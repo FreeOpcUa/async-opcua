@@ -463,13 +463,13 @@ impl Session {
     }
 
     /// Return index of supplied namespace url from cache
-    pub fn get_namespace_index_from_cache(&mut self, url: &str) -> Option<u16> {
+    pub fn get_namespace_index_from_cache(&self, url: &str) -> Option<u16> {
         self.encoding_context.read().namespaces().get_index(url)
     }
 
     /// Return index of supplied namespace url
     /// by first looking at namespace cache and querying server if necessary
-    pub async fn get_namespace_index(&mut self, url: &str) -> Result<u16, Error> {
+    pub async fn get_namespace_index(&self, url: &str) -> Result<u16, Error> {
         if let Some(idx) = self.get_namespace_index_from_cache(url) {
             return Ok(idx);
         };

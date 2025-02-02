@@ -595,7 +595,7 @@ impl PartialEq<DataTypeId> for NodeId {
     }
 }
 
-static NEXT_NODE_ID_NUMERIC: AtomicUsize = AtomicUsize::new(0);
+static NEXT_NODE_ID_NUMERIC: AtomicUsize = AtomicUsize::new(1);
 
 impl Default for NodeId {
     fn default() -> Self {

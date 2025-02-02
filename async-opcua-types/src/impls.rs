@@ -15,11 +15,11 @@ use crate::{
     status_code::StatusCode,
     string::UAString,
     variant::Variant,
-    AnonymousIdentityToken, ApplicationDescription, CallMethodRequest, DataTypeId,
+    AnonymousIdentityToken, ApplicationDescription, CallMethodRequest, DataTypeId, DataValue,
     EndpointDescription, Error, ExpandedNodeId, HistoryUpdateType, IdentityCriteriaType,
     MessageSecurityMode, MonitoredItemCreateRequest, MonitoringMode, MonitoringParameters,
     NumericRange, ObjectId, ReadValueId, ServiceCounterDataType, ServiceFault, SignatureData,
-    UserNameIdentityToken, UserTokenPolicy, UserTokenType,
+    UserNameIdentityToken, UserTokenPolicy, UserTokenType, WriteValue,
 };
 
 use super::PerformUpdateType;
@@ -412,5 +412,33 @@ impl Default for HistoryUpdateType {
 impl Default for IdentityCriteriaType {
     fn default() -> Self {
         Self::Anonymous
+    }
+}
+
+impl WriteValue {
+    /// default constructor with all struct members
+    pub fn new(
+        node_id: NodeId,
+        attribute_id: AttributeId,
+        index_range: UAString,
+        value: DataValue,
+    ) -> Self {
+        Self {
+            node_id,
+            attribute_id: attribute_id as u32,
+            index_range,
+            value,
+        }
+    }
+
+    /// return a WriteValue with AttributeId::Value and no index rane,
+    ///  which is the most common case
+    pub fn value_attr(node_id: NodeId, val: Variant) -> Self {
+        Self {
+            node_id,
+            attribute_id: AttributeId::Value as u32,
+            index_range: UAString::null(),
+            value: val.into(),
+        }
     }
 }

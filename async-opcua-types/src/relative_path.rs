@@ -84,6 +84,49 @@ impl RelativePath {
     }
 }
 
+impl From<&[QualifiedName]> for RelativePath {
+    fn from(value: &[QualifiedName]) -> Self {
+        let elements = value
+            .iter()
+            .map(|qn| RelativePathElement {
+                reference_type_id: ReferenceTypeId::HierarchicalReferences.into(),
+                is_inverse: false,
+                include_subtypes: true,
+                target_name: qn.clone(),
+            })
+            .collect();
+        Self {
+            elements: Some(elements),
+        }
+    }
+}
+// Cannot use
+//impl<T: AsRef<str>> TryFrom<T> for RelativePath {
+// for some strange reasons so implementing all thee manually here
+//
+impl TryFrom<&str> for RelativePath {
+    type Error = OpcUaError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        RelativePath::from_str(value, &RelativePathElement::default_node_resolver)
+    }
+}
+
+impl TryFrom<&String> for RelativePath {
+    type Error = OpcUaError;
+
+    fn try_from(value: &String) -> Result<Self, Self::Error> {
+        RelativePath::from_str(value, &RelativePathElement::default_node_resolver)
+    }
+}
+
+impl TryFrom<String> for RelativePath {
+    type Error = OpcUaError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        RelativePath::from_str(&value, &RelativePathElement::default_node_resolver)
+    }
+}
 impl<'a> From<&'a RelativePathElement> for String {
     fn from(element: &'a RelativePathElement) -> String {
         let mut result = element

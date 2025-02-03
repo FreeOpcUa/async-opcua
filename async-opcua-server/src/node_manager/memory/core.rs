@@ -274,16 +274,16 @@ impl CoreNodeManagerImpl {
                 (limits.max_array_length as u32).into()
             }
             VariableId::Server_ServerCapabilities_MaxBrowseContinuationPoints => {
-                (limits.max_browse_continuation_points as u32).into()
+                (limits.max_browse_continuation_points as u16).into()
             }
             VariableId::Server_ServerCapabilities_MaxByteStringLength => {
                 (limits.max_byte_string_length as u32).into()
             }
             VariableId::Server_ServerCapabilities_MaxHistoryContinuationPoints => {
-                (limits.max_history_continuation_points as u32).into()
+                (limits.max_history_continuation_points as u16).into()
             }
             VariableId::Server_ServerCapabilities_MaxQueryContinuationPoints => {
-                (limits.max_query_continuation_points as u32).into()
+                (limits.max_query_continuation_points as u16).into()
             }
             VariableId::Server_ServerCapabilities_MaxStringLength => {
                 (limits.max_string_length as u32).into()

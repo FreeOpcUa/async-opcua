@@ -11,6 +11,7 @@ use std::sync::LazyLock;
 
 use log::error;
 use regex::Regex;
+use thiserror::Error;
 
 use crate::{
     node_id::{Identifier, NodeId},
@@ -105,7 +106,7 @@ impl From<&[QualifiedName]> for RelativePath {
 // for some strange reasons so implementing all thee manually here
 //
 impl TryFrom<&str> for RelativePath {
-    type Error = OpcUaError;
+    type Error = RelativePathError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         RelativePath::from_str(value, &RelativePathElement::default_node_resolver)
@@ -113,7 +114,7 @@ impl TryFrom<&str> for RelativePath {
 }
 
 impl TryFrom<&String> for RelativePath {
-    type Error = OpcUaError;
+    type Error = RelativePathError;
 
     fn try_from(value: &String) -> Result<Self, Self::Error> {
         RelativePath::from_str(value, &RelativePathElement::default_node_resolver)
@@ -121,7 +122,7 @@ impl TryFrom<&String> for RelativePath {
 }
 
 impl TryFrom<String> for RelativePath {
-    type Error = OpcUaError;
+    type Error = RelativePathError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         RelativePath::from_str(&value, &RelativePathElement::default_node_resolver)
@@ -383,18 +384,19 @@ impl RelativePathElement {
     }
 }
 
-#[derive(Debug, Clone)]
 /// Error returned from parsing a relative path.
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
 pub enum RelativePathError {
-    /// Namespace is out of range of a u16.
+    #[error("Namespace is out of range of a u16.")]
     NamespaceOutOfRange,
-    /// Supplied node resolver was unable to resolve a reference type.
+    #[error("Supplied node resolver was unable to resolve a reference type.")]
     UnresolvedReferenceType,
-    /// Path does not match a relative path.
+    #[error("Path does not match a relative path.")]
     NoMatch,
-    /// Path segment is unusually long and has been rejected.
+    #[error("Path segment is unusually long and has been rejected.")]
     PathSegmentTooLong,
-    /// Number of elements in relative path is too large.
+    #[error("Number of elements in relative path is too large.")]
     TooManyElements,
 }
 

@@ -4,9 +4,10 @@ use opcua::{
     nodes::{DataTypeBuilder, ObjectBuilder, ReferenceDirection, VariableBuilder},
     server::node_manager::memory::SimpleNodeManager,
     types::{
-        ua_encodable, DataTypeDefinition, DataTypeId, EnumDefinition, EnumField, ExpandedNodeId,
-        ExtensionObject, NodeId, ObjectId, ObjectTypeId, ReferenceTypeId, StructureDefinition,
-        StructureField, StructureType,
+        ua_encodable, DataEncoding, DataTypeDefinition, DataTypeId, EnumDefinition, EnumField,
+        ExpandedNodeId, ExtensionObject, NodeId, NumericRange, ObjectId, ObjectTypeId,
+        QualifiedName, ReferenceTypeId, StructureDefinition, StructureField, StructureType,
+        TimestampsToReturn, Variant,
     },
 };
 
@@ -22,13 +23,42 @@ pub fn add_custom_types(nm: Arc<SimpleNodeManager>, ns: u16) {
 
     let addr = nm.address_space();
     let mut addr = addr.write();
-    let error_node = NodeId::next_numeric(ns);
+    let folder_node_id = NodeId::next_numeric(ns);
+    addr.add_folder(
+        &folder_node_id,
+        QualifiedName::new(ns, "ErrorFolder"),
+        "ErrorFolder",
+        &ObjectId::ObjectsFolder.into(),
+    );
+    let error_node_id = NodeId::next_numeric(ns);
     let error_data = ErrorData::new("No Error", 98, AxisState::Idle);
-    VariableBuilder::new(&error_node, "ErrorData", "ErrorData")
-        .organized_by(ObjectId::ObjectsFolder)
-        .data_type(struct_id.clone())
-        .value(ExtensionObject::new(error_data))
-        .insert(&mut *addr);
+    VariableBuilder::new(
+        &error_node_id,
+        QualifiedName::new(ns, "ErrorData"),
+        "ErrorData",
+    )
+    .organized_by(folder_node_id)
+    .writable()
+    .data_type(struct_id.clone())
+    .value(ExtensionObject::new(error_data))
+    .insert(&mut *addr);
+
+    //read value of error node, jsut to show how to do it and that convertion works
+    let dv = addr
+        .find_node(&error_node_id)
+        .unwrap()
+        .as_node()
+        .get_attribute(
+            TimestampsToReturn::Neither,
+            opcua::types::AttributeId::Value,
+            &NumericRange::None,
+            &DataEncoding::Binary,
+        )
+        .unwrap();
+
+    if let Some(Variant::ExtensionObject(e)) = dv.value {
+        dbg!(e.body);
+    }
 }
 
 fn enum_field(name: &str, value: i64) -> EnumField {
@@ -172,5 +202,32 @@ impl opcua::types::ExpandedMessageInfo for ErrorData {
             namespace_uri: NAMESPACE_URI.into(),
             server_index: 0,
         }
+    }
+}
+
+static TYPES: std::sync::LazyLock<opcua::types::TypeLoaderInstance> =
+    std::sync::LazyLock::new(|| {
+        let mut inst = opcua::types::TypeLoaderInstance::new();
+        {
+            inst.add_binary_type(
+                STRUCT_DATA_TYPE_ID,
+                STRUCT_ENC_TYPE_ID,
+                opcua::types::binary_decode_to_enc::<ErrorData>,
+            );
+
+            inst
+        }
+    });
+
+#[derive(Debug, Clone, Copy)]
+pub struct CustomTypeLoader;
+
+impl opcua::types::StaticTypeLoader for CustomTypeLoader {
+    fn instance() -> &'static opcua::types::TypeLoaderInstance {
+        &*TYPES
+    }
+
+    fn namespace() -> &'static str {
+        NAMESPACE_URI
     }
 }

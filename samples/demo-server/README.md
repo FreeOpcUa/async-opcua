@@ -3,6 +3,7 @@ Use `simple-server` as reference for a very simple OPC UA server.
 Use `demo-server` (this project) for a more full-featured server that demonstrates the following.
 
 - Exposes static and dynamically changing variables
+- Expose custom structure and enumeration
 - Variables of every supported data type including arrays
 - Events
 - Http access to diagnostics and other info

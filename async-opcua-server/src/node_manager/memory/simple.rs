@@ -5,7 +5,7 @@ use opcua_core::{trace_read_lock, trace_write_lock};
 use opcua_nodes::NodeSetImport;
 
 use crate::{
-    address_space::{read_node_value, AddressSpace, NodeBase, NodeType},
+    address_space::{read_node_value, AddressSpace},
     node_manager::{
         DefaultTypeTree, MethodCall, MonitoredItemRef, MonitoredItemUpdateRef, NodeManagerBuilder,
         NodeManagersRef, ParsedReadValueId, RequestContext, ServerContext, SyncSampler, WriteNode,
@@ -14,8 +14,8 @@ use crate::{
 };
 use opcua_core::sync::RwLock;
 use opcua_types::{
-    AttributeId, DataValue, MonitoringMode, NodeId, NumericRange, StatusCode, TimestampsToReturn,
-    Variant,
+    AttributeId, DataValue, MonitoringMode, NodeClass, NodeId, NumericRange, StatusCode,
+    TimestampsToReturn, Variant,
 };
 
 use super::{
@@ -364,18 +364,32 @@ impl SimpleNodeManagerImpl {
             }
         };
 
-        let (NodeType::Variable(var), AttributeId::Value) = (node, write.value().attribute_id)
-        else {
+        if node.node_class() != NodeClass::Variable
+            || write.value().attribute_id != AttributeId::Value
+        {
             write.set_status(StatusCode::BadNotWritable);
+            return;
+        }
+
+        // If there is a callback registered, call that.
+        if let Some(cb) = cbs.get(node.as_node().node_id()) {
+            write.set_status(cb(write.value().value.clone(), &write.value().index_range));
             return;
         };
 
-        let Some(cb) = cbs.get(var.node_id()) else {
-            write.set_status(StatusCode::BadNotWritable);
+        // No callback defined, we store the value in our memory address space
+        if let Some(value) = &write.value().value.value {
+            let res = node
+                .as_mut_node()
+                .set_attribute(AttributeId::Value, value.clone());
+            if let Err(status_code) = res {
+                write.set_status(status_code);
+            }
+            write.set_status(StatusCode::Good);
             return;
-        };
+        }
 
-        write.set_status(cb(write.value().value.clone(), &write.value().index_range));
+        write.set_status(StatusCode::BadNothingToDo);
     }
 
     /// Add a callback called on `Write` for the node given by `id`.

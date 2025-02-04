@@ -18,7 +18,7 @@
 #[macro_use]
 extern crate log;
 
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use opcua::server::{
     node_manager::memory::{simple_node_manager, NamespaceMetadata, SimpleNodeManager},
@@ -126,6 +126,7 @@ async fn main() {
                 },
                 "demo",
             ))
+            .with_type_loader(Arc::new(customs::CustomTypeLoader))
             .build()
             .unwrap();
 

@@ -281,9 +281,13 @@ impl BinaryEncodable for DynamicStructure {
             }
             StructureType::StructureWithOptionalFields => {
                 let mut encoding_mask = 0u32;
-                for (idx, (value, field)) in self.data.iter().zip(s.fields.iter()).enumerate() {
-                    if !field.is_optional || !matches!(value, Variant::Empty) {
-                        encoding_mask |= 1 << idx;
+                let mut optional_idx = 0;
+                for (value, field) in self.data.iter().zip(s.fields.iter()) {
+                    if field.is_optional {
+                        if !matches!(value, Variant::Empty) {
+                            encoding_mask |= 1 << optional_idx;
+                        }
+                        optional_idx += 1;
                     }
                 }
                 write_u32(stream, encoding_mask)?;
@@ -514,11 +518,17 @@ impl DynamicTypeLoader {
             StructureType::StructureWithOptionalFields => {
                 let mask = <u32 as BinaryDecodable>::decode(stream, ctx)?;
                 let mut values = Vec::with_capacity(t.fields.len());
-                for (idx, field) in t.fields.iter().enumerate() {
-                    if (1 << idx) & mask != 0 {
-                        values.push(self.decode_field(field, stream, ctx)?);
+                let mut optional_idx = 0;
+                for field in t.fields.iter() {
+                    if field.is_optional {
+                        if (1 << optional_idx) & mask != 0 {
+                            values.push(self.decode_field(field, stream, ctx)?);
+                        } else {
+                            values.push(Variant::Empty);
+                        }
+                        optional_idx += 1;
                     } else {
-                        values.push(Variant::Empty);
+                        values.push(self.decode_field(field, stream, ctx)?);
                     }
                 }
                 Ok(Box::new(DynamicStructure {

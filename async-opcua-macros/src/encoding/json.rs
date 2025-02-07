@@ -9,6 +9,36 @@ use super::{enums::SimpleEnum, EncodingStruct};
 pub fn generate_json_encode_impl(strct: EncodingStruct) -> syn::Result<TokenStream> {
     let ident = strct.ident;
     let mut body = quote! {};
+
+    let any_optional = strct
+        .fields
+        .iter()
+        .any(|f| f.attr.optional && !f.attr.ignore);
+
+    if any_optional {
+        let mut optional_index = 0;
+
+        body.extend(quote! {
+            let mut encoding_mask = 0u32;
+        });
+        for field in &strct.fields {
+            if !field.attr.optional {
+                continue;
+            }
+            let ident = &field.ident;
+            body.extend(quote! {
+                if self.#ident.as_ref().is_some_and(|f| !f.is_null_json()) {
+                    encoding_mask |= 1 << #optional_index;
+                }
+            });
+            optional_index += 1;
+        }
+        body.extend(quote! {
+            stream.name("EncodingMask")?;
+            opcua::types::json::JsonEncodable::encode(&encoding_mask, stream, ctx)?;
+        });
+    }
+
     for field in strct.fields {
         if field.attr.ignore {
             continue;
@@ -20,12 +50,23 @@ pub fn generate_json_encode_impl(strct: EncodingStruct) -> syn::Result<TokenStre
             .unwrap_or_else(|| field.ident.to_string().to_case(Case::Pascal));
 
         let ident = field.ident;
-        body.extend(quote! {
-            if !self.#ident.is_null_json() {
-                stream.name(#name)?;
-                opcua::types::json::JsonEncodable::encode(&self.#ident, stream, ctx)?;
-            }
-        });
+        if field.attr.optional {
+            body.extend(quote! {
+                if let Some(item) = &self.#ident {
+                    if !item.is_null_json() {
+                        stream.name(#name)?;
+                        opcua::types::json::JsonEncodable::encode(item, stream, ctx)?;
+                    }
+                }
+            });
+        } else {
+            body.extend(quote! {
+                if !self.#ident.is_null_json() {
+                    stream.name(#name)?;
+                    opcua::types::json::JsonEncodable::encode(&self.#ident, stream, ctx)?;
+                }
+            });
+        }
     }
 
     Ok(quote! {

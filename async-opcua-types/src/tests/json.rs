@@ -3,6 +3,7 @@ use std::{
     str::FromStr,
 };
 
+use opcua_macros::{JsonDecodable, JsonEncodable};
 use serde_json::{json, Value};
 use struson::{
     reader::JsonStreamReader,
@@ -757,4 +758,69 @@ fn extension_object_round_trip() {
     let obj_3: ExtensionObject = JsonDecodable::decode(&mut reader, &ctx).unwrap();
     // Verify that we've completed a round-trip and ended up with something identical to the original object.
     assert_eq!(obj_3, obj);
+}
+
+#[test]
+fn test_custom_struct_with_optional() {
+    mod opcua {
+        pub use crate as types;
+    }
+
+    #[derive(Debug, PartialEq, Clone, JsonDecodable, JsonEncodable)]
+    pub struct MyStructWithOptionalFields {
+        foo: i32,
+        #[opcua(optional)]
+        my_opt: Option<LocalizedText>,
+        #[opcua(optional)]
+        my_opt_2: Option<i32>,
+    }
+
+    let st = MyStructWithOptionalFields {
+        foo: 123,
+        my_opt: None,
+        my_opt_2: None,
+    };
+
+    let v = to_value(&st).unwrap();
+    assert_eq!(
+        v,
+        json!({
+            "EncodingMask": 0,
+            "Foo": 123,
+        })
+    );
+
+    let st = MyStructWithOptionalFields {
+        foo: 123,
+        my_opt: None,
+        my_opt_2: Some(321),
+    };
+    let v = to_value(&st).unwrap();
+    assert_eq!(
+        v,
+        json!({
+            "EncodingMask": 2,
+            "Foo": 123,
+            "MyOpt2": 321,
+        })
+    );
+
+    let st = MyStructWithOptionalFields {
+        foo: 123,
+        my_opt: Some(LocalizedText::new("Foo", "Bar")),
+        my_opt_2: Some(321),
+    };
+    let v = to_value(&st).unwrap();
+    assert_eq!(
+        v,
+        json!({
+            "EncodingMask": 3,
+            "Foo": 123,
+            "MyOpt2": 321,
+            "MyOpt": {
+                "Locale": "Foo",
+                "Text": "Bar"
+            }
+        })
+    );
 }

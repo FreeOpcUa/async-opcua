@@ -411,9 +411,13 @@ impl JsonEncodable for DynamicStructure {
             }
             crate::StructureType::StructureWithOptionalFields => {
                 let mut encoding_mask = 0u32;
-                for (idx, (value, field)) in self.data.iter().zip(s.fields.iter()).enumerate() {
-                    if !field.is_optional || !matches!(value, Variant::Empty) {
-                        encoding_mask |= 1 << idx;
+                let mut optional_idx = 0;
+                for (value, field) in self.data.iter().zip(s.fields.iter()) {
+                    if field.is_optional {
+                        if !matches!(value, Variant::Empty) {
+                            encoding_mask |= 1 << optional_idx;
+                        }
+                        optional_idx += 1;
                     }
                 }
                 stream.name("EncodingMask")?;

@@ -7,20 +7,72 @@ pub fn generate_binary_encode_impl(strct: EncodingStruct) -> syn::Result<TokenSt
     let mut byte_len_body = quote! {};
     let mut encode_body = quote! {};
 
+    let any_optional = strct
+        .fields
+        .iter()
+        .any(|f| f.attr.optional && !f.attr.ignore);
+
+    if any_optional {
+        let mut optional_index = 0;
+
+        // Add 4 for the byte length of the 32-bit encoding mask.
+        byte_len_body.extend(quote! {
+            size += 4;
+        });
+        encode_body.extend(quote! {
+            let mut encoding_mask = 0u32;
+        });
+        for field in &strct.fields {
+            if !field.attr.optional {
+                continue;
+            }
+            let ident = &field.ident;
+            encode_body.extend(quote! {
+                if self.#ident.is_some() {
+                    encoding_mask |= 1 << #optional_index;
+                }
+            });
+            optional_index += 1;
+        }
+        encode_body.extend(quote! {
+            encoding_mask.encode(stream, ctx)?;
+        });
+    }
+
     for field in strct.fields {
         if field.attr.ignore {
             continue;
         }
 
         let ident = field.ident;
-        byte_len_body.extend(quote! {
-            size += self.#ident.byte_len(ctx);
-        });
-        encode_body.extend(quote! {
-            self.#ident.encode(stream, ctx)?;
-        });
+        if field.attr.optional {
+            byte_len_body.extend(quote! {
+                if let Some(item) = &self.#ident {
+                    size += item.byte_len(ctx);
+                }
+            });
+            encode_body.extend(quote! {
+                if let Some(item) = &self.#ident {
+                    item.encode(stream, ctx)?;
+                }
+            });
+        } else {
+            byte_len_body.extend(quote! {
+                size += self.#ident.byte_len(ctx);
+            });
+            encode_body.extend(quote! {
+                self.#ident.encode(stream, ctx)?;
+            });
+        }
     }
     let ident = strct.ident;
+
+    if any_optional {
+        encode_body = quote! {
+
+            #encode_body
+        }
+    }
 
     Ok(quote! {
         impl opcua::types::BinaryEncodable for #ident {
@@ -48,6 +100,18 @@ pub fn generate_binary_decode_impl(strct: EncodingStruct) -> syn::Result<TokenSt
     let mut decode_build = quote! {};
 
     let mut has_context = false;
+    let any_optional = strct
+        .fields
+        .iter()
+        .any(|f| f.attr.optional && !f.attr.ignore);
+
+    if any_optional {
+        decode_impl.extend(quote! {
+            let encoding_mask = u32::decode(stream, ctx)?;
+        });
+    }
+
+    let mut optional_idx = 0;
     for field in strct.fields {
         if field.attr.ignore {
             continue;
@@ -55,7 +119,7 @@ pub fn generate_binary_decode_impl(strct: EncodingStruct) -> syn::Result<TokenSt
 
         let ident = field.ident;
         let ident_string = ident.to_string();
-        if ident_string == "request_header" {
+        let inner = if ident_string == "request_header" {
             decode_impl.extend(quote! {
                 let request_header: opcua::types::RequestHeader = opcua::types::BinaryDecodable::decode(stream, ctx)?;
                 let __request_handle = request_header.request_handle;
@@ -64,6 +128,7 @@ pub fn generate_binary_decode_impl(strct: EncodingStruct) -> syn::Result<TokenSt
                 request_header,
             });
             has_context = true;
+            continue;
         } else if ident_string == "response_header" {
             decode_impl.extend(quote! {
                 let response_header: opcua::types::ResponseHeader = opcua::types::BinaryDecodable::decode(stream, ctx)?;
@@ -73,14 +138,30 @@ pub fn generate_binary_decode_impl(strct: EncodingStruct) -> syn::Result<TokenSt
                 response_header,
             });
             has_context = true;
+            continue;
         } else if has_context {
+            quote! {
+                opcua::types::BinaryDecodable::decode(stream, ctx)
+                    .map_err(|e| e.with_request_handle(__request_handle))?
+            }
+        } else {
+            quote! {
+                opcua::types::BinaryDecodable::decode(stream, ctx)?
+            }
+        };
+
+        if field.attr.optional {
             decode_build.extend(quote! {
-                #ident: opcua::types::BinaryDecodable::decode(stream, ctx)
-                    .map_err(|e| e.with_request_handle(__request_handle))?,
+                #ident: if (encoding_mask & (1 << #optional_idx)) != 0 {
+                    Some(#inner)
+                } else {
+                    None
+                },
             });
+            optional_idx += 1;
         } else {
             decode_build.extend(quote! {
-                #ident: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+                #ident: #inner,
             });
         }
     }

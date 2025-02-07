@@ -7,7 +7,6 @@ pub(crate) struct EncodingFieldAttribute {
     pub rename: Option<String>,
     pub ignore: bool,
     pub no_default: bool,
-    #[allow(dead_code)]
     pub optional: bool,
 }
 

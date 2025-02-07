@@ -548,3 +548,50 @@ fn deep_encoding() {
     let res = Variant::decode(&mut stream, &ctx);
     assert_eq!(res.unwrap_err().status(), StatusCode::BadDecodingError);
 }
+
+#[test]
+fn test_custom_struct_with_optional() {
+    mod opcua {
+        pub use crate as types;
+    }
+
+    #[derive(Debug, PartialEq, Clone, BinaryDecodable, BinaryEncodable)]
+    pub struct MyStructWithOptionalFields {
+        foo: i32,
+        #[opcua(optional)]
+        my_opt: Option<LocalizedText>,
+        #[opcua(optional)]
+        my_opt_2: Option<i32>,
+    }
+
+    let st = MyStructWithOptionalFields {
+        foo: 123,
+        my_opt: None,
+        my_opt_2: None,
+    };
+    let ctx_f = ContextOwned::default();
+    let ctx = ctx_f.context();
+    // Byte length reflects that optional fields are left out.
+    assert_eq!(st.byte_len(&ctx), 4 + 4);
+
+    serialize_test(st);
+
+    let st = MyStructWithOptionalFields {
+        foo: 123,
+        my_opt: None,
+        my_opt_2: Some(321),
+    };
+    assert_eq!(st.byte_len(&ctx), 4 + 4 + 4);
+    serialize_test(st);
+
+    let st = MyStructWithOptionalFields {
+        foo: 123,
+        my_opt: Some(LocalizedText::new("Foo", "Bar")),
+        my_opt_2: Some(321),
+    };
+    assert_eq!(
+        st.byte_len(&ctx),
+        4 + 4 + 4 + st.my_opt.as_ref().unwrap().byte_len(&ctx)
+    );
+    serialize_test(st);
+}

@@ -1,0 +1,34 @@
+[package]
+name = "async-opcua-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[features]
+nightly = ["libfuzzer-sys", "bytes", "tokio", "tokio-util"]
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = { version = "0.4", optional = true }
+bytes = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+tokio-util = { workspace = true, optional = true }
+
+[dependencies.async-opcua]
+path = "../async-opcua"
+
+[[bin]]
+name = "fuzz_comms"
+path = "fuzz_targets/fuzz_comms.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_deserialize"
+path = "fuzz_targets/fuzz_deserialize.rs"
+test = false
+doc = false
+bench = false

@@ -6,6 +6,7 @@ members = [
     "async-opcua-*",
     "tools/certificate-creator",
     "dotnet-tests/external-tests",
+    "fuzz",
 ]
 
 [workspace.dependencies]

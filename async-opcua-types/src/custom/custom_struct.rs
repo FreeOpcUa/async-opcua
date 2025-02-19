@@ -298,7 +298,7 @@ impl BinaryEncodable for DynamicStructure {
                 }
             }
             StructureType::Union => {
-                write_u32(stream, self.discriminant)?;
+                write_u32(stream, self.discriminant + 1)?;
                 let (Some(value), Some(field)) =
                     (self.data.first(), s.fields.get(self.discriminant as usize))
                 else {
@@ -540,6 +540,13 @@ impl DynamicTypeLoader {
             }
             StructureType::Union => {
                 let discriminant = <u32 as BinaryDecodable>::decode(stream, ctx)?;
+                if discriminant < 1 {
+                    return Err(Error::decoding(format!(
+                        "Invalid discriminant: {}",
+                        discriminant
+                    )));
+                }
+                let discriminant = discriminant - 1;
                 let Some(field) = t.fields.get(discriminant as usize) else {
                     return Err(Error::decoding(format!(
                         "Invalid discriminant: {}",

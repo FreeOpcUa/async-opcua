@@ -1,7 +1,7 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 
-use super::{enums::SimpleEnum, EncodingStruct};
+use super::{enums::SimpleEnum, unions::AdvancedEnum, EncodingStruct};
 
 pub fn generate_binary_encode_impl(strct: EncodingStruct) -> syn::Result<TokenStream> {
     let mut byte_len_body = quote! {};
@@ -213,6 +213,106 @@ pub fn generate_simple_enum_binary_encode_impl(en: SimpleEnum) -> syn::Result<To
                 ctx: &opcua::types::Context<'_>,
             ) -> opcua::types::EncodingResult<()> {
                 (*self as #repr).encode(stream, ctx)
+            }
+        }
+    })
+}
+
+pub fn generate_union_binary_decode_impl(en: AdvancedEnum) -> syn::Result<TokenStream> {
+    let ident = en.ident;
+
+    let mut decode_arms = quote! {};
+
+    let mut idx = 0u32;
+
+    for variant in en.variants {
+        if variant.is_null {
+            continue;
+        }
+        idx += 1;
+
+        let name = &variant.name;
+
+        decode_arms.extend(quote! {
+            #idx => Self::#name(opcua::types::BinaryDecodable::decode(stream, ctx)?),
+        });
+    }
+
+    if let Some(null_variant) = en.null_variant {
+        decode_arms.extend(quote! {
+            0u32 => Self::#null_variant,
+        });
+    }
+
+    Ok(quote! {
+        impl opcua::types::BinaryDecodable for #ident {
+            #[allow(unused_variables)]
+            fn decode<S: std::io::Read + ?Sized>(stream: &mut S, ctx: &opcua::types::Context<'_>) -> opcua::types::EncodingResult<Self> {
+                let disc = u32::decode(stream, ctx)?;
+                Ok(match disc {
+                    #decode_arms
+                    _ => return Err(opcua::types::Error::decoding(format!("Unknown discriminant: {disc}"))),
+                })
+            }
+        }
+    })
+}
+
+pub fn generate_union_binary_encode_impl(en: AdvancedEnum) -> syn::Result<TokenStream> {
+    let ident = en.ident;
+
+    let mut byte_len_arms = quote! {};
+    let mut encode_arms = quote! {};
+
+    let mut idx = 0u32;
+
+    for variant in en.variants {
+        let name = &variant.name;
+        if variant.is_null {
+            encode_arms.extend(quote! {
+                Self::#name => {
+                    0u32.encode(stream, ctx)?;
+                }
+            });
+            byte_len_arms.extend(quote! {
+                Self::#name => 0,
+            });
+            continue;
+        }
+        idx += 1;
+
+        byte_len_arms.extend(quote! {
+            Self::#name(inner) => inner.byte_len(ctx),
+        });
+
+        encode_arms.extend(quote! {
+            Self::#name(inner) => {
+                #idx.encode(stream, ctx)?;
+                inner.encode(stream, ctx)?;
+            },
+        });
+    }
+
+    Ok(quote! {
+        impl opcua::types::BinaryEncodable for #ident {
+            #[allow(unused)]
+            fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+                let mut byte_len = 4;
+                byte_len += match self {
+                    #byte_len_arms
+                };
+                byte_len
+            }
+            #[allow(unused)]
+            fn encode<S: std::io::Write + ?Sized>(
+                &self,
+                stream: &mut S,
+                ctx: &opcua::types::Context<'_>,
+            ) -> opcua::types::EncodingResult<()> {
+                match self {
+                    #encode_arms
+                }
+                Ok(())
             }
         }
     })

@@ -1,14 +1,7 @@
-use std::{
-    collections::HashMap,
-    io::{Cursor, Read, Write},
-    sync::Arc,
-};
+use std::{collections::HashMap, io::Write, sync::Arc};
 
 use crate::{
-    json::{
-        consume_raw_value, JsonDecodable, JsonEncodable, JsonReader, JsonStreamReader,
-        JsonStreamWriter, JsonWriter,
-    },
+    json::{JsonDecodable, JsonEncodable, JsonReader, JsonStreamWriter, JsonWriter},
     Array, ByteString, Context, DataValue, DateTime, DiagnosticInfo, DynEncodable, EncodingResult,
     Error, ExpandedNodeId, ExtensionObject, Guid, LocalizedText, NodeId, QualifiedName, StatusCode,
     StructureType, UAString, Variant, XmlElement,
@@ -328,7 +321,6 @@ impl DynamicTypeLoader {
                 }))
             }
             crate::StructureType::Union => {
-                let mut value_raw: Option<Vec<u8>> = None;
                 let mut value: Option<Variant> = None;
                 let mut discriminant: Option<u32> = None;
 
@@ -336,49 +328,46 @@ impl DynamicTypeLoader {
                 while stream.has_next()? {
                     let name = stream.next_name()?;
                     match name {
-                        "Value" => {
-                            if let Some(disc) = discriminant {
-                                let Some(field) = t.get_field(disc as usize) else {
-                                    return Err(Error::decoding(format!(
-                                        "Invalid discriminant: {}",
-                                        disc
-                                    )));
-                                };
-                                value = Some(self.json_decode_field(field, stream, ctx)?);
-                            } else {
-                                value_raw = Some(consume_raw_value(stream)?);
-                            }
-                        }
                         "SwitchField" => {
                             discriminant = Some(stream.next_number()??);
                         }
-                        _ => stream.skip_value()?,
+                        r => {
+                            let Some((idx, value_field)) =
+                                t.fields.iter().enumerate().find(|(_, f)| f.name == r)
+                            else {
+                                stream.skip_value()?;
+                                continue;
+                            };
+                            // If we've read the discriminant, double check that it matches the field name.
+                            // OPC-UA unions are really only allowed to have two fields, but we can try to handle
+                            // weird payloads anyway.
+                            // Technically doesn't handle cases where there are multiple options _and_ the discriminant
+                            // is late, but that violates the standard so it's probably fine.
+                            if discriminant.is_some_and(|d| d != (idx + 1) as u32) {
+                                stream.skip_value()?;
+                            } else {
+                                value = Some(self.json_decode_field(value_field, stream, ctx)?);
+                                discriminant = Some((idx + 1) as u32);
+                            }
+                        }
                     }
                 }
 
-                let Some(discriminant) = discriminant else {
-                    return Err(Error::decoding("Missing union SwitchField"));
-                };
-
-                let value = if let Some(raw) = value_raw {
-                    let mut cursor = Cursor::new(raw);
-                    let Some(field) = t.get_field(discriminant as usize) else {
-                        return Err(Error::decoding(format!(
-                            "Invalid discriminant: {}",
-                            discriminant
-                        )));
-                    };
-                    let mut inner_stream = JsonStreamReader::new(&mut cursor as &mut dyn Read);
-                    self.json_decode_field(field, &mut inner_stream, ctx)?
-                } else if let Some(value) = value {
-                    value
-                } else {
+                let Some(value) = value else {
                     return Err(Error::decoding("Missing union value"));
                 };
 
+                let Some(discriminant) = discriminant else {
+                    return Err(Error::decoding("Missing discriminant"));
+                };
+
+                if discriminant == 0 {
+                    return Err(Error::decoding("Discriminant must be non-zero"));
+                }
+
                 Ok(Box::new(DynamicStructure {
                     type_def: t.clone(),
-                    discriminant,
+                    discriminant: discriminant - 1,
                     type_tree: self.type_tree.clone(),
                     data: vec![value],
                 }))
@@ -440,7 +429,7 @@ impl JsonEncodable for DynamicStructure {
                         "Discriminant was out of range of known fields",
                     ));
                 };
-                stream.name("Value")?;
+                stream.name(&field.name)?;
                 self.json_encode_field(stream, value, field, ctx)?;
             }
 

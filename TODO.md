@@ -4,7 +4,6 @@ This is a list of things that are known to be missing, or ideas that could be im
 
  - Flesh out the server and client SDK with tooling for ease if use.
    - Make it even easier to implement custom node managers.
- - Support for StructureWithOptionalFields and Union in the encoding macros.
  - Implement Part 4 7.41.2.3, encrypted secrets. We currently only support legacy secrets. We should also support more encryption algorithms for secrets.
  - Write some form of support for IssuedToken based authentication on the client.
  - Implement a better framework for security checks on the server.

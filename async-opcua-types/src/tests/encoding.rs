@@ -4,9 +4,9 @@ use crate::{
     encoding::{BinaryDecodable, DecodingOptions},
     string::UAString,
     tests::*,
-    Array, ByteString, ContextOwned, DataValue, DateTime, DepthGauge, DiagnosticInfo, EncodingMask,
-    ExpandedNodeId, ExtensionObject, Guid, LocalizedText, NamespaceMap, NodeId, ObjectId,
-    QualifiedName, Variant, VariantScalarTypeId, XmlElement,
+    Array, ByteString, ContextOwned, DataValue, DateTime, DepthGauge, DiagnosticInfo,
+    EUInformation, EncodingMask, ExpandedNodeId, ExtensionObject, Guid, LocalizedText,
+    NamespaceMap, NodeId, ObjectId, QualifiedName, Variant, VariantScalarTypeId, XmlElement,
 };
 
 #[test]
@@ -593,5 +593,65 @@ fn test_custom_struct_with_optional() {
         st.byte_len(&ctx),
         4 + 4 + 4 + st.my_opt.as_ref().unwrap().byte_len(&ctx)
     );
+    serialize_test(st);
+}
+
+#[test]
+fn test_custom_union() {
+    mod opcua {
+        pub use crate as types;
+    }
+
+    #[derive(Debug, PartialEq, Clone, BinaryDecodable, BinaryEncodable)]
+    pub enum MyUnion {
+        Var1(i32),
+        Var2(EUInformation),
+        Var3(f64),
+    }
+
+    let ctx_f = ContextOwned::default();
+    let ctx = ctx_f.context();
+    let st = MyUnion::Var1(123);
+    // Byte length depends on variant contents.
+    assert_eq!(st.byte_len(&ctx), 4 + 4);
+
+    serialize_test(st);
+
+    let st = MyUnion::Var2(EUInformation {
+        namespace_uri: "test".into(),
+        unit_id: 123,
+        display_name: "test".into(),
+        description: "desc".into(),
+    });
+    serialize_test(st);
+
+    let st = MyUnion::Var3(123.123);
+    // Byte length depends on variant contents.
+    assert_eq!(st.byte_len(&ctx), 4 + 8);
+    serialize_test(st);
+}
+
+#[test]
+fn test_custom_union_nullable() {
+    mod opcua {
+        pub use crate as types;
+    }
+
+    #[derive(Debug, PartialEq, Clone, BinaryDecodable, BinaryEncodable)]
+    pub enum MyUnion {
+        Var1(i32),
+        Null,
+    }
+
+    let ctx_f = ContextOwned::default();
+    let ctx = ctx_f.context();
+    let st = MyUnion::Var1(123);
+    // Byte length depends on variant contents.
+    assert_eq!(st.byte_len(&ctx), 4 + 4);
+
+    serialize_test(st);
+
+    let st = MyUnion::Null;
+    assert_eq!(st.byte_len(&ctx), 4);
     serialize_test(st);
 }

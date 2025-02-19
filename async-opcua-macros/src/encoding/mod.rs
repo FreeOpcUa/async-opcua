@@ -2,6 +2,7 @@ use attribute::EncodingFieldAttribute;
 use binary::{
     generate_binary_decode_impl, generate_binary_encode_impl,
     generate_simple_enum_binary_decode_impl, generate_simple_enum_binary_encode_impl,
+    generate_union_binary_decode_impl, generate_union_binary_encode_impl,
 };
 use enums::{derive_ua_enum_impl, SimpleEnum};
 #[cfg(feature = "json")]
@@ -9,8 +10,10 @@ use json::{
     generate_json_decode_impl, generate_json_encode_impl, generate_simple_enum_json_decode_impl,
     generate_simple_enum_json_encode_impl,
 };
+use json::{generate_union_json_decode_impl, generate_union_json_encode_impl};
 use proc_macro2::{Span, TokenStream};
 use syn::DeriveInput;
+use unions::AdvancedEnum;
 #[cfg(feature = "xml")]
 use xml::{generate_simple_enum_xml_impl, generate_xml_impl};
 
@@ -24,11 +27,14 @@ mod json;
 #[cfg(feature = "xml")]
 mod xml;
 
+mod unions;
+
 pub(crate) type EncodingStruct = StructItem<EncodingFieldAttribute, EmptyAttribute>;
 
 pub(crate) enum EncodingInput {
     Struct(EncodingStruct),
     SimpleEnum(SimpleEnum),
+    AdvancedEnum(AdvancedEnum),
 }
 
 impl EncodingInput {
@@ -45,10 +51,11 @@ impl EncodingInput {
                     .first()
                     .is_some_and(|v| !v.fields.is_empty());
                 if is_union {
-                    return Err(syn::Error::new_spanned(
+                    return Ok(Self::AdvancedEnum(AdvancedEnum::from_input(
+                        data_enum,
+                        input.attrs,
                         input.ident,
-                        "Only simple unions without variant contents is currently supported",
-                    ));
+                    )?));
                 }
                 Ok(Self::SimpleEnum(SimpleEnum::from_input(
                     data_enum,
@@ -87,9 +94,15 @@ pub fn generate_encoding_impl(
         (EncodingToImpl::BinaryEncode, EncodingInput::SimpleEnum(s)) => {
             generate_simple_enum_binary_encode_impl(s)
         }
+        (EncodingToImpl::BinaryEncode, EncodingInput::AdvancedEnum(s)) => {
+            generate_union_binary_encode_impl(s)
+        }
         (EncodingToImpl::BinaryDecode, EncodingInput::Struct(s)) => generate_binary_decode_impl(s),
         (EncodingToImpl::BinaryDecode, EncodingInput::SimpleEnum(s)) => {
             generate_simple_enum_binary_decode_impl(s)
+        }
+        (EncodingToImpl::BinaryDecode, EncodingInput::AdvancedEnum(s)) => {
+            generate_union_binary_decode_impl(s)
         }
 
         #[cfg(feature = "json")]
@@ -99,15 +112,29 @@ pub fn generate_encoding_impl(
             generate_simple_enum_json_encode_impl(s)
         }
         #[cfg(feature = "json")]
+        (EncodingToImpl::JsonEncode, EncodingInput::AdvancedEnum(s)) => {
+            generate_union_json_encode_impl(s)
+        }
+        #[cfg(feature = "json")]
         (EncodingToImpl::JsonDecode, EncodingInput::Struct(s)) => generate_json_decode_impl(s),
         #[cfg(feature = "json")]
         (EncodingToImpl::JsonDecode, EncodingInput::SimpleEnum(s)) => {
             generate_simple_enum_json_decode_impl(s)
         }
+        #[cfg(feature = "json")]
+        (EncodingToImpl::JsonDecode, EncodingInput::AdvancedEnum(s)) => {
+            generate_union_json_decode_impl(s)
+        }
+
         #[cfg(feature = "xml")]
         (EncodingToImpl::FromXml, EncodingInput::Struct(s)) => generate_xml_impl(s),
         #[cfg(feature = "xml")]
         (EncodingToImpl::FromXml, EncodingInput::SimpleEnum(s)) => generate_simple_enum_xml_impl(s),
+        #[cfg(feature = "xml")]
+        (EncodingToImpl::FromXml, EncodingInput::AdvancedEnum(s)) => Err(syn::Error::new_spanned(
+            s.ident,
+            "FromXml is not supported on unions yet",
+        )),
 
         (EncodingToImpl::UaEnum, EncodingInput::SimpleEnum(s)) => derive_ua_enum_impl(s),
         (EncodingToImpl::UaEnum, _) => Err(syn::Error::new(

@@ -789,6 +789,8 @@ fn test_custom_struct_with_optional() {
             "Foo": 123,
         })
     );
+    let st_cmp = from_value(v).unwrap();
+    assert_eq!(st, st_cmp);
 
     let st = MyStructWithOptionalFields {
         foo: 123,
@@ -804,6 +806,8 @@ fn test_custom_struct_with_optional() {
             "MyOpt2": 321,
         })
     );
+    let st_cmp = from_value(v).unwrap();
+    assert_eq!(st, st_cmp);
 
     let st = MyStructWithOptionalFields {
         foo: 123,
@@ -823,4 +827,107 @@ fn test_custom_struct_with_optional() {
             }
         })
     );
+    let st_cmp = from_value(v).unwrap();
+    assert_eq!(st, st_cmp);
+}
+
+#[test]
+fn test_custom_union() {
+    mod opcua {
+        pub use crate as types;
+    }
+
+    #[derive(Debug, PartialEq, Clone, JsonDecodable, JsonEncodable)]
+    pub enum MyUnion {
+        Var1(i32),
+        #[opcua(rename = "EUInfo")]
+        Var2(EUInformation),
+        Var3(f64),
+    }
+
+    let st = MyUnion::Var1(123);
+    let v = to_value(&st).unwrap();
+    assert_eq!(
+        v,
+        json!({
+            "SwitchField": 1,
+            "Var1": 123
+        })
+    );
+    let st_cmp = from_value(v).unwrap();
+    assert_eq!(st, st_cmp);
+
+    let st = MyUnion::Var2(EUInformation {
+        namespace_uri: "test".into(),
+        unit_id: 123,
+        display_name: "test".into(),
+        description: "desc".into(),
+    });
+    let v = to_value(&st).unwrap();
+    assert_eq!(
+        v,
+        json!({
+            "SwitchField": 2,
+            "EUInfo": {
+                "NamespaceUri": "test",
+                "UnitId": 123,
+                "DisplayName": {
+                    "Text": "test",
+                },
+                "Description": {
+                    "Text": "desc",
+                }
+            }
+        })
+    );
+    let st_cmp = from_value(v).unwrap();
+    assert_eq!(st, st_cmp);
+
+    let st = MyUnion::Var3(123.123);
+    let v = to_value(&st).unwrap();
+    assert_eq!(
+        v,
+        json!({
+            "SwitchField": 3,
+            "Var3": 123.123
+        })
+    );
+    let st_cmp = from_value(v).unwrap();
+    assert_eq!(st, st_cmp);
+}
+
+#[test]
+fn test_custom_union_nullable() {
+    mod opcua {
+        pub use crate as types;
+    }
+
+    #[derive(Debug, PartialEq, Clone, JsonDecodable, JsonEncodable)]
+    pub enum MyUnion {
+        Var1(i32),
+        Null,
+    }
+
+    let st = MyUnion::Var1(123);
+    let v = to_value(&st).unwrap();
+    assert_eq!(
+        v,
+        json!({
+            "SwitchField": 1,
+            "Var1": 123
+        })
+    );
+    let st_cmp = from_value(v).unwrap();
+    assert_eq!(st, st_cmp);
+
+    let st = MyUnion::Null;
+    let v = to_value(&st).unwrap();
+    assert_eq!(
+        v,
+        json!({
+            "SwitchField": 0
+        })
+    );
+    let st_cmp = from_value(v).unwrap();
+    assert_eq!(st, st_cmp);
 }

@@ -4,7 +4,7 @@ use syn::Ident;
 
 use quote::quote;
 
-use super::{enums::SimpleEnum, EncodingStruct};
+use super::{enums::SimpleEnum, unions::AdvancedEnum, EncodingStruct};
 
 pub fn generate_json_encode_impl(strct: EncodingStruct) -> syn::Result<TokenStream> {
     let ident = strct.ident;
@@ -223,6 +223,119 @@ pub fn generate_simple_enum_json_encode_impl(en: SimpleEnum) -> syn::Result<Toke
                 ctx: &opcua::types::Context<'_>
             ) -> opcua::types::EncodingResult<()> {
                 (*self as #repr).encode(stream, ctx)
+            }
+        }
+    })
+}
+
+pub fn generate_union_json_decode_impl(en: AdvancedEnum) -> syn::Result<TokenStream> {
+    let ident = en.ident;
+
+    let mut decode_arms = quote! {};
+
+    for variant in en.variants {
+        if variant.is_null {
+            continue;
+        }
+
+        let name = variant
+            .attr
+            .rename
+            .unwrap_or_else(|| variant.name.to_string());
+        let var_idt = variant.name;
+
+        decode_arms.extend(quote! {
+            #name => value = Some(Self::#var_idt(opcua::types::json::JsonDecodable::decode(stream, ctx)?)),
+        });
+    }
+
+    let fallback = if let Some(null_variant) = en.null_variant {
+        quote! {
+            Ok(Self::#null_variant)
+        }
+    } else {
+        quote! {
+            Err(opcua::types::Error::decoding(format!("Missing union value")))
+        }
+    };
+
+    Ok(quote! {
+        impl opcua::types::json::JsonDecodable for #ident {
+            fn decode(
+                stream: &mut opcua::types::json::JsonStreamReader<&mut dyn std::io::Read>,
+                ctx: &opcua::types::Context<'_>,
+            ) -> opcua::types::EncodingResult<Self> {
+                use opcua::types::json::JsonReader;
+                stream.begin_object()?;
+                let mut value = None;
+                while stream.has_next()? {
+                    match stream.next_name()? {
+                        #decode_arms
+                        _ => stream.skip_value()?,
+                    }
+                }
+                stream.end_object()?;
+
+                let Some(value) = value else {
+                    return #fallback;
+                };
+
+                Ok(value)
+            }
+        }
+    })
+}
+
+pub fn generate_union_json_encode_impl(en: AdvancedEnum) -> syn::Result<TokenStream> {
+    let ident = en.ident;
+
+    let mut encode_arms = quote! {};
+
+    let mut idx = 0u32;
+    for variant in en.variants {
+        let name = variant
+            .attr
+            .rename
+            .unwrap_or_else(|| variant.name.to_string());
+        let var_idt = variant.name;
+        if variant.is_null {
+            encode_arms.extend(quote! {
+                Self::#var_idt => {
+                    stream.name("SwitchField")?;
+                    opcua::types::json::JsonEncodable::encode(&0u32, stream, ctx)?;
+                }
+            });
+            continue;
+        }
+
+        idx += 1;
+
+        encode_arms.extend(quote! {
+            Self::#var_idt(inner) => {
+                stream.name("SwitchField")?;
+                opcua::types::json::JsonEncodable::encode(&#idx, stream, ctx)?;
+                stream.name(#name)?;
+                opcua::types::json::JsonEncodable::encode(inner, stream, ctx)?;
+            },
+        });
+    }
+
+    Ok(quote! {
+        impl opcua::types::json::JsonEncodable for #ident {
+            fn encode(
+                &self,
+                stream: &mut opcua::types::json::JsonStreamWriter<&mut dyn std::io::Write>,
+                ctx: &opcua::types::Context<'_>
+            ) -> opcua::types::EncodingResult<()> {
+                use opcua::types::json::JsonWriter;
+
+                stream.begin_object()?;
+                match self {
+                    #encode_arms
+                }
+                stream.end_object()?;
+
+                Ok(())
             }
         }
     })

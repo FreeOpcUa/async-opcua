@@ -419,11 +419,9 @@ impl DynamicTypeLoader {
                     )?))
                 } else {
                     // Else, load the extension object body directly.
-                    Ok(Variant::from(ctx.load_from_binary(
-                        &field_ty.node_id,
-                        stream,
-                        ctx,
-                    )?))
+                    Ok(Variant::from(
+                        ctx.load_from_binary(&field_ty.node_id, stream)?,
+                    ))
                 }
             }
             crate::VariantScalarTypeId::DataValue => Ok(Variant::from(
@@ -597,8 +595,8 @@ impl TypeLoader for DynamicTypeLoader {
         &self,
         _node_id: &crate::NodeId,
         _body: &opcua_xml::XmlElement,
-        _ctx: &crate::xml::XmlContext<'_>,
-    ) -> Option<Result<Box<dyn crate::DynEncodable>, crate::xml::FromXmlError>> {
+        _ctx: &Context<'_>,
+    ) -> Option<crate::EncodingResult<Box<dyn crate::DynEncodable>>> {
         // TODO: Unimplemented.
         // This is a lot less useful than the others, since this method is currently only
         // used server-side, and server software will usually use codegen instead.

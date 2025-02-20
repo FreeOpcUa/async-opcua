@@ -184,11 +184,9 @@ impl DynamicTypeLoader {
                         stream, ctx,
                     )?))
                 } else {
-                    Ok(Variant::from(ctx.load_from_json(
-                        &field_ty.node_id,
-                        stream,
-                        ctx,
-                    )?))
+                    Ok(Variant::from(
+                        ctx.load_from_json(&field_ty.node_id, stream)?,
+                    ))
                 }
             }
             crate::VariantScalarTypeId::DataValue => Ok(Variant::from(

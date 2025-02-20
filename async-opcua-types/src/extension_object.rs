@@ -245,7 +245,7 @@ mod json {
                                 )));
                             }
                             if let Some(type_id) = &type_id {
-                                body = Some(ctx.load_from_json(type_id, stream, ctx)?);
+                                body = Some(ctx.load_from_json(type_id, stream)?);
                             } else {
                                 raw_body = Some(consume_raw_value(stream)?);
                             }
@@ -282,7 +282,7 @@ mod json {
                 }
                 let mut cursor = Cursor::new(raw_body);
                 let mut inner_stream = JsonStreamReader::new(&mut cursor as &mut dyn Read);
-                Ok(ctx.load_from_json(&type_id, &mut inner_stream, ctx)?)
+                Ok(ctx.load_from_json(&type_id, &mut inner_stream)?)
             } else if let Some(binary_body) = raw_binary_body {
                 if encoding != 1 {
                     return Err(Error::decoding(format!("Unsupported extension object encoding, expected 1 for string, got {encoding}")));
@@ -291,7 +291,7 @@ mod json {
                     return Err(Error::decoding("Missing extension object body"));
                 };
                 let mut cursor = Cursor::new(raw);
-                Ok(ctx.load_from_binary(&type_id, &mut cursor as &mut dyn Read, ctx)?)
+                Ok(ctx.load_from_binary(&type_id, &mut cursor as &mut dyn Read)?)
             } else {
                 Err(Error::decoding("Missing extension object body"))
             }
@@ -380,7 +380,7 @@ impl BinaryDecodable for ExtensionObject {
                 if size <= 0 {
                     None
                 } else {
-                    Some(ctx.load_from_binary(&node_id, &mut stream, ctx)?)
+                    Some(ctx.load_from_binary(&node_id, &mut stream)?)
                 }
             }
             0x2 => {

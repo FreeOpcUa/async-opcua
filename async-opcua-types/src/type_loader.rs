@@ -13,16 +13,13 @@ use hashbrown::HashMap;
 
 use crate::{
     BinaryDecodable, DecodingOptions, DynEncodable, EncodingResult, Error, GeneratedTypeLoader,
-    NamespaceMap, NodeId,
+    NamespaceMap, NodeId, UninitializedIndex,
 };
 
 type BinaryLoadFun = fn(&mut dyn Read, &Context<'_>) -> EncodingResult<Box<dyn DynEncodable>>;
 
 #[cfg(feature = "xml")]
-type XmlLoadFun = fn(
-    &opcua_xml::XmlElement,
-    &crate::xml::XmlContext<'_>,
-) -> Result<Box<dyn DynEncodable>, crate::xml::FromXmlError>;
+type XmlLoadFun = fn(&opcua_xml::XmlElement, &Context<'_>) -> EncodingResult<Box<dyn DynEncodable>>;
 
 #[cfg(feature = "json")]
 type JsonLoadFun = fn(
@@ -63,8 +60,8 @@ pub fn json_decode_to_enc<T: DynEncodable + crate::json::JsonDecodable>(
 /// Convenience method to decode a type into a DynEncodable.
 pub fn xml_decode_to_enc<T: DynEncodable + crate::xml::FromXml>(
     body: &opcua_xml::XmlElement,
-    ctx: &crate::xml::XmlContext<'_>,
-) -> Result<Box<dyn DynEncodable>, crate::xml::FromXmlError> {
+    ctx: &Context<'_>,
+) -> EncodingResult<Box<dyn DynEncodable>> {
     Ok(Box::new(T::from_xml(body, ctx)?))
 }
 
@@ -111,8 +108,8 @@ impl TypeLoaderInstance {
         &self,
         ty: u32,
         body: &opcua_xml::XmlElement,
-        context: &crate::xml::XmlContext<'_>,
-    ) -> Option<Result<Box<dyn DynEncodable>, crate::xml::FromXmlError>> {
+        context: &Context<'_>,
+    ) -> Option<EncodingResult<Box<dyn DynEncodable>>> {
         let fun = self.xml_types.get(&ty)?;
         Some(fun(body, context))
     }
@@ -173,6 +170,8 @@ impl ContextOwned {
             namespaces: &self.namespaces,
             loaders: &self.loaders,
             options: self.options.clone(),
+            aliases: None,
+            index_map: None,
         }
     }
 
@@ -277,6 +276,8 @@ pub struct Context<'a> {
     namespaces: &'a NamespaceMap,
     loaders: &'a TypeLoaderCollection,
     options: DecodingOptions,
+    aliases: Option<&'a HashMap<String, String>>,
+    index_map: Option<&'a HashMap<u16, u16>>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -333,8 +334,8 @@ pub trait TypeLoader: Send + Sync {
         &self,
         node_id: &crate::NodeId,
         body: &opcua_xml::XmlElement,
-        ctx: &crate::xml::XmlContext<'_>,
-    ) -> Option<Result<Box<dyn crate::DynEncodable>, crate::xml::FromXmlError>>;
+        ctx: &Context<'_>,
+    ) -> Option<crate::EncodingResult<Box<dyn crate::DynEncodable>>>;
 
     #[cfg(feature = "json")]
     /// Load the type given by `node_id` from JSON by trying each
@@ -362,6 +363,22 @@ pub trait TypeLoader: Send + Sync {
 }
 
 impl<'a> Context<'a> {
+    /// Constructor. Prefer to use `ContextOwned` to avoid having to juggle
+    /// NamespaceMap and TypeLoaderCollection yourself.
+    pub fn new(
+        namespaces: &'a NamespaceMap,
+        loaders: &'a TypeLoaderCollection,
+        options: DecodingOptions,
+    ) -> Self {
+        Self {
+            namespaces,
+            loaders,
+            options,
+            aliases: None,
+            index_map: None,
+        }
+    }
+
     #[cfg(feature = "json")]
     /// Try to load a type dynamically from JSON, returning an error if no
     /// matching type loader was found.
@@ -369,10 +386,9 @@ impl<'a> Context<'a> {
         &self,
         node_id: &NodeId,
         stream: &mut crate::json::JsonStreamReader<&mut dyn Read>,
-        ctx: &Context<'_>,
     ) -> crate::EncodingResult<crate::ExtensionObject> {
         for loader in self.loaders {
-            if let Some(r) = loader.load_from_json(node_id, stream, ctx) {
+            if let Some(r) = loader.load_from_json(node_id, stream, self) {
                 return Ok(crate::ExtensionObject { body: Some(r?) });
             }
         }
@@ -387,10 +403,27 @@ impl<'a> Context<'a> {
         &self,
         node_id: &NodeId,
         stream: &mut dyn Read,
-        ctx: &Context<'_>,
     ) -> crate::EncodingResult<crate::ExtensionObject> {
         for loader in self.loaders {
-            if let Some(r) = loader.load_from_binary(node_id, stream, ctx) {
+            if let Some(r) = loader.load_from_binary(node_id, stream, self) {
+                return Ok(crate::ExtensionObject { body: Some(r?) });
+            }
+        }
+        Err(Error::decoding(format!(
+            "No type loader defined for {node_id}"
+        )))
+    }
+
+    #[cfg(feature = "xml")]
+    /// Try to load a type dynamically from XML, returning an error if no
+    /// matching type loader was found.
+    pub fn load_from_xml(
+        &self,
+        node_id: &NodeId,
+        body: &opcua_xml::XmlElement,
+    ) -> crate::EncodingResult<crate::ExtensionObject> {
+        for loader in self.loaders {
+            if let Some(r) = loader.load_from_xml(node_id, body, self) {
                 return Ok(crate::ExtensionObject { body: Some(r?) });
             }
         }
@@ -409,6 +442,49 @@ impl<'a> Context<'a> {
         self.namespaces
     }
 
+    /// Set the index map used for resolving namespace indices during XML decoding.
+    pub fn set_index_map(&mut self, index_map: &'a HashMap<u16, u16>) {
+        self.index_map = Some(index_map);
+    }
+
+    /// Set the alias table used for resolving node ID aliases during XML decoding.
+    pub fn set_aliases(&mut self, aliases: &'a HashMap<String, String>) {
+        self.aliases = Some(aliases);
+    }
+
+    /// Resolve the given namespace index to the real, server namespace index.
+    /// Used when loading nodeset files.
+    pub fn resolve_namespace_index(
+        &self,
+        index_in_node_set: u16,
+    ) -> Result<u16, UninitializedIndex> {
+        if index_in_node_set == 0 {
+            return Ok(0);
+        }
+
+        let Some(index_map) = self.index_map else {
+            return Ok(index_in_node_set);
+        };
+        let Some(idx) = index_map.get(&index_in_node_set) else {
+            return Err(UninitializedIndex(index_in_node_set));
+        };
+        Ok(*idx)
+    }
+
+    /// Resolve a node ID alias, if the alias table is registered.
+    /// Only used for XML decoding when loading nodeset files.
+    pub fn resolve_alias<'b>(&self, node_id_str: &'b str) -> &'b str
+    where
+        'a: 'b,
+    {
+        if let Some(aliases) = self.aliases {
+            if let Some(alias) = aliases.get(node_id_str) {
+                return alias.as_str();
+            }
+        }
+        node_id_str
+    }
+
     /// Produce a copy of self with zero client_offset, or a borrow if
     /// the offset is already zero.
     pub fn with_zero_offset(&self) -> Cow<'_, Self> {
@@ -422,6 +498,8 @@ impl<'a> Context<'a> {
                     client_offset: TimeDelta::zero(),
                     ..self.options.clone()
                 },
+                aliases: self.aliases,
+                index_map: self.index_map,
             })
         }
     }

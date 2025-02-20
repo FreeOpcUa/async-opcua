@@ -4,11 +4,12 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
+use hashbrown::HashMap;
 use log::warn;
 use opcua_types::{
-    xml::{FromXmlError, XmlContext},
-    DataTypeDefinition, DataValue, EnumDefinition, EnumField, LocalizedText, NodeClass, NodeId,
-    QualifiedName, StructureDefinition, StructureField, StructureType, TypeLoader, Variant,
+    Context, DataTypeDefinition, DataValue, DecodingOptions, EnumDefinition, EnumField, Error,
+    LocalizedText, NodeClass, NodeId, QualifiedName, StructureDefinition, StructureField,
+    StructureType, TypeLoader, TypeLoaderCollection, Variant,
 };
 use opcua_xml::{
     load_nodeset2_file,
@@ -19,7 +20,6 @@ use opcua_xml::{
     XmlError,
 };
 use regex::Regex;
-use thiserror::Error;
 
 use crate::{
     Base, DataType, EventNotifier, ImportedItem, ImportedReference, Method, NodeSetImport, Object,
@@ -31,9 +31,10 @@ use crate::{
 /// the type loader for the base types is registered, but if your NodeSet2 file uses custom types
 /// you will have to add an [`TypeLoader`] using [`NodeSet2Import::add_type_loader`].
 pub struct NodeSet2Import {
-    type_loaders: Vec<Arc<dyn TypeLoader>>,
+    type_loaders: TypeLoaderCollection,
     dependent_namespaces: Vec<String>,
     preferred_locale: String,
+    aliases: HashMap<String, String>,
     file: UANodeSet,
 }
 
@@ -43,7 +44,7 @@ fn qualified_name_regex() -> &'static Regex {
     QUALIFIED_NAME_REGEX.get_or_init(|| Regex::new(r"^((?P<ns>[0-9]+):)?(?P<name>.*)$").unwrap())
 }
 
-#[derive(Error, Debug)]
+#[derive(thiserror::Error, Debug)]
 /// Error when loading NodeSet2 XML.
 pub enum LoadXmlError {
     /// The XML file failed to parse.
@@ -112,11 +113,18 @@ impl NodeSet2Import {
         nodeset: UANodeSet,
         dependent_namespaces: Vec<String>,
     ) -> Self {
+        let aliases = nodeset
+            .aliases
+            .iter()
+            .flat_map(|i| i.aliases.iter())
+            .map(|alias| (alias.alias.clone(), alias.id.0.clone()))
+            .collect();
         Self {
             preferred_locale: preferred_locale.to_owned(),
-            type_loaders: vec![Arc::new(opcua_types::GeneratedTypeLoader)],
+            type_loaders: TypeLoaderCollection::new(),
             file: nodeset,
             dependent_namespaces,
+            aliases,
         }
     }
 
@@ -125,7 +133,7 @@ impl NodeSet2Import {
     /// Any custom variable Value must be supported by one of the added
     /// type loaders in order for the node set import to work.
     pub fn add_type_loader(&mut self, loader: Arc<dyn TypeLoader>) {
-        self.type_loaders.push(loader);
+        self.type_loaders.add(loader);
     }
 
     fn select_localized_text(&self, texts: &[ua_node_set::LocalizedText]) -> Option<LocalizedText> {
@@ -145,51 +153,46 @@ impl NodeSet2Import {
     fn make_node_id(
         &self,
         node_id: &ua_node_set::NodeId,
-        ctx: &XmlContext<'_>,
-    ) -> Result<NodeId, FromXmlError> {
-        let mut node_id_str = &node_id.0;
-        if let Some(aliased) = ctx.aliases.get(&node_id.0) {
-            node_id_str = aliased;
-        };
+        ctx: &Context<'_>,
+    ) -> Result<NodeId, Error> {
+        let node_id_str = ctx.resolve_alias(&node_id.0);
 
         let Some(mut parsed) = NodeId::from_str(node_id_str).ok() else {
-            return Err(FromXmlError::Other(format!(
+            return Err(Error::decoding(format!(
                 "Failed to parse node ID: {node_id_str}"
             )));
         };
-        parsed.namespace = ctx.namespaces.get_index(parsed.namespace)?;
+
+        parsed.namespace = ctx.resolve_namespace_index(parsed.namespace)?;
         Ok(parsed)
     }
 
     fn make_qualified_name(
         &self,
         qname: &ua_node_set::QualifiedName,
-        ctx: &XmlContext<'_>,
-    ) -> Result<QualifiedName, FromXmlError> {
+        ctx: &Context<'_>,
+    ) -> Result<QualifiedName, Error> {
         let captures = qualified_name_regex()
             .captures(&qname.0)
-            .ok_or_else(|| FromXmlError::Other(format!("Invalid qualified name: {}", qname.0)))?;
+            .ok_or_else(|| Error::decoding(format!("Invalid qualified name: {}", qname.0)))?;
 
         let namespace = if let Some(ns) = captures.name("ns") {
             ns.as_str().trim().parse::<u16>().map_err(|e| {
-                format!(
+                Error::decoding(format!(
                     "Failed to parse namespace index from qualified name: {}, {e:?}",
                     qname.0
-                )
+                ))
             })?
         } else {
             0
         };
 
-        let namespace = ctx.namespaces.get_index(namespace)?;
+        let namespace = ctx.resolve_namespace_index(namespace)?;
         let name = captures.name("name").map(|n| n.as_str()).unwrap_or("");
         Ok(QualifiedName::new(namespace, name))
     }
 
-    fn make_array_dimensions(
-        &self,
-        dims: &ArrayDimensions,
-    ) -> Result<Option<Vec<u32>>, FromXmlError> {
+    fn make_array_dimensions(&self, dims: &ArrayDimensions) -> Result<Option<Vec<u32>>, Error> {
         if dims.0.trim().is_empty() {
             return Ok(None);
         }
@@ -197,7 +200,7 @@ impl NodeSet2Import {
         let mut values = Vec::new();
         for it in dims.0.split(',') {
             let Ok(r) = it.trim().parse::<u32>() else {
-                return Err(FromXmlError::Other(format!(
+                return Err(Error::decoding(format!(
                     "Invalid array dimensions: {}",
                     dims.0
                 )));
@@ -214,8 +217,8 @@ impl NodeSet2Import {
     fn make_data_type_def(
         &self,
         def: &ua_node_set::DataTypeDefinition,
-        ctx: &XmlContext<'_>,
-    ) -> Result<DataTypeDefinition, FromXmlError> {
+        ctx: &Context<'_>,
+    ) -> Result<DataTypeDefinition, Error> {
         let is_enum = def.fields.first().is_some_and(|f| f.value != -1);
         if is_enum {
             let fields = def
@@ -269,10 +272,10 @@ impl NodeSet2Import {
 
     fn make_base(
         &self,
-        ctx: &XmlContext<'_>,
+        ctx: &Context<'_>,
         base: &ua_node_set::UANodeBase,
         node_class: NodeClass,
-    ) -> Result<Base, FromXmlError> {
+    ) -> Result<Base, Error> {
         Ok(Base::new_full(
             self.make_node_id(&base.node_id, ctx)?,
             node_class,
@@ -287,10 +290,10 @@ impl NodeSet2Import {
 
     fn make_references(
         &self,
-        ctx: &XmlContext<'_>,
+        ctx: &Context<'_>,
         base: &Base,
         refs: &Option<ListOfReferences>,
-    ) -> Result<Vec<ImportedReference>, FromXmlError> {
+    ) -> Result<Vec<ImportedReference>, Error> {
         let Some(refs) = refs.as_ref() else {
             return Ok(Vec::new());
         };
@@ -320,11 +323,7 @@ impl NodeSet2Import {
         Ok(res)
     }
 
-    fn make_object(
-        &self,
-        ctx: &XmlContext<'_>,
-        node: &UAObject,
-    ) -> Result<ImportedItem, FromXmlError> {
+    fn make_object(&self, ctx: &Context<'_>, node: &UAObject) -> Result<ImportedItem, Error> {
         let base = self.make_base(ctx, &node.base.base, NodeClass::Object)?;
         Ok(ImportedItem {
             references: self.make_references(ctx, &base, &node.base.base.references)?,
@@ -336,11 +335,7 @@ impl NodeSet2Import {
         })
     }
 
-    fn make_variable(
-        &self,
-        ctx: &XmlContext<'_>,
-        node: &UAVariable,
-    ) -> Result<ImportedItem, FromXmlError> {
+    fn make_variable(&self, ctx: &Context<'_>, node: &UAVariable) -> Result<ImportedItem, Error> {
         let base = self.make_base(ctx, &node.base.base, NodeClass::Variable)?;
         Ok(ImportedItem {
             references: self.make_references(ctx, &base, &node.base.base.references)?,
@@ -352,7 +347,7 @@ impl NodeSet2Import {
                 node.value
                     .as_ref()
                     .map(|v| {
-                        Ok::<DataValue, FromXmlError>(DataValue::new_now(Variant::from_nodeset(
+                        Ok::<DataValue, Error>(DataValue::new_now(Variant::from_nodeset(
                             &v.0, ctx,
                         )?))
                     })
@@ -367,11 +362,7 @@ impl NodeSet2Import {
         })
     }
 
-    fn make_method(
-        &self,
-        ctx: &XmlContext<'_>,
-        node: &UAMethod,
-    ) -> Result<ImportedItem, FromXmlError> {
+    fn make_method(&self, ctx: &Context<'_>, node: &UAMethod) -> Result<ImportedItem, Error> {
         let base = self.make_base(ctx, &node.base.base, NodeClass::Method)?;
         Ok(ImportedItem {
             references: self.make_references(ctx, &base, &node.base.base.references)?,
@@ -379,7 +370,7 @@ impl NodeSet2Import {
         })
     }
 
-    fn make_view(&self, ctx: &XmlContext<'_>, node: &UAView) -> Result<ImportedItem, FromXmlError> {
+    fn make_view(&self, ctx: &Context<'_>, node: &UAView) -> Result<ImportedItem, Error> {
         let base = self.make_base(ctx, &node.base.base, NodeClass::View)?;
         Ok(ImportedItem {
             references: self.make_references(ctx, &base, &node.base.base.references)?,
@@ -394,9 +385,9 @@ impl NodeSet2Import {
 
     fn make_object_type(
         &self,
-        ctx: &XmlContext<'_>,
+        ctx: &Context<'_>,
         node: &UAObjectType,
-    ) -> Result<ImportedItem, FromXmlError> {
+    ) -> Result<ImportedItem, Error> {
         let base = self.make_base(ctx, &node.base.base, NodeClass::ObjectType)?;
         Ok(ImportedItem {
             references: self.make_references(ctx, &base, &node.base.base.references)?,
@@ -406,9 +397,9 @@ impl NodeSet2Import {
 
     fn make_variable_type(
         &self,
-        ctx: &XmlContext<'_>,
+        ctx: &Context<'_>,
         node: &UAVariableType,
-    ) -> Result<ImportedItem, FromXmlError> {
+    ) -> Result<ImportedItem, Error> {
         let base = self.make_base(ctx, &node.base.base, NodeClass::VariableType)?;
         Ok(ImportedItem {
             references: self.make_references(ctx, &base, &node.base.base.references)?,
@@ -419,9 +410,7 @@ impl NodeSet2Import {
                 node.value_rank.0,
                 node.value
                     .as_ref()
-                    .map(|v| {
-                        Ok::<_, FromXmlError>(DataValue::new_now(Variant::from_nodeset(&v.0, ctx)?))
-                    })
+                    .map(|v| Ok::<_, Error>(DataValue::new_now(Variant::from_nodeset(&v.0, ctx)?)))
                     .transpose()?,
                 self.make_array_dimensions(&node.array_dimensions)?,
             )
@@ -429,11 +418,7 @@ impl NodeSet2Import {
         })
     }
 
-    fn make_data_type(
-        &self,
-        ctx: &XmlContext<'_>,
-        node: &UADataType,
-    ) -> Result<ImportedItem, FromXmlError> {
+    fn make_data_type(&self, ctx: &Context<'_>, node: &UADataType) -> Result<ImportedItem, Error> {
         let base = self.make_base(ctx, &node.base.base, NodeClass::DataType)?;
         Ok(ImportedItem {
             references: self.make_references(ctx, &base, &node.base.base.references)?,
@@ -451,9 +436,9 @@ impl NodeSet2Import {
 
     fn make_reference_type(
         &self,
-        ctx: &XmlContext<'_>,
+        ctx: &Context<'_>,
         node: &UAReferenceType,
-    ) -> Result<ImportedItem, FromXmlError> {
+    ) -> Result<ImportedItem, Error> {
         let base = self.make_base(ctx, &node.base.base, NodeClass::ReferenceType)?;
         Ok(ImportedItem {
             references: self.make_references(ctx, &base, &node.base.base.references)?,
@@ -501,18 +486,12 @@ impl NodeSetImport for NodeSet2Import {
         &'a self,
         namespaces: &'a opcua_types::NodeSetNamespaceMapper,
     ) -> Box<dyn Iterator<Item = crate::ImportedItem> + 'a> {
-        let aliases = self
-            .file
-            .aliases
-            .iter()
-            .flat_map(|i| i.aliases.iter())
-            .map(|alias| (alias.alias.clone(), alias.id.0.clone()))
-            .collect();
-        let ctx = XmlContext {
-            namespaces,
-            aliases,
-            loaders: self.type_loaders.clone(),
-        };
+        let mut ctx = Context::new(
+            namespaces.namespaces(),
+            &self.type_loaders,
+            DecodingOptions::default(),
+        );
+        ctx.set_aliases(&self.aliases);
         Box::new(self.file.nodes.iter().filter_map(move |raw_node| {
             let r = match raw_node {
                 opcua_xml::schema::ua_node_set::UANode::Object(node) => {

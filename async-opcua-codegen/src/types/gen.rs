@@ -367,8 +367,8 @@ impl CodeGenerator {
             impl opcua::types::xml::FromXml for #enum_ident {
                 fn from_xml(
                     element: &opcua::types::xml::XmlElement,
-                    ctx: &opcua::types::xml::XmlContext<'_>
-                ) -> Result<Self, opcua::types::xml::FromXmlError> {
+                    ctx: &opcua::types::Context<'_>
+                ) -> opcua::types::EncodingResult<Self> {
                     let val = #ty::from_xml(element, ctx)?;
                     Ok(Self::from_bits_truncate(val))
                 }

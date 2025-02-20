@@ -26,8 +26,8 @@ pub fn generate_xml_impl(strct: EncodingStruct) -> syn::Result<TokenStream> {
         impl opcua::types::xml::FromXml for #ident {
             fn from_xml<'a>(
                 element: &opcua::types::xml::XmlElement,
-                ctx: &opcua::types::xml::XmlContext<'a>
-            ) -> Result<Self, opcua::types::xml::FromXmlError> {
+                ctx: &opcua::types::Context<'a>
+            ) -> Result<Self, opcua::types::Error> {
                 #body
                 Ok(Self {
                     #build
@@ -45,10 +45,10 @@ pub fn generate_simple_enum_xml_impl(en: SimpleEnum) -> syn::Result<TokenStream>
         impl opcua::types::xml::FromXml for #ident {
             fn from_xml<'a>(
                 element: &opcua::types::xml::XmlElement,
-                ctx: &opcua::types::xml::XmlContext<'a>
-            ) -> Result<Self, opcua::types::xml::FromXmlError> {
+                ctx: &opcua::types::Context<'a>
+            ) -> Result<Self, opcua::types::Error> {
                 let val = #repr::from_xml(element, ctx)?;
-                Ok(Self::try_from(val).map_err(|e| e.to_string())?)
+                Self::try_from(val).map_err(opcua::types::Error::decoding)
             }
         }
     })

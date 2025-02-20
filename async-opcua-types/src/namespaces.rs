@@ -122,4 +122,9 @@ impl<'a> NodeSetNamespaceMapper<'a> {
     pub fn namespaces(&'a self) -> &'a NamespaceMap {
         &*self.namespaces
     }
+
+    /// Return the inner index map.
+    pub fn index_map(&self) -> &HashMap<u16, u16> {
+        &self.index_map
+    }
 }

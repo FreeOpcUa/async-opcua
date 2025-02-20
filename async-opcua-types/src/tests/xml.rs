@@ -1,14 +1,14 @@
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use std::str::FromStr;
 
 use opcua_xml::{from_str, XmlElement};
 
 use crate::{
-    xml::{FromXml, FromXmlError, XmlContext},
-    Argument, ByteString, DataTypeId, DataValue, DateTime, ExpandedNodeId, ExtensionObject, Guid,
-    LocalizedText, NodeId, QualifiedName, StatusCode, UAString, Variant,
+    xml::FromXml, Argument, ByteString, DataTypeId, DataValue, DateTime, ExpandedNodeId,
+    ExtensionObject, Guid, LocalizedText, NodeId, QualifiedName, StatusCode, UAString, Variant,
 };
+use crate::{Context, ContextOwned, DecodingOptions, EncodingResult, Error};
 
-use crate::{generated::types::GeneratedTypeLoader, NamespaceMap, NodeSetNamespaceMapper};
+use crate::{NamespaceMap, NodeSetNamespaceMapper};
 
 fn namespaces() -> NamespaceMap {
     NamespaceMap::new()
@@ -18,32 +18,22 @@ fn mapper(ns: &mut NamespaceMap) -> NodeSetNamespaceMapper<'_> {
     NodeSetNamespaceMapper::new(ns)
 }
 
-fn context<'a>(mapper: &'a NodeSetNamespaceMapper<'a>) -> XmlContext<'a> {
-    XmlContext {
-        aliases: HashMap::new(),
-        namespaces: mapper,
-        loaders: vec![Arc::new(GeneratedTypeLoader)],
-    }
+fn context<'a>(mapper: &'a NodeSetNamespaceMapper<'a>, owned: &'a ContextOwned) -> Context<'a> {
+    let mut ctx = owned.context();
+    ctx.set_index_map(mapper.index_map());
+    ctx
 }
 
-macro_rules! setup {
-    ($ns:ident, $mp:ident, $ctx:ident) => {
-        let mut $ns = namespaces();
-        let $mp = mapper(&mut $ns);
-        let $ctx = context(&$mp);
-    };
+fn from_xml_str<T: FromXml>(data: &str) -> EncodingResult<T> {
+    let ctx = ContextOwned::new_default(namespaces(), DecodingOptions::default());
+    let ctx_ref = ctx.context();
+    from_xml_str_ctx(data, &ctx_ref)
 }
 
-fn from_xml_str<T: FromXml>(data: &str) -> Result<T, FromXmlError> {
-    setup!(ns, mp, ctx);
-    from_xml_str_ctx(data, &ctx)
-}
-
-fn from_xml_str_ctx<T: FromXml>(data: &str, ctx: &XmlContext<'_>) -> Result<T, FromXmlError> {
-    let element: Option<XmlElement> =
-        from_str(data).map_err(|e| FromXmlError::Other(e.to_string()))?;
+fn from_xml_str_ctx<T: FromXml>(data: &str, ctx: &Context<'_>) -> EncodingResult<T> {
+    let element: Option<XmlElement> = from_str(data).map_err(Error::decoding)?;
     let Some(element) = element else {
-        return Err(FromXmlError::MissingContent("root"));
+        return Err(Error::decoding("Missing root element"));
     };
     T::from_xml(&element, ctx)
 }
@@ -135,10 +125,11 @@ fn from_xml_node_id() {
         from_xml_str::<NodeId>("<Data><Identifier>s=test</Identifier></Data>").unwrap()
     );
     let mut ns = namespaces();
+    let ctx_owned = ContextOwned::new_default(ns.clone(), DecodingOptions::default());
     ns.add_namespace("opc.tcp://my-server.server");
     let mut mp = mapper(&mut ns);
     mp.add_namespace("opc.tcp://my-server.server", 2);
-    let ctx = context(&mp);
+    let ctx = context(&mp, &ctx_owned);
 
     assert_eq!(
         NodeId::new(1, ByteString::from_base64("aGVsbG8=").unwrap()),
@@ -246,9 +237,10 @@ fn from_xml_qualified_name() {
     );
     let mut ns = namespaces();
     ns.add_namespace("opc.tcp://my-server.server");
+    let ctx_owned = ContextOwned::new_default(ns.clone(), DecodingOptions::default());
     let mut mp = mapper(&mut ns);
     mp.add_namespace("opc.tcp://my-server.server", 2);
-    let ctx = context(&mp);
+    let ctx = context(&mp, &ctx_owned);
 
     assert_eq!(
         QualifiedName::new(1, "Some name"),

@@ -51,8 +51,8 @@ impl opcua::types::IntoVariant for AccessLevelExType {
 impl opcua::types::xml::FromXml for AccessLevelExType {
     fn from_xml(
         element: &opcua::types::xml::XmlElement,
-        ctx: &opcua::types::xml::XmlContext<'_>,
-    ) -> Result<Self, opcua::types::xml::FromXmlError> {
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
         let val = i32::from_xml(element, ctx)?;
         Ok(Self::from_bits_truncate(val))
     }
@@ -119,8 +119,8 @@ impl opcua::types::IntoVariant for AccessLevelType {
 impl opcua::types::xml::FromXml for AccessLevelType {
     fn from_xml(
         element: &opcua::types::xml::XmlElement,
-        ctx: &opcua::types::xml::XmlContext<'_>,
-    ) -> Result<Self, opcua::types::xml::FromXmlError> {
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
         let val = u8::from_xml(element, ctx)?;
         Ok(Self::from_bits_truncate(val))
     }
@@ -186,8 +186,8 @@ impl opcua::types::IntoVariant for AccessRestrictionType {
 impl opcua::types::xml::FromXml for AccessRestrictionType {
     fn from_xml(
         element: &opcua::types::xml::XmlElement,
-        ctx: &opcua::types::xml::XmlContext<'_>,
-    ) -> Result<Self, opcua::types::xml::FromXmlError> {
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
         let val = i16::from_xml(element, ctx)?;
         Ok(Self::from_bits_truncate(val))
     }
@@ -252,8 +252,8 @@ impl opcua::types::IntoVariant for AlarmMask {
 impl opcua::types::xml::FromXml for AlarmMask {
     fn from_xml(
         element: &opcua::types::xml::XmlElement,
-        ctx: &opcua::types::xml::XmlContext<'_>,
-    ) -> Result<Self, opcua::types::xml::FromXmlError> {
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
         let val = i16::from_xml(element, ctx)?;
         Ok(Self::from_bits_truncate(val))
     }
@@ -350,8 +350,8 @@ impl opcua::types::IntoVariant for AttributeWriteMask {
 impl opcua::types::xml::FromXml for AttributeWriteMask {
     fn from_xml(
         element: &opcua::types::xml::XmlElement,
-        ctx: &opcua::types::xml::XmlContext<'_>,
-    ) -> Result<Self, opcua::types::xml::FromXmlError> {
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
         let val = i32::from_xml(element, ctx)?;
         Ok(Self::from_bits_truncate(val))
     }
@@ -560,8 +560,8 @@ impl opcua::types::IntoVariant for DataSetFieldContentMask {
 impl opcua::types::xml::FromXml for DataSetFieldContentMask {
     fn from_xml(
         element: &opcua::types::xml::XmlElement,
-        ctx: &opcua::types::xml::XmlContext<'_>,
-    ) -> Result<Self, opcua::types::xml::FromXmlError> {
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
         let val = i32::from_xml(element, ctx)?;
         Ok(Self::from_bits_truncate(val))
     }
@@ -626,8 +626,8 @@ impl opcua::types::IntoVariant for DataSetFieldFlags {
 impl opcua::types::xml::FromXml for DataSetFieldFlags {
     fn from_xml(
         element: &opcua::types::xml::XmlElement,
-        ctx: &opcua::types::xml::XmlContext<'_>,
-    ) -> Result<Self, opcua::types::xml::FromXmlError> {
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
         let val = i16::from_xml(element, ctx)?;
         Ok(Self::from_bits_truncate(val))
     }
@@ -783,8 +783,8 @@ impl opcua::types::IntoVariant for EventNotifierType {
 impl opcua::types::xml::FromXml for EventNotifierType {
     fn from_xml(
         element: &opcua::types::xml::XmlElement,
-        ctx: &opcua::types::xml::XmlContext<'_>,
-    ) -> Result<Self, opcua::types::xml::FromXmlError> {
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
         let val = u8::from_xml(element, ctx)?;
         Ok(Self::from_bits_truncate(val))
     }
@@ -1033,8 +1033,8 @@ impl opcua::types::IntoVariant for JsonDataSetMessageContentMask {
 impl opcua::types::xml::FromXml for JsonDataSetMessageContentMask {
     fn from_xml(
         element: &opcua::types::xml::XmlElement,
-        ctx: &opcua::types::xml::XmlContext<'_>,
-    ) -> Result<Self, opcua::types::xml::FromXmlError> {
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
         let val = i32::from_xml(element, ctx)?;
         Ok(Self::from_bits_truncate(val))
     }
@@ -1102,8 +1102,8 @@ impl opcua::types::IntoVariant for JsonNetworkMessageContentMask {
 impl opcua::types::xml::FromXml for JsonNetworkMessageContentMask {
     fn from_xml(
         element: &opcua::types::xml::XmlElement,
-        ctx: &opcua::types::xml::XmlContext<'_>,
-    ) -> Result<Self, opcua::types::xml::FromXmlError> {
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
         let val = i32::from_xml(element, ctx)?;
         Ok(Self::from_bits_truncate(val))
     }
@@ -1437,8 +1437,8 @@ impl opcua::types::IntoVariant for PasswordOptionsMask {
 impl opcua::types::xml::FromXml for PasswordOptionsMask {
     fn from_xml(
         element: &opcua::types::xml::XmlElement,
-        ctx: &opcua::types::xml::XmlContext<'_>,
-    ) -> Result<Self, opcua::types::xml::FromXmlError> {
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
         let val = i32::from_xml(element, ctx)?;
         Ok(Self::from_bits_truncate(val))
     }
@@ -1530,8 +1530,8 @@ impl opcua::types::IntoVariant for PermissionType {
 impl opcua::types::xml::FromXml for PermissionType {
     fn from_xml(
         element: &opcua::types::xml::XmlElement,
-        ctx: &opcua::types::xml::XmlContext<'_>,
-    ) -> Result<Self, opcua::types::xml::FromXmlError> {
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
         let val = i32::from_xml(element, ctx)?;
         Ok(Self::from_bits_truncate(val))
     }
@@ -1601,8 +1601,8 @@ impl opcua::types::IntoVariant for PubSubConfigurationRefMask {
 impl opcua::types::xml::FromXml for PubSubConfigurationRefMask {
     fn from_xml(
         element: &opcua::types::xml::XmlElement,
-        ctx: &opcua::types::xml::XmlContext<'_>,
-    ) -> Result<Self, opcua::types::xml::FromXmlError> {
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
         let val = i32::from_xml(element, ctx)?;
         Ok(Self::from_bits_truncate(val))
     }
@@ -1885,8 +1885,8 @@ impl opcua::types::IntoVariant for TrustListValidationOptions {
 impl opcua::types::xml::FromXml for TrustListValidationOptions {
     fn from_xml(
         element: &opcua::types::xml::XmlElement,
-        ctx: &opcua::types::xml::XmlContext<'_>,
-    ) -> Result<Self, opcua::types::xml::FromXmlError> {
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
         let val = i32::from_xml(element, ctx)?;
         Ok(Self::from_bits_truncate(val))
     }
@@ -2067,8 +2067,8 @@ impl opcua::types::IntoVariant for UadpDataSetMessageContentMask {
 impl opcua::types::xml::FromXml for UadpDataSetMessageContentMask {
     fn from_xml(
         element: &opcua::types::xml::XmlElement,
-        ctx: &opcua::types::xml::XmlContext<'_>,
-    ) -> Result<Self, opcua::types::xml::FromXmlError> {
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
         let val = i32::from_xml(element, ctx)?;
         Ok(Self::from_bits_truncate(val))
     }
@@ -2137,8 +2137,8 @@ impl opcua::types::IntoVariant for UadpNetworkMessageContentMask {
 impl opcua::types::xml::FromXml for UadpNetworkMessageContentMask {
     fn from_xml(
         element: &opcua::types::xml::XmlElement,
-        ctx: &opcua::types::xml::XmlContext<'_>,
-    ) -> Result<Self, opcua::types::xml::FromXmlError> {
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
         let val = i32::from_xml(element, ctx)?;
         Ok(Self::from_bits_truncate(val))
     }
@@ -2204,8 +2204,8 @@ impl opcua::types::IntoVariant for UserConfigurationMask {
 impl opcua::types::xml::FromXml for UserConfigurationMask {
     fn from_xml(
         element: &opcua::types::xml::XmlElement,
-        ctx: &opcua::types::xml::XmlContext<'_>,
-    ) -> Result<Self, opcua::types::xml::FromXmlError> {
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
         let val = i32::from_xml(element, ctx)?;
         Ok(Self::from_bits_truncate(val))
     }

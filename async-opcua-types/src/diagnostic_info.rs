@@ -64,10 +64,7 @@ bitflags! {
 
 #[cfg(feature = "xml")]
 impl crate::xml::FromXml for DiagnosticBits {
-    fn from_xml(
-        element: &opcua_xml::XmlElement,
-        ctx: &crate::xml::XmlContext<'_>,
-    ) -> Result<Self, crate::xml::FromXmlError> {
+    fn from_xml(element: &opcua_xml::XmlElement, ctx: &Context<'_>) -> EncodingResult<Self> {
         let v = u32::from_xml(element, ctx)?;
         Ok(Self::from_bits_truncate(v))
     }

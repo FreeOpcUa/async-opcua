@@ -8,9 +8,9 @@ use enums::{derive_ua_enum_impl, SimpleEnum};
 #[cfg(feature = "json")]
 use json::{
     generate_json_decode_impl, generate_json_encode_impl, generate_simple_enum_json_decode_impl,
-    generate_simple_enum_json_encode_impl,
+    generate_simple_enum_json_encode_impl, generate_union_json_decode_impl,
+    generate_union_json_encode_impl,
 };
-use json::{generate_union_json_decode_impl, generate_union_json_encode_impl};
 use proc_macro2::{Span, TokenStream};
 use syn::DeriveInput;
 use unions::AdvancedEnum;

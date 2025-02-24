@@ -9,3 +9,6 @@ jobs:
 
       - name: Run clippy
         run: cargo clippy -- -D warnings
+      
+      - name: No default features
+        run: cargo clippy --no-default-features -- -D warnings

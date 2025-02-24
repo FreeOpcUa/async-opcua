@@ -6,6 +6,7 @@ use super::attribute::EncodingVariantAttribute;
 
 pub struct AdvancedEnumVariant {
     pub name: Ident,
+    #[allow(unused)]
     pub attr: EncodingVariantAttribute,
     pub is_null: bool,
 }

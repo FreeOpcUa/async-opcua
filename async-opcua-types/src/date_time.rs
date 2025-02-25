@@ -63,6 +63,36 @@ mod json {
     }
 }
 
+#[cfg(feature = "xml")]
+mod xml {
+    use crate::xml::*;
+    use std::io::{Read, Write};
+
+    use super::DateTime;
+
+    impl XmlEncodable for DateTime {
+        fn encode(
+            &self,
+            writer: &mut XmlStreamWriter<&mut dyn Write>,
+            context: &Context<'_>,
+        ) -> EncodingResult<()> {
+            self.to_rfc3339().encode(writer, context)
+        }
+    }
+
+    impl XmlDecodable for DateTime {
+        fn decode(
+            read: &mut XmlStreamReader<&mut dyn Read>,
+            _context: &Context<'_>,
+        ) -> Result<Self, Error> {
+            let v = read.consume_as_text()?;
+            let dt = DateTime::parse_from_rfc3339(&v)
+                .map_err(|e| Error::decoding(format!("Cannot parse date time: {e}")))?;
+            Ok(dt)
+        }
+    }
+}
+
 /// DateTime encoded as 64-bit signed int
 impl BinaryEncodable for DateTime {
     fn byte_len(&self, _ctx: &Context<'_>) -> usize {

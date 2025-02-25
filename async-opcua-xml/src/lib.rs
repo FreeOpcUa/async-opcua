@@ -20,6 +20,7 @@ mod ext;
 pub mod schema;
 
 pub use encoding::{XmlReadError, XmlStreamReader, XmlStreamWriter, XmlWriteError};
+pub use quick_xml::events;
 
 pub use error::{XmlError, XmlErrorInner};
 pub use schema::opc_binary_schema::load_bsd_file;

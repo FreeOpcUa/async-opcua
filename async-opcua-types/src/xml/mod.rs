@@ -5,15 +5,18 @@
 mod builtins;
 mod encoding;
 
+pub use crate::{Context, EncodingResult, Error};
+pub use encoding::{XmlDecodable, XmlEncodable, XmlReadExt, XmlWriteExt};
+pub use opcua_xml::{XmlStreamReader, XmlStreamWriter};
+
 use std::str::FromStr;
 
 use log::warn;
 pub use opcua_xml::schema::opc_ua_types::XmlElement;
 
 use crate::{
-    Array, ByteString, Context, DataValue, DateTime, EncodingResult, Error, ExpandedNodeId,
-    ExtensionObject, Guid, LocalizedText, NodeId, QualifiedName, StatusCode, UAString,
-    UninitializedIndex, Variant, VariantScalarTypeId,
+    Array, ByteString, DataValue, DateTime, ExpandedNodeId, ExtensionObject, Guid, LocalizedText,
+    NodeId, QualifiedName, StatusCode, UAString, UninitializedIndex, Variant, VariantScalarTypeId,
 };
 
 impl From<UninitializedIndex> for Error {

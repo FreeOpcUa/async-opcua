@@ -136,6 +136,37 @@ impl SimpleBinaryDecodable for UAString {
     }
 }
 
+#[cfg(feature = "xml")]
+mod xml {
+    use crate::xml::*;
+    use std::io::{Read, Write};
+
+    use super::UAString;
+
+    impl XmlEncodable for UAString {
+        fn encode(
+            &self,
+            writer: &mut XmlStreamWriter<&mut dyn Write>,
+            _ctx: &Context<'_>,
+        ) -> Result<(), Error> {
+            if let Some(s) = self.value() {
+                writer.write_text(s)?;
+            }
+
+            Ok(())
+        }
+    }
+
+    impl XmlDecodable for UAString {
+        fn decode(
+            read: &mut XmlStreamReader<&mut dyn Read>,
+            _context: &Context<'_>,
+        ) -> Result<Self, Error> {
+            Ok(read.consume_as_text()?.into())
+        }
+    }
+}
+
 impl From<UAString> for String {
     fn from(value: UAString) -> Self {
         value.as_ref().to_string()

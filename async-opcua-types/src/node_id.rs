@@ -327,6 +327,48 @@ mod json {
     }
 }
 
+#[cfg(feature = "xml")]
+mod xml {
+    use crate::xml::*;
+    use std::{
+        io::{Read, Write},
+        str::FromStr,
+    };
+
+    use super::NodeId;
+
+    impl XmlEncodable for NodeId {
+        fn encode(
+            &self,
+            writer: &mut XmlStreamWriter<&mut dyn Write>,
+            ctx: &crate::xml::Context<'_>,
+        ) -> Result<(), Error> {
+            let self_str = self.to_string();
+            let val = ctx.resolve_alias(&self_str);
+            writer.encode_child("Identifier", val, ctx)
+        }
+    }
+
+    impl XmlDecodable for NodeId {
+        fn decode(
+            read: &mut XmlStreamReader<&mut dyn Read>,
+            context: &Context<'_>,
+        ) -> Result<Self, Error>
+        where
+            Self: Sized,
+        {
+            let val: Option<String> = read.decode_single_child("Identifier", context)?;
+            let Some(val) = val else {
+                return Ok(NodeId::null());
+            };
+
+            let val_str = context.resolve_alias(&val);
+            NodeId::from_str(val_str)
+                .map_err(|e| Error::new(e, format!("Invalid node ID: {val_str}")))
+        }
+    }
+}
+
 impl BinaryEncodable for NodeId {
     fn byte_len(&self, ctx: &crate::Context<'_>) -> usize {
         // Type determines the byte code

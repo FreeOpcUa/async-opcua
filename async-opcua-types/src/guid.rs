@@ -57,6 +57,40 @@ mod json {
     }
 }
 
+#[cfg(feature = "xml")]
+mod xml {
+    use crate::xml::*;
+    use std::{
+        io::{Read, Write},
+        str::FromStr,
+    };
+
+    use super::Guid;
+
+    impl XmlEncodable for Guid {
+        fn encode(
+            &self,
+            writer: &mut XmlStreamWriter<&mut dyn Write>,
+            ctx: &crate::xml::Context<'_>,
+        ) -> EncodingResult<()> {
+            writer.encode_child("String", &self.to_string(), ctx)
+        }
+    }
+
+    impl XmlDecodable for Guid {
+        fn decode(
+            reader: &mut XmlStreamReader<&mut dyn Read>,
+            ctx: &crate::xml::Context<'_>,
+        ) -> EncodingResult<Self> {
+            let val: Option<String> = reader.decode_single_child("String", ctx)?;
+            let Some(val) = val else {
+                return Ok(Guid::null());
+            };
+            Guid::from_str(&val).map_err(Error::decoding)
+        }
+    }
+}
+
 impl fmt::Display for Guid {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.uuid)

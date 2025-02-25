@@ -44,6 +44,39 @@ mod json {
     }
 }
 
+#[cfg(feature = "xml")]
+mod xml {
+    use crate::xml::*;
+    use std::io::{Read, Write};
+
+    use super::StatusCode;
+
+    impl XmlEncodable for StatusCode {
+        fn encode(
+            &self,
+            writer: &mut XmlStreamWriter<&mut dyn Write>,
+            context: &Context<'_>,
+        ) -> Result<(), Error> {
+            writer.encode_child("Code", &self.0, context)
+        }
+    }
+
+    impl XmlDecodable for StatusCode {
+        fn decode(
+            read: &mut XmlStreamReader<&mut dyn Read>,
+            context: &Context<'_>,
+        ) -> Result<Self, Error>
+        where
+            Self: Sized,
+        {
+            Ok(Self::from(
+                read.decode_single_child::<u32>("Code", context)?
+                    .unwrap_or_default(),
+            ))
+        }
+    }
+}
+
 const SUBCODE_MASK: u32 = 0xffff_0000;
 const INFO_BITS_MASK: u32 = 0b0011_1111_1111;
 

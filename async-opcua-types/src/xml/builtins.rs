@@ -105,6 +105,17 @@ impl XmlEncodable for String {
     }
 }
 
+impl XmlEncodable for str {
+    fn encode(
+        &self,
+        writer: &mut XmlStreamWriter<&mut dyn Write>,
+        _context: &Context<'_>,
+    ) -> Result<(), Error> {
+        writer.write_text(self)?;
+        Ok(())
+    }
+}
+
 impl XmlDecodable for bool {
     fn decode(
         read: &mut XmlStreamReader<&mut dyn Read>,

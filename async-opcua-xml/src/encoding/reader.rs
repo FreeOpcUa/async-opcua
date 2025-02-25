@@ -45,7 +45,10 @@ impl<T: Read> XmlStreamReader<T> {
     /// Get the next event from the stream.
     pub fn next_event(&mut self) -> Result<quick_xml::events::Event, XmlReadError> {
         self.buffer.clear();
-        Ok(self.reader.read_event_into(&mut self.buffer)?)
+        match self.reader.read_event_into(&mut self.buffer)? {
+            Event::Eof => Err(XmlReadError::UnexpectedEof),
+            e => Ok(e),
+        }
     }
 
     /// Skip the current value. This should be called after encountering a

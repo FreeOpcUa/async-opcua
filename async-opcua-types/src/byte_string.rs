@@ -74,6 +74,42 @@ mod json {
     }
 }
 
+#[cfg(feature = "xml")]
+mod xml {
+    use crate::xml::*;
+    use std::io::{Read, Write};
+
+    use super::ByteString;
+
+    impl XmlEncodable for ByteString {
+        fn encode(
+            &self,
+            writer: &mut XmlStreamWriter<&mut dyn Write>,
+            _context: &Context<'_>,
+        ) -> EncodingResult<()> {
+            if self.value.is_some() {
+                writer.write_text(&self.as_base64())?;
+            }
+            Ok(())
+        }
+    }
+
+    impl XmlDecodable for ByteString {
+        fn decode(
+            read: &mut XmlStreamReader<&mut dyn Read>,
+            _context: &Context<'_>,
+        ) -> Result<Self, Error> {
+            let s = read.consume_as_text()?;
+            if s.is_empty() {
+                Ok(ByteString::null())
+            } else {
+                Ok(ByteString::from_base64(&s)
+                    .ok_or_else(|| Error::decoding("Cannot decode base64 bytestring"))?)
+            }
+        }
+    }
+}
+
 impl SimpleBinaryEncodable for ByteString {
     fn byte_len(&self) -> usize {
         // Length plus the actual length of bytes (if not null)

@@ -299,6 +299,88 @@ mod json {
     }
 }
 
+#[cfg(feature = "xml")]
+mod xml {
+    use opcua_xml::events::Event;
+
+    use crate::{xml::*, ByteString, NodeId};
+    use std::io::{Read, Write};
+
+    use super::ExtensionObject;
+
+    impl XmlEncodable for ExtensionObject {
+        fn encode(
+            &self,
+            writer: &mut XmlStreamWriter<&mut dyn Write>,
+            ctx: &crate::Context<'_>,
+        ) -> super::EncodingResult<()> {
+            let Some(body) = &self.body else {
+                // An empty extension object is legal, meaning a null value.
+                return Ok(());
+            };
+            let type_id = body.xml_type_id();
+            let id = type_id.try_resolve(ctx.namespaces()).ok_or_else(|| {
+                Error::encoding(format!("Missing namespace for encoding ID: {type_id}"))
+            })?;
+
+            writer.encode_child("TypeId", id.as_ref(), ctx)?;
+            // TODO: Encode body
+
+            Ok(())
+        }
+    }
+
+    impl XmlDecodable for ExtensionObject {
+        fn decode(
+            read: &mut XmlStreamReader<&mut dyn Read>,
+            ctx: &Context<'_>,
+        ) -> Result<Self, Error> {
+            let mut type_id = None;
+            let mut body = None;
+            read.iter_children(
+                |key, reader, ctx| {
+                    match key.as_str() {
+                        "TypeId" => type_id = Some(NodeId::decode(reader, ctx)?),
+                        "Body" => {
+                            // First, read the top level element.
+                            let top_level = loop {
+                                match reader.next_event()? {
+                                    Event::Start(s) => break s,
+                                    Event::End(_) => {
+                                        return Ok(()); // End of the body itself
+                                    }
+                                    _ => (),
+                                }
+                            };
+                            let Some(type_id) = type_id.take() else {
+                                return Err(Error::decoding("Missing type ID in extension object"));
+                            };
+
+                            if top_level.name().0 == b"ByteString" {
+                                // If it's a bytestring, decode it as a binary body.
+                                let val = ByteString::decode(reader, ctx)?;
+                                if let Some(raw) = val.value {
+                                    let mut cursor = std::io::Cursor::new(raw);
+                                    body = Some(ctx.load_from_binary(&type_id, &mut cursor)?);
+                                }
+                            } else {
+                                // Decode from XML.
+                                todo!();
+                            }
+                            // Read to the end of the body.
+                            reader.skip_value()?;
+                        }
+                        _ => (),
+                    };
+                    Ok(())
+                },
+                ctx,
+            )?;
+            Ok(body.unwrap_or_else(ExtensionObject::null))
+        }
+    }
+}
+
 /// An extension object holds an OPC-UA structure deserialize to a [DynEncodable].
 /// This makes it possible to deserialize an extension object, the serialize it back in a different
 /// format, without reflecting over or inspecting the inner type.

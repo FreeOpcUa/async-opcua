@@ -97,6 +97,34 @@ mod json {
     }
 }
 
+#[cfg(feature = "xml")]
+mod xml {
+    use crate::xml::*;
+    use std::io::{Read, Write};
+
+    use super::DiagnosticBits;
+
+    impl XmlEncodable for DiagnosticBits {
+        fn encode(
+            &self,
+            writer: &mut XmlStreamWriter<&mut dyn Write>,
+            context: &Context<'_>,
+        ) -> EncodingResult<()> {
+            self.bits().encode(writer, context)
+        }
+    }
+
+    impl XmlDecodable for DiagnosticBits {
+        fn decode(
+            reader: &mut XmlStreamReader<&mut dyn Read>,
+            context: &Context<'_>,
+        ) -> EncodingResult<Self> {
+            let v = u32::decode(reader, context)?;
+            Ok(Self::from_bits_truncate(v))
+        }
+    }
+}
+
 #[allow(unused)]
 mod opcua {
     pub use crate as types;

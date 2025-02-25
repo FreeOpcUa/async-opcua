@@ -237,6 +237,45 @@ mod json {
     }
 }
 
+#[cfg(feature = "xml")]
+mod xml {
+    // ExpandedNodeId in XML is for some reason just the exact same
+    // as a NodeId.
+    use crate::{xml::*, NodeId, UAString};
+    use std::io::{Read, Write};
+
+    use super::ExpandedNodeId;
+
+    impl XmlEncodable for ExpandedNodeId {
+        fn encode(
+            &self,
+            writer: &mut XmlStreamWriter<&mut dyn Write>,
+            context: &Context<'_>,
+        ) -> EncodingResult<()> {
+            let Some(node_id) = context.namespaces().resolve_node_id(self) else {
+                return Err(Error::encoding(
+                    "Unable to resolve ExpandedNodeId, invalid namespace",
+                ));
+            };
+            node_id.encode(writer, context)
+        }
+    }
+
+    impl XmlDecodable for ExpandedNodeId {
+        fn decode(
+            reader: &mut XmlStreamReader<&mut dyn Read>,
+            context: &Context<'_>,
+        ) -> EncodingResult<Self> {
+            let node_id = NodeId::decode(reader, context)?;
+            Ok(ExpandedNodeId {
+                node_id,
+                namespace_uri: UAString::null(),
+                server_index: 0,
+            })
+        }
+    }
+}
+
 impl BinaryEncodable for ExpandedNodeId {
     fn byte_len(&self, ctx: &crate::Context<'_>) -> usize {
         let mut size = self.node_id.byte_len(ctx);

@@ -2,6 +2,9 @@
 //!
 //! Core utilities for working with decoding OPC UA types from NodeSet2 XML files.
 
+mod builtins;
+mod encoding;
+
 use std::str::FromStr;
 
 use log::warn;

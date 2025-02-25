@@ -14,9 +14,12 @@
 use ext::NodeExt;
 use roxmltree::Node;
 
+mod encoding;
 mod error;
 mod ext;
 pub mod schema;
+
+pub use encoding::{XmlReadError, XmlStreamReader, XmlStreamWriter, XmlWriteError};
 
 pub use error::{XmlError, XmlErrorInner};
 pub use schema::opc_binary_schema::load_bsd_file;

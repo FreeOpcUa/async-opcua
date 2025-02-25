@@ -19,3 +19,4 @@ chrono = { workspace = true }
 roxmltree = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }
+quick-xml = { workspace = true }

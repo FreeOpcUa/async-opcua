@@ -287,11 +287,11 @@ fn serialize_localized_text() {
 fn serialize_qualified_name() {
     let v = QualifiedName::new(0, "Test");
     let json = to_value(&v).unwrap();
-    assert_eq!(json, json!({"Name": "Test"}));
+    assert_eq!(json, json!("Test"));
 
     let v = QualifiedName::new(2, "Test");
     let json = to_value(&v).unwrap();
-    assert_eq!(json, json!({"Uri": 2, "Name": "Test"}));
+    assert_eq!(json, json!("2:Test"));
 }
 
 /// Serializes and deserializes a variant. The input json should match
@@ -545,7 +545,7 @@ fn serialize_variant_qualified_name() {
     // QualifiedName (20)
     test_ser_de_variant(
         Variant::QualifiedName(Box::new(QualifiedName::null())),
-        json!({"Type": 20, "Body": {}}),
+        json!({"Type": 20, "Body": null}),
     );
 }
 

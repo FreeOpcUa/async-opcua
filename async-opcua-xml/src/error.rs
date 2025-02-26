@@ -53,6 +53,15 @@ pub struct XmlError {
     pub error: XmlErrorInner,
 }
 
+impl From<roxmltree::Error> for XmlError {
+    fn from(value: roxmltree::Error) -> Self {
+        Self {
+            span: 0..0,
+            error: XmlErrorInner::Xml(value),
+        }
+    }
+}
+
 impl XmlError {
     /// Create an error for a node with a missing field with name `name`.
     pub fn missing_field(node: &Node<'_, '_>, name: &str) -> Self {

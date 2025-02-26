@@ -98,6 +98,8 @@ pub struct StructTypeInfo {
     pub is_abstract: bool,
     /// Structure node ID.
     pub node_id: NodeId,
+    /// Structure name.
+    pub name: String,
 }
 
 impl StructTypeInfo {
@@ -308,6 +310,7 @@ impl TypeInfo {
     /// Build a TypeInfo from the data type definition of the data type.
     pub fn from_type_definition(
         value: DataTypeDefinition,
+        name: String,
         encoding_ids: Option<EncodingIds>,
         is_abstract: bool,
         node_id: &NodeId,
@@ -340,6 +343,7 @@ impl TypeInfo {
                     is_abstract,
                     node_id: node_id.clone(),
                     index_by_name: fields_by_name,
+                    name,
                 })))
             }
             DataTypeDefinition::Enum(d) => Ok(Self::Enum(Arc::new(EnumTypeInfo {

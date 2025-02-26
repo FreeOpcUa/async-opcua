@@ -32,7 +32,10 @@ mod opcua {
     feature = "json",
     derive(opcua_macros::JsonEncodable, opcua_macros::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(crate::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(crate::XmlEncodable, crate::XmlDecodable, crate::XmlType)
+)]
 pub struct ResponseHeader {
     /// Response timestamp.
     pub timestamp: UtcTime,

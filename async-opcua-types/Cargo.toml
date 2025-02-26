@@ -34,6 +34,7 @@ struson = { workspace = true, optional = true }
 
 async-opcua-macros = { path = "../async-opcua-macros", version = "0.14.0" }
 async-opcua-xml = { path = "../async-opcua-xml", optional = true, version = "0.14.0" }
+percent-encoding-rfc3986 = "0.1.3"
 
 [dev-dependencies]
 async-opcua-types = { path = ".", features = ["xml", "json"] }

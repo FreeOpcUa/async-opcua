@@ -564,6 +564,7 @@ mod tests {
                         },
                     ]),
                 }),
+                "EUInformation".to_owned(),
                 Some(EncodingIds {
                     binary_id: NodeId::new(1, 6),
                     json_id: NodeId::new(1, 7),

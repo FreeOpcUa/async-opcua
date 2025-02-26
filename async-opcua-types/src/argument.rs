@@ -33,7 +33,10 @@ mod opcua {
 
 #[derive(Clone, Debug, PartialEq, Default)]
 #[cfg_attr(feature = "json", derive(crate::JsonEncodable, crate::JsonDecodable))]
-#[cfg_attr(feature = "xml", derive(crate::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(crate::XmlEncodable, crate::XmlDecodable, crate::XmlType)
+)]
 /// OPC-UA method argument.
 pub struct Argument {
     /// Argument name.

@@ -52,6 +52,7 @@ struct RawTypeData {
     type_definition: Option<DataTypeDefinition>,
     is_abstract: bool,
     encoding_ids: Option<EncodingIds>,
+    name: String,
 }
 
 impl<T: FnMut(&NodeId) -> bool> DataTypeTreeBuilder<T> {
@@ -282,6 +283,7 @@ impl<T: FnMut(&NodeId) -> bool> DataTypeTreeBuilder<T> {
             if let Some(def) = type_data.type_definition {
                 let info = match TypeInfo::from_type_definition(
                     def,
+                    type_data.name,
                     type_data.encoding_ids,
                     type_data.is_abstract,
                     &id,

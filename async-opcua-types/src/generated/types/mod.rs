@@ -5319,16 +5319,16 @@ impl opcua::types::TypeLoader for GeneratedTypeLoader {
     fn load_from_xml(
         &self,
         node_id: &opcua::types::NodeId,
-        stream: &opcua::types::xml::XmlElement,
+        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
         ctx: &opcua::types::Context<'_>,
     ) -> Option<opcua::types::EncodingResult<Box<dyn opcua::types::DynEncodable>>> {
         if node_id.namespace != 0 {
             return None;
         }
         let Some(num_id) = node_id.as_u32() else {
-            return Some(Err(opcua::types::Error::decoding(format!(
-                "Unsupported encoding ID {node_id}, we only support numeric IDs"
-            ))));
+            return Some(Err(opcua::types::Error::decoding(
+                "Unsupported encoding ID. Only numeric encoding IDs are currently supported",
+            )));
         };
         TYPES.decode_xml(num_id, stream, ctx)
     }

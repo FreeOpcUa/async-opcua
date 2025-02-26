@@ -67,6 +67,10 @@ mod xml {
 
     use super::Guid;
 
+    impl XmlType for Guid {
+        const TAG: &'static str = "Guid";
+    }
+
     impl XmlEncodable for Guid {
         fn encode(
             &self,

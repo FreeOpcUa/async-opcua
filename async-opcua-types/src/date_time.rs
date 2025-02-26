@@ -57,7 +57,7 @@ mod json {
         ) -> super::EncodingResult<Self> {
             let v = stream.next_str()?;
             let dt = DateTime::parse_from_rfc3339(v)
-                .map_err(|e| Error::decoding(format!("Cannot parse date time: {e}")))?;
+                .map_err(|e| Error::decoding(format!("Cannot parse date time \"{v}\": {e}")))?;
             Ok(dt)
         }
     }
@@ -69,6 +69,10 @@ mod xml {
     use std::io::{Read, Write};
 
     use super::DateTime;
+
+    impl XmlType for DateTime {
+        const TAG: &'static str = "DateTime";
+    }
 
     impl XmlEncodable for DateTime {
         fn encode(
@@ -87,7 +91,7 @@ mod xml {
         ) -> Result<Self, Error> {
             let v = read.consume_as_text()?;
             let dt = DateTime::parse_from_rfc3339(&v)
-                .map_err(|e| Error::decoding(format!("Cannot parse date time: {e}")))?;
+                .map_err(|e| Error::decoding(format!("Cannot parse date time \"{v}\": {e}")))?;
             Ok(dt)
         }
     }

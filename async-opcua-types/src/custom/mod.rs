@@ -5,6 +5,8 @@ mod custom_struct;
 #[cfg(feature = "json")]
 mod json;
 mod type_tree;
+#[cfg(feature = "xml")]
+mod xml;
 
 pub use custom_struct::{DynamicStructure, DynamicTypeLoader};
 pub use type_tree::{

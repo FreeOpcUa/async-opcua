@@ -89,3 +89,38 @@ impl Parse for EncodingVariantAttribute {
         Ok(slf)
     }
 }
+
+#[derive(Debug, Default)]
+pub(crate) struct EncodingItemAttribute {
+    #[allow(unused)]
+    pub(crate) rename: Option<String>,
+}
+
+impl ItemAttr for EncodingItemAttribute {
+    fn combine(&mut self, other: Self) {
+        self.rename = other.rename;
+    }
+}
+
+impl Parse for EncodingItemAttribute {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let mut slf = Self::default();
+
+        loop {
+            let ident: Ident = input.parse()?;
+            match ident.to_string().as_str() {
+                "rename" => {
+                    input.parse::<Token![=]>()?;
+                    let val: LitStr = input.parse()?;
+                    slf.rename = Some(val.value());
+                }
+                _ => return Err(syn::Error::new_spanned(ident, "Unknown attribute value")),
+            }
+            if !input.peek(Token![,]) {
+                break;
+            }
+            input.parse::<Token![,]>()?;
+        }
+        Ok(slf)
+    }
+}

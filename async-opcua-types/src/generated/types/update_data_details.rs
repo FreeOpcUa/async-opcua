@@ -14,7 +14,14 @@ mod opcua {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 pub struct UpdateDataDetails {
     pub node_id: opcua::types::node_id::NodeId,
     pub perform_insert_replace: super::enums::PerformUpdateType,

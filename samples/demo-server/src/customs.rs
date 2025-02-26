@@ -133,7 +133,14 @@ fn add_custom_data_type(nm: &SimpleNodeManager, ns: u16, e_state_id: &NodeId) ->
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[derive(Default)]
 #[repr(i32)]
 pub enum AxisState {
@@ -150,7 +157,14 @@ pub enum AxisState {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[derive(Default)]
 pub struct ErrorData {
     message: opcua::types::UAString,

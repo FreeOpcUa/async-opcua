@@ -62,14 +62,6 @@ bitflags! {
     }
 }
 
-#[cfg(feature = "xml")]
-impl crate::xml::FromXml for DiagnosticBits {
-    fn from_xml(element: &opcua_xml::XmlElement, ctx: &Context<'_>) -> EncodingResult<Self> {
-        let v = u32::from_xml(element, ctx)?;
-        Ok(Self::from_bits_truncate(v))
-    }
-}
-
 #[cfg(feature = "json")]
 mod json {
     use crate::json::*;
@@ -104,6 +96,10 @@ mod xml {
 
     use super::DiagnosticBits;
 
+    impl XmlType for DiagnosticBits {
+        const TAG: &'static str = u32::TAG;
+    }
+
     impl XmlEncodable for DiagnosticBits {
         fn encode(
             &self,
@@ -136,7 +132,10 @@ mod opcua {
     feature = "json",
     derive(opcua_macros::JsonEncodable, opcua_macros::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(crate::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(crate::XmlEncodable, crate::XmlDecodable, crate::XmlType)
+)]
 pub struct DiagnosticInfo {
     /// A symbolic name for the status code.
     pub symbolic_id: Option<i32>,

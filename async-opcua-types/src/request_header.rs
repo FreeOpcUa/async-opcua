@@ -31,7 +31,10 @@ mod opcua {
     feature = "json",
     derive(opcua_macros::JsonEncodable, opcua_macros::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(crate::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(crate::XmlEncodable, crate::XmlDecodable, crate::XmlType)
+)]
 pub struct RequestHeader {
     /// The secret Session identifier used to verify that the request is associated with
     /// the Session. The SessionAuthenticationToken type is defined in 7.31.

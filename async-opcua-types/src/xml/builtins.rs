@@ -1,10 +1,17 @@
-use super::encoding::{XmlDecodable, XmlEncodable};
+use super::{
+    encoding::{XmlDecodable, XmlEncodable, XmlType},
+    XmlReadExt, XmlWriteExt,
+};
 use crate::{Context, Error};
 use opcua_xml::{XmlStreamReader, XmlStreamWriter};
 use std::io::{Read, Write};
 
 macro_rules! xml_enc_number {
-    ($t:ty) => {
+    ($t:ty, $name:expr) => {
+        impl XmlType for $t {
+            const TAG: &'static str = $name;
+        }
+
         impl XmlEncodable for $t {
             fn encode(
                 &self,
@@ -32,7 +39,11 @@ const VALUE_NEG_INFINITY: &str = "-INF";
 const VALUE_NAN: &str = "NaN";
 
 macro_rules! xml_enc_float {
-    ($t:ty) => {
+    ($t:ty, $name:expr) => {
+        impl XmlType for $t {
+            const TAG: &'static str = $name;
+        }
+
         impl XmlEncodable for $t {
             fn encode(
                 &self,
@@ -71,16 +82,20 @@ macro_rules! xml_enc_float {
     };
 }
 
-xml_enc_number!(u8);
-xml_enc_number!(u16);
-xml_enc_number!(u32);
-xml_enc_number!(u64);
-xml_enc_number!(i8);
-xml_enc_number!(i16);
-xml_enc_number!(i32);
-xml_enc_number!(i64);
-xml_enc_float!(f32);
-xml_enc_float!(f64);
+xml_enc_number!(u8, "Byte");
+xml_enc_number!(u16, "UInt16");
+xml_enc_number!(u32, "UInt32");
+xml_enc_number!(u64, "UInt64");
+xml_enc_number!(i8, "SByte");
+xml_enc_number!(i16, "Int16");
+xml_enc_number!(i32, "Int32");
+xml_enc_number!(i64, "Int64");
+xml_enc_float!(f32, "Float");
+xml_enc_float!(f64, "Double");
+
+impl XmlType for String {
+    const TAG: &'static str = "String";
+}
 
 impl XmlDecodable for String {
     fn decode(
@@ -105,6 +120,10 @@ impl XmlEncodable for String {
     }
 }
 
+impl XmlType for str {
+    const TAG: &'static str = "String";
+}
+
 impl XmlEncodable for str {
     fn encode(
         &self,
@@ -114,6 +133,10 @@ impl XmlEncodable for str {
         writer.write_text(self)?;
         Ok(())
     }
+}
+
+impl XmlType for bool {
+    const TAG: &'static str = "Boolean";
 }
 
 impl XmlDecodable for bool {
@@ -144,6 +167,16 @@ impl XmlEncodable for bool {
     }
 }
 
+impl<T> XmlType for Box<T>
+where
+    T: XmlType,
+{
+    const TAG: &'static str = T::TAG;
+    fn tag(&self) -> &str {
+        self.as_ref().tag()
+    }
+}
+
 impl<T> XmlDecodable for Box<T>
 where
     T: XmlDecodable,
@@ -166,5 +199,97 @@ where
         context: &Context<'_>,
     ) -> Result<(), Error> {
         self.as_ref().encode(writer, context)
+    }
+}
+
+impl<T> XmlType for Vec<T>
+where
+    T: XmlType,
+{
+    // Could be ListOf... but there's no static way to do so, and it isn't
+    // strictly necessary.
+    const TAG: &'static str = T::TAG;
+    fn tag(&self) -> &str {
+        self.first().map(|v| v.tag()).unwrap_or(Self::TAG)
+    }
+}
+
+impl<T> XmlDecodable for Vec<T>
+where
+    T: XmlDecodable + Default,
+{
+    fn decode(
+        read: &mut XmlStreamReader<&mut dyn Read>,
+        context: &Context<'_>,
+    ) -> Result<Self, Error> {
+        let mut vec = Vec::new();
+        read.iter_children_include_empty(
+            |_, reader, context| {
+                let Some(reader) = reader else {
+                    vec.push(T::default());
+                    return Ok(());
+                };
+                vec.push(T::decode(reader, context)?);
+                Ok(())
+            },
+            context,
+        )?;
+        Ok(vec)
+    }
+}
+
+impl<T> XmlEncodable for Vec<T>
+where
+    T: XmlEncodable,
+{
+    fn encode(
+        &self,
+        writer: &mut XmlStreamWriter<&mut dyn Write>,
+        context: &Context<'_>,
+    ) -> super::EncodingResult<()> {
+        for item in self {
+            writer.encode_child(item.tag(), item, context)?;
+        }
+        Ok(())
+    }
+}
+
+impl<T> XmlType for Option<T>
+where
+    T: XmlType,
+{
+    const TAG: &'static str = T::TAG;
+    fn tag(&self) -> &str {
+        self.as_ref().map(|v| v.tag()).unwrap_or(Self::TAG)
+    }
+}
+
+impl<T> XmlDecodable for Option<T>
+where
+    T: XmlDecodable,
+{
+    fn decode(
+        read: &mut XmlStreamReader<&mut dyn Read>,
+        context: &Context<'_>,
+    ) -> Result<Self, Error> {
+        // Effectively we treat missing fields as None, so here we just pass along
+        // to the decoder, since getting here means the field is present.
+        Ok(Some(T::decode(read, context)?))
+    }
+}
+
+impl<T> XmlEncodable for Option<T>
+where
+    T: XmlEncodable,
+{
+    fn encode(
+        &self,
+        writer: &mut XmlStreamWriter<&mut dyn Write>,
+        context: &Context<'_>,
+    ) -> super::EncodingResult<()> {
+        if let Some(value) = self {
+            value.encode(writer, context)?;
+        }
+        Ok(())
     }
 }

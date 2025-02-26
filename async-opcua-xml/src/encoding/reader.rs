@@ -45,10 +45,7 @@ impl<T: Read> XmlStreamReader<T> {
     /// Get the next event from the stream.
     pub fn next_event(&mut self) -> Result<quick_xml::events::Event, XmlReadError> {
         self.buffer.clear();
-        match self.reader.read_event_into(&mut self.buffer)? {
-            Event::Eof => Err(XmlReadError::UnexpectedEof),
-            e => Ok(e),
-        }
+        Ok(self.reader.read_event_into(&mut self.buffer)?)
     }
 
     /// Skip the current value. This should be called after encountering a
@@ -67,7 +64,13 @@ impl<T: Read> XmlStreamReader<T> {
                         return Ok(());
                     }
                 }
-                Event::Eof => return Err(XmlReadError::UnexpectedEof),
+                Event::Eof => {
+                    if depth == 1 {
+                        return Ok(());
+                    } else {
+                        return Err(XmlReadError::UnexpectedEof);
+                    }
+                }
                 _ => {}
             }
         }
@@ -108,7 +111,20 @@ impl<T: Read> XmlStreamReader<T> {
                     }
                 }
 
-                Event::Eof => return Err(XmlReadError::UnexpectedEof),
+                Event::Eof => {
+                    println!("Eof {depth}");
+                    if depth == 1 {
+                        if let Some(mut text) = text {
+                            let trimmed = text.trim_ascii_end();
+                            text.truncate(trimmed.len());
+                            return Ok(text);
+                        } else {
+                            return Ok(String::new());
+                        }
+                    } else {
+                        return Err(XmlReadError::UnexpectedEof);
+                    }
+                }
                 _ => continue,
             }
         }

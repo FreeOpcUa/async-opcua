@@ -14,7 +14,14 @@ mod opcua {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[derive(Default)]
 pub struct JsonWriterGroupMessageDataType {
     pub network_message_content_mask: super::enums::JsonNetworkMessageContentMask,

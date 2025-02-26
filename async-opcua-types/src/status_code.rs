@@ -51,6 +51,10 @@ mod xml {
 
     use super::StatusCode;
 
+    impl XmlType for StatusCode {
+        const TAG: &'static str = "StatusCode";
+    }
+
     impl XmlEncodable for StatusCode {
         fn encode(
             &self,
@@ -175,7 +179,7 @@ impl StatusCode {
     /// Set the info type, this will clear the info bits if set to NotUsed.
     #[must_use = "Status code is copied, not modified in place."]
     pub fn set_info_type(mut self, value: StatusCodeInfoType) -> Self {
-        self.0 = self.0 & !(1 << 10) | ((value as u32) & 1) << 10;
+        self.0 = self.0 & !(1 << 10) | (((value as u32) & 1) << 10);
         // Clear the info bits if we are setting info type to not used.
         if matches!(value, StatusCodeInfoType::NotUsed) {
             self.0 &= !INFO_BITS_MASK;

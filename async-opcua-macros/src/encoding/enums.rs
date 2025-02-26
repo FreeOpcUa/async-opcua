@@ -1,13 +1,13 @@
 use proc_macro2::TokenStream;
-use syn::{Attribute, DataEnum, Expr, Ident, Type, Variant};
+use syn::{Attribute, DataEnum, Ident, LitInt, Type, Variant};
 
 use crate::utils::ItemAttr;
-use quote::quote;
+use quote::{quote, ToTokens};
 
-use super::attribute::EncodingVariantAttribute;
+use super::attribute::{EncodingItemAttribute, EncodingVariantAttribute};
 
 pub struct SimpleEnumVariant {
-    pub value: Expr,
+    pub value: LitInt,
     pub name: Ident,
     pub attr: EncodingVariantAttribute,
 }
@@ -16,6 +16,8 @@ pub struct SimpleEnum {
     pub repr: Type,
     pub variants: Vec<SimpleEnumVariant>,
     pub ident: Ident,
+    #[allow(unused)]
+    pub attr: EncodingItemAttribute,
 }
 
 impl SimpleEnumVariant {
@@ -26,6 +28,7 @@ impl SimpleEnumVariant {
                 "Enum variant must have explicit discriminant",
             ));
         };
+        let value = syn::parse2(value.into_token_stream())?;
         if !variant.fields.is_empty() {
             return Err(syn::Error::new_spanned(
                 variant.fields,
@@ -66,15 +69,18 @@ impl SimpleEnum {
             .collect::<Result<Vec<_>, _>>()?;
 
         let mut repr: Option<Type> = None;
+        let mut final_attr = EncodingItemAttribute::default();
         for attr in attributes {
-            if attr.path().segments.len() == 1
-                && attr
-                    .path()
-                    .segments
-                    .first()
-                    .is_some_and(|s| s.ident == "repr")
-            {
+            if attr.path().segments.len() != 1 {
+                continue;
+            }
+            let seg = attr.path().segments.first();
+            if seg.is_some_and(|s| s.ident == "repr") {
                 repr = Some(attr.parse_args()?);
+            }
+            if seg.is_some_and(|s| s.ident == "opcua") {
+                let data: EncodingItemAttribute = attr.parse_args()?;
+                final_attr.combine(data);
             }
         }
 
@@ -89,6 +95,7 @@ impl SimpleEnum {
             repr,
             variants,
             ident,
+            attr: final_attr,
         })
     }
 }
@@ -117,9 +124,9 @@ pub fn derive_ua_enum_impl(en: SimpleEnum) -> syn::Result<TokenStream> {
         let val = variant.value;
         let name = variant.name;
         let name_str = if let Some(rename) = variant.attr.rename {
-            rename
+            format!("{}_{}", rename, val.base10_digits())
         } else {
-            name.to_string()
+            format!("{}_{}", name, val.base10_digits())
         };
         try_from_arms.extend(quote! {
             #val => Self::#name,

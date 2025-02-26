@@ -2,7 +2,7 @@ use syn::{Ident, Variant};
 
 use crate::utils::ItemAttr;
 
-use super::attribute::EncodingVariantAttribute;
+use super::attribute::{EncodingItemAttribute, EncodingVariantAttribute};
 
 pub struct AdvancedEnumVariant {
     pub name: Ident,
@@ -15,6 +15,8 @@ pub struct AdvancedEnum {
     pub variants: Vec<AdvancedEnumVariant>,
     pub ident: Ident,
     pub null_variant: Option<Ident>,
+    #[allow(unused)]
+    pub attr: EncodingItemAttribute,
 }
 
 impl AdvancedEnumVariant {
@@ -52,7 +54,7 @@ impl AdvancedEnumVariant {
 impl AdvancedEnum {
     pub fn from_input(
         input: syn::DataEnum,
-        _attributes: Vec<syn::Attribute>,
+        attributes: Vec<syn::Attribute>,
         ident: Ident,
     ) -> syn::Result<Self> {
         let variants = input
@@ -60,6 +62,20 @@ impl AdvancedEnum {
             .into_iter()
             .map(AdvancedEnumVariant::from_variant)
             .collect::<syn::Result<Vec<_>>>()?;
+
+        let mut final_attr: EncodingItemAttribute = EncodingItemAttribute::default();
+        for attr in attributes {
+            if attr.path().segments.len() == 1
+                && attr
+                    .path()
+                    .segments
+                    .first()
+                    .is_some_and(|s| s.ident == "opcua")
+            {
+                let data: EncodingItemAttribute = attr.parse_args()?;
+                final_attr.combine(data);
+            }
+        }
 
         let mut null_variant = None;
         for vrt in &variants {
@@ -77,6 +93,7 @@ impl AdvancedEnum {
             variants,
             ident,
             null_variant,
+            attr: final_attr,
         })
     }
 }

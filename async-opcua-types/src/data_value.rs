@@ -66,6 +66,87 @@ pub struct DataValue {
     pub server_picoseconds: Option<u16>,
 }
 
+// For some spectacularly dumb reason Status is different in JSON and XML.
+// It is named "StatusCode" in XML (5.3.1.18) and "Status" in JSON (5.4.2.18), the _only_ place
+// where this is the case on a struct. So we have to implement XML manually.
+#[cfg(feature = "xml")]
+mod xml {
+    use super::DataValue;
+
+    impl crate::xml::XmlEncodable for DataValue {
+        fn encode(
+            &self,
+            stream: &mut crate::xml::XmlStreamWriter<&mut dyn std::io::Write>,
+            ctx: &crate::Context<'_>,
+        ) -> crate::EncodingResult<()> {
+            use crate::xml::XmlWriteExt;
+            stream.encode_child("Value", &self.value, ctx)?;
+            stream.encode_child("StatusCode", &self.status, ctx)?;
+            stream.encode_child("SourceTimestamp", &self.source_timestamp, ctx)?;
+            stream.encode_child("SourcePicoseconds", &self.source_picoseconds, ctx)?;
+            stream.encode_child("ServerTimestamp", &self.server_timestamp, ctx)?;
+            stream.encode_child("ServerPicoseconds", &self.server_picoseconds, ctx)?;
+            Ok(())
+        }
+    }
+    impl crate::xml::XmlDecodable for DataValue {
+        fn decode(
+            stream: &mut crate::xml::XmlStreamReader<&mut dyn std::io::Read>,
+            ctx: &crate::Context<'_>,
+        ) -> crate::EncodingResult<Self> {
+            use crate::xml::XmlReadExt;
+            let mut value = None;
+            let mut status = None;
+            let mut source_timestamp = None;
+            let mut source_picoseconds = None;
+            let mut server_timestamp = None;
+            let mut server_picoseconds = None;
+            stream.iter_children(
+                |__key, stream, ctx| {
+                    match __key.as_str() {
+                        "Value" => {
+                            value = Some(crate::xml::XmlDecodable::decode(stream, ctx)?);
+                        }
+                        "StatusCode" => {
+                            status = Some(crate::xml::XmlDecodable::decode(stream, ctx)?);
+                        }
+                        "SourceTimestamp" => {
+                            source_timestamp = Some(crate::xml::XmlDecodable::decode(stream, ctx)?);
+                        }
+                        "SourcePicoseconds" => {
+                            source_picoseconds =
+                                Some(crate::xml::XmlDecodable::decode(stream, ctx)?);
+                        }
+                        "ServerTimestamp" => {
+                            server_timestamp = Some(crate::xml::XmlDecodable::decode(stream, ctx)?);
+                        }
+                        "ServerPicoseconds" => {
+                            server_picoseconds =
+                                Some(crate::xml::XmlDecodable::decode(stream, ctx)?);
+                        }
+                        _ => {
+                            stream.skip_value()?;
+                        }
+                    }
+                    Ok(())
+                },
+                ctx,
+            )?;
+            Ok(Self {
+                value: value.unwrap_or_default(),
+                status: status.unwrap_or_default(),
+                source_timestamp: source_timestamp.unwrap_or_default(),
+                source_picoseconds: source_picoseconds.unwrap_or_default(),
+                server_timestamp: server_timestamp.unwrap_or_default(),
+                server_picoseconds: server_picoseconds.unwrap_or_default(),
+            })
+        }
+    }
+    impl crate::xml::XmlType for DataValue {
+        const TAG: &'static str = "DataValue";
+    }
+}
+
 impl BinaryEncodable for DataValue {
     fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
         let mut size = 1;

@@ -12,7 +12,14 @@
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[derive(Default)]
 pub struct PnDeviceDiagnosisDataType {
     pub api: u32,
@@ -60,7 +67,14 @@ impl opcua::types::ExpandedMessageInfo for PnDeviceDiagnosisDataType {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[derive(Default)]
 pub struct PnDeviceRoleOptionSet {
     pub value: opcua::types::byte_string::ByteString,
@@ -93,7 +107,14 @@ impl opcua::types::ExpandedMessageInfo for PnDeviceRoleOptionSet {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[derive(Default)]
 pub struct PnIM5DataType {
     pub annotation: opcua::types::string::UAString,

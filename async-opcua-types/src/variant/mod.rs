@@ -10,6 +10,8 @@ mod into;
 #[cfg(feature = "json")]
 mod json;
 mod type_id;
+#[cfg(feature = "xml")]
+mod xml;
 
 pub use from::TryFromVariant;
 pub use into::IntoVariant;

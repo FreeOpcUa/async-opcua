@@ -279,9 +279,10 @@ pub mod xml;
 pub use opcua_macros::FromXml;
 
 #[cfg(feature = "json")]
-pub use opcua_macros::JsonDecodable;
-#[cfg(feature = "json")]
-pub use opcua_macros::JsonEncodable;
+pub use opcua_macros::{JsonDecodable, JsonEncodable};
+
+#[cfg(feature = "xml")]
+pub use opcua_macros::{XmlDecodable, XmlEncodable, XmlType};
 
 pub use opcua_macros::BinaryDecodable;
 pub use opcua_macros::BinaryEncodable;

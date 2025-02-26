@@ -246,6 +246,10 @@ mod xml {
 
     use super::ExpandedNodeId;
 
+    impl XmlType for ExpandedNodeId {
+        const TAG: &'static str = "ExpandedNodeId";
+    }
+
     impl XmlEncodable for ExpandedNodeId {
         fn encode(
             &self,

@@ -23,6 +23,10 @@ mod opcua {
     feature = "json",
     derive(opcua_macros::JsonEncodable, opcua_macros::JsonDecodable)
 )]
+#[cfg_attr(
+    feature = "xml",
+    derive(crate::XmlEncodable, crate::XmlDecodable, crate::XmlType)
+)]
 pub struct LocalizedText {
     /// The locale. Omitted from stream if null or empty
     pub locale: UAString,

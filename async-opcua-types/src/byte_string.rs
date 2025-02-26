@@ -81,6 +81,10 @@ mod xml {
 
     use super::ByteString;
 
+    impl XmlType for ByteString {
+        const TAG: &'static str = "ByteString";
+    }
+
     impl XmlEncodable for ByteString {
         fn encode(
             &self,

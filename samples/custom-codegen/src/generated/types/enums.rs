@@ -21,7 +21,14 @@
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum IMTagSelectorEnumeration {
     #[opcua(default)]
@@ -43,7 +50,14 @@ pub enum IMTagSelectorEnumeration {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum PnARStateEnumeration {
     #[opcua(default)]
@@ -67,7 +81,14 @@ pub enum PnARStateEnumeration {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum PnARTypeEnumeration {
     #[opcua(default)]
@@ -90,7 +111,14 @@ pub enum PnARTypeEnumeration {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum PnAssetChangeEnumeration {
     #[opcua(default)]
@@ -112,7 +140,14 @@ pub enum PnAssetChangeEnumeration {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum PnAssetTypeEnumeration {
     #[opcua(default)]
@@ -135,7 +170,14 @@ pub enum PnAssetTypeEnumeration {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum PnChannelAccumulativeEnumeration {
     #[opcua(default)]
@@ -156,7 +198,14 @@ pub enum PnChannelAccumulativeEnumeration {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum PnChannelDirectionEnumeration {
     #[opcua(default)]
@@ -179,7 +228,14 @@ pub enum PnChannelDirectionEnumeration {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum PnChannelMaintenanceEnumeration {
     #[opcua(default)]
@@ -202,7 +258,14 @@ pub enum PnChannelMaintenanceEnumeration {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum PnChannelSpecifierEnumeration {
     #[opcua(default)]
@@ -225,7 +288,14 @@ pub enum PnChannelSpecifierEnumeration {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum PnChannelTypeEnumeration {
     #[opcua(default)]
@@ -252,7 +322,14 @@ pub enum PnChannelTypeEnumeration {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum PnDeviceStateEnumeration {
     #[opcua(default)]
@@ -275,7 +352,14 @@ pub enum PnDeviceStateEnumeration {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum PnLinkStateEnumeration {
     UP = 1i32,
@@ -300,7 +384,14 @@ pub enum PnLinkStateEnumeration {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum PnModuleStateEnumeration {
     #[opcua(default)]
@@ -324,7 +415,14 @@ pub enum PnModuleStateEnumeration {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum PnPortStateEnumeration {
     #[opcua(default)]
@@ -350,7 +448,14 @@ pub enum PnPortStateEnumeration {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum PnSubmoduleAddInfoEnumeration {
     #[opcua(default)]
@@ -371,7 +476,14 @@ pub enum PnSubmoduleAddInfoEnumeration {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum PnSubmoduleARInfoEnumeration {
     #[opcua(default)]
@@ -395,7 +507,14 @@ pub enum PnSubmoduleARInfoEnumeration {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum PnSubmoduleIdentInfoEnumeration {
     #[opcua(default)]

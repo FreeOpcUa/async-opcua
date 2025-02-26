@@ -19,7 +19,10 @@ use crate::{
 type BinaryLoadFun = fn(&mut dyn Read, &Context<'_>) -> EncodingResult<Box<dyn DynEncodable>>;
 
 #[cfg(feature = "xml")]
-type XmlLoadFun = fn(&opcua_xml::XmlElement, &Context<'_>) -> EncodingResult<Box<dyn DynEncodable>>;
+type XmlLoadFun = fn(
+    &mut crate::xml::XmlStreamReader<&mut dyn std::io::Read>,
+    &Context<'_>,
+) -> EncodingResult<Box<dyn DynEncodable>>;
 
 #[cfg(feature = "json")]
 type JsonLoadFun = fn(
@@ -58,11 +61,11 @@ pub fn json_decode_to_enc<T: DynEncodable + crate::json::JsonDecodable>(
 
 #[cfg(feature = "xml")]
 /// Convenience method to decode a type into a DynEncodable.
-pub fn xml_decode_to_enc<T: DynEncodable + crate::xml::FromXml>(
-    body: &opcua_xml::XmlElement,
+pub fn xml_decode_to_enc<T: DynEncodable + crate::xml::XmlDecodable>(
+    stream: &mut crate::xml::XmlStreamReader<&mut dyn std::io::Read>,
     ctx: &Context<'_>,
 ) -> EncodingResult<Box<dyn DynEncodable>> {
-    Ok(Box::new(T::from_xml(body, ctx)?))
+    Ok(Box::new(T::decode(stream, ctx)?))
 }
 
 impl TypeLoaderInstance {
@@ -107,11 +110,11 @@ impl TypeLoaderInstance {
     pub fn decode_xml(
         &self,
         ty: u32,
-        body: &opcua_xml::XmlElement,
+        stream: &mut crate::xml::XmlStreamReader<&mut dyn std::io::Read>,
         context: &Context<'_>,
     ) -> Option<EncodingResult<Box<dyn DynEncodable>>> {
         let fun = self.xml_types.get(&ty)?;
-        Some(fun(body, context))
+        Some(fun(stream, context))
     }
 
     #[cfg(feature = "json")]
@@ -333,7 +336,7 @@ pub trait TypeLoader: Send + Sync {
     fn load_from_xml(
         &self,
         node_id: &crate::NodeId,
-        body: &opcua_xml::XmlElement,
+        stream: &mut crate::xml::XmlStreamReader<&mut dyn std::io::Read>,
         ctx: &Context<'_>,
     ) -> Option<crate::EncodingResult<Box<dyn crate::DynEncodable>>>;
 
@@ -420,10 +423,10 @@ impl<'a> Context<'a> {
     pub fn load_from_xml(
         &self,
         node_id: &NodeId,
-        body: &opcua_xml::XmlElement,
+        stream: &mut crate::xml::XmlStreamReader<&mut dyn std::io::Read>,
     ) -> crate::EncodingResult<crate::ExtensionObject> {
         for loader in self.loaders {
-            if let Some(r) = loader.load_from_xml(node_id, body, self) {
+            if let Some(r) = loader.load_from_xml(node_id, stream, self) {
                 return Ok(crate::ExtensionObject { body: Some(r?) });
             }
         }
@@ -471,6 +474,25 @@ impl<'a> Context<'a> {
         Ok(*idx)
     }
 
+    /// Look up namespace index in reverse, finding the index in the node set
+    /// given the index in the server.
+    pub fn resolve_namespace_index_inverse(
+        &self,
+        index_in_server: u16,
+    ) -> Result<u16, UninitializedIndex> {
+        if index_in_server == 0 {
+            return Ok(0);
+        }
+
+        let Some(index_map) = self.index_map else {
+            return Ok(index_in_server);
+        };
+        let Some((idx, _)) = index_map.iter().find(|(_, &v)| v == index_in_server) else {
+            return Err(UninitializedIndex(index_in_server));
+        };
+        Ok(*idx)
+    }
+
     /// Resolve a node ID alias, if the alias table is registered.
     /// Only used for XML decoding when loading nodeset files.
     pub fn resolve_alias<'b>(&self, node_id_str: &'b str) -> &'b str
@@ -480,6 +502,21 @@ impl<'a> Context<'a> {
         if let Some(aliases) = self.aliases {
             if let Some(alias) = aliases.get(node_id_str) {
                 return alias.as_str();
+            }
+        }
+        node_id_str
+    }
+
+    /// Resolve a node ID alias in inverse, getting the alias value given the node ID.
+    pub fn resolve_alias_inverse<'b>(&self, node_id_str: &'b str) -> &'b str
+    where
+        'a: 'b,
+    {
+        if let Some(aliases) = self.aliases {
+            for (k, v) in aliases.iter() {
+                if v == node_id_str {
+                    return k.as_str();
+                }
             }
         }
         node_id_str

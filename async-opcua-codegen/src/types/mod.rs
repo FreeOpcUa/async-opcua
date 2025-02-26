@@ -282,14 +282,14 @@ fn xml_loader_impl(ids: &[&(EncodingIds, String)], namespace: &str) -> (TokenStr
             fn load_from_xml(
                 &self,
                 node_id: &opcua::types::NodeId,
-                stream: &opcua::types::xml::XmlElement,
+                stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
                 ctx: &opcua::types::Context<'_>,
             ) -> Option<opcua::types::EncodingResult<Box<dyn opcua::types::DynEncodable>>> {
                 #index_check
 
                 let Some(num_id) = node_id.as_u32() else {
                     return Some(Err(opcua::types::Error::decoding(
-                        format!("Unsupported encoding ID {node_id}, we only support numeric IDs"),
+                        "Unsupported encoding ID. Only numeric encoding IDs are currently supported"
                     )));
                 };
 

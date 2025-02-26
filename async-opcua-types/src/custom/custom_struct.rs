@@ -593,14 +593,18 @@ impl TypeLoader for DynamicTypeLoader {
     #[cfg(feature = "xml")]
     fn load_from_xml(
         &self,
-        _node_id: &crate::NodeId,
-        _body: &opcua_xml::XmlElement,
-        _ctx: &Context<'_>,
+        node_id: &crate::NodeId,
+        stream: &mut crate::xml::XmlStreamReader<&mut dyn std::io::Read>,
+        ctx: &Context<'_>,
     ) -> Option<crate::EncodingResult<Box<dyn crate::DynEncodable>>> {
-        // TODO: Unimplemented.
-        // This is a lot less useful than the others, since this method is currently only
-        // used server-side, and server software will usually use codegen instead.
-        None
+        let ty_node_id = if let Some(mapped) = self.type_tree.encoding_to_data_type().get(node_id) {
+            mapped
+        } else {
+            node_id
+        };
+        let t = self.type_tree.get_struct_type(ty_node_id)?;
+
+        Some(self.xml_decode_type_inner(stream, ctx, t))
     }
 
     #[cfg(feature = "json")]
@@ -693,6 +697,7 @@ pub(crate) mod tests {
                         },
                     ]),
                 }),
+                "EUInformation".to_owned(),
                 Some(EncodingIds {
                     binary_id: ObjectId::EUInformation_Encoding_DefaultBinary.into(),
                     json_id: ObjectId::EUInformation_Encoding_DefaultJson.into(),
@@ -801,6 +806,7 @@ pub(crate) mod tests {
                         },
                     ]),
                 }),
+                "MyType".to_owned(),
                 Some(EncodingIds {
                     binary_id: NodeId::new(1, 6),
                     json_id: NodeId::new(1, 7),

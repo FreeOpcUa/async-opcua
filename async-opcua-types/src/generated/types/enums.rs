@@ -48,14 +48,27 @@ impl opcua::types::IntoVariant for AccessLevelExType {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::FromXml for AccessLevelExType {
-    fn from_xml(
-        element: &opcua::types::xml::XmlElement,
+impl opcua::types::xml::XmlDecodable for AccessLevelExType {
+    fn decode(
+        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
         ctx: &opcua::types::Context<'_>,
     ) -> opcua::types::EncodingResult<Self> {
-        let val = i32::from_xml(element, ctx)?;
-        Ok(Self::from_bits_truncate(val))
+        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
     }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlEncodable for AccessLevelExType {
+    fn encode(
+        &self,
+        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        self.bits().encode(stream, ctx)
+    }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlType for AccessLevelExType {
+    const TAG: &'static str = "AccessLevelExType";
 }
 #[cfg(feature = "json")]
 impl opcua::types::json::JsonDecodable for AccessLevelExType {
@@ -116,14 +129,27 @@ impl opcua::types::IntoVariant for AccessLevelType {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::FromXml for AccessLevelType {
-    fn from_xml(
-        element: &opcua::types::xml::XmlElement,
+impl opcua::types::xml::XmlDecodable for AccessLevelType {
+    fn decode(
+        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
         ctx: &opcua::types::Context<'_>,
     ) -> opcua::types::EncodingResult<Self> {
-        let val = u8::from_xml(element, ctx)?;
-        Ok(Self::from_bits_truncate(val))
+        Ok(Self::from_bits_truncate(u8::decode(stream, ctx)?))
     }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlEncodable for AccessLevelType {
+    fn encode(
+        &self,
+        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        self.bits().encode(stream, ctx)
+    }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlType for AccessLevelType {
+    const TAG: &'static str = "AccessLevelType";
 }
 #[cfg(feature = "json")]
 impl opcua::types::json::JsonDecodable for AccessLevelType {
@@ -183,14 +209,27 @@ impl opcua::types::IntoVariant for AccessRestrictionType {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::FromXml for AccessRestrictionType {
-    fn from_xml(
-        element: &opcua::types::xml::XmlElement,
+impl opcua::types::xml::XmlDecodable for AccessRestrictionType {
+    fn decode(
+        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
         ctx: &opcua::types::Context<'_>,
     ) -> opcua::types::EncodingResult<Self> {
-        let val = i16::from_xml(element, ctx)?;
-        Ok(Self::from_bits_truncate(val))
+        Ok(Self::from_bits_truncate(i16::decode(stream, ctx)?))
     }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlEncodable for AccessRestrictionType {
+    fn encode(
+        &self,
+        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        self.bits().encode(stream, ctx)
+    }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlType for AccessRestrictionType {
+    const TAG: &'static str = "AccessRestrictionType";
 }
 #[cfg(feature = "json")]
 impl opcua::types::json::JsonDecodable for AccessRestrictionType {
@@ -249,14 +288,27 @@ impl opcua::types::IntoVariant for AlarmMask {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::FromXml for AlarmMask {
-    fn from_xml(
-        element: &opcua::types::xml::XmlElement,
+impl opcua::types::xml::XmlDecodable for AlarmMask {
+    fn decode(
+        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
         ctx: &opcua::types::Context<'_>,
     ) -> opcua::types::EncodingResult<Self> {
-        let val = i16::from_xml(element, ctx)?;
-        Ok(Self::from_bits_truncate(val))
+        Ok(Self::from_bits_truncate(i16::decode(stream, ctx)?))
     }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlEncodable for AlarmMask {
+    fn encode(
+        &self,
+        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        self.bits().encode(stream, ctx)
+    }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlType for AlarmMask {
+    const TAG: &'static str = "AlarmMask";
 }
 #[cfg(feature = "json")]
 impl opcua::types::json::JsonDecodable for AlarmMask {
@@ -294,7 +346,14 @@ impl opcua::types::json::JsonEncodable for AlarmMask {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum ApplicationType {
     #[opcua(default)]
@@ -347,14 +406,27 @@ impl opcua::types::IntoVariant for AttributeWriteMask {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::FromXml for AttributeWriteMask {
-    fn from_xml(
-        element: &opcua::types::xml::XmlElement,
+impl opcua::types::xml::XmlDecodable for AttributeWriteMask {
+    fn decode(
+        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
         ctx: &opcua::types::Context<'_>,
     ) -> opcua::types::EncodingResult<Self> {
-        let val = i32::from_xml(element, ctx)?;
-        Ok(Self::from_bits_truncate(val))
+        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
     }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlEncodable for AttributeWriteMask {
+    fn encode(
+        &self,
+        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        self.bits().encode(stream, ctx)
+    }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlType for AttributeWriteMask {
+    const TAG: &'static str = "AttributeWriteMask";
 }
 #[cfg(feature = "json")]
 impl opcua::types::json::JsonDecodable for AttributeWriteMask {
@@ -392,7 +464,14 @@ impl opcua::types::json::JsonEncodable for AttributeWriteMask {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum AxisScaleEnumeration {
     #[opcua(default)]
@@ -414,7 +493,14 @@ pub enum AxisScaleEnumeration {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum BrokerTransportQualityOfService {
     #[opcua(default)]
@@ -438,7 +524,14 @@ pub enum BrokerTransportQualityOfService {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum BrowseDirection {
     #[opcua(default)]
@@ -461,7 +554,14 @@ pub enum BrowseDirection {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum BrowseResultMask {
     #[opcua(default)]
@@ -490,7 +590,14 @@ pub enum BrowseResultMask {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum ConversionLimitEnum {
     #[opcua(default)]
@@ -512,7 +619,14 @@ pub enum ConversionLimitEnum {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum DataChangeTrigger {
     #[opcua(default)]
@@ -557,14 +671,27 @@ impl opcua::types::IntoVariant for DataSetFieldContentMask {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::FromXml for DataSetFieldContentMask {
-    fn from_xml(
-        element: &opcua::types::xml::XmlElement,
+impl opcua::types::xml::XmlDecodable for DataSetFieldContentMask {
+    fn decode(
+        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
         ctx: &opcua::types::Context<'_>,
     ) -> opcua::types::EncodingResult<Self> {
-        let val = i32::from_xml(element, ctx)?;
-        Ok(Self::from_bits_truncate(val))
+        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
     }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlEncodable for DataSetFieldContentMask {
+    fn encode(
+        &self,
+        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        self.bits().encode(stream, ctx)
+    }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlType for DataSetFieldContentMask {
+    const TAG: &'static str = "DataSetFieldContentMask";
 }
 #[cfg(feature = "json")]
 impl opcua::types::json::JsonDecodable for DataSetFieldContentMask {
@@ -623,14 +750,27 @@ impl opcua::types::IntoVariant for DataSetFieldFlags {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::FromXml for DataSetFieldFlags {
-    fn from_xml(
-        element: &opcua::types::xml::XmlElement,
+impl opcua::types::xml::XmlDecodable for DataSetFieldFlags {
+    fn decode(
+        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
         ctx: &opcua::types::Context<'_>,
     ) -> opcua::types::EncodingResult<Self> {
-        let val = i16::from_xml(element, ctx)?;
-        Ok(Self::from_bits_truncate(val))
+        Ok(Self::from_bits_truncate(i16::decode(stream, ctx)?))
     }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlEncodable for DataSetFieldFlags {
+    fn encode(
+        &self,
+        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        self.bits().encode(stream, ctx)
+    }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlType for DataSetFieldFlags {
+    const TAG: &'static str = "DataSetFieldFlags";
 }
 #[cfg(feature = "json")]
 impl opcua::types::json::JsonDecodable for DataSetFieldFlags {
@@ -668,7 +808,14 @@ impl opcua::types::json::JsonEncodable for DataSetFieldFlags {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum DataSetOrderingType {
     #[opcua(default)]
@@ -690,7 +837,14 @@ pub enum DataSetOrderingType {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum DeadbandType {
     #[opcua(default)]
@@ -712,7 +866,14 @@ pub enum DeadbandType {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum DiagnosticsLevel {
     #[opcua(default)]
@@ -736,7 +897,14 @@ pub enum DiagnosticsLevel {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum Duplex {
     #[opcua(default)]
@@ -780,14 +948,27 @@ impl opcua::types::IntoVariant for EventNotifierType {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::FromXml for EventNotifierType {
-    fn from_xml(
-        element: &opcua::types::xml::XmlElement,
+impl opcua::types::xml::XmlDecodable for EventNotifierType {
+    fn decode(
+        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
         ctx: &opcua::types::Context<'_>,
     ) -> opcua::types::EncodingResult<Self> {
-        let val = u8::from_xml(element, ctx)?;
-        Ok(Self::from_bits_truncate(val))
+        Ok(Self::from_bits_truncate(u8::decode(stream, ctx)?))
     }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlEncodable for EventNotifierType {
+    fn encode(
+        &self,
+        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        self.bits().encode(stream, ctx)
+    }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlType for EventNotifierType {
+    const TAG: &'static str = "EventNotifierType";
 }
 #[cfg(feature = "json")]
 impl opcua::types::json::JsonDecodable for EventNotifierType {
@@ -825,7 +1006,14 @@ impl opcua::types::json::JsonEncodable for EventNotifierType {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum ExceptionDeviationFormat {
     #[opcua(default)]
@@ -849,7 +1037,14 @@ pub enum ExceptionDeviationFormat {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum FilterOperator {
     #[opcua(default)]
@@ -886,7 +1081,14 @@ pub enum FilterOperator {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum HistoryUpdateType {
     Insert = 1i32,
@@ -908,7 +1110,14 @@ pub enum HistoryUpdateType {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum IdentityCriteriaType {
     UserName = 1i32,
@@ -934,7 +1143,14 @@ pub enum IdentityCriteriaType {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum IdType {
     #[opcua(default)]
@@ -957,7 +1173,14 @@ pub enum IdType {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum InterfaceAdminStatus {
     #[opcua(default)]
@@ -979,7 +1202,14 @@ pub enum InterfaceAdminStatus {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum InterfaceOperStatus {
     #[opcua(default)]
@@ -1030,14 +1260,27 @@ impl opcua::types::IntoVariant for JsonDataSetMessageContentMask {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::FromXml for JsonDataSetMessageContentMask {
-    fn from_xml(
-        element: &opcua::types::xml::XmlElement,
+impl opcua::types::xml::XmlDecodable for JsonDataSetMessageContentMask {
+    fn decode(
+        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
         ctx: &opcua::types::Context<'_>,
     ) -> opcua::types::EncodingResult<Self> {
-        let val = i32::from_xml(element, ctx)?;
-        Ok(Self::from_bits_truncate(val))
+        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
     }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlEncodable for JsonDataSetMessageContentMask {
+    fn encode(
+        &self,
+        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        self.bits().encode(stream, ctx)
+    }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlType for JsonDataSetMessageContentMask {
+    const TAG: &'static str = "JsonDataSetMessageContentMask";
 }
 #[cfg(feature = "json")]
 impl opcua::types::json::JsonDecodable for JsonDataSetMessageContentMask {
@@ -1099,14 +1342,27 @@ impl opcua::types::IntoVariant for JsonNetworkMessageContentMask {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::FromXml for JsonNetworkMessageContentMask {
-    fn from_xml(
-        element: &opcua::types::xml::XmlElement,
+impl opcua::types::xml::XmlDecodable for JsonNetworkMessageContentMask {
+    fn decode(
+        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
         ctx: &opcua::types::Context<'_>,
     ) -> opcua::types::EncodingResult<Self> {
-        let val = i32::from_xml(element, ctx)?;
-        Ok(Self::from_bits_truncate(val))
+        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
     }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlEncodable for JsonNetworkMessageContentMask {
+    fn encode(
+        &self,
+        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        self.bits().encode(stream, ctx)
+    }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlType for JsonNetworkMessageContentMask {
+    const TAG: &'static str = "JsonNetworkMessageContentMask";
 }
 #[cfg(feature = "json")]
 impl opcua::types::json::JsonDecodable for JsonNetworkMessageContentMask {
@@ -1144,7 +1400,14 @@ impl opcua::types::json::JsonEncodable for JsonNetworkMessageContentMask {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum MessageSecurityMode {
     #[opcua(default)]
@@ -1167,7 +1430,14 @@ pub enum MessageSecurityMode {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum ModelChangeStructureVerbMask {
     NodeAdded = 1i32,
@@ -1190,7 +1460,14 @@ pub enum ModelChangeStructureVerbMask {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum MonitoringMode {
     #[opcua(default)]
@@ -1212,7 +1489,14 @@ pub enum MonitoringMode {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum NamingRuleType {
     Mandatory = 1i32,
@@ -1233,7 +1517,14 @@ pub enum NamingRuleType {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum NegotiationStatus {
     #[opcua(default)]
@@ -1257,7 +1548,14 @@ pub enum NegotiationStatus {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum NodeAttributesMask {
     #[opcua(default)]
@@ -1311,7 +1609,14 @@ pub enum NodeAttributesMask {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum NodeClass {
     #[opcua(default)]
@@ -1340,7 +1645,14 @@ pub enum NodeClass {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(u8)]
 pub enum NodeIdType {
     #[opcua(default)]
@@ -1365,7 +1677,14 @@ pub enum NodeIdType {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum OpenFileMode {
     Read = 1i32,
@@ -1387,7 +1706,14 @@ pub enum OpenFileMode {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum OverrideValueHandling {
     #[opcua(default)]
@@ -1434,14 +1760,27 @@ impl opcua::types::IntoVariant for PasswordOptionsMask {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::FromXml for PasswordOptionsMask {
-    fn from_xml(
-        element: &opcua::types::xml::XmlElement,
+impl opcua::types::xml::XmlDecodable for PasswordOptionsMask {
+    fn decode(
+        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
         ctx: &opcua::types::Context<'_>,
     ) -> opcua::types::EncodingResult<Self> {
-        let val = i32::from_xml(element, ctx)?;
-        Ok(Self::from_bits_truncate(val))
+        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
     }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlEncodable for PasswordOptionsMask {
+    fn encode(
+        &self,
+        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        self.bits().encode(stream, ctx)
+    }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlType for PasswordOptionsMask {
+    const TAG: &'static str = "PasswordOptionsMask";
 }
 #[cfg(feature = "json")]
 impl opcua::types::json::JsonDecodable for PasswordOptionsMask {
@@ -1479,7 +1818,14 @@ impl opcua::types::json::JsonEncodable for PasswordOptionsMask {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum PerformUpdateType {
     Insert = 1i32,
@@ -1527,14 +1873,27 @@ impl opcua::types::IntoVariant for PermissionType {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::FromXml for PermissionType {
-    fn from_xml(
-        element: &opcua::types::xml::XmlElement,
+impl opcua::types::xml::XmlDecodable for PermissionType {
+    fn decode(
+        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
         ctx: &opcua::types::Context<'_>,
     ) -> opcua::types::EncodingResult<Self> {
-        let val = i32::from_xml(element, ctx)?;
-        Ok(Self::from_bits_truncate(val))
+        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
     }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlEncodable for PermissionType {
+    fn encode(
+        &self,
+        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        self.bits().encode(stream, ctx)
+    }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlType for PermissionType {
+    const TAG: &'static str = "PermissionType";
 }
 #[cfg(feature = "json")]
 impl opcua::types::json::JsonDecodable for PermissionType {
@@ -1598,14 +1957,27 @@ impl opcua::types::IntoVariant for PubSubConfigurationRefMask {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::FromXml for PubSubConfigurationRefMask {
-    fn from_xml(
-        element: &opcua::types::xml::XmlElement,
+impl opcua::types::xml::XmlDecodable for PubSubConfigurationRefMask {
+    fn decode(
+        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
         ctx: &opcua::types::Context<'_>,
     ) -> opcua::types::EncodingResult<Self> {
-        let val = i32::from_xml(element, ctx)?;
-        Ok(Self::from_bits_truncate(val))
+        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
     }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlEncodable for PubSubConfigurationRefMask {
+    fn encode(
+        &self,
+        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        self.bits().encode(stream, ctx)
+    }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlType for PubSubConfigurationRefMask {
+    const TAG: &'static str = "PubSubConfigurationRefMask";
 }
 #[cfg(feature = "json")]
 impl opcua::types::json::JsonDecodable for PubSubConfigurationRefMask {
@@ -1643,7 +2015,14 @@ impl opcua::types::json::JsonEncodable for PubSubConfigurationRefMask {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum PubSubDiagnosticsCounterClassification {
     #[opcua(default)]
@@ -1664,7 +2043,14 @@ pub enum PubSubDiagnosticsCounterClassification {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum PubSubState {
     #[opcua(default)]
@@ -1688,7 +2074,14 @@ pub enum PubSubState {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum RedundancySupport {
     #[opcua(default)]
@@ -1713,7 +2106,14 @@ pub enum RedundancySupport {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum RedundantServerMode {
     #[opcua(default)]
@@ -1736,7 +2136,14 @@ pub enum RedundantServerMode {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum SecurityTokenRequestType {
     #[opcua(default)]
@@ -1757,7 +2164,14 @@ pub enum SecurityTokenRequestType {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum ServerState {
     #[opcua(default)]
@@ -1784,7 +2198,14 @@ pub enum ServerState {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum StructureType {
     #[opcua(default)]
@@ -1808,7 +2229,14 @@ pub enum StructureType {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum TimestampsToReturn {
     #[opcua(default)]
@@ -1832,7 +2260,14 @@ pub enum TimestampsToReturn {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum TrustListMasks {
     #[opcua(default)]
@@ -1882,14 +2317,27 @@ impl opcua::types::IntoVariant for TrustListValidationOptions {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::FromXml for TrustListValidationOptions {
-    fn from_xml(
-        element: &opcua::types::xml::XmlElement,
+impl opcua::types::xml::XmlDecodable for TrustListValidationOptions {
+    fn decode(
+        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
         ctx: &opcua::types::Context<'_>,
     ) -> opcua::types::EncodingResult<Self> {
-        let val = i32::from_xml(element, ctx)?;
-        Ok(Self::from_bits_truncate(val))
+        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
     }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlEncodable for TrustListValidationOptions {
+    fn encode(
+        &self,
+        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        self.bits().encode(stream, ctx)
+    }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlType for TrustListValidationOptions {
+    const TAG: &'static str = "TrustListValidationOptions";
 }
 #[cfg(feature = "json")]
 impl opcua::types::json::JsonDecodable for TrustListValidationOptions {
@@ -1927,7 +2375,14 @@ impl opcua::types::json::JsonEncodable for TrustListValidationOptions {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum TsnFailureCode {
     #[opcua(default)]
@@ -1972,7 +2427,14 @@ pub enum TsnFailureCode {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum TsnListenerStatus {
     #[opcua(default)]
@@ -1995,7 +2457,14 @@ pub enum TsnListenerStatus {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum TsnStreamState {
     #[opcua(default)]
@@ -2019,7 +2488,14 @@ pub enum TsnStreamState {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum TsnTalkerStatus {
     #[opcua(default)]
@@ -2064,14 +2540,27 @@ impl opcua::types::IntoVariant for UadpDataSetMessageContentMask {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::FromXml for UadpDataSetMessageContentMask {
-    fn from_xml(
-        element: &opcua::types::xml::XmlElement,
+impl opcua::types::xml::XmlDecodable for UadpDataSetMessageContentMask {
+    fn decode(
+        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
         ctx: &opcua::types::Context<'_>,
     ) -> opcua::types::EncodingResult<Self> {
-        let val = i32::from_xml(element, ctx)?;
-        Ok(Self::from_bits_truncate(val))
+        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
     }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlEncodable for UadpDataSetMessageContentMask {
+    fn encode(
+        &self,
+        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        self.bits().encode(stream, ctx)
+    }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlType for UadpDataSetMessageContentMask {
+    const TAG: &'static str = "UadpDataSetMessageContentMask";
 }
 #[cfg(feature = "json")]
 impl opcua::types::json::JsonDecodable for UadpDataSetMessageContentMask {
@@ -2134,14 +2623,27 @@ impl opcua::types::IntoVariant for UadpNetworkMessageContentMask {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::FromXml for UadpNetworkMessageContentMask {
-    fn from_xml(
-        element: &opcua::types::xml::XmlElement,
+impl opcua::types::xml::XmlDecodable for UadpNetworkMessageContentMask {
+    fn decode(
+        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
         ctx: &opcua::types::Context<'_>,
     ) -> opcua::types::EncodingResult<Self> {
-        let val = i32::from_xml(element, ctx)?;
-        Ok(Self::from_bits_truncate(val))
+        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
     }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlEncodable for UadpNetworkMessageContentMask {
+    fn encode(
+        &self,
+        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        self.bits().encode(stream, ctx)
+    }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlType for UadpNetworkMessageContentMask {
+    const TAG: &'static str = "UadpNetworkMessageContentMask";
 }
 #[cfg(feature = "json")]
 impl opcua::types::json::JsonDecodable for UadpNetworkMessageContentMask {
@@ -2201,14 +2703,27 @@ impl opcua::types::IntoVariant for UserConfigurationMask {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::FromXml for UserConfigurationMask {
-    fn from_xml(
-        element: &opcua::types::xml::XmlElement,
+impl opcua::types::xml::XmlDecodable for UserConfigurationMask {
+    fn decode(
+        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
         ctx: &opcua::types::Context<'_>,
     ) -> opcua::types::EncodingResult<Self> {
-        let val = i32::from_xml(element, ctx)?;
-        Ok(Self::from_bits_truncate(val))
+        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
     }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlEncodable for UserConfigurationMask {
+    fn encode(
+        &self,
+        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        self.bits().encode(stream, ctx)
+    }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlType for UserConfigurationMask {
+    const TAG: &'static str = "UserConfigurationMask";
 }
 #[cfg(feature = "json")]
 impl opcua::types::json::JsonDecodable for UserConfigurationMask {
@@ -2246,7 +2761,14 @@ impl opcua::types::json::JsonEncodable for UserConfigurationMask {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[repr(i32)]
 pub enum UserTokenType {
     #[opcua(default)]

@@ -150,14 +150,16 @@ pub fn generate_json_decode_impl(strct: EncodingStruct) -> syn::Result<TokenStre
 
         if field.attr.no_default {
             let err = format!("Missing required field {name}");
+            let handle = if has_header {
+                quote! {
+                    .map_err(|e| e.maybe_with_request_handle(__request_handle))?
+                }
+            } else {
+                quote! {}
+            };
             build.extend(quote! {
                 #ident: #ident.unwrap_or_else(|| {
-                    log::warn!(#err);
-                    opcua::types::Error::new(
-                        opcua::types::StatusCode::BadDecodingError,
-                        None,
-                        __request_handle,
-                    )
+                    opcua::types::Error::decoding(#err)#handle
                 })?,
             });
         } else {

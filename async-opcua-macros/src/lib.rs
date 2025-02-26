@@ -148,3 +148,40 @@ pub fn derive_ua_enum(item: TokenStream) -> TokenStream {
         Err(e) => e.to_compile_error().into(),
     }
 }
+
+#[cfg(feature = "xml")]
+#[proc_macro_derive(XmlEncodable, attributes(opcua))]
+/// Derive the `XmlEncodable` trait on this struct or enum, creating
+/// code to write the struct as OPC-UA XML.
+///
+/// All fields must be marked with `opcua(ignore)` or implement `XmlEncodable`.
+pub fn derive_xml_encodable(item: TokenStream) -> TokenStream {
+    match generate_encoding_impl(parse_macro_input!(item), EncodingToImpl::XmlEncode) {
+        Ok(r) => r.into(),
+        Err(e) => e.to_compile_error().into(),
+    }
+}
+
+#[cfg(feature = "xml")]
+#[proc_macro_derive(XmlDecodable, attributes(opcua))]
+/// Derive the `XmlDecodable` trait on this struct or enum, creating
+/// code to read the struct from an OPC-UA xml stream.
+///
+/// All fields must be marked with `opcua(ignore)` or implement `XmlDecodable`.
+pub fn derive_xml_decodable(item: TokenStream) -> TokenStream {
+    match generate_encoding_impl(parse_macro_input!(item), EncodingToImpl::XmlDecode) {
+        Ok(r) => r.into(),
+        Err(e) => e.to_compile_error().into(),
+    }
+}
+
+#[cfg(feature = "xml")]
+#[proc_macro_derive(XmlType, attributes(opcua))]
+/// Derive the `XmlType` trait on this struct or enum. This simply exposes
+/// the type name, which can be overridden with an item-level `opcua(rename = ...)` attribute.
+pub fn derive_xml_type(item: TokenStream) -> TokenStream {
+    match generate_encoding_impl(parse_macro_input!(item), EncodingToImpl::XmlType) {
+        Ok(r) => r.into(),
+        Err(e) => e.to_compile_error().into(),
+    }
+}

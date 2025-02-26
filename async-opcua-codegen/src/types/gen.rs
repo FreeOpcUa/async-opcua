@@ -140,7 +140,7 @@ impl CodeGenerator {
 
     fn is_default_recursive(&self, name: &str) -> bool {
         if self.default_excluded.contains(name) {
-            return false;
+            return true;
         }
 
         let Some(it) = self.import_map.get(name) else {
@@ -361,17 +361,36 @@ impl CodeGenerator {
             }
         });
 
-        // Xml impl
         impls.push(parse_quote! {
             #[cfg(feature = "xml")]
-            impl opcua::types::xml::FromXml for #enum_ident {
-                fn from_xml(
-                    element: &opcua::types::xml::XmlElement,
-                    ctx: &opcua::types::Context<'_>
+            impl opcua::types::xml::XmlDecodable for #enum_ident {
+                fn decode(
+                    stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
+                    ctx: &opcua::types::Context<'_>,
                 ) -> opcua::types::EncodingResult<Self> {
-                    let val = #ty::from_xml(element, ctx)?;
-                    Ok(Self::from_bits_truncate(val))
+                    Ok(Self::from_bits_truncate(#ty::decode(stream, ctx)?))
                 }
+            }
+        });
+
+        impls.push(parse_quote! {
+            #[cfg(feature = "xml")]
+            impl opcua::types::xml::XmlEncodable for #enum_ident {
+                fn encode(
+                    &self,
+                    stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
+                    ctx: &opcua::types::Context<'_>,
+                ) -> opcua::types::EncodingResult<()> {
+                    self.bits().encode(stream, ctx)
+                }
+            }
+        });
+
+        let name = &item.name;
+        impls.push(parse_quote! {
+            #[cfg(feature = "xml")]
+            impl opcua::types::xml::XmlType for #enum_ident {
+                const TAG: &'static str = #name;
             }
         });
 
@@ -443,7 +462,10 @@ impl CodeGenerator {
             )]
         });
         attrs.push(parse_quote! {
-            #[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+            #[cfg_attr(
+                feature = "xml",
+                derive(opcua::types::XmlEncodable, opcua::types::XmlDecodable, opcua::types::XmlType)
+            )]
         });
         let ty: Type = syn::parse_str(&item.typ.to_string())?;
         attrs.push(parse_quote! {
@@ -504,7 +526,13 @@ impl CodeGenerator {
             }
         }
 
-        let (enum_ident, _) = safe_ident(&item.name);
+        let (enum_ident, renamed) = safe_ident(&item.name);
+        if renamed {
+            let name = &item.name;
+            attrs.push(parse_quote! {
+                #[opcua(rename = #name)]
+            });
+        }
 
         let res = ItemEnum {
             attrs,
@@ -565,17 +593,26 @@ impl CodeGenerator {
             #[cfg_attr(feature = "json", derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable))]
         });
         attrs.push(parse_quote! {
-            #[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+            #[cfg_attr(
+                feature = "xml",
+                derive(opcua::types::XmlEncodable, opcua::types::XmlDecodable, opcua::types::XmlType)
+            )]
         });
 
-        if self.has_default(&item.name) {
+        if self.has_default(&item.name) && !self.default_excluded.contains(&item.name) {
             attrs.push(parse_quote! {
                 #[derive(Default)]
             });
         }
 
         let mut impls = Vec::new();
-        let (struct_ident, _) = safe_ident(&item.name);
+        let (struct_ident, renamed) = safe_ident(&item.name);
+        if renamed {
+            let name = &item.name;
+            attrs.push(parse_quote! {
+                #[opcua(rename = #name)]
+            });
+        }
 
         for field in item.visible_fields() {
             let typ: Type = match &field.typ {

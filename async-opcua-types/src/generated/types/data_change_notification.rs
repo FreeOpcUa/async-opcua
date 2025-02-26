@@ -14,7 +14,14 @@ mod opcua {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[derive(Default)]
 pub struct DataChangeNotification {
     pub monitored_items: Option<Vec<super::monitored_item_notification::MonitoredItemNotification>>,

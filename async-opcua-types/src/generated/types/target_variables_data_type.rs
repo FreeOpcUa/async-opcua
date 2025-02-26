@@ -14,7 +14,14 @@ mod opcua {
     feature = "json",
     derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
 )]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[derive(Default)]
 pub struct TargetVariablesDataType {
     pub target_variables: Option<Vec<super::field_target_data_type::FieldTargetDataType>>,

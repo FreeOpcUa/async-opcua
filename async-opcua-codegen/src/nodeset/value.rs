@@ -264,13 +264,19 @@ impl<'a> ValueBuilder<'a> {
     }
 
     fn render_extension_object(&self, obj: &ExtensionObject) -> Result<TokenStream, CodeGenError> {
-        let Some(body) = &obj.body else {
+        let Some(data) = obj.body.as_ref().and_then(|b| b.data.as_ref()) else {
             return Ok(quote::quote! {
                 opcua::types::ExtensionObject::null()
             });
         };
 
-        let content = self.render_extension_object_inner(&body.data)?;
+        let element = XmlElement::parse(data)?;
+        let Some(element) = element else {
+            return Ok(quote::quote! {
+                opcua::types::ExtensionObject::null()
+            });
+        };
+        let content = self.render_extension_object_inner(&element)?;
 
         Ok(quote! {
             opcua::types::ExtensionObject::from_message(#content)

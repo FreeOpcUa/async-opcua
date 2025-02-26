@@ -143,6 +143,10 @@ mod xml {
 
     use super::UAString;
 
+    impl XmlType for UAString {
+        const TAG: &'static str = "String";
+    }
+
     impl XmlEncodable for UAString {
         fn encode(
             &self,

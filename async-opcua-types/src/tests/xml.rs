@@ -1,12 +1,14 @@
+use std::io::{Cursor, Read, Write};
 use std::str::FromStr;
 
-use opcua_xml::{from_str, XmlElement};
+use opcua_xml::XmlStreamReader;
 
+use crate::xml::{XmlDecodable, XmlEncodable};
 use crate::{
-    xml::FromXml, Argument, ByteString, DataTypeId, DataValue, DateTime, ExpandedNodeId,
+    Argument, Array, ByteString, DataTypeId, DataValue, DateTime, EUInformation, ExpandedNodeId,
     ExtensionObject, Guid, LocalizedText, NodeId, QualifiedName, StatusCode, UAString, Variant,
 };
-use crate::{Context, ContextOwned, DecodingOptions, EncodingResult, Error};
+use crate::{Context, ContextOwned, DecodingOptions, EncodingResult};
 
 use crate::{NamespaceMap, NodeSetNamespaceMapper};
 
@@ -24,106 +26,121 @@ fn context<'a>(mapper: &'a NodeSetNamespaceMapper<'a>, owned: &'a ContextOwned) 
     ctx
 }
 
-fn from_xml_str<T: FromXml>(data: &str) -> EncodingResult<T> {
-    let ctx = ContextOwned::new_default(namespaces(), DecodingOptions::default());
-    let ctx_ref = ctx.context();
-    from_xml_str_ctx(data, &ctx_ref)
+fn from_xml_str_ctx<T: XmlDecodable>(data: &str, ctx: &Context<'_>) -> EncodingResult<T> {
+    let mut cursor = Cursor::new(data.as_bytes());
+    let mut reader = XmlStreamReader::new(&mut cursor as &mut dyn Read);
+    T::decode(&mut reader, ctx)
 }
 
-fn from_xml_str_ctx<T: FromXml>(data: &str, ctx: &Context<'_>) -> EncodingResult<T> {
-    let element: Option<XmlElement> = from_str(data).map_err(Error::decoding)?;
-    let Some(element) = element else {
-        return Err(Error::decoding("Missing root element"));
-    };
-    T::from_xml(&element, ctx)
+fn encode_xml_ctx<T: XmlEncodable>(data: &T, ctx: &Context<'_>) -> EncodingResult<String> {
+    let mut buf = Vec::new();
+    let mut writer = opcua_xml::XmlStreamWriter::new(&mut buf as &mut dyn Write);
+    data.encode(&mut writer, ctx)?;
+    Ok(String::from_utf8(buf).unwrap())
+}
+
+fn xml_round_trip_ctx<T: XmlDecodable + XmlEncodable + PartialEq + std::fmt::Debug>(
+    cmp: &T,
+    data: &str,
+    ctx: &Context<'_>,
+) {
+    let decoded = from_xml_str_ctx::<T>(data, ctx).unwrap();
+    let encoded = encode_xml_ctx(&decoded, ctx).unwrap();
+    println!("{encoded}");
+    let decoded2 = from_xml_str_ctx::<T>(&encoded, ctx).unwrap();
+    assert_eq!(decoded, decoded2);
+    assert_eq!(&decoded, cmp);
+}
+
+fn xml_round_trip<T: XmlDecodable + XmlEncodable + PartialEq + std::fmt::Debug>(
+    cmp: &T,
+    data: &str,
+) {
+    let ctx = ContextOwned::new_default(namespaces(), DecodingOptions::default());
+    let ctx_ref = ctx.context();
+    xml_round_trip_ctx(cmp, data, &ctx_ref);
 }
 
 #[test]
 fn from_xml_u8() {
-    assert_eq!(5u8, from_xml_str::<u8>("<Data>5</Data>").unwrap());
+    xml_round_trip(&5u8, "5");
 }
 
 #[test]
 fn from_xml_i8() {
-    assert_eq!(5i8, from_xml_str::<i8>("<Data>5</Data>").unwrap());
+    xml_round_trip(&5i8, "5");
 }
 
 #[test]
 fn from_xml_u16() {
-    assert_eq!(5u16, from_xml_str::<u16>("<Data>5</Data>").unwrap());
+    xml_round_trip(&5u16, "5");
 }
 
 #[test]
 fn from_xml_i16() {
-    assert_eq!(5i16, from_xml_str::<i16>("<Data>5</Data>").unwrap());
+    xml_round_trip(&5i16, "5");
 }
 
 #[test]
 fn from_xml_u32() {
-    assert_eq!(5u32, from_xml_str::<u32>("<Data>5</Data>").unwrap());
+    xml_round_trip(&5u32, "5");
 }
 
 #[test]
 fn from_xml_i32() {
-    assert_eq!(5i32, from_xml_str::<i32>("<Data>5</Data>").unwrap());
+    xml_round_trip(&5i32, "5");
 }
 
 #[test]
 fn from_xml_u64() {
-    assert_eq!(5u64, from_xml_str::<u64>("<Data>5</Data>").unwrap());
+    xml_round_trip(&5u64, "5");
 }
 
 #[test]
 fn from_xml_i64() {
-    assert_eq!(5i64, from_xml_str::<i64>("<Data>5</Data>").unwrap());
+    xml_round_trip(&5i64, "5");
 }
 
 #[test]
 fn from_xml_f32() {
-    assert_eq!(5.5f32, from_xml_str::<f32>("<Data>5.5</Data>").unwrap());
+    xml_round_trip(&5.5f32, "5.5");
 }
 
 #[test]
 fn from_xml_f64() {
-    assert_eq!(5.5f64, from_xml_str::<f64>("<Data>5.5</Data>").unwrap());
+    xml_round_trip(&5.5f64, "5.5");
 }
 
 #[test]
 fn from_xml_bool() {
-    assert!(from_xml_str::<bool>("<Data>true</Data>").unwrap());
-    assert!(!from_xml_str::<bool>("<Data>false</Data>").unwrap());
+    xml_round_trip(&true, "true");
+    xml_round_trip(&false, "false");
 }
 
 #[test]
 fn from_xml_uastring() {
-    assert_eq!(
-        UAString::from("test string"),
-        from_xml_str::<UAString>("<Data>test string</Data>").unwrap()
-    );
+    xml_round_trip(&UAString::from("test string"), "test string");
 }
 
 #[test]
 fn from_xml_localized_text() {
-    assert_eq!(
-        LocalizedText::new("en", "Some text"),
-        from_xml_str("<Data><Locale>en</Locale><Text>Some text</Text></Data>").unwrap()
+    xml_round_trip(
+        &LocalizedText::new("en", "Some text"),
+        "<Locale>en</Locale><Text>Some text</Text>",
     );
 }
 
 #[test]
 fn from_xml_guid() {
-    assert_eq!(
-        Guid::from_str("f6aae0c0-455f-4285-82a7-d492ea4ef434").unwrap(),
-        from_xml_str("<Data><String>f6aae0c0-455f-4285-82a7-d492ea4ef434</String></Data>").unwrap()
+    xml_round_trip(
+        &Guid::from_str("f6aae0c0-455f-4285-82a7-d492ea4ef434").unwrap(),
+        "<String>f6aae0c0-455f-4285-82a7-d492ea4ef434</String>",
     );
 }
 
 #[test]
 fn from_xml_node_id() {
-    assert_eq!(
-        NodeId::new(0, "test"),
-        from_xml_str::<NodeId>("<Data><Identifier>s=test</Identifier></Data>").unwrap()
-    );
+    xml_round_trip(&NodeId::new(0, "test"), "<Identifier>s=test</Identifier>");
     let mut ns = namespaces();
     let ctx_owned = ContextOwned::new_default(ns.clone(), DecodingOptions::default());
     ns.add_namespace("opc.tcp://my-server.server");
@@ -131,109 +148,91 @@ fn from_xml_node_id() {
     mp.add_namespace("opc.tcp://my-server.server", 2);
     let ctx = context(&mp, &ctx_owned);
 
-    assert_eq!(
-        NodeId::new(1, ByteString::from_base64("aGVsbG8=").unwrap()),
-        from_xml_str_ctx::<NodeId>(
-            "<Data><Identifier>ns=2;b=aGVsbG8=</Identifier></Data>",
-            &ctx
-        )
-        .unwrap()
+    xml_round_trip_ctx(
+        &NodeId::new(1, ByteString::from_base64("aGVsbG8=").unwrap()),
+        "<Identifier>ns=2;b=aGVsbG8=</Identifier>",
+        &ctx,
     );
-    assert_eq!(
-        NodeId::new(1, 123),
-        from_xml_str_ctx::<NodeId>("<Data><Identifier>ns=2;i=123</Identifier></Data>", &ctx)
-            .unwrap()
+    xml_round_trip_ctx(
+        &NodeId::new(1, 123),
+        "<Identifier>ns=2;i=123</Identifier>",
+        &ctx,
     );
-    assert_eq!(
-        NodeId::new(
+    xml_round_trip_ctx(
+        &NodeId::new(
             1,
-            Guid::from_str("f6aae0c0-455f-4285-82a7-d492ea4ef434").unwrap()
+            Guid::from_str("f6aae0c0-455f-4285-82a7-d492ea4ef434").unwrap(),
         ),
-        from_xml_str_ctx::<NodeId>(
-            "<Data><Identifier>ns=2;g=f6aae0c0-455f-4285-82a7-d492ea4ef434</Identifier></Data>",
-            &ctx
-        )
-        .unwrap()
+        "<Identifier>ns=2;g=f6aae0c0-455f-4285-82a7-d492ea4ef434</Identifier>",
+        &ctx,
     );
 }
 
 #[test]
 fn from_xml_expanded_node_id() {
-    assert_eq!(
-        ExpandedNodeId::new(NodeId::new(0, "test")),
-        from_xml_str::<ExpandedNodeId>("<Data><Identifier>s=test</Identifier></Data>").unwrap()
+    xml_round_trip(
+        &ExpandedNodeId::new(NodeId::new(0, "test")),
+        "<Identifier>s=test</Identifier>",
     );
 }
 
 #[test]
 fn from_xml_status_code() {
-    assert_eq!(
-        StatusCode::GoodCallAgain,
-        from_xml_str::<StatusCode>("<Data><Code>11075584</Code></Data>").unwrap()
-    );
+    xml_round_trip(&StatusCode::GoodCallAgain, "<Code>11075584</Code>");
 }
 
 #[test]
 fn from_xml_extension_object() {
-    assert_eq!(
-        ExtensionObject::from_message(Argument {
+    xml_round_trip(
+        &ExtensionObject::from_message(Argument {
             name: "Some name".into(),
             data_type: DataTypeId::Double.into(),
             value_rank: 1,
             array_dimensions: Some(vec![3]),
-            description: LocalizedText::new("en", "Some desc")
+            description: LocalizedText::new("en", "Some desc"),
         }),
-        from_xml_str::<ExtensionObject>(
-            r#"
-    <Data>
+        r#"
+    
         <TypeId><Identifier>i=297</Identifier></TypeId>
         <Body>
             <Argument>
                 <Name>Some name</Name>
                 <DataType><Identifier>i=11</Identifier></DataType>
                 <ValueRank>1</ValueRank>
-                <ArrayDimensions>3</ArrayDimensions>
+                <ArrayDimensions><UInt32>3</UInt32></ArrayDimensions>
                 <Description>
                     <Locale>en</Locale>
                     <Text>Some desc</Text>
                 </Description>
             </Argument>
         </Body>
-    </Data>
-    "#
-        )
-        .unwrap()
+    
+    "#,
     )
 }
 
 #[test]
 fn from_xml_date_time() {
-    assert_eq!(
-        DateTime::from_str("2020-12-24T20:15:01Z").unwrap(),
-        from_xml_str("<Data>2020-12-24T20:15:01+0000</Data>").unwrap()
+    xml_round_trip(
+        &DateTime::from_str("2020-12-24T20:15:01Z").unwrap(),
+        "2020-12-24T20:15:01+00:00",
     );
 }
 
 #[test]
 fn from_xml_byte_string() {
-    assert_eq!(
-        ByteString::from_base64("aGVsbG8=").unwrap(),
-        from_xml_str("<Data>aGVsbG8=</Data>").unwrap()
-    );
+    xml_round_trip(&ByteString::from_base64("aGVsbG8=").unwrap(), "aGVsbG8=");
 }
 
 #[test]
 fn from_xml_qualified_name() {
-    assert_eq!(
-        QualifiedName::new(0, "Some name"),
-        from_xml_str(
-            r#"
-    <Data>
+    xml_round_trip(
+        &QualifiedName::new(0, "Some name"),
+        r#"
+    
         <Name>Some name</Name>
-    </Data>
-    "#
-        )
-        .unwrap()
+    
+    "#,
     );
     let mut ns = namespaces();
     ns.add_namespace("opc.tcp://my-server.server");
@@ -242,154 +241,158 @@ fn from_xml_qualified_name() {
     mp.add_namespace("opc.tcp://my-server.server", 2);
     let ctx = context(&mp, &ctx_owned);
 
-    assert_eq!(
-        QualifiedName::new(1, "Some name"),
-        from_xml_str_ctx(
-            r#"
-    <Data>
+    xml_round_trip_ctx(
+        &QualifiedName::new(1, "Some name"),
+        r#"
+    
         <NamespaceIndex>2</NamespaceIndex>
         <Name>Some name</Name>
-    </Data>
+    
     "#,
-            &ctx
-        )
-        .unwrap()
+        &ctx,
     )
 }
 
 #[test]
 fn from_xml_data_value() {
-    assert_eq!(
-        DataValue::new_at_status(
+    xml_round_trip(
+        &DataValue::new_at_status(
             123i32,
             DateTime::from_str("2020-01-01T15:00:00Z").unwrap(),
-            StatusCode::Bad
+            StatusCode::Bad,
         ),
-        from_xml_str::<DataValue>(
-            r#"
-        <Data>
+        r#"
             <Value><Int32>123</Int32></Value>
             <StatusCode><Code>2147483648</Code></StatusCode>
             <SourceTimestamp>2020-01-01T15:00:00Z</SourceTimestamp>
             <SourcePicoseconds>0</SourcePicoseconds>
             <ServerTimestamp>2020-01-01T15:00:00Z</ServerTimestamp>
             <ServerPicoseconds>0</ServerPicoseconds>
-        </Data>"#
-        )
-        .unwrap()
+        "#,
     )
 }
 
 #[test]
 fn from_xml_variant() {
-    assert_eq!(
-        Variant::from(1u8),
-        from_xml_str("<Data><Byte>1</Byte></Data>").unwrap()
+    xml_round_trip(&Variant::from(1u8), "<Byte>1</Byte>");
+    xml_round_trip(
+        &Variant::from(vec![1u8, 2u8]),
+        "<ListOfByte><Byte>1</Byte><Byte>2</Byte></ListOfByte>",
     );
-    assert_eq!(
-        Variant::from(vec![1u8, 2u8]),
-        from_xml_str("<Data><ListOfByte><Byte>1</Byte><Byte>2</Byte></ListOfByte></Data>").unwrap()
+    xml_round_trip(&Variant::from(1i8), "<SByte>1</SByte>");
+    xml_round_trip(
+        &Variant::from(vec![1i8, 2i8]),
+        "<ListOfSByte><SByte>1</SByte><SByte>2</SByte></ListOfSByte>",
     );
-    assert_eq!(
-        Variant::from(1i8),
-        from_xml_str("<Data><SByte>1</SByte></Data>").unwrap()
+    xml_round_trip(&Variant::from(1u16), "<UInt16>1</UInt16>");
+    xml_round_trip(
+        &Variant::from(vec![1u16, 2u16]),
+        "<ListOfUInt16><UInt16>1</UInt16><UInt16>2</UInt16></ListOfUInt16>",
     );
-    assert_eq!(
-        Variant::from(vec![1i8, 2i8]),
-        from_xml_str("<Data><ListOfSByte><SByte>1</SByte><SByte>2</SByte></ListOfSByte></Data>")
-            .unwrap()
+    xml_round_trip(&Variant::from(1i16), "<Int16>1</Int16>");
+    xml_round_trip(
+        &Variant::from(vec![1i16, 2i16]),
+        "<ListOfInt16><Int16>1</Int16><Int16>2</Int16></ListOfInt16>",
     );
-    assert_eq!(
-        Variant::from(1u16),
-        from_xml_str("<Data><UInt16>1</UInt16></Data>").unwrap()
+    xml_round_trip(&Variant::from(1u32), "<UInt32>1</UInt32>");
+    xml_round_trip(
+        &Variant::from(vec![1u32, 2u32]),
+        "<ListOfUInt32><UInt32>1</UInt32><UInt32>2</UInt32></ListOfUInt32>",
     );
-    assert_eq!(
-        Variant::from(vec![1u16, 2u16]),
-        from_xml_str(
-            "<Data><ListOfUInt16><UInt16>1</UInt16><UInt16>2</UInt16></ListOfUInt16></Data>"
-        )
-        .unwrap()
+    xml_round_trip(&Variant::from(1i32), "<Int32>1</Int32>");
+    xml_round_trip(
+        &Variant::from(vec![1i32, 2i32]),
+        "<ListOfInt32><Int32>1</Int32><Int32>2</Int32></ListOfInt32>",
     );
-    assert_eq!(
-        Variant::from(1i16),
-        from_xml_str("<Data><Int16>1</Int16></Data>").unwrap()
+    xml_round_trip(&Variant::from(1u64), "<UInt64>1</UInt64>");
+    xml_round_trip(
+        &Variant::from(vec![1u64, 2u64]),
+        "<ListOfUInt64><UInt64>1</UInt64><UInt64>2</UInt64></ListOfUInt64>",
     );
-    assert_eq!(
-        Variant::from(vec![1i16, 2i16]),
-        from_xml_str("<Data><ListOfInt16><Int16>1</Int16><Int16>2</Int16></ListOfInt16></Data>")
-            .unwrap()
+    xml_round_trip(&Variant::from(1i64), "<Int64>1</Int64>");
+    xml_round_trip(
+        &Variant::from(vec![1i64, 2i64]),
+        "<ListOfInt64><Int64>1</Int64><Int64>2</Int64></ListOfInt64>",
     );
-    assert_eq!(
-        Variant::from(1u32),
-        from_xml_str("<Data><UInt32>1</UInt32></Data>").unwrap()
+    xml_round_trip(&Variant::from(1.5f32), "<Float>1.5</Float>");
+    xml_round_trip(
+        &Variant::from(vec![1.5f32, 2.5f32]),
+        "<ListOfFloat><Float>1.5</Float><Float>2.5</Float></ListOfFloat>",
     );
-    assert_eq!(
-        Variant::from(vec![1u32, 2u32]),
-        from_xml_str(
-            "<Data><ListOfUInt32><UInt32>1</UInt32><UInt32>2</UInt32></ListOfUInt32></Data>"
-        )
-        .unwrap()
+    xml_round_trip(&Variant::from(1.5f64), "<Double>1.5</Double>");
+    xml_round_trip(
+        &Variant::from(vec![1.5f64, 2.5f64]),
+        "<ListOfDouble><Double>1.5</Double><Double>2.5</Double></ListOfDouble>",
     );
-    assert_eq!(
-        Variant::from(1i32),
-        from_xml_str("<Data><Int32>1</Int32></Data>").unwrap()
+    xml_round_trip(&Variant::from("foo"), "<String>foo</String>");
+    xml_round_trip(
+        &Variant::from(vec!["foo", "bar"]),
+        "<ListOfString><String>foo</String><String>bar</String></ListOfString>",
     );
-    assert_eq!(
-        Variant::from(vec![1i32, 2i32]),
-        from_xml_str("<Data><ListOfInt32><Int32>1</Int32><Int32>2</Int32></ListOfInt32></Data>")
-            .unwrap()
+    xml_round_trip(
+        &Variant::from(DateTime::parse_from_rfc3339("2020-01-01T00:00:00Z").unwrap()),
+        "<DateTime>2020-01-01T00:00:00Z</DateTime>",
     );
-    assert_eq!(
-        Variant::from(1u64),
-        from_xml_str("<Data><UInt64>1</UInt64></Data>").unwrap()
+    xml_round_trip(
+        &Variant::from(vec![DateTime::parse_from_rfc3339("2020-01-01T00:00:00Z").unwrap(), DateTime::parse_from_rfc3339("2020-01-02T00:00:00Z").unwrap()]),
+        "<ListOfDateTime><DateTime>2020-01-01T00:00:00Z</DateTime><DateTime>2020-01-02T00:00:00Z</DateTime></ListOfDateTime>",
     );
-    assert_eq!(
-        Variant::from(vec![1u64, 2u64]),
-        from_xml_str(
-            "<Data><ListOfUInt64><UInt64>1</UInt64><UInt64>2</UInt64></ListOfUInt64></Data>"
-        )
-        .unwrap()
+    let guid = Guid::from_str("f6aae0c0-455f-4285-82a7-d492ea4ef434").unwrap();
+    xml_round_trip(
+        &Variant::from(guid.clone()),
+        "<Guid><String>f6aae0c0-455f-4285-82a7-d492ea4ef434</String></Guid>",
     );
-    assert_eq!(
-        Variant::from(1i64),
-        from_xml_str("<Data><Int64>1</Int64></Data>").unwrap()
+    xml_round_trip(
+        &Variant::from(vec![guid.clone(), guid.clone()]),
+        "<ListOfGuid><Guid><String>f6aae0c0-455f-4285-82a7-d492ea4ef434</String></Guid>
+        <Guid><String>f6aae0c0-455f-4285-82a7-d492ea4ef434</String></Guid></ListOfGuid>",
     );
-    assert_eq!(
-        Variant::from(vec![1i64, 2i64]),
-        from_xml_str("<Data><ListOfInt64><Int64>1</Int64><Int64>2</Int64></ListOfInt64></Data>")
-            .unwrap()
+    xml_round_trip(
+        &Variant::from(StatusCode::Bad),
+        "<StatusCode><Code>2147483648</Code></StatusCode>",
     );
-    assert_eq!(
-        Variant::from(1.5f32),
-        from_xml_str("<Data><Float>1.5</Float></Data>").unwrap()
+    xml_round_trip(
+        &Variant::from(vec![StatusCode::Bad, StatusCode::Good]),
+        "<ListOfStatusCode><StatusCode><Code>2147483648</Code></StatusCode><StatusCode><Code>0</Code></StatusCode></ListOfStatusCode>",
     );
-    assert_eq!(
-        Variant::from(vec![1.5f32, 2.5f32]),
-        from_xml_str(
-            "<Data><ListOfFloat><Float>1.5</Float><Float>2.5</Float></ListOfFloat></Data>"
-        )
-        .unwrap()
+    xml_round_trip(
+        &Variant::from(EUInformation {
+            namespace_uri: "https://my.namespace.uri".into(),
+            unit_id: 1,
+            display_name: LocalizedText::new("en", "MyUnit"),
+            description: LocalizedText::new("en", "MyDesc"),
+        }),
+        r#"
+        <ExtensionObject>
+            <TypeId><Identifier>i=888</Identifier></TypeId>
+            <Body>
+                <EUInformation>
+                    <NamespaceUri>https://my.namespace.uri</NamespaceUri>
+                    <UnitId>1</UnitId>
+                    <DisplayName><Locale>en</Locale><Text>MyUnit</Text></DisplayName>
+                    <Description><Locale>en</Locale><Text>MyDesc</Text></Description>
+                </EUInformation>
+            </Body>
+        </ExtensionObject>
+        "#,
     );
-    assert_eq!(
-        Variant::from(1.5f64),
-        from_xml_str("<Data><Double>1.5</Double></Data>").unwrap()
-    );
-    assert_eq!(
-        Variant::from(vec![1.5f64, 2.5f64]),
-        from_xml_str(
-            "<Data><ListOfDouble><Double>1.5</Double><Double>2.5</Double></ListOfDouble></Data>"
-        )
-        .unwrap()
-    );
-    assert_eq!(
-        Variant::from("foo"),
-        from_xml_str("<Data><String>foo</String></Data>").unwrap()
-    );
-    assert_eq!(
-        Variant::from(vec!["foo", "bar"]),
-        from_xml_str(
-            "<Data><ListOfString><String>foo</String><String>bar</String></ListOfString></Data>"
-        )
-        .unwrap()
+    xml_round_trip(
+        &Variant::from(
+            Array::new_multi(
+                crate::VariantScalarTypeId::Int32,
+                vec![1.into(), 2.into(), 3.into(), 4.into()],
+                vec![2, 2],
+            )
+            .unwrap(),
+        ),
+        r#"
+    <Matrix>
+        <Dimensions><UInt32>2</UInt32><UInt32>2</UInt32></Dimensions>
+        <Elements>
+            <Int32>1</Int32><Int32>2</Int32>
+            <Int32>3</Int32><Int32>4</Int32>
+        </Elements>
+    </Matrix>
+    "#,
     );
 }

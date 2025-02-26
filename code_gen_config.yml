@@ -23,6 +23,7 @@ targets:
       mod opcua { pub use crate as types; }
     default_excluded:
       - AnonymousIdentityToken
+      - HistoryUpdateType
   - type: nodes
     file_path: schemas/1.05/Opc.Ua.NodeSet2.xml
     output_dir: async-opcua-core-namespace/src/generated

@@ -337,14 +337,24 @@ mod xml {
 
     use super::NodeId;
 
+    impl XmlType for NodeId {
+        const TAG: &'static str = "NodeId";
+    }
+
     impl XmlEncodable for NodeId {
         fn encode(
             &self,
             writer: &mut XmlStreamWriter<&mut dyn Write>,
             ctx: &crate::xml::Context<'_>,
         ) -> Result<(), Error> {
-            let self_str = self.to_string();
-            let val = ctx.resolve_alias(&self_str);
+            let namespace_index = ctx.resolve_namespace_index_inverse(self.namespace)?;
+
+            let self_str = if namespace_index > 0 {
+                format!("ns={};{}", namespace_index, self.identifier)
+            } else {
+                self.identifier.to_string()
+            };
+            let val = ctx.resolve_alias_inverse(&self_str);
             writer.encode_child("Identifier", val, ctx)
         }
     }
@@ -363,8 +373,10 @@ mod xml {
             };
 
             let val_str = context.resolve_alias(&val);
-            NodeId::from_str(val_str)
-                .map_err(|e| Error::new(e, format!("Invalid node ID: {val_str}")))
+            let mut id = NodeId::from_str(val_str)
+                .map_err(|e| Error::new(e, format!("Invalid node ID: {val_str}")))?;
+            id.namespace = context.resolve_namespace_index(id.namespace)?;
+            Ok(id)
         }
     }
 }

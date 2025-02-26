@@ -10,8 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     ext::{
-        children_of_type, children_with_name, first_child_of_type_req, first_child_with_name_opt,
-        value_from_contents_opt,
+        children_of_type, children_with_name, first_child_with_name_opt, value_from_contents_opt,
     },
     XmlError, XmlLoad,
 };
@@ -313,6 +312,13 @@ impl XmlElement {
             .and_then(|c| c.text.as_ref())
             .map(|c| c.as_str())
     }
+
+    /// Parse the XML element from a string.
+    pub fn parse(input: &str) -> Result<Option<Self>, XmlError> {
+        let doc = roxmltree::Document::parse(input)?;
+        let root = doc.root_element();
+        XmlLoad::load(&root)
+    }
 }
 
 #[derive(Debug)]
@@ -355,13 +361,15 @@ impl<'input> XmlLoad<'input> for LocalizedText {
 /// Body of an extension object.
 pub struct ExtensionObjectBody {
     /// Raw extension object body, just an XML node.
-    pub data: XmlElement,
+    pub data: Option<String>,
 }
 
 impl<'input> XmlLoad<'input> for ExtensionObjectBody {
     fn load(node: &Node<'_, 'input>) -> Result<Self, XmlError> {
         Ok(Self {
-            data: first_child_of_type_req(node, "Body")?,
+            data: node
+                .first_element_child()
+                .map(|n| n.document().input_text()[n.range()].to_owned()),
         })
     }
 }

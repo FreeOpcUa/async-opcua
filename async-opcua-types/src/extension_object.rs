@@ -55,6 +55,18 @@ pub trait DynEncodable: Any + Send + Sync + std::fmt::Debug {
         ctx: &crate::Context<'_>,
     ) -> EncodingResult<()>;
 
+    #[cfg(feature = "xml")]
+    /// Encode the struct using OPC-UA XML encoding.
+    fn encode_xml(
+        &self,
+        stream: &mut crate::xml::XmlStreamWriter<&mut dyn std::io::Write>,
+        ctx: &crate::Context<'_>,
+    ) -> EncodingResult<()>;
+
+    #[cfg(feature = "xml")]
+    /// The XML tag name for this struct.
+    fn xml_tag_name(&self) -> &str;
+
     /// Get the binary byte length of this struct.
     fn byte_len_dyn(&self, ctx: &crate::Context<'_>) -> usize;
 
@@ -109,6 +121,20 @@ macro_rules! blanket_dyn_encodable {
                 JsonEncodable::encode(self, stream, ctx)
             }
 
+            #[cfg(feature = "xml")]
+            fn encode_xml(
+                &self,
+                stream: &mut crate::xml::XmlStreamWriter<&mut dyn std::io::Write>,
+                ctx: &crate::Context<'_>,
+            ) -> EncodingResult<()> {
+                XmlEncodable::encode(self, stream, ctx)
+            }
+
+            #[cfg(feature = "xml")]
+            fn xml_tag_name(&self,) -> &str {
+                self.tag()
+            }
+
             fn byte_len_dyn(&self, ctx: &crate::Context<'_>,) -> usize {
                 BinaryEncodable::byte_len(self, ctx)
             }
@@ -161,11 +187,36 @@ macro_rules! blanket_dyn_encodable {
 #[cfg(feature = "json")]
 use crate::json::JsonEncodable;
 
-#[cfg(feature = "json")]
-blanket_dyn_encodable!(BinaryEncodable + JsonEncodable);
+#[cfg(feature = "xml")]
+use crate::xml::XmlEncodable;
 
+#[cfg(feature = "xml")]
+macro_rules! blanket_call_2 {
+    ($($res:tt)*) => {
+        blanket_dyn_encodable!($($res)* + XmlEncodable);
+    }
+}
+#[cfg(not(feature = "xml"))]
+macro_rules! blanket_call_2 {
+    ($($res:tt)*) => {
+        blanket_dyn_encodable!($($res)*);
+    }
+}
+
+#[cfg(feature = "json")]
+macro_rules! blanket_call_1 {
+    ($($res:tt)*) => {
+        blanket_call_2!($($res)* + JsonEncodable);
+    }
+}
 #[cfg(not(feature = "json"))]
-blanket_dyn_encodable!(BinaryEncodable);
+macro_rules! blanket_call_1 {
+    ($($res:tt)*) => {
+        blanket_call_2!($($res)*);
+    }
+}
+
+blanket_call_1!(BinaryEncodable);
 
 impl PartialEq for dyn DynEncodable {
     fn eq(&self, other: &dyn DynEncodable) -> bool {
@@ -308,6 +359,10 @@ mod xml {
 
     use super::ExtensionObject;
 
+    impl XmlType for ExtensionObject {
+        const TAG: &'static str = "ExtensionObject";
+    }
+
     impl XmlEncodable for ExtensionObject {
         fn encode(
             &self,
@@ -324,7 +379,11 @@ mod xml {
             })?;
 
             writer.encode_child("TypeId", id.as_ref(), ctx)?;
-            // TODO: Encode body
+            writer.write_start("Body")?;
+            writer.write_start(body.xml_tag_name())?;
+            body.encode_xml(writer, ctx)?;
+            writer.write_end(body.xml_tag_name())?;
+            writer.write_end("Body")?;
 
             Ok(())
         }
@@ -365,12 +424,12 @@ mod xml {
                                 }
                             } else {
                                 // Decode from XML.
-                                todo!();
+                                body = Some(ctx.load_from_xml(&type_id, reader)?);
                             }
                             // Read to the end of the body.
                             reader.skip_value()?;
                         }
-                        _ => (),
+                        _ => reader.skip_value()?,
                     };
                     Ok(())
                 },

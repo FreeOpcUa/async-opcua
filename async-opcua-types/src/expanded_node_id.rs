@@ -263,6 +263,10 @@ mod xml {
             };
             node_id.encode(writer, context)
         }
+
+        fn is_null_xml(&self) -> bool {
+            self.is_null()
+        }
     }
 
     impl XmlDecodable for ExpandedNodeId {

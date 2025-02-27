@@ -55,6 +55,12 @@ pub trait XmlEncodable: XmlType {
         writer: &mut XmlStreamWriter<&mut dyn Write>,
         context: &Context<'_>,
     ) -> EncodingResult<()>;
+
+    /// This method should return `true` if the value is default
+    /// and should not be serialized.
+    fn is_null_xml(&self) -> bool {
+        false
+    }
 }
 
 /// Extensions for XmlStreamWriter.

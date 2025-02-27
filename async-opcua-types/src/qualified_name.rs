@@ -67,6 +67,10 @@ mod xml {
             writer.encode_child("Name", &self.name, context)?;
             Ok(())
         }
+
+        fn is_null_xml(&self) -> bool {
+            self.is_null()
+        }
     }
 
     impl XmlDecodable for QualifiedName {

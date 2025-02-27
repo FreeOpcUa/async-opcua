@@ -49,6 +49,13 @@ impl<T: Write> XmlStreamWriter<T> {
         Ok(())
     }
 
+    /// Write an empty tag to the stream.
+    pub fn write_empty(&mut self, tag: &str) -> Result<(), XmlWriteError> {
+        self.writer
+            .write_event(Event::Empty(BytesStart::new(tag)))?;
+        Ok(())
+    }
+
     /// Write node contents to the stream.
     pub fn write_text(&mut self, text: &str) -> Result<(), XmlWriteError> {
         self.writer.write_event(Event::Text(BytesText::new(text)))?;

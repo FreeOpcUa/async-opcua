@@ -159,6 +159,10 @@ mod xml {
 
             Ok(())
         }
+
+        fn is_null_xml(&self) -> bool {
+            self.is_null()
+        }
     }
 
     impl XmlDecodable for UAString {

@@ -359,7 +359,7 @@ fn from_xml_variant() {
         &Variant::from(EUInformation {
             namespace_uri: "https://my.namespace.uri".into(),
             unit_id: 1,
-            display_name: LocalizedText::new("en", "MyUnit"),
+            display_name: LocalizedText::from("MyUnit"),
             description: LocalizedText::new("en", "MyDesc"),
         }),
         r#"
@@ -369,7 +369,7 @@ fn from_xml_variant() {
                 <EUInformation>
                     <NamespaceUri>https://my.namespace.uri</NamespaceUri>
                     <UnitId>1</UnitId>
-                    <DisplayName><Locale>en</Locale><Text>MyUnit</Text></DisplayName>
+                    <DisplayName><Text>MyUnit</Text></DisplayName>
                     <Description><Locale>en</Locale><Text>MyDesc</Text></Description>
                 </EUInformation>
             </Body>

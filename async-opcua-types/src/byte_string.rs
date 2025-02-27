@@ -63,7 +63,7 @@ mod json {
             _ctx: &Context<'_>,
         ) -> crate::EncodingResult<Self> {
             match stream.peek()? {
-                ValueType::String => Ok(Self::from_base64(stream.next_str()?)
+                ValueType::String => Ok(Self::from_base64_ignore_whitespace(stream.next_string()?)
                     .ok_or_else(|| Error::decoding("Cannot decode base64 bytestring"))?),
                 _ => {
                     stream.next_null()?;
@@ -107,7 +107,7 @@ mod xml {
             if s.is_empty() {
                 Ok(ByteString::null())
             } else {
-                Ok(ByteString::from_base64(&s)
+                Ok(ByteString::from_base64_ignore_whitespace(s)
                     .ok_or_else(|| Error::decoding("Cannot decode base64 bytestring"))?)
             }
         }
@@ -244,6 +244,16 @@ impl ByteString {
     /// Creates a byte string from a Base64 encoded string
     pub fn from_base64(data: &str) -> Option<ByteString> {
         if let Ok(bytes) = STANDARD.decode(data) {
+            Some(Self::from(bytes))
+        } else {
+            None
+        }
+    }
+
+    /// Creates a byte string from a Base64 encoded string, ignoring whitespace.
+    pub fn from_base64_ignore_whitespace(mut data: String) -> Option<ByteString> {
+        data.retain(|c| !['\n', ' ', '\t', '\r'].contains(&c));
+        if let Ok(bytes) = STANDARD.decode(&data) {
             Some(Self::from(bytes))
         } else {
             None

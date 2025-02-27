@@ -3,6 +3,7 @@ use std::{
     str::FromStr,
 };
 
+use base64::Engine;
 use opcua_macros::{JsonDecodable, JsonEncodable};
 use serde_json::{json, Value};
 use struson::{
@@ -254,10 +255,10 @@ fn serialize_extension_object() {
     assert_eq!(
         json,
         json!({
-            "TypeId": {
+            "UaTypeId": {
                 "Id": ObjectId::Argument_Encoding_DefaultJson as i32
             },
-            "Body": {
+            "UaBody": {
                 "Name": "Arg",
                 "DataType": {
                     "Id": 11
@@ -583,10 +584,10 @@ fn serialize_variant_extension_object() {
         json!({
             "Type": 22,
             "Body": {
-                "TypeId": {
+                "UaTypeId": {
                     "Id": ObjectId::Argument_Encoding_DefaultJson as i32
                 },
-                "Body": {
+                "UaBody": {
                     "Name": "Arg",
                     "DataType": {
                         "Id": 11
@@ -736,7 +737,7 @@ fn extension_object_round_trip() {
     assert_eq!(
         value,
         json!({
-            "Body": {
+            "UaBody": {
                 "NamespaceUri": "some.namespace.uri",
                 "UnitId": 15,
                 "DisplayName": {
@@ -746,7 +747,7 @@ fn extension_object_round_trip() {
                     "Text": "Temperature in degrees Celsius"
                 }
             },
-            "TypeId": {
+            "UaTypeId": {
                 "Id": ObjectId::EUInformation_Encoding_DefaultJson as u32
             }
         })
@@ -930,4 +931,80 @@ fn test_custom_union_nullable() {
     );
     let st_cmp = from_value(v).unwrap();
     assert_eq!(st, st_cmp);
+}
+
+#[test]
+fn test_xml_in_json() {
+    let json = json!({
+        "UaTypeId": {
+            "Id": ObjectId::EUInformation_Encoding_DefaultXml as u32
+        },
+        "UaEncoding": 2,
+        "UaBody": "
+        <EUInformation>
+            <NamespaceUri>https://my.namespace.uri</NamespaceUri>
+            <UnitId>1</UnitId>
+            <DisplayName><Locale>en</Locale><Text>MyUnit</Text></DisplayName>
+            <Description><Locale>en</Locale><Text>MyDesc</Text></Description>
+        </EUInformation>"
+    });
+    let ctx_r = ContextOwned::default();
+    let ctx = ctx_r.context();
+    let json = json.to_string();
+    let mut cursor = Cursor::new(json.as_bytes());
+    let mut reader = JsonStreamReader::new(&mut cursor as &mut dyn Read);
+    let obj_3: ExtensionObject = JsonDecodable::decode(&mut reader, &ctx).unwrap();
+
+    assert_eq!(
+        &EUInformation {
+            namespace_uri: "https://my.namespace.uri".into(),
+            unit_id: 1,
+            display_name: LocalizedText::new("en", "MyUnit"),
+            description: LocalizedText::new("en", "MyDesc"),
+        },
+        obj_3.inner_as().unwrap()
+    );
+}
+
+#[test]
+fn test_binary_in_json() {
+    let json = json!({
+        "UaTypeId": {
+            "Id": ObjectId::EUInformation_Encoding_DefaultBinary as u32
+        },
+        "UaEncoding": 1,
+        "UaBody": "
+        GAAAAGh0dHBzOi8vbXkubmFtZXNwYWNlLnVya
+        QEAAAADAgAAAGVuBgAAAE15VW5pdAMCAAAAZW
+        4GAAAATXlEZXNj"
+    });
+
+    let rf = EUInformation {
+        namespace_uri: "https://my.namespace.uri".into(),
+        unit_id: 1,
+        display_name: LocalizedText::new("en", "MyUnit"),
+        description: LocalizedText::new("en", "MyDesc"),
+    };
+    let ctx_r = ContextOwned::default();
+    let ctx = ctx_r.context();
+
+    let mut buf = Vec::with_capacity(rf.byte_len(&ctx));
+    let mut cursor = Cursor::new(&mut buf);
+    crate::BinaryEncodable::encode(&rf, &mut cursor, &ctx).unwrap();
+    println!("{}", base64::engine::general_purpose::STANDARD.encode(buf));
+
+    let json = json.to_string();
+    let mut cursor = Cursor::new(json.as_bytes());
+    let mut reader = JsonStreamReader::new(&mut cursor as &mut dyn Read);
+    let obj_3: ExtensionObject = JsonDecodable::decode(&mut reader, &ctx).unwrap();
+
+    assert_eq!(
+        &EUInformation {
+            namespace_uri: "https://my.namespace.uri".into(),
+            unit_id: 1,
+            display_name: LocalizedText::new("en", "MyUnit"),
+            description: LocalizedText::new("en", "MyDesc"),
+        },
+        obj_3.inner_as().unwrap()
+    );
 }

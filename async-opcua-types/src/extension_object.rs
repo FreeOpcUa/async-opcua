@@ -230,7 +230,7 @@ impl std::error::Error for ExtensionObjectError {}
 mod json {
     use std::io::{Cursor, Read};
 
-    use crate::{json::*, ByteString, Error, NodeId};
+    use crate::{json::*, xml::enter_first_tag, ByteString, Error, NodeId};
 
     use super::ExtensionObject;
 
@@ -253,10 +253,10 @@ mod json {
 
             stream.begin_object()?;
 
-            stream.name("TypeId")?;
+            stream.name("UaTypeId")?;
             JsonEncodable::encode(id.as_ref(), stream, ctx)?;
 
-            stream.name("Body")?;
+            stream.name("UaBody")?;
             body.encode_json(stream, ctx)?;
 
             stream.end_object()?;
@@ -278,16 +278,16 @@ mod json {
             let mut type_id: Option<NodeId> = None;
             let mut encoding: Option<u32> = None;
             let mut raw_body = None;
-            let mut raw_binary_body: Option<ByteString> = None;
+            let mut raw_string_body: Option<String> = None;
             let mut body = None;
 
             stream.begin_object()?;
 
             while stream.has_next()? {
                 match stream.next_name()? {
-                    "TypeId" => type_id = Some(JsonDecodable::decode(stream, ctx)?),
-                    "Encoding" => encoding = Some(JsonDecodable::decode(stream, ctx)?),
-                    "Body" => match stream.peek()? {
+                    "UaTypeId" => type_id = Some(JsonDecodable::decode(stream, ctx)?),
+                    "UaEncoding" => encoding = Some(JsonDecodable::decode(stream, ctx)?),
+                    "UaBody" => match stream.peek()? {
                         ValueType::Object => {
                             if encoding.is_some_and(|e| e != 0) {
                                 return Err(Error::decoding(format!(
@@ -302,12 +302,7 @@ mod json {
                             }
                         }
                         _ => {
-                            if let Some(enc) = encoding {
-                                if enc != 1 {
-                                    return Err(Error::decoding(format!("Unsupported extension object encoding, expected 1 for string, got {enc}")));
-                                }
-                            }
-                            raw_binary_body = Some(JsonDecodable::decode(stream, ctx)?);
+                            raw_string_body = Some(JsonDecodable::decode(stream, ctx)?);
                         }
                     },
                     _ => stream.skip_value()?,
@@ -334,15 +329,36 @@ mod json {
                 let mut cursor = Cursor::new(raw_body);
                 let mut inner_stream = JsonStreamReader::new(&mut cursor as &mut dyn Read);
                 Ok(ctx.load_from_json(&type_id, &mut inner_stream)?)
-            } else if let Some(binary_body) = raw_binary_body {
-                if encoding != 1 {
-                    return Err(Error::decoding(format!("Unsupported extension object encoding, expected 1 for string, got {encoding}")));
+            } else if let Some(string_body) = raw_string_body {
+                if encoding == 1 {
+                    let bytes = ByteString::from_base64_ignore_whitespace(string_body).ok_or_else(
+                        || Error::decoding("Invalid base64 string is JSON extension object"),
+                    )?;
+                    let Some(raw) = bytes.value else {
+                        return Err(Error::decoding("Missing extension object body"));
+                    };
+                    let mut cursor = Cursor::new(raw);
+                    Ok(ctx.load_from_binary(&type_id, &mut cursor as &mut dyn Read)?)
+                } else if encoding == 2 {
+                    #[cfg(feature = "xml")]
+                    {
+                        let mut cursor = Cursor::new(string_body.as_bytes());
+                        let mut inner_stream =
+                            crate::xml::XmlStreamReader::new(&mut cursor as &mut dyn Read);
+                        if enter_first_tag(&mut inner_stream)? {
+                            Ok(ctx.load_from_xml(&type_id, &mut inner_stream)?)
+                        } else {
+                            Ok(ExtensionObject::null())
+                        }
+                    }
+                    #[cfg(not(feature = "xml"))]
+                    {
+                        log::warn!("XML feature is not enabled, deserializing XML payloads in JSON extension objects is not supported");
+                        Ok(ExtensionObject::null())
+                    }
+                } else {
+                    Err(Error::decoding(format!("Unsupported extension object encoding, expected 1 or 2 for string, got {encoding}")))
                 }
-                let Some(raw) = binary_body.value else {
-                    return Err(Error::decoding("Missing extension object body"));
-                };
-                let mut cursor = Cursor::new(raw);
-                Ok(ctx.load_from_binary(&type_id, &mut cursor as &mut dyn Read)?)
             } else {
                 Err(Error::decoding("Missing extension object body"))
             }

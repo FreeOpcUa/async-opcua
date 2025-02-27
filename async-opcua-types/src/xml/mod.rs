@@ -44,6 +44,19 @@ use opcua_xml::{
     schema::opc_ua_types::{self, Variant as XmlVariant},
 };
 
+/// Enter the first tag in the stream, returning `true` if a start tag was found.
+pub(crate) fn enter_first_tag(stream: &mut XmlStreamReader<&mut dyn Read>) -> EncodingResult<bool> {
+    loop {
+        match stream.next_event()? {
+            Event::Start(_) => return Ok(true),
+            Event::End(_) | Event::Eof | Event::Empty(_) => {
+                return Ok(false);
+            }
+            _ => (),
+        }
+    }
+}
+
 fn mk_extension_object(
     val: &opc_ua_types::ExtensionObject,
     ctx: &Context<'_>,
@@ -61,15 +74,7 @@ fn mk_extension_object(
     let mut cursor = Cursor::new(data.as_bytes());
     let mut stream = XmlStreamReader::new(&mut cursor as &mut dyn Read);
     // Read the entry tag, as this is how extension objects are parsed
-    loop {
-        match stream.next_event()? {
-            Event::Start(_) => break,
-            Event::End(_) | Event::Eof | Event::Empty(_) => {
-                return Ok(ExtensionObject::null());
-            }
-            _ => (),
-        }
-    }
+    enter_first_tag(&mut stream)?;
     ctx.load_from_xml(&node_id, &mut stream)
 }
 

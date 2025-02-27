@@ -10,8 +10,6 @@ use std::{
     io::{Read, Write},
 };
 
-use log::warn;
-
 use crate::{write_i32, write_u8, Error, ExpandedMessageInfo, ExpandedNodeId};
 
 use super::{
@@ -541,8 +539,31 @@ impl BinaryDecodable for ExtensionObject {
                 }
             }
             0x2 => {
-                warn!("Unsupported extension object encoding: XMLElement");
-                None
+                #[cfg(feature = "xml")]
+                {
+                    let body = crate::UAString::decode(stream, ctx)?;
+                    let Some(body) = body.value() else {
+                        return Ok(ExtensionObject::null());
+                    };
+                    let mut cursor = std::io::Cursor::new(body.as_bytes());
+                    let mut inner_stream =
+                        crate::xml::XmlStreamReader::new(&mut cursor as &mut dyn Read);
+                    if crate::xml::enter_first_tag(&mut inner_stream)? {
+                        Some(ctx.load_from_xml(&node_id, &mut inner_stream)?)
+                    } else {
+                        None
+                    }
+                }
+
+                #[cfg(not(feature = "xml"))]
+                {
+                    log::warn!("XML feature is not enabled, deserializing XML payloads in JSON extension objects is not supported");
+                    let size = i32::decode(stream, ctx)?;
+                    if size > 0 {
+                        crate::encoding::skip_bytes(stream, size as u64)?;
+                    }
+                    None
+                }
             }
             _ => {
                 return Err(Error::decoding(format!(

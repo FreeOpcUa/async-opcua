@@ -1,10 +1,15 @@
-use std::{io::Cursor, str::FromStr};
+use std::{
+    io::{Cursor, Write},
+    str::FromStr,
+};
+
+use opcua_xml::XmlStreamWriter;
 
 use crate::{
     encoding::{BinaryDecodable, DecodingOptions},
     string::UAString,
     tests::*,
-    Array, ByteString, ContextOwned, DataValue, DateTime, DepthGauge, DiagnosticInfo,
+    write_u8, Array, ByteString, ContextOwned, DataValue, DateTime, DepthGauge, DiagnosticInfo,
     EUInformation, EncodingMask, ExpandedNodeId, ExtensionObject, Guid, LocalizedText,
     NamespaceMap, NodeId, ObjectId, QualifiedName, Variant, VariantScalarTypeId, XmlElement,
 };
@@ -654,4 +659,37 @@ fn test_custom_union_nullable() {
     let st = MyUnion::Null;
     assert_eq!(st.byte_len(&ctx), 4);
     serialize_test(st);
+}
+
+#[test]
+fn test_xml_in_binary() {
+    // Bit tricky to test since we don't support encoding extension objects as XML.
+    // We may actually allow this to some extent in the future, using the same mechanism
+    // we'll use for decoding fallback.
+    let mut buf = Vec::new();
+    let mut stream = Cursor::new(&mut buf);
+    let ctx_f = ContextOwned::default();
+    let ctx = ctx_f.context();
+    let rf = EUInformation {
+        namespace_uri: "https://my.namespace.uri".into(),
+        unit_id: 1,
+        display_name: LocalizedText::new("en", "MyUnit"),
+        description: LocalizedText::new("en", "MyDesc"),
+    };
+    let id: NodeId = ObjectId::EUInformation_Encoding_DefaultXml.into();
+    id.encode(&mut stream, &ctx).unwrap();
+
+    write_u8(&mut stream, 0x2).unwrap();
+    let mut xml_buf = Vec::new();
+    let mut xml_stream = Cursor::new(&mut xml_buf);
+    xml_stream.write(b"<EUInformation>").unwrap();
+    let mut xml_writer = XmlStreamWriter::new(&mut xml_stream as &mut dyn Write);
+    crate::xml::XmlEncodable::encode(&rf, &mut xml_writer, &ctx).unwrap();
+    xml_stream.write(b"</EUInformation>").unwrap();
+    let str = UAString::from(String::from_utf8(xml_buf).unwrap());
+    str.encode(&mut stream, &ctx).unwrap();
+
+    stream.set_position(0);
+    let decoded = ExtensionObject::decode(&mut stream, &ctx).unwrap();
+    assert_eq!(decoded.inner_as::<EUInformation>().unwrap(), &rf);
 }

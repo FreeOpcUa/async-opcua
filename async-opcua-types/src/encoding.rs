@@ -666,6 +666,12 @@ pub fn read_f64<R: Read + ?Sized>(stream: &mut R) -> EncodingResult<f64> {
     Ok(LittleEndian::read_f64(&buf))
 }
 
+/// Skip `bytes` bytes in the stream.
+pub fn skip_bytes<R: Read + ?Sized>(stream: &mut R, bytes: u64) -> EncodingResult<()> {
+    std::io::copy(&mut stream.take(bytes), &mut std::io::sink())?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;

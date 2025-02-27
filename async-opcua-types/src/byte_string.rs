@@ -241,7 +241,7 @@ impl ByteString {
         self.is_null() || self.is_empty()
     }
 
-    /// Creates a byte string from a Base64 encoded string
+    /// Creates a byte string from a base64 encoded string
     pub fn from_base64(data: &str) -> Option<ByteString> {
         if let Ok(bytes) = STANDARD.decode(data) {
             Some(Self::from(bytes))
@@ -250,9 +250,9 @@ impl ByteString {
         }
     }
 
-    /// Creates a byte string from a Base64 encoded string, ignoring whitespace.
+    /// Creates a byte string from a base64 encoded string, ignoring whitespace.
     pub fn from_base64_ignore_whitespace(mut data: String) -> Option<ByteString> {
-        data.retain(|c| !['\n', ' ', '\t', '\r'].contains(&c));
+        data.retain(|c| !c.is_whitespace());
         if let Ok(bytes) = STANDARD.decode(&data) {
             Some(Self::from(bytes))
         } else {
@@ -260,7 +260,7 @@ impl ByteString {
         }
     }
 
-    /// Encodes the bytestring as a Base64 encoded string
+    /// Encodes the bytestring as a base64 encoded string
     pub fn as_base64(&self) -> String {
         // Base64 encodes the byte string so it can be represented as a string
         if let Some(ref value) = self.value {

@@ -102,12 +102,16 @@ pub fn generate_xml_encode_impl(strct: EncodingStruct) -> syn::Result<TokenStrea
         if field.attr.optional {
             body.extend(quote! {
                 if let Some(item) = &self.#ident {
-                    stream.encode_child(#name, item, ctx)?;
+                    if !item.is_null_xml() {
+                        stream.encode_child(#name, item, ctx)?;
+                    }
                 }
             });
         } else {
             body.extend(quote! {
-                stream.encode_child(#name, &self.#ident, ctx)?;
+                if !self.#ident.is_null_xml() {
+                    stream.encode_child(#name, &self.#ident, ctx)?;
+                }
             });
         }
     }

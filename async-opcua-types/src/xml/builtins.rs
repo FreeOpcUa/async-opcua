@@ -21,6 +21,10 @@ macro_rules! xml_enc_number {
                 writer.write_text(&self.to_string())?;
                 Ok(())
             }
+
+            fn is_null_xml(&self) -> bool {
+                *self == 0
+            }
         }
 
         impl XmlDecodable for $t {
@@ -62,6 +66,10 @@ macro_rules! xml_enc_float {
                     writer.write_text(&self.to_string())?;
                 }
                 Ok(())
+            }
+
+            fn is_null_xml(&self) -> bool {
+                *self == 0.0
             }
         }
 
@@ -165,6 +173,10 @@ impl XmlEncodable for bool {
         writer.write_text(if *self { "true" } else { "false" })?;
         Ok(())
     }
+
+    fn is_null_xml(&self) -> bool {
+        !self
+    }
 }
 
 impl<T> XmlType for Box<T>
@@ -199,6 +211,10 @@ where
         context: &Context<'_>,
     ) -> Result<(), Error> {
         self.as_ref().encode(writer, context)
+    }
+
+    fn is_null_xml(&self) -> bool {
+        self.as_ref().is_null_xml()
     }
 }
 
@@ -248,7 +264,11 @@ where
         context: &Context<'_>,
     ) -> super::EncodingResult<()> {
         for item in self {
-            writer.encode_child(item.tag(), item, context)?;
+            if item.is_null_xml() {
+                writer.write_empty(item.tag())?;
+            } else {
+                writer.encode_child(item.tag(), item, context)?;
+            }
         }
         Ok(())
     }
@@ -291,5 +311,9 @@ where
             value.encode(writer, context)?;
         }
         Ok(())
+    }
+
+    fn is_null_xml(&self) -> bool {
+        self.is_none()
     }
 }

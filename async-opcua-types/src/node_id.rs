@@ -357,6 +357,10 @@ mod xml {
             let val = ctx.resolve_alias_inverse(&self_str);
             writer.encode_child("Identifier", val, ctx)
         }
+
+        fn is_null_xml(&self) -> bool {
+            self.is_null()
+        }
     }
 
     impl XmlDecodable for NodeId {

@@ -64,12 +64,12 @@ impl DynamicStructure {
 
                     stream.write_start("Elements")?;
                     for item in &a.values {
-                        item.encode(stream, ctx)?;
+                        self.xml_encode_field(stream, item, field, ctx)?;
                     }
                     stream.write_end("Elements")?;
                 } else {
                     for item in &a.values {
-                        item.encode(stream, ctx)?;
+                        self.xml_encode_field(stream, item, field, ctx)?;
                     }
                 }
                 Ok(())
@@ -359,21 +359,23 @@ impl DynamicTypeLoader {
                     ctx,
                 )?;
 
-                let Some(value) = value else {
-                    return Err(Error::decoding("Missing union value"));
-                };
-
-                let Some(discriminant) = discriminant else {
-                    return Err(Error::decoding("Missing discriminant"));
+                let (Some(value), Some(discriminant)) = (value, discriminant) else {
+                    return Ok(Box::new(DynamicStructure::new_null_union(
+                        t.clone(),
+                        self.type_tree.clone(),
+                    )));
                 };
 
                 if discriminant == 0 {
-                    return Err(Error::decoding("Discriminant must be non-zero"));
+                    return Ok(Box::new(DynamicStructure::new_null_union(
+                        t.clone(),
+                        self.type_tree.clone(),
+                    )));
                 }
 
                 Ok(Box::new(DynamicStructure {
                     type_def: t.clone(),
-                    discriminant: discriminant - 1,
+                    discriminant,
                     type_tree: self.type_tree.clone(),
                     data: vec![value],
                 }))
@@ -421,9 +423,10 @@ impl XmlEncodable for DynamicStructure {
             }
             StructureType::Union => {
                 stream.encode_child("SwitchField", &self.discriminant, ctx)?;
-                let (Some(value), Some(field)) =
-                    (self.data.first(), s.fields.get(self.discriminant as usize))
-                else {
+                let (Some(value), Some(field)) = (
+                    self.data.first(),
+                    s.fields.get(self.discriminant as usize - 1),
+                ) else {
                     return Err(Error::encoding(
                         "Discriminant was out of range of known fields",
                     ));
@@ -439,5 +442,242 @@ impl XmlEncodable for DynamicStructure {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        io::{Cursor, Read, Seek, Write},
+        sync::Arc,
+    };
+
+    use crate::{
+        custom::custom_struct::tests::{
+            get_custom_union, get_namespaces, MyUnion, MyUnionTypeLoader,
+        },
+        xml::*,
+        Array, ContextOwned, DataTypeDefinition, DataTypeId, DecodingOptions, EUInformation,
+        ExtensionObject, LocalizedText, NamespaceMap, NodeId, StructureDefinition, StructureField,
+        TypeLoaderCollection, Variant, VariantScalarTypeId,
+    };
+
+    use crate::custom::{
+        custom_struct::tests::{add_eu_information, make_type_tree},
+        type_tree::TypeInfo,
+        DynamicStructure, DynamicTypeLoader, EncodingIds,
+    };
+
+    #[test]
+    fn xml_dynamic_struct_round_trip() {
+        let mut type_tree = make_type_tree();
+        add_eu_information(&mut type_tree);
+
+        let loader = DynamicTypeLoader::new(Arc::new(type_tree));
+        let mut loaders = TypeLoaderCollection::new_empty();
+        loaders.add_type_loader(loader);
+        let ctx = ContextOwned::new(NamespaceMap::new(), loaders, DecodingOptions::test());
+
+        let mut write_buf = Vec::<u8>::new();
+        let mut cursor = Cursor::new(&mut write_buf);
+        let mut writer = XmlStreamWriter::new(&mut cursor as &mut dyn Write);
+
+        let obj = ExtensionObject::from_message(EUInformation {
+            namespace_uri: "my.namespace.uri".into(),
+            unit_id: 5,
+            display_name: "Degrees Celsius".into(),
+            description: "Description".into(),
+        });
+
+        XmlEncodable::encode(&obj, &mut writer, &ctx.context()).unwrap();
+        cursor.seek(std::io::SeekFrom::Start(0)).unwrap();
+
+        let mut reader = XmlStreamReader::new(&mut cursor as &mut dyn Read);
+
+        let obj2: ExtensionObject = XmlDecodable::decode(&mut reader, &ctx.context()).unwrap();
+
+        // Decode it back, resulting in a dynamic structure.
+        let value = obj2.inner_as::<DynamicStructure>().unwrap();
+        assert_eq!(value.data.len(), 4);
+        assert_eq!(value.data[0], Variant::from("my.namespace.uri"));
+        assert_eq!(value.data[1], Variant::from(5i32));
+        assert_eq!(
+            value.data[2],
+            Variant::from(LocalizedText::from("Degrees Celsius"))
+        );
+        assert_eq!(
+            value.data[3],
+            Variant::from(LocalizedText::from("Description"))
+        );
+
+        // Re-encode it
+        cursor.seek(std::io::SeekFrom::Start(0)).unwrap();
+        let mut writer = XmlStreamWriter::new(&mut cursor as &mut dyn Write);
+        XmlEncodable::encode(&obj2, &mut writer, &ctx.context()).unwrap();
+
+        // Make a new context, this time with the regular decoder for EUInformation
+        let ctx = ContextOwned::new_default(NamespaceMap::new(), DecodingOptions::test());
+        cursor.seek(std::io::SeekFrom::Start(0)).unwrap();
+        let mut reader = XmlStreamReader::new(&mut cursor as &mut dyn Read);
+        let obj3: ExtensionObject = XmlDecodable::decode(&mut reader, &ctx.context()).unwrap();
+
+        assert_eq!(obj, obj3);
+    }
+
+    #[test]
+    fn xml_dynamic_nested_struct_round_trip() {
+        let mut type_tree = make_type_tree();
+        add_eu_information(&mut type_tree);
+        let type_node_id = NodeId::new(1, 5);
+        type_tree
+            .parent_ids_mut()
+            .add_type(type_node_id.clone(), DataTypeId::Structure.into());
+        type_tree.add_type(
+            type_node_id.clone(),
+            TypeInfo::from_type_definition(
+                DataTypeDefinition::Structure(StructureDefinition {
+                    default_encoding_id: NodeId::null(),
+                    base_data_type: DataTypeId::Structure.into(),
+                    structure_type: crate::StructureType::Structure,
+                    fields: Some(vec![
+                        StructureField {
+                            name: "Info".into(),
+                            data_type: DataTypeId::EUInformation.into(),
+                            value_rank: -1,
+                            ..Default::default()
+                        },
+                        StructureField {
+                            name: "InfoArray".into(),
+                            data_type: DataTypeId::EUInformation.into(),
+                            value_rank: 1,
+                            ..Default::default()
+                        },
+                        StructureField {
+                            name: "AbstractField".into(),
+                            data_type: DataTypeId::BaseDataType.into(),
+                            value_rank: -1,
+                            ..Default::default()
+                        },
+                        StructureField {
+                            name: "PrimitiveArray".into(),
+                            data_type: DataTypeId::Int32.into(),
+                            value_rank: 2,
+                            ..Default::default()
+                        },
+                    ]),
+                }),
+                "EUInformation".to_owned(),
+                Some(EncodingIds {
+                    binary_id: NodeId::new(1, 6),
+                    json_id: NodeId::new(1, 7),
+                    xml_id: NodeId::new(1, 8),
+                }),
+                false,
+                &type_node_id,
+                type_tree.parent_ids(),
+            )
+            .unwrap(),
+        );
+        let type_tree = Arc::new(type_tree);
+        let loader = DynamicTypeLoader::new(type_tree.clone());
+        let mut loaders = TypeLoaderCollection::new();
+        loaders.add_type_loader(loader);
+        let ctx = ContextOwned::new(NamespaceMap::new(), loaders, DecodingOptions::test());
+
+        let obj = DynamicStructure::new_struct(
+            type_tree.get_struct_type(&type_node_id).unwrap().clone(),
+            type_tree,
+            vec![
+                Variant::from(ExtensionObject::from_message(EUInformation {
+                    namespace_uri: "my.namespace.uri".into(),
+                    unit_id: 5,
+                    display_name: "Degrees Celsius".into(),
+                    description: "Description".into(),
+                })),
+                Variant::from(vec![
+                    ExtensionObject::from_message(EUInformation {
+                        namespace_uri: "my.namespace.uri".into(),
+                        unit_id: 5,
+                        display_name: "Degrees Celsius".into(),
+                        description: "Description".into(),
+                    }),
+                    ExtensionObject::from_message(EUInformation {
+                        namespace_uri: "my.namespace.uri.2".into(),
+                        unit_id: 6,
+                        display_name: "Degrees Celsius 2".into(),
+                        description: "Description 2".into(),
+                    }),
+                ]),
+                Variant::Variant(Box::new(Variant::from(123))),
+                Variant::from(
+                    Array::new_multi(
+                        VariantScalarTypeId::Int32,
+                        [1i32, 2, 3, 4, 5, 6]
+                            .into_iter()
+                            .map(Variant::from)
+                            .collect::<Vec<_>>(),
+                        vec![2, 3],
+                    )
+                    .unwrap(),
+                ),
+            ],
+        )
+        .unwrap();
+        let obj = ExtensionObject::from_message(obj);
+
+        let mut write_buf = Vec::<u8>::new();
+        let mut cursor = Cursor::new(&mut write_buf);
+        let mut writer = XmlStreamWriter::new(&mut cursor as &mut dyn Write);
+
+        XmlEncodable::encode(&obj, &mut writer, &ctx.context()).unwrap();
+
+        cursor.seek(std::io::SeekFrom::Start(0)).unwrap();
+
+        println!("{}", std::str::from_utf8(&cursor.get_ref()).unwrap());
+
+        let mut reader = XmlStreamReader::new(&mut cursor as &mut dyn Read);
+        let obj2: ExtensionObject = XmlDecodable::decode(&mut reader, &ctx.context()).unwrap();
+
+        assert_eq!(obj, obj2);
+    }
+
+    #[test]
+    fn union_round_trip() {
+        let ctx = get_custom_union();
+
+        let mut write_buf = Vec::<u8>::new();
+        let mut cursor = Cursor::new(&mut write_buf);
+
+        let obj = ExtensionObject::from_message(MyUnion::Integer(123));
+
+        let mut writer = XmlStreamWriter::new(&mut cursor as &mut dyn Write);
+
+        // Encode the object, using the regular XmlEncodable implementation
+        XmlEncodable::encode(&obj, &mut writer, &ctx.context()).unwrap();
+        cursor.seek(std::io::SeekFrom::Start(0)).unwrap();
+
+        let mut reader = XmlStreamReader::new(&mut cursor as &mut dyn Read);
+
+        let obj2: ExtensionObject = XmlDecodable::decode(&mut reader, &ctx.context()).unwrap();
+
+        // Decode it back, resulting in a dynamic structure.
+        let value = obj2.inner_as::<DynamicStructure>().unwrap();
+        assert_eq!(value.data.len(), 1);
+
+        assert_eq!(value.data[0], Variant::from(123i32));
+        assert_eq!(value.discriminant, 1);
+
+        cursor.seek(std::io::SeekFrom::Start(0)).unwrap();
+        let mut writer = XmlStreamWriter::new(&mut cursor as &mut dyn Write);
+        XmlEncodable::encode(&obj2, &mut writer, &ctx.context()).unwrap();
+
+        // Make a new context, this time with the regular decoder for MyUnion
+        let mut ctx = ContextOwned::new_default(get_namespaces(), DecodingOptions::test());
+        ctx.loaders_mut().add_type_loader(MyUnionTypeLoader);
+        cursor.seek(std::io::SeekFrom::Start(0)).unwrap();
+        let mut reader = XmlStreamReader::new(&mut cursor as &mut dyn Read);
+        let obj3: ExtensionObject = XmlDecodable::decode(&mut reader, &ctx.context()).unwrap();
+
+        assert_eq!(obj, obj3);
     }
 }

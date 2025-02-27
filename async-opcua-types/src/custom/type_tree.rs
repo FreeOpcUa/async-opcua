@@ -114,6 +114,17 @@ impl StructTypeInfo {
             .get(idx)
             .and_then(|i| self.fields.get(*i))
     }
+
+    /// Return whether this struct is supported by the current version of the library.
+    /// Types that are not supported will panic on encoding, and be skipped when decoding.
+    ///
+    /// Currently this is only structures and unions with subtyped values.
+    pub fn is_supported(&self) -> bool {
+        !matches!(
+            self.structure_type,
+            StructureType::StructureWithSubtypedValues | StructureType::UnionWithSubtypedValues
+        )
+    }
 }
 
 #[derive(Debug, Default)]

@@ -538,6 +538,15 @@ impl ExpandedNodeId {
         value.into()
     }
 
+    /// Creates an expanded node id from a namespace URI and an identifier.
+    pub fn new_with_namespace(namespace: &str, value: impl Into<Identifier> + 'static) -> Self {
+        Self {
+            namespace_uri: namespace.into(),
+            node_id: NodeId::new(0, value),
+            server_index: 0,
+        }
+    }
+
     /// Return a null ExpandedNodeId.
     pub fn null() -> ExpandedNodeId {
         Self::new(NodeId::null())

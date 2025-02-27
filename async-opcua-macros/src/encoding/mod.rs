@@ -45,10 +45,7 @@ impl EncodingInput {
                 input.ident,
             )?)),
             syn::Data::Enum(data_enum) => {
-                let is_union = data_enum
-                    .variants
-                    .first()
-                    .is_some_and(|v| !v.fields.is_empty());
+                let is_union = data_enum.variants.iter().any(|v| !v.fields.is_empty());
                 if is_union {
                     return Ok(Self::AdvancedEnum(AdvancedEnum::from_input(
                         data_enum,

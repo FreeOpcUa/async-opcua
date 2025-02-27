@@ -130,6 +130,83 @@ impl TypeLoaderInstance {
     }
 }
 
+/// Convenience trait for a type loader using a static [`TypeLoaderInstance`] and
+/// namespace known at compile time.
+///
+/// Types implementing this blanket implement [`TypeLoader`]
+pub trait StaticTypeLoader {
+    /// Get the type loader instance used by this type loader.
+    fn instance() -> &'static TypeLoaderInstance;
+
+    /// Get the namespace this type loader manages.
+    fn namespace() -> &'static str;
+}
+
+impl<T> TypeLoader for T
+where
+    T: StaticTypeLoader + Send + Sync + 'static,
+{
+    #[cfg(feature = "xml")]
+    fn load_from_xml(
+        &self,
+        node_id: &crate::NodeId,
+        stream: &mut crate::xml::XmlStreamReader<&mut dyn std::io::Read>,
+        ctx: &Context<'_>,
+    ) -> Option<crate::EncodingResult<Box<dyn crate::DynEncodable>>> {
+        let idx = ctx.namespaces().get_index(Self::namespace())?;
+        if idx != node_id.namespace {
+            return None;
+        }
+        let Some(num_id) = node_id.as_u32() else {
+            return Some(Err(Error::decoding(
+                "Unsupported encoding ID. Only numeric encoding IDs are currently supported",
+            )));
+        };
+        Self::instance().decode_xml(num_id, stream, ctx)
+    }
+
+    #[cfg(feature = "json")]
+    fn load_from_json(
+        &self,
+        node_id: &crate::NodeId,
+        stream: &mut crate::json::JsonStreamReader<&mut dyn std::io::Read>,
+        ctx: &Context<'_>,
+    ) -> Option<crate::EncodingResult<Box<dyn crate::DynEncodable>>> {
+        let idx = ctx.namespaces().get_index(Self::namespace())?;
+        if idx != node_id.namespace {
+            return None;
+        }
+        let Some(num_id) = node_id.as_u32() else {
+            return Some(Err(Error::decoding(
+                "Unsupported encoding ID. Only numeric encoding IDs are currently supported",
+            )));
+        };
+        Self::instance().decode_json(num_id, stream, ctx)
+    }
+
+    fn load_from_binary(
+        &self,
+        node_id: &NodeId,
+        stream: &mut dyn Read,
+        ctx: &Context<'_>,
+    ) -> Option<crate::EncodingResult<Box<dyn crate::DynEncodable>>> {
+        let idx = ctx.namespaces().get_index(Self::namespace())?;
+        if idx != node_id.namespace {
+            return None;
+        }
+        let Some(num_id) = node_id.as_u32() else {
+            return Some(Err(Error::decoding(
+                "Unsupported encoding ID. Only numeric encoding IDs are currently supported",
+            )));
+        };
+        Self::instance().decode_binary(num_id, stream, ctx)
+    }
+
+    fn priority(&self) -> TypeLoaderPriority {
+        TypeLoaderPriority::Generated
+    }
+}
+
 /// Owned variant of [Context], this is stored by clients and servers, which
 /// call the [ContextOwned::context] method to produce a [Context]
 /// for decoding/encoding.

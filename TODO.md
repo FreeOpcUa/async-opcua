@@ -10,8 +10,6 @@ This is a list of things that are known to be missing, or ideas that could be im
  - Write a sophisticated server example with a persistent store. This would be a great way to verify the flexibility of the server.
  - Write some "bad ideas" servers, it would be nice to showcase how flexible this is.
  - Finish up XML implementation.
-   - Support for XML bodies in binary and JSON extension objects.
-   - Support for unions in derive macros.
    - Support for XmlElement in Variant.
  - Write a framework for method calls. The foundation for this has been laid with `TryFromVariant`, if we really wanted to we could use clever trait magic to let users simply define a rust method that takes in values that each implement a trait `MethodArg`, with a blanket impl for `TryFromVariant`, and return a tuple of results. Could be really powerful, but methods are a little niche.
  - Implement `Query`. I never got around to this, because the service is just so complex. Currently there is no way to actually implement it, since it won't work unless _all_ node managers implement it, and the core node managers don't.

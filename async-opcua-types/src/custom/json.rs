@@ -351,21 +351,23 @@ impl DynamicTypeLoader {
                     }
                 }
 
-                let Some(value) = value else {
-                    return Err(Error::decoding("Missing union value"));
-                };
-
-                let Some(discriminant) = discriminant else {
-                    return Err(Error::decoding("Missing discriminant"));
+                let (Some(value), Some(discriminant)) = (value, discriminant) else {
+                    return Ok(Box::new(DynamicStructure::new_null_union(
+                        t.clone(),
+                        self.type_tree.clone(),
+                    )));
                 };
 
                 if discriminant == 0 {
-                    return Err(Error::decoding("Discriminant must be non-zero"));
+                    return Ok(Box::new(DynamicStructure::new_null_union(
+                        t.clone(),
+                        self.type_tree.clone(),
+                    )));
                 }
 
                 Ok(Box::new(DynamicStructure {
                     type_def: t.clone(),
-                    discriminant: discriminant - 1,
+                    discriminant,
                     type_tree: self.type_tree.clone(),
                     data: vec![value],
                 }))
@@ -418,17 +420,21 @@ impl JsonEncodable for DynamicStructure {
                 }
             }
             crate::StructureType::Union => {
-                stream.name("SwitchField")?;
-                stream.number_value(self.discriminant)?;
-                let (Some(value), Some(field)) =
-                    (self.data.first(), s.fields.get(self.discriminant as usize))
-                else {
-                    return Err(Error::encoding(
-                        "Discriminant was out of range of known fields",
-                    ));
-                };
-                stream.name(&field.name)?;
-                self.json_encode_field(stream, value, field, ctx)?;
+                if self.discriminant != 0 {
+                    stream.name("SwitchField")?;
+                    stream.number_value(self.discriminant)?;
+
+                    let (Some(value), Some(field)) = (
+                        self.data.first(),
+                        s.fields.get((self.discriminant - 1) as usize),
+                    ) else {
+                        return Err(Error::encoding(
+                            "Discriminant was out of range of known fields",
+                        ));
+                    };
+                    stream.name(&field.name)?;
+                    self.json_encode_field(stream, value, field, ctx)?;
+                }
             }
 
             StructureType::StructureWithSubtypedValues => {
@@ -452,6 +458,9 @@ mod tests {
     };
 
     use crate::{
+        custom::custom_struct::tests::{
+            get_custom_union, get_namespaces, MyUnion, MyUnionTypeLoader,
+        },
         json::{JsonDecodable, JsonEncodable, JsonStreamReader, JsonStreamWriter, JsonWriter},
         Array, ContextOwned, DataTypeDefinition, DataTypeId, DecodingOptions, EUInformation,
         ExtensionObject, LocalizedText, NamespaceMap, NodeId, StructureDefinition, StructureField,
@@ -636,5 +645,47 @@ mod tests {
         let obj2: ExtensionObject = JsonDecodable::decode(&mut reader, &ctx.context()).unwrap();
 
         assert_eq!(obj, obj2);
+    }
+
+    #[test]
+    fn union_round_trip() {
+        let ctx = get_custom_union();
+
+        let mut write_buf = Vec::<u8>::new();
+        let mut cursor = Cursor::new(&mut write_buf);
+
+        let obj = ExtensionObject::from_message(MyUnion::Integer(123));
+
+        let mut writer = JsonStreamWriter::new(&mut cursor as &mut dyn Write);
+
+        // Encode the object, using the regular JsonEncodable implementation
+        JsonEncodable::encode(&obj, &mut writer, &ctx.context()).unwrap();
+        writer.finish_document().unwrap();
+        cursor.seek(std::io::SeekFrom::Start(0)).unwrap();
+
+        let mut reader = JsonStreamReader::new(&mut cursor as &mut dyn Read);
+
+        let obj2: ExtensionObject = JsonDecodable::decode(&mut reader, &ctx.context()).unwrap();
+
+        // Decode it back, resulting in a dynamic structure.
+        let value = obj2.inner_as::<DynamicStructure>().unwrap();
+        assert_eq!(value.data.len(), 1);
+
+        assert_eq!(value.data[0], Variant::from(123i32));
+        assert_eq!(value.discriminant, 1);
+
+        cursor.seek(std::io::SeekFrom::Start(0)).unwrap();
+        let mut writer = JsonStreamWriter::new(&mut cursor as &mut dyn Write);
+        JsonEncodable::encode(&obj2, &mut writer, &ctx.context()).unwrap();
+        writer.finish_document().unwrap();
+
+        // Make a new context, this time with the regular decoder for MyUnion
+        let mut ctx = ContextOwned::new_default(get_namespaces(), DecodingOptions::test());
+        ctx.loaders_mut().add_type_loader(MyUnionTypeLoader);
+        cursor.seek(std::io::SeekFrom::Start(0)).unwrap();
+        let mut reader = JsonStreamReader::new(&mut cursor as &mut dyn Read);
+        let obj3: ExtensionObject = JsonDecodable::decode(&mut reader, &ctx.context()).unwrap();
+
+        assert_eq!(obj, obj3);
     }
 }

@@ -101,13 +101,20 @@ impl DynamicStructure {
         data: Variant,
         discriminant: u32,
     ) -> Result<Self, Error> {
+        if discriminant == 0 {
+            return Err(Error::new(
+                StatusCode::BadInvalidArgument,
+                "Discriminant must be non-zero.",
+            ));
+        }
+
         if !matches!(type_def.structure_type, StructureType::Union) {
             return Err(Error::new(
                 StatusCode::BadInvalidArgument,
                 "Cannot construct a struct using new_union, call new_struct instead",
             ));
         }
-        let Some(field) = type_def.fields.get(discriminant as usize) else {
+        let Some(field) = type_def.fields.get(discriminant as usize - 1) else {
             return Err(Error::new(
                 StatusCode::BadInvalidArgument,
                 format!("Invalid discriminant {}", discriminant),
@@ -120,6 +127,16 @@ impl DynamicStructure {
             type_tree,
             data: vec![data],
         })
+    }
+
+    /// Create a new union, with value null.
+    pub fn new_null_union(type_def: Arc<StructTypeInfo>, type_tree: Arc<DataTypeTree>) -> Self {
+        Self {
+            type_def,
+            type_tree,
+            discriminant: 0,
+            data: Vec::new(),
+        }
     }
 
     /// Get a reference to the fields in order.
@@ -258,12 +275,15 @@ impl BinaryEncodable for DynamicStructure {
             StructureType::Union => {
                 // discriminant
                 size += 4;
-                let (Some(value), Some(field)) =
-                    (self.data.first(), s.fields.get(self.discriminant as usize))
-                else {
-                    return 0;
-                };
-                size += self.field_variant_len(value, field, ctx);
+                if self.discriminant != 0 {
+                    let (Some(value), Some(field)) = (
+                        self.data.first(),
+                        s.fields.get(self.discriminant as usize - 1),
+                    ) else {
+                        return 0;
+                    };
+                    size += self.field_variant_len(value, field, ctx);
+                }
             }
             StructureType::StructureWithSubtypedValues => {
                 todo!("StructureWithSubtypedValues is unsupported")
@@ -308,16 +328,19 @@ impl BinaryEncodable for DynamicStructure {
                 }
             }
             StructureType::Union => {
-                write_u32(stream, self.discriminant + 1)?;
-                let (Some(value), Some(field)) =
-                    (self.data.first(), s.fields.get(self.discriminant as usize))
-                else {
-                    return Err(Error::encoding(
-                        "Discriminant was out of range of known fields",
-                    ));
-                };
+                write_u32(stream, self.discriminant)?;
+                if self.discriminant != 0 {
+                    let (Some(value), Some(field)) = (
+                        self.data.first(),
+                        s.fields.get(self.discriminant as usize - 1),
+                    ) else {
+                        return Err(Error::encoding(
+                            "Discriminant was out of range of known fields",
+                        ));
+                    };
 
-                self.encode_field(stream, value, field, ctx)?;
+                    self.encode_field(stream, value, field, ctx)?;
+                }
             }
             StructureType::StructureWithSubtypedValues => {
                 todo!("StructureWithSubtypedValues is unsupported")
@@ -548,14 +571,13 @@ impl DynamicTypeLoader {
             }
             StructureType::Union => {
                 let discriminant = <u32 as BinaryDecodable>::decode(stream, ctx)?;
-                if discriminant < 1 {
-                    return Err(Error::decoding(format!(
-                        "Invalid discriminant: {}",
-                        discriminant
+                if discriminant == 0 {
+                    return Ok(Box::new(DynamicStructure::new_null_union(
+                        t.clone(),
+                        self.type_tree.clone(),
                     )));
                 }
-                let discriminant = discriminant - 1;
-                let Some(field) = t.fields.get(discriminant as usize) else {
+                let Some(field) = t.fields.get(discriminant as usize - 1) else {
                     return Err(Error::decoding(format!(
                         "Invalid discriminant: {}",
                         discriminant
@@ -593,6 +615,10 @@ impl TypeLoader for DynamicTypeLoader {
         };
         let t = self.type_tree.get_struct_type(ty_node_id)?;
 
+        if !t.is_supported() {
+            return None;
+        }
+
         Some(self.decode_type_inner(stream, ctx, t))
     }
 
@@ -614,6 +640,10 @@ impl TypeLoader for DynamicTypeLoader {
         };
         let t = self.type_tree.get_struct_type(ty_node_id)?;
 
+        if !t.is_supported() {
+            return None;
+        }
+
         Some(self.xml_decode_type_inner(stream, ctx, t))
     }
 
@@ -631,6 +661,10 @@ impl TypeLoader for DynamicTypeLoader {
         };
         let t = self.type_tree.get_struct_type(ty_node_id)?;
 
+        if !t.is_supported() {
+            return None;
+        }
+
         Some(self.json_decode_type_inner(stream, ctx, t))
     }
 }
@@ -639,14 +673,17 @@ impl TypeLoader for DynamicTypeLoader {
 pub(crate) mod tests {
     use std::{
         io::{Cursor, Seek},
-        sync::Arc,
+        sync::{Arc, LazyLock},
     };
 
+    use opcua_macros::ua_encodable;
+
     use crate::{
-        Array, BinaryDecodable, BinaryEncodable, ContextOwned, DataTypeDefinition, DataTypeId,
-        DecodingOptions, EUInformation, ExtensionObject, LocalizedText, NamespaceMap, NodeId,
-        ObjectId, StructureDefinition, StructureField, TypeLoaderCollection, Variant,
-        VariantScalarTypeId,
+        binary_decode_to_enc, json_decode_to_enc, xml_decode_to_enc, Array, BinaryDecodable,
+        BinaryEncodable, ContextOwned, DataTypeDefinition, DataTypeId, DecodingOptions,
+        EUInformation, ExpandedMessageInfo, ExtensionObject, LocalizedText, NamespaceMap, NodeId,
+        ObjectId, StaticTypeLoader, StructureDefinition, StructureField, TypeLoaderCollection,
+        TypeLoaderInstance, UAString, Variant, VariantScalarTypeId,
     };
 
     use crate::custom::type_tree::{
@@ -883,5 +920,177 @@ pub(crate) mod tests {
         let obj2: ExtensionObject = BinaryDecodable::decode(&mut cursor, &ctx.context()).unwrap();
 
         assert_eq!(obj, obj2);
+    }
+
+    pub(crate) fn get_namespaces() -> NamespaceMap {
+        let mut namespaces = NamespaceMap::new();
+        namespaces.add_namespace(TYPE_NAMESPACE);
+        namespaces
+    }
+
+    pub(crate) fn get_custom_union() -> ContextOwned {
+        let mut type_tree = make_type_tree();
+        type_tree
+            .parent_ids_mut()
+            .add_type(NodeId::new(1, 1), DataTypeId::Structure.into());
+        type_tree.add_type(
+            NodeId::new(1, 1),
+            TypeInfo::from_type_definition(
+                DataTypeDefinition::Structure(StructureDefinition {
+                    default_encoding_id: NodeId::null(),
+                    base_data_type: DataTypeId::Structure.into(),
+                    structure_type: crate::StructureType::Union,
+                    fields: Some(vec![
+                        StructureField {
+                            name: "Integer".into(),
+                            data_type: DataTypeId::Int32.into(),
+                            value_rank: -1,
+                            ..Default::default()
+                        },
+                        StructureField {
+                            name: "StringVariant".into(),
+                            data_type: DataTypeId::String.into(),
+                            value_rank: -1,
+                            ..Default::default()
+                        },
+                    ]),
+                }),
+                "MyUnion".to_owned(),
+                Some(EncodingIds {
+                    binary_id: NodeId::new(1, 2),
+                    json_id: NodeId::new(1, 3),
+                    xml_id: NodeId::new(1, 4),
+                }),
+                false,
+                &NodeId::new(1, 1),
+                type_tree.parent_ids(),
+            )
+            .unwrap(),
+        );
+
+        let loader = DynamicTypeLoader::new(Arc::new(type_tree));
+        let mut loaders = TypeLoaderCollection::new_empty();
+        loaders.add_type_loader(loader);
+        let ctx = ContextOwned::new(get_namespaces(), loaders, DecodingOptions::test());
+
+        ctx
+    }
+
+    mod opcua {
+        pub use crate as types;
+    }
+
+    const TYPE_NAMESPACE: &'static str = "my.custom.namespace.uri";
+
+    #[derive(Debug, Clone, PartialEq)]
+    #[ua_encodable]
+    pub(crate) enum MyUnion {
+        Null,
+        Integer(i32),
+        StringVariant(UAString),
+    }
+
+    impl ExpandedMessageInfo for MyUnion {
+        fn full_type_id(&self) -> crate::ExpandedNodeId {
+            crate::ExpandedNodeId::new_with_namespace(TYPE_NAMESPACE, 2)
+        }
+
+        fn full_json_type_id(&self) -> crate::ExpandedNodeId {
+            crate::ExpandedNodeId::new_with_namespace(TYPE_NAMESPACE, 3)
+        }
+
+        fn full_xml_type_id(&self) -> crate::ExpandedNodeId {
+            crate::ExpandedNodeId::new_with_namespace(TYPE_NAMESPACE, 4)
+        }
+
+        fn full_data_type_id(&self) -> crate::ExpandedNodeId {
+            crate::ExpandedNodeId::new_with_namespace(TYPE_NAMESPACE, 1)
+        }
+    }
+
+    static TYPES: LazyLock<TypeLoaderInstance> = LazyLock::new(|| {
+        let mut inst = opcua::types::TypeLoaderInstance::new();
+        inst.add_binary_type(1, 2, binary_decode_to_enc::<MyUnion>);
+        inst.add_json_type(1, 3, json_decode_to_enc::<MyUnion>);
+        inst.add_xml_type(1, 4, xml_decode_to_enc::<MyUnion>);
+        inst
+    });
+
+    pub(crate) struct MyUnionTypeLoader;
+
+    impl StaticTypeLoader for MyUnionTypeLoader {
+        fn instance() -> &'static TypeLoaderInstance {
+            &TYPES
+        }
+
+        fn namespace() -> &'static str {
+            TYPE_NAMESPACE
+        }
+    }
+
+    #[test]
+    fn union_round_trip() {
+        let ctx = get_custom_union();
+
+        let mut write_buf = Vec::<u8>::new();
+        let mut cursor = Cursor::new(&mut write_buf);
+
+        let obj = ExtensionObject::from_message(MyUnion::Integer(123));
+
+        // Encode the object, using the regular BinaryEncodable implementation
+        BinaryEncodable::encode(&obj, &mut cursor, &ctx.context()).unwrap();
+        cursor.seek(std::io::SeekFrom::Start(0)).unwrap();
+
+        let obj2: ExtensionObject = BinaryDecodable::decode(&mut cursor, &ctx.context()).unwrap();
+
+        // Decode it back, resulting in a dynamic structure.
+        let value = obj2.inner_as::<DynamicStructure>().unwrap();
+        assert_eq!(value.data.len(), 1);
+
+        assert_eq!(value.data[0], Variant::from(123i32));
+        assert_eq!(value.discriminant, 1);
+
+        cursor.seek(std::io::SeekFrom::Start(0)).unwrap();
+        BinaryEncodable::encode(&obj2, &mut cursor, &ctx.context()).unwrap();
+
+        // Make a new context, this time with the regular decoder for MyUnion
+        let mut ctx = ContextOwned::new_default(get_namespaces(), DecodingOptions::test());
+        ctx.loaders_mut().add_type_loader(MyUnionTypeLoader);
+        cursor.seek(std::io::SeekFrom::Start(0)).unwrap();
+        let obj3: ExtensionObject = BinaryDecodable::decode(&mut cursor, &ctx.context()).unwrap();
+
+        assert_eq!(obj, obj3);
+    }
+
+    #[test]
+    fn union_null() {
+        let ctx = get_custom_union();
+
+        let mut write_buf = Vec::<u8>::new();
+        let mut cursor = Cursor::new(&mut write_buf);
+
+        let obj = ExtensionObject::from_message(MyUnion::Null);
+
+        // Encode the object, using the regular BinaryEncodable implementation
+        BinaryEncodable::encode(&obj, &mut cursor, &ctx.context()).unwrap();
+        cursor.seek(std::io::SeekFrom::Start(0)).unwrap();
+
+        let obj2: ExtensionObject = BinaryDecodable::decode(&mut cursor, &ctx.context()).unwrap();
+
+        // Decode it back, resulting in a dynamic structure.
+        let value = obj2.inner_as::<DynamicStructure>().unwrap();
+        assert_eq!(value.data.len(), 0);
+        assert_eq!(value.discriminant, 0);
+
+        cursor.seek(std::io::SeekFrom::Start(0)).unwrap();
+        BinaryEncodable::encode(&obj2, &mut cursor, &ctx.context()).unwrap();
+
+        // Make a new context, this time with the regular decoder for MyUnion
+        let mut ctx = ContextOwned::new_default(get_namespaces(), DecodingOptions::test());
+        ctx.loaders_mut().add_type_loader(MyUnionTypeLoader);
+        cursor.seek(std::io::SeekFrom::Start(0)).unwrap();
+        let obj3: ExtensionObject = BinaryDecodable::decode(&mut cursor, &ctx.context()).unwrap();
+
+        assert_eq!(obj, obj3);
     }
 }

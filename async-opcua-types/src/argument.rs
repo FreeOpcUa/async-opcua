@@ -31,7 +31,7 @@ mod opcua {
     pub use crate as types;
 }
 
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq, Default, crate::UaNullable)]
 #[cfg_attr(feature = "json", derive(crate::JsonEncodable, crate::JsonDecodable))]
 #[cfg_attr(
     feature = "xml",

@@ -15,7 +15,7 @@ use regex::Regex;
 use crate::{
     encoding::{BinaryDecodable, BinaryEncodable, EncodingResult},
     string::*,
-    NamespaceMap,
+    NamespaceMap, UaNullable,
 };
 
 #[allow(unused)]
@@ -46,6 +46,12 @@ pub struct QualifiedName {
     pub name: UAString,
 }
 
+impl UaNullable for QualifiedName {
+    fn is_ua_null(&self) -> bool {
+        self.is_null()
+    }
+}
+
 #[cfg(feature = "xml")]
 mod xml {
     use crate::{xml::*, UAString};
@@ -66,10 +72,6 @@ mod xml {
             writer.encode_child("NamespaceIndex", &namespace_index, context)?;
             writer.encode_child("Name", &self.name, context)?;
             Ok(())
-        }
-
-        fn is_null_xml(&self) -> bool {
-            self.is_null()
         }
     }
 
@@ -132,10 +134,6 @@ mod json {
             }
             stream.string_value(&self.to_string())?;
             Ok(())
-        }
-
-        fn is_null_json(&self) -> bool {
-            self.name.is_null_json()
         }
     }
 

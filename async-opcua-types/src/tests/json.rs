@@ -4,7 +4,7 @@ use std::{
 };
 
 use base64::Engine;
-use opcua_macros::{JsonDecodable, JsonEncodable};
+use opcua_macros::{JsonDecodable, JsonEncodable, UaNullable};
 use serde_json::{json, Value};
 use struson::{
     reader::JsonStreamReader,
@@ -767,7 +767,7 @@ fn test_custom_struct_with_optional() {
         pub use crate as types;
     }
 
-    #[derive(Debug, PartialEq, Clone, JsonDecodable, JsonEncodable)]
+    #[derive(Debug, PartialEq, Clone, JsonDecodable, JsonEncodable, UaNullable)]
     pub struct MyStructWithOptionalFields {
         foo: i32,
         #[opcua(optional)]
@@ -838,7 +838,7 @@ fn test_custom_union() {
         pub use crate as types;
     }
 
-    #[derive(Debug, PartialEq, Clone, JsonDecodable, JsonEncodable)]
+    #[derive(Debug, PartialEq, Clone, JsonDecodable, JsonEncodable, UaNullable)]
     pub enum MyUnion {
         Var1(i32),
         #[opcua(rename = "EUInfo")]
@@ -903,7 +903,7 @@ fn test_custom_union_nullable() {
         pub use crate as types;
     }
 
-    #[derive(Debug, PartialEq, Clone, JsonDecodable, JsonEncodable)]
+    #[derive(Debug, PartialEq, Clone, JsonDecodable, JsonEncodable, UaNullable)]
     pub enum MyUnion {
         Var1(i32),
         Null,

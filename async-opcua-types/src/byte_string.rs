@@ -14,7 +14,7 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use crate::{
     encoding::{process_decode_io_result, process_encode_io_result, write_i32, EncodingResult},
     read_i32, DecodingOptions, Error, Guid, OutOfRange, SimpleBinaryDecodable,
-    SimpleBinaryEncodable,
+    SimpleBinaryEncodable, UaNullable,
 };
 
 /// A sequence of octets.
@@ -31,6 +31,12 @@ impl AsRef<[u8]> for ByteString {
         } else {
             self.value.as_ref().unwrap()
         }
+    }
+}
+
+impl UaNullable for ByteString {
+    fn is_ua_null(&self) -> bool {
+        self.is_null()
     }
 }
 

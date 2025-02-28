@@ -316,6 +316,63 @@ impl DecodingOptions {
     }
 }
 
+/// Trait implemented by OPC-UA types, indicating whether
+/// they are null or not, for use in encoding.
+pub trait UaNullable {
+    /// Return true if this value is null, meaning it can be left out when
+    /// being encoded in JSON and XML encodings.
+    fn is_ua_null(&self) -> bool {
+        false
+    }
+}
+
+impl<T> UaNullable for Option<T>
+where
+    T: UaNullable,
+{
+    fn is_ua_null(&self) -> bool {
+        match self {
+            Some(s) => s.is_ua_null(),
+            None => true,
+        }
+    }
+}
+
+impl<T> UaNullable for Vec<T> where T: UaNullable {}
+impl<T> UaNullable for Box<T>
+where
+    T: UaNullable,
+{
+    fn is_ua_null(&self) -> bool {
+        self.as_ref().is_ua_null()
+    }
+}
+
+macro_rules! is_null_const {
+    ($t:ty, $c:expr) => {
+        impl UaNullable for $t {
+            fn is_ua_null(&self) -> bool {
+                *self == $c
+            }
+        }
+    };
+}
+
+is_null_const!(bool, false);
+is_null_const!(u8, 0);
+is_null_const!(u16, 0);
+is_null_const!(u32, 0);
+is_null_const!(u64, 0);
+is_null_const!(i8, 0);
+is_null_const!(i16, 0);
+is_null_const!(i32, 0);
+is_null_const!(i64, 0);
+is_null_const!(f32, 0.0);
+is_null_const!(f64, 0.0);
+
+impl UaNullable for String {}
+impl UaNullable for str {}
+
 /// OPC UA Binary Encoding interface. Anything that encodes to binary must implement this. It provides
 /// functions to calculate the size in bytes of the struct (for allocating memory), encoding to a stream
 /// and decoding from a stream.

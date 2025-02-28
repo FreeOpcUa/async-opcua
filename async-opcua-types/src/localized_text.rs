@@ -18,7 +18,7 @@ mod opcua {
     pub use crate as types;
 }
 /// A human readable text with an optional locale identifier.
-#[derive(PartialEq, Default, Debug, Clone)]
+#[derive(PartialEq, Default, Debug, Clone, crate::UaNullable)]
 #[cfg_attr(
     feature = "json",
     derive(opcua_macros::JsonEncodable, opcua_macros::JsonDecodable)

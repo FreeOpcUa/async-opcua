@@ -26,6 +26,12 @@ impl From<Guid> for Uuid {
     }
 }
 
+impl UaNullable for Guid {
+    fn is_ua_null(&self) -> bool {
+        self.uuid.is_nil()
+    }
+}
+
 #[cfg(feature = "json")]
 mod json {
     use std::io::{Read, Write};

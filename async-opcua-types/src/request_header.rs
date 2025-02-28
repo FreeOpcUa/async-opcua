@@ -26,7 +26,7 @@ mod opcua {
 }
 
 /// The `RequestHeader` contains information common to every request from a client to the server.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, crate::UaNullable)]
 #[cfg_attr(
     feature = "json",
     derive(opcua_macros::JsonEncodable, opcua_macros::JsonDecodable)

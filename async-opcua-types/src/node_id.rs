@@ -24,7 +24,7 @@ use crate::{
     status_code::StatusCode,
     string::*,
     write_u16, write_u32, write_u8, DataTypeId, Error, MethodId, ObjectId, ObjectTypeId,
-    ReferenceTypeId, VariableId, VariableTypeId,
+    ReferenceTypeId, UaNullable, VariableId, VariableTypeId,
 };
 
 /// The kind of identifier, numeric, string, guid or byte
@@ -150,6 +150,12 @@ impl fmt::Display for NodeId {
     }
 }
 
+impl UaNullable for NodeId {
+    fn is_ua_null(&self) -> bool {
+        self.is_null()
+    }
+}
+
 // JSON serialization schema as per spec:
 //
 // "Type"
@@ -222,10 +228,6 @@ mod json {
             }
             stream.end_object()?;
             Ok(())
-        }
-
-        fn is_null_json(&self) -> bool {
-            self.is_null()
         }
     }
 
@@ -356,10 +358,6 @@ mod xml {
             };
             let val = ctx.resolve_alias_inverse(&self_str);
             writer.encode_child("Identifier", val, ctx)
-        }
-
-        fn is_null_xml(&self) -> bool {
-            self.is_null()
         }
     }
 

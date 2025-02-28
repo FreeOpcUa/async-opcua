@@ -4,7 +4,7 @@ use crate::{
     write_i32, write_u32, Array, BinaryDecodable, BinaryEncodable, ByteString, Context, DataValue,
     DateTime, DiagnosticInfo, EncodingResult, Error, ExpandedMessageInfo, ExpandedNodeId,
     ExtensionObject, Guid, LocalizedText, NodeId, QualifiedName, StatusCode, StructureType,
-    TypeLoader, UAString, Variant, XmlElement,
+    TypeLoader, UAString, UaNullable, Variant, XmlElement,
 };
 
 use super::type_tree::{DataTypeTree, ParsedStructureField, StructTypeInfo};
@@ -220,6 +220,16 @@ impl DynamicStructure {
             }
             Variant::Empty => Err(Error::encoding("Empty variant value in structure")),
             r => r.encode_value(stream, ctx),
+        }
+    }
+}
+
+impl UaNullable for DynamicStructure {
+    fn is_ua_null(&self) -> bool {
+        if self.type_def.structure_type == StructureType::Union {
+            self.discriminant == 0
+        } else {
+            false
         }
     }
 }

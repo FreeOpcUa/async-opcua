@@ -5,7 +5,7 @@ use std::{
 
 use opcua_xml::{XmlReadError, XmlStreamReader, XmlStreamWriter, XmlWriteError};
 
-use crate::{Context, EncodingResult, Error};
+use crate::{Context, EncodingResult, Error, UaNullable};
 
 impl From<XmlReadError> for Error {
     fn from(value: XmlReadError) -> Self {
@@ -48,19 +48,13 @@ pub trait XmlDecodable: XmlType {
 }
 
 /// Trait for types that can be encoded to XML.
-pub trait XmlEncodable: XmlType {
+pub trait XmlEncodable: XmlType + UaNullable {
     /// Encode a value to an XML stream.
     fn encode(
         &self,
         writer: &mut XmlStreamWriter<&mut dyn Write>,
         context: &Context<'_>,
     ) -> EncodingResult<()>;
-
-    /// This method should return `true` if the value is default
-    /// and should not be serialized.
-    fn is_null_xml(&self) -> bool {
-        false
-    }
 }
 
 /// Extensions for XmlStreamWriter.

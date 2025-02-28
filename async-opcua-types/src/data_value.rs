@@ -38,7 +38,7 @@ mod opcua {
 
 /// A data value is a value of a variable in the OPC UA server and contains information about its
 /// value, status and change timestamps.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, crate::UaNullable)]
 #[cfg_attr(
     feature = "json",
     derive(opcua_macros::JsonEncodable, opcua_macros::JsonDecodable)

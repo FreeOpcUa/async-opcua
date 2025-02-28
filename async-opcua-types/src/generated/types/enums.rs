@@ -17,6 +17,11 @@ bitflags::bitflags! {
     NonatomicWrite = 512i32; const WriteFullArrayOnly = 1024i32; const NoSubDataTypes =
     2048i32; const NonVolatile = 4096i32; const Constant = 8192i32; }
 }
+impl opcua::types::UaNullable for AccessLevelExType {
+    fn is_ua_null(&self) -> bool {
+        self.is_empty()
+    }
+}
 impl opcua::types::BinaryEncodable for AccessLevelExType {
     fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
         4usize
@@ -98,6 +103,11 @@ bitflags::bitflags! {
     const HistoryWrite = 8u8; const SemanticChange = 16u8; const StatusWrite = 32u8;
     const TimestampWrite = 64u8; }
 }
+impl opcua::types::UaNullable for AccessLevelType {
+    fn is_ua_null(&self) -> bool {
+        self.is_empty()
+    }
+}
 impl opcua::types::BinaryEncodable for AccessLevelType {
     fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
         1usize
@@ -178,6 +188,11 @@ bitflags::bitflags! {
     const None = 0i16; const SigningRequired = 1i16; const EncryptionRequired = 2i16;
     const SessionRequired = 4i16; const ApplyRestrictionsToBrowse = 8i16; }
 }
+impl opcua::types::UaNullable for AccessRestrictionType {
+    fn is_ua_null(&self) -> bool {
+        self.is_empty()
+    }
+}
 impl opcua::types::BinaryEncodable for AccessRestrictionType {
     fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
         2usize
@@ -256,6 +271,11 @@ impl opcua::types::json::JsonEncodable for AccessRestrictionType {
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] pub struct AlarmMask : i16 { const None =
     0i16; const Active = 1i16; const Unacknowledged = 2i16; const Unconfirmed = 4i16; }
+}
+impl opcua::types::UaNullable for AlarmMask {
+    fn is_ua_null(&self) -> bool {
+        self.is_empty()
+    }
 }
 impl opcua::types::BinaryEncodable for AlarmMask {
     fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
@@ -354,6 +374,11 @@ bitflags::bitflags! {
     524288i32; const WriteMask = 1048576i32; const ValueForVariableType = 2097152i32;
     const DataTypeDefinition = 4194304i32; const RolePermissions = 8388608i32; const
     AccessRestrictions = 16777216i32; const AccessLevelEx = 33554432i32; }
+}
+impl opcua::types::UaNullable for AttributeWriteMask {
+    fn is_ua_null(&self) -> bool {
+        self.is_empty()
+    }
 }
 impl opcua::types::BinaryEncodable for AttributeWriteMask {
     fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
@@ -500,6 +525,11 @@ bitflags::bitflags! {
     ServerTimestamp = 4i32; const SourcePicoSeconds = 8i32; const ServerPicoSeconds =
     16i32; const RawData = 32i32; }
 }
+impl opcua::types::UaNullable for DataSetFieldContentMask {
+    fn is_ua_null(&self) -> bool {
+        self.is_empty()
+    }
+}
 impl opcua::types::BinaryEncodable for DataSetFieldContentMask {
     fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
         4usize
@@ -578,6 +608,11 @@ impl opcua::types::json::JsonEncodable for DataSetFieldContentMask {
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] pub struct DataSetFieldFlags : i16 { const
     None = 0i16; const PromotedField = 1i16; }
+}
+impl opcua::types::UaNullable for DataSetFieldFlags {
+    fn is_ua_null(&self) -> bool {
+        self.is_empty()
+    }
 }
 impl opcua::types::BinaryEncodable for DataSetFieldFlags {
     fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
@@ -696,6 +731,11 @@ bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] pub struct EventNotifierType : u8 { const
     None = 0u8; const SubscribeToEvents = 1u8; const HistoryRead = 4u8; const
     HistoryWrite = 8u8; }
+}
+impl opcua::types::UaNullable for EventNotifierType {
+    fn is_ua_null(&self) -> bool {
+        self.is_empty()
+    }
 }
 impl opcua::types::BinaryEncodable for EventNotifierType {
     fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
@@ -869,6 +909,11 @@ bitflags::bitflags! {
     128i32; const PublisherId = 256i32; const WriterGroupName = 512i32; const
     MinorVersion = 1024i32; }
 }
+impl opcua::types::UaNullable for JsonDataSetMessageContentMask {
+    fn is_ua_null(&self) -> bool {
+        self.is_empty()
+    }
+}
 impl opcua::types::BinaryEncodable for JsonDataSetMessageContentMask {
     fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
         4usize
@@ -950,6 +995,11 @@ bitflags::bitflags! {
     DataSetMessageHeader = 2i32; const SingleDataSetMessage = 4i32; const PublisherId =
     8i32; const DataSetClassId = 16i32; const ReplyTo = 32i32; const WriterGroupName =
     64i32; }
+}
+impl opcua::types::UaNullable for JsonNetworkMessageContentMask {
+    fn is_ua_null(&self) -> bool {
+        self.is_empty()
+    }
 }
 impl opcua::types::BinaryEncodable for JsonNetworkMessageContentMask {
     fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
@@ -1169,6 +1219,11 @@ bitflags::bitflags! {
     const RequiresLowerCaseCharacters = 64i32; const RequiresDigitCharacters = 128i32;
     const RequiresSpecialCharacters = 256i32; }
 }
+impl opcua::types::UaNullable for PasswordOptionsMask {
+    fn is_ua_null(&self) -> bool {
+        self.is_empty()
+    }
+}
 impl opcua::types::BinaryEncodable for PasswordOptionsMask {
     fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
         4usize
@@ -1262,6 +1317,11 @@ bitflags::bitflags! {
     2048i32; const Call = 4096i32; const AddReference = 8192i32; const RemoveReference =
     16384i32; const DeleteNode = 32768i32; const AddNode = 65536i32; }
 }
+impl opcua::types::UaNullable for PermissionType {
+    fn is_ua_null(&self) -> bool {
+        self.is_empty()
+    }
+}
 impl opcua::types::BinaryEncodable for PermissionType {
     fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
         4usize
@@ -1345,6 +1405,11 @@ bitflags::bitflags! {
     ReferenceReaderGroup = 128i32; const ReferenceConnection = 256i32; const
     ReferencePubDataset = 512i32; const ReferenceSubDataset = 1024i32; const
     ReferenceSecurityGroup = 2048i32; const ReferencePushTarget = 4096i32; }
+}
+impl opcua::types::UaNullable for PubSubConfigurationRefMask {
+    fn is_ua_null(&self) -> bool {
+        self.is_empty()
+    }
 }
 impl opcua::types::BinaryEncodable for PubSubConfigurationRefMask {
     fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
@@ -1526,6 +1591,11 @@ bitflags::bitflags! {
     = 16i32; const CheckRevocationStatusOnline = 32i32; const
     CheckRevocationStatusOffline = 64i32; }
 }
+impl opcua::types::UaNullable for TrustListValidationOptions {
+    fn is_ua_null(&self) -> bool {
+        self.is_empty()
+    }
+}
 impl opcua::types::BinaryEncodable for TrustListValidationOptions {
     fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
         4usize
@@ -1669,6 +1739,11 @@ bitflags::bitflags! {
     Status = 4i32; const MajorVersion = 8i32; const MinorVersion = 16i32; const
     SequenceNumber = 32i32; }
 }
+impl opcua::types::UaNullable for UadpDataSetMessageContentMask {
+    fn is_ua_null(&self) -> bool {
+        self.is_empty()
+    }
+}
 impl opcua::types::BinaryEncodable for UadpDataSetMessageContentMask {
     fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
         4usize
@@ -1752,6 +1827,11 @@ bitflags::bitflags! {
     const PicoSeconds = 256i32; const DataSetClassId = 512i32; const PromotedFields =
     1024i32; }
 }
+impl opcua::types::UaNullable for UadpNetworkMessageContentMask {
+    fn is_ua_null(&self) -> bool {
+        self.is_empty()
+    }
+}
 impl opcua::types::BinaryEncodable for UadpNetworkMessageContentMask {
     fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
         4usize
@@ -1831,6 +1911,11 @@ bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] pub struct UserConfigurationMask : i32 {
     const None = 0i32; const NoDelete = 1i32; const Disabled = 2i32; const NoChangeByUser
     = 4i32; const MustChangePassword = 8i32; }
+}
+impl opcua::types::UaNullable for UserConfigurationMask {
+    fn is_ua_null(&self) -> bool {
+        self.is_empty()
+    }
 }
 impl opcua::types::BinaryEncodable for UserConfigurationMask {
     fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {

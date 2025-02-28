@@ -102,14 +102,14 @@ pub fn generate_xml_encode_impl(strct: EncodingStruct) -> syn::Result<TokenStrea
         if field.attr.optional {
             body.extend(quote! {
                 if let Some(item) = &self.#ident {
-                    if !item.is_null_xml() {
+                    if !opcua::types::UaNullable::is_ua_null(item) {
                         stream.encode_child(#name, item, ctx)?;
                     }
                 }
             });
         } else {
             body.extend(quote! {
-                if !self.#ident.is_null_xml() {
+                if !opcua::types::UaNullable::is_ua_null(&self.#ident) {
                     stream.encode_child(#name, &self.#ident, ctx)?;
                 }
             });

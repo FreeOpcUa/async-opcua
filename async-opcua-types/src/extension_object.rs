@@ -10,7 +10,7 @@ use std::{
     io::{Read, Write},
 };
 
-use crate::{write_i32, write_u8, Error, ExpandedMessageInfo, ExpandedNodeId};
+use crate::{write_i32, write_u8, Error, ExpandedMessageInfo, ExpandedNodeId, UaNullable};
 
 use super::{
     encoding::{BinaryDecodable, BinaryEncodable, EncodingResult},
@@ -223,6 +223,8 @@ impl PartialEq for dyn DynEncodable {
 }
 
 impl std::error::Error for ExtensionObjectError {}
+
+impl UaNullable for ExtensionObject {}
 
 #[cfg(feature = "json")]
 mod json {

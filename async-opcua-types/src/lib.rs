@@ -288,6 +288,7 @@ pub use opcua_macros::ua_encodable;
 pub use opcua_macros::BinaryDecodable;
 pub use opcua_macros::BinaryEncodable;
 pub use opcua_macros::UaEnum;
+pub use opcua_macros::UaNullable;
 mod ua_enum;
 
 pub use self::{

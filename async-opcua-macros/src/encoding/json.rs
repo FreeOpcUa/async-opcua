@@ -27,7 +27,7 @@ pub fn generate_json_encode_impl(strct: EncodingStruct) -> syn::Result<TokenStre
             }
             let ident = &field.ident;
             body.extend(quote! {
-                if self.#ident.as_ref().is_some_and(|f| !f.is_null_json()) {
+                if self.#ident.as_ref().is_some_and(|f| !opcua::types::UaNullable::is_ua_null(f)) {
                     encoding_mask |= 1 << #optional_index;
                 }
             });
@@ -53,7 +53,7 @@ pub fn generate_json_encode_impl(strct: EncodingStruct) -> syn::Result<TokenStre
         if field.attr.optional {
             body.extend(quote! {
                 if let Some(item) = &self.#ident {
-                    if !item.is_null_json() {
+                    if !opcua::types::UaNullable::is_ua_null(item){
                         stream.name(#name)?;
                         opcua::types::json::JsonEncodable::encode(item, stream, ctx)?;
                     }
@@ -61,7 +61,7 @@ pub fn generate_json_encode_impl(strct: EncodingStruct) -> syn::Result<TokenStre
             });
         } else {
             body.extend(quote! {
-                if !self.#ident.is_null_json() {
+                if !opcua::types::UaNullable::is_ua_null(&self.#ident) {
                     stream.name(#name)?;
                     opcua::types::json::JsonEncodable::encode(&self.#ident, stream, ctx)?;
                 }

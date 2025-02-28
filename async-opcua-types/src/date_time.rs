@@ -34,6 +34,12 @@ pub struct DateTime {
     date_time: DateTimeUtc,
 }
 
+impl crate::UaNullable for DateTime {
+    fn is_ua_null(&self) -> bool {
+        self.is_null()
+    }
+}
+
 #[cfg(feature = "json")]
 mod json {
     use crate::{json::*, Error};

@@ -41,7 +41,7 @@ use crate::{
     qualified_name::QualifiedName,
     status_code::StatusCode,
     string::{UAString, XmlElement},
-    write_i32, write_u8, DataTypeId, DataValue, DiagnosticInfo, DynEncodable, Error,
+    write_i32, write_u8, DataTypeId, DataValue, DiagnosticInfo, DynEncodable, Error, UaNullable,
 };
 /// A `Variant` holds built-in OPC UA data types, including single and multi dimensional arrays,
 /// data values and extension objects.
@@ -311,6 +311,12 @@ impl Variant {
                 Ok(())
             }
         }
+    }
+}
+
+impl UaNullable for Variant {
+    fn is_ua_null(&self) -> bool {
+        self.is_empty()
     }
 }
 

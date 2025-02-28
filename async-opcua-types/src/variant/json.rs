@@ -100,10 +100,6 @@ impl JsonEncodable for Variant {
 
         Ok(())
     }
-
-    fn is_null_json(&self) -> bool {
-        matches!(self, Variant::Empty)
-    }
 }
 
 enum VariantOrArray {

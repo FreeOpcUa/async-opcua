@@ -15,10 +15,10 @@ pub use struson::{
     writer::{JsonStreamWriter, JsonWriter},
 };
 
-use crate::{EncodingResult, Error};
+use crate::{EncodingResult, Error, UaNullable};
 
 /// Trait for OPC-UA json encoding.
-pub trait JsonEncodable {
+pub trait JsonEncodable: UaNullable {
     #[allow(unused)]
     /// Write the type to the provided JSON writer.
     fn encode(
@@ -26,12 +26,6 @@ pub trait JsonEncodable {
         stream: &mut JsonStreamWriter<&mut dyn Write>,
         ctx: &crate::Context<'_>,
     ) -> EncodingResult<()>;
-
-    /// This method should return `true` if the value is default
-    /// and should not be serialized.
-    fn is_null_json(&self) -> bool {
-        false
-    }
 }
 
 impl From<struson::reader::ReaderError> for Error {
@@ -87,10 +81,6 @@ where
             Some(s) => s.encode(stream, ctx),
             None => Ok(stream.null_value()?),
         }
-    }
-
-    fn is_null_json(&self) -> bool {
-        self.is_none()
     }
 }
 
@@ -165,10 +155,6 @@ where
     ) -> EncodingResult<()> {
         T::encode(self, stream, ctx)
     }
-
-    fn is_null_json(&self) -> bool {
-        T::is_null_json(self)
-    }
 }
 
 impl<T> JsonDecodable for Box<T>
@@ -209,10 +195,6 @@ macro_rules! json_enc_float {
 
                 Ok(())
             }
-
-            fn is_null_json(&self) -> bool {
-                *self == 0.0
-            }
         }
 
         impl JsonDecodable for $t {
@@ -248,10 +230,6 @@ macro_rules! json_enc_number {
             ) -> EncodingResult<()> {
                 stream.number_value(*self)?;
                 Ok(())
-            }
-
-            fn is_null_json(&self) -> bool {
-                *self == 0
             }
         }
 
@@ -305,10 +283,6 @@ impl JsonEncodable for bool {
     ) -> EncodingResult<()> {
         stream.bool_value(*self)?;
         Ok(())
-    }
-
-    fn is_null_json(&self) -> bool {
-        !self
     }
 }
 

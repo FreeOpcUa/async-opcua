@@ -8,7 +8,7 @@ use std::{
     io::{Read, Write},
 };
 
-use crate::{DecodingOptions, SimpleBinaryDecodable};
+use crate::{DecodingOptions, SimpleBinaryDecodable, UaNullable};
 
 use super::encoding::{read_u32, write_u32, EncodingResult, SimpleBinaryEncodable};
 
@@ -16,6 +16,12 @@ use super::encoding::{read_u32, write_u32, EncodingResult, SimpleBinaryEncodable
 /// Wrapper around an OPC-UA status code, with utilities for displaying,
 /// parsing, and reading.
 pub struct StatusCode(u32);
+
+impl UaNullable for StatusCode {
+    fn is_ua_null(&self) -> bool {
+        self.0 == 0
+    }
+}
 
 #[cfg(feature = "json")]
 mod json {

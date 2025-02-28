@@ -27,7 +27,7 @@ mod opcua {
 }
 
 /// The `ResponseHeader` contains information common to every response from server to client.
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, crate::UaNullable)]
 #[cfg_attr(
     feature = "json",
     derive(opcua_macros::JsonEncodable, opcua_macros::JsonDecodable)

@@ -6,7 +6,9 @@ mod encoding;
 mod events;
 mod utils;
 
-use encoding::{derive_all_inner, generate_encoding_impl, EncodingToImpl};
+use encoding::{
+    derive_all_inner, derive_ua_nullable_inner, generate_encoding_impl, EncodingToImpl,
+};
 use events::{derive_event_field_inner, derive_event_inner};
 use proc_macro::TokenStream;
 use syn::parse_macro_input;
@@ -181,6 +183,16 @@ pub fn derive_xml_decodable(item: TokenStream) -> TokenStream {
 /// the type name, which can be overridden with an item-level `opcua(rename = ...)` attribute.
 pub fn derive_xml_type(item: TokenStream) -> TokenStream {
     match generate_encoding_impl(parse_macro_input!(item), EncodingToImpl::XmlType) {
+        Ok(r) => r.into(),
+        Err(e) => e.to_compile_error().into(),
+    }
+}
+
+#[proc_macro_derive(UaNullable, attributes(opcua))]
+/// Derive the `UaNullable` trait on this struct or enum. This indicates whether the
+/// value is null/default in OPC-UA encoding.
+pub fn derive_ua_nullable(item: TokenStream) -> TokenStream {
+    match derive_ua_nullable_inner(parse_macro_input!(item)) {
         Ok(r) => r.into(),
         Err(e) => e.to_compile_error().into(),
     }

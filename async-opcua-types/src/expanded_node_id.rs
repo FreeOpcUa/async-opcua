@@ -21,7 +21,7 @@ use crate::{
     read_u16, read_u32, read_u8,
     status_code::StatusCode,
     string::*,
-    write_u16, write_u32, write_u8, Context, Error, NamespaceMap,
+    write_u16, write_u32, write_u8, Context, Error, NamespaceMap, UaNullable,
 };
 
 /// A NodeId that allows the namespace URI to be specified instead of an index.
@@ -33,6 +33,12 @@ pub struct ExpandedNodeId {
     pub namespace_uri: UAString,
     /// The server index. 0 means current server.
     pub server_index: u32,
+}
+
+impl UaNullable for ExpandedNodeId {
+    fn is_ua_null(&self) -> bool {
+        self.is_null()
+    }
 }
 
 #[cfg(feature = "json")]
@@ -117,10 +123,6 @@ mod json {
             }
             stream.end_object()?;
             Ok(())
-        }
-
-        fn is_null_json(&self) -> bool {
-            self.is_null()
         }
     }
 
@@ -262,10 +264,6 @@ mod xml {
                 ));
             };
             node_id.encode(writer, context)
-        }
-
-        fn is_null_xml(&self) -> bool {
-            self.is_null()
         }
     }
 

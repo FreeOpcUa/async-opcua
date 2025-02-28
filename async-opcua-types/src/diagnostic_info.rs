@@ -62,6 +62,12 @@ bitflags! {
     }
 }
 
+impl crate::UaNullable for DiagnosticBits {
+    fn is_ua_null(&self) -> bool {
+        self.is_empty()
+    }
+}
+
 #[cfg(feature = "json")]
 mod json {
     use crate::json::*;
@@ -127,7 +133,7 @@ mod opcua {
 }
 
 /// Diagnostic information.
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, crate::UaNullable)]
 #[cfg_attr(
     feature = "json",
     derive(opcua_macros::JsonEncodable, opcua_macros::JsonDecodable)

@@ -326,6 +326,14 @@ impl CodeGenerator {
         let write_method = Ident::new(&format!("write_{}", item.typ), Span::call_site());
 
         impls.push(parse_quote! {
+            impl opcua::types::UaNullable for #enum_ident {
+                fn is_ua_null(&self) -> bool {
+                    self.is_empty()
+                }
+            }
+        });
+
+        impls.push(parse_quote! {
             impl opcua::types::BinaryEncodable for #enum_ident {
                 fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
                     #size

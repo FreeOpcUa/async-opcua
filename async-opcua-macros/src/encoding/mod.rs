@@ -195,7 +195,7 @@ pub fn generate_encoding_impl(
 pub(crate) fn derive_all_inner(item: DeriveInput) -> syn::Result<TokenStream> {
     let input = EncodingInput::from_derive_input(item.clone())?;
     let mut output = quote! {
-        #[derive(opcua::types::BinaryEncodable, opcua::types::BinaryDecodable)]
+        #[derive(opcua::types::BinaryEncodable, opcua::types::BinaryDecodable, opcua::types::UaNullable)]
         #[cfg_attr(
             feature = "json",
             derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
@@ -221,4 +221,50 @@ pub(crate) fn derive_all_inner(item: DeriveInput) -> syn::Result<TokenStream> {
     });
 
     Ok(output)
+}
+
+pub(crate) fn derive_ua_nullable_inner(item: DeriveInput) -> syn::Result<TokenStream> {
+    let input = EncodingInput::from_derive_input(item.clone())?;
+    match input {
+        EncodingInput::Struct(s) => {
+            let ident = s.ident;
+            Ok(quote! {
+                impl opcua::types::UaNullable for #ident {}
+            })
+        }
+        EncodingInput::SimpleEnum(s) => {
+            let null_variant = s.variants.iter().find(|v| v.attr.default);
+            let ident = s.ident;
+            if let Some(null_variant) = null_variant {
+                let n_ident = &null_variant.name;
+                Ok(quote! {
+                    impl opcua::types::UaNullable for #ident {
+                        fn is_ua_null(&self) -> bool {
+                            matches!(self, Self::#n_ident)
+                        }
+                    }
+                })
+            } else {
+                Ok(quote! {
+                    impl opcua::types::UaNullable for #ident {}
+                })
+            }
+        }
+        EncodingInput::AdvancedEnum(s) => {
+            let ident = s.ident;
+            if let Some(null_variant) = s.null_variant {
+                Ok(quote! {
+                    impl opcua::types::UaNullable for #ident {
+                        fn is_ua_null(&self) -> bool {
+                            matches!(self, Self::#null_variant)
+                        }
+                    }
+                })
+            } else {
+                Ok(quote! {
+                    impl opcua::types::UaNullable for #ident {}
+                })
+            }
+        }
+    }
 }

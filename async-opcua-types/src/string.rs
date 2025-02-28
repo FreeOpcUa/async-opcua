@@ -12,6 +12,7 @@ use std::{
 use crate::{
     encoding::{process_decode_io_result, process_encode_io_result, write_i32, EncodingResult},
     read_i32, DecodingOptions, Error, OutOfRange, SimpleBinaryDecodable, SimpleBinaryEncodable,
+    UaNullable,
 };
 
 /// To avoid naming conflict hell, the OPC UA String type is typed `UAString` so it does not collide
@@ -32,6 +33,12 @@ impl fmt::Display for UAString {
         } else {
             write!(f, "[null]")
         }
+    }
+}
+
+impl UaNullable for UAString {
+    fn is_ua_null(&self) -> bool {
+        self.is_null()
     }
 }
 
@@ -60,10 +67,6 @@ mod json {
             }
 
             Ok(())
-        }
-
-        fn is_null_json(&self) -> bool {
-            self.is_null()
         }
     }
 
@@ -158,10 +161,6 @@ mod xml {
             }
 
             Ok(())
-        }
-
-        fn is_null_xml(&self) -> bool {
-            self.is_null()
         }
     }
 

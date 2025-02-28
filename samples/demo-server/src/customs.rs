@@ -4,9 +4,9 @@ use opcua::{
     nodes::{DataTypeBuilder, ObjectBuilder, ReferenceDirection, VariableBuilder},
     server::node_manager::memory::SimpleNodeManager,
     types::{
-        DataTypeDefinition, DataTypeId, EnumDefinition, EnumField, ExpandedNodeId, ExtensionObject,
-        NodeId, ObjectId, ObjectTypeId, ReferenceTypeId, StructureDefinition, StructureField,
-        StructureType,
+        ua_encodable, DataTypeDefinition, DataTypeId, EnumDefinition, EnumField, ExpandedNodeId,
+        ExtensionObject, NodeId, ObjectId, ObjectTypeId, ReferenceTypeId, StructureDefinition,
+        StructureField, StructureType,
     },
 };
 
@@ -119,29 +119,8 @@ fn add_custom_data_type(nm: &SimpleNodeManager, ns: u16, e_state_id: &NodeId) ->
     struct_id
 }
 
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    PartialEq,
-    Eq,
-    opcua::types::UaEnum,
-    opcua::types::BinaryEncodable,
-    opcua::types::BinaryDecodable,
-)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
-#[derive(Default)]
+#[ua_encodable]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 #[repr(i32)]
 pub enum AxisState {
     #[default]
@@ -152,20 +131,8 @@ pub enum AxisState {
     Error = 5i32,
 }
 
-#[derive(Debug, Clone, PartialEq, opcua::types::BinaryEncodable, opcua::types::BinaryDecodable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
-#[derive(Default)]
+#[ua_encodable]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct ErrorData {
     message: opcua::types::UAString,
     error_id: u32,

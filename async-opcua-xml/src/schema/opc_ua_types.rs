@@ -10,7 +10,8 @@ use uuid::Uuid;
 
 use crate::{
     ext::{
-        children_of_type, children_with_name, first_child_with_name_opt, value_from_contents_opt,
+        children_of_type, children_with_name, first_child_of_type, first_child_with_name_opt,
+        value_from_contents_opt,
     },
     XmlError, XmlLoad,
 };
@@ -357,17 +358,29 @@ impl<'input> XmlLoad<'input> for LocalizedText {
     }
 }
 
+/*
+It's suboptimal that we need both the raw body and the parsed XML element,
+but roxmltree doesn't do well when starting from the middle of a document,
+and we can't yet replace the entire parsing machinery with quick-xml due to the
+lack of a raw element in quick-xml's serde implementation.
+*/
+
 #[derive(Debug)]
 /// Body of an extension object.
 pub struct ExtensionObjectBody {
     /// Raw extension object body, just an XML node.
-    pub data: Option<String>,
+    pub data: Option<XmlElement>,
+    /// The data node as string, copied directly from the source document.
+    /// We currently need both, since one is used for codegen, and the other is used for
+    /// NodeSet2 parsing.
+    pub raw: Option<String>,
 }
 
 impl<'input> XmlLoad<'input> for ExtensionObjectBody {
     fn load(node: &Node<'_, 'input>) -> Result<Self, XmlError> {
         Ok(Self {
-            data: node
+            data: first_child_of_type(node)?,
+            raw: node
                 .first_element_child()
                 .map(|n| n.document().input_text()[n.range()].to_owned()),
         })

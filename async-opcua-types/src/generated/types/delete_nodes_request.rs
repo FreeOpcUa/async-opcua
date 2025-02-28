@@ -9,20 +9,8 @@
 mod opcua {
     pub use crate as types;
 }
-#[derive(Debug, Clone, PartialEq, opcua::types::BinaryEncodable, opcua::types::BinaryDecodable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
-#[derive(Default)]
+#[opcua::types::ua_encodable]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct DeleteNodesRequest {
     pub request_header: opcua::types::request_header::RequestHeader,
     pub nodes_to_delete: Option<Vec<super::delete_nodes_item::DeleteNodesItem>>,

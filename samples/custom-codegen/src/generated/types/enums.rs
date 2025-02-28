@@ -7,28 +7,8 @@
 // Copyright (C) 2017-2024 Einar Omang
 #![allow(non_camel_case_types)]
 #![allow(clippy::upper_case_acronyms)]
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    PartialEq,
-    Eq,
-    opcua::types::UaEnum,
-    opcua::types::BinaryEncodable,
-    opcua::types::BinaryDecodable,
-)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(i32)]
 pub enum IMTagSelectorEnumeration {
     #[opcua(default)]
@@ -36,28 +16,8 @@ pub enum IMTagSelectorEnumeration {
     LOCATION = 1i32,
     BOTH = 2i32,
 }
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    PartialEq,
-    Eq,
-    opcua::types::UaEnum,
-    opcua::types::BinaryEncodable,
-    opcua::types::BinaryDecodable,
-)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(i32)]
 pub enum PnARStateEnumeration {
     #[opcua(default)]
@@ -67,28 +27,8 @@ pub enum PnARStateEnumeration {
     UNCONNECTED_ERR_DUPLICATE_IP = 3i32,
     UNCONNECTED_ERR_DUPLICATE_NOS = 4i32,
 }
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    PartialEq,
-    Eq,
-    opcua::types::UaEnum,
-    opcua::types::BinaryEncodable,
-    opcua::types::BinaryDecodable,
-)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(i32)]
 pub enum PnARTypeEnumeration {
     #[opcua(default)]
@@ -97,28 +37,8 @@ pub enum PnARTypeEnumeration {
     IOCARSingleUsingRT_CLASS_3 = 16i32,
     IOCARSR = 32i32,
 }
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    PartialEq,
-    Eq,
-    opcua::types::UaEnum,
-    opcua::types::BinaryEncodable,
-    opcua::types::BinaryDecodable,
-)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(i32)]
 pub enum PnAssetChangeEnumeration {
     #[opcua(default)]
@@ -126,28 +46,8 @@ pub enum PnAssetChangeEnumeration {
     REMOVED = 1i32,
     CHANGED = 2i32,
 }
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    PartialEq,
-    Eq,
-    opcua::types::UaEnum,
-    opcua::types::BinaryEncodable,
-    opcua::types::BinaryDecodable,
-)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(i32)]
 pub enum PnAssetTypeEnumeration {
     #[opcua(default)]
@@ -156,56 +56,16 @@ pub enum PnAssetTypeEnumeration {
     SUBMODULE = 2i32,
     ASSET = 3i32,
 }
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    PartialEq,
-    Eq,
-    opcua::types::UaEnum,
-    opcua::types::BinaryEncodable,
-    opcua::types::BinaryDecodable,
-)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(i32)]
 pub enum PnChannelAccumulativeEnumeration {
     #[opcua(default)]
     SINGLE = 0i32,
     ACCUMULATIVE = 256i32,
 }
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    PartialEq,
-    Eq,
-    opcua::types::UaEnum,
-    opcua::types::BinaryEncodable,
-    opcua::types::BinaryDecodable,
-)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(i32)]
 pub enum PnChannelDirectionEnumeration {
     #[opcua(default)]
@@ -214,28 +74,8 @@ pub enum PnChannelDirectionEnumeration {
     OUTPUT_CHANNEL = 16384i32,
     BIDIRECTIONAL_CHANNEL = 24576i32,
 }
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    PartialEq,
-    Eq,
-    opcua::types::UaEnum,
-    opcua::types::BinaryEncodable,
-    opcua::types::BinaryDecodable,
-)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(i32)]
 pub enum PnChannelMaintenanceEnumeration {
     #[opcua(default)]
@@ -244,28 +84,8 @@ pub enum PnChannelMaintenanceEnumeration {
     MAINTENANCE_DEMANDED = 1024i32,
     USE_QUALIFIED_CHANNEL_QUALIFIER = 1536i32,
 }
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    PartialEq,
-    Eq,
-    opcua::types::UaEnum,
-    opcua::types::BinaryEncodable,
-    opcua::types::BinaryDecodable,
-)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(i32)]
 pub enum PnChannelSpecifierEnumeration {
     #[opcua(default)]
@@ -274,28 +94,8 @@ pub enum PnChannelSpecifierEnumeration {
     DISAPPEARS = 4096i32,
     DISAPPEARS_OTHER_REMAIN = 6144i32,
 }
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    PartialEq,
-    Eq,
-    opcua::types::UaEnum,
-    opcua::types::BinaryEncodable,
-    opcua::types::BinaryDecodable,
-)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(i32)]
 pub enum PnChannelTypeEnumeration {
     #[opcua(default)]
@@ -308,28 +108,8 @@ pub enum PnChannelTypeEnumeration {
     __32BIT = 6i32,
     __64BIT = 7i32,
 }
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    PartialEq,
-    Eq,
-    opcua::types::UaEnum,
-    opcua::types::BinaryEncodable,
-    opcua::types::BinaryDecodable,
-)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(i32)]
 pub enum PnDeviceStateEnumeration {
     #[opcua(default)]
@@ -338,28 +118,8 @@ pub enum PnDeviceStateEnumeration {
     ONLINE = 2i32,
     ONLINE_DOCKING = 3i32,
 }
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    PartialEq,
-    Eq,
-    opcua::types::UaEnum,
-    opcua::types::BinaryEncodable,
-    opcua::types::BinaryDecodable,
-)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(i32)]
 pub enum PnLinkStateEnumeration {
     UP = 1i32,
@@ -370,28 +130,8 @@ pub enum PnLinkStateEnumeration {
     NOT_PRESENT = 6i32,
     LOWER_LAYER_DOWN = 7i32,
 }
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    PartialEq,
-    Eq,
-    opcua::types::UaEnum,
-    opcua::types::BinaryEncodable,
-    opcua::types::BinaryDecodable,
-)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(i32)]
 pub enum PnModuleStateEnumeration {
     #[opcua(default)]
@@ -401,28 +141,8 @@ pub enum PnModuleStateEnumeration {
     SUBSTITUTE = 3i32,
     OK = 4i32,
 }
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    PartialEq,
-    Eq,
-    opcua::types::UaEnum,
-    opcua::types::BinaryEncodable,
-    opcua::types::BinaryDecodable,
-)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(i32)]
 pub enum PnPortStateEnumeration {
     #[opcua(default)]
@@ -434,56 +154,16 @@ pub enum PnPortStateEnumeration {
     FORWARDING = 5i32,
     BROKEN = 6i32,
 }
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    PartialEq,
-    Eq,
-    opcua::types::UaEnum,
-    opcua::types::BinaryEncodable,
-    opcua::types::BinaryDecodable,
-)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(i32)]
 pub enum PnSubmoduleAddInfoEnumeration {
     #[opcua(default)]
     NO_ADD_INFO = 0i32,
     TAKEOVER_NOT_ALLOWED = 1i32,
 }
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    PartialEq,
-    Eq,
-    opcua::types::UaEnum,
-    opcua::types::BinaryEncodable,
-    opcua::types::BinaryDecodable,
-)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(i32)]
 pub enum PnSubmoduleARInfoEnumeration {
     #[opcua(default)]
@@ -493,28 +173,8 @@ pub enum PnSubmoduleARInfoEnumeration {
     LOCKED_BY_IO_CONTROLLER = 384i32,
     LOCKED_BY_IO_SUPERVISOR = 512i32,
 }
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    PartialEq,
-    Eq,
-    opcua::types::UaEnum,
-    opcua::types::BinaryEncodable,
-    opcua::types::BinaryDecodable,
-)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(i32)]
 pub enum PnSubmoduleIdentInfoEnumeration {
     #[opcua(default)]

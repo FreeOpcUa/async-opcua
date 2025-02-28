@@ -9,20 +9,8 @@
 mod opcua {
     pub use crate as types;
 }
-#[derive(Debug, Clone, PartialEq, opcua::types::BinaryEncodable, opcua::types::BinaryDecodable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
-#[derive(Default)]
+#[opcua::types::ua_encodable]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct EventFilter {
     pub select_clauses: Option<Vec<super::simple_attribute_operand::SimpleAttributeOperand>>,
     pub where_clause: super::content_filter::ContentFilter,

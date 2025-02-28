@@ -7,20 +7,8 @@
 // Copyright (C) 2017-2024 Einar Omang
 #![allow(non_camel_case_types)]
 #![allow(clippy::upper_case_acronyms)]
-#[derive(Debug, Clone, PartialEq, opcua::types::BinaryEncodable, opcua::types::BinaryDecodable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
-#[derive(Default)]
+#[opcua::types::ua_encodable]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct PnDeviceDiagnosisDataType {
     pub api: u32,
     pub slot: u16,
@@ -62,20 +50,8 @@ impl opcua::types::ExpandedMessageInfo for PnDeviceDiagnosisDataType {
         opcua::types::ExpandedNodeId::from((id, "http://opcfoundation.org/UA/PROFINET/"))
     }
 }
-#[derive(Debug, Clone, PartialEq, opcua::types::BinaryEncodable, opcua::types::BinaryDecodable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
-#[derive(Default)]
+#[opcua::types::ua_encodable]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct PnDeviceRoleOptionSet {
     pub value: opcua::types::byte_string::ByteString,
     pub valid_bits: opcua::types::byte_string::ByteString,
@@ -101,21 +77,9 @@ impl opcua::types::ExpandedMessageInfo for PnDeviceRoleOptionSet {
         opcua::types::ExpandedNodeId::from((id, "http://opcfoundation.org/UA/PROFINET/"))
     }
 }
+#[opcua::types::ua_encodable]
 ///Contains the fields of the APDU element I&M5 | I&M5Data
-#[derive(Debug, Clone, PartialEq, opcua::types::BinaryEncodable, opcua::types::BinaryDecodable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct PnIM5DataType {
     pub annotation: opcua::types::string::UAString,
     pub order_id: opcua::types::string::UAString,

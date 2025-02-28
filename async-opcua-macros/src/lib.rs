@@ -6,7 +6,7 @@ mod encoding;
 mod events;
 mod utils;
 
-use encoding::{generate_encoding_impl, EncodingToImpl};
+use encoding::{derive_all_inner, generate_encoding_impl, EncodingToImpl};
 use events::{derive_event_field_inner, derive_event_inner};
 use proc_macro::TokenStream;
 use syn::parse_macro_input;
@@ -181,6 +181,20 @@ pub fn derive_xml_decodable(item: TokenStream) -> TokenStream {
 /// the type name, which can be overridden with an item-level `opcua(rename = ...)` attribute.
 pub fn derive_xml_type(item: TokenStream) -> TokenStream {
     match generate_encoding_impl(parse_macro_input!(item), EncodingToImpl::XmlType) {
+        Ok(r) => r.into(),
+        Err(e) => e.to_compile_error().into(),
+    }
+}
+
+#[proc_macro_attribute]
+/// Derive all the standard encoding traits on this struct or enum.
+/// This will derive `BinaryEncodable`, `BinaryDecodable`, `JsonEncodable`, `JsonDecodable`,
+/// `XmlEncodable`, `XmlDecodable`, `XmlType`, and `UaEnum` if the type is a simple enum.
+///
+/// Normal attributes for those still apply. Note that the XML and JSON traits will
+/// be behind `"xml"` and `"json"` feature gates respectively.
+pub fn ua_encodable(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    match derive_all_inner(parse_macro_input!(item)) {
         Ok(r) => r.into(),
         Err(e) => e.to_compile_error().into(),
     }

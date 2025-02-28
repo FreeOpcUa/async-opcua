@@ -445,27 +445,16 @@ impl CodeGenerator {
         let mut attrs = Vec::new();
         let mut variants = Punctuated::new();
 
+        attrs.push(parse_quote! {
+            #[opcua::types::ua_encodable]
+        });
         if let Some(doc) = item.documentation {
             attrs.push(parse_quote! {
                 #[doc = #doc]
             });
         }
         attrs.push(parse_quote! {
-            #[derive(Debug, Copy, Clone, PartialEq, Eq,
-            opcua::types::UaEnum, opcua::types::BinaryEncodable,
-            opcua::types::BinaryDecodable)]
-        });
-        attrs.push(parse_quote! {
-            #[cfg_attr(
-                feature = "json",
-                derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-            )]
-        });
-        attrs.push(parse_quote! {
-            #[cfg_attr(
-                feature = "xml",
-                derive(opcua::types::XmlEncodable, opcua::types::XmlDecodable, opcua::types::XmlType)
-            )]
+            #[derive(Debug, Copy, Clone, PartialEq, Eq)]
         });
         let ty: Type = syn::parse_str(&item.typ.to_string())?;
         attrs.push(parse_quote! {
@@ -581,22 +570,16 @@ impl CodeGenerator {
         let mut attrs = Vec::new();
         let mut fields = Punctuated::new();
 
+        attrs.push(parse_quote! {
+            #[opcua::types::ua_encodable]
+        });
         if let Some(doc) = &item.documentation {
             attrs.push(parse_quote! {
                 #[doc = #doc]
             });
         }
         attrs.push(parse_quote! {
-            #[derive(Debug, Clone, PartialEq, opcua::types::BinaryEncodable, opcua::types::BinaryDecodable)]
-        });
-        attrs.push(parse_quote! {
-            #[cfg_attr(feature = "json", derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable))]
-        });
-        attrs.push(parse_quote! {
-            #[cfg_attr(
-                feature = "xml",
-                derive(opcua::types::XmlEncodable, opcua::types::XmlDecodable, opcua::types::XmlType)
-            )]
+            #[derive(Debug, Clone, PartialEq)]
         });
 
         if self.has_default(&item.name) && !self.default_excluded.contains(&item.name) {

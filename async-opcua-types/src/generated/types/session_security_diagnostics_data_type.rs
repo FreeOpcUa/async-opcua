@@ -9,20 +9,8 @@
 mod opcua {
     pub use crate as types;
 }
-#[derive(Debug, Clone, PartialEq, opcua::types::BinaryEncodable, opcua::types::BinaryDecodable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
-#[derive(Default)]
+#[opcua::types::ua_encodable]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionSecurityDiagnosticsDataType {
     pub session_id: opcua::types::node_id::NodeId,
     pub client_user_id_of_session: opcua::types::string::UAString,

@@ -64,7 +64,7 @@ fn mk_extension_object(
     let Some(body) = &val.body else {
         return Ok(ExtensionObject::null());
     };
-    let Some(data) = &body.data else {
+    let Some(data) = &body.raw else {
         return Ok(ExtensionObject::null());
     };
     let Some(type_id) = &val.type_id else {

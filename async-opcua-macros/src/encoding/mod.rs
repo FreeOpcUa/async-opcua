@@ -12,6 +12,7 @@ use json::{
     generate_union_json_encode_impl,
 };
 use proc_macro2::{Span, TokenStream};
+use quote::quote;
 use syn::DeriveInput;
 use unions::AdvancedEnum;
 #[cfg(feature = "xml")]
@@ -189,4 +190,35 @@ pub fn generate_encoding_impl(
             "UaEnum derive macro is only supported on simple enums",
         )),
     }
+}
+
+pub(crate) fn derive_all_inner(item: DeriveInput) -> syn::Result<TokenStream> {
+    let input = EncodingInput::from_derive_input(item.clone())?;
+    let mut output = quote! {
+        #[derive(opcua::types::BinaryEncodable, opcua::types::BinaryDecodable)]
+        #[cfg_attr(
+            feature = "json",
+            derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+        )]
+        #[cfg_attr(
+            feature = "xml",
+            derive(
+                opcua::types::XmlEncodable,
+                opcua::types::XmlDecodable,
+                opcua::types::XmlType
+            )
+        )]
+    };
+
+    if matches!(input, EncodingInput::SimpleEnum(_)) {
+        output.extend(quote! {
+            #[derive(opcua::types::UaEnum)]
+        });
+    }
+
+    output.extend(quote! {
+        #item
+    });
+
+    Ok(output)
 }

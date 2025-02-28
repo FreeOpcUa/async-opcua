@@ -270,13 +270,7 @@ impl<'a> ValueBuilder<'a> {
             });
         };
 
-        let element = XmlElement::parse(data)?;
-        let Some(element) = element else {
-            return Ok(quote::quote! {
-                opcua::types::ExtensionObject::null()
-            });
-        };
-        let content = self.render_extension_object_inner(&element)?;
+        let content = self.render_extension_object_inner(data)?;
 
         Ok(quote! {
             opcua::types::ExtensionObject::from_message(#content)

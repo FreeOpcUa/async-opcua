@@ -284,6 +284,7 @@ pub use opcua_macros::{JsonDecodable, JsonEncodable};
 #[cfg(feature = "xml")]
 pub use opcua_macros::{XmlDecodable, XmlEncodable, XmlType};
 
+pub use opcua_macros::ua_encodable;
 pub use opcua_macros::BinaryDecodable;
 pub use opcua_macros::BinaryEncodable;
 pub use opcua_macros::UaEnum;

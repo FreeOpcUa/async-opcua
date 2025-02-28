@@ -9,19 +9,8 @@
 mod opcua {
     pub use crate as types;
 }
-#[derive(Debug, Clone, PartialEq, opcua::types::BinaryEncodable, opcua::types::BinaryDecodable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
+#[derive(Debug, Clone, PartialEq)]
 pub struct UpdateStructureDataDetails {
     pub node_id: opcua::types::node_id::NodeId,
     pub perform_insert_replace: super::enums::PerformUpdateType,

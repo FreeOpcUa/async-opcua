@@ -275,9 +275,6 @@ pub mod variant;
 #[cfg(feature = "xml")]
 pub mod xml;
 
-#[cfg(feature = "xml")]
-pub use opcua_macros::FromXml;
-
 #[cfg(feature = "json")]
 pub use opcua_macros::{JsonDecodable, JsonEncodable};
 

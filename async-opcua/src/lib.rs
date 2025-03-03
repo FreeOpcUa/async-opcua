@@ -23,8 +23,6 @@ extern crate tempdir;
 
 pub use opcua_core::sync;
 
-#[cfg(feature = "xml")]
-pub use opcua_macros::FromXml;
 #[cfg(feature = "server")]
 pub use opcua_macros::{Event, EventField};
 

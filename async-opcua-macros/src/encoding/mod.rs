@@ -15,8 +15,6 @@ use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::DeriveInput;
 use unions::AdvancedEnum;
-#[cfg(feature = "xml")]
-use xml::{generate_simple_enum_xml_impl, generate_xml_impl};
 
 use crate::utils::StructItem;
 
@@ -81,8 +79,6 @@ pub enum EncodingToImpl {
     #[cfg(feature = "json")]
     JsonDecode,
     #[cfg(feature = "xml")]
-    FromXml,
-    #[cfg(feature = "xml")]
     XmlEncode,
     #[cfg(feature = "xml")]
     XmlDecode,
@@ -141,11 +137,7 @@ pub fn generate_encoding_impl(
         }
         #[cfg(feature = "xml")]
         (EncodingToImpl::XmlEncode, EncodingInput::AdvancedEnum(s)) => {
-            // xml::generate_union_xml_encode_impl(s)
-            Err(syn::Error::new_spanned(
-                s.ident,
-                "XmlEncodable is not supported on unions yet",
-            ))
+            xml::generate_union_xml_encode_impl(s)
         }
         #[cfg(feature = "xml")]
         (EncodingToImpl::XmlDecode, EncodingInput::Struct(s)) => xml::generate_xml_decode_impl(s),
@@ -155,11 +147,7 @@ pub fn generate_encoding_impl(
         }
         #[cfg(feature = "xml")]
         (EncodingToImpl::XmlDecode, EncodingInput::AdvancedEnum(s)) => {
-            // xml::generate_union_xml_decode_impl(s)
-            Err(syn::Error::new_spanned(
-                s.ident,
-                "XmlDecodable is not supported on unions yet",
-            ))
+            xml::generate_union_xml_decode_impl(s)
         }
         #[cfg(feature = "xml")]
         (EncodingToImpl::XmlType, EncodingInput::Struct(s)) => {
@@ -173,16 +161,6 @@ pub fn generate_encoding_impl(
         (EncodingToImpl::XmlType, EncodingInput::AdvancedEnum(s)) => {
             xml::generate_xml_type_impl(s.ident, s.attr)
         }
-
-        #[cfg(feature = "xml")]
-        (EncodingToImpl::FromXml, EncodingInput::Struct(s)) => generate_xml_impl(s),
-        #[cfg(feature = "xml")]
-        (EncodingToImpl::FromXml, EncodingInput::SimpleEnum(s)) => generate_simple_enum_xml_impl(s),
-        #[cfg(feature = "xml")]
-        (EncodingToImpl::FromXml, EncodingInput::AdvancedEnum(s)) => Err(syn::Error::new_spanned(
-            s.ident,
-            "FromXml is not supported on unions yet",
-        )),
 
         (EncodingToImpl::UaEnum, EncodingInput::SimpleEnum(s)) => derive_ua_enum_impl(s),
         (EncodingToImpl::UaEnum, _) => Err(syn::Error::new(

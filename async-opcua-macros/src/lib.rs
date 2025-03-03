@@ -74,19 +74,6 @@ pub fn derive_event_field(item: TokenStream) -> TokenStream {
     }
 }
 
-#[cfg(feature = "xml")]
-#[proc_macro_derive(FromXml, attributes(opcua))]
-/// Derive the `FromXml` trait on this struct or enum, creating a conversion from
-/// NodeSet2 XML files.
-///
-/// All fields must be marked with `opcua(ignore)` or implement `FromXml`.
-pub fn derive_from_xml(item: TokenStream) -> TokenStream {
-    match generate_encoding_impl(parse_macro_input!(item), EncodingToImpl::FromXml) {
-        Ok(r) => r.into(),
-        Err(e) => e.to_compile_error().into(),
-    }
-}
-
 #[cfg(feature = "json")]
 #[proc_macro_derive(JsonEncodable, attributes(opcua))]
 /// Derive the `JsonEncodable` trait on this struct or enum, creating code

@@ -4,56 +4,9 @@ use syn::Ident;
 
 use quote::quote;
 
-use super::{attribute::EncodingItemAttribute, enums::SimpleEnum, EncodingStruct};
-
-pub fn generate_xml_impl(strct: EncodingStruct) -> syn::Result<TokenStream> {
-    let ident = strct.ident;
-    let mut body = quote! {};
-    let mut build = quote! {};
-    for field in strct.fields {
-        let name = field
-            .attr
-            .rename
-            .unwrap_or_else(|| field.ident.to_string().to_case(Case::Pascal));
-        let ident = field.ident;
-        body.extend(quote! {
-            let #ident = opcua::types::xml::XmlField::get_xml_field(element, #name, ctx)?;
-        });
-        build.extend(quote! {
-            #ident,
-        });
-    }
-    Ok(quote! {
-        impl opcua::types::xml::FromXml for #ident {
-            fn from_xml<'a>(
-                element: &opcua::types::xml::XmlElement,
-                ctx: &opcua::types::Context<'a>
-            ) -> Result<Self, opcua::types::Error> {
-                #body
-                Ok(Self {
-                    #build
-                })
-            }
-        }
-    })
-}
-
-pub fn generate_simple_enum_xml_impl(en: SimpleEnum) -> syn::Result<TokenStream> {
-    let ident = en.ident;
-    let repr = en.repr;
-
-    Ok(quote! {
-        impl opcua::types::xml::FromXml for #ident {
-            fn from_xml<'a>(
-                element: &opcua::types::xml::XmlElement,
-                ctx: &opcua::types::Context<'a>
-            ) -> Result<Self, opcua::types::Error> {
-                let val = #repr::from_xml(element, ctx)?;
-                Self::try_from(val).map_err(opcua::types::Error::decoding)
-            }
-        }
-    })
-}
+use super::{
+    attribute::EncodingItemAttribute, enums::SimpleEnum, unions::AdvancedEnum, EncodingStruct,
+};
 
 pub fn generate_xml_encode_impl(strct: EncodingStruct) -> syn::Result<TokenStream> {
     let ident = strct.ident;
@@ -278,6 +231,116 @@ pub fn generate_xml_type_impl(idt: Ident, attr: EncodingItemAttribute) -> syn::R
     Ok(quote! {
         impl opcua::types::xml::XmlType for #idt {
             const TAG: &'static str = #name;
+        }
+    })
+}
+
+pub fn generate_union_xml_decode_impl(en: AdvancedEnum) -> syn::Result<TokenStream> {
+    let ident = en.ident;
+
+    let mut decode_arms = quote! {};
+
+    for variant in en.variants {
+        if variant.is_null {
+            continue;
+        }
+
+        let name = variant
+            .attr
+            .rename
+            .unwrap_or_else(|| variant.name.to_string());
+        let var_idt = variant.name;
+
+        decode_arms.extend(quote! {
+            #name => value = Some(Self::#var_idt(opcua::types::xml::XmlDecodable::decode(stream, ctx)?)),
+        });
+    }
+
+    let fallback = if let Some(null_variant) = en.null_variant {
+        quote! {
+            Ok(Self::#null_variant)
+        }
+    } else {
+        quote! {
+            Err(opcua::types::Error::decoding(format!("Missing union value")))
+        }
+    };
+
+    Ok(quote! {
+        impl opcua::types::xml::XmlDecodable for #ident {
+            fn decode(
+                stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
+                ctx: &opcua::types::Context<'_>,
+            ) -> opcua::types::EncodingResult<Self> {
+                use opcua::types::xml::XmlReadExt;
+
+                let mut value = None;
+                stream.iter_children(|__key, stream, ctx| {
+                    match __key.as_str() {
+                        #decode_arms
+                        _ => {
+                            stream.skip_value()?;
+                        }
+                    }
+                    Ok(())
+                }, ctx)?;
+
+                let Some(value) = value else {
+                    return #fallback;
+                };
+
+                Ok(value)
+            }
+        }
+    })
+}
+
+pub fn generate_union_xml_encode_impl(en: AdvancedEnum) -> syn::Result<TokenStream> {
+    let ident = en.ident;
+
+    let mut encode_arms = quote! {};
+
+    let mut idx = 0u32;
+    for variant in en.variants {
+        let name = variant
+            .attr
+            .rename
+            .unwrap_or_else(|| variant.name.to_string());
+        let var_idt = variant.name;
+        if variant.is_null {
+            encode_arms.extend(quote! {
+                Self::#var_idt => {
+                    stream.encode_child("SwitchField", &0u32, ctx)?;
+                }
+            });
+            continue;
+        }
+
+        idx += 1;
+
+        encode_arms.extend(quote! {
+            Self::#var_idt(inner) => {
+                stream.encode_child("SwitchField", &#idx, ctx)?;
+                stream.encode_child(#name, inner, ctx)?;
+            },
+        });
+    }
+
+    Ok(quote! {
+        impl opcua::types::xml::XmlEncodable for #ident {
+            fn encode(
+                &self,
+                stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
+                ctx: &opcua::types::Context<'_>
+            ) -> opcua::types::EncodingResult<()> {
+                use opcua::types::xml::XmlWriteExt;
+
+                match self {
+                    #encode_arms
+                }
+
+                Ok(())
+            }
         }
     })
 }

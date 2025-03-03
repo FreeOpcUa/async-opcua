@@ -1,12 +1,14 @@
 use std::io::{Cursor, Read, Write};
 use std::str::FromStr;
 
+use opcua_macros::{XmlDecodable, XmlEncodable, XmlType};
 use opcua_xml::XmlStreamReader;
 
 use crate::xml::{XmlDecodable, XmlEncodable};
 use crate::{
     Argument, Array, ByteString, DataTypeId, DataValue, DateTime, EUInformation, ExpandedNodeId,
-    ExtensionObject, Guid, LocalizedText, NodeId, QualifiedName, StatusCode, UAString, Variant,
+    ExtensionObject, Guid, LocalizedText, NodeId, QualifiedName, StatusCode, UAString, UaNullable,
+    Variant,
 };
 use crate::{Context, ContextOwned, DecodingOptions, EncodingResult};
 
@@ -395,4 +397,66 @@ fn from_xml_variant() {
     </Matrix>
     "#,
     );
+}
+
+#[test]
+fn test_custom_union() {
+    mod opcua {
+        pub use crate as types;
+    }
+
+    #[derive(Debug, PartialEq, Clone, XmlDecodable, XmlEncodable, UaNullable, XmlType)]
+    pub enum MyUnion {
+        Var1(i32),
+        #[opcua(rename = "EUInfo")]
+        Var2(EUInformation),
+        Var3(f64),
+    }
+
+    xml_round_trip(
+        &MyUnion::Var1(123),
+        r#"<SwitchField>1</SwitchField><Var1>123</Var1>"#,
+    );
+
+    xml_round_trip(
+        &MyUnion::Var2(EUInformation {
+            namespace_uri: "https://my.namespace.uri".into(),
+            unit_id: 1,
+            display_name: LocalizedText::from("MyUnit"),
+            description: LocalizedText::new("en", "MyDesc"),
+        }),
+        r#"
+        <SwitchField>2</SwitchField>
+        <EUInfo>
+            <NamespaceUri>https://my.namespace.uri</NamespaceUri>
+            <UnitId>1</UnitId>
+            <DisplayName><Text>MyUnit</Text></DisplayName>
+            <Description><Locale>en</Locale><Text>MyDesc</Text></Description>
+        </EUInfo>
+        "#,
+    );
+
+    xml_round_trip(
+        &MyUnion::Var3(123.123),
+        r#"<SwitchField>1</SwitchField><Var3>123.123</Var3>"#,
+    );
+}
+
+#[test]
+fn test_custom_union_nullable() {
+    mod opcua {
+        pub use crate as types;
+    }
+
+    #[derive(Debug, PartialEq, Clone, XmlDecodable, XmlEncodable, UaNullable, XmlType)]
+    pub enum MyUnion {
+        Var1(i32),
+        Null,
+    }
+
+    xml_round_trip(
+        &MyUnion::Var1(123),
+        r#"<SwitchField>1</SwitchField><Var1>123</Var1>"#,
+    );
+    xml_round_trip(&MyUnion::Null, r#"<SwitchField>0</SwitchField>"#);
 }

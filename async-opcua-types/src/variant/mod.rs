@@ -13,6 +13,10 @@ mod type_id;
 #[cfg(feature = "xml")]
 mod xml;
 
+mod xml_element;
+
+pub use xml_element::XmlElement;
+
 pub use from::TryFromVariant;
 pub use into::IntoVariant;
 pub use type_id::*;
@@ -40,7 +44,7 @@ use crate::{
     numeric_range::NumericRange,
     qualified_name::QualifiedName,
     status_code::StatusCode,
-    string::{UAString, XmlElement},
+    string::UAString,
     write_i32, write_u8, DataTypeId, DataValue, DiagnosticInfo, DynEncodable, Error, UaNullable,
 };
 /// A `Variant` holds built-in OPC UA data types, including single and multi dimensional arrays,
@@ -156,6 +160,7 @@ impl_variant_type_for!(DateTime, VariantScalarTypeId::DateTime);
 impl_variant_type_for!(Guid, VariantScalarTypeId::Guid);
 impl_variant_type_for!(StatusCode, VariantScalarTypeId::StatusCode);
 impl_variant_type_for!(ByteString, VariantScalarTypeId::ByteString);
+impl_variant_type_for!(XmlElement, VariantScalarTypeId::XmlElement);
 impl_variant_type_for!(QualifiedName, VariantScalarTypeId::QualifiedName);
 impl_variant_type_for!(LocalizedText, VariantScalarTypeId::LocalizedText);
 impl_variant_type_for!(NodeId, VariantScalarTypeId::NodeId);

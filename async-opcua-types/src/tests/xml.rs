@@ -8,7 +8,7 @@ use crate::xml::{XmlDecodable, XmlEncodable};
 use crate::{
     Argument, Array, ByteString, DataTypeId, DataValue, DateTime, EUInformation, ExpandedNodeId,
     ExtensionObject, Guid, LocalizedText, NodeId, QualifiedName, StatusCode, UAString, UaNullable,
-    Variant,
+    Variant, XmlElement,
 };
 use crate::{Context, ContextOwned, DecodingOptions, EncodingResult};
 
@@ -275,6 +275,15 @@ fn from_xml_data_value() {
 }
 
 #[test]
+fn from_xml_xml_element() {
+    let data = r#"<Thing>Hello there</Thing>
+<Thing>Other thing</Thing>
+"#;
+    // XML elements are simply captured one-to-one.
+    xml_round_trip(&XmlElement::from(data), data);
+}
+
+#[test]
 fn from_xml_variant() {
     xml_round_trip(&Variant::from(1u8), "<Byte>1</Byte>");
     xml_round_trip(
@@ -356,6 +365,17 @@ fn from_xml_variant() {
     xml_round_trip(
         &Variant::from(vec![StatusCode::Bad, StatusCode::Good]),
         "<ListOfStatusCode><StatusCode><Code>2147483648</Code></StatusCode><StatusCode><Code>0</Code></StatusCode></ListOfStatusCode>",
+    );
+    let data = r#"<Thing>Hello there</Thing>
+<Thing>Other thing</Thing>
+"#;
+    xml_round_trip(
+        &Variant::from(XmlElement::from(data)),
+        &format!("<XmlElement>{data}</XmlElement>"),
+    );
+    xml_round_trip(
+        &Variant::from(vec![XmlElement::from(data), XmlElement::from(data)]),
+        &format!("<ListOfXmlElement><XmlElement>{data}</XmlElement><XmlElement>{data}</XmlElement></ListOfXmlElement>"),
     );
     xml_round_trip(
         &Variant::from(EUInformation {

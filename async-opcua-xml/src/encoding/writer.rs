@@ -67,3 +67,12 @@ impl<T: Write> XmlStreamWriter<T> {
         self.writer.create_element(name)
     }
 }
+
+impl XmlStreamWriter<&mut dyn Write> {
+    /// Write the given bytes raw to the stream.
+    /// This may produce invalid XML, if the data is not valid and properly escaped.
+    pub fn write_raw(&mut self, data: &[u8]) -> Result<(), XmlWriteError> {
+        self.writer.get_mut().write_all(data)?;
+        Ok(())
+    }
+}

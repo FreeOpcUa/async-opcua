@@ -112,7 +112,6 @@ impl<T: Read> XmlStreamReader<T> {
                 }
 
                 Event::Eof => {
-                    println!("Eof {depth}");
                     if depth == 1 {
                         if let Some(mut text) = text {
                             let trimmed = text.trim_ascii_end();
@@ -126,6 +125,76 @@ impl<T: Read> XmlStreamReader<T> {
                     }
                 }
                 _ => continue,
+            }
+        }
+    }
+
+    /// Consume the current element as a raw array of bytes.
+    pub fn consume_raw(&mut self) -> Result<Vec<u8>, XmlReadError> {
+        let mut out = Vec::new();
+        let mut depth = 1u32;
+        // quick-xml doesn't really have a way to do this, and in fact does not capture the full event,
+        // fortunately the way it does capture each event is quite predictable, so we can reconstruct
+        // the input.
+        // We do need the parser, since we only want to read the current element.
+        loop {
+            let evt = self.next_event()?;
+            match evt {
+                Event::Start(s) => {
+                    depth += 1;
+                    out.push(b'<');
+                    out.extend_from_slice(&s);
+                    out.push(b'>');
+                }
+                Event::End(s) => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Ok(out);
+                    }
+                    out.extend_from_slice(b"</");
+                    out.extend_from_slice(&s);
+                    out.push(b'>');
+                }
+                Event::CData(s) => {
+                    out.extend_from_slice(b"<![CDATA[");
+                    out.extend_from_slice(&s);
+                    out.extend_from_slice(b"]]>");
+                }
+                Event::Comment(s) => {
+                    out.extend_from_slice(b"<!--");
+                    out.extend_from_slice(&s);
+                    out.extend_from_slice(b"-->");
+                }
+                Event::Decl(s) => {
+                    out.extend_from_slice(b"<?");
+                    out.extend_from_slice(&s);
+                    out.extend_from_slice(b"?>");
+                }
+                Event::DocType(s) => {
+                    out.extend_from_slice(b"<!DOCTYPE");
+                    out.extend_from_slice(&s);
+                    out.push(b'>');
+                }
+                Event::Empty(s) => {
+                    out.push(b'<');
+                    out.extend_from_slice(&s);
+                    out.extend_from_slice(b"/>");
+                }
+                Event::PI(s) => {
+                    out.extend_from_slice(b"<?");
+                    out.extend_from_slice(&s);
+                    out.extend_from_slice(b"?>");
+                }
+                Event::Text(s) => {
+                    out.extend_from_slice(&s);
+                }
+                Event::Eof => {
+                    if depth == 1 {
+                        return Ok(out);
+                    } else {
+                        return Err(XmlReadError::UnexpectedEof);
+                    }
+                }
             }
         }
     }
@@ -201,5 +270,23 @@ mod test {
 
         assert!(matches!(reader.next_event().unwrap(), Event::Start(_)));
         assert_eq!(reader.consume_content::<u32>().unwrap(), 12345);
+    }
+
+    #[test]
+    fn test_consume_raw() {
+        let xml = r#"<Foo>
+<Bar>
+    Hello <!-- Comment here -->
+    More text
+</Bar>
+<Bar attr = "foo" />
+<? Mystery PI ?>
+</Foo>"#;
+        let mut cursor = Cursor::new(xml.as_bytes());
+        let mut reader = super::XmlStreamReader::new(&mut cursor);
+        assert!(matches!(reader.next_event().unwrap(), Event::Start(_)));
+        let raw = reader.consume_raw().unwrap();
+        println!("{}", String::from_utf8_lossy(&raw));
+        assert_eq!(xml[5..(xml.len() - 6)].as_bytes(), &*raw);
     }
 }

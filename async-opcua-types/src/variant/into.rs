@@ -5,7 +5,7 @@ use crate::{
     ExtensionObject, Guid, LocalizedText, NodeId, QualifiedName, StatusCode, UAString,
 };
 
-use super::{Array, Variant, VariantScalarTypeId, VariantType};
+use super::{Array, Variant, VariantScalarTypeId, VariantType, XmlElement};
 
 /// Trait implemented by types that can be converted to a variant.
 /// This is a workaround for specialization in `EventField`.
@@ -63,6 +63,7 @@ impl_into_variant!(u64, UInt64);
 impl_into_variant!(f32, Float);
 impl_into_variant!(f64, Double);
 impl_into_variant!(UAString, String);
+impl_into_variant!(XmlElement, XmlElement);
 impl_into_variant_boxed!(DateTime, DateTime);
 impl_into_variant_boxed!(Guid, Guid);
 impl_into_variant!(StatusCode, StatusCode);

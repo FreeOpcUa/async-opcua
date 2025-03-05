@@ -6,7 +6,7 @@ use crate::{
     UAString, VariantScalarTypeId,
 };
 
-use super::Variant;
+use super::{Variant, XmlElement};
 
 /// Trait for types that can be cast from a variant.
 ///
@@ -65,6 +65,7 @@ impl_from_variant_primitive!(u64, UInt64);
 impl_from_variant_primitive!(f32, Float);
 impl_from_variant_primitive!(f64, Double);
 impl_from_variant_primitive!(UAString, String);
+impl_from_variant_primitive!(XmlElement, XmlElement);
 impl_from_variant_primitive_unbox!(DateTime, DateTime);
 impl_from_variant_primitive_unbox!(Guid, Guid);
 impl_from_variant_primitive!(StatusCode, StatusCode);

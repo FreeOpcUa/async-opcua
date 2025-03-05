@@ -344,6 +344,3 @@ fn string_substring() {
 
     assert!(UAString::null().substring(0, 0).is_err());
 }
-
-/// An XML element.
-pub type XmlElement = UAString;

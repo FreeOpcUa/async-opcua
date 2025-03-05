@@ -239,7 +239,7 @@ impl XmlEncodable for Variant {
             Variant::Guid(v) => stream.encode_child(Guid::TAG, v, ctx)?,
             Variant::StatusCode(v) => stream.encode_child(StatusCode::TAG, v, ctx)?,
             Variant::ByteString(v) => stream.encode_child(ByteString::TAG, v, ctx)?,
-            Variant::XmlElement(v) => stream.encode_child("XmlElement", v, ctx)?,
+            Variant::XmlElement(v) => stream.encode_child(crate::XmlElement::TAG, v, ctx)?,
             Variant::QualifiedName(v) => stream.encode_child(QualifiedName::TAG, v, ctx)?,
             Variant::LocalizedText(v) => stream.encode_child(LocalizedText::TAG, v, ctx)?,
             Variant::NodeId(v) => stream.encode_child(NodeId::TAG, v, ctx)?,

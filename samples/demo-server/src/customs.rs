@@ -224,7 +224,7 @@ pub struct CustomTypeLoader;
 
 impl opcua::types::StaticTypeLoader for CustomTypeLoader {
     fn instance() -> &'static opcua::types::TypeLoaderInstance {
-        &*TYPES
+        &TYPES
     }
 
     fn namespace() -> &'static str {

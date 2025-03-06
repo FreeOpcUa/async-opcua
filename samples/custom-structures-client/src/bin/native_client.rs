@@ -3,8 +3,8 @@ use std::sync::Arc;
 use opcua::{
     client::Session,
     types::{
-        errors::OpcUaError, BrowsePath, ExpandedNodeId, ExtensionObject, NodeId, ObjectId,
-        TimestampsToReturn, Variant, WriteValue,
+        errors::OpcUaError, ua_encodable, BrowsePath, ExpandedNodeId, ExtensionObject, NodeId,
+        ObjectId, StaticTypeLoader, TimestampsToReturn, Variant, WriteValue,
     },
 };
 use opcua_structure_client::{client_connect, NAMESPACE_URI};
@@ -73,25 +73,11 @@ async fn read_structure_var(session: &Arc<Session>, ns: u16) -> Result<(), OpcUa
 // The struct and enum code after this line could/should be shared with demo server,
 // but having it here makes the example self-contained.
 
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    PartialEq,
-    Eq,
-    opcua::types::UaEnum,
-    opcua::types::BinaryEncodable,
-    opcua::types::BinaryDecodable,
-)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
-#[derive(Default)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[ua_encodable]
 #[repr(i32)]
 pub enum AxisState {
-    #[default]
+    #[opcua(default)]
     Disabled = 1i32,
     Enabled = 2i32,
     Idle = 3i32,
@@ -99,13 +85,8 @@ pub enum AxisState {
     Error = 5i32,
 }
 
-#[derive(Debug, Clone, PartialEq, opcua::types::BinaryEncodable, opcua::types::BinaryDecodable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(feature = "xml", derive(opcua::types::FromXml))]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
+#[ua_encodable]
 pub struct ErrorData {
     message: opcua::types::UAString,
     error_id: u32,
@@ -128,44 +109,14 @@ static TYPES: std::sync::LazyLock<opcua::types::TypeLoaderInstance> =
 
 #[derive(Debug, Clone, Copy)]
 pub struct CustomTypeLoader;
-impl opcua::types::TypeLoader for CustomTypeLoader {
-    fn load_from_binary(
-        &self,
-        node_id: &opcua::types::NodeId,
-        stream: &mut dyn std::io::Read,
-        ctx: &opcua::types::Context<'_>,
-    ) -> Option<opcua::types::EncodingResult<Box<dyn opcua::types::DynEncodable>>> {
-        let idx = ctx.namespaces().get_index(NAMESPACE_URI)?;
-        if idx != node_id.namespace {
-            return None;
-        }
-        let Some(num_id) = node_id.as_u32() else {
-            return Some(Err(opcua::types::Error::decoding(
-                "Unsupported encoding ID. Only numeric encoding IDs are currently supported",
-            )));
-        };
-        TYPES.decode_binary(num_id, stream, ctx)
+
+impl StaticTypeLoader for CustomTypeLoader {
+    fn instance() -> &'static opcua::types::TypeLoaderInstance {
+        &TYPES
     }
-    #[cfg(feature = "xml")]
-    fn load_from_xml(
-        &self,
-        _node_id: &opcua::types::NodeId,
-        _stream: &opcua::types::xml::XmlElement,
-        _ctx: &opcua::types::xml::XmlContext<'_>,
-    ) -> Option<Result<Box<dyn opcua::types::DynEncodable>, opcua::types::xml::FromXmlError>> {
-        todo!()
-    }
-    #[cfg(feature = "json")]
-    fn load_from_json(
-        &self,
-        _node_id: &opcua::types::NodeId,
-        _stream: &mut opcua::types::json::JsonStreamReader<&mut dyn std::io::Read>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> Option<opcua::types::EncodingResult<Box<dyn opcua::types::DynEncodable>>> {
-        todo!()
-    }
-    fn priority(&self) -> opcua::types::TypeLoaderPriority {
-        opcua::types::TypeLoaderPriority::Generated
+
+    fn namespace() -> &'static str {
+        NAMESPACE_URI
     }
 }
 

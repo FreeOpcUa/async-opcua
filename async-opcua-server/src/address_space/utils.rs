@@ -2,8 +2,8 @@ use crate::node_manager::{ParsedReadValueId, ParsedWriteValue, RequestContext, S
 use log::debug;
 use opcua_nodes::TypeTree;
 use opcua_types::{
-    AttributeId, DataEncoding, DataTypeId, DataValue, NumericRange, StatusCode, TimestampsToReturn,
-    Variant, WriteMask,
+    AttributeId, DataEncoding, DataTypeId, DataValue, DateTime, NumericRange, StatusCode,
+    TimestampsToReturn, Variant, WriteMask,
 };
 
 use super::{AccessLevel, AddressSpace, HasNodeId, NodeType, Variable};
@@ -270,6 +270,29 @@ pub fn read_node_value(
         }
     }
     result_value
+}
+
+/// Invoke `Write` for the given `node_to_write` on `node`.
+pub fn write_node_value(
+    node: &mut NodeType,
+    node_to_write: &ParsedWriteValue,
+) -> Result<(), StatusCode> {
+    let now = DateTime::now();
+    if node_to_write.attribute_id == AttributeId::Value {
+        if let NodeType::Variable(variable) = node {
+            return variable.set_value_range(
+                node_to_write.value.value.clone().unwrap_or_default(),
+                &node_to_write.index_range,
+                node_to_write.value.status.unwrap_or_default(),
+                &now,
+                &node_to_write.value.source_timestamp.unwrap_or(now),
+            );
+        }
+    }
+    node.as_mut_node().set_attribute(
+        node_to_write.attribute_id,
+        node_to_write.value.value.clone().unwrap_or_default(),
+    )
 }
 
 /// Add the given list of namespaces to the type tree in `context` and

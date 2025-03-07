@@ -24,22 +24,24 @@ server = ["base-server", "generated-address-space"]
 base-server = ["async-opcua-server", "async-opcua-nodes"]
 # Client default settings
 client = ["async-opcua-client"]
-# Console logging just installs a logger that writes out to the screen, useful for general logging
+# Console logging just installs a logger that writes out to
+# the screen, useful for general logging
 console-logging = ["env_logger"]
-# The json feature adds serialize/deserialize to all OPC-UA types.
-json = ["async-opcua-types/json"]
-# Includes all the code to populate the address space with the default node set. This is something that embedded
-# systems may or may not require.
-generated-address-space = [
-    "async-opcua-server/generated-address-space",
-    "async-opcua-core-namespace",
-]
-# Allows a server to register itself with a local discovery server. It does so by becoming a client to the LDS,
-# which brings in a dependency to async-opcua-client. Omitting the feature saves some memory.
+# Allows a server to register itself with a local discovery server. It does so by
+# becoming a client to the LDS, which brings in a dependency to async-opcua-client.
+# Omitting the feature saves some memory.
 discovery-server-registration = [
-    "async-opcua-server/discovery-server-registration",
+  "async-opcua-server/discovery-server-registration",
+]
+# Includes all the code to populate the address space with the default node set.
+# This is something that embedded systems may or may not require.
+generated-address-space = [
+  "async-opcua-server/generated-address-space",
+  "async-opcua-core-namespace",
 ]
 # Methods for XML parsing and loading of nodesets from XML.
+# The json feature adds serialize/deserialize to all OPC-UA types.
+json = ["async-opcua-types/json"]
 xml = ["async-opcua-types/xml", "async-opcua-nodes/xml", "async-opcua-xml"]
 
 
@@ -48,16 +50,15 @@ chrono = { workspace = true }
 env_logger = { version = "0.10", optional = true }
 log = { workspace = true }
 
-async-opcua-types = { path = "../async-opcua-types", version = "0.14.0" }
-async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.14.0" }
-async-opcua-core = { path = "../async-opcua-core", version = "0.14.0" }
 async-opcua-client = { path = "../async-opcua-client", optional = true, version = "0.14.0" }
-async-opcua-server = { path = "../async-opcua-server", optional = true, default-features = false, version = "0.14.0" }
-async-opcua-nodes = { path = "../async-opcua-nodes", optional = true, version = "0.14.0" }
+async-opcua-core = { path = "../async-opcua-core", version = "0.14.0" }
 async-opcua-core-namespace = { path = "../async-opcua-core-namespace", optional = true, version = "0.14.0" }
-async-opcua-xml = { path = "../async-opcua-xml", optional = true, version = "0.14.0" }
-
+async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.14.0" }
 async-opcua-macros = { path = "../async-opcua-macros", version = "0.14.0" }
+async-opcua-nodes = { path = "../async-opcua-nodes", optional = true, version = "0.14.0" }
+async-opcua-server = { path = "../async-opcua-server", optional = true, default-features = false, version = "0.14.0" }
+async-opcua-types = { path = "../async-opcua-types", version = "0.14.0" }
+async-opcua-xml = { path = "../async-opcua-xml", optional = true, version = "0.14.0" }
 
 [dev-dependencies]
 async-trait = { workspace = true }

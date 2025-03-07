@@ -1,17 +1,17 @@
 [workspace]
 resolver = "2"
 members = [
-    "async-opcua",
-    "samples/*",
-    "async-opcua-*",
-    "tools/certificate-creator",
-    "dotnet-tests/external-tests",
-    "fuzz",
+  "async-opcua",
+  "samples/*",
+  "async-opcua-*",
+  "tools/certificate-creator",
+  "dotnet-tests/external-tests",
+  "fuzz",
 ]
 
 [workspace.dependencies]
-async-trait = "^0.1"
 arc-swap = "^1"
+async-trait = "^0.1"
 base64 = "^0.22"
 bitflags = "^2"
 byteorder = "^1"
@@ -31,8 +31,8 @@ regex = "^1"
 roxmltree = "^0.20"
 serde = { version = "^1", features = ["derive"] }
 serde_json = { version = "^1", features = ["arbitrary_precision"] }
-serde_yaml = "^0.9"
 serde_with = "^3"
+serde_yaml = "^0.9"
 struson = { version = "^0.6" }
 syn = { version = "^2", features = ["full"] }
 thiserror = "^1"
@@ -41,36 +41,36 @@ tokio-util = { version = "^0.7", features = ["codec"] }
 url = "^2"
 uuid = { version = "^1", features = ["v4"] }
 
-
-hmac = "^0.12"
-sha2 = { version = "^0.10", features = ["oid"] }
-sha1 = { version = "^0.10", features = ["oid"] }
-cbc = "^0.1"
 aes = "^0.8"
-rsa = { version = "^0.9", features = ["sha2", "sha1", "pem"] }
-rand = "^0.8"
-x509-cert = { version = "^0.2", features = ["builder", "hazmat"] }
+cbc = "^0.1"
 const-oid = { version = "^0.9", features = ["db"] }
+hmac = "^0.12"
+rand = "^0.8"
+rsa = { version = "^0.9", features = ["sha2", "sha1", "pem"] }
+sha1 = { version = "^0.10", features = ["oid"] }
+sha2 = { version = "^0.10", features = ["oid"] }
+x509-cert = { version = "^0.2", features = ["builder", "hazmat"] }
 
-
-# Compile the crypto dependencies in release even in debug, to make test performance tolerable
-# This makes initial compile times slightly worse, but tests run way faster.
+# Compile the crypto dependencies in release even in debug, to make test
+# performance tolerable. This makes initial compile times slightly worse,
+# but tests run way faster.
+[profile.dev.package.aes]
+opt-level = 3
+[profile.dev.package.cbc]
+opt-level = 3
+[profile.dev.package.hmac]
+opt-level = 3
+[profile.dev.package.rand]
+opt-level = 3
+[profile.dev.package.rsa]
+opt-level = 3
 [profile.dev.package.sha1]
 opt-level = 3
 [profile.dev.package.sha2]
 opt-level = 3
-[profile.dev.package.cbc]
-opt-level = 3
-[profile.dev.package.aes]
-opt-level = 3
-[profile.dev.package.rsa]
-opt-level = 3
-[profile.dev.package.rand]
-opt-level = 3
 [profile.dev.package.x509-cert]
 opt-level = 3
-[profile.dev.package.hmac]
-opt-level = 3
+
 # This is probably the most important for the tests at the moment,
 # as it is on the hot path of RSA private key generation (gen_prime)
 [profile.dev.package.num-bigint-dig]

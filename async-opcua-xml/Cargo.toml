@@ -16,7 +16,7 @@ name = "opcua_xml"
 
 [dependencies]
 chrono = { workspace = true }
+quick-xml = { workspace = true }
 roxmltree = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }
-quick-xml = { workspace = true }

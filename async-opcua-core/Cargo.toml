@@ -22,14 +22,13 @@ log = { workspace = true }
 parking_lot = { workspace = true }
 serde = { workspace = true }
 serde_yaml = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 url = { workspace = true }
 
-async-opcua-types = { path = "../async-opcua-types", version = "0.14.0" }
 async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.14.0" }
-thiserror = { workspace = true }
-
+async-opcua-types = { path = "../async-opcua-types", version = "0.14.0" }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage)'] }

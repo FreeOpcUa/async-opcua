@@ -16,22 +16,22 @@ edition = "2021"
 name = "opcua_crypto"
 
 [dependencies]
-log = { workspace = true }
-gethostname = { workspace = true }
 chrono = { workspace = true }
+gethostname = { workspace = true }
+log = { workspace = true }
 serde = { workspace = true }
 
 async-opcua-types = { path = "../async-opcua-types", version = "0.14.0" }
 
-hmac = { workspace = true }
-sha2 = { workspace = true }
-sha1 = { workspace = true }
-cbc = { workspace = true }
 aes = { workspace = true }
-rsa = { workspace = true }
-rand = { workspace = true }
-x509-cert = { workspace = true }
+cbc = { workspace = true }
 const-oid = { workspace = true }
+hmac = { workspace = true }
+rand = { workspace = true }
+rsa = { workspace = true }
+sha1 = { workspace = true }
+sha2 = { workspace = true }
+x509-cert = { workspace = true }
 
 [dev-dependencies]
 tempdir = "0.3"

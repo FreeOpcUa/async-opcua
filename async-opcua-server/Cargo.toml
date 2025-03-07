@@ -17,14 +17,14 @@ name = "opcua_server"
 
 [features]
 default = ["generated-address-space"]
-# Includes all the code to populate the address space with the default node set. This is something that embedded
-# systems may or may not require.
+# Includes all the code to populate the address space with the default node set
+# . This is something that embedded systems may or may not require.
 generated-address-space = ["async-opcua-core-namespace"]
 # Includes serialize/deserialize for OPC-UA types.
 json = ["async-opcua-types/json"]
-
-# Allows a server to register itself with a local discovery server. It does so by becoming a client to the LDS,
-# which brings in a dependency to async-opcua-client. Omitting the feature saves some memory.
+# Allows a server to register itself with a local discovery server. It does so by
+# becoming a client to the LDS, which brings in a dependency to async-opcua-client.
+# Omitting the feature saves some memory.
 discovery-server-registration = ["async-opcua-client"]
 
 [dependencies]
@@ -36,24 +36,24 @@ futures = { workspace = true }
 hashbrown = { workspace = true }
 log = { workspace = true }
 parking_lot = { workspace = true }
+postcard = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
-postcard = { workspace = true }
-
-
-async-opcua-types = { path = "../async-opcua-types", version = "0.14.0" }
-async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.14.0" }
-async-opcua-core = { path = "../async-opcua-core", version = "0.14.0" }
-async-opcua-nodes = { path = "../async-opcua-nodes", version = "0.14.0" }
 
 async-opcua-client = { path = "../async-opcua-client", optional = true, version = "0.14.0" }
+async-opcua-core = { path = "../async-opcua-core", version = "0.14.0" }
 async-opcua-core-namespace = { path = "../async-opcua-core-namespace", optional = true, version = "0.14.0" }
-
+async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.14.0" }
+async-opcua-nodes = { path = "../async-opcua-nodes", version = "0.14.0" }
+async-opcua-types = { path = "../async-opcua-types", version = "0.14.0" }
 
 [dev-dependencies]
-async-opcua-server = { path = ".", features = ["discovery-server-registration", "json"]}
+async-opcua-server = { path = ".", features = [
+  "discovery-server-registration",
+  "json",
+] }
 
 [package.metadata.docs.rs]
 all-features = true

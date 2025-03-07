@@ -4,9 +4,9 @@ authors = ["Adam Lock <locka99@gmail.com>"]
 edition = "2021"
 
 [dependencies]
+log = { workspace = true }
 pico-args = "0.5"
 tokio = { version = "1.36.0", features = ["full"] }
-log = { workspace = true }
 
 [dependencies.async-opcua]
 path = "../../async-opcua"

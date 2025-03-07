@@ -7,9 +7,9 @@ edition = "2021"
 [dependencies]
 chrono = { workspace = true }
 log = { workspace = true }
-rand = { workspace = true }
 log4rs = "1.2"
 pico-args = "0.5"
+rand = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 

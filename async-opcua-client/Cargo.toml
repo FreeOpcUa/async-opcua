@@ -24,12 +24,11 @@ hashbrown = { workspace = true }
 log = { workspace = true }
 parking_lot = { workspace = true }
 rsa = { workspace = true }
+serde = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
-serde = { workspace = true }
 
-
-async-opcua-types = { path = "../async-opcua-types", version = "0.14.0" }
 async-opcua-core = { path = "../async-opcua-core", version = "0.14.0" }
 async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.14.0" }
 async-opcua-nodes = { path = "../async-opcua-nodes", version = "0.14.0" }
+async-opcua-types = { path = "../async-opcua-types", version = "0.14.0" }

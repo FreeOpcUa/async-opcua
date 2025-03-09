@@ -21,6 +21,12 @@ impl XmlElement {
     }
 }
 
+impl std::fmt::Display for XmlElement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 impl From<String> for XmlElement {
     fn from(value: String) -> Self {
         Self(UAString::from(value))

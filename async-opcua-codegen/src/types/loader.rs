@@ -11,10 +11,10 @@ pub fn to_snake_case(v: &str) -> String {
     v.to_case(Case::Snake)
 }
 
-pub struct BsdTypeLoader {
+pub struct BsdTypeLoader<'a> {
     ignored: HashSet<String>,
     native_type_mappings: HashMap<String, String>,
-    xml: TypeDictionary,
+    xml: &'a TypeDictionary,
 }
 
 fn strip_first_segment<'a>(val: &'a str, sep: &'static str) -> Result<&'a str, CodeGenError> {
@@ -46,11 +46,11 @@ impl LoadedType {
     }
 }
 
-impl BsdTypeLoader {
+impl<'a> BsdTypeLoader<'a> {
     pub fn new(
         ignored: HashSet<String>,
         native_type_mappings: HashMap<String, String>,
-        data: TypeDictionary,
+        data: &'a TypeDictionary,
     ) -> Result<Self, CodeGenError> {
         Ok(Self {
             ignored,
@@ -68,17 +68,18 @@ impl BsdTypeLoader {
 
     fn load_structure(
         &self,
-        item: opcua_xml::schema::opc_binary_schema::StructuredType,
+        item: &opcua_xml::schema::opc_binary_schema::StructuredType,
     ) -> Result<StructuredType, CodeGenError> {
         let mut fields_to_add = Vec::new();
         let mut fields_to_hide = Vec::new();
 
-        for field in item.fields {
+        for field in &item.fields {
             let field_name = to_snake_case(&field.name);
             let typ = field
                 .type_name
+                .as_ref()
                 .ok_or(CodeGenError::missing_required_value("TypeName"))
-                .and_then(|r| Ok(self.massage_type_name(strip_first_segment(&r, ":")?)))
+                .and_then(|r| Ok(self.massage_type_name(strip_first_segment(r, ":")?)))
                 .map_err(|e| {
                     e.with_context(format!(
                         "while loading field {} in struct {}",
@@ -86,33 +87,37 @@ impl BsdTypeLoader {
                     ))
                 })?;
 
-            if let Some(length_field) = field.length_field {
+            if let Some(length_field) = &field.length_field {
                 fields_to_add.push(StructureField {
                     name: field_name,
-                    original_name: field.name,
+                    original_name: field.name.clone(),
                     typ: StructureFieldType::Array(typ),
                 });
-                fields_to_hide.push(to_snake_case(&length_field))
+                fields_to_hide.push(to_snake_case(length_field))
             } else {
                 fields_to_add.push(StructureField {
                     name: field_name,
-                    original_name: field.name,
+                    original_name: field.name.clone(),
                     typ: StructureFieldType::Field(typ),
                 });
             }
         }
 
         Ok(StructuredType {
-            name: item.description.name,
+            name: item.description.name.clone(),
             fields: fields_to_add,
             hidden_fields: fields_to_hide,
-            documentation: item.description.documentation.and_then(|d| d.contents),
-            base_type: item.base_type,
+            documentation: item
+                .description
+                .documentation
+                .as_ref()
+                .and_then(|d| d.contents.clone()),
+            base_type: item.base_type.clone(),
             is_union: false,
         })
     }
 
-    fn load_enum(&self, item: EnumeratedType) -> Result<EnumType, CodeGenError> {
+    fn load_enum(&self, item: &EnumeratedType) -> Result<EnumType, CodeGenError> {
         let Some(len) = item.opaque.length_in_bits else {
             return Err(
                 CodeGenError::missing_required_value("LengthInBits").with_context(format!(
@@ -140,7 +145,7 @@ impl BsdTypeLoader {
             }
         };
         let mut variants = Vec::new();
-        for val in item.variants {
+        for val in &item.variants {
             let Some(value) = val.value else {
                 return Err(
                     CodeGenError::missing_required_value("Value").with_context(format!(
@@ -149,7 +154,7 @@ impl BsdTypeLoader {
                     )),
                 );
             };
-            let Some(name) = val.name else {
+            let Some(name) = &val.name else {
                 return Err(
                     CodeGenError::missing_required_value("Name").with_context(format!(
                         "while loading enum {}",
@@ -158,17 +163,21 @@ impl BsdTypeLoader {
                 );
             };
 
-            variants.push(EnumValue { name, value });
+            variants.push(EnumValue {
+                name: name.clone(),
+                value,
+            });
         }
 
         Ok(EnumType {
-            name: item.opaque.description.name,
+            name: item.opaque.description.name.clone(),
             values: variants,
             documentation: item
                 .opaque
                 .description
                 .documentation
-                .and_then(|d| d.contents),
+                .as_ref()
+                .and_then(|d| d.contents.clone()),
             option: item.is_option_set,
             typ: ty,
             size: len_bytes,
@@ -180,9 +189,9 @@ impl BsdTypeLoader {
         self.xml.target_namespace.clone()
     }
 
-    pub fn from_bsd(mut self) -> Result<Vec<LoadedType>, CodeGenError> {
+    pub fn from_bsd(self) -> Result<Vec<LoadedType>, CodeGenError> {
         let mut types = Vec::new();
-        for node in std::mem::take(&mut self.xml.elements) {
+        for node in &self.xml.elements {
             match node {
                 // Ignore opaque types for now, should these be mapped to structs with raw binary data?
                 opcua_xml::schema::opc_binary_schema::TypeDictionaryItem::Opaque(_) => continue,

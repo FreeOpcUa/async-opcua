@@ -4,7 +4,7 @@ extra_header: |
   // Copyright (C) 2017-2024 Adam Lock, Einar Omang
 targets:
   - type: types
-    file_path: schemas/1.05/Opc.Ua.Types.bsd
+    file: Opc.Ua.Types.bsd
     output_dir: async-opcua-types/src/generated/types
     enums_single_file: true
     types_import_map:
@@ -25,14 +25,14 @@ targets:
       - AnonymousIdentityToken
       - HistoryUpdateType
   - type: nodes
-    file_path: schemas/1.05/Opc.Ua.NodeSet2.xml
+    file: Opc.Ua.NodeSet2.xml
     output_dir: async-opcua-core-namespace/src/generated
     max_nodes_per_file: 100
     extra_header: |
       #[allow(unused)]
       mod opcua { pub use opcua_types as types; pub use opcua_nodes as nodes; }
     types:
-      - file_path: schemas/1.05/Opc.Ua.Types.xsd
+      - file: Opc.Ua.Types.xsd
         root_path: opcua::types
     own_namespaces:
       - "http://opcfoundation.org/UA/"
@@ -50,3 +50,8 @@ targets:
     extra_header: |
       mod opcua { pub use crate as types; }
     output_file: async-opcua-types/src/generated/node_ids.rs
+
+sources:
+  - schemas/1.05/Opc.Ua.Types.bsd
+  - schemas/1.05/Opc.Ua.NodeSet2.xml
+  - schemas/1.05/Opc.Ua.Types.xsd

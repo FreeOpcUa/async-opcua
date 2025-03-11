@@ -9,14 +9,14 @@ pub use events::generate_events;
 pub use gen::{NodeGenMethod, NodeSetCodeGenerator};
 use opcua_xml::schema::{
     ua_node_set::UANodeSet,
-    xml_schema::{load_xsd_schema, XsdFileItem, XsdFileType},
+    xml_schema::{XsdFileItem, XsdFileType},
 };
 use proc_macro2::Span;
 use quote::quote;
 use serde::{Deserialize, Serialize};
 use syn::{parse_quote, parse_str, File, Ident, Item, ItemFn, Path};
 
-use crate::{CodeGenError, GeneratedOutput};
+use crate::{input::SchemaCache, CodeGenError, GeneratedOutput};
 
 pub struct XsdTypeWithPath {
     pub ty: XsdFileType,
@@ -25,13 +25,13 @@ pub struct XsdTypeWithPath {
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct NodeSetTypes {
-    pub file_path: String,
+    pub file: String,
     pub root_path: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct NodeSetCodeGenTarget {
-    pub file_path: String,
+    pub file: String,
     pub output_dir: String,
     pub max_nodes_per_file: usize,
     pub types: Vec<NodeSetTypes>,
@@ -45,7 +45,7 @@ pub struct NodeSetCodeGenTarget {
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct DependentNodeset {
-    pub path: String,
+    pub file: String,
     pub import_path: String,
 }
 
@@ -60,28 +60,25 @@ pub struct EventsTarget {
 
 pub fn make_type_dict(
     target: &NodeSetCodeGenTarget,
-    root_path: &str,
+    cache: &SchemaCache,
 ) -> Result<HashMap<String, XsdTypeWithPath>, CodeGenError> {
     let mut res = HashMap::new();
     for file in &target.types {
-        let xsd_file = std::fs::read_to_string(format!("{}/{}", root_path, file.file_path))
-            .map_err(|e| CodeGenError::io(&format!("Failed to read file {}", file.file_path), e))?;
+        let xsd_file = cache.get_xml_schema(&file.file)?;
         let path: Path = parse_str(&file.root_path)?;
-        let xsd_file = load_xsd_schema(&xsd_file)
-            .map_err(|e| CodeGenError::from(e).in_file(&file.file_path))?;
 
-        for it in xsd_file.items {
+        for it in &xsd_file.xml.items {
             let (ty, name) = match it {
                 XsdFileItem::SimpleType(i) => {
                     if let Some(name) = i.name.clone() {
-                        (XsdFileType::Simple(i), name)
+                        (XsdFileType::Simple(i.clone()), name)
                     } else {
                         continue;
                     }
                 }
                 XsdFileItem::ComplexType(i) => {
                     if let Some(name) = i.name.clone() {
-                        (XsdFileType::Complex(i), name)
+                        (XsdFileType::Complex(i.clone()), name)
                     } else {
                         continue;
                     }
@@ -152,9 +149,9 @@ pub fn generate_target(
     config: &NodeSetCodeGenTarget,
     nodes: &UANodeSet,
     preferred_locale: &str,
-    root_path: &str,
+    cache: &SchemaCache,
 ) -> Result<Vec<NodeSetChunk>, CodeGenError> {
-    let types = make_type_dict(config, root_path)?;
+    let types = make_type_dict(config, cache)?;
 
     let mut generator = NodeSetCodeGenerator::new(preferred_locale, nodes.aliases.as_ref(), types)?;
 
@@ -163,7 +160,7 @@ pub fn generate_target(
         fns.push(
             generator
                 .generate_item(node)
-                .map_err(|e| e.in_file(&config.file_path))?,
+                .map_err(|e| e.in_file(&config.file))?,
         );
     }
     fns.sort_by(|a, b| a.name.cmp(&b.name));

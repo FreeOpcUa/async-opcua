@@ -1,5 +1,7 @@
+mod config;
 mod error;
 mod ids;
+mod input;
 pub mod nodeset;
 mod types;
 mod utils;
@@ -10,10 +12,10 @@ use std::{
     path::Path,
 };
 
+use config::{load_schemas, CodeGenSource};
 pub use error::CodeGenError;
 use ids::{generate_node_ids, NodeIdCodeGenTarget};
 use nodeset::{generate_events, generate_target, make_root_module, NodeSetCodeGenTarget};
-use opcua_xml::load_nodeset2_file;
 use serde::{Deserialize, Serialize};
 use syn::File;
 pub use types::{
@@ -112,15 +114,19 @@ fn make_header(path: &str, extra: &[&str]) -> String {
 }
 
 pub fn run_codegen(config: &CodeGenConfig, root_path: &str) -> Result<(), CodeGenError> {
+    let cache = load_schemas(root_path, &config.sources)?;
+
     for target in &config.targets {
         match target {
             CodeGenTarget::Types(t) => {
-                println!("Running data type code generation for {}", t.file_path);
+                println!("Running data type code generation for {}", t.file);
+                let input = cache.get_binary_schema(&t.file)?;
+
                 let (types, target_namespace) =
-                    generate_types(t, root_path).map_err(|e| e.in_file(&t.file_path))?;
+                    generate_types(t, input).map_err(|e| e.in_file(&t.file))?;
                 println!("Writing {} types to {}", types.len(), t.output_dir);
 
-                let header = make_header(&t.file_path, &[&config.extra_header, &t.extra_header]);
+                let header = make_header(&input.path, &[&config.extra_header, &t.extra_header]);
 
                 let mut object_ids: Vec<_> = types
                     .iter()
@@ -134,94 +140,59 @@ pub fn run_codegen(config: &CodeGenConfig, root_path: &str) -> Result<(), CodeGe
                 }
 
                 let modules = write_to_directory(&t.output_dir, root_path, &header, types)
-                    .map_err(|e| e.in_file(&t.file_path))?;
+                    .map_err(|e| e.in_file(&input.path))?;
                 let mut module_file = create_module_file(modules);
                 module_file
                     .items
                     .extend(type_loader_impl(&object_ids, &target_namespace).into_iter());
 
                 write_module_file(&t.output_dir, root_path, &header, module_file)
-                    .map_err(|e| e.in_file(&t.file_path))?;
+                    .map_err(|e| e.in_file(&input.path))?;
             }
             CodeGenTarget::Nodes(n) => {
-                println!("Running node set code generation for {}", n.file_path);
-                println!("Loading node set from {}", n.file_path);
-                let node_set = std::fs::read_to_string(format!("{}/{}", root_path, &n.file_path))
-                    .map_err(|e| {
-                    CodeGenError::io(&format!("Failed to read file {}", n.file_path), e)
-                })?;
-                let node_set = load_nodeset2_file(&node_set)?;
-                let nodes = node_set
-                    .node_set
-                    .as_ref()
-                    .ok_or_else(|| {
-                        CodeGenError::other("Missing UANodeSet in xml schema".to_owned())
-                    })
-                    .map_err(|e| e.in_file(&n.file_path))?;
-                println!("Found {} nodes in node set", nodes.nodes.len());
+                println!("Running node set code generation for {}", n.file);
+                let node_set = cache.get_nodeset(&n.file)?;
+                println!("Found {} nodes in node set", node_set.xml.nodes.len());
 
-                let chunks = generate_target(n, nodes, &config.preferred_locale, root_path)
-                    .map_err(|e| e.in_file(&n.file_path))?;
+                let chunks = generate_target(n, &node_set.xml, &config.preferred_locale, &cache)
+                    .map_err(|e| e.in_file(&node_set.path))?;
                 let module_file =
-                    make_root_module(&chunks, n).map_err(|e| e.in_file(&n.file_path))?;
+                    make_root_module(&chunks, n).map_err(|e| e.in_file(&node_set.path))?;
 
                 println!("Writing {} files to {}", chunks.len() + 1, n.output_dir);
 
-                let header = make_header(&n.file_path, &[&config.extra_header, &n.extra_header]);
+                let header = make_header(&node_set.path, &[&config.extra_header, &n.extra_header]);
 
                 write_to_directory(&n.output_dir, root_path, &header, chunks)?;
                 write_module_file(&n.output_dir, root_path, &header, module_file)?;
 
                 if let Some(events_target) = &n.events {
                     println!("Generating events to {}", events_target.output_dir);
-                    let mut p_sets = Vec::new();
                     let mut sets = Vec::with_capacity(events_target.dependent_nodesets.len() + 1);
                     for nodeset_file in &events_target.dependent_nodesets {
-                        println!("Loading dependent node set from {}", nodeset_file.path);
-                        let node_set =
-                            std::fs::read_to_string(format!("{}/{}", root_path, nodeset_file.path))
-                                .map_err(|e| {
-                                    CodeGenError::io(
-                                        &format!("Failed to read file {}", n.file_path),
-                                        e,
-                                    )
-                                })
-                                .map_err(|e| e.in_file(&n.file_path))?;
-                        let node_set = load_nodeset2_file(&node_set)?;
-                        p_sets.push((node_set, nodeset_file.import_path.as_str()));
+                        println!("Loading dependent node set {}", nodeset_file.file);
+                        let set = cache.get_nodeset(&nodeset_file.file)?;
+                        sets.push((&set.xml, nodeset_file.import_path.as_str()));
                     }
-                    for set in &p_sets {
-                        sets.push((
-                            set.0
-                                .node_set
-                                .as_ref()
-                                .ok_or_else(|| {
-                                    CodeGenError::other(
-                                        "Missing UANodeSet in dependent xml schema".to_owned(),
-                                    )
-                                })
-                                .map_err(|e| e.in_file(&n.file_path))?,
-                            set.1,
-                        ));
-                    }
-                    sets.push((nodes, ""));
+
+                    sets.push((&node_set.xml, ""));
 
                     let events = generate_events(&sets)?;
                     let cnt = events.len();
                     let header = make_header(
-                        &n.file_path,
+                        &node_set.path,
                         &[&config.extra_header, &events_target.extra_header],
                     );
                     let modules =
                         write_to_directory(&events_target.output_dir, root_path, &header, events)
-                            .map_err(|e| e.in_file(&n.file_path))?;
+                            .map_err(|e| e.in_file(&node_set.path))?;
                     write_module_file(
                         &events_target.output_dir,
                         root_path,
                         &header,
                         create_module_file(modules),
                     )
-                    .map_err(|e| e.in_file(&n.file_path))?;
+                    .map_err(|e| e.in_file(&node_set.path))?;
                     println!("Created {} event types", cnt);
                 }
             }
@@ -253,7 +224,7 @@ pub fn run_codegen(config: &CodeGenConfig, root_path: &str) -> Result<(), CodeGe
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct TypeCodeGenTarget {
-    pub file_path: String,
+    pub file: String,
     pub output_dir: String,
     #[serde(default)]
     pub ignore: Vec<String>,
@@ -285,30 +256,7 @@ pub struct CodeGenConfig {
     #[serde(default)]
     pub preferred_locale: String,
     pub targets: Vec<CodeGenTarget>,
-}
-
-impl CodeGenConfig {
-    pub fn update_paths(&mut self, root_path: &str) {
-        for target in &mut self.targets {
-            match target {
-                CodeGenTarget::Types(t) => {
-                    t.file_path = format!("{}/{}", root_path, t.file_path);
-                    t.output_dir = format!("{}/{}", root_path, t.output_dir);
-                }
-                CodeGenTarget::Nodes(t) => {
-                    t.file_path = format!("{}/{}", root_path, t.file_path);
-                    t.output_dir = format!("{}/{}", root_path, t.output_dir);
-                    for ty in &mut t.types {
-                        ty.file_path = format!("{}/{}", root_path, ty.file_path);
-                    }
-                }
-                CodeGenTarget::Ids(t) => {
-                    t.file_path = format!("{}/{}", root_path, t.file_path);
-                    t.output_file = format!("{}/{}", root_path, t.output_file);
-                }
-            }
-        }
-    }
+    pub sources: Vec<CodeGenSource>,
 }
 
 const BASE_NAMESPACE: &str = "http://opcfoundation.org/UA/";

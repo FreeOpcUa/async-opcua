@@ -8,26 +8,20 @@ pub use base_constants::*;
 pub use enum_type::{EnumType, EnumValue};
 pub use gen::{CodeGenItemConfig, CodeGenerator, EncodingIds, GeneratedItem, ItemDefinition};
 pub use loader::{BsdTypeLoader, LoadedType, LoadedTypes};
-use opcua_xml::load_bsd_file;
 use proc_macro2::TokenStream;
 use quote::quote;
 pub use structure::{StructureField, StructureFieldType, StructuredType};
 use syn::{parse_quote, parse_str, Item, Path};
 
-use crate::{CodeGenError, TypeCodeGenTarget, BASE_NAMESPACE};
+use crate::{input::BinarySchemaInput, CodeGenError, TypeCodeGenTarget, BASE_NAMESPACE};
 
 pub fn generate_types(
     target: &TypeCodeGenTarget,
-    root_path: &str,
+    input: &BinarySchemaInput,
 ) -> Result<(Vec<GeneratedItem>, String), CodeGenError> {
-    println!("Loading types from {}", target.file_path);
-    let data = std::fs::read_to_string(format!("{}/{}", root_path, &target.file_path))
-        .map_err(|e| CodeGenError::io(&format!("Failed to read file {}", target.file_path), e))?;
-    let type_dictionary =
-        load_bsd_file(&data).map_err(|e| CodeGenError::from(e).in_file(&target.file_path))?;
     println!(
         "Found {} raw elements in the type dictionary.",
-        type_dictionary.elements.len()
+        input.xml.elements.len()
     );
     let type_loader = BsdTypeLoader::new(
         target
@@ -37,12 +31,10 @@ pub fn generate_types(
             .chain(base_ignored_types().into_iter())
             .collect(),
         base_native_type_mappings(),
-        type_dictionary,
+        &input.xml,
     )?;
     let target_namespace = type_loader.target_namespace();
-    let types = type_loader
-        .from_bsd()
-        .map_err(|e| e.in_file(&target.file_path))?;
+    let types = type_loader.from_bsd().map_err(|e| e.in_file(&input.path))?;
     println!("Generated code for {} types", types.len());
 
     let mut types_import_map = basic_types_import_map();

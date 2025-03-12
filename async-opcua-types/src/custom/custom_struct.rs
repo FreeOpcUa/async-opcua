@@ -971,7 +971,6 @@ pub(crate) mod tests {
         let loader = DynamicTypeLoader::new(Arc::new(type_tree));
         let mut loaders = TypeLoaderCollection::new_empty();
         loaders.add_type_loader(loader);
-        
 
         ContextOwned::new(get_namespaces(), loaders, DecodingOptions::test())
     }

@@ -15,113 +15,668 @@ pub(super) fn imported_nodes<'a>(
 ) -> Box<dyn Iterator<Item = opcua::nodes::ImportedItem> + 'a> {
     Box::new(
         [
-            &make_method_2429 as &dyn Fn(_) -> opcua::nodes::ImportedItem,
-            &make_method_2432,
-            &make_method_2435,
+            &make_method_2388 as &dyn Fn(_) -> opcua::nodes::ImportedItem,
+            &make_method_2390,
+            &make_method_2404,
+            &make_method_2407,
+            &make_method_2410,
+            &make_method_2411,
+            &make_method_2412,
+            &make_method_2415,
+            &make_method_2417,
             &make_method_2437,
-            &make_method_2446,
-            &make_method_2449,
-            &make_method_2451,
-            &make_method_2454,
+            &make_method_2440,
+            &make_method_2442,
+            &make_method_2445,
+            &make_method_2447,
+            &make_method_2450,
+            &make_method_2453,
             &make_method_2456,
             &make_method_2459,
-            &make_method_2462,
-            &make_method_2465,
-            &make_method_2468,
+            &make_method_2461,
             &make_method_2470,
-            &make_method_2479,
-            &make_method_2482,
-            &make_method_2484,
-            &make_method_2487,
+            &make_method_2473,
+            &make_method_2475,
+            &make_method_2478,
+            &make_method_2480,
+            &make_method_2483,
+            &make_method_2486,
             &make_method_2489,
             &make_method_2492,
-            &make_method_2495,
-            &make_method_2498,
-            &make_method_2501,
+            &make_method_2494,
             &make_method_2503,
-            &make_method_2514,
-            &make_method_2517,
-            &make_method_2518,
+            &make_method_2506,
+            &make_method_2508,
+            &make_method_2511,
+            &make_method_2513,
+            &make_method_2516,
             &make_method_2519,
             &make_method_2522,
-            &make_method_2524,
-            &make_method_2529,
+            &make_method_2525,
+            &make_method_2527,
             &make_method_2538,
             &make_method_2541,
+            &make_method_2542,
             &make_method_2543,
-            &make_method_2687,
-            &make_method_2690,
-            &make_method_2694,
-            &make_method_2697,
-            &make_method_2700,
-            &make_method_2703,
-            &make_method_2707,
-            &make_method_2710,
-            &make_method_2712,
-            &make_method_2715,
-            &make_method_2724,
-            &make_method_2727,
+            &make_method_2546,
+            &make_method_2548,
+            &make_method_2560,
+            &make_method_2564,
+            &make_method_2573,
+            &make_method_2576,
+            &make_method_2578,
             &make_method_2729,
             &make_method_2732,
-            &make_method_2741,
+            &make_method_2736,
+            &make_method_2739,
             &make_method_2742,
-            &make_method_2759,
-            &make_method_2762,
-            &make_method_2765,
-            &make_method_2768,
+            &make_method_2745,
+            &make_method_2749,
+            &make_method_2752,
+            &make_method_2754,
+            &make_method_2757,
+            &make_method_2766,
+            &make_method_2769,
             &make_method_2771,
-            &make_method_2773,
-            &make_method_2776,
-            &make_method_2787,
-            &make_method_2790,
-            &make_method_2793,
-            &make_method_2794,
-            &make_method_2797,
-            &make_method_2799,
-            &make_method_2802,
+            &make_method_2774,
+            &make_method_2783,
+            &make_method_2784,
+            &make_method_2801,
+            &make_method_2804,
+            &make_method_2807,
+            &make_method_2810,
+            &make_method_2813,
             &make_method_2815,
-            &make_method_2817,
-            &make_method_2820,
+            &make_method_2818,
             &make_method_2829,
             &make_method_2832,
-            &make_method_2834,
-            &make_method_2837,
+            &make_method_2835,
+            &make_method_2836,
             &make_method_2839,
-            &make_method_2842,
+            &make_method_2841,
             &make_method_2844,
-            &make_method_2847,
+            &make_method_2857,
+            &make_method_2859,
             &make_method_2862,
-            &make_method_2913,
-            &make_method_2916,
-            &make_method_2920,
-            &make_method_2923,
-            &make_method_2926,
-            &make_method_2929,
-            &make_method_2931,
-            &make_method_2933,
-            &make_method_2936,
-            &make_method_2945,
-            &make_method_2948,
-            &make_method_2950,
-            &make_method_2953,
+            &make_method_2871,
+            &make_method_2874,
+            &make_method_2876,
+            &make_method_2879,
+            &make_method_2881,
+            &make_method_2884,
+            &make_method_2886,
+            &make_method_2889,
+            &make_method_2904,
             &make_method_2955,
             &make_method_2958,
-            &make_method_2960,
-            &make_method_2963,
-            &make_method_2978,
-            &make_method_3039,
-            &make_method_3042,
-            &make_method_3061,
-            &make_method_3064,
-            &make_method_3068,
-            &make_method_3071,
+            &make_method_2962,
+            &make_method_2965,
+            &make_method_2968,
+            &make_method_2971,
+            &make_method_2973,
+            &make_method_2975,
         ]
         .into_iter()
         .map(|f| f(ns_map)),
     )
 }
 #[allow(unused)]
-fn make_method_2429(
+fn make_method_2388(
+    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
+) -> opcua::nodes::ImportedItem {
+    opcua::nodes::ImportedItem {
+        node: opcua::nodes::Method::new_full(
+            opcua::nodes::Base::new_full(
+                opcua::types::NodeId::new(0u16, 13980u32),
+                opcua::types::NodeClass::Method,
+                opcua::types::QualifiedName::new(0u16, "AddCertificate"),
+                opcua::types::LocalizedText::new("", "AddCertificate"),
+                None,
+                Some(0u32),
+                Some(0u32),
+            ),
+            false,
+            false,
+        )
+        .into(),
+        references: vec![
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 13981u32),
+                type_id: opcua::types::NodeId::new(0u16, 46u32),
+                is_forward: true,
+            },
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 78u32),
+                type_id: opcua::types::NodeId::new(0u16, 37u32),
+                is_forward: true,
+            },
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 13952u32),
+                type_id: opcua::types::NodeId::new(0u16, 47u32),
+                is_forward: false,
+            },
+        ],
+    }
+}
+#[allow(unused)]
+fn make_method_2390(
+    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
+) -> opcua::nodes::ImportedItem {
+    opcua::nodes::ImportedItem {
+        node: opcua::nodes::Method::new_full(
+            opcua::nodes::Base::new_full(
+                opcua::types::NodeId::new(0u16, 13982u32),
+                opcua::types::NodeClass::Method,
+                opcua::types::QualifiedName::new(0u16, "RemoveCertificate"),
+                opcua::types::LocalizedText::new("", "RemoveCertificate"),
+                None,
+                Some(0u32),
+                Some(0u32),
+            ),
+            false,
+            false,
+        )
+        .into(),
+        references: vec![
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 13983u32),
+                type_id: opcua::types::NodeId::new(0u16, 46u32),
+                is_forward: true,
+            },
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 78u32),
+                type_id: opcua::types::NodeId::new(0u16, 37u32),
+                is_forward: true,
+            },
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 13952u32),
+                type_id: opcua::types::NodeId::new(0u16, 47u32),
+                is_forward: false,
+            },
+        ],
+    }
+}
+#[allow(unused)]
+fn make_method_2404(
+    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
+) -> opcua::nodes::ImportedItem {
+    opcua::nodes::ImportedItem {
+        node: opcua::nodes::Method::new_full(
+            opcua::nodes::Base::new_full(
+                opcua::types::NodeId::new(0u16, 12616u32),
+                opcua::types::NodeClass::Method,
+                opcua::types::QualifiedName::new(0u16, "UpdateCertificate"),
+                opcua::types::LocalizedText::new("", "UpdateCertificate"),
+                None,
+                Some(0u32),
+                Some(0u32),
+            ),
+            false,
+            false,
+        )
+        .into(),
+        references: vec![
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 12617u32),
+                type_id: opcua::types::NodeId::new(0u16, 46u32),
+                is_forward: true,
+            },
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 12618u32),
+                type_id: opcua::types::NodeId::new(0u16, 46u32),
+                is_forward: true,
+            },
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 78u32),
+                type_id: opcua::types::NodeId::new(0u16, 37u32),
+                is_forward: true,
+            },
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 12581u32),
+                type_id: opcua::types::NodeId::new(0u16, 47u32),
+                is_forward: false,
+            },
+        ],
+    }
+}
+#[allow(unused)]
+fn make_method_2407(
+    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
+) -> opcua::nodes::ImportedItem {
+    opcua::nodes::ImportedItem {
+        node: opcua::nodes::Method::new_full(
+            opcua::nodes::Base::new_full(
+                opcua::types::NodeId::new(0u16, 32296u32),
+                opcua::types::NodeClass::Method,
+                opcua::types::QualifiedName::new(0u16, "GetCertificates"),
+                opcua::types::LocalizedText::new("", "GetCertificates"),
+                None,
+                Some(0u32),
+                Some(0u32),
+            ),
+            false,
+            false,
+        )
+        .into(),
+        references: vec![
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 32297u32),
+                type_id: opcua::types::NodeId::new(0u16, 46u32),
+                is_forward: true,
+            },
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 32298u32),
+                type_id: opcua::types::NodeId::new(0u16, 46u32),
+                is_forward: true,
+            },
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 80u32),
+                type_id: opcua::types::NodeId::new(0u16, 37u32),
+                is_forward: true,
+            },
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 12581u32),
+                type_id: opcua::types::NodeId::new(0u16, 47u32),
+                is_forward: false,
+            },
+        ],
+    }
+}
+#[allow(unused)]
+fn make_method_2410(
+    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
+) -> opcua::nodes::ImportedItem {
+    opcua::nodes::ImportedItem {
+        node: opcua::nodes::Method::new_full(
+            opcua::nodes::Base::new_full(
+                opcua::types::NodeId::new(0u16, 12734u32),
+                opcua::types::NodeClass::Method,
+                opcua::types::QualifiedName::new(0u16, "ApplyChanges"),
+                opcua::types::LocalizedText::new("", "ApplyChanges"),
+                None,
+                Some(0u32),
+                Some(0u32),
+            ),
+            false,
+            false,
+        )
+        .into(),
+        references: vec![
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 78u32),
+                type_id: opcua::types::NodeId::new(0u16, 37u32),
+                is_forward: true,
+            },
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 12581u32),
+                type_id: opcua::types::NodeId::new(0u16, 47u32),
+                is_forward: false,
+            },
+        ],
+    }
+}
+#[allow(unused)]
+fn make_method_2411(
+    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
+) -> opcua::nodes::ImportedItem {
+    opcua::nodes::ImportedItem {
+        node: opcua::nodes::Method::new_full(
+            opcua::nodes::Base::new_full(
+                opcua::types::NodeId::new(0u16, 25698u32),
+                opcua::types::NodeClass::Method,
+                opcua::types::QualifiedName::new(0u16, "CancelChanges"),
+                opcua::types::LocalizedText::new("", "CancelChanges"),
+                None,
+                Some(0u32),
+                Some(0u32),
+            ),
+            false,
+            false,
+        )
+        .into(),
+        references: vec![
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 80u32),
+                type_id: opcua::types::NodeId::new(0u16, 37u32),
+                is_forward: true,
+            },
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 12581u32),
+                type_id: opcua::types::NodeId::new(0u16, 47u32),
+                is_forward: false,
+            },
+        ],
+    }
+}
+#[allow(unused)]
+fn make_method_2412(
+    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
+) -> opcua::nodes::ImportedItem {
+    opcua::nodes::ImportedItem {
+        node: opcua::nodes::Method::new_full(
+            opcua::nodes::Base::new_full(
+                opcua::types::NodeId::new(0u16, 12731u32),
+                opcua::types::NodeClass::Method,
+                opcua::types::QualifiedName::new(0u16, "CreateSigningRequest"),
+                opcua::types::LocalizedText::new("", "CreateSigningRequest"),
+                None,
+                Some(0u32),
+                Some(0u32),
+            ),
+            false,
+            false,
+        )
+        .into(),
+        references: vec![
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 12732u32),
+                type_id: opcua::types::NodeId::new(0u16, 46u32),
+                is_forward: true,
+            },
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 12733u32),
+                type_id: opcua::types::NodeId::new(0u16, 46u32),
+                is_forward: true,
+            },
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 78u32),
+                type_id: opcua::types::NodeId::new(0u16, 37u32),
+                is_forward: true,
+            },
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 12581u32),
+                type_id: opcua::types::NodeId::new(0u16, 47u32),
+                is_forward: false,
+            },
+        ],
+    }
+}
+#[allow(unused)]
+fn make_method_2415(
+    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
+) -> opcua::nodes::ImportedItem {
+    opcua::nodes::ImportedItem {
+        node: opcua::nodes::Method::new_full(
+            opcua::nodes::Base::new_full(
+                opcua::types::NodeId::new(0u16, 12775u32),
+                opcua::types::NodeClass::Method,
+                opcua::types::QualifiedName::new(0u16, "GetRejectedList"),
+                opcua::types::LocalizedText::new("", "GetRejectedList"),
+                None,
+                Some(0u32),
+                Some(0u32),
+            ),
+            false,
+            false,
+        )
+        .into(),
+        references: vec![
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 12776u32),
+                type_id: opcua::types::NodeId::new(0u16, 46u32),
+                is_forward: true,
+            },
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 78u32),
+                type_id: opcua::types::NodeId::new(0u16, 37u32),
+                is_forward: true,
+            },
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 12581u32),
+                type_id: opcua::types::NodeId::new(0u16, 47u32),
+                is_forward: false,
+            },
+        ],
+    }
+}
+#[allow(unused)]
+fn make_method_2417(
+    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
+) -> opcua::nodes::ImportedItem {
+    opcua::nodes::ImportedItem {
+        node: opcua::nodes::Method::new_full(
+            opcua::nodes::Base::new_full(
+                opcua::types::NodeId::new(0u16, 25699u32),
+                opcua::types::NodeClass::Method,
+                opcua::types::QualifiedName::new(0u16, "ResetToServerDefaults"),
+                opcua::types::LocalizedText::new("", "ResetToServerDefaults"),
+                None,
+                Some(0u32),
+                Some(0u32),
+            ),
+            false,
+            false,
+        )
+        .into(),
+        references: vec![
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 80u32),
+                type_id: opcua::types::NodeId::new(0u16, 37u32),
+                is_forward: true,
+            },
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 12581u32),
+                type_id: opcua::types::NodeId::new(0u16, 47u32),
+                is_forward: false,
+            },
+        ],
+    }
+}
+#[allow(unused)]
+fn make_method_2437(
+    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
+) -> opcua::nodes::ImportedItem {
+    opcua::nodes::ImportedItem {
+        node: opcua::nodes::Method::new_full(
+            opcua::nodes::Base::new_full(
+                opcua::types::NodeId::new(0u16, 12647u32),
+                opcua::types::NodeClass::Method,
+                opcua::types::QualifiedName::new(0u16, "Open"),
+                opcua::types::LocalizedText::new("", "Open"),
+                None,
+                Some(0u32),
+                Some(0u32),
+            ),
+            false,
+            false,
+        )
+        .into(),
+        references: vec![
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 12648u32),
+                type_id: opcua::types::NodeId::new(0u16, 46u32),
+                is_forward: true,
+            },
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 12649u32),
+                type_id: opcua::types::NodeId::new(0u16, 46u32),
+                is_forward: true,
+            },
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 12642u32),
+                type_id: opcua::types::NodeId::new(0u16, 47u32),
+                is_forward: false,
+            },
+        ],
+    }
+}
+#[allow(unused)]
+fn make_method_2440(
+    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
+) -> opcua::nodes::ImportedItem {
+    opcua::nodes::ImportedItem {
+        node: opcua::nodes::Method::new_full(
+            opcua::nodes::Base::new_full(
+                opcua::types::NodeId::new(0u16, 12650u32),
+                opcua::types::NodeClass::Method,
+                opcua::types::QualifiedName::new(0u16, "Close"),
+                opcua::types::LocalizedText::new("", "Close"),
+                None,
+                Some(0u32),
+                Some(0u32),
+            ),
+            false,
+            false,
+        )
+        .into(),
+        references: vec![
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 12651u32),
+                type_id: opcua::types::NodeId::new(0u16, 46u32),
+                is_forward: true,
+            },
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 12642u32),
+                type_id: opcua::types::NodeId::new(0u16, 47u32),
+                is_forward: false,
+            },
+        ],
+    }
+}
+#[allow(unused)]
+fn make_method_2442(
+    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
+) -> opcua::nodes::ImportedItem {
+    opcua::nodes::ImportedItem {
+        node: opcua::nodes::Method::new_full(
+            opcua::nodes::Base::new_full(
+                opcua::types::NodeId::new(0u16, 12652u32),
+                opcua::types::NodeClass::Method,
+                opcua::types::QualifiedName::new(0u16, "Read"),
+                opcua::types::LocalizedText::new("", "Read"),
+                None,
+                Some(0u32),
+                Some(0u32),
+            ),
+            false,
+            false,
+        )
+        .into(),
+        references: vec![
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 12653u32),
+                type_id: opcua::types::NodeId::new(0u16, 46u32),
+                is_forward: true,
+            },
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 12654u32),
+                type_id: opcua::types::NodeId::new(0u16, 46u32),
+                is_forward: true,
+            },
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 12642u32),
+                type_id: opcua::types::NodeId::new(0u16, 47u32),
+                is_forward: false,
+            },
+        ],
+    }
+}
+#[allow(unused)]
+fn make_method_2445(
+    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
+) -> opcua::nodes::ImportedItem {
+    opcua::nodes::ImportedItem {
+        node: opcua::nodes::Method::new_full(
+            opcua::nodes::Base::new_full(
+                opcua::types::NodeId::new(0u16, 12655u32),
+                opcua::types::NodeClass::Method,
+                opcua::types::QualifiedName::new(0u16, "Write"),
+                opcua::types::LocalizedText::new("", "Write"),
+                None,
+                Some(0u32),
+                Some(0u32),
+            ),
+            false,
+            false,
+        )
+        .into(),
+        references: vec![
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 12656u32),
+                type_id: opcua::types::NodeId::new(0u16, 46u32),
+                is_forward: true,
+            },
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 12642u32),
+                type_id: opcua::types::NodeId::new(0u16, 47u32),
+                is_forward: false,
+            },
+        ],
+    }
+}
+#[allow(unused)]
+fn make_method_2447(
+    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
+) -> opcua::nodes::ImportedItem {
+    opcua::nodes::ImportedItem {
+        node: opcua::nodes::Method::new_full(
+            opcua::nodes::Base::new_full(
+                opcua::types::NodeId::new(0u16, 12657u32),
+                opcua::types::NodeClass::Method,
+                opcua::types::QualifiedName::new(0u16, "GetPosition"),
+                opcua::types::LocalizedText::new("", "GetPosition"),
+                None,
+                Some(0u32),
+                Some(0u32),
+            ),
+            false,
+            false,
+        )
+        .into(),
+        references: vec![
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 12658u32),
+                type_id: opcua::types::NodeId::new(0u16, 46u32),
+                is_forward: true,
+            },
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 12659u32),
+                type_id: opcua::types::NodeId::new(0u16, 46u32),
+                is_forward: true,
+            },
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 12642u32),
+                type_id: opcua::types::NodeId::new(0u16, 47u32),
+                is_forward: false,
+            },
+        ],
+    }
+}
+#[allow(unused)]
+fn make_method_2450(
+    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
+) -> opcua::nodes::ImportedItem {
+    opcua::nodes::ImportedItem {
+        node: opcua::nodes::Method::new_full(
+            opcua::nodes::Base::new_full(
+                opcua::types::NodeId::new(0u16, 12660u32),
+                opcua::types::NodeClass::Method,
+                opcua::types::QualifiedName::new(0u16, "SetPosition"),
+                opcua::types::LocalizedText::new("", "SetPosition"),
+                None,
+                Some(0u32),
+                Some(0u32),
+            ),
+            false,
+            false,
+        )
+        .into(),
+        references: vec![
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 12661u32),
+                type_id: opcua::types::NodeId::new(0u16, 46u32),
+                is_forward: true,
+            },
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 12642u32),
+                type_id: opcua::types::NodeId::new(0u16, 47u32),
+                is_forward: false,
+            },
+        ],
+    }
+}
+#[allow(unused)]
+fn make_method_2453(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -159,7 +714,7 @@ fn make_method_2429(
     }
 }
 #[allow(unused)]
-fn make_method_2432(
+fn make_method_2456(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -197,7 +752,7 @@ fn make_method_2432(
     }
 }
 #[allow(unused)]
-fn make_method_2435(
+fn make_method_2459(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -230,7 +785,7 @@ fn make_method_2435(
     }
 }
 #[allow(unused)]
-fn make_method_2437(
+fn make_method_2461(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -263,7 +818,7 @@ fn make_method_2437(
     }
 }
 #[allow(unused)]
-fn make_method_2446(
+fn make_method_2470(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -301,7 +856,7 @@ fn make_method_2446(
     }
 }
 #[allow(unused)]
-fn make_method_2449(
+fn make_method_2473(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -334,7 +889,7 @@ fn make_method_2449(
     }
 }
 #[allow(unused)]
-fn make_method_2451(
+fn make_method_2475(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -372,7 +927,7 @@ fn make_method_2451(
     }
 }
 #[allow(unused)]
-fn make_method_2454(
+fn make_method_2478(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -405,7 +960,7 @@ fn make_method_2454(
     }
 }
 #[allow(unused)]
-fn make_method_2456(
+fn make_method_2480(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -443,7 +998,7 @@ fn make_method_2456(
     }
 }
 #[allow(unused)]
-fn make_method_2459(
+fn make_method_2483(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -476,7 +1031,7 @@ fn make_method_2459(
     }
 }
 #[allow(unused)]
-fn make_method_2462(
+fn make_method_2486(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -514,7 +1069,7 @@ fn make_method_2462(
     }
 }
 #[allow(unused)]
-fn make_method_2465(
+fn make_method_2489(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -552,7 +1107,7 @@ fn make_method_2465(
     }
 }
 #[allow(unused)]
-fn make_method_2468(
+fn make_method_2492(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -585,7 +1140,7 @@ fn make_method_2468(
     }
 }
 #[allow(unused)]
-fn make_method_2470(
+fn make_method_2494(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -618,7 +1173,7 @@ fn make_method_2470(
     }
 }
 #[allow(unused)]
-fn make_method_2479(
+fn make_method_2503(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -656,7 +1211,7 @@ fn make_method_2479(
     }
 }
 #[allow(unused)]
-fn make_method_2482(
+fn make_method_2506(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -689,7 +1244,7 @@ fn make_method_2482(
     }
 }
 #[allow(unused)]
-fn make_method_2484(
+fn make_method_2508(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -727,7 +1282,7 @@ fn make_method_2484(
     }
 }
 #[allow(unused)]
-fn make_method_2487(
+fn make_method_2511(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -760,7 +1315,7 @@ fn make_method_2487(
     }
 }
 #[allow(unused)]
-fn make_method_2489(
+fn make_method_2513(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -798,7 +1353,7 @@ fn make_method_2489(
     }
 }
 #[allow(unused)]
-fn make_method_2492(
+fn make_method_2516(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -831,7 +1386,7 @@ fn make_method_2492(
     }
 }
 #[allow(unused)]
-fn make_method_2495(
+fn make_method_2519(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -869,7 +1424,7 @@ fn make_method_2495(
     }
 }
 #[allow(unused)]
-fn make_method_2498(
+fn make_method_2522(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -907,7 +1462,7 @@ fn make_method_2498(
     }
 }
 #[allow(unused)]
-fn make_method_2501(
+fn make_method_2525(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -940,7 +1495,7 @@ fn make_method_2501(
     }
 }
 #[allow(unused)]
-fn make_method_2503(
+fn make_method_2527(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -973,7 +1528,7 @@ fn make_method_2503(
     }
 }
 #[allow(unused)]
-fn make_method_2514(
+fn make_method_2538(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -1011,7 +1566,7 @@ fn make_method_2514(
     }
 }
 #[allow(unused)]
-fn make_method_2517(
+fn make_method_2541(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -1037,7 +1592,7 @@ fn make_method_2517(
     }
 }
 #[allow(unused)]
-fn make_method_2518(
+fn make_method_2542(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -1063,7 +1618,7 @@ fn make_method_2518(
     }
 }
 #[allow(unused)]
-fn make_method_2519(
+fn make_method_2543(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -1101,7 +1656,7 @@ fn make_method_2519(
     }
 }
 #[allow(unused)]
-fn make_method_2522(
+fn make_method_2546(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -1134,7 +1689,7 @@ fn make_method_2522(
     }
 }
 #[allow(unused)]
-fn make_method_2524(
+fn make_method_2548(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -1160,7 +1715,7 @@ fn make_method_2524(
     }
 }
 #[allow(unused)]
-fn make_method_2529(
+fn make_method_2560(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -1203,7 +1758,45 @@ fn make_method_2529(
     }
 }
 #[allow(unused)]
-fn make_method_2538(
+fn make_method_2564(
+    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
+) -> opcua::nodes::ImportedItem {
+    opcua::nodes::ImportedItem {
+        node: opcua::nodes::Method::new_full(
+            opcua::nodes::Base::new_full(
+                opcua::types::NodeId::new(0u16, 17528u32),
+                opcua::types::NodeClass::Method,
+                opcua::types::QualifiedName::new(0u16, "CreateCredential"),
+                opcua::types::LocalizedText::new("", "CreateCredential"),
+                None,
+                Some(0u32),
+                Some(0u32),
+            ),
+            false,
+            false,
+        )
+        .into(),
+        references: vec![
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 17529u32),
+                type_id: opcua::types::NodeId::new(0u16, 46u32),
+                is_forward: true,
+            },
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 17530u32),
+                type_id: opcua::types::NodeId::new(0u16, 46u32),
+                is_forward: true,
+            },
+            opcua::nodes::ImportedReference {
+                target_id: opcua::types::NodeId::new(0u16, 18155u32),
+                type_id: opcua::types::NodeId::new(0u16, 47u32),
+                is_forward: false,
+            },
+        ],
+    }
+}
+#[allow(unused)]
+fn make_method_2573(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -1246,7 +1839,7 @@ fn make_method_2538(
     }
 }
 #[allow(unused)]
-fn make_method_2541(
+fn make_method_2576(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -1284,7 +1877,7 @@ fn make_method_2541(
     }
 }
 #[allow(unused)]
-fn make_method_2543(
+fn make_method_2578(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -1317,7 +1910,7 @@ fn make_method_2543(
     }
 }
 #[allow(unused)]
-fn make_method_2687(
+fn make_method_2729(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -1360,7 +1953,7 @@ fn make_method_2687(
     }
 }
 #[allow(unused)]
-fn make_method_2690(
+fn make_method_2732(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -1403,7 +1996,7 @@ fn make_method_2690(
     }
 }
 #[allow(unused)]
-fn make_method_2694(
+fn make_method_2736(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -1446,7 +2039,7 @@ fn make_method_2694(
     }
 }
 #[allow(unused)]
-fn make_method_2697(
+fn make_method_2739(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -1484,7 +2077,7 @@ fn make_method_2697(
     }
 }
 #[allow(unused)]
-fn make_method_2700(
+fn make_method_2742(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -1527,7 +2120,7 @@ fn make_method_2700(
     }
 }
 #[allow(unused)]
-fn make_method_2703(
+fn make_method_2745(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -1565,7 +2158,7 @@ fn make_method_2703(
     }
 }
 #[allow(unused)]
-fn make_method_2707(
+fn make_method_2749(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -1608,7 +2201,7 @@ fn make_method_2707(
     }
 }
 #[allow(unused)]
-fn make_method_2710(
+fn make_method_2752(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -1646,7 +2239,7 @@ fn make_method_2710(
     }
 }
 #[allow(unused)]
-fn make_method_2712(
+fn make_method_2754(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -1689,7 +2282,7 @@ fn make_method_2712(
     }
 }
 #[allow(unused)]
-fn make_method_2715(
+fn make_method_2757(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -1727,7 +2320,7 @@ fn make_method_2715(
     }
 }
 #[allow(unused)]
-fn make_method_2724(
+fn make_method_2766(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -1770,7 +2363,7 @@ fn make_method_2724(
     }
 }
 #[allow(unused)]
-fn make_method_2727(
+fn make_method_2769(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -1808,7 +2401,7 @@ fn make_method_2727(
     }
 }
 #[allow(unused)]
-fn make_method_2729(
+fn make_method_2771(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -1851,7 +2444,7 @@ fn make_method_2729(
     }
 }
 #[allow(unused)]
-fn make_method_2732(
+fn make_method_2774(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -1889,7 +2482,7 @@ fn make_method_2732(
     }
 }
 #[allow(unused)]
-fn make_method_2741(
+fn make_method_2783(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -1922,7 +2515,7 @@ fn make_method_2741(
     }
 }
 #[allow(unused)]
-fn make_method_2742(
+fn make_method_2784(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -1955,7 +2548,7 @@ fn make_method_2742(
     }
 }
 #[allow(unused)]
-fn make_method_2759(
+fn make_method_2801(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -1998,7 +2591,7 @@ fn make_method_2759(
     }
 }
 #[allow(unused)]
-fn make_method_2762(
+fn make_method_2804(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -2041,7 +2634,7 @@ fn make_method_2762(
     }
 }
 #[allow(unused)]
-fn make_method_2765(
+fn make_method_2807(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -2074,7 +2667,7 @@ fn make_method_2765(
     }
 }
 #[allow(unused)]
-fn make_method_2768(
+fn make_method_2810(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -2117,7 +2710,7 @@ fn make_method_2768(
     }
 }
 #[allow(unused)]
-fn make_method_2771(
+fn make_method_2813(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -2155,7 +2748,7 @@ fn make_method_2771(
     }
 }
 #[allow(unused)]
-fn make_method_2773(
+fn make_method_2815(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -2198,7 +2791,7 @@ fn make_method_2773(
     }
 }
 #[allow(unused)]
-fn make_method_2776(
+fn make_method_2818(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -2236,7 +2829,7 @@ fn make_method_2776(
     }
 }
 #[allow(unused)]
-fn make_method_2787(
+fn make_method_2829(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -2279,7 +2872,7 @@ fn make_method_2787(
     }
 }
 #[allow(unused)]
-fn make_method_2790(
+fn make_method_2832(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -2322,7 +2915,7 @@ fn make_method_2790(
     }
 }
 #[allow(unused)]
-fn make_method_2793(
+fn make_method_2835(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -2355,7 +2948,7 @@ fn make_method_2793(
     }
 }
 #[allow(unused)]
-fn make_method_2794(
+fn make_method_2836(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -2398,7 +2991,7 @@ fn make_method_2794(
     }
 }
 #[allow(unused)]
-fn make_method_2797(
+fn make_method_2839(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -2436,7 +3029,7 @@ fn make_method_2797(
     }
 }
 #[allow(unused)]
-fn make_method_2799(
+fn make_method_2841(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -2479,7 +3072,7 @@ fn make_method_2799(
     }
 }
 #[allow(unused)]
-fn make_method_2802(
+fn make_method_2844(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -2517,7 +3110,7 @@ fn make_method_2802(
     }
 }
 #[allow(unused)]
-fn make_method_2815(
+fn make_method_2857(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -2555,7 +3148,7 @@ fn make_method_2815(
     }
 }
 #[allow(unused)]
-fn make_method_2817(
+fn make_method_2859(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -2598,7 +3191,7 @@ fn make_method_2817(
     }
 }
 #[allow(unused)]
-fn make_method_2820(
+fn make_method_2862(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -2636,7 +3229,7 @@ fn make_method_2820(
     }
 }
 #[allow(unused)]
-fn make_method_2829(
+fn make_method_2871(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -2679,7 +3272,7 @@ fn make_method_2829(
     }
 }
 #[allow(unused)]
-fn make_method_2832(
+fn make_method_2874(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -2717,7 +3310,7 @@ fn make_method_2832(
     }
 }
 #[allow(unused)]
-fn make_method_2834(
+fn make_method_2876(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -2760,7 +3353,7 @@ fn make_method_2834(
     }
 }
 #[allow(unused)]
-fn make_method_2837(
+fn make_method_2879(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -2798,7 +3391,7 @@ fn make_method_2837(
     }
 }
 #[allow(unused)]
-fn make_method_2839(
+fn make_method_2881(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -2841,7 +3434,7 @@ fn make_method_2839(
     }
 }
 #[allow(unused)]
-fn make_method_2842(
+fn make_method_2884(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -2879,7 +3472,7 @@ fn make_method_2842(
     }
 }
 #[allow(unused)]
-fn make_method_2844(
+fn make_method_2886(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -2922,7 +3515,7 @@ fn make_method_2844(
     }
 }
 #[allow(unused)]
-fn make_method_2847(
+fn make_method_2889(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -2965,7 +3558,7 @@ fn make_method_2847(
     }
 }
 #[allow(unused)]
-fn make_method_2862(
+fn make_method_2904(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -2998,7 +3591,7 @@ fn make_method_2862(
     }
 }
 #[allow(unused)]
-fn make_method_2913(
+fn make_method_2955(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -3036,7 +3629,7 @@ fn make_method_2913(
     }
 }
 #[allow(unused)]
-fn make_method_2916(
+fn make_method_2958(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -3074,7 +3667,7 @@ fn make_method_2916(
     }
 }
 #[allow(unused)]
-fn make_method_2920(
+fn make_method_2962(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -3112,7 +3705,7 @@ fn make_method_2920(
     }
 }
 #[allow(unused)]
-fn make_method_2923(
+fn make_method_2965(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -3145,7 +3738,7 @@ fn make_method_2923(
     }
 }
 #[allow(unused)]
-fn make_method_2926(
+fn make_method_2968(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -3183,7 +3776,7 @@ fn make_method_2926(
     }
 }
 #[allow(unused)]
-fn make_method_2929(
+fn make_method_2971(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -3216,7 +3809,7 @@ fn make_method_2929(
     }
 }
 #[allow(unused)]
-fn make_method_2931(
+fn make_method_2973(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -3249,7 +3842,7 @@ fn make_method_2931(
     }
 }
 #[allow(unused)]
-fn make_method_2933(
+fn make_method_2975(
     ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
@@ -3280,602 +3873,6 @@ fn make_method_2933(
             },
             opcua::nodes::ImportedReference {
                 target_id: opcua::types::NodeId::new(0u16, 14443u32),
-                type_id: opcua::types::NodeId::new(0u16, 47u32),
-                is_forward: false,
-            },
-        ],
-    }
-}
-#[allow(unused)]
-fn make_method_2936(
-    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
-) -> opcua::nodes::ImportedItem {
-    opcua::nodes::ImportedItem {
-        node: opcua::nodes::Method::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 17369u32),
-                opcua::types::NodeClass::Method,
-                opcua::types::QualifiedName::new(0u16, "RemoveConnection"),
-                opcua::types::LocalizedText::new("", "RemoveConnection"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
-            false,
-            false,
-        )
-        .into(),
-        references: vec![
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 17370u32),
-                type_id: opcua::types::NodeId::new(0u16, 46u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 14443u32),
-                type_id: opcua::types::NodeId::new(0u16, 47u32),
-                is_forward: false,
-            },
-        ],
-    }
-}
-#[allow(unused)]
-fn make_method_2945(
-    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
-) -> opcua::nodes::ImportedItem {
-    opcua::nodes::ImportedItem {
-        node: opcua::nodes::Method::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 25459u32),
-                opcua::types::NodeClass::Method,
-                opcua::types::QualifiedName::new(0u16, "Open"),
-                opcua::types::LocalizedText::new("", "Open"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
-            false,
-            false,
-        )
-        .into(),
-        references: vec![
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 25460u32),
-                type_id: opcua::types::NodeId::new(0u16, 46u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 25461u32),
-                type_id: opcua::types::NodeId::new(0u16, 46u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 25451u32),
-                type_id: opcua::types::NodeId::new(0u16, 47u32),
-                is_forward: false,
-            },
-        ],
-    }
-}
-#[allow(unused)]
-fn make_method_2948(
-    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
-) -> opcua::nodes::ImportedItem {
-    opcua::nodes::ImportedItem {
-        node: opcua::nodes::Method::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 25462u32),
-                opcua::types::NodeClass::Method,
-                opcua::types::QualifiedName::new(0u16, "Close"),
-                opcua::types::LocalizedText::new("", "Close"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
-            false,
-            false,
-        )
-        .into(),
-        references: vec![
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 25463u32),
-                type_id: opcua::types::NodeId::new(0u16, 46u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 25451u32),
-                type_id: opcua::types::NodeId::new(0u16, 47u32),
-                is_forward: false,
-            },
-        ],
-    }
-}
-#[allow(unused)]
-fn make_method_2950(
-    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
-) -> opcua::nodes::ImportedItem {
-    opcua::nodes::ImportedItem {
-        node: opcua::nodes::Method::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 25464u32),
-                opcua::types::NodeClass::Method,
-                opcua::types::QualifiedName::new(0u16, "Read"),
-                opcua::types::LocalizedText::new("", "Read"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
-            false,
-            false,
-        )
-        .into(),
-        references: vec![
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 25465u32),
-                type_id: opcua::types::NodeId::new(0u16, 46u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 25466u32),
-                type_id: opcua::types::NodeId::new(0u16, 46u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 25451u32),
-                type_id: opcua::types::NodeId::new(0u16, 47u32),
-                is_forward: false,
-            },
-        ],
-    }
-}
-#[allow(unused)]
-fn make_method_2953(
-    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
-) -> opcua::nodes::ImportedItem {
-    opcua::nodes::ImportedItem {
-        node: opcua::nodes::Method::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 25467u32),
-                opcua::types::NodeClass::Method,
-                opcua::types::QualifiedName::new(0u16, "Write"),
-                opcua::types::LocalizedText::new("", "Write"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
-            false,
-            false,
-        )
-        .into(),
-        references: vec![
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 25468u32),
-                type_id: opcua::types::NodeId::new(0u16, 46u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 25451u32),
-                type_id: opcua::types::NodeId::new(0u16, 47u32),
-                is_forward: false,
-            },
-        ],
-    }
-}
-#[allow(unused)]
-fn make_method_2955(
-    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
-) -> opcua::nodes::ImportedItem {
-    opcua::nodes::ImportedItem {
-        node: opcua::nodes::Method::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 25469u32),
-                opcua::types::NodeClass::Method,
-                opcua::types::QualifiedName::new(0u16, "GetPosition"),
-                opcua::types::LocalizedText::new("", "GetPosition"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
-            false,
-            false,
-        )
-        .into(),
-        references: vec![
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 25470u32),
-                type_id: opcua::types::NodeId::new(0u16, 46u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 25471u32),
-                type_id: opcua::types::NodeId::new(0u16, 46u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 25451u32),
-                type_id: opcua::types::NodeId::new(0u16, 47u32),
-                is_forward: false,
-            },
-        ],
-    }
-}
-#[allow(unused)]
-fn make_method_2958(
-    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
-) -> opcua::nodes::ImportedItem {
-    opcua::nodes::ImportedItem {
-        node: opcua::nodes::Method::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 25472u32),
-                opcua::types::NodeClass::Method,
-                opcua::types::QualifiedName::new(0u16, "SetPosition"),
-                opcua::types::LocalizedText::new("", "SetPosition"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
-            false,
-            false,
-        )
-        .into(),
-        references: vec![
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 25473u32),
-                type_id: opcua::types::NodeId::new(0u16, 46u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 25451u32),
-                type_id: opcua::types::NodeId::new(0u16, 47u32),
-                is_forward: false,
-            },
-        ],
-    }
-}
-#[allow(unused)]
-fn make_method_2960(
-    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
-) -> opcua::nodes::ImportedItem {
-    opcua::nodes::ImportedItem {
-        node: opcua::nodes::Method::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 25474u32),
-                opcua::types::NodeClass::Method,
-                opcua::types::QualifiedName::new(0u16, "ReserveIds"),
-                opcua::types::LocalizedText::new("", "ReserveIds"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
-            false,
-            false,
-        )
-        .into(),
-        references: vec![
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 25475u32),
-                type_id: opcua::types::NodeId::new(0u16, 46u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 25476u32),
-                type_id: opcua::types::NodeId::new(0u16, 46u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 25451u32),
-                type_id: opcua::types::NodeId::new(0u16, 47u32),
-                is_forward: false,
-            },
-        ],
-    }
-}
-#[allow(unused)]
-fn make_method_2963(
-    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
-) -> opcua::nodes::ImportedItem {
-    opcua::nodes::ImportedItem {
-        node: opcua::nodes::Method::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 25477u32),
-                opcua::types::NodeClass::Method,
-                opcua::types::QualifiedName::new(0u16, "CloseAndUpdate"),
-                opcua::types::LocalizedText::new("", "CloseAndUpdate"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
-            false,
-            false,
-        )
-        .into(),
-        references: vec![
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 25478u32),
-                type_id: opcua::types::NodeId::new(0u16, 46u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 25479u32),
-                type_id: opcua::types::NodeId::new(0u16, 46u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 25451u32),
-                type_id: opcua::types::NodeId::new(0u16, 47u32),
-                is_forward: false,
-            },
-        ],
-    }
-}
-#[allow(unused)]
-fn make_method_2978(
-    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
-) -> opcua::nodes::ImportedItem {
-    opcua::nodes::ImportedItem {
-        node: opcua::nodes::Method::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 17421u32),
-                opcua::types::NodeClass::Method,
-                opcua::types::QualifiedName::new(0u16, "Reset"),
-                opcua::types::LocalizedText::new("", "Reset"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
-            false,
-            false,
-        )
-        .into(),
-        references: vec![opcua::nodes::ImportedReference {
-            target_id: opcua::types::NodeId::new(0u16, 17409u32),
-            type_id: opcua::types::NodeId::new(0u16, 47u32),
-            is_forward: false,
-        }],
-    }
-}
-#[allow(unused)]
-fn make_method_3039(
-    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
-) -> opcua::nodes::ImportedItem {
-    opcua::nodes::ImportedItem {
-        node: opcua::nodes::Method::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 25505u32),
-                opcua::types::NodeClass::Method,
-                opcua::types::QualifiedName::new(0u16, "ReserveIds"),
-                opcua::types::LocalizedText::new("", "ReserveIds"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
-            false,
-            false,
-        )
-        .into(),
-        references: vec![
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 25506u32),
-                type_id: opcua::types::NodeId::new(0u16, 46u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 25507u32),
-                type_id: opcua::types::NodeId::new(0u16, 46u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 78u32),
-                type_id: opcua::types::NodeId::new(0u16, 37u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 25482u32),
-                type_id: opcua::types::NodeId::new(0u16, 47u32),
-                is_forward: false,
-            },
-        ],
-    }
-}
-#[allow(unused)]
-fn make_method_3042(
-    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
-) -> opcua::nodes::ImportedItem {
-    opcua::nodes::ImportedItem {
-        node: opcua::nodes::Method::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 25508u32),
-                opcua::types::NodeClass::Method,
-                opcua::types::QualifiedName::new(0u16, "CloseAndUpdate"),
-                opcua::types::LocalizedText::new("", "CloseAndUpdate"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
-            false,
-            false,
-        )
-        .into(),
-        references: vec![
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 25509u32),
-                type_id: opcua::types::NodeId::new(0u16, 46u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 25510u32),
-                type_id: opcua::types::NodeId::new(0u16, 46u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 78u32),
-                type_id: opcua::types::NodeId::new(0u16, 37u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 25482u32),
-                type_id: opcua::types::NodeId::new(0u16, 47u32),
-                is_forward: false,
-            },
-        ],
-    }
-}
-#[allow(unused)]
-fn make_method_3061(
-    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
-) -> opcua::nodes::ImportedItem {
-    opcua::nodes::ImportedItem {
-        node: opcua::nodes::Method::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 15482u32),
-                opcua::types::NodeClass::Method,
-                opcua::types::QualifiedName::new(0u16, "AddExtensionField"),
-                opcua::types::LocalizedText::new("", "AddExtensionField"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
-            false,
-            false,
-        )
-        .into(),
-        references: vec![
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 15483u32),
-                type_id: opcua::types::NodeId::new(0u16, 46u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 15484u32),
-                type_id: opcua::types::NodeId::new(0u16, 46u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 78u32),
-                type_id: opcua::types::NodeId::new(0u16, 37u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 15481u32),
-                type_id: opcua::types::NodeId::new(0u16, 47u32),
-                is_forward: false,
-            },
-        ],
-    }
-}
-#[allow(unused)]
-fn make_method_3064(
-    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
-) -> opcua::nodes::ImportedItem {
-    opcua::nodes::ImportedItem {
-        node: opcua::nodes::Method::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 15485u32),
-                opcua::types::NodeClass::Method,
-                opcua::types::QualifiedName::new(0u16, "RemoveExtensionField"),
-                opcua::types::LocalizedText::new("", "RemoveExtensionField"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
-            false,
-            false,
-        )
-        .into(),
-        references: vec![
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 15486u32),
-                type_id: opcua::types::NodeId::new(0u16, 46u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 78u32),
-                type_id: opcua::types::NodeId::new(0u16, 37u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 15481u32),
-                type_id: opcua::types::NodeId::new(0u16, 47u32),
-                is_forward: false,
-            },
-        ],
-    }
-}
-#[allow(unused)]
-fn make_method_3068(
-    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
-) -> opcua::nodes::ImportedItem {
-    opcua::nodes::ImportedItem {
-        node: opcua::nodes::Method::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 15491u32),
-                opcua::types::NodeClass::Method,
-                opcua::types::QualifiedName::new(0u16, "AddExtensionField"),
-                opcua::types::LocalizedText::new("", "AddExtensionField"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
-            false,
-            false,
-        )
-        .into(),
-        references: vec![
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 15492u32),
-                type_id: opcua::types::NodeId::new(0u16, 46u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 15493u32),
-                type_id: opcua::types::NodeId::new(0u16, 46u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 78u32),
-                type_id: opcua::types::NodeId::new(0u16, 37u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 15489u32),
-                type_id: opcua::types::NodeId::new(0u16, 47u32),
-                is_forward: false,
-            },
-        ],
-    }
-}
-#[allow(unused)]
-fn make_method_3071(
-    ns_map: &opcua::nodes::NodeSetNamespaceMapper<'_>,
-) -> opcua::nodes::ImportedItem {
-    opcua::nodes::ImportedItem {
-        node: opcua::nodes::Method::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 15494u32),
-                opcua::types::NodeClass::Method,
-                opcua::types::QualifiedName::new(0u16, "RemoveExtensionField"),
-                opcua::types::LocalizedText::new("", "RemoveExtensionField"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
-            false,
-            false,
-        )
-        .into(),
-        references: vec![
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 15495u32),
-                type_id: opcua::types::NodeId::new(0u16, 46u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 78u32),
-                type_id: opcua::types::NodeId::new(0u16, 37u32),
-                is_forward: true,
-            },
-            opcua::nodes::ImportedReference {
-                target_id: opcua::types::NodeId::new(0u16, 15489u32),
                 type_id: opcua::types::NodeId::new(0u16, 47u32),
                 is_forward: false,
             },

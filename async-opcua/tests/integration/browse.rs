@@ -596,7 +596,8 @@ async fn test_recursive_browser() {
         .await
         .unwrap();
 
-    assert_eq!(3740, res.nodes.len());
+    // Note: This value is expected to change with new versions of the standard.
+    assert_eq!(3890, res.nodes.len());
 
     // Try to get some event fields.
     let rs: Vec<_> = res
@@ -639,7 +640,8 @@ async fn test_recursive_browser_multi_hit() {
     .await
     .unwrap();
 
-    assert_eq!(4228, res.nodes.len());
+    // Note: This value is expected to change with new versions of the standard.
+    assert_eq!(4402, res.nodes.len());
 
     // This one will be referenced from many places.
     assert!(res
@@ -657,5 +659,6 @@ async fn test_recursive_browser_multi_hit() {
         )
         .collect();
 
-    assert_eq!(rs.len(), 2164);
+    // Note: This value is expected to change with new versions of the standard.
+    assert_eq!(rs.len(), 2247);
 }

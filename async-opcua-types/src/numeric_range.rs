@@ -82,8 +82,7 @@ impl SimpleBinaryDecodable for NumericRange {
         decoding_options: &crate::DecodingOptions,
     ) -> crate::EncodingResult<Self> {
         let raw: UAString = SimpleBinaryDecodable::decode(stream, decoding_options)?;
-        raw
-            .as_ref()
+        raw.as_ref()
             .parse::<NumericRange>()
             .map_err(Error::decoding)
     }
@@ -145,8 +144,7 @@ mod json {
             ctx: &Context<'_>,
         ) -> crate::EncodingResult<Self> {
             let raw = UAString::decode(stream, ctx)?;
-            raw
-                .as_ref()
+            raw.as_ref()
                 .parse::<NumericRange>()
                 .map_err(Error::decoding)
         }
@@ -178,8 +176,7 @@ mod xml {
             context: &Context<'_>,
         ) -> Result<Self, Error> {
             let raw = UAString::decode(read, context)?;
-            raw
-                .as_ref()
+            raw.as_ref()
                 .parse::<NumericRange>()
                 .map_err(Error::decoding)
         }

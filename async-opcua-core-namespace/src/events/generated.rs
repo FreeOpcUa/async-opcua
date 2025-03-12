@@ -79,6 +79,7 @@ pub struct AudioVariableType {
 pub struct AuditActivateSessionEventType {
     pub base: AuditSessionEventType,
     pub client_software_certificates: types::SignedSoftwareCertificate,
+    pub current_role_ids: types::NodeId,
     pub secure_channel_id: opcua::types::UAString,
     pub user_identity_token: opcua::types::ExtensionObject,
 }
@@ -155,8 +156,8 @@ pub struct AuditClientEventType {
 pub struct AuditClientUpdateMethodResultEventType {
     pub base: AuditClientEventType,
     pub input_arguments: opcua::types::ExtensionObject,
-    pub method_id: types::NodeId,
-    pub object_id: types::NodeId,
+    pub method_id: types::ExpandedNodeId,
+    pub object_id: types::ExpandedNodeId,
     pub output_arguments: opcua::types::ExtensionObject,
     pub status_code_id: types::StatusCode,
 }
@@ -375,6 +376,8 @@ pub struct AuditUpdateMethodEventType {
     pub base: AuditEventType,
     pub input_arguments: opcua::types::ExtensionObject,
     pub method_id: types::NodeId,
+    pub output_arguments: opcua::types::ExtensionObject,
+    pub status_code_id: types::StatusCode,
 }
 #[derive(Debug, opcua::Event)]
 #[opcua(identifier = "i=2315")]
@@ -415,7 +418,7 @@ pub struct CertificateExpirationAlarmType {
 #[derive(Debug, opcua::Event)]
 #[opcua(identifier = "i=12620")]
 pub struct CertificateUpdatedAuditEventType {
-    pub base: AuditEventType,
+    pub base: AuditUpdateMethodEventType,
     pub certificate_group: types::NodeId,
     pub certificate_type: types::NodeId,
 }
@@ -800,7 +803,7 @@ pub struct TrustListOutOfDateAlarmType {
 #[derive(Debug, opcua::Event)]
 #[opcua(identifier = "i=12561")]
 pub struct TrustListUpdatedAuditEventType {
-    pub base: AuditEventType,
+    pub base: AuditUpdateMethodEventType,
     pub trust_list_id: types::NodeId,
 }
 #[derive(Debug, opcua::Event)]

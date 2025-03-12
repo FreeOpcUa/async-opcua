@@ -56,6 +56,8 @@ mod nodeset_48;
 mod nodeset_49;
 mod nodeset_5;
 mod nodeset_50;
+mod nodeset_51;
+mod nodeset_52;
 mod nodeset_6;
 mod nodeset_7;
 mod nodeset_8;
@@ -118,6 +120,8 @@ impl opcua::nodes::NodeSetImport for CoreNamespace {
                 nodeset_48::imported_nodes(map),
                 nodeset_49::imported_nodes(map),
                 nodeset_50::imported_nodes(map),
+                nodeset_51::imported_nodes(map),
+                nodeset_52::imported_nodes(map),
             ]
             .into_iter()
             .flatten(),

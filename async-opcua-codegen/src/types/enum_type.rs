@@ -2,6 +2,7 @@
 pub struct EnumValue {
     pub name: String,
     pub value: i64,
+    pub documentation: Option<String>,
 }
 
 #[derive(serde::Serialize, Debug)]

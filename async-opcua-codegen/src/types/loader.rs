@@ -99,6 +99,10 @@ impl<'a> BsdTypeLoader<'a> {
                     name: field_name,
                     original_name: field.name.clone(),
                     typ: StructureFieldType::Array(Self::get_field_type(&typ)),
+                    documentation: field
+                        .documentation
+                        .as_ref()
+                        .and_then(|d| d.contents.clone()),
                 });
                 fields_to_hide.push(to_snake_case(length_field))
             } else {
@@ -106,6 +110,10 @@ impl<'a> BsdTypeLoader<'a> {
                     name: field_name,
                     original_name: field.name.clone(),
                     typ: StructureFieldType::Field(Self::get_field_type(&typ)),
+                    documentation: field
+                        .documentation
+                        .as_ref()
+                        .and_then(|d| d.contents.clone()),
                 });
             }
         }
@@ -177,6 +185,7 @@ impl<'a> BsdTypeLoader<'a> {
             variants.push(EnumValue {
                 name: name.clone(),
                 value,
+                documentation: val.documentation.as_ref().and_then(|d| d.contents.clone()),
             });
         }
 

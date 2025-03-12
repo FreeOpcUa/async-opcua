@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use opcua_xml::schema::ua_node_set::{DataTypeField, UADataType, UANode};
+use opcua_xml::schema::ua_node_set::{DataTypeField, LocalizedText, UADataType, UANode};
 
 use crate::{
     input::{NodeSetInput, SchemaCache, TypeInfo},
@@ -17,6 +17,7 @@ pub struct NodeSetTypeLoader<'a> {
     ignored: HashSet<String>,
     native_type_mappings: HashMap<String, String>,
     input: &'a NodeSetInput,
+    preferred_locale: String,
 }
 
 /// These are types that custom types are allowed to descend from.
@@ -37,12 +38,22 @@ impl<'a> NodeSetTypeLoader<'a> {
         ignored: HashSet<String>,
         native_type_mappings: HashMap<String, String>,
         input: &'a NodeSetInput,
+        preferred_locale: &str,
     ) -> Self {
         Self {
             ignored,
             native_type_mappings,
             input,
+            preferred_locale: preferred_locale.to_owned(),
         }
+    }
+
+    fn get_from_localized_text(&self, options: &[LocalizedText]) -> Option<String> {
+        options
+            .iter()
+            .find(|f| f.locale.0 == self.preferred_locale)
+            .or_else(|| options.first())
+            .map(|v| v.text.clone())
     }
 
     fn field_type_for_info(info: TypeInfo) -> FieldType {
@@ -103,6 +114,7 @@ impl<'a> NodeSetTypeLoader<'a> {
                             } else {
                                 f.value
                             },
+                            documentation: self.get_from_localized_text(&f.descriptions),
                         })
                         .collect(),
                     documentation: node.base.base.documentation.clone(),
@@ -151,6 +163,7 @@ impl<'a> NodeSetTypeLoader<'a> {
                                         StructureFieldType::Field(ty)
                                     }
                                 },
+                                documentation: self.get_from_localized_text(&f.descriptions),
                             })
                         })
                         .collect::<Result<Vec<_>, _>>()?,

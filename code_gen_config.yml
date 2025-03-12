@@ -47,7 +47,6 @@ targets:
     output_file: async-opcua-types/src/generated/node_ids.rs
 
 sources:
-  - schemas/1.05/Opc.Ua.Types.bsd
   - schemas/1.05/Opc.Ua.NodeSet2.xml
   - schemas/1.05/Opc.Ua.NodeSet2.Services.xml
   - schemas/1.05/Opc.Ua.Types.xsd

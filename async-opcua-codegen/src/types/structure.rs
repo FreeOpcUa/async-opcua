@@ -9,6 +9,7 @@ pub struct StructureField {
     pub name: String,
     pub original_name: String,
     pub typ: StructureFieldType,
+    pub documentation: Option<String>,
 }
 
 #[derive(serde::Serialize, Debug, Clone)]

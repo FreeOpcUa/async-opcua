@@ -318,7 +318,14 @@ impl CodeGenerator {
                     parse_quote! { #value }
                 }
             };
+            let mut attrs = quote! {};
+            if let Some(doc) = &field.documentation {
+                attrs.extend(quote! {
+                    #[doc = #doc]
+                });
+            }
             variants.extend(quote! {
+                #attrs
                 const #name = #value_token;
             });
         }
@@ -485,7 +492,7 @@ impl CodeGenerator {
         });
 
         for field in &item.values {
-            let (name, _) = safe_ident(&field.name);
+            let (name, renamed) = safe_ident(&field.name);
             let value = field.value;
             let is_default = if let Some(default_name) = &item.default_value {
                 &name.to_string() == default_name
@@ -526,16 +533,27 @@ impl CodeGenerator {
                 }
             };
 
+            let mut attrs = quote! {};
             if is_default {
-                variants.push(parse_quote! {
+                attrs.extend(quote! {
                     #[opcua(default)]
-                    #name = #value_token
-                })
-            } else {
-                variants.push(parse_quote! {
-                    #name = #value_token
-                })
+                });
             }
+            if let Some(doc) = &field.documentation {
+                attrs.extend(quote! {
+                    #[doc = #doc]
+                });
+            }
+            if renamed {
+                let orig = &field.name;
+                attrs.extend(quote! {
+                    #[opcua(rename = #orig)]
+                });
+            }
+            variants.push(parse_quote! {
+                #attrs
+                #name = #value_token
+            })
         }
 
         let (enum_ident, renamed) = safe_ident(&item.name);
@@ -640,8 +658,13 @@ impl CodeGenerator {
             if changed {
                 let orig = &field.original_name;
                 attrs = quote! {
-                    #[cfg_attr(any(feature = "json", feature = "xml"), opcua(rename = #orig))]
+                    #[opcua(rename = #orig)]
                 };
+            }
+            if let Some(doc) = &field.documentation {
+                attrs.extend(quote! {
+                    #[doc = #doc]
+                });
             }
             fields.push(parse_quote! {
                 #attrs

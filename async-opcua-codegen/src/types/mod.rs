@@ -48,6 +48,7 @@ pub fn generate_types_nodeset(
     target: &TypeCodeGenTarget,
     input: &NodeSetInput,
     cache: &SchemaCache,
+    preferred_locale: &str,
 ) -> Result<(Vec<GeneratedItem>, String), CodeGenError> {
     let type_loader = nodeset_loader::NodeSetTypeLoader::new(
         target
@@ -58,6 +59,7 @@ pub fn generate_types_nodeset(
             .collect(),
         base_native_type_mappings(),
         input,
+        preferred_locale,
     );
     let target_namespace = input.uri.clone();
     let types = type_loader.load_types(cache)?;

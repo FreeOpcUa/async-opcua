@@ -122,7 +122,7 @@ pub fn run_codegen(config: &CodeGenConfig, root_path: &str) -> Result<(), CodeGe
                 println!("Running data type code generation for {}", t.file);
                 let (types, target_namespace, path) = if t.file.ends_with(".xml") {
                     let input = cache.get_nodeset(&t.file)?;
-                    let r = generate_types_nodeset(t, input, &cache)
+                    let r = generate_types_nodeset(t, input, &cache, &config.preferred_locale)
                         .map_err(|e| e.in_file(&input.path))?;
                     (r.0, r.1, input.path.clone())
                 } else {

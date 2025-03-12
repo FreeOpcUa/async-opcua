@@ -527,12 +527,19 @@ pub enum BrowseResultMask {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(i32)]
 pub enum ChassisIdSubtype {
+    ///Represents a chassis identifier based on the value of entPhysicalAlias object (defined in IETF RFC 2737) for a chassis component (i.e., an entPhysicalClass value of chassis(3))
     ChassisComponent = 1i32,
+    ///Represents a chassis identifier based on the value of ifAlias object (defined in IETF RFC 2863) for an interface on the containing chassis.
     InterfaceAlias = 2i32,
+    ///Represents a chassis identifier based on the value of entPhysicalAlias object (defined in IETF RFC 2737) for a port or backplane component (i.e., entPhysicalClass has a value of port(10), or backplane(4)), within the containing chassis.
     PortComponent = 3i32,
+    ///Represents a chassis identifier based on the value of a unicast source address (encoded in network byte order and IEEE 802.3 canonical bit order) of a port on the containing chassis as defined in IEEE Std 802-2014.
     MacAddress = 4i32,
+    ///Represents a chassis identifier based on a network address associated with a particular chassis. The encoded address is actually composed of two fields. The first field is a single octet, representing the IANA AddressFamilyNumbers value for the specific address type, and the second field is the network address value.
     NetworkAddress = 5i32,
+    ///Represents a chassis identifier based on the value of ifName object (defined in IETF RFC 2863) for an interface on the containing chassis.
     InterfaceName = 6i32,
+    ///Represents a chassis identifier based on a locally defined value.
     Local = 7i32,
 }
 #[opcua::types::ua_encodable]
@@ -764,8 +771,11 @@ pub enum DiagnosticsLevel {
 #[repr(i32)]
 pub enum Duplex {
     #[opcua(default)]
+    ///Full duplex.
     Full = 0i32,
+    ///Half duplex.
     Half = 1i32,
+    ///Link is currently disconnected or initializing.
     Unknown = 2i32,
 }
 bitflags::bitflags! {
@@ -896,9 +906,13 @@ pub enum FilterOperator {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(i32)]
 pub enum HistoryUpdateType {
+    ///Data was inserted.
     Insert = 1i32,
+    ///Data was replaced.
     Replace = 2i32,
+    ///Data was inserted or replaced.
     Update = 3i32,
+    ///Data was deleted.
     Delete = 4i32,
 }
 #[opcua::types::ua_encodable]
@@ -906,14 +920,23 @@ pub enum HistoryUpdateType {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(i32)]
 pub enum IdentityCriteriaType {
+    ///The rule specifies a UserName from a UserNameIdentityToken.
     UserName = 1i32,
+    ///The rule specifies the Thumbprint of a user or CA Certificate.
     Thumbprint = 2i32,
+    ///The rule is a Role specified in an Access Token.
     Role = 3i32,
+    ///The rule is a user group specified in the Access Token.
     GroupId = 4i32,
+    ///The rule specifies Anonymous UserIdentityToken.
     Anonymous = 5i32,
+    ///The rule specifies any non Anonymous UserIdentityToken.
     AuthenticatedUser = 6i32,
+    ///The rule specifies the combination of an application identity and an Anonymous UserIdentityToken.
     Application = 7i32,
+    ///The rule specifies the X509 subject name of a user or CA Certificate.
     X509Subject = 8i32,
+    ///The rule specifies any trusted application that has been authenticated with a trusted ApplicationInstance Certificate.
     TrustedApplication = 9i32,
 }
 #[opcua::types::ua_encodable]
@@ -933,8 +956,11 @@ pub enum IdType {
 #[repr(i32)]
 pub enum InterfaceAdminStatus {
     #[opcua(default)]
+    ///Ready to pass packets.
     Up = 0i32,
+    ///Not ready to pass packets and not in some test mode.
     Down = 1i32,
+    ///In some test mode.
     Testing = 2i32,
 }
 #[opcua::types::ua_encodable]
@@ -943,12 +969,19 @@ pub enum InterfaceAdminStatus {
 #[repr(i32)]
 pub enum InterfaceOperStatus {
     #[opcua(default)]
+    ///Ready to pass packets.
     Up = 0i32,
+    ///The interface does not pass any packets.
     Down = 1i32,
+    ///In some test mode. No operational packets can be passed.
     Testing = 2i32,
+    ///Status cannot be determined for some reason.
     Unknown = 3i32,
+    ///Waiting for some external event.
     Dormant = 4i32,
+    ///Some component (typically hardware) is missing.
     NotPresent = 5i32,
+    ///Down due to state of lower-layer interface(s).
     LowerLayerDown = 6i32,
 }
 bitflags::bitflags! {
@@ -1131,11 +1164,19 @@ impl opcua::types::json::JsonEncodable for JsonNetworkMessageContentMask {
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] #[doc =
     "https://reference.opcfoundation.org/v105/Core/docs/Part22/5.3.3/#5.3.3.1"] pub
-    struct LldpSystemCapabilitiesMap : i32 { const Other = 1i32; const Repeater = 2i32;
-    const Bridge = 4i32; const WlanAccessPoint = 8i32; const Router = 16i32; const
-    Telephone = 32i32; const DocsisCableDevice = 64i32; const StationOnly = 128i32; const
-    CvlanComponent = 256i32; const SvlanComponent = 512i32; const TwoPortMacRelay =
-    1024i32; }
+    struct LldpSystemCapabilitiesMap : i32 { #[doc =
+    "System has capabilities other than those listed below"] const Other = 1i32; #[doc =
+    "System has repeater capability"] const Repeater = 2i32; #[doc =
+    "System has bridge capability"] const Bridge = 4i32; #[doc =
+    "System has WLAN access point capability"] const WlanAccessPoint = 8i32; #[doc =
+    "System has router capability"] const Router = 16i32; #[doc =
+    "System has telephone capability"] const Telephone = 32i32; #[doc =
+    "System has DOCSIS cable device capability (IETF RFC 4639)"] const DocsisCableDevice
+    = 64i32; #[doc = "System has only station capability"] const StationOnly = 128i32;
+    #[doc = "System has C-VLAN component functionality"] const CvlanComponent = 256i32;
+    #[doc = "System has S-VLAN component functionality"] const SvlanComponent = 512i32;
+    #[doc = "System has Two-port MAC Relay (TPMR) functionality."] const TwoPortMacRelay
+    = 1024i32; }
 }
 impl opcua::types::UaNullable for LldpSystemCapabilitiesMap {
     fn is_ua_null(&self) -> bool {
@@ -1223,9 +1264,13 @@ impl opcua::types::json::JsonEncodable for LldpSystemCapabilitiesMap {
 #[repr(i32)]
 pub enum ManAddrIfSubtype {
     #[opcua(default)]
+    ///Optional variable is not set.
     None = 0i32,
+    ///Interface is not known.
     Unknown = 1i32,
+    ///Interface based on the port-ref MIB object.
     PortRef = 2i32,
+    ///Interface based on the system port number.
     SystemPortNumber = 3i32,
 }
 #[opcua::types::ua_encodable]
@@ -1263,8 +1308,11 @@ pub enum MonitoringMode {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(i32)]
 pub enum NamingRuleType {
+    ///The BrowseName must appear in all instances of the type.
     Mandatory = 1i32,
+    ///The BrowseName may appear in an instance of the type.
     Optional = 2i32,
+    ///The modelling rule defines a constraint and the BrowseName is not used in an instance of the type.
     Constraint = 3i32,
 }
 #[opcua::types::ua_encodable]
@@ -1273,10 +1321,15 @@ pub enum NamingRuleType {
 #[repr(i32)]
 pub enum NegotiationStatus {
     #[opcua(default)]
+    ///The auto-negotiation protocol is running and negotiation is currently in-progress.
     InProgress = 0i32,
+    ///The auto-negotiation protocol has completed successfully.
     Complete = 1i32,
+    ///The auto-negotiation protocol has failed.
     Failed = 2i32,
+    ///The auto-negotiation status is not currently known, this could be because it is still negotiating or the protocol cannot run (e.g., if no medium is present).
     Unknown = 3i32,
+    ///No auto-negotiation is executed. The auto-negotiation function is either not supported on this interface or has not been enabled.
     NoNegotiation = 4i32,
 }
 #[opcua::types::ua_encodable]
@@ -1326,14 +1379,23 @@ pub enum NodeAttributesMask {
 #[repr(i32)]
 pub enum NodeClass {
     #[opcua(default)]
+    ///No value is specified.
     Unspecified = 0i32,
+    ///The Node is an Object.
     Object = 1i32,
+    ///The Node is a Variable.
     Variable = 2i32,
+    ///The Node is a Method.
     Method = 4i32,
+    ///The Node is an ObjectType.
     ObjectType = 8i32,
+    ///The Node is a VariableType.
     VariableType = 16i32,
+    ///The Node is a ReferenceType.
     ReferenceType = 32i32,
+    ///The Node is a DataType.
     DataType = 64i32,
+    ///The Node is a View.
     View = 128i32,
 }
 #[opcua::types::ua_encodable]
@@ -1358,11 +1420,25 @@ pub enum OverrideValueHandling {
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] #[doc =
     "https://reference.opcfoundation.org/v105/Core/docs/Part18/5.2.2"] pub struct
-    PasswordOptionsMask : i32 { const SupportInitialPasswordChange = 1i32; const
-    SupportDisableUser = 2i32; const SupportDisableDeleteForUser = 4i32; const
-    SupportNoChangeForUser = 8i32; const SupportDescriptionForUser = 16i32; const
-    RequiresUpperCaseCharacters = 32i32; const RequiresLowerCaseCharacters = 64i32; const
-    RequiresDigitCharacters = 128i32; const RequiresSpecialCharacters = 256i32; }
+    PasswordOptionsMask : i32 { #[doc =
+    "Indicates if the server supports the feature to require a password change after the creation of the user."]
+    const SupportInitialPasswordChange = 1i32; #[doc =
+    "Indicates if the server supports to disable a user."] const SupportDisableUser =
+    2i32; #[doc =
+    "Indicates if the server supports the configuration NoDelete for a user."] const
+    SupportDisableDeleteForUser = 4i32; #[doc =
+    "Indicates if the server supports the configuration NoChangeByUser for a user."]
+    const SupportNoChangeForUser = 8i32; #[doc =
+    "Indicates if the server supports to management of a description for the user."]
+    const SupportDescriptionForUser = 16i32; #[doc =
+    "Indicates if a upper case ASCII character is required in a password."] const
+    RequiresUpperCaseCharacters = 32i32; #[doc =
+    "Indicates if a lower case ASCII character is required in a password."] const
+    RequiresLowerCaseCharacters = 64i32; #[doc =
+    "Indicates if a digit ASCII character is required in a password."] const
+    RequiresDigitCharacters = 128i32; #[doc =
+    "Indicates if a special character is required in a password."] const
+    RequiresSpecialCharacters = 256i32; }
 }
 impl opcua::types::UaNullable for PasswordOptionsMask {
     fn is_ua_null(&self) -> bool {
@@ -1449,9 +1525,13 @@ impl opcua::types::json::JsonEncodable for PasswordOptionsMask {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(i32)]
 pub enum PerformUpdateType {
+    ///Data was inserted.
     Insert = 1i32,
+    ///Data was replaced.
     Replace = 2i32,
+    ///Data was inserted or replaced.
     Update = 3i32,
+    ///Data was deleted.
     Remove = 4i32,
 }
 bitflags::bitflags! {
@@ -1550,12 +1630,19 @@ impl opcua::types::json::JsonEncodable for PermissionType {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(i32)]
 pub enum PortIdSubtype {
+    ///Represents a port identifier based on the ifAlias MIB object defined in IETF RFC 2863.
     InterfaceAlias = 1i32,
+    ///Represents a port identifier based on the value of entPhysicalAlias (defined in IETF RFC 2737) for a port component (i.e., entPhysicalClass value of port(10) or backplane(4)), within the containing chassis.
     PortComponent = 2i32,
+    ///Represents a port identifier based on a unicast source address (encoded in network byte order and IEEE 802.3 canonical bit order) which has been detected by the agent and associated with a particular port (IEEE Std 802-2014).
     MacAddress = 3i32,
+    ///Represents a port identifier based on a network address, detected by the agent and associated with a particular port.
     NetworkAddress = 4i32,
+    ///Represents a port identifier based on the ifName MIB object, defined in IETF RFC 2863.
     InterfaceName = 5i32,
+    ///Represents a port identifier based on the agent-local identifier of the circuit (defined in IETF RFC 3046), detected by the agent and associated with a particular port.
     AgentCircuitId = 6i32,
+    ///Represents a port identifier based on a value locally assigned.
     Local = 7i32,
 }
 bitflags::bitflags! {
@@ -1756,21 +1843,36 @@ pub enum TimestampsToReturn {
 #[repr(i32)]
 pub enum TrustListMasks {
     #[opcua(default)]
+    ///No fields are provided.
     None = 0i32,
+    ///The TrustedCertificates are provided.
     TrustedCertificates = 1i32,
+    ///The TrustedCrls are provided.
     TrustedCrls = 2i32,
+    ///The IssuerCertificates are provided.
     IssuerCertificates = 4i32,
+    ///The IssuerCrls are provided.
     IssuerCrls = 8i32,
+    ///All fields are provided.
     All = 15i32,
 }
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] #[doc =
     "https://reference.opcfoundation.org/v105/Core/docs/Part12/7.8.2/#7.8.2.8"] pub
-    struct TrustListValidationOptions : i32 { const SuppressCertificateExpired = 1i32;
-    const SuppressHostNameInvalid = 2i32; const SuppressRevocationStatusUnknown = 4i32;
-    const SuppressIssuerCertificateExpired = 8i32; const
-    SuppressIssuerRevocationStatusUnknown = 16i32; const CheckRevocationStatusOnline =
-    32i32; const CheckRevocationStatusOffline = 64i32; }
+    struct TrustListValidationOptions : i32 { #[doc =
+    "Ignore errors related to the validity time of the Certificate."] const
+    SuppressCertificateExpired = 1i32; #[doc =
+    "Ignore mismatches between the host name or ApplicationUri."] const
+    SuppressHostNameInvalid = 2i32; #[doc =
+    "Ignore errors if the revocation list cannot be found for the issuer of the Certificate."]
+    const SuppressRevocationStatusUnknown = 4i32; #[doc =
+    "Ignore errors if an issuer has an expired Certificate."] const
+    SuppressIssuerCertificateExpired = 8i32; #[doc =
+    "Ignore errors if the revocation list cannot be found for any issuer of issuer Certificates."]
+    const SuppressIssuerRevocationStatusUnknown = 16i32; #[doc =
+    "Check the revocation status online."] const CheckRevocationStatusOnline = 32i32;
+    #[doc = "Check the revocation status offline."] const CheckRevocationStatusOffline =
+    64i32; }
 }
 impl opcua::types::UaNullable for TrustListValidationOptions {
     fn is_ua_null(&self) -> bool {
@@ -1858,31 +1960,57 @@ impl opcua::types::json::JsonEncodable for TrustListValidationOptions {
 #[repr(i32)]
 pub enum TsnFailureCode {
     #[opcua(default)]
+    ///No failure
     NoFailure = 0i32,
+    ///Insufficient bandwidth
     InsufficientBandwidth = 1i32,
+    ///Insufficient bridge resources
     InsufficientResources = 2i32,
+    ///Insufficient bandwidth for Traffic Class
     InsufficientTrafficClassBandwidth = 3i32,
+    ///StreamID in use by another Talker
     StreamIdInUse = 4i32,
+    ///Stream destination address already in use
     StreamDestinationAddressInUse = 5i32,
+    ///Stream pre-empted by higher rank
     StreamPreemptedByHigherRank = 6i32,
+    ///Reported latency has changed
     LatencyHasChanged = 7i32,
+    ///Egress port is not AVBCapable
     EgressPortNotAvbCapable = 8i32,
+    ///Use a different destination address
     UseDifferentDestinationAddress = 9i32,
+    ///Out of MSRP resources
     OutOfMsrpResources = 10i32,
+    ///Out of MMRP resources
     OutOfMmrpResources = 11i32,
+    ///Cannot store destination address
     CannotStoreDestinationAddress = 12i32,
+    ///Requested priority is not an SR Class priority
     PriorityIsNotAnSrcClass = 13i32,
+    ///MaxFrameSize is too large for media
     MaxFrameSizeTooLarge = 14i32,
+    ///MaxFanInPorts limit has been reached
     MaxFanInPortsLimitReached = 15i32,
+    ///Changes in FirstValue for a registered StreamID
     FirstValueChangedForStreamId = 16i32,
+    ///VLAN is blocked on this egress port (Registration Forbidden)
     VlanBlockedOnEgress = 17i32,
+    ///VLAN tagging is disabled on this egress port (untagged set)
     VlanTaggingDisabledOnEgress = 18i32,
+    ///SR class priority mismatch
     SrClassPriorityMismatch = 19i32,
+    ///Enhanced feature cannot be propagated to original Port
     FeatureNotPropagated = 20i32,
+    ///MaxLatency exceeded
     MaxLatencyExceeded = 21i32,
+    ///Nearest Bridge cannot provide network identification for stream transformation
     BridgeDoesNotProvideNetworkId = 22i32,
+    ///Stream transformation not supported
     StreamTransformNotSupported = 23i32,
+    ///Stream identification type not supported for stream transformation
     StreamIdTypeNotSupported = 24i32,
+    ///Enhanced feature cannot be supported without a CNC
     FeatureNotSupported = 25i32,
 }
 #[opcua::types::ua_encodable]
@@ -1891,9 +2019,13 @@ pub enum TsnFailureCode {
 #[repr(i32)]
 pub enum TsnListenerStatus {
     #[opcua(default)]
+    ///No Listener detected.
     None = 0i32,
+    ///Listener ready (configured).
     Ready = 1i32,
+    ///One or more Listeners ready, and one or more Listeners failed.
     PartialFailed = 2i32,
+    ///Listener failed.
     Failed = 3i32,
 }
 #[opcua::types::ua_encodable]
@@ -1902,10 +2034,15 @@ pub enum TsnListenerStatus {
 #[repr(i32)]
 pub enum TsnStreamState {
     #[opcua(default)]
+    ///The related TSN Stream is currently disabled.
     Disabled = 0i32,
+    ///The related TSN Stream is in the process of receiving configuration parameters from the TSN Control Layer.
     Configuring = 1i32,
+    ///The related TSN Stream has successfully received and applied the configuration from the TSN Control Layer. The related TSN Stream is not fully operational as long as local preconditions (e.g. synchronization state) are not valid.
     Ready = 2i32,
+    ///The related TSN Stream object is configured and all other required preconditions (e.g. synchronization state) for sending / receiving data are valid.
     Operational = 3i32,
+    ///The related TSN Stream object is in an error state.
     Error = 4i32,
 }
 #[opcua::types::ua_encodable]
@@ -1914,8 +2051,11 @@ pub enum TsnStreamState {
 #[repr(i32)]
 pub enum TsnTalkerStatus {
     #[opcua(default)]
+    ///No Talker detected.
     None = 0i32,
+    ///Talker ready (configured).
     Ready = 1i32,
+    ///Talker failed.
     Failed = 2i32,
 }
 bitflags::bitflags! {
@@ -2097,8 +2237,11 @@ impl opcua::types::json::JsonEncodable for UadpNetworkMessageContentMask {
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] #[doc =
     "https://reference.opcfoundation.org/v105/Core/docs/Part18/5.2.3"] pub struct
-    UserConfigurationMask : i32 { const NoDelete = 1i32; const Disabled = 2i32; const
-    NoChangeByUser = 4i32; const MustChangePassword = 8i32; }
+    UserConfigurationMask : i32 { #[doc = "The user cannot be deleted."] const NoDelete =
+    1i32; #[doc = "The user is disabled."] const Disabled = 2i32; #[doc =
+    "The user cannot change the password."] const NoChangeByUser = 4i32; #[doc =
+    "The user must change the password to get the assigned roles. If the password is not changed, the user has only the Role Anonymous."]
+    const MustChangePassword = 8i32; }
 }
 impl opcua::types::UaNullable for UserConfigurationMask {
     fn is_ua_null(&self) -> bool {

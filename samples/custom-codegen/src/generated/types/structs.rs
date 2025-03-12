@@ -15,7 +15,7 @@ pub struct PnDeviceDiagnosisDataType {
     pub slot: u16,
     pub subslot: u16,
     pub channel_number: u16,
-    #[cfg_attr(any(feature = "json", feature = "xml"), opcua(rename = "Type"))]
+    #[opcua(rename = "Type")]
     pub __type: super::enums::PnChannelTypeEnumeration,
     pub accumulative: super::enums::PnChannelAccumulativeEnumeration,
     pub maintenance: super::enums::PnChannelMaintenanceEnumeration,
@@ -26,8 +26,11 @@ pub struct PnDeviceDiagnosisDataType {
     pub ext_channel_error_type: u16,
     pub ext_channel_add_value: u32,
     pub qualified_channel_qualifier: u32,
+    ///Manufacturer specific diagnosis data
     pub manufacturer_data: opcua::types::byte_string::ByteString,
+    ///Diagnosis message read from the GSDML
     pub message: opcua::types::localized_text::LocalizedText,
+    ///Help text read from the GSDML
     pub help_text: opcua::types::localized_text::LocalizedText,
 }
 impl opcua::types::ExpandedMessageInfo for PnDeviceDiagnosisDataType {
@@ -83,11 +86,17 @@ impl opcua::types::ExpandedMessageInfo for PnDeviceRoleOptionSet {
 ///https://reference.opcfoundation.org/v104/PROFINET/v101/docs/6.3.3/#6.3.3.1.2
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PnIM5DataType {
+    ///I&M5Data | IM_Annotation
     pub annotation: opcua::types::string::UAString,
+    ///I&M5Data | IM_OrderID
     pub order_id: opcua::types::string::UAString,
+    ///I&M5Data | VendorID
     pub vendor_id: u16,
+    ///I&M5Data | IM_Serial_Number
     pub serial_number: opcua::types::string::UAString,
+    ///I&M5Data | IM_Hardware_Revision
     pub hardware_revision: opcua::types::string::UAString,
+    ///I&M5Data | IM_Software_Revision
     pub software_revision: opcua::types::string::UAString,
 }
 impl opcua::types::ExpandedMessageInfo for PnIM5DataType {

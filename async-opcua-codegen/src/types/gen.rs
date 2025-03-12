@@ -11,7 +11,9 @@ use crate::{
     error::CodeGenError, utils::safe_ident, GeneratedOutput, StructuredType, BASE_NAMESPACE,
 };
 
-use super::{enum_type::EnumReprType, loader::LoadedType, EnumType, ExternalType};
+use super::{
+    enum_type::EnumReprType, loader::LoadedType, structure::FieldType, EnumType, ExternalType,
+};
 use quote::quote;
 
 pub enum ItemDefinition {
@@ -86,7 +88,7 @@ pub struct CodeGenItemConfig {
 pub struct ImportType {
     path: String,
     has_default: Option<bool>,
-    base_type: Option<String>,
+    base_type: Option<FieldType>,
     is_defined: bool,
 }
 
@@ -117,7 +119,13 @@ impl CodeGenerator {
                         ImportType {
                             path: v.path,
                             has_default: v.has_default,
-                            base_type: v.base_type,
+                            base_type: match v.base_type.as_deref() {
+                                Some("ExtensionObject" | "OptionSet") => {
+                                    Some(FieldType::ExtensionObject)
+                                }
+                                Some(t) => Some(FieldType::Normal(t.to_owned())),
+                                None => None,
+                            },
                             is_defined: true,
                         },
                     )
@@ -160,8 +168,11 @@ impl CodeGenerator {
             LoadedType::Struct(s) => {
                 for k in &s.fields {
                     let has_default = match &k.typ {
-                        crate::StructureFieldType::Field(f) => self.is_default_recursive(f),
-                        crate::StructureFieldType::Array(_) => true,
+                        crate::StructureFieldType::Field(FieldType::Normal(f)) => {
+                            self.is_default_recursive(f)
+                        }
+                        crate::StructureFieldType::Array(_)
+                        | crate::StructureFieldType::Field(_) => true,
                     };
                     if !has_default {
                         return false;
@@ -262,11 +273,14 @@ impl CodeGenerator {
     fn generate_bitfield(&self, item: EnumType) -> Result<GeneratedItem, CodeGenError> {
         let mut body = quote! {};
         let ty: Type = syn::parse_str(&item.typ.to_string())?;
-        if let Some(doc) = item.documentation {
-            body.extend(quote! {
+        let doc_tokens = if let Some(doc) = item.documentation {
+            quote! {
                 #[doc = #doc]
-            });
-        }
+            }
+        } else {
+            quote! {}
+        };
+
         let mut variants = quote! {};
 
         for field in &item.values {
@@ -313,6 +327,7 @@ impl CodeGenerator {
         body.extend(quote! {
             bitflags::bitflags! {
                 #[derive(Debug, Copy, Clone, PartialEq)]
+                #doc_tokens
                 pub struct #enum_ident: #ty {
                     #variants
                 }
@@ -554,24 +569,22 @@ impl CodeGenerator {
         })
     }
 
-    fn is_extension_object(&self, typ: &str) -> bool {
-        if typ == "ua:ExtensionObject" || typ == "ua:OptionSet" {
-            return true;
-        }
-
-        let name = match typ.split_once(":") {
+    fn is_extension_object(&self, typ: Option<&FieldType>) -> bool {
+        let name = match &typ {
+            Some(FieldType::Abstract(_)) | Some(FieldType::ExtensionObject) => return true,
+            Some(FieldType::Normal(s)) => s,
+            None => return false,
+        };
+        let name = match name.split_once(":") {
             Some((_, n)) => n,
-            None => typ,
+            None => name,
         };
 
         let Some(parent) = self.import_map.get(name) else {
             return false;
         };
-        if let Some(p) = &parent.base_type {
-            self.is_extension_object(p)
-        } else {
-            false
-        }
+
+        self.is_extension_object(parent.base_type.as_ref())
     }
 
     fn generate_struct(&self, item: StructuredType) -> Result<GeneratedItem, CodeGenError> {
@@ -607,9 +620,18 @@ impl CodeGenerator {
 
         for field in item.visible_fields() {
             let typ: Type = match &field.typ {
-                crate::StructureFieldType::Field(f) => syn::parse_str(&self.get_type_path(f))?,
+                crate::StructureFieldType::Field(f) => {
+                    syn::parse_str(&self.get_type_path(f.as_type_str())).map_err(|e| {
+                        CodeGenError::from(e)
+                            .with_context(format!("Generating path for {}", f.as_type_str()))
+                    })?
+                }
                 crate::StructureFieldType::Array(f) => {
-                    let path: Path = syn::parse_str(&self.get_type_path(f))?;
+                    let path: Path =
+                        syn::parse_str(&self.get_type_path(f.as_type_str())).map_err(|e| {
+                            CodeGenError::from(e)
+                                .with_context(format!("Generating path for {}", f.as_type_str()))
+                        })?;
                     parse_quote! { Option<Vec<#path>> }
                 }
             };
@@ -630,11 +652,7 @@ impl CodeGenerator {
         let mut encoding_ids = None;
         // Generate impls
         // Has message info
-        if item
-            .base_type
-            .as_ref()
-            .is_some_and(|v| self.is_extension_object(v))
-        {
+        if self.is_extension_object(item.base_type.as_ref()) {
             let (encoding_ident, _) = safe_ident(&format!("{}_Encoding_DefaultBinary", item.name));
             let (json_encoding_ident, _) =
                 safe_ident(&format!("{}_Encoding_DefaultJson", item.name));

@@ -105,21 +105,14 @@ impl HistoryNode {
         cp: Option<ContinuationPoint>,
     ) -> Self {
         let mut status = StatusCode::BadNodeIdUnknown;
-        let index_range = match node.index_range.as_ref().parse::<NumericRange>() {
-            Err(_) => {
-                status = StatusCode::BadIndexRangeInvalid;
-                NumericRange::None
-            }
-            Ok(r) => r,
-        };
 
-        if !matches!(index_range, NumericRange::None) && is_events {
+        if !matches!(node.index_range, NumericRange::None) && is_events {
             status = StatusCode::BadIndexRangeDataMismatch;
         }
 
         Self {
             node_id: node.node_id,
-            index_range,
+            index_range: node.index_range,
             data_encoding: node.data_encoding,
             input_continuation_point: cp,
             next_continuation_point: None,

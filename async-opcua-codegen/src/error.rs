@@ -6,7 +6,7 @@ use std::{
 
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum CodeGenErrorKind {
     #[error("Failed to load XML: {0}")]
     Xml(#[from] opcua_xml::XmlError),
@@ -25,10 +25,10 @@ pub enum CodeGenErrorKind {
     #[error("Failed to generate code: {0}")]
     Syn(#[from] syn::Error),
     #[error("{0}: {1}")]
-    Io(String, std::io::Error),
+    Io(String, String),
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub struct CodeGenError {
     #[source]
     pub kind: Box<CodeGenErrorKind>,
@@ -81,7 +81,7 @@ impl From<syn::Error> for CodeGenError {
 
 impl CodeGenError {
     pub fn io(msg: &str, e: std::io::Error) -> Self {
-        Self::new(CodeGenErrorKind::Io(msg.to_owned(), e))
+        Self::new(CodeGenErrorKind::Io(msg.to_owned(), e.to_string()))
     }
 
     pub fn other(msg: impl Into<String>) -> Self {

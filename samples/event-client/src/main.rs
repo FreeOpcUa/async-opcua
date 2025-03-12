@@ -16,7 +16,7 @@ use opcua::crypto::SecurityPolicy;
 use opcua::types::{
     AttributeId, ContentFilter, EventFilter, ExtensionObject, MessageSecurityMode,
     MonitoredItemCreateRequest, NodeId, ObjectTypeId, QualifiedName, SimpleAttributeOperand,
-    StatusCode, TimestampsToReturn, UAString, UserTokenPolicy,
+    StatusCode, TimestampsToReturn, UserTokenPolicy,
 };
 
 struct Args {
@@ -166,7 +166,7 @@ async fn subscribe_to_events(
                 type_definition_id: ObjectTypeId::BaseEventType.into(),
                 browse_path: Some(vec![QualifiedName::from(s)]),
                 attribute_id: AttributeId::Value as u32,
-                index_range: UAString::null(),
+                index_range: opcua::types::NumericRange::None,
             })
             .collect(),
     );

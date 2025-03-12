@@ -4,7 +4,7 @@ extra_header: |
   // Copyright (C) 2017-2024 Einar Omang
 targets:
   - type: types
-    file: Opc.Ua.Pn.Types.bsd
+    file: Opc.Ua.Pn.NodeSet2.xml
     output_dir: src/generated/types
     enums_single_file: true
     structs_single_file: true

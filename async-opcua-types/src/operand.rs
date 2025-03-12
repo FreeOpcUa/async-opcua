@@ -11,7 +11,7 @@ use std::convert::TryFrom;
 use crate::{
     attribute::AttributeId, match_extension_object_owned, status_code::StatusCode,
     AttributeOperand, ContentFilter, ContentFilterElement, ElementOperand, ExtensionObject,
-    FilterOperator, LiteralOperand, NodeId, QualifiedName, SimpleAttributeOperand, UAString,
+    FilterOperator, LiteralOperand, NodeId, NumericRange, QualifiedName, SimpleAttributeOperand,
     Variant,
 };
 
@@ -192,7 +192,7 @@ impl Operand {
         type_definition_id: T,
         browse_path: &str,
         attribute_id: AttributeId,
-        index_range: UAString,
+        index_range: NumericRange,
     ) -> Operand
     where
         T: Into<NodeId>,
@@ -423,7 +423,7 @@ impl SimpleAttributeOperand {
         type_definition_id: T,
         browse_path: &str,
         attribute_id: AttributeId,
-        index_range: UAString,
+        index_range: NumericRange,
     ) -> Self
     where
         T: Into<NodeId>,

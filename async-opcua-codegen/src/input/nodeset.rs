@@ -1,14 +1,31 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::OnceLock,
+};
 
 use opcua_xml::{
     load_nodeset2_file,
-    schema::{opc_ua_types::Variant, ua_node_set::UANodeSet},
+    schema::{
+        opc_ua_types::Variant,
+        ua_node_set::{DataTypeDefinition, UANode, UANodeSet},
+    },
     XmlElement,
 };
 
-use crate::CodeGenError;
+use crate::{
+    utils::{split_qualified_name, ParsedNodeId},
+    CodeGenError, BASE_NAMESPACE,
+};
 
 use super::SchemaCache;
+
+#[derive(Debug, Clone)]
+pub struct TypeInfo {
+    pub name: String,
+    pub is_abstract: bool,
+    pub definition: Option<DataTypeDefinition>,
+    pub has_encoding: bool,
+}
 
 pub struct NodeSetInput {
     pub xml: UANodeSet,
@@ -19,6 +36,13 @@ pub struct NodeSetInput {
     pub documentation: Option<HashMap<i64, String>>,
     pub referenced_xsd_schemas: HashSet<String>,
     pub path: String,
+    pub namespaces: Vec<String>,
+    // Index of the model URI in the namespace array.
+    pub own_namespace_index: u16,
+    // A little weird to store it as a result, but since it can fail it's actually the semantically
+    // correct thing. It's a cached computation result.
+    pub parent_type_ids: OnceLock<Result<HashMap<ParsedNodeId, ParsedNodeId>, CodeGenError>>,
+    pub type_info: OnceLock<Result<HashMap<ParsedNodeId, TypeInfo>, CodeGenError>>,
 }
 
 impl NodeSetInput {
@@ -73,6 +97,10 @@ impl NodeSetInput {
             Self::find_referenced_xsd_schemas_variant(&value.0, &mut res);
         }
         res
+    }
+
+    pub fn resolve_alias<'a>(&'a self, alias: &'a str) -> &'a str {
+        self.aliases.get(alias).map(|s| s.as_str()).unwrap_or(alias)
     }
 
     pub fn parse(data: &str, path: &str, docs: Option<&str>) -> Result<Self, CodeGenError> {
@@ -131,6 +159,19 @@ impl NodeSetInput {
 
         let xsd_uris = Self::find_referenced_xsd_schemas(&nodeset);
 
+        let mut namespaces = Vec::new();
+        let mut own_namespace_index = 0;
+        // Whether they define it or not, all nodesets depend on the base namespace.
+        namespaces.push(BASE_NAMESPACE.to_owned());
+        for namespace in nodeset.namespace_uris.iter().flat_map(|n| n.uris.iter()) {
+            if namespace != BASE_NAMESPACE {
+                if namespace == &model.model_uri {
+                    own_namespace_index = namespaces.len() as u16;
+                }
+                namespaces.push(namespace.clone());
+            }
+        }
+
         Ok(Self {
             uri: model.model_uri.clone(),
             xml: nodeset,
@@ -139,6 +180,10 @@ impl NodeSetInput {
             documentation,
             referenced_xsd_schemas: xsd_uris,
             path: path.to_owned(),
+            parent_type_ids: OnceLock::new(),
+            namespaces,
+            own_namespace_index,
+            type_info: OnceLock::new(),
         })
     }
 
@@ -167,5 +212,122 @@ impl NodeSetInput {
         }
 
         Ok(())
+    }
+
+    pub fn get_parent_type_ids(
+        &self,
+    ) -> Result<&HashMap<ParsedNodeId, ParsedNodeId>, CodeGenError> {
+        self.parent_type_ids
+            .get_or_init(|| {
+                let mut res = HashMap::new();
+                for node in &self.xml.nodes {
+                    let UANode::DataType(d) = node else {
+                        continue;
+                    };
+
+                    let id = ParsedNodeId::parse(self.resolve_alias(&d.base.base.node_id.0))?;
+
+                    let subtype_refs = d
+                        .base
+                        .base
+                        .references
+                        .iter()
+                        .flat_map(|r| r.references.iter())
+                        .filter(|r| self.resolve_alias(&r.reference_type.0) == "i=45");
+
+                    for r in subtype_refs {
+                        if r.is_forward {
+                            res.insert(
+                                ParsedNodeId::parse(self.resolve_alias(&r.node_id.0))?,
+                                id.clone(),
+                            );
+                        } else {
+                            res.insert(
+                                id.clone(),
+                                ParsedNodeId::parse(self.resolve_alias(&r.node_id.0))?,
+                            );
+                        }
+                    }
+                }
+                Ok(res)
+            })
+            .as_ref()
+            .map_err(|e| e.clone())
+    }
+
+    pub fn get_type_names(&self) -> Result<&HashMap<ParsedNodeId, TypeInfo>, CodeGenError> {
+        self.type_info
+            .get_or_init(|| {
+                let mut res = HashMap::new();
+                let mut has_encoding: HashSet<ParsedNodeId> = HashSet::new();
+                for node in &self.xml.nodes {
+                    // We need to find encoding for data types, which is the only way to figure out if a
+                    // data type can be encoded in an extension object from here.
+                    let data_type = match node {
+                        UANode::Object(uaobject) => {
+                            let encodes = uaobject
+                                .base
+                                .base
+                                .references
+                                .iter()
+                                .flat_map(|r| r.references.iter())
+                                .find(|r| {
+                                    !r.is_forward
+                                        && self.resolve_alias(&r.reference_type.0) == "i=38"
+                                });
+                            if let Some(encodes) = encodes {
+                                has_encoding.insert(ParsedNodeId::parse(
+                                    self.resolve_alias(&encodes.node_id.0),
+                                )?);
+                            }
+                            continue;
+                        }
+                        UANode::DataType(node) => node,
+                        _ => continue,
+                    };
+
+                    // Both directions are valid, though the inverse is almost always used.
+                    let has_encoding = data_type
+                        .base
+                        .base
+                        .references
+                        .iter()
+                        .flat_map(|r| r.references.iter())
+                        .any(|r| r.is_forward && self.resolve_alias(&r.reference_type.0) == "i=38");
+
+                    let id =
+                        ParsedNodeId::parse(self.resolve_alias(&data_type.base.base.node_id.0))?;
+                    let name = data_type
+                        .base
+                        .base
+                        .symbolic_name
+                        .as_ref()
+                        .and_then(|n| n.names.first())
+                        .cloned()
+                        .unwrap_or(
+                            split_qualified_name(&data_type.base.base.browse_name.0)?
+                                .0
+                                .to_owned(),
+                        );
+                    res.insert(
+                        id,
+                        TypeInfo {
+                            name,
+                            is_abstract: data_type.base.is_abstract,
+                            definition: data_type.definition.clone(),
+                            has_encoding,
+                        },
+                    );
+                }
+                for (k, v) in res.iter_mut() {
+                    if !v.has_encoding {
+                        v.has_encoding = has_encoding.contains(k);
+                    }
+                }
+
+                Ok(res)
+            })
+            .as_ref()
+            .map_err(|e| e.clone())
     }
 }

@@ -23,16 +23,11 @@ impl ParsedReadValueId {
     pub fn parse(val: ReadValueId) -> Result<Self, StatusCode> {
         let attribute_id = AttributeId::from_u32(val.attribute_id)
             .map_err(|_| StatusCode::BadAttributeIdInvalid)?;
-        let index_range: NumericRange = val
-            .index_range
-            .as_ref()
-            .parse()
-            .map_err(|_| StatusCode::BadIndexRangeInvalid)?;
 
         Ok(Self {
             node_id: val.node_id,
             attribute_id,
-            index_range,
+            index_range: val.index_range,
             data_encoding: DataEncoding::from_browse_name(val.data_encoding)?,
         })
     }
@@ -158,16 +153,11 @@ impl ParsedWriteValue {
     pub fn parse(val: WriteValue) -> Result<Self, StatusCode> {
         let attribute_id = AttributeId::from_u32(val.attribute_id)
             .map_err(|_| StatusCode::BadAttributeIdInvalid)?;
-        let index_range: NumericRange = val
-            .index_range
-            .as_ref()
-            .parse()
-            .map_err(|_| StatusCode::BadIndexRangeInvalid)?;
 
         Ok(Self {
             node_id: val.node_id,
             attribute_id,
-            index_range,
+            index_range: val.index_range,
             value: val.value,
         })
     }

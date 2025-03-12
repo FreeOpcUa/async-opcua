@@ -633,7 +633,7 @@ mod tests {
 
         cursor.seek(std::io::SeekFrom::Start(0)).unwrap();
 
-        println!("{}", std::str::from_utf8(&cursor.get_ref()).unwrap());
+        println!("{}", std::str::from_utf8(cursor.get_ref()).unwrap());
 
         let mut reader = XmlStreamReader::new(&mut cursor as &mut dyn Read);
         let obj2: ExtensionObject = XmlDecodable::decode(&mut reader, &ctx.context()).unwrap();

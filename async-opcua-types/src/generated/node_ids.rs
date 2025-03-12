@@ -328,9 +328,15 @@ pub enum DataTypeId {
     UABinaryFileDataType = 15006u32,
     BrokerConnectionTransportDataType = 15007u32,
     BrokerTransportQualityOfService = 15008u32,
+    TestScalarStructure = 15015u32,
+    TestArrayStructure = 15016u32,
+    TestStructure = 15017u32,
     AccessLevelType = 15031u32,
     EventNotifierType = 15033u32,
+    TestAbstractStructure = 15399u32,
+    TestConcreteStructure = 15400u32,
     AccessLevelExType = 15406u32,
+    TestEnumeration = 15432u32,
     WriterGroupDataType = 15480u32,
     StructureDescription = 15487u32,
     EnumDescription = 15488u32,
@@ -390,6 +396,15 @@ pub enum DataTypeId {
     GenericAttributeValue = 17606u32,
     GenericAttributes = 17607u32,
     DecimalDataType = 17861u32,
+    ActionTargetDataType = 18593u32,
+    PublishedActionDataType = 18594u32,
+    ActionState = 18595u32,
+    ActionMethodDataType = 18597u32,
+    SortOrderType = 18646u32,
+    SortRuleElement = 18648u32,
+    ReadEventDetailsSorted = 18649u32,
+    PublishedActionMethodDataType = 18793u32,
+    DtlsPubSubConnectionDataType = 18794u32,
     RationalNumber = 18806u32,
     Vector = 18807u32,
     ThreeDVector = 18808u32,
@@ -399,6 +414,28 @@ pub enum DataTypeId {
     ThreeDOrientation = 18812u32,
     Frame = 18813u32,
     ThreeDFrame = 18814u32,
+    ChassisIdSubtype = 18947u32,
+    PortIdSubtype = 18949u32,
+    ManAddrIfSubtype = 18951u32,
+    LldpManagementAddressTxPortType = 18953u32,
+    LldpManagementAddressType = 18954u32,
+    LldpTlvType = 18955u32,
+    LldpSystemCapabilitiesMap = 18956u32,
+    JsonNetworkMessage = 19311u32,
+    JsonDataSetMessage = 19312u32,
+    JsonDataSetMetaDataMessage = 19313u32,
+    JsonApplicationDescriptionMessage = 19314u32,
+    JsonServerEndpointsMessage = 19315u32,
+    JsonStatusMessage = 19316u32,
+    JsonPubSubConnectionMessage = 19317u32,
+    JsonActionMetaDataMessage = 19318u32,
+    JsonActionResponderMessage = 19319u32,
+    JsonActionNetworkMessage = 19320u32,
+    JsonActionRequestMessage = 19321u32,
+    JsonActionResponseMessage = 19322u32,
+    TestUnion = 19431u32,
+    TestOptionalFields = 19432u32,
+    TestOptionSet = 19433u32,
     DiagnosticsLevel = 19723u32,
     PubSubDiagnosticsCounterClassification = 19730u32,
     DataSetOrderingType = 20408u32,
@@ -798,9 +835,15 @@ impl TryFrom<u32> for DataTypeId {
             15006u32 => Self::UABinaryFileDataType,
             15007u32 => Self::BrokerConnectionTransportDataType,
             15008u32 => Self::BrokerTransportQualityOfService,
+            15015u32 => Self::TestScalarStructure,
+            15016u32 => Self::TestArrayStructure,
+            15017u32 => Self::TestStructure,
             15031u32 => Self::AccessLevelType,
             15033u32 => Self::EventNotifierType,
+            15399u32 => Self::TestAbstractStructure,
+            15400u32 => Self::TestConcreteStructure,
             15406u32 => Self::AccessLevelExType,
+            15432u32 => Self::TestEnumeration,
             15480u32 => Self::WriterGroupDataType,
             15487u32 => Self::StructureDescription,
             15488u32 => Self::EnumDescription,
@@ -860,6 +903,15 @@ impl TryFrom<u32> for DataTypeId {
             17606u32 => Self::GenericAttributeValue,
             17607u32 => Self::GenericAttributes,
             17861u32 => Self::DecimalDataType,
+            18593u32 => Self::ActionTargetDataType,
+            18594u32 => Self::PublishedActionDataType,
+            18595u32 => Self::ActionState,
+            18597u32 => Self::ActionMethodDataType,
+            18646u32 => Self::SortOrderType,
+            18648u32 => Self::SortRuleElement,
+            18649u32 => Self::ReadEventDetailsSorted,
+            18793u32 => Self::PublishedActionMethodDataType,
+            18794u32 => Self::DtlsPubSubConnectionDataType,
             18806u32 => Self::RationalNumber,
             18807u32 => Self::Vector,
             18808u32 => Self::ThreeDVector,
@@ -869,6 +921,28 @@ impl TryFrom<u32> for DataTypeId {
             18812u32 => Self::ThreeDOrientation,
             18813u32 => Self::Frame,
             18814u32 => Self::ThreeDFrame,
+            18947u32 => Self::ChassisIdSubtype,
+            18949u32 => Self::PortIdSubtype,
+            18951u32 => Self::ManAddrIfSubtype,
+            18953u32 => Self::LldpManagementAddressTxPortType,
+            18954u32 => Self::LldpManagementAddressType,
+            18955u32 => Self::LldpTlvType,
+            18956u32 => Self::LldpSystemCapabilitiesMap,
+            19311u32 => Self::JsonNetworkMessage,
+            19312u32 => Self::JsonDataSetMessage,
+            19313u32 => Self::JsonDataSetMetaDataMessage,
+            19314u32 => Self::JsonApplicationDescriptionMessage,
+            19315u32 => Self::JsonServerEndpointsMessage,
+            19316u32 => Self::JsonStatusMessage,
+            19317u32 => Self::JsonPubSubConnectionMessage,
+            19318u32 => Self::JsonActionMetaDataMessage,
+            19319u32 => Self::JsonActionResponderMessage,
+            19320u32 => Self::JsonActionNetworkMessage,
+            19321u32 => Self::JsonActionRequestMessage,
+            19322u32 => Self::JsonActionResponseMessage,
+            19431u32 => Self::TestUnion,
+            19432u32 => Self::TestOptionalFields,
+            19433u32 => Self::TestOptionSet,
             19723u32 => Self::DiagnosticsLevel,
             19730u32 => Self::PubSubDiagnosticsCounterClassification,
             20408u32 => Self::DataSetOrderingType,
@@ -1349,18 +1423,164 @@ pub enum MethodId {
     PublishSubscribeType_PublishedDataSets_AddDataSetFolder = 16651u32,
     PublishSubscribeType_PublishedDataSets_RemoveDataSetFolder = 16680u32,
     AddConnectionMethodType = 16691u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_Open =
+        16717u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_Close =
+        16724u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_Read =
+        16726u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_Write =
+        16729u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_GetPosition =
+        16732u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_SetPosition =
+        16735u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_OpenWithMasks =
+        16741u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_CloseAndUpdate =
+        16744u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_AddCertificate =
+        16747u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_RemoveCertificate =
+        16749u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_GetRejectedList =
+        16752u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Disable =
+        16790u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Enable =
+        16791u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AddComment =
+        16792u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Acknowledge =
+        16812u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Confirm =
+        16814u32,
     DataSetFolderType_DataSetFolderName_Placeholder_AddPublishedDataItemsTemplate = 16842u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_TimedShelve =
+        16864u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_TimedShelve2 =
+        16866u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_Unshelve =
+        16868u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_Unshelve2 =
+        16869u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_OneShotShelve =
+        16871u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_OneShotShelve2 =
+        16872u32,
     DataSetFolderType_DataSetFolderName_Placeholder_AddPublishedEventsTemplate = 16881u32,
     DataSetFolderType_DataSetFolderName_Placeholder_AddDataSetFolder = 16884u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Silence =
+        16911u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Suppress =
+        16912u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Suppress2 =
+        16913u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Unsuppress =
+        16915u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Unsuppress2 =
+        16916u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_RemoveFromService =
+        16918u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_RemoveFromService2 =
+        16919u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_PlaceInService =
+        16921u32,
     DataSetFolderType_DataSetFolderName_Placeholder_RemoveDataSetFolder = 16923u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_PlaceInService2 =
+        16926u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Reset =
+        16928u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Reset2 =
+        16929u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_GetGroupMemberships =
+        16931u32,
     DataSetFolderType_AddPublishedDataItemsTemplate = 16935u32,
     DataSetFolderType_AddPublishedEventsTemplate = 16960u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Disable =
+        16977u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Enable =
+        16978u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AddComment =
+        16979u32,
     DataSetFolderType_AddDataSetFolder = 16994u32,
     DataSetFolderType_RemoveDataSetFolder = 16997u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Acknowledge =
+        17003u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Confirm =
+        17005u32,
     AddPublishedDataItemsTemplateMethodType = 17030u32,
     AddPublishedEventsTemplateMethodType = 17033u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_TimedShelve =
+        17056u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_TimedShelve2 =
+        17058u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_Unshelve =
+        17060u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_Unshelve2 =
+        17061u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_OneShotShelve =
+        17063u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_OneShotShelve2 =
+        17064u32,
     AddDataSetFolderMethodType = 17067u32,
     RemoveDataSetFolderMethodType = 17079u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Silence =
+        17103u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Suppress =
+        17104u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Suppress2 =
+        17105u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Unsuppress =
+        17107u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Unsuppress2 =
+        17108u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_RemoveFromService =
+        17110u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_RemoveFromService2 =
+        17111u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_PlaceInService =
+        17113u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_PlaceInService2 =
+        17114u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Reset =
+        17116u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Reset2 =
+        17117u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_GetGroupMemberships =
+        17119u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_Open =
+        17134u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_Close =
+        17137u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_Read =
+        17139u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_Write =
+        17142u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_GetPosition =
+        17144u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_SetPosition =
+        17147u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_OpenWithMasks =
+        17153u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_CloseAndUpdate =
+        17156u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_AddCertificate =
+        17159u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_RemoveCertificate =
+        17161u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_GetRejectedList =
+        17164u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Disable =
+        17199u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Enable =
+        17200u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AddComment =
+        17205u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Acknowledge =
+        17237u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Confirm =
+        17239u32,
     PubSubConnectionType_WriterGroupName_Placeholder_AddDataSetWriter = 17293u32,
     PublishSubscribeType_SetSecurityKeys = 17296u32,
     SetSecurityKeysMethodType = 17298u32,
@@ -1370,6 +1590,18 @@ pub enum MethodId {
     PubSubConnectionType_ReaderGroupName_Placeholder_Status_Enable = 17331u32,
     PubSubConnectionType_ReaderGroupName_Placeholder_Status_Disable = 17332u32,
     PubSubConnectionType_ReaderGroupName_Placeholder_RemoveDataSetReader = 17333u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_TimedShelve =
+        17340u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_TimedShelve2 =
+        17342u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_Unshelve =
+        17344u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_Unshelve2 =
+        17345u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_OneShotShelve =
+        17347u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_OneShotShelve2 =
+        17348u32,
     PubSubConnectionType_ReaderGroupName_Placeholder_AddDataSetReader = 17355u32,
     PublishSubscribe_SetSecurityKeys = 17364u32,
     PublishSubscribe_AddConnection = 17366u32,
@@ -1398,7 +1630,41 @@ pub enum MethodId {
     GetEncryptingKeyMethodType = 17531u32,
     KeyCredentialConfigurationType_GetEncryptingKey = 17534u32,
     PubSubConnectionTypeAddWriterGroupMethodType = 17561u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Silence =
+        17572u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Suppress =
+        17573u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Suppress2 =
+        17574u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Unsuppress =
+        17586u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Unsuppress2 =
+        17587u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_RemoveFromService =
+        17596u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_RemoveFromService2 =
+        17599u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_PlaceInService =
+        17616u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_PlaceInService2 =
+        17617u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Reset =
+        17619u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Reset2 =
+        17620u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_GetGroupMemberships =
+        17622u32,
     PubSubConnectionAddReaderGroupGroupMethodType = 17630u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Disable =
+        17678u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Enable =
+        17679u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AddComment =
+        17680u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Acknowledge =
+        17700u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Confirm =
+        17702u32,
     FileDirectoryType_FileDirectoryName_Placeholder_DeleteFileSystemObject = 17718u32,
     WriterGroupType_DataSetWriterName_Placeholder_Status_Enable = 17751u32,
     WriterGroupType_DataSetWriterName_Placeholder_Status_Disable = 17752u32,
@@ -1410,17 +1676,180 @@ pub enum MethodId {
     AlarmGroupType_AlarmConditionInstance_Placeholder_Unsuppress = 17875u32,
     AlarmGroupType_AlarmConditionInstance_Placeholder_RemoveFromService = 17876u32,
     AlarmGroupType_AlarmConditionInstance_Placeholder_PlaceInService = 17877u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_TimedShelve =
+        17917u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_TimedShelve2 =
+        17919u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_Unshelve =
+        17922u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_Unshelve2 =
+        17923u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_OneShotShelve =
+        17925u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_OneShotShelve2 =
+        17926u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Silence =
+        17965u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Suppress =
+        17966u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Suppress2 =
+        17967u32,
     WriterGroupType_AddDataSetWriter = 17969u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Unsuppress =
+        17970u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Unsuppress2 =
+        17971u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_RemoveFromService =
+        17973u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_RemoveFromService2 =
+        17974u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_PlaceInService =
+        17977u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_PlaceInService2 =
+        17978u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Reset =
+        17980u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Reset2 =
+        17981u32,
     WriterGroupType_RemoveDataSetWriter = 17992u32,
     PubSubGroupTypeAddWriterMethodType = 17994u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_GetGroupMemberships =
+        18000u32,
     KeyCredentialConfigurationType_UpdateCredential = 18006u32,
     KeyCredentialConfigurationType_DeleteCredential = 18008u32,
     KeyCredentialUpdateMethodType = 18009u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_Open =
+        18024u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_Close =
+        18027u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_Read =
+        18031u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_Write =
+        18034u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_GetPosition =
+        18036u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_SetPosition =
+        18039u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_OpenWithMasks =
+        18045u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_CloseAndUpdate =
+        18049u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_AddCertificate =
+        18052u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_RemoveCertificate =
+        18054u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_GetRejectedList =
+        18057u32,
     ReaderGroupType_DataSetReaderName_Placeholder_Status_Enable = 18090u32,
     ReaderGroupType_DataSetReaderName_Placeholder_Status_Disable = 18091u32,
     ReaderGroupType_DataSetReaderName_Placeholder_Diagnostics_Reset = 18104u32,
     AlarmConditionType_Reset = 18199u32,
     AlarmGroupType_AlarmConditionInstance_Placeholder_Reset = 18212u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Disable =
+        18225u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Enable =
+        18226u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AddComment =
+        18227u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Acknowledge =
+        18247u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Confirm =
+        18249u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_TimedShelve =
+        18294u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_TimedShelve2 =
+        18296u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_Unshelve =
+        18298u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_Unshelve2 =
+        18299u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_OneShotShelve =
+        18301u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_OneShotShelve2 =
+        18302u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Silence =
+        18335u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Suppress =
+        18336u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Suppress2 =
+        18337u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Unsuppress =
+        18339u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Unsuppress2 =
+        18340u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_RemoveFromService =
+        18342u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_RemoveFromService2 =
+        18343u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_PlaceInService =
+        18345u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_PlaceInService2 =
+        18346u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Reset =
+        18349u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Reset2 =
+        18350u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_GetGroupMemberships =
+        18352u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Disable =
+        18392u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Enable =
+        18393u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AddComment =
+        18394u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Acknowledge =
+        18414u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Confirm =
+        18416u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_TimedShelve =
+        18461u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_TimedShelve2 =
+        18463u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_Unshelve =
+        18465u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_Unshelve2 =
+        18466u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_OneShotShelve =
+        18468u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_OneShotShelve2 =
+        18469u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Silence =
+        18503u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Suppress =
+        18504u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Suppress2 =
+        18505u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Unsuppress =
+        18507u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Unsuppress2 =
+        18508u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_RemoveFromService =
+        18510u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_RemoveFromService2 =
+        18511u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_PlaceInService =
+        18513u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_PlaceInService2 =
+        18514u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Reset =
+        18516u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Reset2 =
+        18517u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_GetGroupMemberships =
+        18519u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_UpdateCertificate = 18533u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_GetCertificates = 18536u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_ApplyChanges = 18539u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CancelChanges = 18540u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CreateSigningRequest = 18541u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_GetRejectedList = 18544u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_ResetToServerDefaults = 18546u32,
+    WellKnownRole_TrustedApplication_AddIdentity = 18632u32,
+    WellKnownRole_TrustedApplication_RemoveIdentity = 18634u32,
+    WellKnownRole_TrustedApplication_AddApplication = 18636u32,
+    WellKnownRole_TrustedApplication_RemoveApplication = 18638u32,
+    WellKnownRole_TrustedApplication_AddEndpoint = 18640u32,
+    WellKnownRole_TrustedApplication_RemoveEndpoint = 18642u32,
     AlarmMetricsType_Reset = 18666u32,
     PublishSubscribeType_ConnectionName_Placeholder_Diagnostics_Reset = 18679u32,
     PublishSubscribeType_Diagnostics_Reset = 18727u32,
@@ -3515,8 +3944,74 @@ impl TryFrom<u32> for MethodId {
                     Self::PublishSubscribeType_PublishedDataSets_RemoveDataSetFolder
                 }
                 16691u32 => Self::AddConnectionMethodType,
+                16717u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_Open
+                }
+                16724u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_Close
+                }
+                16726u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_Read
+                }
+                16729u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_Write
+                }
+                16732u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_GetPosition
+                }
+                16735u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_SetPosition
+                }
+                16741u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_OpenWithMasks
+                }
+                16744u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_CloseAndUpdate
+                }
+                16747u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_AddCertificate
+                }
+                16749u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_RemoveCertificate
+                }
+                16752u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_GetRejectedList
+                }
+                16790u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Disable
+                }
+                16791u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Enable
+                }
+                16792u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AddComment
+                }
+                16812u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Acknowledge
+                }
+                16814u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Confirm
+                }
                 16842u32 => {
                     Self::DataSetFolderType_DataSetFolderName_Placeholder_AddPublishedDataItemsTemplate
+                }
+                16864u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_TimedShelve
+                }
+                16866u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_TimedShelve2
+                }
+                16868u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_Unshelve
+                }
+                16869u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_Unshelve2
+                }
+                16871u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_OneShotShelve
+                }
+                16872u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_OneShotShelve2
                 }
                 16881u32 => {
                     Self::DataSetFolderType_DataSetFolderName_Placeholder_AddPublishedEventsTemplate
@@ -3524,17 +4019,170 @@ impl TryFrom<u32> for MethodId {
                 16884u32 => {
                     Self::DataSetFolderType_DataSetFolderName_Placeholder_AddDataSetFolder
                 }
+                16911u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Silence
+                }
+                16912u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Suppress
+                }
+                16913u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Suppress2
+                }
+                16915u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Unsuppress
+                }
+                16916u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Unsuppress2
+                }
+                16918u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_RemoveFromService
+                }
+                16919u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_RemoveFromService2
+                }
+                16921u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_PlaceInService
+                }
                 16923u32 => {
                     Self::DataSetFolderType_DataSetFolderName_Placeholder_RemoveDataSetFolder
                 }
+                16926u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_PlaceInService2
+                }
+                16928u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Reset
+                }
+                16929u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Reset2
+                }
+                16931u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_GetGroupMemberships
+                }
                 16935u32 => Self::DataSetFolderType_AddPublishedDataItemsTemplate,
                 16960u32 => Self::DataSetFolderType_AddPublishedEventsTemplate,
+                16977u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Disable
+                }
+                16978u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Enable
+                }
+                16979u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AddComment
+                }
                 16994u32 => Self::DataSetFolderType_AddDataSetFolder,
                 16997u32 => Self::DataSetFolderType_RemoveDataSetFolder,
+                17003u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Acknowledge
+                }
+                17005u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Confirm
+                }
                 17030u32 => Self::AddPublishedDataItemsTemplateMethodType,
                 17033u32 => Self::AddPublishedEventsTemplateMethodType,
+                17056u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_TimedShelve
+                }
+                17058u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_TimedShelve2
+                }
+                17060u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_Unshelve
+                }
+                17061u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_Unshelve2
+                }
+                17063u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_OneShotShelve
+                }
+                17064u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_OneShotShelve2
+                }
                 17067u32 => Self::AddDataSetFolderMethodType,
                 17079u32 => Self::RemoveDataSetFolderMethodType,
+                17103u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Silence
+                }
+                17104u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Suppress
+                }
+                17105u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Suppress2
+                }
+                17107u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Unsuppress
+                }
+                17108u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Unsuppress2
+                }
+                17110u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_RemoveFromService
+                }
+                17111u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_RemoveFromService2
+                }
+                17113u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_PlaceInService
+                }
+                17114u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_PlaceInService2
+                }
+                17116u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Reset
+                }
+                17117u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Reset2
+                }
+                17119u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_GetGroupMemberships
+                }
+                17134u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_Open
+                }
+                17137u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_Close
+                }
+                17139u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_Read
+                }
+                17142u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_Write
+                }
+                17144u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_GetPosition
+                }
+                17147u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_SetPosition
+                }
+                17153u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_OpenWithMasks
+                }
+                17156u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_CloseAndUpdate
+                }
+                17159u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_AddCertificate
+                }
+                17161u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_RemoveCertificate
+                }
+                17164u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_GetRejectedList
+                }
+                17199u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Disable
+                }
+                17200u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Enable
+                }
+                17205u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AddComment
+                }
+                17237u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Acknowledge
+                }
+                17239u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Confirm
+                }
                 17293u32 => {
                     Self::PubSubConnectionType_WriterGroupName_Placeholder_AddDataSetWriter
                 }
@@ -3557,6 +4205,24 @@ impl TryFrom<u32> for MethodId {
                 }
                 17333u32 => {
                     Self::PubSubConnectionType_ReaderGroupName_Placeholder_RemoveDataSetReader
+                }
+                17340u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_TimedShelve
+                }
+                17342u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_TimedShelve2
+                }
+                17344u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_Unshelve
+                }
+                17345u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_Unshelve2
+                }
+                17347u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_OneShotShelve
+                }
+                17348u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_OneShotShelve2
                 }
                 17355u32 => {
                     Self::PubSubConnectionType_ReaderGroupName_Placeholder_AddDataSetReader
@@ -3602,7 +4268,58 @@ impl TryFrom<u32> for MethodId {
                 17531u32 => Self::GetEncryptingKeyMethodType,
                 17534u32 => Self::KeyCredentialConfigurationType_GetEncryptingKey,
                 17561u32 => Self::PubSubConnectionTypeAddWriterGroupMethodType,
+                17572u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Silence
+                }
+                17573u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Suppress
+                }
+                17574u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Suppress2
+                }
+                17586u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Unsuppress
+                }
+                17587u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Unsuppress2
+                }
+                17596u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_RemoveFromService
+                }
+                17599u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_RemoveFromService2
+                }
+                17616u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_PlaceInService
+                }
+                17617u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_PlaceInService2
+                }
+                17619u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Reset
+                }
+                17620u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Reset2
+                }
+                17622u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_GetGroupMemberships
+                }
                 17630u32 => Self::PubSubConnectionAddReaderGroupGroupMethodType,
+                17678u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Disable
+                }
+                17679u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Enable
+                }
+                17680u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AddComment
+                }
+                17700u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Acknowledge
+                }
+                17702u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Confirm
+                }
                 17718u32 => {
                     Self::FileDirectoryType_FileDirectoryName_Placeholder_DeleteFileSystemObject
                 }
@@ -3628,12 +4345,99 @@ impl TryFrom<u32> for MethodId {
                 17877u32 => {
                     Self::AlarmGroupType_AlarmConditionInstance_Placeholder_PlaceInService
                 }
+                17917u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_TimedShelve
+                }
+                17919u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_TimedShelve2
+                }
+                17922u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_Unshelve
+                }
+                17923u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_Unshelve2
+                }
+                17925u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_OneShotShelve
+                }
+                17926u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_OneShotShelve2
+                }
+                17965u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Silence
+                }
+                17966u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Suppress
+                }
+                17967u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Suppress2
+                }
                 17969u32 => Self::WriterGroupType_AddDataSetWriter,
+                17970u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Unsuppress
+                }
+                17971u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Unsuppress2
+                }
+                17973u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_RemoveFromService
+                }
+                17974u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_RemoveFromService2
+                }
+                17977u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_PlaceInService
+                }
+                17978u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_PlaceInService2
+                }
+                17980u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Reset
+                }
+                17981u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Reset2
+                }
                 17992u32 => Self::WriterGroupType_RemoveDataSetWriter,
                 17994u32 => Self::PubSubGroupTypeAddWriterMethodType,
+                18000u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_GetGroupMemberships
+                }
                 18006u32 => Self::KeyCredentialConfigurationType_UpdateCredential,
                 18008u32 => Self::KeyCredentialConfigurationType_DeleteCredential,
                 18009u32 => Self::KeyCredentialUpdateMethodType,
+                18024u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_Open
+                }
+                18027u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_Close
+                }
+                18031u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_Read
+                }
+                18034u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_Write
+                }
+                18036u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_GetPosition
+                }
+                18039u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_SetPosition
+                }
+                18045u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_OpenWithMasks
+                }
+                18049u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_CloseAndUpdate
+                }
+                18052u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_AddCertificate
+                }
+                18054u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_RemoveCertificate
+                }
+                18057u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_GetRejectedList
+                }
                 18090u32 => {
                     Self::ReaderGroupType_DataSetReaderName_Placeholder_Status_Enable
                 }
@@ -3645,6 +4449,171 @@ impl TryFrom<u32> for MethodId {
                 }
                 18199u32 => Self::AlarmConditionType_Reset,
                 18212u32 => Self::AlarmGroupType_AlarmConditionInstance_Placeholder_Reset,
+                18225u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Disable
+                }
+                18226u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Enable
+                }
+                18227u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AddComment
+                }
+                18247u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Acknowledge
+                }
+                18249u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Confirm
+                }
+                18294u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_TimedShelve
+                }
+                18296u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_TimedShelve2
+                }
+                18298u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_Unshelve
+                }
+                18299u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_Unshelve2
+                }
+                18301u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_OneShotShelve
+                }
+                18302u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_OneShotShelve2
+                }
+                18335u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Silence
+                }
+                18336u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Suppress
+                }
+                18337u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Suppress2
+                }
+                18339u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Unsuppress
+                }
+                18340u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Unsuppress2
+                }
+                18342u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_RemoveFromService
+                }
+                18343u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_RemoveFromService2
+                }
+                18345u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_PlaceInService
+                }
+                18346u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_PlaceInService2
+                }
+                18349u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Reset
+                }
+                18350u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Reset2
+                }
+                18352u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_GetGroupMemberships
+                }
+                18392u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Disable
+                }
+                18393u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Enable
+                }
+                18394u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AddComment
+                }
+                18414u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Acknowledge
+                }
+                18416u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Confirm
+                }
+                18461u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_TimedShelve
+                }
+                18463u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_TimedShelve2
+                }
+                18465u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_Unshelve
+                }
+                18466u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_Unshelve2
+                }
+                18468u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_OneShotShelve
+                }
+                18469u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_OneShotShelve2
+                }
+                18503u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Silence
+                }
+                18504u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Suppress
+                }
+                18505u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Suppress2
+                }
+                18507u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Unsuppress
+                }
+                18508u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Unsuppress2
+                }
+                18510u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_RemoveFromService
+                }
+                18511u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_RemoveFromService2
+                }
+                18513u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_PlaceInService
+                }
+                18514u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_PlaceInService2
+                }
+                18516u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Reset
+                }
+                18517u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Reset2
+                }
+                18519u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_GetGroupMemberships
+                }
+                18533u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_UpdateCertificate
+                }
+                18536u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_GetCertificates
+                }
+                18539u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_ApplyChanges
+                }
+                18540u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CancelChanges
+                }
+                18541u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CreateSigningRequest
+                }
+                18544u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_GetRejectedList
+                }
+                18546u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_ResetToServerDefaults
+                }
+                18632u32 => Self::WellKnownRole_TrustedApplication_AddIdentity,
+                18634u32 => Self::WellKnownRole_TrustedApplication_RemoveIdentity,
+                18636u32 => Self::WellKnownRole_TrustedApplication_AddApplication,
+                18638u32 => Self::WellKnownRole_TrustedApplication_RemoveApplication,
+                18640u32 => Self::WellKnownRole_TrustedApplication_AddEndpoint,
+                18642u32 => Self::WellKnownRole_TrustedApplication_RemoveEndpoint,
                 18666u32 => Self::AlarmMetricsType_Reset,
                 18679u32 => {
                     Self::PublishSubscribeType_ConnectionName_Placeholder_Diagnostics_Reset
@@ -6580,6 +7549,9 @@ pub enum ObjectId {
     KeyValuePair_Encoding_DefaultBinary = 14846u32,
     ConfigurationVersionDataType_Encoding_DefaultBinary = 14847u32,
     FieldTargetDataType_Encoding_DefaultBinary = 14848u32,
+    TestScalarStructure_Encoding_DefaultBinary = 15024u32,
+    TestArrayStructure_Encoding_DefaultBinary = 15025u32,
+    TestStructure_Encoding_DefaultBinary = 15026u32,
     KeyValuePair_Encoding_DefaultJson = 15041u32,
     IdentityMappingRuleType_Encoding_DefaultJson = 15042u32,
     TrustListDataType_Encoding_DefaultJson = 15044u32,
@@ -6718,6 +7690,9 @@ pub enum ObjectId {
     PublishedDataSetType_DataSetWriterName_Placeholder_Status = 15223u32,
     PublishedDataSetType_DataSetWriterName_Placeholder_TransportSettings = 15227u32,
     ContentFilterResult_Encoding_DefaultJson = 15228u32,
+    TestScalarStructure_Encoding_DefaultXml = 15232u32,
+    TestArrayStructure_Encoding_DefaultXml = 15233u32,
+    TestStructure_Encoding_DefaultXml = 15234u32,
     ParsingResult_Encoding_DefaultJson = 15236u32,
     QueryFirstRequest_Encoding_DefaultJson = 15244u32,
     QueryFirstResponse_Encoding_DefaultJson = 15252u32,
@@ -6831,8 +7806,17 @@ pub enum ObjectId {
     XVType_Encoding_DefaultJson = 15380u32,
     ProgramDiagnosticDataType_Encoding_DefaultJson = 15381u32,
     Annotation_Encoding_DefaultJson = 15382u32,
+    TestScalarStructure_Encoding_DefaultJson = 15396u32,
+    TestArrayStructure_Encoding_DefaultJson = 15397u32,
+    TestStructure_Encoding_DefaultJson = 15398u32,
+    TestAbstractStructure_Encoding_DefaultBinary = 15401u32,
+    TestConcreteStructure_Encoding_DefaultBinary = 15402u32,
+    TestAbstractStructure_Encoding_DefaultXml = 15403u32,
+    TestConcreteStructure_Encoding_DefaultXml = 15404u32,
+    TestAbstractStructure_Encoding_DefaultJson = 15405u32,
     SimpleTypeDescription_Encoding_DefaultBinary = 15421u32,
     UABinaryFileDataType_Encoding_DefaultBinary = 15422u32,
+    TestConcreteStructure_Encoding_DefaultJson = 15431u32,
     PublishSubscribe_SecurityGroups = 15443u32,
     SecurityGroupFolderType_SecurityGroupFolderName_Placeholder = 15453u32,
     SecurityGroupFolderType_SecurityGroupName_Placeholder = 15459u32,
@@ -6983,8 +7967,35 @@ pub enum ObjectId {
     BrokerDataSetWriterTransportDataType_Encoding_DefaultJson = 16525u32,
     BrokerDataSetReaderTransportDataType_Encoding_DefaultJson = 16526u32,
     AlarmGroupType_AlarmConditionInstance_Placeholder_FirstInGroup = 16530u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder = 16663u32,
+    ManagedApplications = 16706u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups = 16707u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup =
+        16708u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList =
+        16709u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired =
+        16754u32,
     PublishedDataSetType_DataSetWriterName_Placeholder_MessageSettings = 16758u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState =
+        16847u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_FirstInGroup =
+        16898u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate =
+        16939u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState =
+        17040u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_FirstInGroup =
+        17091u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup =
+        17125u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList =
+        17126u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired =
+        17166u32,
     PubSubConnectionType_TransportSettings = 17203u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState =
+        17271u32,
     PubSubConnectionType_WriterGroupName_Placeholder_TransportSettings = 17290u32,
     PubSubConnectionType_WriterGroupName_Placeholder_MessageSettings = 17291u32,
     PubSubConnectionType_ReaderGroupName_Placeholder_TransportSettings = 17307u32,
@@ -7001,6 +8012,8 @@ pub enum ObjectId {
     DatagramConnectionTransportDataType_Encoding_DefaultBinary = 17468u32,
     DatagramConnectionTransportDataType_Encoding_DefaultXml = 17472u32,
     DatagramConnectionTransportDataType_Encoding_DefaultJson = 17476u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_FirstInGroup =
+        17499u32,
     KeyCredentialConfigurationFolderType_ServiceName_Placeholder = 17511u32,
     AdditionalParametersType_Encoding_DefaultBinary = 17537u32,
     AdditionalParametersType_Encoding_DefaultXml = 17541u32,
@@ -7016,6 +8029,8 @@ pub enum ObjectId {
     GenericAttributes_Encoding_DefaultXml = 17609u32,
     GenericAttributeValue_Encoding_DefaultBinary = 17610u32,
     GenericAttributes_Encoding_DefaultBinary = 17611u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate =
+        17629u32,
     InterfaceTypes = 17708u32,
     AuthorizationServices = 17732u32,
     WriterGroupType_TransportSettings = 17741u32,
@@ -7032,6 +8047,16 @@ pub enum ObjectId {
     WriterGroupType_Diagnostics_LiveValues = 17858u32,
     DecimalDataType_Encoding_DefaultXml = 17862u32,
     DecimalDataType_Encoding_DefaultBinary = 17863u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState =
+        17895u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_FirstInGroup =
+        17951u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup =
+        18015u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList =
+        18016u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired =
+        18059u32,
     ReaderGroupType_DataSetReaderName_Placeholder = 18076u32,
     ReaderGroupType_DataSetReaderName_Placeholder_TransportSettings = 18086u32,
     ReaderGroupType_DataSetReaderName_Placeholder_MessageSettings = 18087u32,
@@ -7040,12 +8065,41 @@ pub enum ObjectId {
     ReaderGroupType_DataSetReaderName_Placeholder_Diagnostics_Counters = 18106u32,
     ReaderGroupType_DataSetReaderName_Placeholder_Diagnostics_LiveValues = 18137u32,
     KeyCredentialConfiguration = 18155u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState =
+        18279u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_FirstInGroup =
+        18323u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate =
+        18359u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState =
+        18446u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_FirstInGroup =
+        18490u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_TransactionDiagnostics =
+        18547u32,
+    ActionTargetDataType_Encoding_DefaultBinary = 18598u32,
+    PublishedActionDataType_Encoding_DefaultBinary = 18599u32,
+    ActionMethodDataType_Encoding_DefaultBinary = 18600u32,
+    ActionTargetDataType_Encoding_DefaultXml = 18610u32,
+    PublishedActionDataType_Encoding_DefaultXml = 18611u32,
+    ActionMethodDataType_Encoding_DefaultXml = 18612u32,
+    ActionTargetDataType_Encoding_DefaultJson = 18622u32,
+    PublishedActionDataType_Encoding_DefaultJson = 18623u32,
+    ActionMethodDataType_Encoding_DefaultJson = 18624u32,
+    WellKnownRole_TrustedApplication = 18625u32,
+    SortRuleElement_Encoding_DefaultBinary = 18650u32,
+    ReadEventDetailsSorted_Encoding_DefaultBinary = 18651u32,
+    SortRuleElement_Encoding_DefaultXml = 18652u32,
+    ReadEventDetailsSorted_Encoding_DefaultXml = 18653u32,
+    SortRuleElement_Encoding_DefaultJson = 18654u32,
+    ReadEventDetailsSorted_Encoding_DefaultJson = 18655u32,
     PublishSubscribeType_ConnectionName_Placeholder_Diagnostics = 18667u32,
     PublishSubscribeType_ConnectionName_Placeholder_Diagnostics_Counters = 18681u32,
     PublishSubscribeType_ConnectionName_Placeholder_Diagnostics_LiveValues = 18712u32,
     PublishSubscribeType_Diagnostics = 18715u32,
     PublishSubscribeType_Diagnostics_Counters = 18729u32,
     PublishSubscribeType_Diagnostics_LiveValues = 18760u32,
+    PublishedActionMethodDataType_Encoding_DefaultBinary = 18795u32,
     RationalNumber_Encoding_DefaultBinary = 18815u32,
     Vector_Encoding_DefaultBinary = 18816u32,
     ThreeDVector_Encoding_DefaultBinary = 18817u32,
@@ -7067,6 +8121,22 @@ pub enum ObjectId {
     PublishedDataSetType_DataSetWriterName_Placeholder_Diagnostics = 18871u32,
     PublishedDataSetType_DataSetWriterName_Placeholder_Diagnostics_Counters = 18885u32,
     PublishedDataSetType_DataSetWriterName_Placeholder_Diagnostics_LiveValues = 18916u32,
+    DtlsPubSubConnectionDataType_Encoding_DefaultBinary = 18930u32,
+    PublishedActionMethodDataType_Encoding_DefaultXml = 18937u32,
+    DtlsPubSubConnectionDataType_Encoding_DefaultXml = 18938u32,
+    PublishedActionMethodDataType_Encoding_DefaultJson = 18945u32,
+    DtlsPubSubConnectionDataType_Encoding_DefaultJson = 18946u32,
+    LLDP = 18958u32,
+    LLDP_RemoteStatistics = 18959u32,
+    LLDP_LocalSystemData = 18965u32,
+    LLDP_Ports = 18972u32,
+    LldpInformationType_RemoteStatistics = 18974u32,
+    LldpInformationType_LocalSystemData = 18980u32,
+    LldpInformationType_Ports = 18987u32,
+    LldpInformationType_Ports_LldpPortInformation_Placeholder = 18988u32,
+    LldpInformationType_Ports_LldpPortInformation_Placeholder_RemoteSystemsData = 18995u32,
+    LldpPortInformationType_RemoteSystemsData = 19016u32,
+    LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder = 19017u32,
     RationalNumber_Encoding_DefaultJson = 19064u32,
     Vector_Encoding_DefaultJson = 19065u32,
     ThreeDVector_Encoding_DefaultJson = 19066u32,
@@ -7076,6 +8146,12 @@ pub enum ObjectId {
     ThreeDOrientation_Encoding_DefaultJson = 19070u32,
     Frame_Encoding_DefaultJson = 19071u32,
     ThreeDFrame_Encoding_DefaultJson = 19072u32,
+    LldpManagementAddressTxPortType_Encoding_DefaultBinary = 19079u32,
+    LldpManagementAddressType_Encoding_DefaultBinary = 19080u32,
+    LldpTlvType_Encoding_DefaultBinary = 19081u32,
+    LldpManagementAddressTxPortType_Encoding_DefaultXml = 19100u32,
+    LldpManagementAddressType_Encoding_DefaultXml = 19101u32,
+    LldpTlvType_Encoding_DefaultXml = 19102u32,
     PubSubConnectionType_WriterGroupName_Placeholder_Diagnostics = 19107u32,
     PubSubConnectionType_WriterGroupName_Placeholder_Diagnostics_Counters = 19121u32,
     PubSubConnectionType_WriterGroupName_Placeholder_Diagnostics_LiveValues = 19152u32,
@@ -7085,6 +8161,15 @@ pub enum ObjectId {
     PubSubConnectionType_Diagnostics = 19241u32,
     PubSubConnectionType_Diagnostics_Counters = 19255u32,
     PubSubConnectionType_Diagnostics_LiveValues = 19286u32,
+    LldpManagementAddressTxPortType_Encoding_DefaultJson = 19299u32,
+    LldpManagementAddressType_Encoding_DefaultJson = 19300u32,
+    LldpTlvType_Encoding_DefaultJson = 19301u32,
+    TestUnion_Encoding_DefaultBinary = 19435u32,
+    TestOptionalFields_Encoding_DefaultBinary = 19436u32,
+    TestUnion_Encoding_DefaultXml = 19437u32,
+    TestOptionalFields_Encoding_DefaultXml = 19438u32,
+    TestUnion_Encoding_DefaultJson = 19439u32,
+    TestOptionalFields_Encoding_DefaultJson = 19440u32,
     CertificateGroupType_CertificateExpired = 19450u32,
     CertificateGroupType_CertificateExpired_ShelvingState = 19537u32,
     DataSetWriterType_Diagnostics = 19550u32,
@@ -8123,6 +9208,9 @@ impl TryFrom<u32> for ObjectId {
                 14846u32 => Self::KeyValuePair_Encoding_DefaultBinary,
                 14847u32 => Self::ConfigurationVersionDataType_Encoding_DefaultBinary,
                 14848u32 => Self::FieldTargetDataType_Encoding_DefaultBinary,
+                15024u32 => Self::TestScalarStructure_Encoding_DefaultBinary,
+                15025u32 => Self::TestArrayStructure_Encoding_DefaultBinary,
+                15026u32 => Self::TestStructure_Encoding_DefaultBinary,
                 15041u32 => Self::KeyValuePair_Encoding_DefaultJson,
                 15042u32 => Self::IdentityMappingRuleType_Encoding_DefaultJson,
                 15044u32 => Self::TrustListDataType_Encoding_DefaultJson,
@@ -8269,6 +9357,9 @@ impl TryFrom<u32> for ObjectId {
                     Self::PublishedDataSetType_DataSetWriterName_Placeholder_TransportSettings
                 }
                 15228u32 => Self::ContentFilterResult_Encoding_DefaultJson,
+                15232u32 => Self::TestScalarStructure_Encoding_DefaultXml,
+                15233u32 => Self::TestArrayStructure_Encoding_DefaultXml,
+                15234u32 => Self::TestStructure_Encoding_DefaultXml,
                 15236u32 => Self::ParsingResult_Encoding_DefaultJson,
                 15244u32 => Self::QueryFirstRequest_Encoding_DefaultJson,
                 15252u32 => Self::QueryFirstResponse_Encoding_DefaultJson,
@@ -8384,8 +9475,17 @@ impl TryFrom<u32> for ObjectId {
                 15380u32 => Self::XVType_Encoding_DefaultJson,
                 15381u32 => Self::ProgramDiagnosticDataType_Encoding_DefaultJson,
                 15382u32 => Self::Annotation_Encoding_DefaultJson,
+                15396u32 => Self::TestScalarStructure_Encoding_DefaultJson,
+                15397u32 => Self::TestArrayStructure_Encoding_DefaultJson,
+                15398u32 => Self::TestStructure_Encoding_DefaultJson,
+                15401u32 => Self::TestAbstractStructure_Encoding_DefaultBinary,
+                15402u32 => Self::TestConcreteStructure_Encoding_DefaultBinary,
+                15403u32 => Self::TestAbstractStructure_Encoding_DefaultXml,
+                15404u32 => Self::TestConcreteStructure_Encoding_DefaultXml,
+                15405u32 => Self::TestAbstractStructure_Encoding_DefaultJson,
                 15421u32 => Self::SimpleTypeDescription_Encoding_DefaultBinary,
                 15422u32 => Self::UABinaryFileDataType_Encoding_DefaultBinary,
+                15431u32 => Self::TestConcreteStructure_Encoding_DefaultJson,
                 15443u32 => Self::PublishSubscribe_SecurityGroups,
                 15453u32 => {
                     Self::SecurityGroupFolderType_SecurityGroupFolderName_Placeholder
@@ -8562,10 +9662,53 @@ impl TryFrom<u32> for ObjectId {
                 16530u32 => {
                     Self::AlarmGroupType_AlarmConditionInstance_Placeholder_FirstInGroup
                 }
+                16663u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder
+                }
+                16706u32 => Self::ManagedApplications,
+                16707u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups
+                }
+                16708u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup
+                }
+                16709u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList
+                }
+                16754u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired
+                }
                 16758u32 => {
                     Self::PublishedDataSetType_DataSetWriterName_Placeholder_MessageSettings
                 }
+                16847u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState
+                }
+                16898u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_FirstInGroup
+                }
+                16939u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate
+                }
+                17040u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState
+                }
+                17091u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_FirstInGroup
+                }
+                17125u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup
+                }
+                17126u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList
+                }
+                17166u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired
+                }
                 17203u32 => Self::PubSubConnectionType_TransportSettings,
+                17271u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState
+                }
                 17290u32 => {
                     Self::PubSubConnectionType_WriterGroupName_Placeholder_TransportSettings
                 }
@@ -8594,6 +9737,9 @@ impl TryFrom<u32> for ObjectId {
                 17476u32 => {
                     Self::DatagramConnectionTransportDataType_Encoding_DefaultJson
                 }
+                17499u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_FirstInGroup
+                }
                 17511u32 => {
                     Self::KeyCredentialConfigurationFolderType_ServiceName_Placeholder
                 }
@@ -8611,6 +9757,9 @@ impl TryFrom<u32> for ObjectId {
                 17609u32 => Self::GenericAttributes_Encoding_DefaultXml,
                 17610u32 => Self::GenericAttributeValue_Encoding_DefaultBinary,
                 17611u32 => Self::GenericAttributes_Encoding_DefaultBinary,
+                17629u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate
+                }
                 17708u32 => Self::InterfaceTypes,
                 17732u32 => Self::AuthorizationServices,
                 17741u32 => Self::WriterGroupType_TransportSettings,
@@ -8637,6 +9786,21 @@ impl TryFrom<u32> for ObjectId {
                 17858u32 => Self::WriterGroupType_Diagnostics_LiveValues,
                 17862u32 => Self::DecimalDataType_Encoding_DefaultXml,
                 17863u32 => Self::DecimalDataType_Encoding_DefaultBinary,
+                17895u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState
+                }
+                17951u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_FirstInGroup
+                }
+                18015u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup
+                }
+                18016u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList
+                }
+                18059u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired
+                }
                 18076u32 => Self::ReaderGroupType_DataSetReaderName_Placeholder,
                 18086u32 => {
                     Self::ReaderGroupType_DataSetReaderName_Placeholder_TransportSettings
@@ -8655,6 +9819,40 @@ impl TryFrom<u32> for ObjectId {
                     Self::ReaderGroupType_DataSetReaderName_Placeholder_Diagnostics_LiveValues
                 }
                 18155u32 => Self::KeyCredentialConfiguration,
+                18279u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState
+                }
+                18323u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_FirstInGroup
+                }
+                18359u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate
+                }
+                18446u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState
+                }
+                18490u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_FirstInGroup
+                }
+                18547u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_TransactionDiagnostics
+                }
+                18598u32 => Self::ActionTargetDataType_Encoding_DefaultBinary,
+                18599u32 => Self::PublishedActionDataType_Encoding_DefaultBinary,
+                18600u32 => Self::ActionMethodDataType_Encoding_DefaultBinary,
+                18610u32 => Self::ActionTargetDataType_Encoding_DefaultXml,
+                18611u32 => Self::PublishedActionDataType_Encoding_DefaultXml,
+                18612u32 => Self::ActionMethodDataType_Encoding_DefaultXml,
+                18622u32 => Self::ActionTargetDataType_Encoding_DefaultJson,
+                18623u32 => Self::PublishedActionDataType_Encoding_DefaultJson,
+                18624u32 => Self::ActionMethodDataType_Encoding_DefaultJson,
+                18625u32 => Self::WellKnownRole_TrustedApplication,
+                18650u32 => Self::SortRuleElement_Encoding_DefaultBinary,
+                18651u32 => Self::ReadEventDetailsSorted_Encoding_DefaultBinary,
+                18652u32 => Self::SortRuleElement_Encoding_DefaultXml,
+                18653u32 => Self::ReadEventDetailsSorted_Encoding_DefaultXml,
+                18654u32 => Self::SortRuleElement_Encoding_DefaultJson,
+                18655u32 => Self::ReadEventDetailsSorted_Encoding_DefaultJson,
                 18667u32 => {
                     Self::PublishSubscribeType_ConnectionName_Placeholder_Diagnostics
                 }
@@ -8667,6 +9865,7 @@ impl TryFrom<u32> for ObjectId {
                 18715u32 => Self::PublishSubscribeType_Diagnostics,
                 18729u32 => Self::PublishSubscribeType_Diagnostics_Counters,
                 18760u32 => Self::PublishSubscribeType_Diagnostics_LiveValues,
+                18795u32 => Self::PublishedActionMethodDataType_Encoding_DefaultBinary,
                 18815u32 => Self::RationalNumber_Encoding_DefaultBinary,
                 18816u32 => Self::Vector_Encoding_DefaultBinary,
                 18817u32 => Self::ThreeDVector_Encoding_DefaultBinary,
@@ -8694,6 +9893,28 @@ impl TryFrom<u32> for ObjectId {
                 18916u32 => {
                     Self::PublishedDataSetType_DataSetWriterName_Placeholder_Diagnostics_LiveValues
                 }
+                18930u32 => Self::DtlsPubSubConnectionDataType_Encoding_DefaultBinary,
+                18937u32 => Self::PublishedActionMethodDataType_Encoding_DefaultXml,
+                18938u32 => Self::DtlsPubSubConnectionDataType_Encoding_DefaultXml,
+                18945u32 => Self::PublishedActionMethodDataType_Encoding_DefaultJson,
+                18946u32 => Self::DtlsPubSubConnectionDataType_Encoding_DefaultJson,
+                18958u32 => Self::LLDP,
+                18959u32 => Self::LLDP_RemoteStatistics,
+                18965u32 => Self::LLDP_LocalSystemData,
+                18972u32 => Self::LLDP_Ports,
+                18974u32 => Self::LldpInformationType_RemoteStatistics,
+                18980u32 => Self::LldpInformationType_LocalSystemData,
+                18987u32 => Self::LldpInformationType_Ports,
+                18988u32 => {
+                    Self::LldpInformationType_Ports_LldpPortInformation_Placeholder
+                }
+                18995u32 => {
+                    Self::LldpInformationType_Ports_LldpPortInformation_Placeholder_RemoteSystemsData
+                }
+                19016u32 => Self::LldpPortInformationType_RemoteSystemsData,
+                19017u32 => {
+                    Self::LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder
+                }
                 19064u32 => Self::RationalNumber_Encoding_DefaultJson,
                 19065u32 => Self::Vector_Encoding_DefaultJson,
                 19066u32 => Self::ThreeDVector_Encoding_DefaultJson,
@@ -8703,6 +9924,12 @@ impl TryFrom<u32> for ObjectId {
                 19070u32 => Self::ThreeDOrientation_Encoding_DefaultJson,
                 19071u32 => Self::Frame_Encoding_DefaultJson,
                 19072u32 => Self::ThreeDFrame_Encoding_DefaultJson,
+                19079u32 => Self::LldpManagementAddressTxPortType_Encoding_DefaultBinary,
+                19080u32 => Self::LldpManagementAddressType_Encoding_DefaultBinary,
+                19081u32 => Self::LldpTlvType_Encoding_DefaultBinary,
+                19100u32 => Self::LldpManagementAddressTxPortType_Encoding_DefaultXml,
+                19101u32 => Self::LldpManagementAddressType_Encoding_DefaultXml,
+                19102u32 => Self::LldpTlvType_Encoding_DefaultXml,
                 19107u32 => {
                     Self::PubSubConnectionType_WriterGroupName_Placeholder_Diagnostics
                 }
@@ -8724,6 +9951,15 @@ impl TryFrom<u32> for ObjectId {
                 19241u32 => Self::PubSubConnectionType_Diagnostics,
                 19255u32 => Self::PubSubConnectionType_Diagnostics_Counters,
                 19286u32 => Self::PubSubConnectionType_Diagnostics_LiveValues,
+                19299u32 => Self::LldpManagementAddressTxPortType_Encoding_DefaultJson,
+                19300u32 => Self::LldpManagementAddressType_Encoding_DefaultJson,
+                19301u32 => Self::LldpTlvType_Encoding_DefaultJson,
+                19435u32 => Self::TestUnion_Encoding_DefaultBinary,
+                19436u32 => Self::TestOptionalFields_Encoding_DefaultBinary,
+                19437u32 => Self::TestUnion_Encoding_DefaultXml,
+                19438u32 => Self::TestOptionalFields_Encoding_DefaultXml,
+                19439u32 => Self::TestUnion_Encoding_DefaultJson,
+                19440u32 => Self::TestOptionalFields_Encoding_DefaultJson,
                 19450u32 => Self::CertificateGroupType_CertificateExpired,
                 19537u32 => Self::CertificateGroupType_CertificateExpired_ShelvingState,
                 19550u32 => Self::DataSetWriterType_Diagnostics,
@@ -9419,6 +10655,7 @@ pub enum ObjectTypeId {
     FileTransferStateMachineType = 15803u32,
     PubSubKeyServiceType = 15906u32,
     AlarmGroupType = 16405u32,
+    ApplicationConfigurationFolderType = 16662u32,
     DiscrepancyAlarmType = 17080u32,
     SafetyConditionClassType = 17218u32,
     HighlyManagedAlarmConditionClassType = 17219u32,
@@ -9448,6 +10685,11 @@ pub enum ObjectTypeId {
     InstrumentDiagnosticAlarmType = 18347u32,
     SystemDiagnosticAlarmType = 18496u32,
     StatisticalConditionClassType = 18665u32,
+    LldpInformationType = 18973u32,
+    LldpRemoteStatisticsType = 18996u32,
+    LldpLocalSystemType = 19002u32,
+    LldpPortInformationType = 19009u32,
+    LldpRemoteSystemType = 19033u32,
     AuditHistoryAnnotationUpdateEventType = 19095u32,
     TrustListOutOfDateAlarmType = 19297u32,
     PubSubDiagnosticsType = 19677u32,
@@ -9706,6 +10948,7 @@ impl TryFrom<u32> for ObjectTypeId {
             15803u32 => Self::FileTransferStateMachineType,
             15906u32 => Self::PubSubKeyServiceType,
             16405u32 => Self::AlarmGroupType,
+            16662u32 => Self::ApplicationConfigurationFolderType,
             17080u32 => Self::DiscrepancyAlarmType,
             17218u32 => Self::SafetyConditionClassType,
             17219u32 => Self::HighlyManagedAlarmConditionClassType,
@@ -9735,6 +10978,11 @@ impl TryFrom<u32> for ObjectTypeId {
             18347u32 => Self::InstrumentDiagnosticAlarmType,
             18496u32 => Self::SystemDiagnosticAlarmType,
             18665u32 => Self::StatisticalConditionClassType,
+            18973u32 => Self::LldpInformationType,
+            18996u32 => Self::LldpRemoteStatisticsType,
+            19002u32 => Self::LldpLocalSystemType,
+            19009u32 => Self::LldpPortInformationType,
+            19033u32 => Self::LldpRemoteSystemType,
             19095u32 => Self::AuditHistoryAnnotationUpdateEventType,
             19297u32 => Self::TrustListOutOfDateAlarmType,
             19677u32 => Self::PubSubDiagnosticsType,
@@ -12178,6 +13426,7 @@ pub enum VariableId {
     WellKnownRole_ConfigureAdmin_ApplicationsExclude = 15428u32,
     WellKnownRole_ConfigureAdmin_EndpointsExclude = 15429u32,
     WellKnownRole_SecurityAdmin_ApplicationsExclude = 15430u32,
+    TestEnumeration_EnumValues = 15433u32,
     PublishSubscribe_GetSecurityGroup_InputArguments = 15441u32,
     PublishSubscribe_GetSecurityGroup_OutputArguments = 15442u32,
     PublishSubscribe_SecurityGroups_AddSecurityGroup_InputArguments = 15445u32,
@@ -12835,44 +14084,794 @@ pub enum VariableId {
     PublishSubscribeType_PublishedDataSets_AddDataSetFolder_InputArguments = 16678u32,
     PublishSubscribeType_PublishedDataSets_AddDataSetFolder_OutputArguments = 16679u32,
     PublishSubscribeType_PublishedDataSets_RemoveDataSetFolder_InputArguments = 16681u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_Size =
+        16710u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_Writable =
+        16711u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_UserWritable =
+        16712u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_OpenCount =
+        16713u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_MimeType =
+        16714u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_MaxByteStringLength =
+        16715u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_LastModifiedTime =
+        16716u32,
     AddConnectionMethodType_InputArguments = 16718u32,
     AddConnectionMethodType_OutputArguments = 16719u32,
     PublishedDataSetType_DataSetWriterName_Placeholder_DataSetWriterId = 16720u32,
     PublishedDataSetType_DataSetWriterName_Placeholder_DataSetFieldContentMask = 16721u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_Open_InputArguments =
+        16722u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_Open_OutputArguments =
+        16723u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_Close_InputArguments =
+        16725u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_Read_InputArguments =
+        16727u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_Read_OutputArguments =
+        16728u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_Write_InputArguments =
+        16730u32,
     PublishedDataSetType_DataSetWriterName_Placeholder_KeyFrameCount = 16731u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_GetPosition_InputArguments =
+        16733u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_GetPosition_OutputArguments =
+        16734u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_SetPosition_InputArguments =
+        16736u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_LastUpdateTime =
+        16737u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_UpdateFrequency =
+        16738u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_ActivityTimeout =
+        16739u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_DefaultValidationOptions =
+        16740u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_OpenWithMasks_InputArguments =
+        16742u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_OpenWithMasks_OutputArguments =
+        16743u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_CloseAndUpdate_InputArguments =
+        16745u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_CloseAndUpdate_OutputArguments =
+        16746u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_AddCertificate_InputArguments =
+        16748u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_RemoveCertificate_InputArguments =
+        16750u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateTypes =
+        16751u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_GetRejectedList_OutputArguments =
+        16753u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_EventId =
+        16755u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_EventType =
+        16756u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SourceNode =
+        16757u32,
     PublishedDataSetType_DataSetClassId = 16759u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SourceName =
+        16760u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Time =
+        16761u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ReceiveTime =
+        16762u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_LocalTime =
+        16763u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Message =
+        16764u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Severity =
+        16765u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ConditionClassId =
+        16766u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ConditionClassName =
+        16767u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ConditionSubClassId =
+        16768u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ConditionSubClassName =
+        16769u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ConditionName =
+        16770u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_BranchId =
+        16771u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Retain =
+        16772u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_EnabledState =
+        16773u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_EnabledState_Id =
+        16774u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_EnabledState_Name =
+        16775u32,
     NonExclusiveDeviationAlarmType_BaseSetpointNode = 16776u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_EnabledState_Number =
+        16777u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_EnabledState_EffectiveDisplayName =
+        16778u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_EnabledState_TransitionTime =
+        16779u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_EnabledState_EffectiveTransitionTime =
+        16780u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_EnabledState_TrueState =
+        16781u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_EnabledState_FalseState =
+        16782u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Quality =
+        16783u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Quality_SourceTimestamp =
+        16784u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_LastSeverity =
+        16785u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_LastSeverity_SourceTimestamp =
+        16786u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Comment =
+        16787u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Comment_SourceTimestamp =
+        16788u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ClientUserId =
+        16789u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AddComment_InputArguments =
+        16793u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AckedState =
+        16794u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AckedState_Id =
+        16795u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AckedState_Name =
+        16796u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AckedState_Number =
+        16797u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AckedState_EffectiveDisplayName =
+        16798u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AckedState_TransitionTime =
+        16799u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AckedState_EffectiveTransitionTime =
+        16800u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AckedState_TrueState =
+        16801u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AckedState_FalseState =
+        16802u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ConfirmedState =
+        16803u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ConfirmedState_Id =
+        16804u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ConfirmedState_Name =
+        16805u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ConfirmedState_Number =
+        16806u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ConfirmedState_EffectiveDisplayName =
+        16807u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ConfirmedState_TransitionTime =
+        16808u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ConfirmedState_EffectiveTransitionTime =
+        16809u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ConfirmedState_TrueState =
+        16810u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ConfirmedState_FalseState =
+        16811u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Acknowledge_InputArguments =
+        16813u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Confirm_InputArguments =
+        16815u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ActiveState =
+        16816u32,
     ExclusiveDeviationAlarmType_BaseSetpointNode = 16817u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ActiveState_Id =
+        16818u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ActiveState_Name =
+        16819u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ActiveState_Number =
+        16820u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ActiveState_EffectiveDisplayName =
+        16821u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ActiveState_TransitionTime =
+        16822u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ActiveState_EffectiveTransitionTime =
+        16823u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ActiveState_TrueState =
+        16824u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ActiveState_FalseState =
+        16825u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_InputNode =
+        16826u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SuppressedState =
+        16827u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SuppressedState_Id =
+        16828u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SuppressedState_Name =
+        16829u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SuppressedState_Number =
+        16830u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SuppressedState_EffectiveDisplayName =
+        16831u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SuppressedState_TransitionTime =
+        16832u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SuppressedState_EffectiveTransitionTime =
+        16833u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SuppressedState_TrueState =
+        16834u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SuppressedState_FalseState =
+        16835u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_OutOfServiceState =
+        16836u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_OutOfServiceState_Id =
+        16837u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_OutOfServiceState_Name =
+        16838u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_OutOfServiceState_Number =
+        16839u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_OutOfServiceState_EffectiveDisplayName =
+        16840u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_OutOfServiceState_TransitionTime =
+        16841u32,
     DataSetFolderType_DataSetFolderName_Placeholder_AddPublishedDataItemsTemplate_InputArguments =
         16843u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_OutOfServiceState_EffectiveTransitionTime =
+        16844u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_OutOfServiceState_TrueState =
+        16845u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_OutOfServiceState_FalseState =
+        16846u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_CurrentState =
+        16848u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_CurrentState_Id =
+        16849u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_CurrentState_Name =
+        16850u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_CurrentState_Number =
+        16851u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_CurrentState_EffectiveDisplayName =
+        16852u32,
     DataSetFolderType_DataSetFolderName_Placeholder_AddPublishedDataItemsTemplate_OutputArguments =
         16853u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_LastTransition =
+        16854u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_LastTransition_Id =
+        16855u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_LastTransition_Name =
+        16856u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_LastTransition_Number =
+        16857u32,
     NonExclusiveRateOfChangeAlarmType_EngineeringUnits = 16858u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_LastTransition_TransitionTime =
+        16859u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_LastTransition_EffectiveTransitionTime =
+        16860u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_AvailableStates =
+        16861u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_AvailableTransitions =
+        16862u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_UnshelveTime =
+        16863u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_TimedShelve_InputArguments =
+        16865u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_TimedShelve2_InputArguments =
+        16867u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_Unshelve2_InputArguments =
+        16870u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_OneShotShelve2_InputArguments =
+        16873u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SuppressedOrShelved =
+        16874u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_MaxTimeShelved =
+        16875u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AudibleEnabled =
+        16876u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AudibleSound =
+        16877u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AudibleSound_ListId =
+        16878u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AudibleSound_AgencyId =
+        16879u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AudibleSound_VersionId =
+        16880u32,
     DataSetFolderType_DataSetFolderName_Placeholder_AddPublishedEventsTemplate_InputArguments =
         16882u32,
     DataSetFolderType_DataSetFolderName_Placeholder_AddPublishedEventsTemplate_OutputArguments =
         16883u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SilenceState =
+        16885u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SilenceState_Id =
+        16886u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SilenceState_Name =
+        16887u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SilenceState_Number =
+        16888u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SilenceState_EffectiveDisplayName =
+        16889u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SilenceState_TransitionTime =
+        16890u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SilenceState_EffectiveTransitionTime =
+        16891u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SilenceState_TrueState =
+        16892u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SilenceState_FalseState =
+        16893u32,
     DataSetFolderType_DataSetFolderName_Placeholder_AddDataSetFolder_InputArguments = 16894u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_OnDelay =
+        16895u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_OffDelay =
+        16896u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_FirstInGroupFlag =
+        16897u32,
     ExclusiveRateOfChangeAlarmType_EngineeringUnits = 16899u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_LatchedState =
+        16900u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_LatchedState_Id =
+        16901u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_LatchedState_Name =
+        16902u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_LatchedState_Number =
+        16903u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_LatchedState_EffectiveDisplayName =
+        16904u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_LatchedState_TransitionTime =
+        16905u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_LatchedState_EffectiveTransitionTime =
+        16906u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_LatchedState_TrueState =
+        16907u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_LatchedState_FalseState =
+        16908u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ReAlarmTime =
+        16909u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ReAlarmRepeatCount =
+        16910u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Suppress2_InputArguments =
+        16914u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Unsuppress2_InputArguments =
+        16917u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_RemoveFromService2_InputArguments =
+        16920u32,
     DataSetFolderType_DataSetFolderName_Placeholder_AddDataSetFolder_OutputArguments = 16922u32,
     DataSetFolderType_DataSetFolderName_Placeholder_RemoveDataSetFolder_InputArguments = 16924u32,
     DataSetFolderType_PublishedDataSetName_Placeholder_DataSetClassId = 16925u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_PlaceInService2_InputArguments =
+        16927u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Reset2_InputArguments =
+        16930u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_GetGroupMemberships_OutputArguments =
+        16932u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_NormalState =
+        16933u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ExpirationDate =
+        16934u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ExpirationLimit =
+        16936u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_CertificateType =
+        16937u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Certificate =
+        16938u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_EventId =
+        16940u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_EventType =
+        16941u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SourceNode =
+        16942u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SourceName =
+        16943u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Time =
+        16944u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ReceiveTime =
+        16945u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_LocalTime =
+        16946u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Message =
+        16947u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Severity =
+        16948u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ConditionClassId =
+        16949u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ConditionClassName =
+        16950u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ConditionSubClassId =
+        16951u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ConditionSubClassName =
+        16952u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ConditionName =
+        16953u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_BranchId =
+        16954u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Retain =
+        16955u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_EnabledState =
+        16956u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_EnabledState_Id =
+        16957u32,
     DataSetFolderType_AddPublishedDataItemsTemplate_InputArguments = 16958u32,
     DataSetFolderType_AddPublishedDataItemsTemplate_OutputArguments = 16959u32,
     DataSetFolderType_AddPublishedEventsTemplate_InputArguments = 16961u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_EnabledState_Name =
+        16962u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_EnabledState_Number =
+        16963u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_EnabledState_EffectiveDisplayName =
+        16964u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_EnabledState_TransitionTime =
+        16965u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_EnabledState_EffectiveTransitionTime =
+        16966u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_EnabledState_TrueState =
+        16967u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_EnabledState_FalseState =
+        16968u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Quality =
+        16969u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Quality_SourceTimestamp =
+        16970u32,
     DataSetFolderType_AddPublishedEventsTemplate_OutputArguments = 16971u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_LastSeverity =
+        16972u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_LastSeverity_SourceTimestamp =
+        16973u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Comment =
+        16974u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Comment_SourceTimestamp =
+        16975u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ClientUserId =
+        16976u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AddComment_InputArguments =
+        16980u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AckedState =
+        16981u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AckedState_Id =
+        16982u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AckedState_Name =
+        16983u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AckedState_Number =
+        16984u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AckedState_EffectiveDisplayName =
+        16985u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AckedState_TransitionTime =
+        16986u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AckedState_EffectiveTransitionTime =
+        16987u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AckedState_TrueState =
+        16988u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AckedState_FalseState =
+        16989u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ConfirmedState =
+        16990u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ConfirmedState_Id =
+        16991u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ConfirmedState_Name =
+        16992u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ConfirmedState_Number =
+        16993u32,
     DataSetFolderType_AddDataSetFolder_InputArguments = 16995u32,
     DataSetFolderType_AddDataSetFolder_OutputArguments = 16996u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ConfirmedState_EffectiveDisplayName =
+        16998u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ConfirmedState_TransitionTime =
+        16999u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ConfirmedState_EffectiveTransitionTime =
+        17000u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ConfirmedState_TrueState =
+        17001u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ConfirmedState_FalseState =
+        17002u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Acknowledge_InputArguments =
+        17004u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Confirm_InputArguments =
+        17006u32,
     DataSetFolderType_RemoveDataSetFolder_InputArguments = 17007u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ActiveState =
+        17008u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ActiveState_Id =
+        17009u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ActiveState_Name =
+        17010u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ActiveState_Number =
+        17011u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ActiveState_EffectiveDisplayName =
+        17012u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ActiveState_TransitionTime =
+        17013u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ActiveState_EffectiveTransitionTime =
+        17014u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ActiveState_TrueState =
+        17015u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ActiveState_FalseState =
+        17016u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_InputNode =
+        17017u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SuppressedState =
+        17018u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SuppressedState_Id =
+        17019u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SuppressedState_Name =
+        17020u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SuppressedState_Number =
+        17021u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SuppressedState_EffectiveDisplayName =
+        17022u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SuppressedState_TransitionTime =
+        17023u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SuppressedState_EffectiveTransitionTime =
+        17024u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SuppressedState_TrueState =
+        17025u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SuppressedState_FalseState =
+        17026u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_OutOfServiceState =
+        17027u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_OutOfServiceState_Id =
+        17028u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_OutOfServiceState_Name =
+        17029u32,
     AddPublishedDataItemsTemplateMethodType_InputArguments = 17031u32,
     AddPublishedDataItemsTemplateMethodType_OutputArguments = 17032u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_OutOfServiceState_Number =
+        17034u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_OutOfServiceState_EffectiveDisplayName =
+        17035u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_OutOfServiceState_TransitionTime =
+        17036u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_OutOfServiceState_EffectiveTransitionTime =
+        17037u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_OutOfServiceState_TrueState =
+        17038u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_OutOfServiceState_FalseState =
+        17039u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_CurrentState =
+        17041u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_CurrentState_Id =
+        17042u32,
     AddPublishedEventsTemplateMethodType_InputArguments = 17043u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_CurrentState_Name =
+        17044u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_CurrentState_Number =
+        17045u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_CurrentState_EffectiveDisplayName =
+        17046u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_LastTransition =
+        17047u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_LastTransition_Id =
+        17048u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_LastTransition_Name =
+        17049u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_LastTransition_Number =
+        17050u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_LastTransition_TransitionTime =
+        17051u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_LastTransition_EffectiveTransitionTime =
+        17052u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_AvailableStates =
+        17053u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_AvailableTransitions =
+        17054u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_UnshelveTime =
+        17055u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_TimedShelve_InputArguments =
+        17057u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_TimedShelve2_InputArguments =
+        17059u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_Unshelve2_InputArguments =
+        17062u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_OneShotShelve2_InputArguments =
+        17065u32,
     AddPublishedEventsTemplateMethodType_OutputArguments = 17066u32,
     AddDataSetFolderMethodType_InputArguments = 17068u32,
     AddDataSetFolderMethodType_OutputArguments = 17069u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SuppressedOrShelved =
+        17070u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_MaxTimeShelved =
+        17071u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AudibleEnabled =
+        17072u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AudibleSound =
+        17073u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AudibleSound_ListId =
+        17074u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AudibleSound_AgencyId =
+        17075u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AudibleSound_VersionId =
+        17076u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SilenceState =
+        17077u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SilenceState_Id =
+        17078u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SilenceState_Name =
+        17081u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SilenceState_Number =
+        17082u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SilenceState_EffectiveDisplayName =
+        17083u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SilenceState_TransitionTime =
+        17084u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SilenceState_EffectiveTransitionTime =
+        17085u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SilenceState_TrueState =
+        17086u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SilenceState_FalseState =
+        17087u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_OnDelay =
+        17088u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_OffDelay =
+        17089u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_FirstInGroupFlag =
+        17090u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_LatchedState =
+        17092u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_LatchedState_Id =
+        17093u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_LatchedState_Name =
+        17094u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_LatchedState_Number =
+        17095u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_LatchedState_EffectiveDisplayName =
+        17096u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_LatchedState_TransitionTime =
+        17097u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_LatchedState_EffectiveTransitionTime =
+        17098u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_LatchedState_TrueState =
+        17099u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_LatchedState_FalseState =
+        17100u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ReAlarmTime =
+        17101u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ReAlarmRepeatCount =
+        17102u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Suppress2_InputArguments =
+        17106u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Unsuppress2_InputArguments =
+        17109u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_RemoveFromService2_InputArguments =
+        17112u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_PlaceInService2_InputArguments =
+        17115u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Reset2_InputArguments =
+        17118u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_GetGroupMemberships_OutputArguments =
+        17120u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_NormalState =
+        17121u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_TrustListId =
+        17122u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_LastUpdateTime =
+        17123u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_UpdateFrequency =
+        17124u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_Size =
+        17127u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_Writable =
+        17128u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_UserWritable =
+        17129u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_OpenCount =
+        17130u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_MimeType =
+        17131u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_MaxByteStringLength =
+        17132u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_LastModifiedTime =
+        17133u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_Open_InputArguments =
+        17135u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_Open_OutputArguments =
+        17136u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_Close_InputArguments =
+        17138u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_Read_InputArguments =
+        17140u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_Read_OutputArguments =
+        17141u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_Write_InputArguments =
+        17143u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_GetPosition_InputArguments =
+        17145u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_GetPosition_OutputArguments =
+        17146u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_SetPosition_InputArguments =
+        17148u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_LastUpdateTime =
+        17149u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_UpdateFrequency =
+        17150u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_ActivityTimeout =
+        17151u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_DefaultValidationOptions =
+        17152u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_OpenWithMasks_InputArguments =
+        17154u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_OpenWithMasks_OutputArguments =
+        17155u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_CloseAndUpdate_InputArguments =
+        17157u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_CloseAndUpdate_OutputArguments =
+        17158u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_AddCertificate_InputArguments =
+        17160u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_RemoveCertificate_InputArguments =
+        17162u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateTypes =
+        17163u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_GetRejectedList_OutputArguments =
+        17165u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_EventId =
+        17167u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_EventType =
+        17168u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SourceNode =
+        17169u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SourceName =
+        17170u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Time =
+        17171u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ReceiveTime =
+        17172u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_LocalTime =
+        17173u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Message =
+        17174u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Severity =
+        17175u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ConditionClassId =
+        17176u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ConditionClassName =
+        17177u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ConditionSubClassId =
+        17178u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ConditionSubClassName =
+        17179u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ConditionName =
+        17180u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_BranchId =
+        17181u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Retain =
+        17182u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_EnabledState =
+        17183u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_EnabledState_Id =
+        17184u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_EnabledState_Name =
+        17185u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_EnabledState_Number =
+        17186u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_EnabledState_EffectiveDisplayName =
+        17187u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_EnabledState_TransitionTime =
+        17188u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_EnabledState_EffectiveTransitionTime =
+        17189u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_EnabledState_TrueState =
+        17190u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_EnabledState_FalseState =
+        17191u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Quality =
+        17192u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Quality_SourceTimestamp =
+        17193u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_LastSeverity =
+        17194u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_LastSeverity_SourceTimestamp =
+        17195u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Comment =
+        17196u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Comment_SourceTimestamp =
+        17197u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ClientUserId =
+        17198u32,
     RemoveDataSetFolderMethodType_InputArguments = 17201u32,
     PubSubConnectionType_Address_NetworkInterface = 17202u32,
     PubSubConnectionType_WriterGroupName_Placeholder_MaxNetworkMessageSize = 17204u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AddComment_InputArguments =
+        17206u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AckedState =
+        17207u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AckedState_Id =
+        17208u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AckedState_Name =
+        17209u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AckedState_Number =
+        17210u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AckedState_EffectiveDisplayName =
+        17211u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AckedState_TransitionTime =
+        17212u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AckedState_EffectiveTransitionTime =
+        17213u32,
     PubSubConnectionType_WriterGroupName_Placeholder_WriterGroupId = 17214u32,
     DiscrepancyAlarmType_TargetValueNode = 17215u32,
     DiscrepancyAlarmType_ExpectedTime = 17216u32,
@@ -12880,6 +14879,96 @@ pub enum VariableId {
     AuditConditionCommentEventType_ConditionEventId = 17222u32,
     AuditConditionAcknowledgeEventType_ConditionEventId = 17223u32,
     AuditConditionConfirmEventType_ConditionEventId = 17224u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AckedState_TrueState =
+        17226u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AckedState_FalseState =
+        17227u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ConfirmedState =
+        17228u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ConfirmedState_Id =
+        17229u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ConfirmedState_Name =
+        17230u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ConfirmedState_Number =
+        17231u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ConfirmedState_EffectiveDisplayName =
+        17232u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ConfirmedState_TransitionTime =
+        17233u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ConfirmedState_EffectiveTransitionTime =
+        17234u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ConfirmedState_TrueState =
+        17235u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ConfirmedState_FalseState =
+        17236u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Acknowledge_InputArguments =
+        17238u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Confirm_InputArguments =
+        17240u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ActiveState =
+        17241u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ActiveState_Id =
+        17243u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ActiveState_Name =
+        17244u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ActiveState_Number =
+        17245u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ActiveState_EffectiveDisplayName =
+        17246u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ActiveState_TransitionTime =
+        17247u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ActiveState_EffectiveTransitionTime =
+        17248u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ActiveState_TrueState =
+        17249u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ActiveState_FalseState =
+        17250u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_InputNode =
+        17251u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SuppressedState =
+        17252u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SuppressedState_Id =
+        17253u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SuppressedState_Name =
+        17254u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SuppressedState_Number =
+        17255u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SuppressedState_EffectiveDisplayName =
+        17256u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SuppressedState_TransitionTime =
+        17257u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SuppressedState_EffectiveTransitionTime =
+        17258u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SuppressedState_TrueState =
+        17260u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SuppressedState_FalseState =
+        17261u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_OutOfServiceState =
+        17262u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_OutOfServiceState_Id =
+        17263u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_OutOfServiceState_Name =
+        17264u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_OutOfServiceState_Number =
+        17265u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_OutOfServiceState_EffectiveDisplayName =
+        17266u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_OutOfServiceState_TransitionTime =
+        17267u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_OutOfServiceState_EffectiveTransitionTime =
+        17268u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_OutOfServiceState_TrueState =
+        17269u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_OutOfServiceState_FalseState =
+        17270u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_CurrentState =
+        17272u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_CurrentState_Id =
+        17273u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_CurrentState_Name =
+        17274u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_CurrentState_Number =
+        17275u32,
     AlarmRateVariableType_Rate = 17278u32,
     AlarmMetricsType_AlarmCount = 17280u32,
     AlarmMetricsType_MaximumActiveState = 17281u32,
@@ -12896,8 +14985,16 @@ pub enum VariableId {
     PublishSubscribeType_ConnectionName_Placeholder_TransportProfileUri_RestrictToList = 17295u32,
     PublishSubscribeType_SetSecurityKeys_InputArguments = 17297u32,
     SetSecurityKeysMethodType_InputArguments = 17299u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_CurrentState_EffectiveDisplayName =
+        17300u32,
     PubSubConnectionType_WriterGroupName_Placeholder_AddDataSetWriter_OutputArguments = 17301u32,
     PubSubConnectionType_ReaderGroupName_Placeholder_MaxNetworkMessageSize = 17302u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_LastTransition =
+        17303u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_LastTransition_Id =
+        17304u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_LastTransition_Name =
+        17305u32,
     PubSubConnectionType_TransportProfileUri = 17306u32,
     PubSubConnectionType_TransportProfileUri_RestrictToList = 17309u32,
     PubSubConnectionType_WriterGroupName_Placeholder_SecurityMode = 17311u32,
@@ -12906,6 +15003,8 @@ pub enum VariableId {
     PubSubConnectionType_WriterGroupName_Placeholder_Status_State = 17315u32,
     PubSubConnectionType_WriterGroupName_Placeholder_PublishingInterval = 17318u32,
     PubSubConnectionType_WriterGroupName_Placeholder_KeepAliveTime = 17319u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_LastTransition_Number =
+        17320u32,
     PubSubConnectionType_WriterGroupName_Placeholder_Priority = 17321u32,
     PubSubConnectionType_WriterGroupName_Placeholder_LocaleIds = 17322u32,
     PubSubConnectionType_WriterGroupName_Placeholder_RemoveDataSetWriter_InputArguments = 17324u32,
@@ -12914,6 +15013,50 @@ pub enum VariableId {
     PubSubConnectionType_ReaderGroupName_Placeholder_SecurityKeyServices = 17328u32,
     PubSubConnectionType_ReaderGroupName_Placeholder_Status_State = 17330u32,
     PubSubConnectionType_ReaderGroupName_Placeholder_RemoveDataSetReader_InputArguments = 17334u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_LastTransition_TransitionTime =
+        17335u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_LastTransition_EffectiveTransitionTime =
+        17336u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_AvailableStates =
+        17337u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_AvailableTransitions =
+        17338u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_UnshelveTime =
+        17339u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_TimedShelve_InputArguments =
+        17341u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_TimedShelve2_InputArguments =
+        17343u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_Unshelve2_InputArguments =
+        17346u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_OneShotShelve2_InputArguments =
+        17349u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SuppressedOrShelved =
+        17350u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_MaxTimeShelved =
+        17351u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AudibleEnabled =
+        17352u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AudibleSound =
+        17353u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AudibleSound_ListId =
+        17354u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AudibleSound_AgencyId =
+        17356u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AudibleSound_VersionId =
+        17357u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SilenceState =
+        17358u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SilenceState_Id =
+        17359u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SilenceState_Name =
+        17360u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SilenceState_Number =
+        17361u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SilenceState_EffectiveDisplayName =
+        17362u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SilenceState_TransitionTime =
+        17363u32,
     PublishSubscribe_SetSecurityKeys_InputArguments = 17365u32,
     PublishSubscribe_AddConnection_InputArguments = 17367u32,
     PublishSubscribe_AddConnection_OutputArguments = 17368u32,
@@ -13002,25 +15145,47 @@ pub enum VariableId {
     UadpDataSetReaderMessageType_DataSetOffset = 17477u32,
     PublishSubscribeType_ConnectionName_Placeholder_ConnectionProperties = 17478u32,
     PublishSubscribeType_SupportedTransportProfiles = 17479u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SilenceState_EffectiveTransitionTime =
+        17480u32,
     PublishSubscribe_SupportedTransportProfiles = 17481u32,
     PublishedDataSetType_DataSetWriterName_Placeholder_DataSetWriterProperties = 17482u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SilenceState_TrueState =
+        17483u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SilenceState_FalseState =
+        17484u32,
     PubSubConnectionType_ConnectionProperties = 17485u32,
     PubSubConnectionType_WriterGroupName_Placeholder_GroupProperties = 17486u32,
     PubSubConnectionType_ReaderGroupName_Placeholder_GroupProperties = 17487u32,
     PubSubGroupType_GroupProperties = 17488u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_OnDelay =
+        17489u32,
     WriterGroupType_DataSetWriterName_Placeholder_DataSetWriterProperties = 17490u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_OffDelay =
+        17491u32,
     ReaderGroupType_DataSetReaderName_Placeholder_DataSetReaderProperties = 17492u32,
     DataSetWriterType_DataSetWriterProperties = 17493u32,
     DataSetReaderType_DataSetReaderProperties = 17494u32,
     CreateCredentialMethodType_OutputArguments = 17495u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_FirstInGroupFlag =
+        17498u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_LatchedState =
+        17500u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_LatchedState_Id =
+        17501u32,
     AnalogUnitType_EngineeringUnits = 17502u32,
     PublishSubscribeType_ConnectionName_Placeholder_Address_NetworkInterface_Selections = 17503u32,
     PublishSubscribeType_ConnectionName_Placeholder_Address_NetworkInterface_SelectionDescriptions =
         17504u32,
     PublishSubscribeType_ConnectionName_Placeholder_Address_NetworkInterface_RestrictToList =
         17505u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_LatchedState_Name =
+        17506u32,
     PubSubConnectionType_AddReaderGroup_InputArguments = 17507u32,
     PubSubConnectionType_AddReaderGroup_OutputArguments = 17508u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_LatchedState_Number =
+        17509u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_LatchedState_EffectiveDisplayName =
+        17510u32,
     KeyCredentialConfigurationFolderType_ServiceName_Placeholder_ResourceUri = 17512u32,
     KeyCredentialConfigurationFolderType_ServiceName_Placeholder_ProfileUri = 17513u32,
     KeyCredentialConfigurationFolderType_ServiceName_Placeholder_EndpointUrls = 17514u32,
@@ -13033,6 +15198,12 @@ pub enum VariableId {
         17520u32,
     KeyCredentialConfigurationFolderType_CreateCredential_InputArguments = 17523u32,
     KeyCredentialConfigurationFolderType_CreateCredential_OutputArguments = 17524u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_LatchedState_TransitionTime =
+        17525u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_LatchedState_EffectiveTransitionTime =
+        17526u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_LatchedState_TrueState =
+        17527u32,
     KeyCredentialConfiguration_CreateCredential_InputArguments = 17529u32,
     KeyCredentialConfiguration_CreateCredential_OutputArguments = 17530u32,
     GetEncryptingKeyMethodType_InputArguments = 17532u32,
@@ -13057,9 +15228,15 @@ pub enum VariableId {
     ReaderGroupType_DataSetReaderName_Placeholder_HeaderLayoutUri = 17562u32,
     DataSetReaderType_KeyFrameCount = 17563u32,
     DataSetReaderType_HeaderLayoutUri = 17564u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_LatchedState_FalseState =
+        17565u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ReAlarmTime =
+        17566u32,
     BaseAnalogType_InstrumentRange = 17567u32,
     BaseAnalogType_EURange = 17568u32,
     BaseAnalogType_EngineeringUnits = 17569u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ReAlarmRepeatCount =
+        17571u32,
     AnalogUnitRangeType_EngineeringUnits = 17575u32,
     PubSubConnectionType_Address_NetworkInterface_Selections = 17576u32,
     PubSubConnectionType_Address_NetworkInterface_SelectionDescriptions = 17577u32,
@@ -13071,11 +15248,33 @@ pub enum VariableId {
     NetworkAddressType_NetworkInterface_Selections = 17582u32,
     NetworkAddressType_NetworkInterface_SelectionDescriptions = 17583u32,
     NetworkAddressType_NetworkInterface_RestrictToList = 17584u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Suppress2_InputArguments =
+        17585u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Unsuppress2_InputArguments =
+        17595u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_RemoveFromService2_InputArguments =
+        17601u32,
     DefaultInstanceBrowseName = 17605u32,
     ServerType_LocalTime = 17612u32,
     PubSubConnectionTypeAddWriterGroupMethodType_InputArguments = 17613u32,
     PubSubConnectionTypeAddWriterGroupMethodType_OutputArguments = 17614u32,
     AuditSecurityEventType_StatusCodeId = 17615u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_PlaceInService2_InputArguments =
+        17618u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Reset2_InputArguments =
+        17621u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_GetGroupMemberships_OutputArguments =
+        17623u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_NormalState =
+        17624u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ExpirationDate =
+        17625u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ExpirationLimit =
+        17626u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_CertificateType =
+        17627u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Certificate =
+        17628u32,
     PubSubConnectionAddReaderGroupGroupMethodType_InputArguments = 17631u32,
     SelectionListType_Selections = 17632u32,
     SelectionListType_SelectionDescriptions = 17633u32,
@@ -13084,12 +15283,122 @@ pub enum VariableId {
     FiniteStateMachineType_AvailableTransitions = 17636u32,
     TemporaryFileTransferType_TransferState_Placeholder_AvailableStates = 17637u32,
     TemporaryFileTransferType_TransferState_Placeholder_AvailableTransitions = 17638u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_EventId =
+        17639u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_EventType =
+        17640u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SourceNode =
+        17642u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SourceName =
+        17643u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Time =
+        17644u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ReceiveTime =
+        17645u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_LocalTime =
+        17646u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Message =
+        17647u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Severity =
+        17648u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ConditionClassId =
+        17649u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ConditionClassName =
+        17650u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ConditionSubClassId =
+        17651u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ConditionSubClassName =
+        17652u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ConditionName =
+        17653u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_BranchId =
+        17654u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Retain =
+        17655u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_EnabledState =
+        17656u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_EnabledState_Id =
+        17657u32,
     AlarmConditionType_ShelvingState_AvailableStates = 17658u32,
     AlarmConditionType_ShelvingState_AvailableTransitions = 17659u32,
     AlarmGroupType_AlarmConditionInstance_Placeholder_ShelvingState_AvailableStates = 17660u32,
     AlarmGroupType_AlarmConditionInstance_Placeholder_ShelvingState_AvailableTransitions = 17661u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_EnabledState_Name =
+        17662u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_EnabledState_Number =
+        17663u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_EnabledState_EffectiveDisplayName =
+        17664u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_EnabledState_TransitionTime =
+        17665u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_EnabledState_EffectiveTransitionTime =
+        17666u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_EnabledState_TrueState =
+        17667u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_EnabledState_FalseState =
+        17668u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Quality =
+        17669u32,
     ExclusiveLimitAlarmType_LimitState_AvailableStates = 17670u32,
     ExclusiveLimitAlarmType_LimitState_AvailableTransitions = 17671u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Quality_SourceTimestamp =
+        17672u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_LastSeverity =
+        17673u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_LastSeverity_SourceTimestamp =
+        17674u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Comment =
+        17675u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Comment_SourceTimestamp =
+        17676u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ClientUserId =
+        17677u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AddComment_InputArguments =
+        17681u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AckedState =
+        17682u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AckedState_Id =
+        17683u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AckedState_Name =
+        17684u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AckedState_Number =
+        17685u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AckedState_EffectiveDisplayName =
+        17686u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AckedState_TransitionTime =
+        17687u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AckedState_EffectiveTransitionTime =
+        17688u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AckedState_TrueState =
+        17689u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AckedState_FalseState =
+        17690u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ConfirmedState =
+        17691u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ConfirmedState_Id =
+        17692u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ConfirmedState_Name =
+        17693u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ConfirmedState_Number =
+        17694u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ConfirmedState_EffectiveDisplayName =
+        17695u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ConfirmedState_TransitionTime =
+        17696u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ConfirmedState_EffectiveTransitionTime =
+        17697u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ConfirmedState_TrueState =
+        17698u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ConfirmedState_FalseState =
+        17699u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Acknowledge_InputArguments =
+        17701u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Confirm_InputArguments =
+        17703u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ActiveState =
+        17704u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ActiveState_Id =
+        17705u32,
     PublishSubscribeType_ConnectionName_Placeholder_TransportProfileUri_Selections = 17706u32,
     PublishSubscribeType_ConnectionName_Placeholder_TransportProfileUri_SelectionDescriptions =
         17707u32,
@@ -13098,10 +15407,34 @@ pub enum VariableId {
     RationalNumberType_Numerator = 17712u32,
     RationalNumberType_Denominator = 17713u32,
     VectorType_VectorUnit = 17715u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ActiveState_Name =
+        17717u32,
     FileDirectoryType_FileDirectoryName_Placeholder_DeleteFileSystemObject_InputArguments =
         17719u32,
     PubSubConnectionAddReaderGroupGroupMethodType_OutputArguments = 17720u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ActiveState_Number =
+        17722u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ActiveState_EffectiveDisplayName =
+        17723u32,
     PubSubGroupType_MaxNetworkMessageSize = 17724u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ActiveState_TransitionTime =
+        17726u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ActiveState_EffectiveTransitionTime =
+        17727u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ActiveState_TrueState =
+        17728u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ActiveState_FalseState =
+        17729u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_InputNode =
+        17730u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SuppressedState =
+        17731u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SuppressedState_Id =
+        17733u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SuppressedState_Name =
+        17734u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SuppressedState_Number =
+        17735u32,
     WriterGroupType_WriterGroupId = 17736u32,
     WriterGroupType_PublishingInterval = 17737u32,
     WriterGroupType_KeepAliveTime = 17738u32,
@@ -13261,23 +15594,157 @@ pub enum VariableId {
     WriterGroupType_Diagnostics_Counters_SentNetworkMessages_TimeFirstChange = 17873u32,
     WriterGroupType_Diagnostics_Counters_FailedTransmissions = 17874u32,
     WriterGroupType_Diagnostics_Counters_FailedTransmissions_Active = 17878u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SuppressedState_EffectiveDisplayName =
+        17879u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SuppressedState_TransitionTime =
+        17880u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SuppressedState_EffectiveTransitionTime =
+        17881u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SuppressedState_TrueState =
+        17882u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SuppressedState_FalseState =
+        17883u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_OutOfServiceState =
+        17884u32,
     WriterGroupType_Diagnostics_Counters_FailedTransmissions_Classification = 17885u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_OutOfServiceState_Id =
+        17886u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_OutOfServiceState_Name =
+        17887u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_OutOfServiceState_Number =
+        17888u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_OutOfServiceState_EffectiveDisplayName =
+        17889u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_OutOfServiceState_TransitionTime =
+        17890u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_OutOfServiceState_EffectiveTransitionTime =
+        17891u32,
     WriterGroupType_Diagnostics_Counters_FailedTransmissions_DiagnosticsLevel = 17892u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_OutOfServiceState_TrueState =
+        17893u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_OutOfServiceState_FalseState =
+        17894u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_CurrentState =
+        17896u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_CurrentState_Id =
+        17897u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_CurrentState_Name =
+        17898u32,
     WriterGroupType_Diagnostics_Counters_FailedTransmissions_TimeFirstChange = 17899u32,
     WriterGroupType_Diagnostics_Counters_EncryptionErrors = 17900u32,
     WriterGroupType_Diagnostics_Counters_EncryptionErrors_Active = 17901u32,
     WriterGroupType_Diagnostics_Counters_EncryptionErrors_Classification = 17902u32,
     WriterGroupType_Diagnostics_Counters_EncryptionErrors_DiagnosticsLevel = 17903u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_CurrentState_Number =
+        17904u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_CurrentState_EffectiveDisplayName =
+        17905u32,
     WriterGroupType_Diagnostics_Counters_EncryptionErrors_TimeFirstChange = 17906u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_LastTransition =
+        17907u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_LastTransition_Id =
+        17908u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_LastTransition_Name =
+        17909u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_LastTransition_Number =
+        17910u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_LastTransition_TransitionTime =
+        17911u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_LastTransition_EffectiveTransitionTime =
+        17912u32,
     WriterGroupType_Diagnostics_LiveValues_ConfiguredDataSetWriters = 17913u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_AvailableStates =
+        17914u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_AvailableTransitions =
+        17915u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_UnshelveTime =
+        17916u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_TimedShelve_InputArguments =
+        17918u32,
     WriterGroupType_Diagnostics_LiveValues_ConfiguredDataSetWriters_DiagnosticsLevel = 17920u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_TimedShelve2_InputArguments =
+        17921u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_Unshelve2_InputArguments =
+        17924u32,
     WriterGroupType_Diagnostics_LiveValues_OperationalDataSetWriters = 17927u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_OneShotShelve2_InputArguments =
+        17928u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SuppressedOrShelved =
+        17929u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_MaxTimeShelved =
+        17930u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AudibleEnabled =
+        17931u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AudibleSound =
+        17932u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AudibleSound_ListId =
+        17933u32,
     WriterGroupType_Diagnostics_LiveValues_OperationalDataSetWriters_DiagnosticsLevel = 17934u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AudibleSound_AgencyId =
+        17935u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AudibleSound_VersionId =
+        17936u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SilenceState =
+        17937u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SilenceState_Id =
+        17938u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SilenceState_Name =
+        17939u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SilenceState_Number =
+        17940u32,
     WriterGroupType_Diagnostics_LiveValues_SecurityTokenID = 17941u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SilenceState_EffectiveDisplayName =
+        17942u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SilenceState_TransitionTime =
+        17943u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SilenceState_EffectiveTransitionTime =
+        17944u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SilenceState_TrueState =
+        17945u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SilenceState_FalseState =
+        17946u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_OnDelay =
+        17947u32,
     WriterGroupType_Diagnostics_LiveValues_SecurityTokenID_DiagnosticsLevel = 17948u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_OffDelay =
+        17949u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_FirstInGroupFlag =
+        17950u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_LatchedState =
+        17952u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_LatchedState_Id =
+        17953u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_LatchedState_Name =
+        17954u32,
     WriterGroupType_Diagnostics_LiveValues_TimeToNextTokenID = 17955u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_LatchedState_Number =
+        17956u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_LatchedState_EffectiveDisplayName =
+        17957u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_LatchedState_TransitionTime =
+        17958u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_LatchedState_EffectiveTransitionTime =
+        17959u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_LatchedState_TrueState =
+        17960u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_LatchedState_FalseState =
+        17961u32,
     WriterGroupType_Diagnostics_LiveValues_TimeToNextTokenID_DiagnosticsLevel = 17962u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ReAlarmTime =
+        17963u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ReAlarmRepeatCount =
+        17964u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Suppress2_InputArguments =
+        17968u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Unsuppress2_InputArguments =
+        17972u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_RemoveFromService2_InputArguments =
+        17975u32,
     WriterGroupType_AddDataSetWriter_InputArguments = 17976u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_PlaceInService2_InputArguments =
+        17979u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Reset2_InputArguments =
+        17982u32,
     WriterGroupType_AddDataSetWriter_OutputArguments = 17987u32,
     AudioVariableType_ListId = 17988u32,
     AudioVariableType_AgencyId = 17989u32,
@@ -13286,15 +15753,105 @@ pub enum VariableId {
     WriterGroupType_RemoveDataSetWriter_InputArguments = 17993u32,
     PubSubGroupTypeAddWriterMethodType_InputArguments = 17995u32,
     PubSubGroupTypeAddWriterMethodType_OutputArguments = 17996u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_GetGroupMemberships_OutputArguments =
+        18002u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_NormalState =
+        18003u32,
     KeyCredentialConfigurationType_EndpointUrls = 18004u32,
     KeyCredentialConfigurationType_ServiceStatus = 18005u32,
     KeyCredentialConfigurationType_UpdateCredential_InputArguments = 18007u32,
     KeyCredentialUpdateMethodType_InputArguments = 18010u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_TrustListId =
+        18012u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_LastUpdateTime =
+        18013u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_UpdateFrequency =
+        18014u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_Size =
+        18017u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_Writable =
+        18018u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_UserWritable =
+        18019u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_OpenCount =
+        18020u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_MimeType =
+        18021u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_MaxByteStringLength =
+        18022u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_LastModifiedTime =
+        18023u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_Open_InputArguments =
+        18025u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_Open_OutputArguments =
+        18026u32,
     KeyCredentialAuditEventType_ResourceUri = 18028u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_Close_InputArguments =
+        18030u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_Read_InputArguments =
+        18032u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_Read_OutputArguments =
+        18033u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_Write_InputArguments =
+        18035u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_GetPosition_InputArguments =
+        18037u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_GetPosition_OutputArguments =
+        18038u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_SetPosition_InputArguments =
+        18040u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_LastUpdateTime =
+        18041u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_UpdateFrequency =
+        18042u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_ActivityTimeout =
+        18043u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_DefaultValidationOptions =
+        18044u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_OpenWithMasks_InputArguments =
+        18046u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_OpenWithMasks_OutputArguments =
+        18048u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_CloseAndUpdate_InputArguments =
+        18050u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_CloseAndUpdate_OutputArguments =
+        18051u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_AddCertificate_InputArguments =
+        18053u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_RemoveCertificate_InputArguments =
+        18055u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateTypes =
+        18056u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_GetRejectedList_OutputArguments =
+        18058u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_EventId =
+        18060u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_EventType =
+        18061u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SourceNode =
+        18062u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SourceName =
+        18063u32,
     KeyCredentialDeletedAuditEventType_ResourceUri = 18064u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Time =
+        18065u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ReceiveTime =
+        18066u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_LocalTime =
+        18067u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Message =
+        18068u32,
     KeyCredentialConfigurationType_ResourceUri = 18069u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Severity =
+        18070u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ConditionClassId =
+        18071u32,
     AuthorizationServiceConfigurationType_ServiceUri = 18072u32,
     AuthorizationServiceConfigurationType_IssuerEndpointUrl = 18073u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ConditionClassName =
+        18074u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ConditionSubClassId =
+        18075u32,
     ReaderGroupType_DataSetReaderName_Placeholder_PublisherId = 18077u32,
     ReaderGroupType_DataSetReaderName_Placeholder_WriterGroupId = 18078u32,
     ReaderGroupType_DataSetReaderName_Placeholder_DataSetWriterId = 18079u32,
@@ -13409,8 +15966,24 @@ pub enum VariableId {
     ReaderGroupType_DataSetReaderName_Placeholder_Diagnostics_LiveValues_MajorVersion_DiagnosticsLevel =
         18153u32,
     ReaderGroupType_DataSetReaderName_Placeholder_Diagnostics_LiveValues_MinorVersion = 18154u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ConditionSubClassName =
+        18156u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ConditionName =
+        18157u32,
     ReaderGroupType_DataSetReaderName_Placeholder_Diagnostics_LiveValues_MinorVersion_DiagnosticsLevel =
         18158u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_BranchId =
+        18159u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Retain =
+        18160u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_EnabledState =
+        18161u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_EnabledState_Id =
+        18162u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_EnabledState_Name =
+        18163u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_EnabledState_Number =
+        18164u32,
     KeyCredentialConfigurationType_ProfileUri = 18165u32,
     OpcUa_XmlSchema_DataTypeDefinition = 18166u32,
     OpcUa_XmlSchema_DataTypeDefinition_DataTypeVersion = 18167u32,
@@ -13458,6 +16031,603 @@ pub enum VariableId {
         18209u32,
     AlarmGroupType_AlarmConditionInstance_Placeholder_LatchedState_TrueState = 18210u32,
     AlarmGroupType_AlarmConditionInstance_Placeholder_LatchedState_FalseState = 18211u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_EnabledState_EffectiveDisplayName =
+        18213u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_EnabledState_TransitionTime =
+        18214u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_EnabledState_EffectiveTransitionTime =
+        18215u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_EnabledState_TrueState =
+        18216u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_EnabledState_FalseState =
+        18217u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Quality =
+        18218u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Quality_SourceTimestamp =
+        18219u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_LastSeverity =
+        18220u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_LastSeverity_SourceTimestamp =
+        18221u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Comment =
+        18222u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Comment_SourceTimestamp =
+        18223u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ClientUserId =
+        18224u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AddComment_InputArguments =
+        18228u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AckedState =
+        18229u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AckedState_Id =
+        18230u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AckedState_Name =
+        18231u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AckedState_Number =
+        18232u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AckedState_EffectiveDisplayName =
+        18233u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AckedState_TransitionTime =
+        18234u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AckedState_EffectiveTransitionTime =
+        18235u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AckedState_TrueState =
+        18236u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AckedState_FalseState =
+        18237u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ConfirmedState =
+        18238u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ConfirmedState_Id =
+        18239u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ConfirmedState_Name =
+        18240u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ConfirmedState_Number =
+        18241u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ConfirmedState_EffectiveDisplayName =
+        18242u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ConfirmedState_TransitionTime =
+        18243u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ConfirmedState_EffectiveTransitionTime =
+        18244u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ConfirmedState_TrueState =
+        18245u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ConfirmedState_FalseState =
+        18246u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Acknowledge_InputArguments =
+        18248u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Confirm_InputArguments =
+        18250u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ActiveState =
+        18251u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ActiveState_Id =
+        18252u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ActiveState_Name =
+        18253u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ActiveState_Number =
+        18254u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ActiveState_EffectiveDisplayName =
+        18255u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ActiveState_TransitionTime =
+        18256u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ActiveState_EffectiveTransitionTime =
+        18257u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ActiveState_TrueState =
+        18258u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ActiveState_FalseState =
+        18259u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_InputNode =
+        18260u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SuppressedState =
+        18261u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SuppressedState_Id =
+        18262u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SuppressedState_Name =
+        18263u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SuppressedState_Number =
+        18264u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SuppressedState_EffectiveDisplayName =
+        18265u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SuppressedState_TransitionTime =
+        18266u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SuppressedState_EffectiveTransitionTime =
+        18267u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SuppressedState_TrueState =
+        18268u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SuppressedState_FalseState =
+        18269u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_OutOfServiceState =
+        18270u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_OutOfServiceState_Id =
+        18271u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_OutOfServiceState_Name =
+        18272u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_OutOfServiceState_Number =
+        18273u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_OutOfServiceState_EffectiveDisplayName =
+        18274u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_OutOfServiceState_TransitionTime =
+        18275u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_OutOfServiceState_EffectiveTransitionTime =
+        18276u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_OutOfServiceState_TrueState =
+        18277u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_OutOfServiceState_FalseState =
+        18278u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_CurrentState =
+        18280u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_CurrentState_Id =
+        18281u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_CurrentState_Name =
+        18282u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_CurrentState_Number =
+        18283u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_CurrentState_EffectiveDisplayName =
+        18284u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_LastTransition =
+        18285u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_LastTransition_Id =
+        18286u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_LastTransition_Name =
+        18287u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_LastTransition_Number =
+        18288u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_LastTransition_TransitionTime =
+        18289u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_LastTransition_EffectiveTransitionTime =
+        18290u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_AvailableStates =
+        18291u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_AvailableTransitions =
+        18292u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_UnshelveTime =
+        18293u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_TimedShelve_InputArguments =
+        18295u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_TimedShelve2_InputArguments =
+        18297u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_Unshelve2_InputArguments =
+        18300u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_OneShotShelve2_InputArguments =
+        18303u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SuppressedOrShelved =
+        18304u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_MaxTimeShelved =
+        18305u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AudibleEnabled =
+        18306u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AudibleSound =
+        18307u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AudibleSound_ListId =
+        18308u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AudibleSound_AgencyId =
+        18309u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AudibleSound_VersionId =
+        18310u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SilenceState =
+        18311u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SilenceState_Id =
+        18312u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SilenceState_Name =
+        18313u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SilenceState_Number =
+        18314u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SilenceState_EffectiveDisplayName =
+        18315u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SilenceState_TransitionTime =
+        18316u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SilenceState_EffectiveTransitionTime =
+        18317u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SilenceState_TrueState =
+        18318u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SilenceState_FalseState =
+        18319u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_OnDelay =
+        18320u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_OffDelay =
+        18321u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_FirstInGroupFlag =
+        18322u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_LatchedState =
+        18324u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_LatchedState_Id =
+        18325u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_LatchedState_Name =
+        18326u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_LatchedState_Number =
+        18327u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_LatchedState_EffectiveDisplayName =
+        18328u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_LatchedState_TransitionTime =
+        18329u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_LatchedState_EffectiveTransitionTime =
+        18330u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_LatchedState_TrueState =
+        18331u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_LatchedState_FalseState =
+        18332u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ReAlarmTime =
+        18333u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ReAlarmRepeatCount =
+        18334u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Suppress2_InputArguments =
+        18338u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Unsuppress2_InputArguments =
+        18341u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_RemoveFromService2_InputArguments =
+        18344u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_PlaceInService2_InputArguments =
+        18348u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Reset2_InputArguments =
+        18351u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_GetGroupMemberships_OutputArguments =
+        18353u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_NormalState =
+        18354u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ExpirationDate =
+        18355u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ExpirationLimit =
+        18356u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_CertificateType =
+        18357u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Certificate =
+        18358u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_EventId =
+        18360u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_EventType =
+        18361u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SourceNode =
+        18362u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SourceName =
+        18363u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Time =
+        18364u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ReceiveTime =
+        18365u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_LocalTime =
+        18366u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Message =
+        18367u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Severity =
+        18368u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ConditionClassId =
+        18369u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ConditionClassName =
+        18370u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ConditionSubClassId =
+        18371u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ConditionSubClassName =
+        18372u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ConditionName =
+        18373u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_BranchId =
+        18374u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Retain =
+        18375u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_EnabledState =
+        18376u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_EnabledState_Id =
+        18377u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_EnabledState_Name =
+        18378u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_EnabledState_Number =
+        18379u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_EnabledState_EffectiveDisplayName =
+        18380u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_EnabledState_TransitionTime =
+        18381u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_EnabledState_EffectiveTransitionTime =
+        18382u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_EnabledState_TrueState =
+        18383u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_EnabledState_FalseState =
+        18384u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Quality =
+        18385u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Quality_SourceTimestamp =
+        18386u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_LastSeverity =
+        18387u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_LastSeverity_SourceTimestamp =
+        18388u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Comment =
+        18389u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Comment_SourceTimestamp =
+        18390u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ClientUserId =
+        18391u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AddComment_InputArguments =
+        18395u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AckedState =
+        18396u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AckedState_Id =
+        18397u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AckedState_Name =
+        18398u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AckedState_Number =
+        18399u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AckedState_EffectiveDisplayName =
+        18400u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AckedState_TransitionTime =
+        18401u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AckedState_EffectiveTransitionTime =
+        18402u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AckedState_TrueState =
+        18403u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AckedState_FalseState =
+        18404u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ConfirmedState =
+        18405u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ConfirmedState_Id =
+        18406u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ConfirmedState_Name =
+        18407u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ConfirmedState_Number =
+        18408u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ConfirmedState_EffectiveDisplayName =
+        18409u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ConfirmedState_TransitionTime =
+        18410u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ConfirmedState_EffectiveTransitionTime =
+        18411u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ConfirmedState_TrueState =
+        18412u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ConfirmedState_FalseState =
+        18413u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Acknowledge_InputArguments =
+        18415u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Confirm_InputArguments =
+        18417u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ActiveState =
+        18418u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ActiveState_Id =
+        18419u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ActiveState_Name =
+        18420u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ActiveState_Number =
+        18421u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ActiveState_EffectiveDisplayName =
+        18422u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ActiveState_TransitionTime =
+        18423u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ActiveState_EffectiveTransitionTime =
+        18424u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ActiveState_TrueState =
+        18425u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ActiveState_FalseState =
+        18426u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_InputNode =
+        18427u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SuppressedState =
+        18428u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SuppressedState_Id =
+        18429u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SuppressedState_Name =
+        18430u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SuppressedState_Number =
+        18431u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SuppressedState_EffectiveDisplayName =
+        18432u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SuppressedState_TransitionTime =
+        18433u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SuppressedState_EffectiveTransitionTime =
+        18434u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SuppressedState_TrueState =
+        18435u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SuppressedState_FalseState =
+        18436u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_OutOfServiceState =
+        18437u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_OutOfServiceState_Id =
+        18438u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_OutOfServiceState_Name =
+        18439u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_OutOfServiceState_Number =
+        18440u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_OutOfServiceState_EffectiveDisplayName =
+        18441u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_OutOfServiceState_TransitionTime =
+        18442u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_OutOfServiceState_EffectiveTransitionTime =
+        18443u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_OutOfServiceState_TrueState =
+        18444u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_OutOfServiceState_FalseState =
+        18445u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_CurrentState =
+        18447u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_CurrentState_Id =
+        18448u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_CurrentState_Name =
+        18449u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_CurrentState_Number =
+        18450u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_CurrentState_EffectiveDisplayName =
+        18451u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_LastTransition =
+        18452u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_LastTransition_Id =
+        18453u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_LastTransition_Name =
+        18454u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_LastTransition_Number =
+        18455u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_LastTransition_TransitionTime =
+        18456u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_LastTransition_EffectiveTransitionTime =
+        18457u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_AvailableStates =
+        18458u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_AvailableTransitions =
+        18459u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_UnshelveTime =
+        18460u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_TimedShelve_InputArguments =
+        18462u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_TimedShelve2_InputArguments =
+        18464u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_Unshelve2_InputArguments =
+        18467u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_OneShotShelve2_InputArguments =
+        18470u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SuppressedOrShelved =
+        18471u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_MaxTimeShelved =
+        18472u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AudibleEnabled =
+        18473u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AudibleSound =
+        18474u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AudibleSound_ListId =
+        18475u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AudibleSound_AgencyId =
+        18476u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AudibleSound_VersionId =
+        18477u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SilenceState =
+        18478u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SilenceState_Id =
+        18479u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SilenceState_Name =
+        18480u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SilenceState_Number =
+        18481u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SilenceState_EffectiveDisplayName =
+        18482u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SilenceState_TransitionTime =
+        18483u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SilenceState_EffectiveTransitionTime =
+        18484u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SilenceState_TrueState =
+        18485u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SilenceState_FalseState =
+        18486u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_OnDelay =
+        18487u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_OffDelay =
+        18488u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_FirstInGroupFlag =
+        18489u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_LatchedState =
+        18491u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_LatchedState_Id =
+        18492u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_LatchedState_Name =
+        18493u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_LatchedState_Number =
+        18494u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_LatchedState_EffectiveDisplayName =
+        18495u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_LatchedState_TransitionTime =
+        18497u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_LatchedState_EffectiveTransitionTime =
+        18498u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_LatchedState_TrueState =
+        18499u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_LatchedState_FalseState =
+        18500u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ReAlarmTime =
+        18501u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ReAlarmRepeatCount =
+        18502u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Suppress2_InputArguments =
+        18506u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Unsuppress2_InputArguments =
+        18509u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_RemoveFromService2_InputArguments =
+        18512u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_PlaceInService2_InputArguments =
+        18515u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Reset2_InputArguments =
+        18518u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_GetGroupMemberships_OutputArguments =
+        18520u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_NormalState =
+        18521u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_TrustListId =
+        18522u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_LastUpdateTime =
+        18523u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_UpdateFrequency =
+        18524u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_ApplicationUri = 18525u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_ProductUri = 18526u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_ApplicationType = 18527u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_ServerCapabilities = 18528u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_SupportedPrivateKeyFormats =
+        18529u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_MaxTrustListSize = 18530u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_MulticastDnsEnabled = 18531u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_HasSecureElement = 18532u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_UpdateCertificate_InputArguments =
+        18534u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_UpdateCertificate_OutputArguments =
+        18535u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_GetCertificates_InputArguments =
+        18537u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_GetCertificates_OutputArguments =
+        18538u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CreateSigningRequest_InputArguments =
+        18542u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_CreateSigningRequest_OutputArguments =
+        18543u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_GetRejectedList_OutputArguments =
+        18545u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_TransactionDiagnostics_StartTime =
+        18548u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_TransactionDiagnostics_EndTime =
+        18549u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_TransactionDiagnostics_Result =
+        18550u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_TransactionDiagnostics_AffectedTrustLists =
+        18551u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_TransactionDiagnostics_AffectedCertificateGroups =
+        18552u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_TransactionDiagnostics_Errors =
+        18553u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_Enabled = 18592u32,
+    ActionState_EnumStrings = 18596u32,
+    OpcUa_BinarySchema_ActionTargetDataType = 18601u32,
+    OpcUa_BinarySchema_ActionTargetDataType_DataTypeVersion = 18602u32,
+    OpcUa_BinarySchema_ActionTargetDataType_DictionaryFragment = 18603u32,
+    OpcUa_BinarySchema_PublishedActionDataType = 18604u32,
+    OpcUa_BinarySchema_PublishedActionDataType_DataTypeVersion = 18605u32,
+    OpcUa_BinarySchema_PublishedActionDataType_DictionaryFragment = 18606u32,
+    OpcUa_BinarySchema_ActionMethodDataType = 18607u32,
+    OpcUa_BinarySchema_ActionMethodDataType_DataTypeVersion = 18608u32,
+    OpcUa_BinarySchema_ActionMethodDataType_DictionaryFragment = 18609u32,
+    OpcUa_XmlSchema_ActionTargetDataType = 18613u32,
+    OpcUa_XmlSchema_ActionTargetDataType_DataTypeVersion = 18614u32,
+    OpcUa_XmlSchema_ActionTargetDataType_DictionaryFragment = 18615u32,
+    OpcUa_XmlSchema_PublishedActionDataType = 18616u32,
+    OpcUa_XmlSchema_PublishedActionDataType_DataTypeVersion = 18617u32,
+    OpcUa_XmlSchema_PublishedActionDataType_DictionaryFragment = 18618u32,
+    OpcUa_XmlSchema_ActionMethodDataType = 18619u32,
+    OpcUa_XmlSchema_ActionMethodDataType_DataTypeVersion = 18620u32,
+    OpcUa_XmlSchema_ActionMethodDataType_DictionaryFragment = 18621u32,
+    WellKnownRole_TrustedApplication_Identities = 18626u32,
+    WellKnownRole_TrustedApplication_ApplicationsExclude = 18627u32,
+    WellKnownRole_TrustedApplication_Applications = 18628u32,
+    WellKnownRole_TrustedApplication_EndpointsExclude = 18629u32,
+    WellKnownRole_TrustedApplication_Endpoints = 18630u32,
+    WellKnownRole_TrustedApplication_CustomConfiguration = 18631u32,
+    WellKnownRole_TrustedApplication_AddIdentity_InputArguments = 18633u32,
+    WellKnownRole_TrustedApplication_RemoveIdentity_InputArguments = 18635u32,
+    WellKnownRole_TrustedApplication_AddApplication_InputArguments = 18637u32,
+    WellKnownRole_TrustedApplication_RemoveApplication_InputArguments = 18639u32,
+    WellKnownRole_TrustedApplication_AddEndpoint_InputArguments = 18641u32,
+    WellKnownRole_TrustedApplication_RemoveEndpoint_InputArguments = 18643u32,
+    HistoricalEventConfigurationType_SortByEventFields = 18644u32,
+    DefaultHEConfiguration_SortByEventFields = 18645u32,
+    SortOrderType_EnumStrings = 18647u32,
+    KeyCredentialConfigurationFolderType_ServiceName_Placeholder_CredentialId = 18656u32,
+    KeyCredentialConfigurationType_CredentialId = 18657u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_ApplicationNames = 18658u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_SupportsTransactions = 18659u32,
+    ServerConfigurationType_ApplicationNames = 18660u32,
+    ServerConfigurationType_SupportsTransactions = 18661u32,
+    ServerConfiguration_ApplicationNames = 18662u32,
+    ServerConfiguration_SupportsTransactions = 18663u32,
+    ProvisionableDeviceType_ApplicationName_Placeholder_ApplicationNames = 18664u32,
     PublishSubscribeType_ConnectionName_Placeholder_Diagnostics_DiagnosticsLevel = 18668u32,
     PublishSubscribeType_ConnectionName_Placeholder_Diagnostics_TotalInformation = 18669u32,
     PublishSubscribeType_ConnectionName_Placeholder_Diagnostics_TotalInformation_Active = 18670u32,
@@ -13597,6 +16767,7 @@ pub enum VariableId {
     ThreeDVectorType_Y = 18770u32,
     ThreeDVectorType_Z = 18771u32,
     CartesianCoordinatesType_LengthUnit = 18773u32,
+    ProvisionableDeviceType_ApplicationName_Placeholder_SupportsTransactions = 18775u32,
     ThreeDCartesianCoordinatesType_X = 18776u32,
     ThreeDCartesianCoordinatesType_Y = 18777u32,
     ThreeDCartesianCoordinatesType_Z = 18778u32,
@@ -13759,6 +16930,105 @@ pub enum VariableId {
         18928u32,
     PublishedDataSetType_DataSetWriterName_Placeholder_Diagnostics_LiveValues_MinorVersion_DiagnosticsLevel =
         18929u32,
+    OpcUa_BinarySchema_PublishedActionMethodDataType = 18931u32,
+    OpcUa_BinarySchema_PublishedActionMethodDataType_DataTypeVersion = 18932u32,
+    OpcUa_BinarySchema_PublishedActionMethodDataType_DictionaryFragment = 18933u32,
+    OpcUa_BinarySchema_DtlsPubSubConnectionDataType = 18934u32,
+    OpcUa_BinarySchema_DtlsPubSubConnectionDataType_DataTypeVersion = 18935u32,
+    OpcUa_BinarySchema_DtlsPubSubConnectionDataType_DictionaryFragment = 18936u32,
+    OpcUa_XmlSchema_PublishedActionMethodDataType = 18939u32,
+    OpcUa_XmlSchema_PublishedActionMethodDataType_DataTypeVersion = 18940u32,
+    OpcUa_XmlSchema_PublishedActionMethodDataType_DictionaryFragment = 18941u32,
+    OpcUa_XmlSchema_DtlsPubSubConnectionDataType = 18942u32,
+    OpcUa_XmlSchema_DtlsPubSubConnectionDataType_DataTypeVersion = 18943u32,
+    OpcUa_XmlSchema_DtlsPubSubConnectionDataType_DictionaryFragment = 18944u32,
+    ChassisIdSubtype_EnumValues = 18948u32,
+    PortIdSubtype_EnumValues = 18950u32,
+    ManAddrIfSubtype_EnumValues = 18952u32,
+    LldpSystemCapabilitiesMap_OptionSetValues = 18957u32,
+    LLDP_RemoteStatistics_LastChangeTime = 18960u32,
+    LLDP_RemoteStatistics_RemoteInserts = 18961u32,
+    LLDP_RemoteStatistics_RemoteDeletes = 18962u32,
+    LLDP_RemoteStatistics_RemoteDrops = 18963u32,
+    LLDP_RemoteStatistics_RemoteAgeouts = 18964u32,
+    LLDP_LocalSystemData_ChassisIdSubtype = 18966u32,
+    LLDP_LocalSystemData_ChassisId = 18967u32,
+    LLDP_LocalSystemData_SystemName = 18968u32,
+    LLDP_LocalSystemData_SystemDescription = 18969u32,
+    LLDP_LocalSystemData_SystemCapabilitiesSupported = 18970u32,
+    LLDP_LocalSystemData_SystemCapabilitiesEnabled = 18971u32,
+    LldpInformationType_RemoteStatistics_LastChangeTime = 18975u32,
+    LldpInformationType_RemoteStatistics_RemoteInserts = 18976u32,
+    LldpInformationType_RemoteStatistics_RemoteDeletes = 18977u32,
+    LldpInformationType_RemoteStatistics_RemoteDrops = 18978u32,
+    LldpInformationType_RemoteStatistics_RemoteAgeouts = 18979u32,
+    LldpInformationType_LocalSystemData_ChassisIdSubtype = 18981u32,
+    LldpInformationType_LocalSystemData_ChassisId = 18982u32,
+    LldpInformationType_LocalSystemData_SystemName = 18983u32,
+    LldpInformationType_LocalSystemData_SystemDescription = 18984u32,
+    LldpInformationType_LocalSystemData_SystemCapabilitiesSupported = 18985u32,
+    LldpInformationType_LocalSystemData_SystemCapabilitiesEnabled = 18986u32,
+    LldpInformationType_Ports_LldpPortInformation_Placeholder_IetfBaseNetworkInterfaceName =
+        18989u32,
+    LldpInformationType_Ports_LldpPortInformation_Placeholder_DestMacAddress = 18990u32,
+    LldpInformationType_Ports_LldpPortInformation_Placeholder_PortIdSubtype = 18991u32,
+    LldpInformationType_Ports_LldpPortInformation_Placeholder_PortId = 18992u32,
+    LldpInformationType_Ports_LldpPortInformation_Placeholder_PortDescription = 18993u32,
+    LldpInformationType_Ports_LldpPortInformation_Placeholder_ManagementAddressTxPort = 18994u32,
+    LldpRemoteStatisticsType_LastChangeTime = 18997u32,
+    LldpRemoteStatisticsType_RemoteInserts = 18998u32,
+    LldpRemoteStatisticsType_RemoteDeletes = 18999u32,
+    LldpRemoteStatisticsType_RemoteDrops = 19000u32,
+    LldpRemoteStatisticsType_RemoteAgeouts = 19001u32,
+    LldpLocalSystemType_ChassisIdSubtype = 19003u32,
+    LldpLocalSystemType_ChassisId = 19004u32,
+    LldpLocalSystemType_SystemName = 19005u32,
+    LldpLocalSystemType_SystemDescription = 19006u32,
+    LldpLocalSystemType_SystemCapabilitiesSupported = 19007u32,
+    LldpLocalSystemType_SystemCapabilitiesEnabled = 19008u32,
+    LldpPortInformationType_IetfBaseNetworkInterfaceName = 19010u32,
+    LldpPortInformationType_DestMacAddress = 19011u32,
+    LldpPortInformationType_PortIdSubtype = 19012u32,
+    LldpPortInformationType_PortId = 19013u32,
+    LldpPortInformationType_PortDescription = 19014u32,
+    LldpPortInformationType_ManagementAddressTxPort = 19015u32,
+    LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_TimeMark = 19018u32,
+    LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_RemoteIndex = 19019u32,
+    LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_ChassisIdSubtype =
+        19020u32,
+    LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_ChassisId = 19021u32,
+    LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_PortIdSubtype = 19022u32,
+    LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_PortId = 19023u32,
+    LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_PortDescription =
+        19024u32,
+    LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_SystemName = 19025u32,
+    LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_SystemDescription =
+        19026u32,
+    LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_SystemCapabilitiesSupported =
+        19027u32,
+    LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_SystemCapabilitiesEnabled =
+        19028u32,
+    LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_RemoteChanges = 19029u32,
+    LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_RemoteTooManyNeighbors =
+        19030u32,
+    LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_ManagementAddress =
+        19031u32,
+    LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_RemoteUnknownTlv =
+        19032u32,
+    LldpRemoteSystemType_TimeMark = 19034u32,
+    LldpRemoteSystemType_RemoteIndex = 19035u32,
+    LldpRemoteSystemType_ChassisIdSubtype = 19036u32,
+    LldpRemoteSystemType_ChassisId = 19037u32,
+    LldpRemoteSystemType_PortIdSubtype = 19038u32,
+    LldpRemoteSystemType_PortId = 19039u32,
+    LldpRemoteSystemType_PortDescription = 19040u32,
+    LldpRemoteSystemType_SystemName = 19041u32,
+    LldpRemoteSystemType_SystemDescription = 19042u32,
+    LldpRemoteSystemType_SystemCapabilitiesSupported = 19043u32,
+    LldpRemoteSystemType_SystemCapabilitiesEnabled = 19044u32,
+    LldpRemoteSystemType_RemoteChanges = 19045u32,
+    LldpRemoteSystemType_RemoteTooManyNeighbors = 19046u32,
+    LldpRemoteSystemType_ManagementAddress = 19047u32,
     OpcUa_XmlSchema_CartesianCoordinates_DictionaryFragment = 19048u32,
     OpcUa_XmlSchema_ThreeDCartesianCoordinates = 19049u32,
     OpcUa_XmlSchema_ThreeDCartesianCoordinates_DataTypeVersion = 19050u32,
@@ -13779,13 +17049,27 @@ pub enum VariableId {
     ThreeDFrameType_Orientation_A = 19074u32,
     ThreeDFrameType_Orientation_B = 19075u32,
     ThreeDFrameType_Orientation_C = 19076u32,
+    LldpRemoteSystemType_RemoteUnknownTlv = 19078u32,
     MultiStateDictionaryEntryDiscreteBaseType_EnumDictionaryEntries = 19082u32,
     MultiStateDictionaryEntryDiscreteBaseType_ValueAsDictionaryEntries = 19083u32,
+    OpcUa_BinarySchema_LldpManagementAddressTxPortType = 19085u32,
+    OpcUa_BinarySchema_LldpManagementAddressTxPortType_DataTypeVersion = 19086u32,
+    OpcUa_BinarySchema_LldpManagementAddressTxPortType_DictionaryFragment = 19087u32,
+    OpcUa_BinarySchema_LldpManagementAddressType = 19088u32,
+    OpcUa_BinarySchema_LldpManagementAddressType_DataTypeVersion = 19089u32,
     MultiStateDictionaryEntryDiscreteType_ValueAsDictionaryEntries = 19090u32,
     HistoryServerCapabilities_ServerTimestampSupported = 19091u32,
     HistoricalDataConfigurationType_ServerTimestampSupported = 19092u32,
     HAConfiguration_ServerTimestampSupported = 19093u32,
     HistoryServerCapabilitiesType_ServerTimestampSupported = 19094u32,
+    OpcUa_BinarySchema_LldpManagementAddressType_DictionaryFragment = 19096u32,
+    OpcUa_BinarySchema_LldpTlvType = 19097u32,
+    OpcUa_BinarySchema_LldpTlvType_DataTypeVersion = 19098u32,
+    OpcUa_BinarySchema_LldpTlvType_DictionaryFragment = 19099u32,
+    OpcUa_XmlSchema_LldpManagementAddressTxPortType = 19103u32,
+    OpcUa_XmlSchema_LldpManagementAddressTxPortType_DataTypeVersion = 19104u32,
+    OpcUa_XmlSchema_LldpManagementAddressTxPortType_DictionaryFragment = 19105u32,
+    OpcUa_XmlSchema_LldpManagementAddressType = 19106u32,
     PubSubConnectionType_WriterGroupName_Placeholder_Diagnostics_DiagnosticsLevel = 19108u32,
     PubSubConnectionType_WriterGroupName_Placeholder_Diagnostics_TotalInformation = 19109u32,
     PubSubConnectionType_WriterGroupName_Placeholder_Diagnostics_TotalInformation_Active = 19110u32,
@@ -14068,10 +17352,25 @@ pub enum VariableId {
     PubSubConnectionType_Diagnostics_Counters_StateDisabledByMethod_TimeFirstChange = 19285u32,
     PubSubConnectionType_Diagnostics_LiveValues_ResolvedAddress = 19287u32,
     PubSubConnectionType_Diagnostics_LiveValues_ResolvedAddress_DiagnosticsLevel = 19288u32,
+    OpcUa_XmlSchema_LldpManagementAddressType_DataTypeVersion = 19289u32,
+    OpcUa_XmlSchema_LldpManagementAddressType_DictionaryFragment = 19290u32,
+    OpcUa_XmlSchema_LldpTlvType = 19291u32,
+    OpcUa_XmlSchema_LldpTlvType_DataTypeVersion = 19292u32,
     AuditHistoryAnnotationUpdateEventType_PerformInsertReplace = 19293u32,
     AuditHistoryAnnotationUpdateEventType_NewValues = 19294u32,
     AuditHistoryAnnotationUpdateEventType_OldValues = 19295u32,
     TrustListType_UpdateFrequency = 19296u32,
+    OpcUa_XmlSchema_LldpTlvType_DictionaryFragment = 19298u32,
+    SessionsDiagnosticsSummaryType_ClientName_Placeholder_CurrentRoleIds = 19302u32,
+    SessionDiagnosticsObjectType_CurrentRoleIds = 19303u32,
+    AuditActivateSessionEventType_CurrentRoleIds = 19304u32,
+    AuditUpdateMethodEventType_StatusCodeId = 19305u32,
+    AuditUpdateMethodEventType_OutputArguments = 19306u32,
+    ApplicationConfigurationFolderType_ApplicationName_Placeholder_InApplicationSetup = 19307u32,
+    ServerConfigurationType_InApplicationSetup = 19308u32,
+    ServerConfiguration_InApplicationSetup = 19309u32,
+    ProvisionableDeviceType_ApplicationName_Placeholder_InApplicationSetup = 19310u32,
+    TestOptionSet_OptionSetValues = 19441u32,
     TrustListOutOfDateAlarmType_TrustListId = 19446u32,
     TrustListOutOfDateAlarmType_LastUpdateTime = 19447u32,
     TrustListOutOfDateAlarmType_UpdateFrequency = 19448u32,
@@ -22840,33 +26139,27 @@ pub enum VariableId {
     ConversionLimitEnum_EnumStrings = 32437u32,
     SyntaxReferenceEntryType_CommonName = 32441u32,
     UnitType_Symbol = 32443u32,
-    UnitType_Description = 32444u32,
     UnitType_UnitSystem = 32445u32,
     UnitType_Discipline = 32446u32,
     ServerUnitType_ConversionLimit = 32461u32,
     ServerUnitType_CoherentUnit_Symbol = 32463u32,
-    ServerUnitType_CoherentUnit_Description = 32464u32,
     ServerUnitType_CoherentUnit_UnitSystem = 32465u32,
     ServerUnitType_CoherentUnit_Discipline = 32466u32,
     AlternativeUnitType_LinearConversion = 32472u32,
     AlternativeUnitType_MathMLConversion = 32473u32,
     AlternativeUnitType_MathMLInverseConversion = 32474u32,
     QuantityType_Symbol = 32476u32,
-    QuantityType_Description = 32477u32,
     QuantityType_Annotation = 32478u32,
     QuantityType_ConversionService = 32479u32,
     QuantityType_Dimension = 32480u32,
     QuantityType_ServerUnits_ServerUnit_Placeholder_Symbol = 32483u32,
-    QuantityType_ServerUnits_ServerUnit_Placeholder_Description = 32484u32,
     QuantityType_ServerUnits_ServerUnit_Placeholder_UnitSystem = 32485u32,
     QuantityType_ServerUnits_ServerUnit_Placeholder_Discipline = 32486u32,
     QuantityType_ServerUnits_ServerUnit_Placeholder_ConversionLimit = 32496u32,
     QuantityType_ServerUnits_ServerUnit_Placeholder_CoherentUnit_Symbol = 32498u32,
-    QuantityType_ServerUnits_ServerUnit_Placeholder_CoherentUnit_Description = 32499u32,
     QuantityType_ServerUnits_ServerUnit_Placeholder_CoherentUnit_UnitSystem = 32500u32,
     QuantityType_ServerUnits_ServerUnit_Placeholder_CoherentUnit_Discipline = 32501u32,
     QuantitiesFolderType_Quantity_Placeholder_Symbol = 32504u32,
-    QuantitiesFolderType_Quantity_Placeholder_Description = 32505u32,
     QuantitiesFolderType_Quantity_Placeholder_Annotation = 32506u32,
     QuantitiesFolderType_Quantity_Placeholder_ConversionService = 32507u32,
     QuantitiesFolderType_Quantity_Placeholder_Dimension = 32508u32,
@@ -22889,7 +26182,6 @@ pub enum VariableId {
     OpcUa_XmlSchema_QuantityDimension_DataTypeVersion = 32582u32,
     OpcUa_XmlSchema_QuantityDimension_DictionaryFragment = 32583u32,
     ServerUnitType_AlternativeUnits_AlternativeUnit_Placeholder_Symbol = 32588u32,
-    ServerUnitType_AlternativeUnits_AlternativeUnit_Placeholder_Description = 32589u32,
     ServerUnitType_AlternativeUnits_AlternativeUnit_Placeholder_UnitSystem = 32590u32,
     ServerUnitType_AlternativeUnits_AlternativeUnit_Placeholder_Discipline = 32591u32,
     ServerUnitType_AlternativeUnits_AlternativeUnit_Placeholder_LinearConversion = 32592u32,
@@ -26505,6 +29797,7 @@ impl TryFrom<u32> for VariableId {
                 15428u32 => Self::WellKnownRole_ConfigureAdmin_ApplicationsExclude,
                 15429u32 => Self::WellKnownRole_ConfigureAdmin_EndpointsExclude,
                 15430u32 => Self::WellKnownRole_SecurityAdmin_ApplicationsExclude,
+                15433u32 => Self::TestEnumeration_EnumValues,
                 15441u32 => Self::PublishSubscribe_GetSecurityGroup_InputArguments,
                 15442u32 => Self::PublishSubscribe_GetSecurityGroup_OutputArguments,
                 15445u32 => {
@@ -27808,6 +31101,27 @@ impl TryFrom<u32> for VariableId {
                 16681u32 => {
                     Self::PublishSubscribeType_PublishedDataSets_RemoveDataSetFolder_InputArguments
                 }
+                16710u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_Size
+                }
+                16711u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_Writable
+                }
+                16712u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_UserWritable
+                }
+                16713u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_OpenCount
+                }
+                16714u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_MimeType
+                }
+                16715u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_MaxByteStringLength
+                }
+                16716u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_LastModifiedTime
+                }
                 16718u32 => Self::AddConnectionMethodType_InputArguments,
                 16719u32 => Self::AddConnectionMethodType_OutputArguments,
                 16720u32 => {
@@ -27816,29 +31130,488 @@ impl TryFrom<u32> for VariableId {
                 16721u32 => {
                     Self::PublishedDataSetType_DataSetWriterName_Placeholder_DataSetFieldContentMask
                 }
+                16722u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_Open_InputArguments
+                }
+                16723u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_Open_OutputArguments
+                }
+                16725u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_Close_InputArguments
+                }
+                16727u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_Read_InputArguments
+                }
+                16728u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_Read_OutputArguments
+                }
+                16730u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_Write_InputArguments
+                }
                 16731u32 => {
                     Self::PublishedDataSetType_DataSetWriterName_Placeholder_KeyFrameCount
                 }
+                16733u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_GetPosition_InputArguments
+                }
+                16734u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_GetPosition_OutputArguments
+                }
+                16736u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_SetPosition_InputArguments
+                }
+                16737u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_LastUpdateTime
+                }
+                16738u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_UpdateFrequency
+                }
+                16739u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_ActivityTimeout
+                }
+                16740u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_DefaultValidationOptions
+                }
+                16742u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_OpenWithMasks_InputArguments
+                }
+                16743u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_OpenWithMasks_OutputArguments
+                }
+                16745u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_CloseAndUpdate_InputArguments
+                }
+                16746u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_CloseAndUpdate_OutputArguments
+                }
+                16748u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_AddCertificate_InputArguments
+                }
+                16750u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustList_RemoveCertificate_InputArguments
+                }
+                16751u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateTypes
+                }
+                16753u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_GetRejectedList_OutputArguments
+                }
+                16755u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_EventId
+                }
+                16756u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_EventType
+                }
+                16757u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SourceNode
+                }
                 16759u32 => Self::PublishedDataSetType_DataSetClassId,
+                16760u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SourceName
+                }
+                16761u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Time
+                }
+                16762u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ReceiveTime
+                }
+                16763u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_LocalTime
+                }
+                16764u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Message
+                }
+                16765u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Severity
+                }
+                16766u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ConditionClassId
+                }
+                16767u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ConditionClassName
+                }
+                16768u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ConditionSubClassId
+                }
+                16769u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ConditionSubClassName
+                }
+                16770u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ConditionName
+                }
+                16771u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_BranchId
+                }
+                16772u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Retain
+                }
+                16773u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_EnabledState
+                }
+                16774u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_EnabledState_Id
+                }
+                16775u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_EnabledState_Name
+                }
                 16776u32 => Self::NonExclusiveDeviationAlarmType_BaseSetpointNode,
+                16777u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_EnabledState_Number
+                }
+                16778u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_EnabledState_EffectiveDisplayName
+                }
+                16779u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_EnabledState_TransitionTime
+                }
+                16780u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_EnabledState_EffectiveTransitionTime
+                }
+                16781u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_EnabledState_TrueState
+                }
+                16782u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_EnabledState_FalseState
+                }
+                16783u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Quality
+                }
+                16784u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Quality_SourceTimestamp
+                }
+                16785u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_LastSeverity
+                }
+                16786u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_LastSeverity_SourceTimestamp
+                }
+                16787u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Comment
+                }
+                16788u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Comment_SourceTimestamp
+                }
+                16789u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ClientUserId
+                }
+                16793u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AddComment_InputArguments
+                }
+                16794u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AckedState
+                }
+                16795u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AckedState_Id
+                }
+                16796u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AckedState_Name
+                }
+                16797u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AckedState_Number
+                }
+                16798u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AckedState_EffectiveDisplayName
+                }
+                16799u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AckedState_TransitionTime
+                }
+                16800u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AckedState_EffectiveTransitionTime
+                }
+                16801u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AckedState_TrueState
+                }
+                16802u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AckedState_FalseState
+                }
+                16803u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ConfirmedState
+                }
+                16804u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ConfirmedState_Id
+                }
+                16805u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ConfirmedState_Name
+                }
+                16806u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ConfirmedState_Number
+                }
+                16807u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ConfirmedState_EffectiveDisplayName
+                }
+                16808u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ConfirmedState_TransitionTime
+                }
+                16809u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ConfirmedState_EffectiveTransitionTime
+                }
+                16810u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ConfirmedState_TrueState
+                }
+                16811u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ConfirmedState_FalseState
+                }
+                16813u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Acknowledge_InputArguments
+                }
+                16815u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Confirm_InputArguments
+                }
+                16816u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ActiveState
+                }
                 16817u32 => Self::ExclusiveDeviationAlarmType_BaseSetpointNode,
+                16818u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ActiveState_Id
+                }
+                16819u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ActiveState_Name
+                }
+                16820u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ActiveState_Number
+                }
+                16821u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ActiveState_EffectiveDisplayName
+                }
+                16822u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ActiveState_TransitionTime
+                }
+                16823u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ActiveState_EffectiveTransitionTime
+                }
+                16824u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ActiveState_TrueState
+                }
+                16825u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ActiveState_FalseState
+                }
+                16826u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_InputNode
+                }
+                16827u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SuppressedState
+                }
+                16828u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SuppressedState_Id
+                }
+                16829u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SuppressedState_Name
+                }
+                16830u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SuppressedState_Number
+                }
+                16831u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SuppressedState_EffectiveDisplayName
+                }
+                16832u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SuppressedState_TransitionTime
+                }
+                16833u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SuppressedState_EffectiveTransitionTime
+                }
+                16834u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SuppressedState_TrueState
+                }
+                16835u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SuppressedState_FalseState
+                }
+                16836u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_OutOfServiceState
+                }
+                16837u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_OutOfServiceState_Id
+                }
+                16838u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_OutOfServiceState_Name
+                }
+                16839u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_OutOfServiceState_Number
+                }
+                16840u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_OutOfServiceState_EffectiveDisplayName
+                }
+                16841u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_OutOfServiceState_TransitionTime
+                }
                 16843u32 => {
                     Self::DataSetFolderType_DataSetFolderName_Placeholder_AddPublishedDataItemsTemplate_InputArguments
+                }
+                16844u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_OutOfServiceState_EffectiveTransitionTime
+                }
+                16845u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_OutOfServiceState_TrueState
+                }
+                16846u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_OutOfServiceState_FalseState
+                }
+                16848u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_CurrentState
+                }
+                16849u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_CurrentState_Id
+                }
+                16850u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_CurrentState_Name
+                }
+                16851u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_CurrentState_Number
+                }
+                16852u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_CurrentState_EffectiveDisplayName
                 }
                 16853u32 => {
                     Self::DataSetFolderType_DataSetFolderName_Placeholder_AddPublishedDataItemsTemplate_OutputArguments
                 }
+                16854u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_LastTransition
+                }
+                16855u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_LastTransition_Id
+                }
+                16856u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_LastTransition_Name
+                }
+                16857u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_LastTransition_Number
+                }
                 16858u32 => Self::NonExclusiveRateOfChangeAlarmType_EngineeringUnits,
+                16859u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_LastTransition_TransitionTime
+                }
+                16860u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_LastTransition_EffectiveTransitionTime
+                }
+                16861u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_AvailableStates
+                }
+                16862u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_AvailableTransitions
+                }
+                16863u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_UnshelveTime
+                }
+                16865u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_TimedShelve_InputArguments
+                }
+                16867u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_TimedShelve2_InputArguments
+                }
+                16870u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_Unshelve2_InputArguments
+                }
+                16873u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ShelvingState_OneShotShelve2_InputArguments
+                }
+                16874u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SuppressedOrShelved
+                }
+                16875u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_MaxTimeShelved
+                }
+                16876u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AudibleEnabled
+                }
+                16877u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AudibleSound
+                }
+                16878u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AudibleSound_ListId
+                }
+                16879u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AudibleSound_AgencyId
+                }
+                16880u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_AudibleSound_VersionId
+                }
                 16882u32 => {
                     Self::DataSetFolderType_DataSetFolderName_Placeholder_AddPublishedEventsTemplate_InputArguments
                 }
                 16883u32 => {
                     Self::DataSetFolderType_DataSetFolderName_Placeholder_AddPublishedEventsTemplate_OutputArguments
                 }
+                16885u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SilenceState
+                }
+                16886u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SilenceState_Id
+                }
+                16887u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SilenceState_Name
+                }
+                16888u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SilenceState_Number
+                }
+                16889u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SilenceState_EffectiveDisplayName
+                }
+                16890u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SilenceState_TransitionTime
+                }
+                16891u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SilenceState_EffectiveTransitionTime
+                }
+                16892u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SilenceState_TrueState
+                }
+                16893u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_SilenceState_FalseState
+                }
                 16894u32 => {
                     Self::DataSetFolderType_DataSetFolderName_Placeholder_AddDataSetFolder_InputArguments
                 }
+                16895u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_OnDelay
+                }
+                16896u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_OffDelay
+                }
+                16897u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_FirstInGroupFlag
+                }
                 16899u32 => Self::ExclusiveRateOfChangeAlarmType_EngineeringUnits,
+                16900u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_LatchedState
+                }
+                16901u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_LatchedState_Id
+                }
+                16902u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_LatchedState_Name
+                }
+                16903u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_LatchedState_Number
+                }
+                16904u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_LatchedState_EffectiveDisplayName
+                }
+                16905u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_LatchedState_TransitionTime
+                }
+                16906u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_LatchedState_EffectiveTransitionTime
+                }
+                16907u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_LatchedState_TrueState
+                }
+                16908u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_LatchedState_FalseState
+                }
+                16909u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ReAlarmTime
+                }
+                16910u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ReAlarmRepeatCount
+                }
+                16914u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Suppress2_InputArguments
+                }
+                16917u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Unsuppress2_InputArguments
+                }
+                16920u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_RemoveFromService2_InputArguments
+                }
                 16922u32 => {
                     Self::DataSetFolderType_DataSetFolderName_Placeholder_AddDataSetFolder_OutputArguments
                 }
@@ -27847,6 +31620,84 @@ impl TryFrom<u32> for VariableId {
                 }
                 16925u32 => {
                     Self::DataSetFolderType_PublishedDataSetName_Placeholder_DataSetClassId
+                }
+                16927u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_PlaceInService2_InputArguments
+                }
+                16930u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Reset2_InputArguments
+                }
+                16932u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_GetGroupMemberships_OutputArguments
+                }
+                16933u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_NormalState
+                }
+                16934u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ExpirationDate
+                }
+                16936u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_ExpirationLimit
+                }
+                16937u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_CertificateType
+                }
+                16938u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_CertificateExpired_Certificate
+                }
+                16940u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_EventId
+                }
+                16941u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_EventType
+                }
+                16942u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SourceNode
+                }
+                16943u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SourceName
+                }
+                16944u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Time
+                }
+                16945u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ReceiveTime
+                }
+                16946u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_LocalTime
+                }
+                16947u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Message
+                }
+                16948u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Severity
+                }
+                16949u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ConditionClassId
+                }
+                16950u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ConditionClassName
+                }
+                16951u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ConditionSubClassId
+                }
+                16952u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ConditionSubClassName
+                }
+                16953u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ConditionName
+                }
+                16954u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_BranchId
+                }
+                16955u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Retain
+                }
+                16956u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_EnabledState
+                }
+                16957u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_EnabledState_Id
                 }
                 16958u32 => {
                     Self::DataSetFolderType_AddPublishedDataItemsTemplate_InputArguments
@@ -27857,22 +31708,589 @@ impl TryFrom<u32> for VariableId {
                 16961u32 => {
                     Self::DataSetFolderType_AddPublishedEventsTemplate_InputArguments
                 }
+                16962u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_EnabledState_Name
+                }
+                16963u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_EnabledState_Number
+                }
+                16964u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_EnabledState_EffectiveDisplayName
+                }
+                16965u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_EnabledState_TransitionTime
+                }
+                16966u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_EnabledState_EffectiveTransitionTime
+                }
+                16967u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_EnabledState_TrueState
+                }
+                16968u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_EnabledState_FalseState
+                }
+                16969u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Quality
+                }
+                16970u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Quality_SourceTimestamp
+                }
                 16971u32 => {
                     Self::DataSetFolderType_AddPublishedEventsTemplate_OutputArguments
                 }
+                16972u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_LastSeverity
+                }
+                16973u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_LastSeverity_SourceTimestamp
+                }
+                16974u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Comment
+                }
+                16975u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Comment_SourceTimestamp
+                }
+                16976u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ClientUserId
+                }
+                16980u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AddComment_InputArguments
+                }
+                16981u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AckedState
+                }
+                16982u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AckedState_Id
+                }
+                16983u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AckedState_Name
+                }
+                16984u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AckedState_Number
+                }
+                16985u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AckedState_EffectiveDisplayName
+                }
+                16986u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AckedState_TransitionTime
+                }
+                16987u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AckedState_EffectiveTransitionTime
+                }
+                16988u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AckedState_TrueState
+                }
+                16989u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AckedState_FalseState
+                }
+                16990u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ConfirmedState
+                }
+                16991u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ConfirmedState_Id
+                }
+                16992u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ConfirmedState_Name
+                }
+                16993u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ConfirmedState_Number
+                }
                 16995u32 => Self::DataSetFolderType_AddDataSetFolder_InputArguments,
                 16996u32 => Self::DataSetFolderType_AddDataSetFolder_OutputArguments,
+                16998u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ConfirmedState_EffectiveDisplayName
+                }
+                16999u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ConfirmedState_TransitionTime
+                }
+                17000u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ConfirmedState_EffectiveTransitionTime
+                }
+                17001u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ConfirmedState_TrueState
+                }
+                17002u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ConfirmedState_FalseState
+                }
+                17004u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Acknowledge_InputArguments
+                }
+                17006u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Confirm_InputArguments
+                }
                 17007u32 => Self::DataSetFolderType_RemoveDataSetFolder_InputArguments,
+                17008u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ActiveState
+                }
+                17009u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ActiveState_Id
+                }
+                17010u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ActiveState_Name
+                }
+                17011u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ActiveState_Number
+                }
+                17012u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ActiveState_EffectiveDisplayName
+                }
+                17013u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ActiveState_TransitionTime
+                }
+                17014u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ActiveState_EffectiveTransitionTime
+                }
+                17015u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ActiveState_TrueState
+                }
+                17016u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ActiveState_FalseState
+                }
+                17017u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_InputNode
+                }
+                17018u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SuppressedState
+                }
+                17019u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SuppressedState_Id
+                }
+                17020u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SuppressedState_Name
+                }
+                17021u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SuppressedState_Number
+                }
+                17022u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SuppressedState_EffectiveDisplayName
+                }
+                17023u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SuppressedState_TransitionTime
+                }
+                17024u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SuppressedState_EffectiveTransitionTime
+                }
+                17025u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SuppressedState_TrueState
+                }
+                17026u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SuppressedState_FalseState
+                }
+                17027u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_OutOfServiceState
+                }
+                17028u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_OutOfServiceState_Id
+                }
+                17029u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_OutOfServiceState_Name
+                }
                 17031u32 => Self::AddPublishedDataItemsTemplateMethodType_InputArguments,
                 17032u32 => Self::AddPublishedDataItemsTemplateMethodType_OutputArguments,
+                17034u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_OutOfServiceState_Number
+                }
+                17035u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_OutOfServiceState_EffectiveDisplayName
+                }
+                17036u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_OutOfServiceState_TransitionTime
+                }
+                17037u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_OutOfServiceState_EffectiveTransitionTime
+                }
+                17038u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_OutOfServiceState_TrueState
+                }
+                17039u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_OutOfServiceState_FalseState
+                }
+                17041u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_CurrentState
+                }
+                17042u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_CurrentState_Id
+                }
                 17043u32 => Self::AddPublishedEventsTemplateMethodType_InputArguments,
+                17044u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_CurrentState_Name
+                }
+                17045u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_CurrentState_Number
+                }
+                17046u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_CurrentState_EffectiveDisplayName
+                }
+                17047u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_LastTransition
+                }
+                17048u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_LastTransition_Id
+                }
+                17049u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_LastTransition_Name
+                }
+                17050u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_LastTransition_Number
+                }
+                17051u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_LastTransition_TransitionTime
+                }
+                17052u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_LastTransition_EffectiveTransitionTime
+                }
+                17053u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_AvailableStates
+                }
+                17054u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_AvailableTransitions
+                }
+                17055u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_UnshelveTime
+                }
+                17057u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_TimedShelve_InputArguments
+                }
+                17059u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_TimedShelve2_InputArguments
+                }
+                17062u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_Unshelve2_InputArguments
+                }
+                17065u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ShelvingState_OneShotShelve2_InputArguments
+                }
                 17066u32 => Self::AddPublishedEventsTemplateMethodType_OutputArguments,
                 17068u32 => Self::AddDataSetFolderMethodType_InputArguments,
                 17069u32 => Self::AddDataSetFolderMethodType_OutputArguments,
+                17070u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SuppressedOrShelved
+                }
+                17071u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_MaxTimeShelved
+                }
+                17072u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AudibleEnabled
+                }
+                17073u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AudibleSound
+                }
+                17074u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AudibleSound_ListId
+                }
+                17075u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AudibleSound_AgencyId
+                }
+                17076u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_AudibleSound_VersionId
+                }
+                17077u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SilenceState
+                }
+                17078u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SilenceState_Id
+                }
+                17081u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SilenceState_Name
+                }
+                17082u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SilenceState_Number
+                }
+                17083u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SilenceState_EffectiveDisplayName
+                }
+                17084u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SilenceState_TransitionTime
+                }
+                17085u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SilenceState_EffectiveTransitionTime
+                }
+                17086u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SilenceState_TrueState
+                }
+                17087u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_SilenceState_FalseState
+                }
+                17088u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_OnDelay
+                }
+                17089u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_OffDelay
+                }
+                17090u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_FirstInGroupFlag
+                }
+                17092u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_LatchedState
+                }
+                17093u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_LatchedState_Id
+                }
+                17094u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_LatchedState_Name
+                }
+                17095u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_LatchedState_Number
+                }
+                17096u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_LatchedState_EffectiveDisplayName
+                }
+                17097u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_LatchedState_TransitionTime
+                }
+                17098u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_LatchedState_EffectiveTransitionTime
+                }
+                17099u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_LatchedState_TrueState
+                }
+                17100u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_LatchedState_FalseState
+                }
+                17101u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ReAlarmTime
+                }
+                17102u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_ReAlarmRepeatCount
+                }
+                17106u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Suppress2_InputArguments
+                }
+                17109u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Unsuppress2_InputArguments
+                }
+                17112u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_RemoveFromService2_InputArguments
+                }
+                17115u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_PlaceInService2_InputArguments
+                }
+                17118u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_Reset2_InputArguments
+                }
+                17120u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_GetGroupMemberships_OutputArguments
+                }
+                17121u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_NormalState
+                }
+                17122u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_TrustListId
+                }
+                17123u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_LastUpdateTime
+                }
+                17124u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultApplicationGroup_TrustListOutOfDate_UpdateFrequency
+                }
+                17127u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_Size
+                }
+                17128u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_Writable
+                }
+                17129u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_UserWritable
+                }
+                17130u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_OpenCount
+                }
+                17131u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_MimeType
+                }
+                17132u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_MaxByteStringLength
+                }
+                17133u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_LastModifiedTime
+                }
+                17135u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_Open_InputArguments
+                }
+                17136u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_Open_OutputArguments
+                }
+                17138u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_Close_InputArguments
+                }
+                17140u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_Read_InputArguments
+                }
+                17141u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_Read_OutputArguments
+                }
+                17143u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_Write_InputArguments
+                }
+                17145u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_GetPosition_InputArguments
+                }
+                17146u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_GetPosition_OutputArguments
+                }
+                17148u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_SetPosition_InputArguments
+                }
+                17149u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_LastUpdateTime
+                }
+                17150u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_UpdateFrequency
+                }
+                17151u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_ActivityTimeout
+                }
+                17152u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_DefaultValidationOptions
+                }
+                17154u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_OpenWithMasks_InputArguments
+                }
+                17155u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_OpenWithMasks_OutputArguments
+                }
+                17157u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_CloseAndUpdate_InputArguments
+                }
+                17158u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_CloseAndUpdate_OutputArguments
+                }
+                17160u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_AddCertificate_InputArguments
+                }
+                17162u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustList_RemoveCertificate_InputArguments
+                }
+                17163u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateTypes
+                }
+                17165u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_GetRejectedList_OutputArguments
+                }
+                17167u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_EventId
+                }
+                17168u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_EventType
+                }
+                17169u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SourceNode
+                }
+                17170u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SourceName
+                }
+                17171u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Time
+                }
+                17172u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ReceiveTime
+                }
+                17173u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_LocalTime
+                }
+                17174u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Message
+                }
+                17175u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Severity
+                }
+                17176u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ConditionClassId
+                }
+                17177u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ConditionClassName
+                }
+                17178u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ConditionSubClassId
+                }
+                17179u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ConditionSubClassName
+                }
+                17180u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ConditionName
+                }
+                17181u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_BranchId
+                }
+                17182u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Retain
+                }
+                17183u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_EnabledState
+                }
+                17184u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_EnabledState_Id
+                }
+                17185u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_EnabledState_Name
+                }
+                17186u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_EnabledState_Number
+                }
+                17187u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_EnabledState_EffectiveDisplayName
+                }
+                17188u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_EnabledState_TransitionTime
+                }
+                17189u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_EnabledState_EffectiveTransitionTime
+                }
+                17190u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_EnabledState_TrueState
+                }
+                17191u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_EnabledState_FalseState
+                }
+                17192u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Quality
+                }
+                17193u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Quality_SourceTimestamp
+                }
+                17194u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_LastSeverity
+                }
+                17195u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_LastSeverity_SourceTimestamp
+                }
+                17196u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Comment
+                }
+                17197u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Comment_SourceTimestamp
+                }
+                17198u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ClientUserId
+                }
                 17201u32 => Self::RemoveDataSetFolderMethodType_InputArguments,
                 17202u32 => Self::PubSubConnectionType_Address_NetworkInterface,
                 17204u32 => {
                     Self::PubSubConnectionType_WriterGroupName_Placeholder_MaxNetworkMessageSize
+                }
+                17206u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AddComment_InputArguments
+                }
+                17207u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AckedState
+                }
+                17208u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AckedState_Id
+                }
+                17209u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AckedState_Name
+                }
+                17210u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AckedState_Number
+                }
+                17211u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AckedState_EffectiveDisplayName
+                }
+                17212u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AckedState_TransitionTime
+                }
+                17213u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AckedState_EffectiveTransitionTime
                 }
                 17214u32 => {
                     Self::PubSubConnectionType_WriterGroupName_Placeholder_WriterGroupId
@@ -27883,6 +32301,141 @@ impl TryFrom<u32> for VariableId {
                 17222u32 => Self::AuditConditionCommentEventType_ConditionEventId,
                 17223u32 => Self::AuditConditionAcknowledgeEventType_ConditionEventId,
                 17224u32 => Self::AuditConditionConfirmEventType_ConditionEventId,
+                17226u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AckedState_TrueState
+                }
+                17227u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AckedState_FalseState
+                }
+                17228u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ConfirmedState
+                }
+                17229u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ConfirmedState_Id
+                }
+                17230u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ConfirmedState_Name
+                }
+                17231u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ConfirmedState_Number
+                }
+                17232u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ConfirmedState_EffectiveDisplayName
+                }
+                17233u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ConfirmedState_TransitionTime
+                }
+                17234u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ConfirmedState_EffectiveTransitionTime
+                }
+                17235u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ConfirmedState_TrueState
+                }
+                17236u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ConfirmedState_FalseState
+                }
+                17238u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Acknowledge_InputArguments
+                }
+                17240u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Confirm_InputArguments
+                }
+                17241u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ActiveState
+                }
+                17243u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ActiveState_Id
+                }
+                17244u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ActiveState_Name
+                }
+                17245u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ActiveState_Number
+                }
+                17246u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ActiveState_EffectiveDisplayName
+                }
+                17247u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ActiveState_TransitionTime
+                }
+                17248u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ActiveState_EffectiveTransitionTime
+                }
+                17249u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ActiveState_TrueState
+                }
+                17250u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ActiveState_FalseState
+                }
+                17251u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_InputNode
+                }
+                17252u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SuppressedState
+                }
+                17253u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SuppressedState_Id
+                }
+                17254u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SuppressedState_Name
+                }
+                17255u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SuppressedState_Number
+                }
+                17256u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SuppressedState_EffectiveDisplayName
+                }
+                17257u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SuppressedState_TransitionTime
+                }
+                17258u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SuppressedState_EffectiveTransitionTime
+                }
+                17260u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SuppressedState_TrueState
+                }
+                17261u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SuppressedState_FalseState
+                }
+                17262u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_OutOfServiceState
+                }
+                17263u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_OutOfServiceState_Id
+                }
+                17264u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_OutOfServiceState_Name
+                }
+                17265u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_OutOfServiceState_Number
+                }
+                17266u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_OutOfServiceState_EffectiveDisplayName
+                }
+                17267u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_OutOfServiceState_TransitionTime
+                }
+                17268u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_OutOfServiceState_EffectiveTransitionTime
+                }
+                17269u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_OutOfServiceState_TrueState
+                }
+                17270u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_OutOfServiceState_FalseState
+                }
+                17272u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_CurrentState
+                }
+                17273u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_CurrentState_Id
+                }
+                17274u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_CurrentState_Name
+                }
+                17275u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_CurrentState_Number
+                }
                 17278u32 => Self::AlarmRateVariableType_Rate,
                 17280u32 => Self::AlarmMetricsType_AlarmCount,
                 17281u32 => Self::AlarmMetricsType_MaximumActiveState,
@@ -27905,11 +32458,23 @@ impl TryFrom<u32> for VariableId {
                 }
                 17297u32 => Self::PublishSubscribeType_SetSecurityKeys_InputArguments,
                 17299u32 => Self::SetSecurityKeysMethodType_InputArguments,
+                17300u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_CurrentState_EffectiveDisplayName
+                }
                 17301u32 => {
                     Self::PubSubConnectionType_WriterGroupName_Placeholder_AddDataSetWriter_OutputArguments
                 }
                 17302u32 => {
                     Self::PubSubConnectionType_ReaderGroupName_Placeholder_MaxNetworkMessageSize
+                }
+                17303u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_LastTransition
+                }
+                17304u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_LastTransition_Id
+                }
+                17305u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_LastTransition_Name
                 }
                 17306u32 => Self::PubSubConnectionType_TransportProfileUri,
                 17309u32 => Self::PubSubConnectionType_TransportProfileUri_RestrictToList,
@@ -27930,6 +32495,9 @@ impl TryFrom<u32> for VariableId {
                 }
                 17319u32 => {
                     Self::PubSubConnectionType_WriterGroupName_Placeholder_KeepAliveTime
+                }
+                17320u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_LastTransition_Number
                 }
                 17321u32 => {
                     Self::PubSubConnectionType_WriterGroupName_Placeholder_Priority
@@ -27954,6 +32522,72 @@ impl TryFrom<u32> for VariableId {
                 }
                 17334u32 => {
                     Self::PubSubConnectionType_ReaderGroupName_Placeholder_RemoveDataSetReader_InputArguments
+                }
+                17335u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_LastTransition_TransitionTime
+                }
+                17336u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_LastTransition_EffectiveTransitionTime
+                }
+                17337u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_AvailableStates
+                }
+                17338u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_AvailableTransitions
+                }
+                17339u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_UnshelveTime
+                }
+                17341u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_TimedShelve_InputArguments
+                }
+                17343u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_TimedShelve2_InputArguments
+                }
+                17346u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_Unshelve2_InputArguments
+                }
+                17349u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ShelvingState_OneShotShelve2_InputArguments
+                }
+                17350u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SuppressedOrShelved
+                }
+                17351u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_MaxTimeShelved
+                }
+                17352u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AudibleEnabled
+                }
+                17353u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AudibleSound
+                }
+                17354u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AudibleSound_ListId
+                }
+                17356u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AudibleSound_AgencyId
+                }
+                17357u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_AudibleSound_VersionId
+                }
+                17358u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SilenceState
+                }
+                17359u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SilenceState_Id
+                }
+                17360u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SilenceState_Name
+                }
+                17361u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SilenceState_Number
+                }
+                17362u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SilenceState_EffectiveDisplayName
+                }
+                17363u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SilenceState_TransitionTime
                 }
                 17365u32 => Self::PublishSubscribe_SetSecurityKeys_InputArguments,
                 17367u32 => Self::PublishSubscribe_AddConnection_InputArguments,
@@ -28169,9 +32803,18 @@ impl TryFrom<u32> for VariableId {
                     Self::PublishSubscribeType_ConnectionName_Placeholder_ConnectionProperties
                 }
                 17479u32 => Self::PublishSubscribeType_SupportedTransportProfiles,
+                17480u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SilenceState_EffectiveTransitionTime
+                }
                 17481u32 => Self::PublishSubscribe_SupportedTransportProfiles,
                 17482u32 => {
                     Self::PublishedDataSetType_DataSetWriterName_Placeholder_DataSetWriterProperties
+                }
+                17483u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SilenceState_TrueState
+                }
+                17484u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_SilenceState_FalseState
                 }
                 17485u32 => Self::PubSubConnectionType_ConnectionProperties,
                 17486u32 => {
@@ -28181,8 +32824,14 @@ impl TryFrom<u32> for VariableId {
                     Self::PubSubConnectionType_ReaderGroupName_Placeholder_GroupProperties
                 }
                 17488u32 => Self::PubSubGroupType_GroupProperties,
+                17489u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_OnDelay
+                }
                 17490u32 => {
                     Self::WriterGroupType_DataSetWriterName_Placeholder_DataSetWriterProperties
+                }
+                17491u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_OffDelay
                 }
                 17492u32 => {
                     Self::ReaderGroupType_DataSetReaderName_Placeholder_DataSetReaderProperties
@@ -28190,6 +32839,15 @@ impl TryFrom<u32> for VariableId {
                 17493u32 => Self::DataSetWriterType_DataSetWriterProperties,
                 17494u32 => Self::DataSetReaderType_DataSetReaderProperties,
                 17495u32 => Self::CreateCredentialMethodType_OutputArguments,
+                17498u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_FirstInGroupFlag
+                }
+                17500u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_LatchedState
+                }
+                17501u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_LatchedState_Id
+                }
                 17502u32 => Self::AnalogUnitType_EngineeringUnits,
                 17503u32 => {
                     Self::PublishSubscribeType_ConnectionName_Placeholder_Address_NetworkInterface_Selections
@@ -28200,8 +32858,17 @@ impl TryFrom<u32> for VariableId {
                 17505u32 => {
                     Self::PublishSubscribeType_ConnectionName_Placeholder_Address_NetworkInterface_RestrictToList
                 }
+                17506u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_LatchedState_Name
+                }
                 17507u32 => Self::PubSubConnectionType_AddReaderGroup_InputArguments,
                 17508u32 => Self::PubSubConnectionType_AddReaderGroup_OutputArguments,
+                17509u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_LatchedState_Number
+                }
+                17510u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_LatchedState_EffectiveDisplayName
+                }
                 17512u32 => {
                     Self::KeyCredentialConfigurationFolderType_ServiceName_Placeholder_ResourceUri
                 }
@@ -28228,6 +32895,15 @@ impl TryFrom<u32> for VariableId {
                 }
                 17524u32 => {
                     Self::KeyCredentialConfigurationFolderType_CreateCredential_OutputArguments
+                }
+                17525u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_LatchedState_TransitionTime
+                }
+                17526u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_LatchedState_EffectiveTransitionTime
+                }
+                17527u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_LatchedState_TrueState
                 }
                 17529u32 => {
                     Self::KeyCredentialConfiguration_CreateCredential_InputArguments
@@ -28275,9 +32951,18 @@ impl TryFrom<u32> for VariableId {
                 }
                 17563u32 => Self::DataSetReaderType_KeyFrameCount,
                 17564u32 => Self::DataSetReaderType_HeaderLayoutUri,
+                17565u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_LatchedState_FalseState
+                }
+                17566u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ReAlarmTime
+                }
                 17567u32 => Self::BaseAnalogType_InstrumentRange,
                 17568u32 => Self::BaseAnalogType_EURange,
                 17569u32 => Self::BaseAnalogType_EngineeringUnits,
+                17571u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ReAlarmRepeatCount
+                }
                 17575u32 => Self::AnalogUnitRangeType_EngineeringUnits,
                 17576u32 => {
                     Self::PubSubConnectionType_Address_NetworkInterface_Selections
@@ -28302,6 +32987,15 @@ impl TryFrom<u32> for VariableId {
                     Self::NetworkAddressType_NetworkInterface_SelectionDescriptions
                 }
                 17584u32 => Self::NetworkAddressType_NetworkInterface_RestrictToList,
+                17585u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Suppress2_InputArguments
+                }
+                17595u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Unsuppress2_InputArguments
+                }
+                17601u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_RemoveFromService2_InputArguments
+                }
                 17605u32 => Self::DefaultInstanceBrowseName,
                 17612u32 => Self::ServerType_LocalTime,
                 17613u32 => {
@@ -28311,6 +33005,30 @@ impl TryFrom<u32> for VariableId {
                     Self::PubSubConnectionTypeAddWriterGroupMethodType_OutputArguments
                 }
                 17615u32 => Self::AuditSecurityEventType_StatusCodeId,
+                17618u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_PlaceInService2_InputArguments
+                }
+                17621u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Reset2_InputArguments
+                }
+                17623u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_GetGroupMemberships_OutputArguments
+                }
+                17624u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_NormalState
+                }
+                17625u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ExpirationDate
+                }
+                17626u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_ExpirationLimit
+                }
+                17627u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_CertificateType
+                }
+                17628u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_CertificateExpired_Certificate
+                }
                 17631u32 => {
                     Self::PubSubConnectionAddReaderGroupGroupMethodType_InputArguments
                 }
@@ -28325,6 +33043,60 @@ impl TryFrom<u32> for VariableId {
                 17638u32 => {
                     Self::TemporaryFileTransferType_TransferState_Placeholder_AvailableTransitions
                 }
+                17639u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_EventId
+                }
+                17640u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_EventType
+                }
+                17642u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SourceNode
+                }
+                17643u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SourceName
+                }
+                17644u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Time
+                }
+                17645u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ReceiveTime
+                }
+                17646u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_LocalTime
+                }
+                17647u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Message
+                }
+                17648u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Severity
+                }
+                17649u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ConditionClassId
+                }
+                17650u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ConditionClassName
+                }
+                17651u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ConditionSubClassId
+                }
+                17652u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ConditionSubClassName
+                }
+                17653u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ConditionName
+                }
+                17654u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_BranchId
+                }
+                17655u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Retain
+                }
+                17656u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_EnabledState
+                }
+                17657u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_EnabledState_Id
+                }
                 17658u32 => Self::AlarmConditionType_ShelvingState_AvailableStates,
                 17659u32 => Self::AlarmConditionType_ShelvingState_AvailableTransitions,
                 17660u32 => {
@@ -28333,8 +33105,119 @@ impl TryFrom<u32> for VariableId {
                 17661u32 => {
                     Self::AlarmGroupType_AlarmConditionInstance_Placeholder_ShelvingState_AvailableTransitions
                 }
+                17662u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_EnabledState_Name
+                }
+                17663u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_EnabledState_Number
+                }
+                17664u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_EnabledState_EffectiveDisplayName
+                }
+                17665u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_EnabledState_TransitionTime
+                }
+                17666u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_EnabledState_EffectiveTransitionTime
+                }
+                17667u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_EnabledState_TrueState
+                }
+                17668u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_EnabledState_FalseState
+                }
+                17669u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Quality
+                }
                 17670u32 => Self::ExclusiveLimitAlarmType_LimitState_AvailableStates,
                 17671u32 => Self::ExclusiveLimitAlarmType_LimitState_AvailableTransitions,
+                17672u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Quality_SourceTimestamp
+                }
+                17673u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_LastSeverity
+                }
+                17674u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_LastSeverity_SourceTimestamp
+                }
+                17675u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Comment
+                }
+                17676u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Comment_SourceTimestamp
+                }
+                17677u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ClientUserId
+                }
+                17681u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AddComment_InputArguments
+                }
+                17682u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AckedState
+                }
+                17683u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AckedState_Id
+                }
+                17684u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AckedState_Name
+                }
+                17685u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AckedState_Number
+                }
+                17686u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AckedState_EffectiveDisplayName
+                }
+                17687u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AckedState_TransitionTime
+                }
+                17688u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AckedState_EffectiveTransitionTime
+                }
+                17689u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AckedState_TrueState
+                }
+                17690u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AckedState_FalseState
+                }
+                17691u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ConfirmedState
+                }
+                17692u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ConfirmedState_Id
+                }
+                17693u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ConfirmedState_Name
+                }
+                17694u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ConfirmedState_Number
+                }
+                17695u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ConfirmedState_EffectiveDisplayName
+                }
+                17696u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ConfirmedState_TransitionTime
+                }
+                17697u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ConfirmedState_EffectiveTransitionTime
+                }
+                17698u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ConfirmedState_TrueState
+                }
+                17699u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ConfirmedState_FalseState
+                }
+                17701u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Acknowledge_InputArguments
+                }
+                17703u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Confirm_InputArguments
+                }
+                17704u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ActiveState
+                }
+                17705u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ActiveState_Id
+                }
                 17706u32 => {
                     Self::PublishSubscribeType_ConnectionName_Placeholder_TransportProfileUri_Selections
                 }
@@ -28348,13 +33231,49 @@ impl TryFrom<u32> for VariableId {
                 17712u32 => Self::RationalNumberType_Numerator,
                 17713u32 => Self::RationalNumberType_Denominator,
                 17715u32 => Self::VectorType_VectorUnit,
+                17717u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ActiveState_Name
+                }
                 17719u32 => {
                     Self::FileDirectoryType_FileDirectoryName_Placeholder_DeleteFileSystemObject_InputArguments
                 }
                 17720u32 => {
                     Self::PubSubConnectionAddReaderGroupGroupMethodType_OutputArguments
                 }
+                17722u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ActiveState_Number
+                }
+                17723u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ActiveState_EffectiveDisplayName
+                }
                 17724u32 => Self::PubSubGroupType_MaxNetworkMessageSize,
+                17726u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ActiveState_TransitionTime
+                }
+                17727u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ActiveState_EffectiveTransitionTime
+                }
+                17728u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ActiveState_TrueState
+                }
+                17729u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ActiveState_FalseState
+                }
+                17730u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_InputNode
+                }
+                17731u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SuppressedState
+                }
+                17733u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SuppressedState_Id
+                }
+                17734u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SuppressedState_Name
+                }
+                17735u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SuppressedState_Number
+                }
                 17736u32 => Self::WriterGroupType_WriterGroupId,
                 17737u32 => Self::WriterGroupType_PublishingInterval,
                 17738u32 => Self::WriterGroupType_KeepAliveTime,
@@ -28668,11 +33587,62 @@ impl TryFrom<u32> for VariableId {
                 17878u32 => {
                     Self::WriterGroupType_Diagnostics_Counters_FailedTransmissions_Active
                 }
+                17879u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SuppressedState_EffectiveDisplayName
+                }
+                17880u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SuppressedState_TransitionTime
+                }
+                17881u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SuppressedState_EffectiveTransitionTime
+                }
+                17882u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SuppressedState_TrueState
+                }
+                17883u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SuppressedState_FalseState
+                }
+                17884u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_OutOfServiceState
+                }
                 17885u32 => {
                     Self::WriterGroupType_Diagnostics_Counters_FailedTransmissions_Classification
                 }
+                17886u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_OutOfServiceState_Id
+                }
+                17887u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_OutOfServiceState_Name
+                }
+                17888u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_OutOfServiceState_Number
+                }
+                17889u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_OutOfServiceState_EffectiveDisplayName
+                }
+                17890u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_OutOfServiceState_TransitionTime
+                }
+                17891u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_OutOfServiceState_EffectiveTransitionTime
+                }
                 17892u32 => {
                     Self::WriterGroupType_Diagnostics_Counters_FailedTransmissions_DiagnosticsLevel
+                }
+                17893u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_OutOfServiceState_TrueState
+                }
+                17894u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_OutOfServiceState_FalseState
+                }
+                17896u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_CurrentState
+                }
+                17897u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_CurrentState_Id
+                }
+                17898u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_CurrentState_Name
                 }
                 17899u32 => {
                     Self::WriterGroupType_Diagnostics_Counters_FailedTransmissions_TimeFirstChange
@@ -28687,32 +33657,182 @@ impl TryFrom<u32> for VariableId {
                 17903u32 => {
                     Self::WriterGroupType_Diagnostics_Counters_EncryptionErrors_DiagnosticsLevel
                 }
+                17904u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_CurrentState_Number
+                }
+                17905u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_CurrentState_EffectiveDisplayName
+                }
                 17906u32 => {
                     Self::WriterGroupType_Diagnostics_Counters_EncryptionErrors_TimeFirstChange
+                }
+                17907u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_LastTransition
+                }
+                17908u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_LastTransition_Id
+                }
+                17909u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_LastTransition_Name
+                }
+                17910u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_LastTransition_Number
+                }
+                17911u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_LastTransition_TransitionTime
+                }
+                17912u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_LastTransition_EffectiveTransitionTime
                 }
                 17913u32 => {
                     Self::WriterGroupType_Diagnostics_LiveValues_ConfiguredDataSetWriters
                 }
+                17914u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_AvailableStates
+                }
+                17915u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_AvailableTransitions
+                }
+                17916u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_UnshelveTime
+                }
+                17918u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_TimedShelve_InputArguments
+                }
                 17920u32 => {
                     Self::WriterGroupType_Diagnostics_LiveValues_ConfiguredDataSetWriters_DiagnosticsLevel
+                }
+                17921u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_TimedShelve2_InputArguments
+                }
+                17924u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_Unshelve2_InputArguments
                 }
                 17927u32 => {
                     Self::WriterGroupType_Diagnostics_LiveValues_OperationalDataSetWriters
                 }
+                17928u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ShelvingState_OneShotShelve2_InputArguments
+                }
+                17929u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SuppressedOrShelved
+                }
+                17930u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_MaxTimeShelved
+                }
+                17931u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AudibleEnabled
+                }
+                17932u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AudibleSound
+                }
+                17933u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AudibleSound_ListId
+                }
                 17934u32 => {
                     Self::WriterGroupType_Diagnostics_LiveValues_OperationalDataSetWriters_DiagnosticsLevel
                 }
+                17935u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AudibleSound_AgencyId
+                }
+                17936u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_AudibleSound_VersionId
+                }
+                17937u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SilenceState
+                }
+                17938u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SilenceState_Id
+                }
+                17939u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SilenceState_Name
+                }
+                17940u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SilenceState_Number
+                }
                 17941u32 => Self::WriterGroupType_Diagnostics_LiveValues_SecurityTokenID,
+                17942u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SilenceState_EffectiveDisplayName
+                }
+                17943u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SilenceState_TransitionTime
+                }
+                17944u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SilenceState_EffectiveTransitionTime
+                }
+                17945u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SilenceState_TrueState
+                }
+                17946u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_SilenceState_FalseState
+                }
+                17947u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_OnDelay
+                }
                 17948u32 => {
                     Self::WriterGroupType_Diagnostics_LiveValues_SecurityTokenID_DiagnosticsLevel
+                }
+                17949u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_OffDelay
+                }
+                17950u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_FirstInGroupFlag
+                }
+                17952u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_LatchedState
+                }
+                17953u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_LatchedState_Id
+                }
+                17954u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_LatchedState_Name
                 }
                 17955u32 => {
                     Self::WriterGroupType_Diagnostics_LiveValues_TimeToNextTokenID
                 }
+                17956u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_LatchedState_Number
+                }
+                17957u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_LatchedState_EffectiveDisplayName
+                }
+                17958u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_LatchedState_TransitionTime
+                }
+                17959u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_LatchedState_EffectiveTransitionTime
+                }
+                17960u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_LatchedState_TrueState
+                }
+                17961u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_LatchedState_FalseState
+                }
                 17962u32 => {
                     Self::WriterGroupType_Diagnostics_LiveValues_TimeToNextTokenID_DiagnosticsLevel
                 }
+                17963u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ReAlarmTime
+                }
+                17964u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_ReAlarmRepeatCount
+                }
+                17968u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Suppress2_InputArguments
+                }
+                17972u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Unsuppress2_InputArguments
+                }
+                17975u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_RemoveFromService2_InputArguments
+                }
                 17976u32 => Self::WriterGroupType_AddDataSetWriter_InputArguments,
+                17979u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_PlaceInService2_InputArguments
+                }
+                17982u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_Reset2_InputArguments
+                }
                 17987u32 => Self::WriterGroupType_AddDataSetWriter_OutputArguments,
                 17988u32 => Self::AudioVariableType_ListId,
                 17989u32 => Self::AudioVariableType_AgencyId,
@@ -28721,17 +33841,152 @@ impl TryFrom<u32> for VariableId {
                 17993u32 => Self::WriterGroupType_RemoveDataSetWriter_InputArguments,
                 17995u32 => Self::PubSubGroupTypeAddWriterMethodType_InputArguments,
                 17996u32 => Self::PubSubGroupTypeAddWriterMethodType_OutputArguments,
+                18002u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_GetGroupMemberships_OutputArguments
+                }
+                18003u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_NormalState
+                }
                 18004u32 => Self::KeyCredentialConfigurationType_EndpointUrls,
                 18005u32 => Self::KeyCredentialConfigurationType_ServiceStatus,
                 18007u32 => {
                     Self::KeyCredentialConfigurationType_UpdateCredential_InputArguments
                 }
                 18010u32 => Self::KeyCredentialUpdateMethodType_InputArguments,
+                18012u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_TrustListId
+                }
+                18013u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_LastUpdateTime
+                }
+                18014u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultHttpsGroup_TrustListOutOfDate_UpdateFrequency
+                }
+                18017u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_Size
+                }
+                18018u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_Writable
+                }
+                18019u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_UserWritable
+                }
+                18020u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_OpenCount
+                }
+                18021u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_MimeType
+                }
+                18022u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_MaxByteStringLength
+                }
+                18023u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_LastModifiedTime
+                }
+                18025u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_Open_InputArguments
+                }
+                18026u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_Open_OutputArguments
+                }
                 18028u32 => Self::KeyCredentialAuditEventType_ResourceUri,
+                18030u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_Close_InputArguments
+                }
+                18032u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_Read_InputArguments
+                }
+                18033u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_Read_OutputArguments
+                }
+                18035u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_Write_InputArguments
+                }
+                18037u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_GetPosition_InputArguments
+                }
+                18038u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_GetPosition_OutputArguments
+                }
+                18040u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_SetPosition_InputArguments
+                }
+                18041u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_LastUpdateTime
+                }
+                18042u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_UpdateFrequency
+                }
+                18043u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_ActivityTimeout
+                }
+                18044u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_DefaultValidationOptions
+                }
+                18046u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_OpenWithMasks_InputArguments
+                }
+                18048u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_OpenWithMasks_OutputArguments
+                }
+                18050u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_CloseAndUpdate_InputArguments
+                }
+                18051u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_CloseAndUpdate_OutputArguments
+                }
+                18053u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_AddCertificate_InputArguments
+                }
+                18055u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustList_RemoveCertificate_InputArguments
+                }
+                18056u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateTypes
+                }
+                18058u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_GetRejectedList_OutputArguments
+                }
+                18060u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_EventId
+                }
+                18061u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_EventType
+                }
+                18062u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SourceNode
+                }
+                18063u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SourceName
+                }
                 18064u32 => Self::KeyCredentialDeletedAuditEventType_ResourceUri,
+                18065u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Time
+                }
+                18066u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ReceiveTime
+                }
+                18067u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_LocalTime
+                }
+                18068u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Message
+                }
                 18069u32 => Self::KeyCredentialConfigurationType_ResourceUri,
+                18070u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Severity
+                }
+                18071u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ConditionClassId
+                }
                 18072u32 => Self::AuthorizationServiceConfigurationType_ServiceUri,
                 18073u32 => Self::AuthorizationServiceConfigurationType_IssuerEndpointUrl,
+                18074u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ConditionClassName
+                }
+                18075u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ConditionSubClassId
+                }
                 18077u32 => {
                     Self::ReaderGroupType_DataSetReaderName_Placeholder_PublisherId
                 }
@@ -28939,8 +34194,32 @@ impl TryFrom<u32> for VariableId {
                 18154u32 => {
                     Self::ReaderGroupType_DataSetReaderName_Placeholder_Diagnostics_LiveValues_MinorVersion
                 }
+                18156u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ConditionSubClassName
+                }
+                18157u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ConditionName
+                }
                 18158u32 => {
                     Self::ReaderGroupType_DataSetReaderName_Placeholder_Diagnostics_LiveValues_MinorVersion_DiagnosticsLevel
+                }
+                18159u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_BranchId
+                }
+                18160u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Retain
+                }
+                18161u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_EnabledState
+                }
+                18162u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_EnabledState_Id
+                }
+                18163u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_EnabledState_Name
+                }
+                18164u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_EnabledState_Number
                 }
                 18165u32 => Self::KeyCredentialConfigurationType_ProfileUri,
                 18166u32 => Self::OpcUa_XmlSchema_DataTypeDefinition,
@@ -29015,6 +34294,922 @@ impl TryFrom<u32> for VariableId {
                 }
                 18211u32 => {
                     Self::AlarmGroupType_AlarmConditionInstance_Placeholder_LatchedState_FalseState
+                }
+                18213u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_EnabledState_EffectiveDisplayName
+                }
+                18214u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_EnabledState_TransitionTime
+                }
+                18215u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_EnabledState_EffectiveTransitionTime
+                }
+                18216u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_EnabledState_TrueState
+                }
+                18217u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_EnabledState_FalseState
+                }
+                18218u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Quality
+                }
+                18219u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Quality_SourceTimestamp
+                }
+                18220u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_LastSeverity
+                }
+                18221u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_LastSeverity_SourceTimestamp
+                }
+                18222u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Comment
+                }
+                18223u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Comment_SourceTimestamp
+                }
+                18224u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ClientUserId
+                }
+                18228u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AddComment_InputArguments
+                }
+                18229u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AckedState
+                }
+                18230u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AckedState_Id
+                }
+                18231u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AckedState_Name
+                }
+                18232u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AckedState_Number
+                }
+                18233u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AckedState_EffectiveDisplayName
+                }
+                18234u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AckedState_TransitionTime
+                }
+                18235u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AckedState_EffectiveTransitionTime
+                }
+                18236u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AckedState_TrueState
+                }
+                18237u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AckedState_FalseState
+                }
+                18238u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ConfirmedState
+                }
+                18239u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ConfirmedState_Id
+                }
+                18240u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ConfirmedState_Name
+                }
+                18241u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ConfirmedState_Number
+                }
+                18242u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ConfirmedState_EffectiveDisplayName
+                }
+                18243u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ConfirmedState_TransitionTime
+                }
+                18244u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ConfirmedState_EffectiveTransitionTime
+                }
+                18245u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ConfirmedState_TrueState
+                }
+                18246u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ConfirmedState_FalseState
+                }
+                18248u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Acknowledge_InputArguments
+                }
+                18250u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Confirm_InputArguments
+                }
+                18251u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ActiveState
+                }
+                18252u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ActiveState_Id
+                }
+                18253u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ActiveState_Name
+                }
+                18254u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ActiveState_Number
+                }
+                18255u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ActiveState_EffectiveDisplayName
+                }
+                18256u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ActiveState_TransitionTime
+                }
+                18257u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ActiveState_EffectiveTransitionTime
+                }
+                18258u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ActiveState_TrueState
+                }
+                18259u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ActiveState_FalseState
+                }
+                18260u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_InputNode
+                }
+                18261u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SuppressedState
+                }
+                18262u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SuppressedState_Id
+                }
+                18263u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SuppressedState_Name
+                }
+                18264u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SuppressedState_Number
+                }
+                18265u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SuppressedState_EffectiveDisplayName
+                }
+                18266u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SuppressedState_TransitionTime
+                }
+                18267u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SuppressedState_EffectiveTransitionTime
+                }
+                18268u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SuppressedState_TrueState
+                }
+                18269u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SuppressedState_FalseState
+                }
+                18270u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_OutOfServiceState
+                }
+                18271u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_OutOfServiceState_Id
+                }
+                18272u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_OutOfServiceState_Name
+                }
+                18273u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_OutOfServiceState_Number
+                }
+                18274u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_OutOfServiceState_EffectiveDisplayName
+                }
+                18275u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_OutOfServiceState_TransitionTime
+                }
+                18276u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_OutOfServiceState_EffectiveTransitionTime
+                }
+                18277u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_OutOfServiceState_TrueState
+                }
+                18278u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_OutOfServiceState_FalseState
+                }
+                18280u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_CurrentState
+                }
+                18281u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_CurrentState_Id
+                }
+                18282u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_CurrentState_Name
+                }
+                18283u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_CurrentState_Number
+                }
+                18284u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_CurrentState_EffectiveDisplayName
+                }
+                18285u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_LastTransition
+                }
+                18286u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_LastTransition_Id
+                }
+                18287u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_LastTransition_Name
+                }
+                18288u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_LastTransition_Number
+                }
+                18289u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_LastTransition_TransitionTime
+                }
+                18290u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_LastTransition_EffectiveTransitionTime
+                }
+                18291u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_AvailableStates
+                }
+                18292u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_AvailableTransitions
+                }
+                18293u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_UnshelveTime
+                }
+                18295u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_TimedShelve_InputArguments
+                }
+                18297u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_TimedShelve2_InputArguments
+                }
+                18300u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_Unshelve2_InputArguments
+                }
+                18303u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ShelvingState_OneShotShelve2_InputArguments
+                }
+                18304u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SuppressedOrShelved
+                }
+                18305u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_MaxTimeShelved
+                }
+                18306u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AudibleEnabled
+                }
+                18307u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AudibleSound
+                }
+                18308u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AudibleSound_ListId
+                }
+                18309u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AudibleSound_AgencyId
+                }
+                18310u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_AudibleSound_VersionId
+                }
+                18311u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SilenceState
+                }
+                18312u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SilenceState_Id
+                }
+                18313u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SilenceState_Name
+                }
+                18314u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SilenceState_Number
+                }
+                18315u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SilenceState_EffectiveDisplayName
+                }
+                18316u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SilenceState_TransitionTime
+                }
+                18317u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SilenceState_EffectiveTransitionTime
+                }
+                18318u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SilenceState_TrueState
+                }
+                18319u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_SilenceState_FalseState
+                }
+                18320u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_OnDelay
+                }
+                18321u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_OffDelay
+                }
+                18322u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_FirstInGroupFlag
+                }
+                18324u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_LatchedState
+                }
+                18325u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_LatchedState_Id
+                }
+                18326u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_LatchedState_Name
+                }
+                18327u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_LatchedState_Number
+                }
+                18328u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_LatchedState_EffectiveDisplayName
+                }
+                18329u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_LatchedState_TransitionTime
+                }
+                18330u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_LatchedState_EffectiveTransitionTime
+                }
+                18331u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_LatchedState_TrueState
+                }
+                18332u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_LatchedState_FalseState
+                }
+                18333u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ReAlarmTime
+                }
+                18334u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ReAlarmRepeatCount
+                }
+                18338u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Suppress2_InputArguments
+                }
+                18341u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Unsuppress2_InputArguments
+                }
+                18344u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_RemoveFromService2_InputArguments
+                }
+                18348u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_PlaceInService2_InputArguments
+                }
+                18351u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Reset2_InputArguments
+                }
+                18353u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_GetGroupMemberships_OutputArguments
+                }
+                18354u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_NormalState
+                }
+                18355u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ExpirationDate
+                }
+                18356u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_ExpirationLimit
+                }
+                18357u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_CertificateType
+                }
+                18358u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_CertificateExpired_Certificate
+                }
+                18360u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_EventId
+                }
+                18361u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_EventType
+                }
+                18362u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SourceNode
+                }
+                18363u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SourceName
+                }
+                18364u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Time
+                }
+                18365u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ReceiveTime
+                }
+                18366u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_LocalTime
+                }
+                18367u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Message
+                }
+                18368u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Severity
+                }
+                18369u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ConditionClassId
+                }
+                18370u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ConditionClassName
+                }
+                18371u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ConditionSubClassId
+                }
+                18372u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ConditionSubClassName
+                }
+                18373u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ConditionName
+                }
+                18374u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_BranchId
+                }
+                18375u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Retain
+                }
+                18376u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_EnabledState
+                }
+                18377u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_EnabledState_Id
+                }
+                18378u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_EnabledState_Name
+                }
+                18379u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_EnabledState_Number
+                }
+                18380u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_EnabledState_EffectiveDisplayName
+                }
+                18381u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_EnabledState_TransitionTime
+                }
+                18382u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_EnabledState_EffectiveTransitionTime
+                }
+                18383u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_EnabledState_TrueState
+                }
+                18384u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_EnabledState_FalseState
+                }
+                18385u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Quality
+                }
+                18386u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Quality_SourceTimestamp
+                }
+                18387u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_LastSeverity
+                }
+                18388u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_LastSeverity_SourceTimestamp
+                }
+                18389u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Comment
+                }
+                18390u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Comment_SourceTimestamp
+                }
+                18391u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ClientUserId
+                }
+                18395u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AddComment_InputArguments
+                }
+                18396u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AckedState
+                }
+                18397u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AckedState_Id
+                }
+                18398u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AckedState_Name
+                }
+                18399u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AckedState_Number
+                }
+                18400u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AckedState_EffectiveDisplayName
+                }
+                18401u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AckedState_TransitionTime
+                }
+                18402u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AckedState_EffectiveTransitionTime
+                }
+                18403u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AckedState_TrueState
+                }
+                18404u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AckedState_FalseState
+                }
+                18405u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ConfirmedState
+                }
+                18406u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ConfirmedState_Id
+                }
+                18407u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ConfirmedState_Name
+                }
+                18408u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ConfirmedState_Number
+                }
+                18409u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ConfirmedState_EffectiveDisplayName
+                }
+                18410u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ConfirmedState_TransitionTime
+                }
+                18411u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ConfirmedState_EffectiveTransitionTime
+                }
+                18412u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ConfirmedState_TrueState
+                }
+                18413u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ConfirmedState_FalseState
+                }
+                18415u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Acknowledge_InputArguments
+                }
+                18417u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Confirm_InputArguments
+                }
+                18418u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ActiveState
+                }
+                18419u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ActiveState_Id
+                }
+                18420u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ActiveState_Name
+                }
+                18421u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ActiveState_Number
+                }
+                18422u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ActiveState_EffectiveDisplayName
+                }
+                18423u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ActiveState_TransitionTime
+                }
+                18424u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ActiveState_EffectiveTransitionTime
+                }
+                18425u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ActiveState_TrueState
+                }
+                18426u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ActiveState_FalseState
+                }
+                18427u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_InputNode
+                }
+                18428u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SuppressedState
+                }
+                18429u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SuppressedState_Id
+                }
+                18430u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SuppressedState_Name
+                }
+                18431u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SuppressedState_Number
+                }
+                18432u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SuppressedState_EffectiveDisplayName
+                }
+                18433u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SuppressedState_TransitionTime
+                }
+                18434u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SuppressedState_EffectiveTransitionTime
+                }
+                18435u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SuppressedState_TrueState
+                }
+                18436u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SuppressedState_FalseState
+                }
+                18437u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_OutOfServiceState
+                }
+                18438u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_OutOfServiceState_Id
+                }
+                18439u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_OutOfServiceState_Name
+                }
+                18440u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_OutOfServiceState_Number
+                }
+                18441u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_OutOfServiceState_EffectiveDisplayName
+                }
+                18442u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_OutOfServiceState_TransitionTime
+                }
+                18443u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_OutOfServiceState_EffectiveTransitionTime
+                }
+                18444u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_OutOfServiceState_TrueState
+                }
+                18445u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_OutOfServiceState_FalseState
+                }
+                18447u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_CurrentState
+                }
+                18448u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_CurrentState_Id
+                }
+                18449u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_CurrentState_Name
+                }
+                18450u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_CurrentState_Number
+                }
+                18451u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_CurrentState_EffectiveDisplayName
+                }
+                18452u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_LastTransition
+                }
+                18453u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_LastTransition_Id
+                }
+                18454u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_LastTransition_Name
+                }
+                18455u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_LastTransition_Number
+                }
+                18456u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_LastTransition_TransitionTime
+                }
+                18457u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_LastTransition_EffectiveTransitionTime
+                }
+                18458u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_AvailableStates
+                }
+                18459u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_AvailableTransitions
+                }
+                18460u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_UnshelveTime
+                }
+                18462u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_TimedShelve_InputArguments
+                }
+                18464u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_TimedShelve2_InputArguments
+                }
+                18467u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_Unshelve2_InputArguments
+                }
+                18470u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ShelvingState_OneShotShelve2_InputArguments
+                }
+                18471u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SuppressedOrShelved
+                }
+                18472u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_MaxTimeShelved
+                }
+                18473u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AudibleEnabled
+                }
+                18474u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AudibleSound
+                }
+                18475u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AudibleSound_ListId
+                }
+                18476u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AudibleSound_AgencyId
+                }
+                18477u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_AudibleSound_VersionId
+                }
+                18478u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SilenceState
+                }
+                18479u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SilenceState_Id
+                }
+                18480u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SilenceState_Name
+                }
+                18481u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SilenceState_Number
+                }
+                18482u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SilenceState_EffectiveDisplayName
+                }
+                18483u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SilenceState_TransitionTime
+                }
+                18484u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SilenceState_EffectiveTransitionTime
+                }
+                18485u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SilenceState_TrueState
+                }
+                18486u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_SilenceState_FalseState
+                }
+                18487u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_OnDelay
+                }
+                18488u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_OffDelay
+                }
+                18489u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_FirstInGroupFlag
+                }
+                18491u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_LatchedState
+                }
+                18492u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_LatchedState_Id
+                }
+                18493u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_LatchedState_Name
+                }
+                18494u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_LatchedState_Number
+                }
+                18495u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_LatchedState_EffectiveDisplayName
+                }
+                18497u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_LatchedState_TransitionTime
+                }
+                18498u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_LatchedState_EffectiveTransitionTime
+                }
+                18499u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_LatchedState_TrueState
+                }
+                18500u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_LatchedState_FalseState
+                }
+                18501u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ReAlarmTime
+                }
+                18502u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_ReAlarmRepeatCount
+                }
+                18506u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Suppress2_InputArguments
+                }
+                18509u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Unsuppress2_InputArguments
+                }
+                18512u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_RemoveFromService2_InputArguments
+                }
+                18515u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_PlaceInService2_InputArguments
+                }
+                18518u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_Reset2_InputArguments
+                }
+                18520u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_GetGroupMemberships_OutputArguments
+                }
+                18521u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_NormalState
+                }
+                18522u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_TrustListId
+                }
+                18523u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_LastUpdateTime
+                }
+                18524u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CertificateGroups_DefaultUserTokenGroup_TrustListOutOfDate_UpdateFrequency
+                }
+                18525u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_ApplicationUri
+                }
+                18526u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_ProductUri
+                }
+                18527u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_ApplicationType
+                }
+                18528u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_ServerCapabilities
+                }
+                18529u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_SupportedPrivateKeyFormats
+                }
+                18530u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_MaxTrustListSize
+                }
+                18531u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_MulticastDnsEnabled
+                }
+                18532u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_HasSecureElement
+                }
+                18534u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_UpdateCertificate_InputArguments
+                }
+                18535u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_UpdateCertificate_OutputArguments
+                }
+                18537u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_GetCertificates_InputArguments
+                }
+                18538u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_GetCertificates_OutputArguments
+                }
+                18542u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CreateSigningRequest_InputArguments
+                }
+                18543u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_CreateSigningRequest_OutputArguments
+                }
+                18545u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_GetRejectedList_OutputArguments
+                }
+                18548u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_TransactionDiagnostics_StartTime
+                }
+                18549u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_TransactionDiagnostics_EndTime
+                }
+                18550u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_TransactionDiagnostics_Result
+                }
+                18551u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_TransactionDiagnostics_AffectedTrustLists
+                }
+                18552u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_TransactionDiagnostics_AffectedCertificateGroups
+                }
+                18553u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_TransactionDiagnostics_Errors
+                }
+                18592u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_Enabled
+                }
+                18596u32 => Self::ActionState_EnumStrings,
+                18601u32 => Self::OpcUa_BinarySchema_ActionTargetDataType,
+                18602u32 => Self::OpcUa_BinarySchema_ActionTargetDataType_DataTypeVersion,
+                18603u32 => {
+                    Self::OpcUa_BinarySchema_ActionTargetDataType_DictionaryFragment
+                }
+                18604u32 => Self::OpcUa_BinarySchema_PublishedActionDataType,
+                18605u32 => {
+                    Self::OpcUa_BinarySchema_PublishedActionDataType_DataTypeVersion
+                }
+                18606u32 => {
+                    Self::OpcUa_BinarySchema_PublishedActionDataType_DictionaryFragment
+                }
+                18607u32 => Self::OpcUa_BinarySchema_ActionMethodDataType,
+                18608u32 => Self::OpcUa_BinarySchema_ActionMethodDataType_DataTypeVersion,
+                18609u32 => {
+                    Self::OpcUa_BinarySchema_ActionMethodDataType_DictionaryFragment
+                }
+                18613u32 => Self::OpcUa_XmlSchema_ActionTargetDataType,
+                18614u32 => Self::OpcUa_XmlSchema_ActionTargetDataType_DataTypeVersion,
+                18615u32 => Self::OpcUa_XmlSchema_ActionTargetDataType_DictionaryFragment,
+                18616u32 => Self::OpcUa_XmlSchema_PublishedActionDataType,
+                18617u32 => Self::OpcUa_XmlSchema_PublishedActionDataType_DataTypeVersion,
+                18618u32 => {
+                    Self::OpcUa_XmlSchema_PublishedActionDataType_DictionaryFragment
+                }
+                18619u32 => Self::OpcUa_XmlSchema_ActionMethodDataType,
+                18620u32 => Self::OpcUa_XmlSchema_ActionMethodDataType_DataTypeVersion,
+                18621u32 => Self::OpcUa_XmlSchema_ActionMethodDataType_DictionaryFragment,
+                18626u32 => Self::WellKnownRole_TrustedApplication_Identities,
+                18627u32 => Self::WellKnownRole_TrustedApplication_ApplicationsExclude,
+                18628u32 => Self::WellKnownRole_TrustedApplication_Applications,
+                18629u32 => Self::WellKnownRole_TrustedApplication_EndpointsExclude,
+                18630u32 => Self::WellKnownRole_TrustedApplication_Endpoints,
+                18631u32 => Self::WellKnownRole_TrustedApplication_CustomConfiguration,
+                18633u32 => {
+                    Self::WellKnownRole_TrustedApplication_AddIdentity_InputArguments
+                }
+                18635u32 => {
+                    Self::WellKnownRole_TrustedApplication_RemoveIdentity_InputArguments
+                }
+                18637u32 => {
+                    Self::WellKnownRole_TrustedApplication_AddApplication_InputArguments
+                }
+                18639u32 => {
+                    Self::WellKnownRole_TrustedApplication_RemoveApplication_InputArguments
+                }
+                18641u32 => {
+                    Self::WellKnownRole_TrustedApplication_AddEndpoint_InputArguments
+                }
+                18643u32 => {
+                    Self::WellKnownRole_TrustedApplication_RemoveEndpoint_InputArguments
+                }
+                18644u32 => Self::HistoricalEventConfigurationType_SortByEventFields,
+                18645u32 => Self::DefaultHEConfiguration_SortByEventFields,
+                18647u32 => Self::SortOrderType_EnumStrings,
+                18656u32 => {
+                    Self::KeyCredentialConfigurationFolderType_ServiceName_Placeholder_CredentialId
+                }
+                18657u32 => Self::KeyCredentialConfigurationType_CredentialId,
+                18658u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_ApplicationNames
+                }
+                18659u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_SupportsTransactions
+                }
+                18660u32 => Self::ServerConfigurationType_ApplicationNames,
+                18661u32 => Self::ServerConfigurationType_SupportsTransactions,
+                18662u32 => Self::ServerConfiguration_ApplicationNames,
+                18663u32 => Self::ServerConfiguration_SupportsTransactions,
+                18664u32 => {
+                    Self::ProvisionableDeviceType_ApplicationName_Placeholder_ApplicationNames
                 }
                 18668u32 => {
                     Self::PublishSubscribeType_ConnectionName_Placeholder_Diagnostics_DiagnosticsLevel
@@ -29290,6 +35485,9 @@ impl TryFrom<u32> for VariableId {
                 18770u32 => Self::ThreeDVectorType_Y,
                 18771u32 => Self::ThreeDVectorType_Z,
                 18773u32 => Self::CartesianCoordinatesType_LengthUnit,
+                18775u32 => {
+                    Self::ProvisionableDeviceType_ApplicationName_Placeholder_SupportsTransactions
+                }
                 18776u32 => Self::ThreeDCartesianCoordinatesType_X,
                 18777u32 => Self::ThreeDCartesianCoordinatesType_Y,
                 18778u32 => Self::ThreeDCartesianCoordinatesType_Z,
@@ -29520,6 +35718,158 @@ impl TryFrom<u32> for VariableId {
                 18929u32 => {
                     Self::PublishedDataSetType_DataSetWriterName_Placeholder_Diagnostics_LiveValues_MinorVersion_DiagnosticsLevel
                 }
+                18931u32 => Self::OpcUa_BinarySchema_PublishedActionMethodDataType,
+                18932u32 => {
+                    Self::OpcUa_BinarySchema_PublishedActionMethodDataType_DataTypeVersion
+                }
+                18933u32 => {
+                    Self::OpcUa_BinarySchema_PublishedActionMethodDataType_DictionaryFragment
+                }
+                18934u32 => Self::OpcUa_BinarySchema_DtlsPubSubConnectionDataType,
+                18935u32 => {
+                    Self::OpcUa_BinarySchema_DtlsPubSubConnectionDataType_DataTypeVersion
+                }
+                18936u32 => {
+                    Self::OpcUa_BinarySchema_DtlsPubSubConnectionDataType_DictionaryFragment
+                }
+                18939u32 => Self::OpcUa_XmlSchema_PublishedActionMethodDataType,
+                18940u32 => {
+                    Self::OpcUa_XmlSchema_PublishedActionMethodDataType_DataTypeVersion
+                }
+                18941u32 => {
+                    Self::OpcUa_XmlSchema_PublishedActionMethodDataType_DictionaryFragment
+                }
+                18942u32 => Self::OpcUa_XmlSchema_DtlsPubSubConnectionDataType,
+                18943u32 => {
+                    Self::OpcUa_XmlSchema_DtlsPubSubConnectionDataType_DataTypeVersion
+                }
+                18944u32 => {
+                    Self::OpcUa_XmlSchema_DtlsPubSubConnectionDataType_DictionaryFragment
+                }
+                18948u32 => Self::ChassisIdSubtype_EnumValues,
+                18950u32 => Self::PortIdSubtype_EnumValues,
+                18952u32 => Self::ManAddrIfSubtype_EnumValues,
+                18957u32 => Self::LldpSystemCapabilitiesMap_OptionSetValues,
+                18960u32 => Self::LLDP_RemoteStatistics_LastChangeTime,
+                18961u32 => Self::LLDP_RemoteStatistics_RemoteInserts,
+                18962u32 => Self::LLDP_RemoteStatistics_RemoteDeletes,
+                18963u32 => Self::LLDP_RemoteStatistics_RemoteDrops,
+                18964u32 => Self::LLDP_RemoteStatistics_RemoteAgeouts,
+                18966u32 => Self::LLDP_LocalSystemData_ChassisIdSubtype,
+                18967u32 => Self::LLDP_LocalSystemData_ChassisId,
+                18968u32 => Self::LLDP_LocalSystemData_SystemName,
+                18969u32 => Self::LLDP_LocalSystemData_SystemDescription,
+                18970u32 => Self::LLDP_LocalSystemData_SystemCapabilitiesSupported,
+                18971u32 => Self::LLDP_LocalSystemData_SystemCapabilitiesEnabled,
+                18975u32 => Self::LldpInformationType_RemoteStatistics_LastChangeTime,
+                18976u32 => Self::LldpInformationType_RemoteStatistics_RemoteInserts,
+                18977u32 => Self::LldpInformationType_RemoteStatistics_RemoteDeletes,
+                18978u32 => Self::LldpInformationType_RemoteStatistics_RemoteDrops,
+                18979u32 => Self::LldpInformationType_RemoteStatistics_RemoteAgeouts,
+                18981u32 => Self::LldpInformationType_LocalSystemData_ChassisIdSubtype,
+                18982u32 => Self::LldpInformationType_LocalSystemData_ChassisId,
+                18983u32 => Self::LldpInformationType_LocalSystemData_SystemName,
+                18984u32 => Self::LldpInformationType_LocalSystemData_SystemDescription,
+                18985u32 => {
+                    Self::LldpInformationType_LocalSystemData_SystemCapabilitiesSupported
+                }
+                18986u32 => {
+                    Self::LldpInformationType_LocalSystemData_SystemCapabilitiesEnabled
+                }
+                18989u32 => {
+                    Self::LldpInformationType_Ports_LldpPortInformation_Placeholder_IetfBaseNetworkInterfaceName
+                }
+                18990u32 => {
+                    Self::LldpInformationType_Ports_LldpPortInformation_Placeholder_DestMacAddress
+                }
+                18991u32 => {
+                    Self::LldpInformationType_Ports_LldpPortInformation_Placeholder_PortIdSubtype
+                }
+                18992u32 => {
+                    Self::LldpInformationType_Ports_LldpPortInformation_Placeholder_PortId
+                }
+                18993u32 => {
+                    Self::LldpInformationType_Ports_LldpPortInformation_Placeholder_PortDescription
+                }
+                18994u32 => {
+                    Self::LldpInformationType_Ports_LldpPortInformation_Placeholder_ManagementAddressTxPort
+                }
+                18997u32 => Self::LldpRemoteStatisticsType_LastChangeTime,
+                18998u32 => Self::LldpRemoteStatisticsType_RemoteInserts,
+                18999u32 => Self::LldpRemoteStatisticsType_RemoteDeletes,
+                19000u32 => Self::LldpRemoteStatisticsType_RemoteDrops,
+                19001u32 => Self::LldpRemoteStatisticsType_RemoteAgeouts,
+                19003u32 => Self::LldpLocalSystemType_ChassisIdSubtype,
+                19004u32 => Self::LldpLocalSystemType_ChassisId,
+                19005u32 => Self::LldpLocalSystemType_SystemName,
+                19006u32 => Self::LldpLocalSystemType_SystemDescription,
+                19007u32 => Self::LldpLocalSystemType_SystemCapabilitiesSupported,
+                19008u32 => Self::LldpLocalSystemType_SystemCapabilitiesEnabled,
+                19010u32 => Self::LldpPortInformationType_IetfBaseNetworkInterfaceName,
+                19011u32 => Self::LldpPortInformationType_DestMacAddress,
+                19012u32 => Self::LldpPortInformationType_PortIdSubtype,
+                19013u32 => Self::LldpPortInformationType_PortId,
+                19014u32 => Self::LldpPortInformationType_PortDescription,
+                19015u32 => Self::LldpPortInformationType_ManagementAddressTxPort,
+                19018u32 => {
+                    Self::LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_TimeMark
+                }
+                19019u32 => {
+                    Self::LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_RemoteIndex
+                }
+                19020u32 => {
+                    Self::LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_ChassisIdSubtype
+                }
+                19021u32 => {
+                    Self::LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_ChassisId
+                }
+                19022u32 => {
+                    Self::LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_PortIdSubtype
+                }
+                19023u32 => {
+                    Self::LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_PortId
+                }
+                19024u32 => {
+                    Self::LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_PortDescription
+                }
+                19025u32 => {
+                    Self::LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_SystemName
+                }
+                19026u32 => {
+                    Self::LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_SystemDescription
+                }
+                19027u32 => {
+                    Self::LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_SystemCapabilitiesSupported
+                }
+                19028u32 => {
+                    Self::LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_SystemCapabilitiesEnabled
+                }
+                19029u32 => {
+                    Self::LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_RemoteChanges
+                }
+                19030u32 => {
+                    Self::LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_RemoteTooManyNeighbors
+                }
+                19031u32 => {
+                    Self::LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_ManagementAddress
+                }
+                19032u32 => {
+                    Self::LldpPortInformationType_RemoteSystemsData_LldpRemoteSystem_Placeholder_RemoteUnknownTlv
+                }
+                19034u32 => Self::LldpRemoteSystemType_TimeMark,
+                19035u32 => Self::LldpRemoteSystemType_RemoteIndex,
+                19036u32 => Self::LldpRemoteSystemType_ChassisIdSubtype,
+                19037u32 => Self::LldpRemoteSystemType_ChassisId,
+                19038u32 => Self::LldpRemoteSystemType_PortIdSubtype,
+                19039u32 => Self::LldpRemoteSystemType_PortId,
+                19040u32 => Self::LldpRemoteSystemType_PortDescription,
+                19041u32 => Self::LldpRemoteSystemType_SystemName,
+                19042u32 => Self::LldpRemoteSystemType_SystemDescription,
+                19043u32 => Self::LldpRemoteSystemType_SystemCapabilitiesSupported,
+                19044u32 => Self::LldpRemoteSystemType_SystemCapabilitiesEnabled,
+                19045u32 => Self::LldpRemoteSystemType_RemoteChanges,
+                19046u32 => Self::LldpRemoteSystemType_RemoteTooManyNeighbors,
+                19047u32 => Self::LldpRemoteSystemType_ManagementAddress,
                 19048u32 => Self::OpcUa_XmlSchema_CartesianCoordinates_DictionaryFragment,
                 19049u32 => Self::OpcUa_XmlSchema_ThreeDCartesianCoordinates,
                 19050u32 => {
@@ -29544,11 +35894,23 @@ impl TryFrom<u32> for VariableId {
                 19074u32 => Self::ThreeDFrameType_Orientation_A,
                 19075u32 => Self::ThreeDFrameType_Orientation_B,
                 19076u32 => Self::ThreeDFrameType_Orientation_C,
+                19078u32 => Self::LldpRemoteSystemType_RemoteUnknownTlv,
                 19082u32 => {
                     Self::MultiStateDictionaryEntryDiscreteBaseType_EnumDictionaryEntries
                 }
                 19083u32 => {
                     Self::MultiStateDictionaryEntryDiscreteBaseType_ValueAsDictionaryEntries
+                }
+                19085u32 => Self::OpcUa_BinarySchema_LldpManagementAddressTxPortType,
+                19086u32 => {
+                    Self::OpcUa_BinarySchema_LldpManagementAddressTxPortType_DataTypeVersion
+                }
+                19087u32 => {
+                    Self::OpcUa_BinarySchema_LldpManagementAddressTxPortType_DictionaryFragment
+                }
+                19088u32 => Self::OpcUa_BinarySchema_LldpManagementAddressType,
+                19089u32 => {
+                    Self::OpcUa_BinarySchema_LldpManagementAddressType_DataTypeVersion
                 }
                 19090u32 => {
                     Self::MultiStateDictionaryEntryDiscreteType_ValueAsDictionaryEntries
@@ -29559,6 +35921,20 @@ impl TryFrom<u32> for VariableId {
                 }
                 19093u32 => Self::HAConfiguration_ServerTimestampSupported,
                 19094u32 => Self::HistoryServerCapabilitiesType_ServerTimestampSupported,
+                19096u32 => {
+                    Self::OpcUa_BinarySchema_LldpManagementAddressType_DictionaryFragment
+                }
+                19097u32 => Self::OpcUa_BinarySchema_LldpTlvType,
+                19098u32 => Self::OpcUa_BinarySchema_LldpTlvType_DataTypeVersion,
+                19099u32 => Self::OpcUa_BinarySchema_LldpTlvType_DictionaryFragment,
+                19103u32 => Self::OpcUa_XmlSchema_LldpManagementAddressTxPortType,
+                19104u32 => {
+                    Self::OpcUa_XmlSchema_LldpManagementAddressTxPortType_DataTypeVersion
+                }
+                19105u32 => {
+                    Self::OpcUa_XmlSchema_LldpManagementAddressTxPortType_DictionaryFragment
+                }
+                19106u32 => Self::OpcUa_XmlSchema_LldpManagementAddressType,
                 19108u32 => {
                     Self::PubSubConnectionType_WriterGroupName_Placeholder_Diagnostics_DiagnosticsLevel
                 }
@@ -30057,12 +36433,37 @@ impl TryFrom<u32> for VariableId {
                 19288u32 => {
                     Self::PubSubConnectionType_Diagnostics_LiveValues_ResolvedAddress_DiagnosticsLevel
                 }
+                19289u32 => {
+                    Self::OpcUa_XmlSchema_LldpManagementAddressType_DataTypeVersion
+                }
+                19290u32 => {
+                    Self::OpcUa_XmlSchema_LldpManagementAddressType_DictionaryFragment
+                }
+                19291u32 => Self::OpcUa_XmlSchema_LldpTlvType,
+                19292u32 => Self::OpcUa_XmlSchema_LldpTlvType_DataTypeVersion,
                 19293u32 => {
                     Self::AuditHistoryAnnotationUpdateEventType_PerformInsertReplace
                 }
                 19294u32 => Self::AuditHistoryAnnotationUpdateEventType_NewValues,
                 19295u32 => Self::AuditHistoryAnnotationUpdateEventType_OldValues,
                 19296u32 => Self::TrustListType_UpdateFrequency,
+                19298u32 => Self::OpcUa_XmlSchema_LldpTlvType_DictionaryFragment,
+                19302u32 => {
+                    Self::SessionsDiagnosticsSummaryType_ClientName_Placeholder_CurrentRoleIds
+                }
+                19303u32 => Self::SessionDiagnosticsObjectType_CurrentRoleIds,
+                19304u32 => Self::AuditActivateSessionEventType_CurrentRoleIds,
+                19305u32 => Self::AuditUpdateMethodEventType_StatusCodeId,
+                19306u32 => Self::AuditUpdateMethodEventType_OutputArguments,
+                19307u32 => {
+                    Self::ApplicationConfigurationFolderType_ApplicationName_Placeholder_InApplicationSetup
+                }
+                19308u32 => Self::ServerConfigurationType_InApplicationSetup,
+                19309u32 => Self::ServerConfiguration_InApplicationSetup,
+                19310u32 => {
+                    Self::ProvisionableDeviceType_ApplicationName_Placeholder_InApplicationSetup
+                }
+                19441u32 => Self::TestOptionSet_OptionSetValues,
                 19446u32 => Self::TrustListOutOfDateAlarmType_TrustListId,
                 19447u32 => Self::TrustListOutOfDateAlarmType_LastUpdateTime,
                 19448u32 => Self::TrustListOutOfDateAlarmType_UpdateFrequency,
@@ -44706,26 +51107,20 @@ impl TryFrom<u32> for VariableId {
                 32437u32 => Self::ConversionLimitEnum_EnumStrings,
                 32441u32 => Self::SyntaxReferenceEntryType_CommonName,
                 32443u32 => Self::UnitType_Symbol,
-                32444u32 => Self::UnitType_Description,
                 32445u32 => Self::UnitType_UnitSystem,
                 32446u32 => Self::UnitType_Discipline,
                 32461u32 => Self::ServerUnitType_ConversionLimit,
                 32463u32 => Self::ServerUnitType_CoherentUnit_Symbol,
-                32464u32 => Self::ServerUnitType_CoherentUnit_Description,
                 32465u32 => Self::ServerUnitType_CoherentUnit_UnitSystem,
                 32466u32 => Self::ServerUnitType_CoherentUnit_Discipline,
                 32472u32 => Self::AlternativeUnitType_LinearConversion,
                 32473u32 => Self::AlternativeUnitType_MathMLConversion,
                 32474u32 => Self::AlternativeUnitType_MathMLInverseConversion,
                 32476u32 => Self::QuantityType_Symbol,
-                32477u32 => Self::QuantityType_Description,
                 32478u32 => Self::QuantityType_Annotation,
                 32479u32 => Self::QuantityType_ConversionService,
                 32480u32 => Self::QuantityType_Dimension,
                 32483u32 => Self::QuantityType_ServerUnits_ServerUnit_Placeholder_Symbol,
-                32484u32 => {
-                    Self::QuantityType_ServerUnits_ServerUnit_Placeholder_Description
-                }
                 32485u32 => {
                     Self::QuantityType_ServerUnits_ServerUnit_Placeholder_UnitSystem
                 }
@@ -44738,9 +51133,6 @@ impl TryFrom<u32> for VariableId {
                 32498u32 => {
                     Self::QuantityType_ServerUnits_ServerUnit_Placeholder_CoherentUnit_Symbol
                 }
-                32499u32 => {
-                    Self::QuantityType_ServerUnits_ServerUnit_Placeholder_CoherentUnit_Description
-                }
                 32500u32 => {
                     Self::QuantityType_ServerUnits_ServerUnit_Placeholder_CoherentUnit_UnitSystem
                 }
@@ -44748,7 +51140,6 @@ impl TryFrom<u32> for VariableId {
                     Self::QuantityType_ServerUnits_ServerUnit_Placeholder_CoherentUnit_Discipline
                 }
                 32504u32 => Self::QuantitiesFolderType_Quantity_Placeholder_Symbol,
-                32505u32 => Self::QuantitiesFolderType_Quantity_Placeholder_Description,
                 32506u32 => Self::QuantitiesFolderType_Quantity_Placeholder_Annotation,
                 32507u32 => {
                     Self::QuantitiesFolderType_Quantity_Placeholder_ConversionService
@@ -44784,9 +51175,6 @@ impl TryFrom<u32> for VariableId {
                 32583u32 => Self::OpcUa_XmlSchema_QuantityDimension_DictionaryFragment,
                 32588u32 => {
                     Self::ServerUnitType_AlternativeUnits_AlternativeUnit_Placeholder_Symbol
-                }
-                32589u32 => {
-                    Self::ServerUnitType_AlternativeUnits_AlternativeUnit_Placeholder_Description
                 }
                 32590u32 => {
                     Self::ServerUnitType_AlternativeUnits_AlternativeUnit_Placeholder_UnitSystem

@@ -4,7 +4,7 @@
 
 //! Certain aliases for OPC-UA data types.
 
-use crate::{date_time::DateTime, ByteString, UAString};
+use crate::{date_time::DateTime, ByteString, NodeId, UAString};
 
 /// This primitive data type is a UInt32 that is used as an identifier, such as a handle.
 /// All values, except for 0, are valid. IntegerId = 288,
@@ -23,3 +23,24 @@ pub type UriString = UAString;
 
 /// OPC-UA AudiDataType, represented as just a ByteString.
 pub type AudioDataType = ByteString;
+
+/// OPC-UA LocaleId.
+pub type LocaleId = UAString;
+
+/// OPC-UA raw continuation point, alias for ByteString.
+pub type ContinuationPoint = ByteString;
+
+/// OPC-UA Index, alias for u32.
+pub type Index = u32;
+
+/// OPC-UA Counter, alias for u32.
+pub type Counter = u32;
+
+/// OPC-UA VersionTime, alias for u32.
+pub type VersionTime = u32;
+
+/// OPC-UA application instance certificate, alias for ByteString.
+pub type ApplicationInstanceCertificate = ByteString;
+
+/// OPC-UA SessionAuthenticationToken, alias for NodeId.
+pub type SessionAuthenticationToken = NodeId;

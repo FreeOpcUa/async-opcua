@@ -2,6 +2,7 @@ mod base_constants;
 mod enum_type;
 mod gen;
 mod loader;
+mod nodeset_loader;
 mod structure;
 
 pub use base_constants::*;
@@ -13,7 +14,10 @@ use quote::quote;
 pub use structure::{StructureField, StructureFieldType, StructuredType};
 use syn::{parse_quote, parse_str, Item, Path};
 
-use crate::{input::BinarySchemaInput, CodeGenError, TypeCodeGenTarget, BASE_NAMESPACE};
+use crate::{
+    input::{BinarySchemaInput, NodeSetInput, SchemaCache},
+    CodeGenError, TypeCodeGenTarget, BASE_NAMESPACE,
+};
 
 pub fn generate_types(
     target: &TypeCodeGenTarget,
@@ -35,8 +39,38 @@ pub fn generate_types(
     )?;
     let target_namespace = type_loader.target_namespace();
     let types = type_loader.from_bsd().map_err(|e| e.in_file(&input.path))?;
-    println!("Generated code for {} types", types.len());
+    println!("Loaded {} types", types.len());
 
+    generate_types_inner(target, target_namespace, types)
+}
+
+pub fn generate_types_nodeset(
+    target: &TypeCodeGenTarget,
+    input: &NodeSetInput,
+    cache: &SchemaCache,
+) -> Result<(Vec<GeneratedItem>, String), CodeGenError> {
+    let type_loader = nodeset_loader::NodeSetTypeLoader::new(
+        target
+            .ignore
+            .iter()
+            .cloned()
+            .chain(base_ignored_types())
+            .collect(),
+        base_native_type_mappings(),
+        input,
+    );
+    let target_namespace = input.uri.clone();
+    let types = type_loader.load_types(cache)?;
+    println!("Loaded {} types", types.len());
+
+    generate_types_inner(target, target_namespace, types)
+}
+
+fn generate_types_inner(
+    target: &TypeCodeGenTarget,
+    target_namespace: String,
+    types: Vec<LoadedType>,
+) -> Result<(Vec<GeneratedItem>, String), CodeGenError> {
     let mut types_import_map = basic_types_import_map();
     for (k, v) in &target.types_import_map {
         types_import_map.insert(k.clone(), v.clone());

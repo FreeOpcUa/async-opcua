@@ -11,8 +11,8 @@ use opcua::{
     types::{
         AttributeId, DataTypeId, DataValue, DateTime, HistoryData, HistoryReadValueId, NodeClass,
         NodeId, ObjectId, ObjectTypeId, QualifiedName, ReadRawModifiedDetails, ReadValueId,
-        ReferenceTypeId, StatusCode, TimestampsToReturn, UAString, VariableId, VariableTypeId,
-        Variant, WriteMask,
+        ReferenceTypeId, StatusCode, TimestampsToReturn, VariableId, VariableTypeId, Variant,
+        WriteMask,
     },
 };
 use opcua_client::{services::Read, DefaultRetryPolicy, ExponentialBackoff};
@@ -642,7 +642,7 @@ async fn read_mixed() {
                 ReadValueId {
                     node_id: VariableId::Server_ServiceLevel.into(),
                     attribute_id: AttributeId::Value as u32,
-                    index_range: UAString::from("1"),
+                    index_range: opcua_types::NumericRange::Index(1),
                     ..Default::default()
                 },
                 // Invalid encoding

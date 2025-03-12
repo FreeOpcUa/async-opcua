@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use opcua_xml::schema::ua_node_set::UANode;
 
-use crate::{nodeset::render::split_qualified_name, CodeGenError};
+use crate::{utils::split_qualified_name, CodeGenError};
 
 #[derive(Debug, Clone)]
 pub enum FieldKind<'a> {
@@ -38,6 +38,7 @@ pub struct CollectedType<'a> {
     pub kind: TypeKind,
     pub nodeset_index: usize,
     pub import_path: &'a str,
+    pub is_abstract: bool,
 }
 
 pub struct TypeCollector<'a> {
@@ -296,6 +297,13 @@ impl<'a> TypeCollector<'a> {
                 data_type_id,
                 nodeset_index: node.nodeset_index,
                 import_path: node.import_path,
+                is_abstract: match &node.node {
+                    UANode::ObjectType(d) => d.base.is_abstract,
+                    UANode::VariableType(d) => d.base.is_abstract,
+                    UANode::DataType(d) => d.base.is_abstract,
+                    UANode::ReferenceType(d) => d.base.is_abstract,
+                    _ => false,
+                },
             },
         );
 

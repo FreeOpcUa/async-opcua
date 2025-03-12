@@ -23,7 +23,7 @@ pub use types::{
     CodeGenItemConfig, GeneratedItem, ItemDefinition, LoadedType, LoadedTypes, StructureField,
     StructureFieldType, StructuredType,
 };
-use types::{generate_types, type_loader_impl, EncodingIds, ExternalType};
+use types::{generate_types, generate_types_nodeset, type_loader_impl, EncodingIds, ExternalType};
 pub use utils::{create_module_file, GeneratedOutput};
 
 pub fn write_to_directory<T: GeneratedOutput>(
@@ -120,13 +120,19 @@ pub fn run_codegen(config: &CodeGenConfig, root_path: &str) -> Result<(), CodeGe
         match target {
             CodeGenTarget::Types(t) => {
                 println!("Running data type code generation for {}", t.file);
-                let input = cache.get_binary_schema(&t.file)?;
-
-                let (types, target_namespace) =
-                    generate_types(t, input).map_err(|e| e.in_file(&t.file))?;
+                let (types, target_namespace, path) = if t.file.ends_with(".xml") {
+                    let input = cache.get_nodeset(&t.file)?;
+                    let r = generate_types_nodeset(t, input, &cache)
+                        .map_err(|e| e.in_file(&input.path))?;
+                    (r.0, r.1, input.path.clone())
+                } else {
+                    let input = cache.get_binary_schema(&t.file)?;
+                    let r = generate_types(t, input).map_err(|e| e.in_file(&t.file))?;
+                    (r.0, r.1, input.path.clone())
+                };
                 println!("Writing {} types to {}", types.len(), t.output_dir);
 
-                let header = make_header(&input.path, &[&config.extra_header, &t.extra_header]);
+                let header = make_header(&path, &[&config.extra_header, &t.extra_header]);
 
                 let mut object_ids: Vec<_> = types
                     .iter()
@@ -140,14 +146,14 @@ pub fn run_codegen(config: &CodeGenConfig, root_path: &str) -> Result<(), CodeGe
                 }
 
                 let modules = write_to_directory(&t.output_dir, root_path, &header, types)
-                    .map_err(|e| e.in_file(&input.path))?;
+                    .map_err(|e| e.in_file(&path))?;
                 let mut module_file = create_module_file(modules);
                 module_file
                     .items
                     .extend(type_loader_impl(&object_ids, &target_namespace).into_iter());
 
                 write_module_file(&t.output_dir, root_path, &header, module_file)
-                    .map_err(|e| e.in_file(&input.path))?;
+                    .map_err(|e| e.in_file(&path))?;
             }
             CodeGenTarget::Nodes(n) => {
                 println!("Running node set code generation for {}", n.file);

@@ -501,7 +501,7 @@ impl<'input> XmlLoad<'input> for LocalizedText {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// Symbolic name.
 pub struct SymbolicName {
     /// Name alternatives.
@@ -952,7 +952,7 @@ impl FromValue for DataTypePurpose {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// Field in a data type definition.
 pub struct DataTypeField {
     /// Possible display name translations.
@@ -999,7 +999,7 @@ impl<'input> XmlLoad<'input> for DataTypeField {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// Data type definition.
 pub struct DataTypeDefinition {
     /// Fields in this data type.

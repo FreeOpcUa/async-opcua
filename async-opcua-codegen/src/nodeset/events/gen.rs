@@ -5,7 +5,10 @@ use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::{parse_quote, Ident, ItemStruct, Path};
 
-use crate::{nodeset::render::split_node_id, utils::safe_ident, CodeGenError};
+use crate::{
+    utils::{safe_ident, ParsedNodeId},
+    CodeGenError,
+};
 
 use super::collector::{CollectedType, FieldKind, TypeKind};
 
@@ -114,7 +117,11 @@ impl<'a> EventGenerator<'a> {
                 "Data type {data_type_id} not found for variable"
             )));
         };
-        if data_type_id == "i=24" {
+        if data_type.is_abstract {
+            Ok(quote! {
+                opcua::types::ExtensionObject
+            })
+        } else if data_type_id == "i=24" {
             let ident = Ident::new("Variant", Span::call_site());
             Ok(quote! {
                 types::#ident
@@ -304,14 +311,18 @@ impl<'a> EventGenerator<'a> {
             });
         }
 
-        let (k, v, namespace) = split_node_id(id)?;
-        let identifier = format!("{k}{v}");
-        let opcua_attr = if namespace > 0 {
-            let namespace_uri = self.namespaces.get(namespace as usize).ok_or_else(|| {
-                CodeGenError::other(format!(
-                    "Namespace index {namespace} is out of range of provided namespace table"
-                ))
-            })?;
+        let parsed = ParsedNodeId::parse(id)?;
+        let identifier = parsed.value.to_string();
+        let opcua_attr = if parsed.namespace > 0 {
+            let namespace_uri =
+                self.namespaces
+                    .get(parsed.namespace as usize)
+                    .ok_or_else(|| {
+                        CodeGenError::other(format!(
+                            "Namespace index {} is out of range of provided namespace table",
+                            parsed.namespace
+                        ))
+                    })?;
             fields.extend(quote! {
                 pub own_namespace_index: u16,
             });

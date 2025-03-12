@@ -4,20 +4,15 @@ extra_header: |
   // Copyright (C) 2017-2024 Adam Lock, Einar Omang
 targets:
   - type: types
-    file: Opc.Ua.Types.bsd
+    file: Opc.Ua.NodeSet2.Services.xml
     output_dir: async-opcua-types/src/generated/types
     enums_single_file: true
     types_import_map:
       Argument:
         path: "crate::argument"
         has_default: true
-        base_type: "ua:ExtensionObject"
+        base_type: "ExtensionObject"
         add_to_type_loader: true
-      DataTypeDefinition:
-        path: "crate::data_type_definition"
-        has_default: false
-        base_type: "ua:ExtensionObject"
-        add_to_type_loader: false
     extra_header: |
       #[allow(unused)]
       mod opcua { pub use crate as types; }
@@ -54,4 +49,5 @@ targets:
 sources:
   - schemas/1.05/Opc.Ua.Types.bsd
   - schemas/1.05/Opc.Ua.NodeSet2.xml
+  - schemas/1.05/Opc.Ua.NodeSet2.Services.xml
   - schemas/1.05/Opc.Ua.Types.xsd

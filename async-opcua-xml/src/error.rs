@@ -8,7 +8,7 @@ use chrono::ParseError;
 use roxmltree::Node;
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 /// Inner error variant of an error parsing an XML document.
 pub enum XmlErrorInner {
     #[error("Failed to load XML: {0}")]
@@ -43,7 +43,7 @@ pub enum XmlErrorInner {
     Other(String),
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 #[error("{error} at {span:?}")]
 /// Error returned from loading an XML document.
 pub struct XmlError {

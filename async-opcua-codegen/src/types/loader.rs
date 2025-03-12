@@ -5,7 +5,7 @@ use opcua_xml::schema::opc_binary_schema::{EnumeratedType, TypeDictionary};
 
 use crate::{error::CodeGenError, StructureField, StructureFieldType, StructuredType};
 
-use super::{enum_type::EnumReprType, EnumType, EnumValue};
+use super::{enum_type::EnumReprType, structure::FieldType, EnumType, EnumValue};
 
 pub fn to_snake_case(v: &str) -> String {
     v.to_case(Case::Snake)
@@ -66,6 +66,13 @@ impl<'a> BsdTypeLoader<'a> {
             .unwrap_or_else(|| name.to_owned())
     }
 
+    fn get_field_type(field: &str) -> FieldType {
+        match field {
+            "ExtensionObject" | "OptionSet" => FieldType::ExtensionObject,
+            _ => FieldType::Normal(field.to_owned()),
+        }
+    }
+
     fn load_structure(
         &self,
         item: &opcua_xml::schema::opc_binary_schema::StructuredType,
@@ -91,14 +98,14 @@ impl<'a> BsdTypeLoader<'a> {
                 fields_to_add.push(StructureField {
                     name: field_name,
                     original_name: field.name.clone(),
-                    typ: StructureFieldType::Array(typ),
+                    typ: StructureFieldType::Array(Self::get_field_type(&typ)),
                 });
                 fields_to_hide.push(to_snake_case(length_field))
             } else {
                 fields_to_add.push(StructureField {
                     name: field_name,
                     original_name: field.name.clone(),
-                    typ: StructureFieldType::Field(typ),
+                    typ: StructureFieldType::Field(Self::get_field_type(&typ)),
                 });
             }
         }
@@ -112,7 +119,11 @@ impl<'a> BsdTypeLoader<'a> {
                 .documentation
                 .as_ref()
                 .and_then(|d| d.contents.clone()),
-            base_type: item.base_type.clone(),
+            base_type: match item.base_type.as_deref() {
+                Some("ua:ExtensionObject" | "ua:OptionSet") => Some(FieldType::ExtensionObject),
+                Some(base) => Some(FieldType::Normal(self.massage_type_name(base))),
+                None => None,
+            },
             is_union: false,
         })
     }

@@ -74,17 +74,12 @@ impl ParsedOperand {
                 }
                 let attribute_id = AttributeId::from_u32(o.attribute_id)
                     .map_err(|_| StatusCode::BadAttributeIdInvalid)?;
-                let index_range = o
-                    .index_range
-                    .as_ref()
-                    .parse::<NumericRange>()
-                    .map_err(|_| StatusCode::BadIndexRangeInvalid)?;
                 Ok(Self::AttributeOperand(ParsedAttributeOperand {
                     node_id: o.node_id,
                     attribute_id,
                     alias: o.alias,
                     browse_path: o.browse_path,
-                    index_range,
+                    index_range: o.index_range,
                 }))
             }
             Operand::SimpleAttributeOperand(o) => Ok(Self::SimpleAttributeOperand(
@@ -205,10 +200,6 @@ fn validate_select_clause(
         return Err(StatusCode::BadNodeIdUnknown);
     };
 
-    let Ok(index_range) = clause.index_range.as_ref().parse::<NumericRange>() else {
-        return Err(StatusCode::BadIndexRangeInvalid);
-    };
-
     let Ok(attribute_id) = AttributeId::from_u32(clause.attribute_id) else {
         return Err(StatusCode::BadAttributeIdInvalid);
     };
@@ -228,7 +219,7 @@ fn validate_select_clause(
             type_definition_id: clause.type_definition_id,
             browse_path: path,
             attribute_id,
-            index_range,
+            index_range: clause.index_range,
         });
     }
 
@@ -258,7 +249,7 @@ fn validate_select_clause(
             type_definition_id: clause.type_definition_id,
             browse_path: path,
             attribute_id,
-            index_range,
+            index_range: clause.index_range,
         })
     }
 }

@@ -104,6 +104,8 @@ pub fn base_native_type_mappings() -> HashMap<String, String> {
     [
         ("String", "UAString"),
         ("CharArray", "UAString"),
+        ("Structure", "ExtensionObject"),
+        ("BaseDataType", "Variant"),
         ("Boolean", "bool"),
         ("SByte", "i8"),
         ("Byte", "u8"),

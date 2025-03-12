@@ -35,16 +35,11 @@ impl ParsedQueryDataDescription {
     pub(crate) fn parse(desc: QueryDataDescription) -> Result<Self, StatusCode> {
         let attribute_id = AttributeId::from_u32(desc.attribute_id)
             .map_err(|_| StatusCode::BadAttributeIdInvalid)?;
-        let index_range = desc
-            .index_range
-            .as_ref()
-            .parse::<NumericRange>()
-            .map_err(|_| StatusCode::BadIndexRangeInvalid)?;
 
         Ok(Self {
             relative_path: desc.relative_path,
             attribute_id,
-            index_range,
+            index_range: desc.index_range,
         })
     }
 }

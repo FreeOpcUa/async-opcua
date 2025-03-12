@@ -971,16 +971,16 @@ pub(crate) mod tests {
         let loader = DynamicTypeLoader::new(Arc::new(type_tree));
         let mut loaders = TypeLoaderCollection::new_empty();
         loaders.add_type_loader(loader);
-        let ctx = ContextOwned::new(get_namespaces(), loaders, DecodingOptions::test());
+        
 
-        ctx
+        ContextOwned::new(get_namespaces(), loaders, DecodingOptions::test())
     }
 
     mod opcua {
         pub use crate as types;
     }
 
-    const TYPE_NAMESPACE: &'static str = "my.custom.namespace.uri";
+    const TYPE_NAMESPACE: &str = "my.custom.namespace.uri";
 
     #[derive(Debug, Clone, PartialEq)]
     #[ua_encodable]

@@ -12,7 +12,7 @@ use std::{
 
 use regex::Regex;
 
-use crate::{Error, SimpleBinaryDecodable, SimpleBinaryEncodable, UAString, UaNullable};
+use crate::{impl_encoded_as, Error, UAString, UaNullable};
 
 #[derive(Debug)]
 /// Error returned when parsing a numeric range.
@@ -74,29 +74,7 @@ impl NumericRange {
     pub fn is_none(&self) -> bool {
         matches!(self, NumericRange::None)
     }
-}
 
-impl SimpleBinaryDecodable for NumericRange {
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        decoding_options: &crate::DecodingOptions,
-    ) -> crate::EncodingResult<Self> {
-        let raw: UAString = SimpleBinaryDecodable::decode(stream, decoding_options)?;
-        raw.as_ref()
-            .parse::<NumericRange>()
-            .map_err(Error::decoding)
-    }
-}
-
-fn num_len(n: u32) -> usize {
-    if n == 0 {
-        1
-    } else {
-        n.ilog10() as usize + 1
-    }
-}
-
-impl SimpleBinaryEncodable for NumericRange {
     fn byte_len(&self) -> usize {
         // String length field = 4 bytes.
         4 + match self {
@@ -112,8 +90,32 @@ impl SimpleBinaryEncodable for NumericRange {
         }
     }
 
-    fn encode<S: std::io::Write + ?Sized>(&self, stream: &mut S) -> crate::EncodingResult<()> {
-        UAString::from(self.to_string()).encode(stream)
+    fn from_ua_string(str: UAString) -> Result<Self, Error> {
+        str.as_ref()
+            .parse::<NumericRange>()
+            .map_err(Error::decoding)
+    }
+
+    fn to_ua_string(&self) -> Result<UAString, Error> {
+        match self {
+            NumericRange::None => Ok(UAString::null()),
+            _ => Ok(UAString::from(self.to_string())),
+        }
+    }
+}
+
+impl_encoded_as!(
+    NumericRange,
+    NumericRange::from_ua_string,
+    NumericRange::to_ua_string,
+    NumericRange::byte_len
+);
+
+fn num_len(n: u32) -> usize {
+    if n == 0 {
+        1
+    } else {
+        n.ilog10() as usize + 1
     }
 }
 
@@ -123,64 +125,9 @@ impl UaNullable for NumericRange {
     }
 }
 
-#[cfg(feature = "json")]
-mod json {
-    use super::NumericRange;
-    use crate::{json::*, Error, UAString};
-
-    impl JsonEncodable for NumericRange {
-        fn encode(
-            &self,
-            stream: &mut JsonStreamWriter<&mut dyn std::io::Write>,
-            ctx: &crate::Context<'_>,
-        ) -> crate::EncodingResult<()> {
-            UAString::from(self.to_string()).encode(stream, ctx)
-        }
-    }
-
-    impl JsonDecodable for NumericRange {
-        fn decode(
-            stream: &mut JsonStreamReader<&mut dyn std::io::Read>,
-            ctx: &Context<'_>,
-        ) -> crate::EncodingResult<Self> {
-            let raw = UAString::decode(stream, ctx)?;
-            raw.as_ref()
-                .parse::<NumericRange>()
-                .map_err(Error::decoding)
-        }
-    }
-}
-
 #[cfg(feature = "xml")]
-mod xml {
-    use super::NumericRange;
-    use crate::{xml::*, UAString};
-
-    impl XmlType for NumericRange {
-        const TAG: &'static str = "NumericRange";
-    }
-
-    impl XmlEncodable for NumericRange {
-        fn encode(
-            &self,
-            writer: &mut XmlStreamWriter<&mut dyn std::io::Write>,
-            context: &Context<'_>,
-        ) -> EncodingResult<()> {
-            UAString::from(self.to_string()).encode(writer, context)
-        }
-    }
-
-    impl XmlDecodable for NumericRange {
-        fn decode(
-            read: &mut XmlStreamReader<&mut dyn std::io::Read>,
-            context: &Context<'_>,
-        ) -> Result<Self, Error> {
-            let raw = UAString::decode(read, context)?;
-            raw.as_ref()
-                .parse::<NumericRange>()
-                .map_err(Error::decoding)
-        }
-    }
+impl crate::xml::XmlType for NumericRange {
+    const TAG: &'static str = "NumericRange";
 }
 
 // Valid inputs

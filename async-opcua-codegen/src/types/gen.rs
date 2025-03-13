@@ -4,7 +4,7 @@ use convert_case::{Case, Casing};
 use proc_macro2::Span;
 use syn::{
     parse_quote, punctuated::Punctuated, FieldsNamed, File, Generics, Ident, Item, ItemEnum,
-    ItemImpl, ItemMacro, ItemStruct, Lit, LitByte, Path, Token, Type, Visibility,
+    ItemMacro, ItemStruct, Lit, LitByte, Path, Token, Type, Visibility,
 };
 
 use crate::{
@@ -46,7 +46,7 @@ impl EncodingIds {
 
 pub struct GeneratedItem {
     pub item: ItemDefinition,
-    pub impls: Vec<ItemImpl>,
+    pub impls: Vec<Item>,
     pub module: String,
     pub name: String,
     pub encoding_ids: Option<EncodingIds>,
@@ -61,7 +61,7 @@ impl GeneratedOutput for GeneratedItem {
             ItemDefinition::BitField(v) => items.push(Item::Macro(v)),
         }
         for imp in self.impls {
-            items.push(Item::Impl(imp));
+            items.push(imp);
         }
 
         File {
@@ -342,10 +342,6 @@ impl CodeGenerator {
         });
 
         let mut impls = Vec::new();
-        let size: usize = item.size.try_into().map_err(|_| {
-            CodeGenError::other(format!("Value {} does not fit in a usize", item.size))
-        })?;
-        let write_method = Ident::new(&format!("write_{}", item.typ), Span::call_site());
 
         impls.push(parse_quote! {
             impl opcua::types::UaNullable for #enum_ident {
@@ -354,25 +350,13 @@ impl CodeGenerator {
                 }
             }
         });
-
         impls.push(parse_quote! {
-            impl opcua::types::BinaryEncodable for #enum_ident {
-                fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
-                    #size
-                }
-
-                fn encode<S: std::io::Write + ?Sized>(&self, stream: &mut S, _ctx: &opcua::types::Context<'_>) -> opcua::types::EncodingResult<()> {
-                    opcua::types::#write_method(stream, self.bits())
-                }
-            }
-        });
-
-        impls.push(parse_quote! {
-            impl opcua::types::BinaryDecodable for #enum_ident {
-                fn decode<S: std::io::Read + ?Sized>(stream: &mut S, ctx: &opcua::types::Context<'_>) -> opcua::types::EncodingResult<Self> {
-                    Ok(Self::from_bits_truncate(#ty::decode(stream, ctx)?))
-                }
-            }
+            opcua::types::impl_encoded_as!(
+                #enum_ident,
+                |v| Ok(#enum_ident::from_bits_truncate(v)),
+                |v: &#enum_ident| Ok::<_, opcua::types::Error>(v.bits()),
+                |v: &#enum_ident| v.bits().byte_len()
+            );
         });
 
         impls.push(parse_quote! {
@@ -391,64 +375,11 @@ impl CodeGenerator {
             }
         });
 
-        impls.push(parse_quote! {
-            #[cfg(feature = "xml")]
-            impl opcua::types::xml::XmlDecodable for #enum_ident {
-                fn decode(
-                    stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
-                    ctx: &opcua::types::Context<'_>,
-                ) -> opcua::types::EncodingResult<Self> {
-                    Ok(Self::from_bits_truncate(#ty::decode(stream, ctx)?))
-                }
-            }
-        });
-
-        impls.push(parse_quote! {
-            #[cfg(feature = "xml")]
-            impl opcua::types::xml::XmlEncodable for #enum_ident {
-                fn encode(
-                    &self,
-                    stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
-                    ctx: &opcua::types::Context<'_>,
-                ) -> opcua::types::EncodingResult<()> {
-                    self.bits().encode(stream, ctx)
-                }
-            }
-        });
-
         let name = &item.name;
         impls.push(parse_quote! {
             #[cfg(feature = "xml")]
             impl opcua::types::xml::XmlType for #enum_ident {
                 const TAG: &'static str = #name;
-            }
-        });
-
-        impls.push(parse_quote! {
-            #[cfg(feature = "json")]
-            impl opcua::types::json::JsonDecodable for #enum_ident {
-                fn decode(
-                    stream: &mut opcua::types::json::JsonStreamReader<&mut dyn std::io::Read>,
-                    _ctx: &opcua::types::Context<'_>,
-                ) -> opcua::types::EncodingResult<Self> {
-                    use opcua::types::json::JsonReader;
-                    Ok(Self::from_bits_truncate(stream.next_number()??))
-                }
-            }
-        });
-
-        impls.push(parse_quote! {
-            #[cfg(feature = "json")]
-            impl opcua::types::json::JsonEncodable for #enum_ident {
-                fn encode(
-                    &self,
-                    stream: &mut opcua::types::json::JsonStreamWriter<&mut dyn std::io::Write>,
-                    _ctx: &opcua::types::Context<'_>,
-                ) -> opcua::types::EncodingResult<()> {
-                    use opcua::types::json::JsonWriter;
-                    stream.number_value(self.bits())?;
-                    Ok(())
-                }
             }
         });
 

@@ -776,3 +776,80 @@ mod tests {
         }
     }
 }
+
+#[macro_export]
+/// Implement the encodable traits for a type, using the provided
+/// functions to convert to and from some other type.
+///
+/// Usage is `impl_encoded_as!(MyType, MyType::from_other, MyType::into_other, |t| t.len())`
+macro_rules! impl_encoded_as {
+    ($ty:ident, $from:expr, $to:expr, $byte_len:expr) => {
+        impl $crate::SimpleBinaryEncodable for $ty {
+            fn byte_len(&self) -> usize {
+                $byte_len(self)
+            }
+
+            fn encode<S: std::io::Write + ?Sized>(
+                &self,
+                stream: &mut S,
+            ) -> $crate::EncodingResult<()> {
+                $to(self)?.encode(stream)
+            }
+        }
+
+        impl $crate::SimpleBinaryDecodable for $ty {
+            fn decode<S: std::io::Read + ?Sized>(
+                stream: &mut S,
+                decoding_options: &$crate::DecodingOptions,
+            ) -> $crate::EncodingResult<Self> {
+                let inner = $crate::SimpleBinaryDecodable::decode(stream, decoding_options)?;
+                $from(inner)
+            }
+        }
+
+        #[cfg(feature = "json")]
+        impl $crate::json::JsonEncodable for $ty {
+            fn encode(
+                &self,
+                stream: &mut $crate::json::JsonStreamWriter<&mut dyn std::io::Write>,
+                ctx: &$crate::json::Context<'_>,
+            ) -> $crate::EncodingResult<()> {
+                $to(self)?.encode(stream, ctx)
+            }
+        }
+
+        #[cfg(feature = "json")]
+        impl $crate::json::JsonDecodable for $ty {
+            fn decode(
+                stream: &mut $crate::json::JsonStreamReader<&mut dyn std::io::Read>,
+                ctx: &$crate::json::Context<'_>,
+            ) -> $crate::EncodingResult<Self> {
+                let inner = $crate::json::JsonDecodable::decode(stream, ctx)?;
+                $from(inner)
+            }
+        }
+
+        #[cfg(feature = "xml")]
+        impl $crate::xml::XmlEncodable for $ty {
+            fn encode(
+                &self,
+                stream: &mut $crate::xml::XmlStreamWriter<&mut dyn std::io::Write>,
+                ctx: &$crate::xml::Context<'_>,
+            ) -> $crate::EncodingResult<()> {
+                $to(self)?.encode(stream, ctx)
+            }
+        }
+        #[cfg(feature = "xml")]
+        impl $crate::xml::XmlDecodable for $ty {
+            fn decode(
+                stream: &mut $crate::xml::XmlStreamReader<&mut dyn std::io::Read>,
+                ctx: &$crate::xml::Context<'_>,
+            ) -> $crate::EncodingResult<Self> {
+                let inner = $crate::xml::XmlDecodable::decode(stream, ctx)?;
+                $from(inner)
+            }
+        }
+    };
+}
+
+pub use impl_encoded_as;

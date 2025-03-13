@@ -23,26 +23,12 @@ impl opcua::types::UaNullable for AccessLevelExType {
         self.is_empty()
     }
 }
-impl opcua::types::BinaryEncodable for AccessLevelExType {
-    fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
-        4usize
-    }
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::write_i32(stream, self.bits())
-    }
-}
-impl opcua::types::BinaryDecodable for AccessLevelExType {
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
-    }
-}
+opcua::types::impl_encoded_as!(
+    AccessLevelExType,
+    |v| Ok(AccessLevelExType::from_bits_truncate(v)),
+    |v: &AccessLevelExType| Ok::<_, opcua::types::Error>(v.bits()),
+    |v: &AccessLevelExType| v.bits().byte_len()
+);
 impl Default for AccessLevelExType {
     fn default() -> Self {
         Self::empty()
@@ -54,49 +40,8 @@ impl opcua::types::IntoVariant for AccessLevelExType {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::XmlDecodable for AccessLevelExType {
-    fn decode(
-        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
-    }
-}
-#[cfg(feature = "xml")]
-impl opcua::types::xml::XmlEncodable for AccessLevelExType {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        self.bits().encode(stream, ctx)
-    }
-}
-#[cfg(feature = "xml")]
 impl opcua::types::xml::XmlType for AccessLevelExType {
     const TAG: &'static str = "AccessLevelExType";
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonDecodable for AccessLevelExType {
-    fn decode(
-        stream: &mut opcua::types::json::JsonStreamReader<&mut dyn std::io::Read>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        use opcua::types::json::JsonReader;
-        Ok(Self::from_bits_truncate(stream.next_number()??))
-    }
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonEncodable for AccessLevelExType {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::json::JsonStreamWriter<&mut dyn std::io::Write>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        use opcua::types::json::JsonWriter;
-        stream.number_value(self.bits())?;
-        Ok(())
-    }
 }
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] #[doc =
@@ -110,26 +55,12 @@ impl opcua::types::UaNullable for AccessLevelType {
         self.is_empty()
     }
 }
-impl opcua::types::BinaryEncodable for AccessLevelType {
-    fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
-        1usize
-    }
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::write_u8(stream, self.bits())
-    }
-}
-impl opcua::types::BinaryDecodable for AccessLevelType {
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(u8::decode(stream, ctx)?))
-    }
-}
+opcua::types::impl_encoded_as!(
+    AccessLevelType,
+    |v| Ok(AccessLevelType::from_bits_truncate(v)),
+    |v: &AccessLevelType| Ok::<_, opcua::types::Error>(v.bits()),
+    |v: &AccessLevelType| v.bits().byte_len()
+);
 impl Default for AccessLevelType {
     fn default() -> Self {
         Self::empty()
@@ -141,49 +72,8 @@ impl opcua::types::IntoVariant for AccessLevelType {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::XmlDecodable for AccessLevelType {
-    fn decode(
-        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(u8::decode(stream, ctx)?))
-    }
-}
-#[cfg(feature = "xml")]
-impl opcua::types::xml::XmlEncodable for AccessLevelType {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        self.bits().encode(stream, ctx)
-    }
-}
-#[cfg(feature = "xml")]
 impl opcua::types::xml::XmlType for AccessLevelType {
     const TAG: &'static str = "AccessLevelType";
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonDecodable for AccessLevelType {
-    fn decode(
-        stream: &mut opcua::types::json::JsonStreamReader<&mut dyn std::io::Read>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        use opcua::types::json::JsonReader;
-        Ok(Self::from_bits_truncate(stream.next_number()??))
-    }
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonEncodable for AccessLevelType {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::json::JsonStreamWriter<&mut dyn std::io::Write>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        use opcua::types::json::JsonWriter;
-        stream.number_value(self.bits())?;
-        Ok(())
-    }
 }
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] #[doc =
@@ -197,26 +87,12 @@ impl opcua::types::UaNullable for AccessRestrictionType {
         self.is_empty()
     }
 }
-impl opcua::types::BinaryEncodable for AccessRestrictionType {
-    fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
-        2usize
-    }
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::write_i16(stream, self.bits())
-    }
-}
-impl opcua::types::BinaryDecodable for AccessRestrictionType {
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i16::decode(stream, ctx)?))
-    }
-}
+opcua::types::impl_encoded_as!(
+    AccessRestrictionType,
+    |v| Ok(AccessRestrictionType::from_bits_truncate(v)),
+    |v: &AccessRestrictionType| Ok::<_, opcua::types::Error>(v.bits()),
+    |v: &AccessRestrictionType| v.bits().byte_len()
+);
 impl Default for AccessRestrictionType {
     fn default() -> Self {
         Self::empty()
@@ -228,49 +104,8 @@ impl opcua::types::IntoVariant for AccessRestrictionType {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::XmlDecodable for AccessRestrictionType {
-    fn decode(
-        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i16::decode(stream, ctx)?))
-    }
-}
-#[cfg(feature = "xml")]
-impl opcua::types::xml::XmlEncodable for AccessRestrictionType {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        self.bits().encode(stream, ctx)
-    }
-}
-#[cfg(feature = "xml")]
 impl opcua::types::xml::XmlType for AccessRestrictionType {
     const TAG: &'static str = "AccessRestrictionType";
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonDecodable for AccessRestrictionType {
-    fn decode(
-        stream: &mut opcua::types::json::JsonStreamReader<&mut dyn std::io::Read>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        use opcua::types::json::JsonReader;
-        Ok(Self::from_bits_truncate(stream.next_number()??))
-    }
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonEncodable for AccessRestrictionType {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::json::JsonStreamWriter<&mut dyn std::io::Write>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        use opcua::types::json::JsonWriter;
-        stream.number_value(self.bits())?;
-        Ok(())
-    }
 }
 #[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part14/6.2.11/#6.2.11.2.1
@@ -292,26 +127,12 @@ impl opcua::types::UaNullable for AlarmMask {
         self.is_empty()
     }
 }
-impl opcua::types::BinaryEncodable for AlarmMask {
-    fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
-        2usize
-    }
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::write_i16(stream, self.bits())
-    }
-}
-impl opcua::types::BinaryDecodable for AlarmMask {
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i16::decode(stream, ctx)?))
-    }
-}
+opcua::types::impl_encoded_as!(
+    AlarmMask,
+    |v| Ok(AlarmMask::from_bits_truncate(v)),
+    |v: &AlarmMask| Ok::<_, opcua::types::Error>(v.bits()),
+    |v: &AlarmMask| v.bits().byte_len()
+);
 impl Default for AlarmMask {
     fn default() -> Self {
         Self::empty()
@@ -323,49 +144,8 @@ impl opcua::types::IntoVariant for AlarmMask {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::XmlDecodable for AlarmMask {
-    fn decode(
-        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i16::decode(stream, ctx)?))
-    }
-}
-#[cfg(feature = "xml")]
-impl opcua::types::xml::XmlEncodable for AlarmMask {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        self.bits().encode(stream, ctx)
-    }
-}
-#[cfg(feature = "xml")]
 impl opcua::types::xml::XmlType for AlarmMask {
     const TAG: &'static str = "AlarmMask";
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonDecodable for AlarmMask {
-    fn decode(
-        stream: &mut opcua::types::json::JsonStreamReader<&mut dyn std::io::Read>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        use opcua::types::json::JsonReader;
-        Ok(Self::from_bits_truncate(stream.next_number()??))
-    }
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonEncodable for AlarmMask {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::json::JsonStreamWriter<&mut dyn std::io::Write>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        use opcua::types::json::JsonWriter;
-        stream.number_value(self.bits())?;
-        Ok(())
-    }
 }
 #[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/7.4
@@ -398,26 +178,12 @@ impl opcua::types::UaNullable for AttributeWriteMask {
         self.is_empty()
     }
 }
-impl opcua::types::BinaryEncodable for AttributeWriteMask {
-    fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
-        4usize
-    }
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::write_i32(stream, self.bits())
-    }
-}
-impl opcua::types::BinaryDecodable for AttributeWriteMask {
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
-    }
-}
+opcua::types::impl_encoded_as!(
+    AttributeWriteMask,
+    |v| Ok(AttributeWriteMask::from_bits_truncate(v)),
+    |v: &AttributeWriteMask| Ok::<_, opcua::types::Error>(v.bits()),
+    |v: &AttributeWriteMask| v.bits().byte_len()
+);
 impl Default for AttributeWriteMask {
     fn default() -> Self {
         Self::empty()
@@ -429,49 +195,8 @@ impl opcua::types::IntoVariant for AttributeWriteMask {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::XmlDecodable for AttributeWriteMask {
-    fn decode(
-        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
-    }
-}
-#[cfg(feature = "xml")]
-impl opcua::types::xml::XmlEncodable for AttributeWriteMask {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        self.bits().encode(stream, ctx)
-    }
-}
-#[cfg(feature = "xml")]
 impl opcua::types::xml::XmlType for AttributeWriteMask {
     const TAG: &'static str = "AttributeWriteMask";
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonDecodable for AttributeWriteMask {
-    fn decode(
-        stream: &mut opcua::types::json::JsonStreamReader<&mut dyn std::io::Read>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        use opcua::types::json::JsonReader;
-        Ok(Self::from_bits_truncate(stream.next_number()??))
-    }
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonEncodable for AttributeWriteMask {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::json::JsonStreamWriter<&mut dyn std::io::Write>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        use opcua::types::json::JsonWriter;
-        stream.number_value(self.bits())?;
-        Ok(())
-    }
 }
 #[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part8/5.6.7
@@ -574,26 +299,12 @@ impl opcua::types::UaNullable for DataSetFieldContentMask {
         self.is_empty()
     }
 }
-impl opcua::types::BinaryEncodable for DataSetFieldContentMask {
-    fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
-        4usize
-    }
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::write_i32(stream, self.bits())
-    }
-}
-impl opcua::types::BinaryDecodable for DataSetFieldContentMask {
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
-    }
-}
+opcua::types::impl_encoded_as!(
+    DataSetFieldContentMask,
+    |v| Ok(DataSetFieldContentMask::from_bits_truncate(v)),
+    |v: &DataSetFieldContentMask| Ok::<_, opcua::types::Error>(v.bits()),
+    |v: &DataSetFieldContentMask| v.bits().byte_len()
+);
 impl Default for DataSetFieldContentMask {
     fn default() -> Self {
         Self::empty()
@@ -605,49 +316,8 @@ impl opcua::types::IntoVariant for DataSetFieldContentMask {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::XmlDecodable for DataSetFieldContentMask {
-    fn decode(
-        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
-    }
-}
-#[cfg(feature = "xml")]
-impl opcua::types::xml::XmlEncodable for DataSetFieldContentMask {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        self.bits().encode(stream, ctx)
-    }
-}
-#[cfg(feature = "xml")]
 impl opcua::types::xml::XmlType for DataSetFieldContentMask {
     const TAG: &'static str = "DataSetFieldContentMask";
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonDecodable for DataSetFieldContentMask {
-    fn decode(
-        stream: &mut opcua::types::json::JsonStreamReader<&mut dyn std::io::Read>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        use opcua::types::json::JsonReader;
-        Ok(Self::from_bits_truncate(stream.next_number()??))
-    }
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonEncodable for DataSetFieldContentMask {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::json::JsonStreamWriter<&mut dyn std::io::Write>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        use opcua::types::json::JsonWriter;
-        stream.number_value(self.bits())?;
-        Ok(())
-    }
 }
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] #[doc =
@@ -659,26 +329,12 @@ impl opcua::types::UaNullable for DataSetFieldFlags {
         self.is_empty()
     }
 }
-impl opcua::types::BinaryEncodable for DataSetFieldFlags {
-    fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
-        2usize
-    }
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::write_i16(stream, self.bits())
-    }
-}
-impl opcua::types::BinaryDecodable for DataSetFieldFlags {
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i16::decode(stream, ctx)?))
-    }
-}
+opcua::types::impl_encoded_as!(
+    DataSetFieldFlags,
+    |v| Ok(DataSetFieldFlags::from_bits_truncate(v)),
+    |v: &DataSetFieldFlags| Ok::<_, opcua::types::Error>(v.bits()),
+    |v: &DataSetFieldFlags| v.bits().byte_len()
+);
 impl Default for DataSetFieldFlags {
     fn default() -> Self {
         Self::empty()
@@ -690,49 +346,8 @@ impl opcua::types::IntoVariant for DataSetFieldFlags {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::XmlDecodable for DataSetFieldFlags {
-    fn decode(
-        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i16::decode(stream, ctx)?))
-    }
-}
-#[cfg(feature = "xml")]
-impl opcua::types::xml::XmlEncodable for DataSetFieldFlags {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        self.bits().encode(stream, ctx)
-    }
-}
-#[cfg(feature = "xml")]
 impl opcua::types::xml::XmlType for DataSetFieldFlags {
     const TAG: &'static str = "DataSetFieldFlags";
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonDecodable for DataSetFieldFlags {
-    fn decode(
-        stream: &mut opcua::types::json::JsonStreamReader<&mut dyn std::io::Read>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        use opcua::types::json::JsonReader;
-        Ok(Self::from_bits_truncate(stream.next_number()??))
-    }
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonEncodable for DataSetFieldFlags {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::json::JsonStreamWriter<&mut dyn std::io::Write>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        use opcua::types::json::JsonWriter;
-        stream.number_value(self.bits())?;
-        Ok(())
-    }
 }
 #[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part14/6.3.1/#6.3.1.1.3
@@ -789,26 +404,12 @@ impl opcua::types::UaNullable for EventNotifierType {
         self.is_empty()
     }
 }
-impl opcua::types::BinaryEncodable for EventNotifierType {
-    fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
-        1usize
-    }
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::write_u8(stream, self.bits())
-    }
-}
-impl opcua::types::BinaryDecodable for EventNotifierType {
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(u8::decode(stream, ctx)?))
-    }
-}
+opcua::types::impl_encoded_as!(
+    EventNotifierType,
+    |v| Ok(EventNotifierType::from_bits_truncate(v)),
+    |v: &EventNotifierType| Ok::<_, opcua::types::Error>(v.bits()),
+    |v: &EventNotifierType| v.bits().byte_len()
+);
 impl Default for EventNotifierType {
     fn default() -> Self {
         Self::empty()
@@ -820,49 +421,8 @@ impl opcua::types::IntoVariant for EventNotifierType {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::XmlDecodable for EventNotifierType {
-    fn decode(
-        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(u8::decode(stream, ctx)?))
-    }
-}
-#[cfg(feature = "xml")]
-impl opcua::types::xml::XmlEncodable for EventNotifierType {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        self.bits().encode(stream, ctx)
-    }
-}
-#[cfg(feature = "xml")]
 impl opcua::types::xml::XmlType for EventNotifierType {
     const TAG: &'static str = "EventNotifierType";
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonDecodable for EventNotifierType {
-    fn decode(
-        stream: &mut opcua::types::json::JsonStreamReader<&mut dyn std::io::Read>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        use opcua::types::json::JsonReader;
-        Ok(Self::from_bits_truncate(stream.next_number()??))
-    }
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonEncodable for EventNotifierType {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::json::JsonStreamWriter<&mut dyn std::io::Write>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        use opcua::types::json::JsonWriter;
-        stream.number_value(self.bits())?;
-        Ok(())
-    }
 }
 #[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part11/5.2.2
@@ -998,26 +558,12 @@ impl opcua::types::UaNullable for JsonDataSetMessageContentMask {
         self.is_empty()
     }
 }
-impl opcua::types::BinaryEncodable for JsonDataSetMessageContentMask {
-    fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
-        4usize
-    }
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::write_i32(stream, self.bits())
-    }
-}
-impl opcua::types::BinaryDecodable for JsonDataSetMessageContentMask {
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
-    }
-}
+opcua::types::impl_encoded_as!(
+    JsonDataSetMessageContentMask,
+    |v| Ok(JsonDataSetMessageContentMask::from_bits_truncate(v)),
+    |v: &JsonDataSetMessageContentMask| Ok::<_, opcua::types::Error>(v.bits()),
+    |v: &JsonDataSetMessageContentMask| v.bits().byte_len()
+);
 impl Default for JsonDataSetMessageContentMask {
     fn default() -> Self {
         Self::empty()
@@ -1029,49 +575,8 @@ impl opcua::types::IntoVariant for JsonDataSetMessageContentMask {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::XmlDecodable for JsonDataSetMessageContentMask {
-    fn decode(
-        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
-    }
-}
-#[cfg(feature = "xml")]
-impl opcua::types::xml::XmlEncodable for JsonDataSetMessageContentMask {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        self.bits().encode(stream, ctx)
-    }
-}
-#[cfg(feature = "xml")]
 impl opcua::types::xml::XmlType for JsonDataSetMessageContentMask {
     const TAG: &'static str = "JsonDataSetMessageContentMask";
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonDecodable for JsonDataSetMessageContentMask {
-    fn decode(
-        stream: &mut opcua::types::json::JsonStreamReader<&mut dyn std::io::Read>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        use opcua::types::json::JsonReader;
-        Ok(Self::from_bits_truncate(stream.next_number()??))
-    }
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonEncodable for JsonDataSetMessageContentMask {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::json::JsonStreamWriter<&mut dyn std::io::Write>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        use opcua::types::json::JsonWriter;
-        stream.number_value(self.bits())?;
-        Ok(())
-    }
 }
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] #[doc =
@@ -1086,26 +591,12 @@ impl opcua::types::UaNullable for JsonNetworkMessageContentMask {
         self.is_empty()
     }
 }
-impl opcua::types::BinaryEncodable for JsonNetworkMessageContentMask {
-    fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
-        4usize
-    }
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::write_i32(stream, self.bits())
-    }
-}
-impl opcua::types::BinaryDecodable for JsonNetworkMessageContentMask {
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
-    }
-}
+opcua::types::impl_encoded_as!(
+    JsonNetworkMessageContentMask,
+    |v| Ok(JsonNetworkMessageContentMask::from_bits_truncate(v)),
+    |v: &JsonNetworkMessageContentMask| Ok::<_, opcua::types::Error>(v.bits()),
+    |v: &JsonNetworkMessageContentMask| v.bits().byte_len()
+);
 impl Default for JsonNetworkMessageContentMask {
     fn default() -> Self {
         Self::empty()
@@ -1117,49 +608,8 @@ impl opcua::types::IntoVariant for JsonNetworkMessageContentMask {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::XmlDecodable for JsonNetworkMessageContentMask {
-    fn decode(
-        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
-    }
-}
-#[cfg(feature = "xml")]
-impl opcua::types::xml::XmlEncodable for JsonNetworkMessageContentMask {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        self.bits().encode(stream, ctx)
-    }
-}
-#[cfg(feature = "xml")]
 impl opcua::types::xml::XmlType for JsonNetworkMessageContentMask {
     const TAG: &'static str = "JsonNetworkMessageContentMask";
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonDecodable for JsonNetworkMessageContentMask {
-    fn decode(
-        stream: &mut opcua::types::json::JsonStreamReader<&mut dyn std::io::Read>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        use opcua::types::json::JsonReader;
-        Ok(Self::from_bits_truncate(stream.next_number()??))
-    }
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonEncodable for JsonNetworkMessageContentMask {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::json::JsonStreamWriter<&mut dyn std::io::Write>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        use opcua::types::json::JsonWriter;
-        stream.number_value(self.bits())?;
-        Ok(())
-    }
 }
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] #[doc =
@@ -1183,26 +633,12 @@ impl opcua::types::UaNullable for LldpSystemCapabilitiesMap {
         self.is_empty()
     }
 }
-impl opcua::types::BinaryEncodable for LldpSystemCapabilitiesMap {
-    fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
-        4usize
-    }
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::write_i32(stream, self.bits())
-    }
-}
-impl opcua::types::BinaryDecodable for LldpSystemCapabilitiesMap {
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
-    }
-}
+opcua::types::impl_encoded_as!(
+    LldpSystemCapabilitiesMap,
+    |v| Ok(LldpSystemCapabilitiesMap::from_bits_truncate(v)),
+    |v: &LldpSystemCapabilitiesMap| Ok::<_, opcua::types::Error>(v.bits()),
+    |v: &LldpSystemCapabilitiesMap| v.bits().byte_len()
+);
 impl Default for LldpSystemCapabilitiesMap {
     fn default() -> Self {
         Self::empty()
@@ -1214,49 +650,8 @@ impl opcua::types::IntoVariant for LldpSystemCapabilitiesMap {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::XmlDecodable for LldpSystemCapabilitiesMap {
-    fn decode(
-        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
-    }
-}
-#[cfg(feature = "xml")]
-impl opcua::types::xml::XmlEncodable for LldpSystemCapabilitiesMap {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        self.bits().encode(stream, ctx)
-    }
-}
-#[cfg(feature = "xml")]
 impl opcua::types::xml::XmlType for LldpSystemCapabilitiesMap {
     const TAG: &'static str = "LldpSystemCapabilitiesMap";
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonDecodable for LldpSystemCapabilitiesMap {
-    fn decode(
-        stream: &mut opcua::types::json::JsonStreamReader<&mut dyn std::io::Read>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        use opcua::types::json::JsonReader;
-        Ok(Self::from_bits_truncate(stream.next_number()??))
-    }
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonEncodable for LldpSystemCapabilitiesMap {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::json::JsonStreamWriter<&mut dyn std::io::Write>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        use opcua::types::json::JsonWriter;
-        stream.number_value(self.bits())?;
-        Ok(())
-    }
 }
 #[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part22/5.3.1/#5.3.1.11
@@ -1445,26 +840,12 @@ impl opcua::types::UaNullable for PasswordOptionsMask {
         self.is_empty()
     }
 }
-impl opcua::types::BinaryEncodable for PasswordOptionsMask {
-    fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
-        4usize
-    }
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::write_i32(stream, self.bits())
-    }
-}
-impl opcua::types::BinaryDecodable for PasswordOptionsMask {
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
-    }
-}
+opcua::types::impl_encoded_as!(
+    PasswordOptionsMask,
+    |v| Ok(PasswordOptionsMask::from_bits_truncate(v)),
+    |v: &PasswordOptionsMask| Ok::<_, opcua::types::Error>(v.bits()),
+    |v: &PasswordOptionsMask| v.bits().byte_len()
+);
 impl Default for PasswordOptionsMask {
     fn default() -> Self {
         Self::empty()
@@ -1476,49 +857,8 @@ impl opcua::types::IntoVariant for PasswordOptionsMask {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::XmlDecodable for PasswordOptionsMask {
-    fn decode(
-        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
-    }
-}
-#[cfg(feature = "xml")]
-impl opcua::types::xml::XmlEncodable for PasswordOptionsMask {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        self.bits().encode(stream, ctx)
-    }
-}
-#[cfg(feature = "xml")]
 impl opcua::types::xml::XmlType for PasswordOptionsMask {
     const TAG: &'static str = "PasswordOptionsMask";
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonDecodable for PasswordOptionsMask {
-    fn decode(
-        stream: &mut opcua::types::json::JsonStreamReader<&mut dyn std::io::Read>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        use opcua::types::json::JsonReader;
-        Ok(Self::from_bits_truncate(stream.next_number()??))
-    }
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonEncodable for PasswordOptionsMask {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::json::JsonStreamWriter<&mut dyn std::io::Write>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        use opcua::types::json::JsonWriter;
-        stream.number_value(self.bits())?;
-        Ok(())
-    }
 }
 #[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part11/6.8
@@ -1550,26 +890,12 @@ impl opcua::types::UaNullable for PermissionType {
         self.is_empty()
     }
 }
-impl opcua::types::BinaryEncodable for PermissionType {
-    fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
-        4usize
-    }
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::write_i32(stream, self.bits())
-    }
-}
-impl opcua::types::BinaryDecodable for PermissionType {
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
-    }
-}
+opcua::types::impl_encoded_as!(
+    PermissionType,
+    |v| Ok(PermissionType::from_bits_truncate(v)),
+    |v: &PermissionType| Ok::<_, opcua::types::Error>(v.bits()),
+    |v: &PermissionType| v.bits().byte_len()
+);
 impl Default for PermissionType {
     fn default() -> Self {
         Self::empty()
@@ -1581,49 +907,8 @@ impl opcua::types::IntoVariant for PermissionType {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::XmlDecodable for PermissionType {
-    fn decode(
-        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
-    }
-}
-#[cfg(feature = "xml")]
-impl opcua::types::xml::XmlEncodable for PermissionType {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        self.bits().encode(stream, ctx)
-    }
-}
-#[cfg(feature = "xml")]
 impl opcua::types::xml::XmlType for PermissionType {
     const TAG: &'static str = "PermissionType";
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonDecodable for PermissionType {
-    fn decode(
-        stream: &mut opcua::types::json::JsonStreamReader<&mut dyn std::io::Read>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        use opcua::types::json::JsonReader;
-        Ok(Self::from_bits_truncate(stream.next_number()??))
-    }
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonEncodable for PermissionType {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::json::JsonStreamWriter<&mut dyn std::io::Write>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        use opcua::types::json::JsonWriter;
-        stream.number_value(self.bits())?;
-        Ok(())
-    }
 }
 #[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part22/5.3.1/#5.3.1.10
@@ -1660,26 +945,12 @@ impl opcua::types::UaNullable for PubSubConfigurationRefMask {
         self.is_empty()
     }
 }
-impl opcua::types::BinaryEncodable for PubSubConfigurationRefMask {
-    fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
-        4usize
-    }
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::write_i32(stream, self.bits())
-    }
-}
-impl opcua::types::BinaryDecodable for PubSubConfigurationRefMask {
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
-    }
-}
+opcua::types::impl_encoded_as!(
+    PubSubConfigurationRefMask,
+    |v| Ok(PubSubConfigurationRefMask::from_bits_truncate(v)),
+    |v: &PubSubConfigurationRefMask| Ok::<_, opcua::types::Error>(v.bits()),
+    |v: &PubSubConfigurationRefMask| v.bits().byte_len()
+);
 impl Default for PubSubConfigurationRefMask {
     fn default() -> Self {
         Self::empty()
@@ -1691,49 +962,8 @@ impl opcua::types::IntoVariant for PubSubConfigurationRefMask {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::XmlDecodable for PubSubConfigurationRefMask {
-    fn decode(
-        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
-    }
-}
-#[cfg(feature = "xml")]
-impl opcua::types::xml::XmlEncodable for PubSubConfigurationRefMask {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        self.bits().encode(stream, ctx)
-    }
-}
-#[cfg(feature = "xml")]
 impl opcua::types::xml::XmlType for PubSubConfigurationRefMask {
     const TAG: &'static str = "PubSubConfigurationRefMask";
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonDecodable for PubSubConfigurationRefMask {
-    fn decode(
-        stream: &mut opcua::types::json::JsonStreamReader<&mut dyn std::io::Read>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        use opcua::types::json::JsonReader;
-        Ok(Self::from_bits_truncate(stream.next_number()??))
-    }
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonEncodable for PubSubConfigurationRefMask {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::json::JsonStreamWriter<&mut dyn std::io::Write>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        use opcua::types::json::JsonWriter;
-        stream.number_value(self.bits())?;
-        Ok(())
-    }
 }
 #[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part14/9.1.11/#9.1.11.6
@@ -1879,26 +1109,12 @@ impl opcua::types::UaNullable for TrustListValidationOptions {
         self.is_empty()
     }
 }
-impl opcua::types::BinaryEncodable for TrustListValidationOptions {
-    fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
-        4usize
-    }
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::write_i32(stream, self.bits())
-    }
-}
-impl opcua::types::BinaryDecodable for TrustListValidationOptions {
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
-    }
-}
+opcua::types::impl_encoded_as!(
+    TrustListValidationOptions,
+    |v| Ok(TrustListValidationOptions::from_bits_truncate(v)),
+    |v: &TrustListValidationOptions| Ok::<_, opcua::types::Error>(v.bits()),
+    |v: &TrustListValidationOptions| v.bits().byte_len()
+);
 impl Default for TrustListValidationOptions {
     fn default() -> Self {
         Self::empty()
@@ -1910,49 +1126,8 @@ impl opcua::types::IntoVariant for TrustListValidationOptions {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::XmlDecodable for TrustListValidationOptions {
-    fn decode(
-        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
-    }
-}
-#[cfg(feature = "xml")]
-impl opcua::types::xml::XmlEncodable for TrustListValidationOptions {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        self.bits().encode(stream, ctx)
-    }
-}
-#[cfg(feature = "xml")]
 impl opcua::types::xml::XmlType for TrustListValidationOptions {
     const TAG: &'static str = "TrustListValidationOptions";
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonDecodable for TrustListValidationOptions {
-    fn decode(
-        stream: &mut opcua::types::json::JsonStreamReader<&mut dyn std::io::Read>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        use opcua::types::json::JsonReader;
-        Ok(Self::from_bits_truncate(stream.next_number()??))
-    }
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonEncodable for TrustListValidationOptions {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::json::JsonStreamWriter<&mut dyn std::io::Write>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        use opcua::types::json::JsonWriter;
-        stream.number_value(self.bits())?;
-        Ok(())
-    }
 }
 #[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part22/5.3.1/#5.3.1.5
@@ -2070,26 +1245,12 @@ impl opcua::types::UaNullable for UadpDataSetMessageContentMask {
         self.is_empty()
     }
 }
-impl opcua::types::BinaryEncodable for UadpDataSetMessageContentMask {
-    fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
-        4usize
-    }
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::write_i32(stream, self.bits())
-    }
-}
-impl opcua::types::BinaryDecodable for UadpDataSetMessageContentMask {
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
-    }
-}
+opcua::types::impl_encoded_as!(
+    UadpDataSetMessageContentMask,
+    |v| Ok(UadpDataSetMessageContentMask::from_bits_truncate(v)),
+    |v: &UadpDataSetMessageContentMask| Ok::<_, opcua::types::Error>(v.bits()),
+    |v: &UadpDataSetMessageContentMask| v.bits().byte_len()
+);
 impl Default for UadpDataSetMessageContentMask {
     fn default() -> Self {
         Self::empty()
@@ -2101,49 +1262,8 @@ impl opcua::types::IntoVariant for UadpDataSetMessageContentMask {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::XmlDecodable for UadpDataSetMessageContentMask {
-    fn decode(
-        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
-    }
-}
-#[cfg(feature = "xml")]
-impl opcua::types::xml::XmlEncodable for UadpDataSetMessageContentMask {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        self.bits().encode(stream, ctx)
-    }
-}
-#[cfg(feature = "xml")]
 impl opcua::types::xml::XmlType for UadpDataSetMessageContentMask {
     const TAG: &'static str = "UadpDataSetMessageContentMask";
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonDecodable for UadpDataSetMessageContentMask {
-    fn decode(
-        stream: &mut opcua::types::json::JsonStreamReader<&mut dyn std::io::Read>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        use opcua::types::json::JsonReader;
-        Ok(Self::from_bits_truncate(stream.next_number()??))
-    }
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonEncodable for UadpDataSetMessageContentMask {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::json::JsonStreamWriter<&mut dyn std::io::Write>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        use opcua::types::json::JsonWriter;
-        stream.number_value(self.bits())?;
-        Ok(())
-    }
 }
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] #[doc =
@@ -2159,26 +1279,12 @@ impl opcua::types::UaNullable for UadpNetworkMessageContentMask {
         self.is_empty()
     }
 }
-impl opcua::types::BinaryEncodable for UadpNetworkMessageContentMask {
-    fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
-        4usize
-    }
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::write_i32(stream, self.bits())
-    }
-}
-impl opcua::types::BinaryDecodable for UadpNetworkMessageContentMask {
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
-    }
-}
+opcua::types::impl_encoded_as!(
+    UadpNetworkMessageContentMask,
+    |v| Ok(UadpNetworkMessageContentMask::from_bits_truncate(v)),
+    |v: &UadpNetworkMessageContentMask| Ok::<_, opcua::types::Error>(v.bits()),
+    |v: &UadpNetworkMessageContentMask| v.bits().byte_len()
+);
 impl Default for UadpNetworkMessageContentMask {
     fn default() -> Self {
         Self::empty()
@@ -2190,49 +1296,8 @@ impl opcua::types::IntoVariant for UadpNetworkMessageContentMask {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::XmlDecodable for UadpNetworkMessageContentMask {
-    fn decode(
-        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
-    }
-}
-#[cfg(feature = "xml")]
-impl opcua::types::xml::XmlEncodable for UadpNetworkMessageContentMask {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        self.bits().encode(stream, ctx)
-    }
-}
-#[cfg(feature = "xml")]
 impl opcua::types::xml::XmlType for UadpNetworkMessageContentMask {
     const TAG: &'static str = "UadpNetworkMessageContentMask";
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonDecodable for UadpNetworkMessageContentMask {
-    fn decode(
-        stream: &mut opcua::types::json::JsonStreamReader<&mut dyn std::io::Read>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        use opcua::types::json::JsonReader;
-        Ok(Self::from_bits_truncate(stream.next_number()??))
-    }
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonEncodable for UadpNetworkMessageContentMask {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::json::JsonStreamWriter<&mut dyn std::io::Write>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        use opcua::types::json::JsonWriter;
-        stream.number_value(self.bits())?;
-        Ok(())
-    }
 }
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] #[doc =
@@ -2248,26 +1313,12 @@ impl opcua::types::UaNullable for UserConfigurationMask {
         self.is_empty()
     }
 }
-impl opcua::types::BinaryEncodable for UserConfigurationMask {
-    fn byte_len(&self, _ctx: &opcua::types::Context<'_>) -> usize {
-        4usize
-    }
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::write_i32(stream, self.bits())
-    }
-}
-impl opcua::types::BinaryDecodable for UserConfigurationMask {
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
-    }
-}
+opcua::types::impl_encoded_as!(
+    UserConfigurationMask,
+    |v| Ok(UserConfigurationMask::from_bits_truncate(v)),
+    |v: &UserConfigurationMask| Ok::<_, opcua::types::Error>(v.bits()),
+    |v: &UserConfigurationMask| v.bits().byte_len()
+);
 impl Default for UserConfigurationMask {
     fn default() -> Self {
         Self::empty()
@@ -2279,49 +1330,8 @@ impl opcua::types::IntoVariant for UserConfigurationMask {
     }
 }
 #[cfg(feature = "xml")]
-impl opcua::types::xml::XmlDecodable for UserConfigurationMask {
-    fn decode(
-        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self::from_bits_truncate(i32::decode(stream, ctx)?))
-    }
-}
-#[cfg(feature = "xml")]
-impl opcua::types::xml::XmlEncodable for UserConfigurationMask {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        self.bits().encode(stream, ctx)
-    }
-}
-#[cfg(feature = "xml")]
 impl opcua::types::xml::XmlType for UserConfigurationMask {
     const TAG: &'static str = "UserConfigurationMask";
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonDecodable for UserConfigurationMask {
-    fn decode(
-        stream: &mut opcua::types::json::JsonStreamReader<&mut dyn std::io::Read>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        use opcua::types::json::JsonReader;
-        Ok(Self::from_bits_truncate(stream.next_number()??))
-    }
-}
-#[cfg(feature = "json")]
-impl opcua::types::json::JsonEncodable for UserConfigurationMask {
-    fn encode(
-        &self,
-        stream: &mut opcua::types::json::JsonStreamWriter<&mut dyn std::io::Write>,
-        _ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        use opcua::types::json::JsonWriter;
-        stream.number_value(self.bits())?;
-        Ok(())
-    }
 }
 #[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/7.43

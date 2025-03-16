@@ -45,6 +45,7 @@ use std::time::{Duration, Instant};
 use arc_swap::ArcSwap;
 pub use client::Client;
 pub use connect::SessionConnectMode;
+pub use connection::SessionBuilder;
 pub use event_loop::{SessionActivity, SessionEventLoop, SessionPollResult};
 use log::{error, info};
 use opcua_core::handle::AtomicHandle;

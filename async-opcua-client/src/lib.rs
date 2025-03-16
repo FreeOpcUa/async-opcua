@@ -129,8 +129,8 @@ pub use retry::{ExponentialBackoff, SessionRetryPolicy};
 pub use session::{
     Client, DataChangeCallback, DefaultRetryPolicy, EventCallback, HistoryReadAction,
     HistoryUpdateAction, MonitoredItem, OnSubscriptionNotification, RequestRetryPolicy, Session,
-    SessionActivity, SessionConnectMode, SessionEventLoop, SessionPollResult, Subscription,
-    SubscriptionActivity, SubscriptionCallbacks, UARequest,
+    SessionActivity, SessionBuilder, SessionConnectMode, SessionEventLoop, SessionPollResult,
+    Subscription, SubscriptionActivity, SubscriptionCallbacks, UARequest,
 };
 pub use transport::AsyncSecureChannel;
 

@@ -188,7 +188,7 @@ async fn main() {
     ).into();
 
     // Create the session
-    let (session, event_loop) = client.new_session_from_endpoint(endpoint, IdentityToken::Anonymous).await.unwrap();
+    let (session, event_loop) = client.connect_to_matching_endpoint(endpoint, IdentityToken::Anonymous).await.unwrap();
 
     // Spawn the event loop on a tokio task.
     let mut handle = event_loop.spawn();

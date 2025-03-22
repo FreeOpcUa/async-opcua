@@ -17,7 +17,7 @@ pub use error::CodeGenError;
 use ids::{generate_node_ids, NodeIdCodeGenTarget};
 use nodeset::{generate_events, generate_target, make_root_module, NodeSetCodeGenTarget};
 use serde::{Deserialize, Serialize};
-use syn::File;
+use syn::{parse_str, File};
 pub use types::{
     base_ignored_types, base_native_type_mappings, basic_types_import_map, BsdTypeLoader,
     CodeGenItemConfig, GeneratedItem, ItemDefinition, LoadedType, LoadedTypes, StructureField,
@@ -138,10 +138,13 @@ pub fn run_codegen(config: &CodeGenConfig, root_path: &str) -> Result<(), CodeGe
                     .iter()
                     .filter_map(|v| v.encoding_ids.as_ref().map(|i| (i.clone(), v.name.clone())))
                     .collect();
+                let id_path: syn::Path = parse_str(&t.id_path)?;
                 for (name, typ) in t.types_import_map.iter() {
                     if typ.add_to_type_loader {
-                        object_ids
-                            .push((EncodingIds::new(name), format!("{}::{}", typ.path, name)));
+                        object_ids.push((
+                            EncodingIds::new(id_path.clone(), name),
+                            format!("{}::{}", typ.path, name),
+                        ));
                     }
                 }
 
@@ -244,6 +247,14 @@ pub struct TypeCodeGenTarget {
     pub structs_single_file: bool,
     #[serde(default)]
     pub extra_header: String,
+    #[serde(default = "defaults::id_path")]
+    pub id_path: String,
+}
+
+mod defaults {
+    pub fn id_path() -> String {
+        "crate".to_owned()
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]

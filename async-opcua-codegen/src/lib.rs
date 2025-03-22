@@ -142,7 +142,7 @@ pub fn run_codegen(config: &CodeGenConfig, root_path: &str) -> Result<(), CodeGe
                 for (name, typ) in t.types_import_map.iter() {
                     if typ.add_to_type_loader {
                         object_ids.push((
-                            EncodingIds::new(id_path.clone(), name),
+                            EncodingIds::new_external(&id_path, name, typ)?,
                             format!("{}::{}", typ.path, name),
                         ));
                     }
@@ -249,6 +249,8 @@ pub struct TypeCodeGenTarget {
     pub extra_header: String,
     #[serde(default = "defaults::id_path")]
     pub id_path: String,
+    #[serde(default)]
+    pub node_ids_from_nodeset: bool,
 }
 
 mod defaults {

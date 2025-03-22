@@ -6,6 +6,7 @@ fn main() -> Result<(), CodeGenError> {
 
 fn run_cli() -> Result<(), CodeGenError> {
     let mut args = std::env::args();
+    env_logger::init();
 
     if args.len() != 2 {
         println!(

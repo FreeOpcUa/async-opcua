@@ -23,6 +23,10 @@ pub fn generate_types(
     target: &TypeCodeGenTarget,
     input: &BinarySchemaInput,
 ) -> Result<(Vec<GeneratedItem>, String), CodeGenError> {
+    if target.node_ids_from_nodeset {
+        return Err(CodeGenError::other("Invalid config. node_ids_from_nodeset is not valid when using a BSD file for code generation."));
+    }
+
     println!(
         "Found {} raw elements in the type dictionary.",
         input.xml.elements.len()
@@ -91,6 +95,7 @@ fn generate_types_inner(
         CodeGenItemConfig {
             enums_single_file: target.enums_single_file,
             structs_single_file: target.structs_single_file,
+            node_ids_from_nodeset: target.node_ids_from_nodeset,
         },
         target_namespace.clone(),
         target.id_path.clone(),
@@ -170,14 +175,13 @@ fn binary_loader_impl(
 ) -> (TokenStream, TokenStream) {
     let mut fields = quote! {};
     for (ids, typ) in ids {
-        let dt_ident = &ids.data_type;
-        let enc_ident = &ids.binary;
+        let dt_expr = &ids.data_type;
+        let enc_expr = &ids.binary;
         let typ_path: Path = parse_str(typ).unwrap();
-        let id_path = &ids.id_path;
         fields.extend(quote! {
             inst.add_binary_type(
-                #id_path::DataTypeId::#dt_ident as u32,
-                #id_path::ObjectId::#enc_ident as u32,
+                #dt_expr,
+                #enc_expr,
                 opcua::types::binary_decode_to_enc::<#typ_path>
             );
         });
@@ -224,14 +228,13 @@ fn binary_loader_impl(
 fn json_loader_impl(ids: &[&(EncodingIds, String)], namespace: &str) -> (TokenStream, TokenStream) {
     let mut fields = quote! {};
     for (ids, typ) in ids {
-        let dt_ident = &ids.data_type;
-        let enc_ident = &ids.json;
+        let dt_expr = &ids.data_type;
+        let enc_expr = &ids.json;
         let typ_path: Path = parse_str(typ).unwrap();
-        let id_path = &ids.id_path;
         fields.extend(quote! {
             inst.add_json_type(
-                #id_path::DataTypeId::#dt_ident as u32,
-                #id_path::ObjectId::#enc_ident as u32,
+                #dt_expr,
+                #enc_expr,
                 opcua::types::json_decode_to_enc::<#typ_path>
             );
         });
@@ -279,14 +282,13 @@ fn json_loader_impl(ids: &[&(EncodingIds, String)], namespace: &str) -> (TokenSt
 fn xml_loader_impl(ids: &[&(EncodingIds, String)], namespace: &str) -> (TokenStream, TokenStream) {
     let mut fields = quote! {};
     for (ids, typ) in ids {
-        let dt_ident = &ids.data_type;
-        let enc_ident = &ids.xml;
+        let dt_expr = &ids.data_type;
+        let enc_expr = &ids.xml;
         let typ_path: Path = parse_str(typ).unwrap();
-        let id_path = &ids.id_path;
         fields.extend(quote! {
             inst.add_xml_type(
-                #id_path::DataTypeId::#dt_ident as u32,
-                #id_path::ObjectId::#enc_ident as u32,
+                #dt_expr,
+                #enc_expr,
                 opcua::types::xml_decode_to_enc::<#typ_path>
             );
         });

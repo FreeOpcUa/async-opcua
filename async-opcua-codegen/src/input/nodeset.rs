@@ -3,6 +3,7 @@ use std::{
     sync::OnceLock,
 };
 
+use log::warn;
 use opcua_xml::{
     load_nodeset2_file,
     schema::{
@@ -19,12 +20,26 @@ use crate::{
 
 use super::SchemaCache;
 
+#[derive(Debug, Clone, Default)]
+pub struct RawEncodingIds {
+    pub xml: Option<ParsedNodeId>,
+    pub binary: Option<ParsedNodeId>,
+    pub json: Option<ParsedNodeId>,
+    pub data_type: Option<ParsedNodeId>,
+}
+
 #[derive(Debug, Clone)]
 pub struct TypeInfo {
     pub name: String,
     pub is_abstract: bool,
     pub definition: Option<DataTypeDefinition>,
-    pub has_encoding: bool,
+    pub encoding_ids: RawEncodingIds,
+}
+
+impl TypeInfo {
+    pub fn has_encoding(&self) -> bool {
+        self.encoding_ids.binary.is_some()
+    }
 }
 
 pub struct NodeSetInput {
@@ -43,6 +58,13 @@ pub struct NodeSetInput {
     // correct thing. It's a cached computation result.
     pub parent_type_ids: OnceLock<Result<HashMap<ParsedNodeId, ParsedNodeId>, CodeGenError>>,
     pub type_info: OnceLock<Result<HashMap<ParsedNodeId, TypeInfo>, CodeGenError>>,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum EncodingKind {
+    Xml,
+    Binary,
+    Json,
 }
 
 impl NodeSetInput {
@@ -259,44 +281,80 @@ impl NodeSetInput {
         self.type_info
             .get_or_init(|| {
                 let mut res = HashMap::new();
-                let mut has_encoding: HashSet<ParsedNodeId> = HashSet::new();
-                for node in &self.xml.nodes {
-                    // We need to find encoding for data types, which is the only way to figure out if a
-                    // data type can be encoded in an extension object from here.
-                    let data_type = match node {
-                        UANode::Object(uaobject) => {
-                            let encodes = uaobject
-                                .base
-                                .base
-                                .references
-                                .iter()
-                                .flat_map(|r| r.references.iter())
-                                .find(|r| {
-                                    !r.is_forward
-                                        && self.resolve_alias(&r.reference_type.0) == "i=38"
-                                });
-                            if let Some(encodes) = encodes {
-                                has_encoding.insert(ParsedNodeId::parse(
-                                    self.resolve_alias(&encodes.node_id.0),
-                                )?);
-                            }
-                            continue;
-                        }
-                        UANode::DataType(node) => node,
+                let mut encoding_ids: HashMap<ParsedNodeId, RawEncodingIds> = HashMap::new();
+                let mut known_encoding_nodes: HashMap<ParsedNodeId, EncodingKind> = HashMap::new();
+
+                // First iterate through objects to find all encoding nodes.
+                for object in self.xml.nodes.iter().filter_map(|n| match n {
+                    UANode::Object(o) => Some(o),
+                    _ => None,
+                }) {
+                    let (name, _) = split_qualified_name(&object.base.base.browse_name.0)?;
+                    let kind = match name {
+                        "Default Binary" => EncodingKind::Binary,
+                        "Default JSON" => EncodingKind::Json,
+                        "Default XML" => EncodingKind::Xml,
                         _ => continue,
                     };
-
-                    // Both directions are valid, though the inverse is almost always used.
-                    let has_encoding = data_type
+                    let encodes = object
                         .base
                         .base
                         .references
                         .iter()
                         .flat_map(|r| r.references.iter())
-                        .any(|r| r.is_forward && self.resolve_alias(&r.reference_type.0) == "i=38");
+                        .find(|r| {
+                            !r.is_forward && self.resolve_alias(&r.reference_type.0) == "i=38"
+                        });
+                    let id = ParsedNodeId::parse(self.resolve_alias(&object.base.base.node_id.0))?;
+                    known_encoding_nodes.insert(id.clone(), kind);
+                    let Some(encodes) = encodes else {
+                        println!("{id:?} is missing an inverse encoding ref");
+                        continue;
+                    };
 
+                    let encoded_id = ParsedNodeId::parse(self.resolve_alias(&encodes.node_id.0))?;
+                    let entry = encoding_ids.entry(encoded_id).or_default();
+                    match kind {
+                        EncodingKind::Binary => entry.binary = Some(id),
+                        EncodingKind::Json => entry.json = Some(id),
+                        EncodingKind::Xml => entry.xml = Some(id),
+                    }
+                }
+
+                // Next, iterate through data types to build type info.
+                for data_type in self.xml.nodes.iter().filter_map(|n| match n {
+                    UANode::DataType(o) => Some(o),
+                    _ => None,
+                }) {
                     let id =
                         ParsedNodeId::parse(self.resolve_alias(&data_type.base.base.node_id.0))?;
+
+                    // Check if there are any forward encoding IDs. The inverse is most common, but some
+                    // schemas use these.
+                    for encoding in data_type
+                        .base
+                        .base
+                        .references
+                        .iter()
+                        .flat_map(|r| r.references.iter())
+                        .filter(|r| {
+                            r.is_forward && self.resolve_alias(&r.reference_type.0) == "i=38"
+                        })
+                    {
+                        let encoded_id =
+                            ParsedNodeId::parse(self.resolve_alias(&encoding.node_id.0))?;
+                        let Some(kind) = known_encoding_nodes.get(&encoded_id) else {
+                            warn!("Unknown encoding node referenced {:?}", encoded_id);
+                            continue;
+                        };
+                        let entry = encoding_ids.entry(id.clone()).or_default();
+                        match kind {
+                            EncodingKind::Binary => entry.binary = Some(encoded_id),
+                            EncodingKind::Json => entry.json = Some(encoded_id),
+                            EncodingKind::Xml => entry.xml = Some(encoded_id),
+                        }
+                    }
+
                     let name = data_type
                         .base
                         .base
@@ -309,20 +367,17 @@ impl NodeSetInput {
                                 .0
                                 .to_owned(),
                         );
+                    let mut encoding_ids = encoding_ids.remove(&id).unwrap_or_default();
+                    encoding_ids.data_type = Some(id.clone());
                     res.insert(
                         id,
                         TypeInfo {
                             name,
                             is_abstract: data_type.base.is_abstract,
                             definition: data_type.definition.clone(),
-                            has_encoding,
+                            encoding_ids,
                         },
                     );
-                }
-                for (k, v) in res.iter_mut() {
-                    if !v.has_encoding {
-                        v.has_encoding = has_encoding.contains(k);
-                    }
                 }
 
                 Ok(res)

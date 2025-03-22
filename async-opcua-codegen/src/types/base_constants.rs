@@ -42,6 +42,14 @@ pub fn base_ignored_types() -> HashSet<String> {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ExternalIds {
+    pub binary: Option<String>,
+    pub xml: Option<String>,
+    pub json: Option<String>,
+    pub id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ExternalType {
     /// Relative path in the OPC-UA types library.
     pub path: String,
@@ -52,6 +60,7 @@ pub struct ExternalType {
     /// Add to type loader impl
     #[serde(default)]
     pub add_to_type_loader: bool,
+    pub ids: Option<ExternalIds>,
 }
 
 impl ExternalType {
@@ -61,6 +70,7 @@ impl ExternalType {
             has_default: Some(has_default),
             base_type: None,
             add_to_type_loader: false,
+            ids: None,
         }
     }
 }

@@ -1,10 +1,12 @@
-#[derive(serde::Serialize, Debug)]
+use crate::{input::RawEncodingIds, utils::ParsedNodeId};
+
+#[derive(Debug)]
 pub enum StructureFieldType {
     Field(FieldType),
     Array(FieldType),
 }
 
-#[derive(serde::Serialize, Debug)]
+#[derive(Debug)]
 pub struct StructureField {
     pub name: String,
     pub original_name: String,
@@ -12,25 +14,26 @@ pub struct StructureField {
     pub documentation: Option<String>,
 }
 
-#[derive(serde::Serialize, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub enum FieldType {
     Abstract(String),
-    ExtensionObject,
+    ExtensionObject(Option<RawEncodingIds>),
     Normal(String),
 }
 
 impl FieldType {
     pub fn as_type_str(&self) -> &str {
         match self {
-            FieldType::Abstract(_) | FieldType::ExtensionObject => "ExtensionObject",
+            FieldType::Abstract(_) | FieldType::ExtensionObject(_) => "ExtensionObject",
             FieldType::Normal(s) => s,
         }
     }
 }
 
-#[derive(serde::Serialize, Debug)]
+#[derive(Debug)]
 pub struct StructuredType {
     pub name: String,
+    pub id: Option<ParsedNodeId>,
     pub fields: Vec<StructureField>,
     pub hidden_fields: Vec<String>,
     pub documentation: Option<String>,

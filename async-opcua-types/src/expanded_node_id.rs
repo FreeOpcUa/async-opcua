@@ -426,11 +426,14 @@ impl From<(NodeId, u32)> for ExpandedNodeId {
     }
 }
 
-impl From<(NodeId, &str)> for ExpandedNodeId {
-    fn from(v: (NodeId, &str)) -> Self {
+impl<T> From<(T, &str)> for ExpandedNodeId
+where
+    T: Into<NodeId>,
+{
+    fn from(value: (T, &str)) -> Self {
         ExpandedNodeId {
-            node_id: v.0,
-            namespace_uri: v.1.into(),
+            node_id: value.0.into(),
+            namespace_uri: value.1.into(),
             server_index: 0,
         }
     }

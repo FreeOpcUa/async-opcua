@@ -10,7 +10,7 @@ mod nodeset;
 mod xml_schema;
 
 pub use binary_schema::BinarySchemaInput;
-pub use nodeset::{NodeSetInput, TypeInfo};
+pub use nodeset::{NodeSetInput, RawEncodingIds, TypeInfo};
 pub use xml_schema::XmlSchemaInput;
 
 struct SchemaCacheInst<T> {

@@ -60,7 +60,7 @@ impl<'a> NodeSetTypeLoader<'a> {
         if info.is_abstract {
             FieldType::Abstract(info.name)
         } else if info.name == "Structure" || info.name == "OptionSet" {
-            FieldType::ExtensionObject
+            FieldType::ExtensionObject(Some(info.encoding_ids))
         } else {
             FieldType::Normal(info.name)
         }
@@ -143,12 +143,18 @@ impl<'a> NodeSetTypeLoader<'a> {
                 let type_info = self.resolve_type_info(&id, cache)?;
                 let ty = StructuredType {
                     name,
+                    id: Some(id),
                     fields: fields
                         .iter()
                         .map(|f| {
                             Ok::<StructureField, CodeGenError>(StructureField {
                                 name: to_snake_case(&f.name),
-                                original_name: f.name.clone(),
+                                original_name: f
+                                    .symbolic_name
+                                    .as_ref()
+                                    .and_then(|n| n.names.first())
+                                    .unwrap_or(&f.name)
+                                    .clone(),
                                 typ: {
                                     let type_info = self.resolve_type_info(
                                         &ParsedNodeId::parse(
@@ -171,8 +177,8 @@ impl<'a> NodeSetTypeLoader<'a> {
                     documentation: node.base.base.documentation.clone(),
                     // We inherit from structure, so this must be an extension object type,
                     // but if it doesn't have an encoding, just set the base type to None.
-                    base_type: if type_info.has_encoding {
-                        Some(FieldType::ExtensionObject)
+                    base_type: if type_info.has_encoding() {
+                        Some(FieldType::ExtensionObject(Some(type_info.encoding_ids)))
                     } else {
                         None
                     },
@@ -265,7 +271,7 @@ impl<'a> NodeSetTypeLoader<'a> {
                 name: native.to_owned(),
                 is_abstract: false,
                 definition: None,
-                has_encoding: false,
+                encoding_ids: Default::default(),
             })
         } else {
             Ok(r)

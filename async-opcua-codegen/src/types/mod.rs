@@ -93,6 +93,7 @@ fn generate_types_inner(
             structs_single_file: target.structs_single_file,
         },
         target_namespace.clone(),
+        target.id_path.clone(),
     );
 
     Ok((generator.generate_types()?, target_namespace))
@@ -172,10 +173,11 @@ fn binary_loader_impl(
         let dt_ident = &ids.data_type;
         let enc_ident = &ids.binary;
         let typ_path: Path = parse_str(typ).unwrap();
+        let id_path = &ids.id_path;
         fields.extend(quote! {
             inst.add_binary_type(
-                crate::DataTypeId::#dt_ident as u32,
-                crate::ObjectId::#enc_ident as u32,
+                #id_path::DataTypeId::#dt_ident as u32,
+                #id_path::ObjectId::#enc_ident as u32,
                 opcua::types::binary_decode_to_enc::<#typ_path>
             );
         });
@@ -225,10 +227,11 @@ fn json_loader_impl(ids: &[&(EncodingIds, String)], namespace: &str) -> (TokenSt
         let dt_ident = &ids.data_type;
         let enc_ident = &ids.json;
         let typ_path: Path = parse_str(typ).unwrap();
+        let id_path = &ids.id_path;
         fields.extend(quote! {
             inst.add_json_type(
-                crate::DataTypeId::#dt_ident as u32,
-                crate::ObjectId::#enc_ident as u32,
+                #id_path::DataTypeId::#dt_ident as u32,
+                #id_path::ObjectId::#enc_ident as u32,
                 opcua::types::json_decode_to_enc::<#typ_path>
             );
         });
@@ -279,10 +282,11 @@ fn xml_loader_impl(ids: &[&(EncodingIds, String)], namespace: &str) -> (TokenStr
         let dt_ident = &ids.data_type;
         let enc_ident = &ids.xml;
         let typ_path: Path = parse_str(typ).unwrap();
+        let id_path = &ids.id_path;
         fields.extend(quote! {
             inst.add_xml_type(
-                crate::DataTypeId::#dt_ident as u32,
-                crate::ObjectId::#enc_ident as u32,
+                #id_path::DataTypeId::#dt_ident as u32,
+                #id_path::ObjectId::#enc_ident as u32,
                 opcua::types::xml_decode_to_enc::<#typ_path>
             );
         });

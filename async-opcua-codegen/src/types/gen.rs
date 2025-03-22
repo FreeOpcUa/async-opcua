@@ -3,8 +3,8 @@ use std::collections::{HashMap, HashSet};
 use convert_case::{Case, Casing};
 use proc_macro2::Span;
 use syn::{
-    parse_quote, punctuated::Punctuated, FieldsNamed, File, Generics, Ident, Item, ItemEnum,
-    ItemMacro, ItemStruct, Lit, LitByte, Path, Token, Type, Visibility,
+    parse_quote, parse_str, punctuated::Punctuated, FieldsNamed, File, Generics, Ident, Item,
+    ItemEnum, ItemMacro, ItemStruct, Lit, LitByte, Path, Token, Type, Visibility,
 };
 
 use crate::{
@@ -28,11 +28,13 @@ pub struct EncodingIds {
     pub xml: Ident,
     pub json: Ident,
     pub binary: Ident,
+    pub id_path: Path,
 }
 
 impl EncodingIds {
-    pub fn new(root: &str) -> Self {
+    pub fn new(id_path: Path, root: &str) -> Self {
         Self {
+            id_path,
             data_type: Ident::new(root, Span::call_site()),
             xml: Ident::new(&format!("{}_Encoding_DefaultXml", root), Span::call_site()),
             json: Ident::new(&format!("{}_Encoding_DefaultJson", root), Span::call_site()),
@@ -99,6 +101,7 @@ pub struct CodeGenerator {
     config: CodeGenItemConfig,
     target_namespace: String,
     native_types: HashSet<String>,
+    id_path: String,
 }
 
 impl CodeGenerator {
@@ -109,6 +112,7 @@ impl CodeGenerator {
         default_excluded: HashSet<String>,
         config: CodeGenItemConfig,
         target_namespace: String,
+        id_path: String,
     ) -> Self {
         Self {
             import_map: external_import_map
@@ -139,6 +143,7 @@ impl CodeGenerator {
             default_excluded,
             target_namespace,
             native_types,
+            id_path,
         }
     }
 
@@ -612,6 +617,7 @@ impl CodeGenerator {
                 safe_ident(&format!("{}_Encoding_DefaultJson", item.name));
             let (xml_encoding_ident, _) = safe_ident(&format!("{}_Encoding_DefaultXml", item.name));
             let (data_type_ident, _) = safe_ident(&item.name);
+            let id_path: Path = parse_str(&self.id_path)?;
             if self.is_base_namespace() {
                 impls.push(parse_quote! {
                     impl opcua::types::MessageInfo for #struct_ident {
@@ -634,26 +640,26 @@ impl CodeGenerator {
                 impls.push(parse_quote! {
                     impl opcua::types::ExpandedMessageInfo for #struct_ident {
                         fn full_type_id(&self) -> opcua::types::ExpandedNodeId {
-                            let id: opcua::types::NodeId = crate::ObjectId::#encoding_ident.into();
+                            let id: opcua::types::NodeId = #id_path::ObjectId::#encoding_ident.into();
                             opcua::types::ExpandedNodeId::from((id, #namespace))
                         }
                         fn full_json_type_id(&self) -> opcua::types::ExpandedNodeId {
-                            let id: opcua::types::NodeId = crate::ObjectId::#json_encoding_ident.into();
+                            let id: opcua::types::NodeId = #id_path::ObjectId::#json_encoding_ident.into();
                             opcua::types::ExpandedNodeId::from((id, #namespace))
                         }
                         fn full_xml_type_id(&self) -> opcua::types::ExpandedNodeId {
-                            let id: opcua::types::NodeId = crate::ObjectId::#xml_encoding_ident.into();
+                            let id: opcua::types::NodeId = #id_path::ObjectId::#xml_encoding_ident.into();
                             opcua::types::ExpandedNodeId::from((id, #namespace))
                         }
                         fn full_data_type_id(&self) -> opcua::types::ExpandedNodeId {
-                            let id: opcua::types::NodeId = crate::DataTypeId::#data_type_ident.into();
+                            let id: opcua::types::NodeId = #id_path::DataTypeId::#data_type_ident.into();
                             opcua::types::ExpandedNodeId::from((id, #namespace))
                         }
                     }
                 });
             }
 
-            encoding_ids = Some(EncodingIds::new(&item.name));
+            encoding_ids = Some(EncodingIds::new(id_path, &item.name));
         }
 
         let res = ItemStruct {

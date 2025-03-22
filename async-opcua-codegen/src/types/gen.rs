@@ -1,14 +1,18 @@
 use std::collections::{HashMap, HashSet};
 
 use convert_case::{Case, Casing};
+use log::warn;
 use proc_macro2::Span;
 use syn::{
-    parse_quote, punctuated::Punctuated, FieldsNamed, File, Generics, Ident, Item, ItemEnum,
-    ItemMacro, ItemStruct, Lit, LitByte, Path, Token, Type, Visibility,
+    parse_quote, parse_str, punctuated::Punctuated, Expr, FieldsNamed, File, Generics, Ident, Item,
+    ItemEnum, ItemMacro, ItemStruct, Lit, LitByte, Path, Token, Type, Visibility,
 };
 
 use crate::{
-    error::CodeGenError, utils::safe_ident, GeneratedOutput, StructuredType, BASE_NAMESPACE,
+    error::CodeGenError,
+    input::RawEncodingIds,
+    utils::{safe_ident, ParsedNodeId, RenderExpr},
+    GeneratedOutput, StructuredType, BASE_NAMESPACE,
 };
 
 use super::{
@@ -24,23 +28,74 @@ pub enum ItemDefinition {
 
 #[derive(Clone)]
 pub struct EncodingIds {
-    pub data_type: Ident,
-    pub xml: Ident,
-    pub json: Ident,
-    pub binary: Ident,
+    pub data_type: Expr,
+    pub xml: Expr,
+    pub json: Expr,
+    pub binary: Expr,
 }
 
 impl EncodingIds {
-    pub fn new(root: &str) -> Self {
-        Self {
-            data_type: Ident::new(root, Span::call_site()),
-            xml: Ident::new(&format!("{}_Encoding_DefaultXml", root), Span::call_site()),
-            json: Ident::new(&format!("{}_Encoding_DefaultJson", root), Span::call_site()),
-            binary: Ident::new(
-                &format!("{}_Encoding_DefaultBinary", root),
-                Span::call_site(),
-            ),
+    pub fn new(id_path: Path, root: &str) -> Result<Self, CodeGenError> {
+        let data_type = Ident::new(root, Span::call_site());
+        let xml = Ident::new(&format!("{}_Encoding_DefaultXml", root), Span::call_site());
+        let json = Ident::new(&format!("{}_Encoding_DefaultJson", root), Span::call_site());
+        let bin = Ident::new(
+            &format!("{}_Encoding_DefaultBinary", root),
+            Span::call_site(),
+        );
+        Ok(Self {
+            data_type: parse_quote! { #id_path::DataTypeId::#data_type as u32 },
+            xml: parse_quote! { #id_path::ObjectId::#xml as u32 },
+            json: parse_quote! { #id_path::ObjectId::#json as u32 },
+            binary: parse_quote! { #id_path::ObjectId::#bin as u32 },
+        })
+    }
+
+    pub fn new_external(
+        id_path: &Path,
+        name: &str,
+        ty: &ExternalType,
+    ) -> Result<Self, CodeGenError> {
+        if let Some(ids) = &ty.ids {
+            let data_type = ids
+                .id
+                .as_ref()
+                .ok_or_else(|| CodeGenError::other("Missing data type ID in external type"))?;
+            let binary = ids.binary.as_ref().unwrap_or(data_type);
+            let xml = ids.xml.as_ref().unwrap_or(data_type);
+            let json = ids.json.as_ref().unwrap_or(data_type);
+
+            let data_type = ParsedNodeId::parse(data_type)?.value.render()?;
+            let binary = ParsedNodeId::parse(binary)?.value.render()?;
+            let xml = ParsedNodeId::parse(xml)?.value.render()?;
+            let json = ParsedNodeId::parse(json)?.value.render()?;
+
+            Ok(Self {
+                data_type: parse_quote!( #data_type ),
+                xml: parse_quote!( #xml ),
+                json: parse_quote!( #json ),
+                binary: parse_quote!( #binary ),
+            })
+        } else {
+            Self::new(id_path.clone(), name)
         }
+    }
+
+    pub fn new_raw(raw: &RawEncodingIds) -> Result<Self, CodeGenError> {
+        let data_type = raw
+            .data_type
+            .as_ref()
+            .ok_or_else(|| CodeGenError::other("Missing data type ID"))?;
+        let binary = raw.binary.as_ref().unwrap_or(data_type).value.render()?;
+        let xml = raw.xml.as_ref().unwrap_or(data_type).value.render()?;
+        let json = raw.json.as_ref().unwrap_or(data_type).value.render()?;
+        let data_type = data_type.value.render()?;
+        Ok(Self {
+            data_type: parse_quote!( #data_type ),
+            xml: parse_quote!( #xml ),
+            json: parse_quote!( #json ),
+            binary: parse_quote!( #binary ),
+        })
     }
 }
 
@@ -83,6 +138,7 @@ impl GeneratedOutput for GeneratedItem {
 pub struct CodeGenItemConfig {
     pub enums_single_file: bool,
     pub structs_single_file: bool,
+    pub node_ids_from_nodeset: bool,
 }
 
 pub struct ImportType {
@@ -99,6 +155,7 @@ pub struct CodeGenerator {
     config: CodeGenItemConfig,
     target_namespace: String,
     native_types: HashSet<String>,
+    id_path: String,
 }
 
 impl CodeGenerator {
@@ -109,6 +166,7 @@ impl CodeGenerator {
         default_excluded: HashSet<String>,
         config: CodeGenItemConfig,
         target_namespace: String,
+        id_path: String,
     ) -> Self {
         Self {
             import_map: external_import_map
@@ -117,15 +175,15 @@ impl CodeGenerator {
                     (
                         k,
                         ImportType {
-                            path: v.path,
                             has_default: v.has_default,
                             base_type: match v.base_type.as_deref() {
                                 Some("ExtensionObject" | "OptionSet") => {
-                                    Some(FieldType::ExtensionObject)
+                                    Some(FieldType::ExtensionObject(None))
                                 }
                                 Some(t) => Some(FieldType::Normal(t.to_owned())),
                                 None => None,
                             },
+                            path: v.path,
                             is_defined: true,
                         },
                     )
@@ -139,6 +197,7 @@ impl CodeGenerator {
             default_excluded,
             target_namespace,
             native_types,
+            id_path,
         }
     }
 
@@ -520,7 +579,7 @@ impl CodeGenerator {
 
     fn is_extension_object(&self, typ: Option<&FieldType>) -> bool {
         let name = match &typ {
-            Some(FieldType::Abstract(_)) | Some(FieldType::ExtensionObject) => return true,
+            Some(FieldType::Abstract(_)) | Some(FieldType::ExtensionObject(_)) => return true,
             Some(FieldType::Normal(s)) => s,
             None => return false,
         };
@@ -607,53 +666,99 @@ impl CodeGenerator {
         // Generate impls
         // Has message info
         if self.is_extension_object(item.base_type.as_ref()) {
-            let (encoding_ident, _) = safe_ident(&format!("{}_Encoding_DefaultBinary", item.name));
-            let (json_encoding_ident, _) =
-                safe_ident(&format!("{}_Encoding_DefaultJson", item.name));
-            let (xml_encoding_ident, _) = safe_ident(&format!("{}_Encoding_DefaultXml", item.name));
-            let (data_type_ident, _) = safe_ident(&item.name);
-            if self.is_base_namespace() {
-                impls.push(parse_quote! {
-                    impl opcua::types::MessageInfo for #struct_ident {
-                        fn type_id(&self) -> opcua::types::ObjectId {
-                            opcua::types::ObjectId::#encoding_ident
+            if self.config.node_ids_from_nodeset {
+                // To allow supporting the other encodings and not just panicing, use the data type id as fallback
+                // if the encoding type isn't set.
+                if let Some(ids) = item.base_type.and_then(|t| match t {
+                    FieldType::ExtensionObject(n) => n,
+                    _ => None,
+                }) {
+                    // Should not be null here, since ID is always set when generating from nodeset.
+                    // Ugly, but too much of a pain to work around. We don't have IDs at all when working
+                    // with BSDs.
+                    let id = item
+                        .id
+                        .as_ref()
+                        .ok_or_else(|| CodeGenError::other("Missing data type ID"))?;
+                    let binary_expr = ids.binary.as_ref().unwrap_or(id).value.render()?;
+                    let xml_expr = ids.xml.as_ref().unwrap_or(id).value.render()?;
+                    let json_expr = ids.json.as_ref().unwrap_or(id).value.render()?;
+                    let type_expr = id.value.render()?;
+                    let namespace = self.target_namespace.as_str();
+                    impls.push(parse_quote! {
+                        impl opcua::types::ExpandedMessageInfo for #struct_ident {
+                            fn full_type_id(&self) -> opcua::types::ExpandedNodeId {
+                                opcua::types::ExpandedNodeId::from((#binary_expr, #namespace))
+                            }
+                            fn full_json_type_id(&self) -> opcua::types::ExpandedNodeId {
+                                opcua::types::ExpandedNodeId::from((#json_expr, #namespace))
+                            }
+                            fn full_xml_type_id(&self) -> opcua::types::ExpandedNodeId {
+                                opcua::types::ExpandedNodeId::from((#xml_expr, #namespace))
+                            }
+                            fn full_data_type_id(&self) -> opcua::types::ExpandedNodeId {
+                                opcua::types::ExpandedNodeId::from((#type_expr, #namespace))
+                            }
                         }
-                        fn json_type_id(&self) -> opcua::types::ObjectId {
-                            opcua::types::ObjectId::#json_encoding_ident
-                        }
-                        fn xml_type_id(&self) -> opcua::types::ObjectId {
-                            opcua::types::ObjectId::#xml_encoding_ident
-                        }
-                        fn data_type_id(&self) -> opcua::types::DataTypeId {
-                            opcua::types::DataTypeId::#data_type_ident
-                        }
-                    }
-                });
+                    });
+                    encoding_ids = Some(EncodingIds::new_raw(&ids)?);
+                } else {
+                    warn!(
+                        "Type {} should be extension object but is missing encoding IDs, skipping",
+                        item.name
+                    )
+                }
             } else {
-                let namespace = self.target_namespace.as_str();
-                impls.push(parse_quote! {
-                    impl opcua::types::ExpandedMessageInfo for #struct_ident {
-                        fn full_type_id(&self) -> opcua::types::ExpandedNodeId {
-                            let id: opcua::types::NodeId = crate::ObjectId::#encoding_ident.into();
-                            opcua::types::ExpandedNodeId::from((id, #namespace))
+                let (encoding_ident, _) =
+                    safe_ident(&format!("{}_Encoding_DefaultBinary", item.name));
+                let (json_encoding_ident, _) =
+                    safe_ident(&format!("{}_Encoding_DefaultJson", item.name));
+                let (xml_encoding_ident, _) =
+                    safe_ident(&format!("{}_Encoding_DefaultXml", item.name));
+                let (data_type_ident, _) = safe_ident(&item.name);
+                let id_path: Path = parse_str(&self.id_path)?;
+                if self.is_base_namespace() {
+                    impls.push(parse_quote! {
+                        impl opcua::types::MessageInfo for #struct_ident {
+                            fn type_id(&self) -> opcua::types::ObjectId {
+                                opcua::types::ObjectId::#encoding_ident
+                            }
+                            fn json_type_id(&self) -> opcua::types::ObjectId {
+                                opcua::types::ObjectId::#json_encoding_ident
+                            }
+                            fn xml_type_id(&self) -> opcua::types::ObjectId {
+                                opcua::types::ObjectId::#xml_encoding_ident
+                            }
+                            fn data_type_id(&self) -> opcua::types::DataTypeId {
+                                opcua::types::DataTypeId::#data_type_ident
+                            }
                         }
-                        fn full_json_type_id(&self) -> opcua::types::ExpandedNodeId {
-                            let id: opcua::types::NodeId = crate::ObjectId::#json_encoding_ident.into();
-                            opcua::types::ExpandedNodeId::from((id, #namespace))
+                    });
+                } else {
+                    let namespace = self.target_namespace.as_str();
+                    impls.push(parse_quote! {
+                        impl opcua::types::ExpandedMessageInfo for #struct_ident {
+                            fn full_type_id(&self) -> opcua::types::ExpandedNodeId {
+                                let id: opcua::types::NodeId = #id_path::ObjectId::#encoding_ident.into();
+                                opcua::types::ExpandedNodeId::from((id, #namespace))
+                            }
+                            fn full_json_type_id(&self) -> opcua::types::ExpandedNodeId {
+                                let id: opcua::types::NodeId = #id_path::ObjectId::#json_encoding_ident.into();
+                                opcua::types::ExpandedNodeId::from((id, #namespace))
+                            }
+                            fn full_xml_type_id(&self) -> opcua::types::ExpandedNodeId {
+                                let id: opcua::types::NodeId = #id_path::ObjectId::#xml_encoding_ident.into();
+                                opcua::types::ExpandedNodeId::from((id, #namespace))
+                            }
+                            fn full_data_type_id(&self) -> opcua::types::ExpandedNodeId {
+                                let id: opcua::types::NodeId = #id_path::DataTypeId::#data_type_ident.into();
+                                opcua::types::ExpandedNodeId::from((id, #namespace))
+                            }
                         }
-                        fn full_xml_type_id(&self) -> opcua::types::ExpandedNodeId {
-                            let id: opcua::types::NodeId = crate::ObjectId::#xml_encoding_ident.into();
-                            opcua::types::ExpandedNodeId::from((id, #namespace))
-                        }
-                        fn full_data_type_id(&self) -> opcua::types::ExpandedNodeId {
-                            let id: opcua::types::NodeId = crate::DataTypeId::#data_type_ident.into();
-                            opcua::types::ExpandedNodeId::from((id, #namespace))
-                        }
-                    }
-                });
+                    });
+                }
+                encoding_ids = Some(EncodingIds::new(id_path, &item.name)?);
             }
-
-            encoding_ids = Some(EncodingIds::new(&item.name));
         }
 
         let res = ItemStruct {

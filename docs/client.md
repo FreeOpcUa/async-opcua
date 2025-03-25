@@ -58,7 +58,7 @@ add that dependency. You will also need `tokio`:
 
 ```toml
 [dependencies]
-opcua = { version = "0.14", features = ["client"] }
+async-opcua = { version = "0.14", features = ["client"] }
 tokio = { version = "1", features = ["full"] }
 ```
 

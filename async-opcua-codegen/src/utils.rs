@@ -59,8 +59,11 @@ where
 pub fn safe_ident(val: &str) -> (Ident, bool) {
     let mut val = val.to_string();
     let mut changed = false;
-    if val.starts_with(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']) || val == "type" {
-        val = format!("__{val}");
+    if val.starts_with(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'])
+        || val == "type"
+        || val.contains(['/'])
+    {
+        val = format!("__{}", val.replace(['/'], "_"));
         changed = true;
     }
 

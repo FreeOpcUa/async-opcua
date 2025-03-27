@@ -1,7 +1,6 @@
 use opcua_xml::schema::ua_node_set::{LocalizedText, NodeId, QualifiedName};
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{parse_quote, Expr};
 
 use crate::{
     utils::{split_qualified_name, NodeIdVariant, ParsedNodeId, RenderExpr},
@@ -24,17 +23,7 @@ impl RenderExpr for NodeId {
         let ParsedNodeId { value, namespace } = ParsedNodeId::parse(id)?;
 
         // Do as much parsing as possible here, to optimize performance and get the errors as early as possible.
-        let id_item: Expr = match value {
-            NodeIdVariant::Numeric(i) => parse_quote! { #i },
-            NodeIdVariant::String(s) => parse_quote! { #s },
-            NodeIdVariant::ByteString(b) => {
-                parse_quote! { opcua::types::ByteString::from(vec![#(#b)*,]) }
-            }
-            NodeIdVariant::Guid(g) => {
-                let bytes = g.as_bytes();
-                parse_quote! { opcua::types::Guid::from_slice(&[#(#bytes)*,]).unwrap() }
-            }
-        };
+        let id_item = value.render()?;
 
         let ns_item = if namespace == 0 {
             quote! { 0u16 }
@@ -46,6 +35,22 @@ impl RenderExpr for NodeId {
 
         Ok(quote! {
             opcua::types::NodeId::new(#ns_item, #id_item)
+        })
+    }
+}
+
+impl RenderExpr for NodeIdVariant {
+    fn render(&self) -> Result<TokenStream, CodeGenError> {
+        Ok(match self {
+            NodeIdVariant::Numeric(i) => quote! { #i },
+            NodeIdVariant::String(s) => quote! { #s },
+            NodeIdVariant::ByteString(b) => {
+                quote! { opcua::types::ByteString::from(vec![#(#b)*,]) }
+            }
+            NodeIdVariant::Guid(g) => {
+                let bytes = g.as_bytes();
+                quote! { opcua::types::Guid::from_slice(&[#(#bytes)*,]).unwrap() }
+            }
         })
     }
 }

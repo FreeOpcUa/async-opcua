@@ -1,6 +1,5 @@
 mod events;
 mod gen;
-mod render;
 mod value;
 
 use std::collections::HashMap;

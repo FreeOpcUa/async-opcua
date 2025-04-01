@@ -4,13 +4,13 @@ use opcua_xml::schema::ua_node_set::{DataTypeField, LocalizedText, UADataType, U
 
 use crate::{
     input::{NodeSetInput, SchemaCache, TypeInfo},
-    utils::{split_qualified_name, NodeIdVariant, ParsedNodeId},
+    utils::{split_qualified_name, to_snake_case, NodeIdVariant, ParsedNodeId},
     CodeGenError,
 };
 
 use super::{
-    enum_type::EnumReprType, loader::to_snake_case, structure::FieldType, EnumType, EnumValue,
-    LoadedType, StructureField, StructureFieldType, StructuredType,
+    types::{EnumReprType, EnumValue, FieldType, StructureField, StructureFieldType},
+    EnumType, LoadedType, StructuredType,
 };
 
 pub struct NodeSetTypeLoader<'a> {

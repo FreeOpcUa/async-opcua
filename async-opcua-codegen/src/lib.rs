@@ -21,8 +21,7 @@ use serde::{Deserialize, Serialize};
 use syn::{parse_str, File};
 pub use types::{
     base_ignored_types, base_native_type_mappings, basic_types_import_map, BsdTypeLoader,
-    CodeGenItemConfig, GeneratedItem, ItemDefinition, LoadedType, LoadedTypes, StructureField,
-    StructureFieldType, StructuredType,
+    CodeGenItemConfig, GeneratedItem, ItemDefinition, LoadedType, LoadedTypes,
 };
 use types::{generate_types, generate_types_nodeset, type_loader_impl, EncodingIds, ExternalType};
 pub use utils::{create_module_file, GeneratedOutput};

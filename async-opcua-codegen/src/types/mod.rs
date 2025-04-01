@@ -1,18 +1,16 @@
 mod base_constants;
-mod enum_type;
+mod encoding_ids;
 mod gen;
-mod loader;
-mod nodeset_loader;
-mod structure;
+mod loaders;
 
 pub use base_constants::*;
-pub use enum_type::{EnumType, EnumValue};
-pub use gen::{CodeGenItemConfig, CodeGenerator, EncodingIds, GeneratedItem, ItemDefinition};
-pub use loader::{BsdTypeLoader, LoadedType, LoadedTypes};
+pub use encoding_ids::EncodingIds;
+pub use gen::{CodeGenItemConfig, CodeGenerator, GeneratedItem, ItemDefinition};
+use loaders::NodeSetTypeLoader;
+pub use loaders::{BsdTypeLoader, LoadedType, LoadedTypes};
 use log::info;
 use proc_macro2::TokenStream;
 use quote::quote;
-pub use structure::{StructureField, StructureFieldType, StructuredType};
 use syn::{parse_quote, parse_str, Item, Path};
 
 use crate::{
@@ -55,7 +53,7 @@ pub fn generate_types_nodeset(
     cache: &SchemaCache,
     preferred_locale: &str,
 ) -> Result<(Vec<GeneratedItem>, String), CodeGenError> {
-    let type_loader = nodeset_loader::NodeSetTypeLoader::new(
+    let type_loader = NodeSetTypeLoader::new(
         target
             .ignore
             .iter()

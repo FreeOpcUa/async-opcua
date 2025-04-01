@@ -1,15 +1,16 @@
 use std::collections::{HashMap, HashSet};
 
-use convert_case::{Case, Casing};
 use opcua_xml::schema::opc_binary_schema::{EnumeratedType, TypeDictionary};
 
-use crate::{error::CodeGenError, StructureField, StructureFieldType, StructuredType};
+use crate::{error::CodeGenError, utils::to_snake_case};
 
-use super::{enum_type::EnumReprType, structure::FieldType, EnumType, EnumValue};
-
-pub fn to_snake_case(v: &str) -> String {
-    v.to_case(Case::Snake)
-}
+use super::{
+    types::{
+        EnumReprType, EnumType, EnumValue, FieldType, StructureField, StructureFieldType,
+        StructuredType,
+    },
+    LoadedType,
+};
 
 pub struct BsdTypeLoader<'a> {
     ignored: HashSet<String>,
@@ -21,27 +22,6 @@ fn strip_first_segment<'a>(val: &'a str, sep: &'static str) -> Result<&'a str, C
     val.split_once(sep)
         .ok_or_else(|| CodeGenError::wrong_format(format!("A{sep}B.."), val))
         .map(|v| v.1)
-}
-
-#[derive(Debug)]
-pub struct LoadedTypes {
-    pub structures: Vec<StructuredType>,
-    pub enums: Vec<EnumType>,
-}
-
-#[derive(Debug)]
-pub enum LoadedType {
-    Struct(StructuredType),
-    Enum(EnumType),
-}
-
-impl LoadedType {
-    pub fn name(&self) -> &str {
-        match self {
-            LoadedType::Struct(s) => &s.name,
-            LoadedType::Enum(s) => &s.name,
-        }
-    }
 }
 
 impl<'a> BsdTypeLoader<'a> {

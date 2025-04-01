@@ -1,74 +1,14 @@
-use std::{fmt::Display, sync::OnceLock};
+use std::{fmt::Display, sync::LazyLock};
 
 use base64::Engine;
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::TokenStream;
+use quote::quote;
 use regex::Regex;
-use syn::{parse_quote, File, Ident};
 use uuid::Uuid;
 
 use crate::CodeGenError;
 
-pub fn create_module_file(modules: Vec<String>) -> File {
-    let mut items = Vec::new();
-    for md in modules {
-        let ident = Ident::new(&md, Span::call_site());
-        items.push(parse_quote! {
-            pub mod #ident;
-        });
-        items.push(parse_quote! {
-            pub use #ident::*;
-        });
-    }
-
-    File {
-        shebang: None,
-        attrs: Vec::new(),
-        items,
-    }
-}
-
-pub trait GeneratedOutput {
-    fn to_file(self) -> File;
-
-    fn module(&self) -> &str;
-
-    fn name(&self) -> &str;
-}
-
-pub trait RenderExpr {
-    fn render(&self) -> Result<TokenStream, CodeGenError>;
-}
-
-impl<T> RenderExpr for Option<&T>
-where
-    T: RenderExpr,
-{
-    fn render(&self) -> Result<TokenStream, CodeGenError> {
-        Ok(match self {
-            Some(t) => {
-                let rendered = t.render()?;
-                parse_quote! {
-                    Some(#rendered)
-                }
-            }
-            None => parse_quote! { None },
-        })
-    }
-}
-
-pub fn safe_ident(val: &str) -> (Ident, bool) {
-    let mut val = val.to_string();
-    let mut changed = false;
-    if val.starts_with(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'])
-        || val == "type"
-        || val.contains(['/'])
-    {
-        val = format!("__{}", val.replace(['/'], "_"));
-        changed = true;
-    }
-
-    (Ident::new(&val, Span::call_site()), changed)
-}
+use super::RenderExpr;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum NodeIdVariant {
@@ -107,15 +47,12 @@ impl Display for ParsedNodeId {
     }
 }
 
-static NODEID_REGEX: OnceLock<Regex> = OnceLock::new();
-
-fn nodeid_regex() -> &'static Regex {
-    NODEID_REGEX.get_or_init(|| Regex::new(r"^(ns=(?P<ns>[0-9]+);)?(?P<t>[isgb]=.+)$").unwrap())
-}
+static NODEID_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^(ns=(?P<ns>[0-9]+);)?(?P<t>[isgb]=.+)$").unwrap());
 
 impl ParsedNodeId {
     pub fn parse(id: &str) -> Result<Self, CodeGenError> {
-        let captures = nodeid_regex()
+        let captures = NODEID_REGEX
             .captures(id)
             .ok_or_else(|| CodeGenError::other(format!("Invalid nodeId: {}", id)))?;
         let namespace = if let Some(ns) = captures.name("ns") {
@@ -162,24 +99,40 @@ impl ParsedNodeId {
     }
 }
 
-static QUALIFIED_NAME_REGEX: OnceLock<Regex> = OnceLock::new();
+impl RenderExpr for opcua_xml::schema::ua_node_set::NodeId {
+    fn render(&self) -> Result<TokenStream, CodeGenError> {
+        let id = &self.0;
+        let ParsedNodeId { value, namespace } = ParsedNodeId::parse(id)?;
 
-fn qualified_name_regex() -> &'static Regex {
-    QUALIFIED_NAME_REGEX.get_or_init(|| Regex::new(r"^((?P<ns>[0-9]+):)?(?P<name>.*)$").unwrap())
+        // Do as much parsing as possible here, to optimize performance and get the errors as early as possible.
+        let id_item = value.render()?;
+
+        let ns_item = if namespace == 0 {
+            quote! { 0u16 }
+        } else {
+            quote! {
+                ns_map.get_index(#namespace).unwrap()
+            }
+        };
+
+        Ok(quote! {
+            opcua::types::NodeId::new(#ns_item, #id_item)
+        })
+    }
 }
 
-pub fn split_qualified_name(name: &str) -> Result<(&str, u16), CodeGenError> {
-    let captures = qualified_name_regex()
-        .captures(name)
-        .ok_or_else(|| CodeGenError::other(format!("Invalid qualifiedname: {}", name)))?;
-
-    let namespace = if let Some(ns) = captures.name("ns") {
-        ns.as_str()
-            .parse::<u16>()
-            .map_err(|_| CodeGenError::other(format!("Invalid nodeId: {}", name)))?
-    } else {
-        0
-    };
-
-    Ok((captures.name("name").unwrap().as_str(), namespace))
+impl RenderExpr for NodeIdVariant {
+    fn render(&self) -> Result<TokenStream, CodeGenError> {
+        Ok(match self {
+            NodeIdVariant::Numeric(i) => quote! { #i },
+            NodeIdVariant::String(s) => quote! { #s },
+            NodeIdVariant::ByteString(b) => {
+                quote! { opcua::types::ByteString::from(vec![#(#b)*,]) }
+            }
+            NodeIdVariant::Guid(g) => {
+                let bytes = g.as_bytes();
+                quote! { opcua::types::Guid::from_slice(&[#(#bytes)*,]).unwrap() }
+            }
+        })
+    }
 }

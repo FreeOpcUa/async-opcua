@@ -4,19 +4,20 @@ use convert_case::{Case, Casing};
 use log::warn;
 use proc_macro2::Span;
 use syn::{
-    parse_quote, parse_str, punctuated::Punctuated, Expr, FieldsNamed, File, Generics, Ident, Item,
-    ItemEnum, ItemMacro, ItemStruct, Lit, LitByte, Path, Token, Type, Visibility,
+    parse_quote, parse_str, punctuated::Punctuated, FieldsNamed, File, Generics, Item, ItemEnum,
+    ItemMacro, ItemStruct, Lit, LitByte, Path, Token, Type, Visibility,
 };
 
 use crate::{
     error::CodeGenError,
-    input::RawEncodingIds,
-    utils::{safe_ident, ParsedNodeId, RenderExpr},
-    GeneratedOutput, StructuredType, BASE_NAMESPACE,
+    utils::{safe_ident, RenderExpr},
+    GeneratedOutput, BASE_NAMESPACE,
 };
 
 use super::{
-    enum_type::EnumReprType, loader::LoadedType, structure::FieldType, EnumType, ExternalType,
+    encoding_ids::EncodingIds,
+    loaders::{EnumReprType, EnumType, FieldType, StructureFieldType, StructuredType},
+    ExternalType, LoadedType,
 };
 use quote::quote;
 
@@ -24,79 +25,6 @@ pub enum ItemDefinition {
     Struct(ItemStruct),
     Enum(ItemEnum),
     BitField(ItemMacro),
-}
-
-#[derive(Clone)]
-pub struct EncodingIds {
-    pub data_type: Expr,
-    pub xml: Expr,
-    pub json: Expr,
-    pub binary: Expr,
-}
-
-impl EncodingIds {
-    pub fn new(id_path: Path, root: &str) -> Result<Self, CodeGenError> {
-        let data_type = Ident::new(root, Span::call_site());
-        let xml = Ident::new(&format!("{}_Encoding_DefaultXml", root), Span::call_site());
-        let json = Ident::new(&format!("{}_Encoding_DefaultJson", root), Span::call_site());
-        let bin = Ident::new(
-            &format!("{}_Encoding_DefaultBinary", root),
-            Span::call_site(),
-        );
-        Ok(Self {
-            data_type: parse_quote! { #id_path::DataTypeId::#data_type as u32 },
-            xml: parse_quote! { #id_path::ObjectId::#xml as u32 },
-            json: parse_quote! { #id_path::ObjectId::#json as u32 },
-            binary: parse_quote! { #id_path::ObjectId::#bin as u32 },
-        })
-    }
-
-    pub fn new_external(
-        id_path: &Path,
-        name: &str,
-        ty: &ExternalType,
-    ) -> Result<Self, CodeGenError> {
-        if let Some(ids) = &ty.ids {
-            let data_type = ids
-                .id
-                .as_ref()
-                .ok_or_else(|| CodeGenError::other("Missing data type ID in external type"))?;
-            let binary = ids.binary.as_ref().unwrap_or(data_type);
-            let xml = ids.xml.as_ref().unwrap_or(data_type);
-            let json = ids.json.as_ref().unwrap_or(data_type);
-
-            let data_type = ParsedNodeId::parse(data_type)?.value.render()?;
-            let binary = ParsedNodeId::parse(binary)?.value.render()?;
-            let xml = ParsedNodeId::parse(xml)?.value.render()?;
-            let json = ParsedNodeId::parse(json)?.value.render()?;
-
-            Ok(Self {
-                data_type: parse_quote!( #data_type ),
-                xml: parse_quote!( #xml ),
-                json: parse_quote!( #json ),
-                binary: parse_quote!( #binary ),
-            })
-        } else {
-            Self::new(id_path.clone(), name)
-        }
-    }
-
-    pub fn new_raw(raw: &RawEncodingIds) -> Result<Self, CodeGenError> {
-        let data_type = raw
-            .data_type
-            .as_ref()
-            .ok_or_else(|| CodeGenError::other("Missing data type ID"))?;
-        let binary = raw.binary.as_ref().unwrap_or(data_type).value.render()?;
-        let xml = raw.xml.as_ref().unwrap_or(data_type).value.render()?;
-        let json = raw.json.as_ref().unwrap_or(data_type).value.render()?;
-        let data_type = data_type.value.render()?;
-        Ok(Self {
-            data_type: parse_quote!( #data_type ),
-            xml: parse_quote!( #xml ),
-            json: parse_quote!( #json ),
-            binary: parse_quote!( #binary ),
-        })
-    }
 }
 
 pub struct GeneratedItem {
@@ -227,11 +155,10 @@ impl CodeGenerator {
             LoadedType::Struct(s) => {
                 for k in &s.fields {
                     let has_default = match &k.typ {
-                        crate::StructureFieldType::Field(FieldType::Normal(f)) => {
+                        StructureFieldType::Field(FieldType::Normal(f)) => {
                             self.is_default_recursive(f)
                         }
-                        crate::StructureFieldType::Array(_)
-                        | crate::StructureFieldType::Field(_) => true,
+                        StructureFieldType::Array(_) | StructureFieldType::Field(_) => true,
                     };
                     if !has_default {
                         return false;
@@ -628,13 +555,13 @@ impl CodeGenerator {
 
         for field in item.visible_fields() {
             let typ: Type = match &field.typ {
-                crate::StructureFieldType::Field(f) => {
+                StructureFieldType::Field(f) => {
                     syn::parse_str(&self.get_type_path(f.as_type_str())).map_err(|e| {
                         CodeGenError::from(e)
                             .with_context(format!("Generating path for {}", f.as_type_str()))
                     })?
                 }
-                crate::StructureFieldType::Array(f) => {
+                StructureFieldType::Array(f) => {
                     let path: Path =
                         syn::parse_str(&self.get_type_path(f.as_type_str())).map_err(|e| {
                             CodeGenError::from(e)

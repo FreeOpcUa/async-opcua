@@ -18,6 +18,7 @@ byteorder = "^1"
 bytes = "^1"
 chrono = { version = "^0.4", features = ["serde"] }
 convert_case = "^0.6"
+env_logger = "^0.10"
 futures = "^0.3"
 gethostname = "^0.5"
 hashbrown = "^0.15"

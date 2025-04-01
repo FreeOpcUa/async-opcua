@@ -295,7 +295,7 @@ impl Tester {
 
     #[allow(unused)]
     pub async fn new_default_server(quick_timeout: bool) -> Self {
-        opcua::console_logging::init();
+        let _ = env_logger::try_init();
 
         let test_id = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
         let listener = Self::listener().await;
@@ -325,7 +325,7 @@ impl Tester {
 
     #[allow(unused)]
     pub async fn new(server: ServerBuilder, quick_timeout: bool) -> Self {
-        opcua::console_logging::init();
+        let _ = env_logger::try_init();
 
         let test_id = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
         let listener = Self::listener().await;
@@ -354,7 +354,7 @@ impl Tester {
 
     #[allow(unused)]
     pub async fn new_custom_client(server: ServerBuilder, client: ClientBuilder) -> Self {
-        opcua::console_logging::init();
+        let _ = env_logger::try_init();
 
         let test_id = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
         let listener = Self::listener().await;

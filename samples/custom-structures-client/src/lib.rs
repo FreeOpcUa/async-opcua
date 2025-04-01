@@ -47,7 +47,7 @@ pub async fn client_connect(
         return Err("Help requested, exiting".into());
     }
     // Optional - enable OPC UA logging
-    opcua::console_logging::init();
+    env_logger::init();
 
     // Make the client configuration
     let mut client = ClientBuilder::new()

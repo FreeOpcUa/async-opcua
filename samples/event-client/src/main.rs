@@ -69,7 +69,7 @@ async fn main() -> Result<(), ()> {
         return Ok(());
     }
     // Optional - enable OPC UA logging
-    opcua::console_logging::init();
+    env_logger::init();
 
     // Make the client configuration
     let mut client = ClientBuilder::new()

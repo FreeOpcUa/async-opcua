@@ -35,7 +35,7 @@ To use the server crate we need to add a dependency to the `Cargo.toml`.
 
 ```
 [dependencies]
-opcua = { "0.15", features = ["server", "console-logging"] }
+opcua = { "0.15", features = ["server"] }
 ```
 
 ## Create your server
@@ -65,9 +65,9 @@ use opcua::types::{BuildInfo, DataValue, DateTime, NodeId, UAString};
 #[tokio::main]
 async fn main() {
     // First, for convenience, we enable console logging based on the
-    // `RUST_OPCUA_LOG` environment variable. You could enable this using
+    // `RUST_LOG` environment variable. You could enable this using
     // any other system to interact with the `log` framework if you prefer.
-    opcua::console_logging::init();
+    env_logger::init();
 
     // Construct the server.
     let (server, handle) = ServerBuilder::new()
@@ -299,24 +299,25 @@ OPC UA for Rust provides an extensive amount of logging at error, warn, info, de
 
 ### Console logging
 
-For convenience OPC UA for Rust provides a simple `async-opcua-console-logging` crate that wraps [env_logger](https://docs.rs/env_logger/0.6.2/env_logger/) and writes out logging information to stdout. To use it, set an `RUST_OPCUA_LOG` environment variable (not `RUST_LOG`), otherwise following the documentation in `env_logger`. e.g.
+OPC-UA for rust uses `log` for logging. You should configure this using a crate like [env_logger](https://docs.rs/env_logger/0.6.2/env_logger/). e.g.
 
 ```shell script
-export RUST_OPCUA_LOG=debug
+export RUST_LOG="opcua=debug"
 ```
 
-In your `Cargo.toml`, ensure to add `console-logging` to your opcua features:
+In your `Cargo.toml`, you need `env_logger`
 
 ```toml
 [dependencies]
-opcua = { "0.12", features = ["....", "console-logging"]}
+opcua = { "0.14", features = ["...."]}
+env_logger = "0.10"
 ```
 
 In your `main()`:
 
 ```rust
 fn main() {
-    opcua_console_logging::init();
+    env_logger::init();
     //...
 }
 ```

@@ -17,7 +17,7 @@ name = "opcua"
 
 [features]
 default = []
-all = ["server", "client", "console-logging"]
+all = ["server", "client"]
 # Server default settings
 server = ["base-server", "generated-address-space"]
 # Base server, without the core address space.
@@ -26,7 +26,6 @@ base-server = ["async-opcua-server", "async-opcua-nodes"]
 client = ["async-opcua-client"]
 # Console logging just installs a logger that writes out to
 # the screen, useful for general logging
-console-logging = ["env_logger"]
 # Allows a server to register itself with a local discovery server. It does so by
 # becoming a client to the LDS, which brings in a dependency to async-opcua-client.
 # Omitting the feature saves some memory.
@@ -47,7 +46,6 @@ xml = ["async-opcua-types/xml", "async-opcua-nodes/xml", "async-opcua-xml"]
 
 [dependencies]
 chrono = { workspace = true }
-env_logger = { version = "0.10", optional = true }
 log = { workspace = true }
 
 async-opcua-client = { path = "../async-opcua-client", optional = true, version = "0.14.0" }
@@ -67,8 +65,9 @@ serde_json = { workspace = true }
 tempdir = "0.3"
 tokio = { workspace = true }
 tokio-util = { workspace = true }
+env_logger = { workspace = true }
 
-# Include console-logging and json when building tests
+# Include json when building tests
 async-opcua = { path = ".", features = ["all", "json", "xml"] }
 
 [package.metadata.docs.rs]

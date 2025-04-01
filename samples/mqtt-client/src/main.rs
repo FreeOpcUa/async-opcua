@@ -83,7 +83,7 @@ async fn main() -> Result<(), ()> {
     let endpoint_id = args.endpoint_id;
 
     // Optional - enable OPC UA logging
-    opcua::console_logging::init();
+    env_logger::init();
 
     // The way this will work is the mqtt connection will live in its own thread, listening for
     // events that are sent to it.

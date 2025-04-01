@@ -164,6 +164,7 @@ name = "async-opcua-chess-server"
 version = "0.13.0"
 dependencies = [
  "async-opcua",
+ "env_logger 0.10.2",
  "tokio",
  "uci",
 ]
@@ -279,6 +280,7 @@ name = "async-opcua-discovery-client"
 version = "0.13.0"
 dependencies = [
  "async-opcua",
+ "env_logger 0.10.2",
  "pico-args",
  "tokio",
 ]
@@ -288,6 +290,7 @@ name = "async-opcua-event-client"
 version = "0.13.0"
 dependencies = [
  "async-opcua",
+ "env_logger 0.10.2",
  "pico-args",
  "tokio",
 ]
@@ -320,6 +323,7 @@ name = "async-opcua-mqtt-client"
 version = "0.13.0"
 dependencies = [
  "async-opcua",
+ "env_logger 0.10.2",
  "pico-args",
  "rumqttc",
  "tokio",
@@ -371,6 +375,7 @@ name = "async-opcua-simple-client"
 version = "0.0.0"
 dependencies = [
  "async-opcua",
+ "env_logger 0.10.2",
  "log",
  "pico-args",
  "tokio",
@@ -382,6 +387,7 @@ version = "0.13.0"
 dependencies = [
  "async-opcua",
  "chrono",
+ "env_logger 0.10.2",
  "log",
  "tokio",
 ]
@@ -643,6 +649,7 @@ name = "custom-codegen"
 version = "0.1.0"
 dependencies = [
  "async-opcua",
+ "env_logger 0.10.2",
  "log",
  "serde",
  "serde_json",
@@ -849,6 +856,7 @@ name = "external-tests"
 version = "0.1.0"
 dependencies = [
  "async-opcua",
+ "env_logger 0.10.2",
  "futures",
  "log",
  "serde",
@@ -1562,6 +1570,7 @@ name = "opcua-structure-client"
 version = "0.13.0"
 dependencies = [
  "async-opcua",
+ "env_logger 0.10.2",
  "log",
  "pico-args",
  "tokio",

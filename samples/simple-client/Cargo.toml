@@ -7,8 +7,9 @@ edition = "2021"
 log = { workspace = true }
 pico-args = "0.5"
 tokio = { version = "1.36.0", features = ["full"] }
+env_logger = { workspace = true }
 
 [dependencies.async-opcua]
 path = "../../async-opcua"
-features = ["client", "console-logging"]
+features = ["client"]
 default-features = false

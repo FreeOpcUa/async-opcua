@@ -13,5 +13,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }
 futures = { workspace = true }
+env_logger = { workspace = true }
 
-async-opcua = { path = "../../async-opcua" }
+async-opcua = { path = "../../async-opcua", features = ["client"] }

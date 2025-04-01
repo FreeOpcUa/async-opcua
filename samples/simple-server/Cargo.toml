@@ -8,8 +8,9 @@ edition = "2021"
 chrono = { workspace = true }
 log = { workspace = true }
 tokio = { workspace = true }
+env_logger = { workspace = true }
 
 [dependencies.async-opcua]
 path = "../../async-opcua"
-features = ["server", "console-logging"]
+features = ["server"]
 default-features = false

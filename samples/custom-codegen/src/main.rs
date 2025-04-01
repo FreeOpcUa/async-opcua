@@ -8,7 +8,7 @@ use opcua::server::{node_manager::memory::simple_node_manager_imports, ServerBui
 
 #[tokio::main]
 async fn main() {
-    opcua::console_logging::init();
+    env_logger::init();
 
     let (server, handle) = ServerBuilder::new()
         .with_config_from("../server.conf")

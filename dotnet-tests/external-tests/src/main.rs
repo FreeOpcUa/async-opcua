@@ -11,7 +11,7 @@ mod tests;
 
 #[tokio::main]
 pub async fn main() {
-    opcua::console_logging::init();
+    env_logger::init();
 
     let runner = Runner::new();
     run_client_tests(&runner).await

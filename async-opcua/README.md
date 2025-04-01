@@ -35,11 +35,10 @@ There are also generated API docs on crates.io.
 
 # Features
 
-* `all`, enables the `server`, `client`, and `console-logging` features.
+* `all`, enables the `server` and `client` features.
 * `server`, includes the server SDK.
 * `base-server`, includes the server SDK, but without the core address space. Most users should use the `server` feature.
 * `client`, includes the client SDK.
-* `console-logging`, adds a method to install simple console logging. You do not have to use this, we use `log` for logging so you can include a library like [env_logger](https://docs.rs/env_logger/latest/env_logger/) yourself.
 * `json`, adds support for OPC-UA JSON to generated types.
 * `generated-address-space`, adds the core OPC-UA namespace. This is usually required for compliant OPC-UA servers.
 * `discovery-server-registration`, allows the server to register itself with a local discovery server, by pulling in a client.

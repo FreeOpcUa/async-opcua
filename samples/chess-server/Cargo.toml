@@ -6,8 +6,9 @@ edition = "2021"
 
 [dependencies]
 tokio = { workspace = true }
+env_logger = { workspace = true }
 uci = "0.1.1"
 
 [dependencies.async-opcua]
 path = "../../async-opcua"
-features = ["server", "console-logging"]
+features = ["server"]

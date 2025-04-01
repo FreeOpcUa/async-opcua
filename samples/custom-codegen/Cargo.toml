@@ -15,7 +15,8 @@ serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 serde_with = { workspace = true, optional = true }
 tokio = { workspace = true }
+env_logger = { workspace = true }
 
 [dependencies.async-opcua]
 path = "../../async-opcua"
-features = ["client", "console-logging"]
+features = ["client"]

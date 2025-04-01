@@ -7,7 +7,7 @@ fn main() -> Result<(), CodeGenError> {
 
 fn run_cli() -> Result<(), CodeGenError> {
     let mut args = std::env::args();
-    env_logger::init_from_env(Env::new().filter_or("RUST_OPCUA_LOG", "debug"));
+    env_logger::init_from_env(Env::new().filter_or("RUST_LOG", "debug"));
 
     if args.len() != 2 {
         // Deliberately println instead of using the logger.

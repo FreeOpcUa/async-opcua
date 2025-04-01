@@ -26,7 +26,7 @@ use crate::utils::{
 
 #[tokio::test]
 async fn hello_timeout() {
-    opcua::console_logging::init();
+    let _ = env_logger::try_init();
 
     let test_id = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();

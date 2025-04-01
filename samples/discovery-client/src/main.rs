@@ -52,7 +52,7 @@ async fn main() -> Result<(), ()> {
 
         println!("Attempting to connect to discovery server {} ...", url);
         // Optional - enable OPC UA logging
-        opcua::console_logging::init();
+        env_logger::init();
 
         // The client API has a simple `find_servers` function that connects and returns servers for us.
         let client = Client::new(ClientConfig::new("DiscoveryClient", "urn:DiscoveryClient"));

@@ -14,13 +14,6 @@
 //! and the performance characteristics are useful when creating OPC-UA tooling
 //! that will run in constrained environments.
 
-#[cfg_attr(feature = "console-logging", macro_use)]
-extern crate log;
-#[cfg(test)]
-extern crate serde_json;
-#[cfg(test)]
-extern crate tempdir;
-
 pub use opcua_core::sync;
 
 #[cfg(feature = "server")]
@@ -28,8 +21,6 @@ pub use opcua_macros::{Event, EventField};
 
 #[cfg(feature = "client")]
 pub use opcua_client as client;
-#[cfg(feature = "console-logging")]
-pub mod console_logging;
 #[cfg(feature = "server")]
 pub use opcua_nodes as nodes;
 #[cfg(feature = "server")]

@@ -9,6 +9,7 @@ pub use base_constants::*;
 pub use enum_type::{EnumType, EnumValue};
 pub use gen::{CodeGenItemConfig, CodeGenerator, EncodingIds, GeneratedItem, ItemDefinition};
 pub use loader::{BsdTypeLoader, LoadedType, LoadedTypes};
+use log::info;
 use proc_macro2::TokenStream;
 use quote::quote;
 pub use structure::{StructureField, StructureFieldType, StructuredType};
@@ -27,7 +28,7 @@ pub fn generate_types(
         return Err(CodeGenError::other("Invalid config. node_ids_from_nodeset is not valid when using a BSD file for code generation."));
     }
 
-    println!(
+    info!(
         "Found {} raw elements in the type dictionary.",
         input.xml.elements.len()
     );
@@ -43,7 +44,7 @@ pub fn generate_types(
     )?;
     let target_namespace = type_loader.target_namespace();
     let types = type_loader.from_bsd().map_err(|e| e.in_file(&input.path))?;
-    println!("Loaded {} types", types.len());
+    info!("Loaded {} types", types.len());
 
     generate_types_inner(target, target_namespace, types)
 }
@@ -67,7 +68,7 @@ pub fn generate_types_nodeset(
     );
     let target_namespace = input.uri.clone();
     let types = type_loader.load_types(cache)?;
-    println!("Loaded {} types", types.len());
+    info!("Loaded {} types", types.len());
 
     generate_types_inner(target, target_namespace, types)
 }

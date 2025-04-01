@@ -15,6 +15,7 @@ use std::{
 use config::{load_schemas, CodeGenSource};
 pub use error::CodeGenError;
 use ids::{generate_node_ids, NodeIdCodeGenTarget};
+use log::info;
 use nodeset::{generate_events, generate_target, make_root_module, NodeSetCodeGenTarget};
 use serde::{Deserialize, Serialize};
 use syn::{parse_str, File};
@@ -119,7 +120,7 @@ pub fn run_codegen(config: &CodeGenConfig, root_path: &str) -> Result<(), CodeGe
     for target in &config.targets {
         match target {
             CodeGenTarget::Types(t) => {
-                println!("Running data type code generation for {}", t.file);
+                info!("Running data type code generation for {}", t.file);
                 let (types, target_namespace, path) = if t.file.ends_with(".xml") {
                     let input = cache.get_nodeset(&t.file)?;
                     let r = generate_types_nodeset(t, input, &cache, &config.preferred_locale)
@@ -130,7 +131,7 @@ pub fn run_codegen(config: &CodeGenConfig, root_path: &str) -> Result<(), CodeGe
                     let r = generate_types(t, input).map_err(|e| e.in_file(&t.file))?;
                     (r.0, r.1, input.path.clone())
                 };
-                println!("Writing {} types to {}", types.len(), t.output_dir);
+                info!("Writing {} types to {}", types.len(), t.output_dir);
 
                 let header = make_header(&path, &[&config.extra_header, &t.extra_header]);
 
@@ -159,16 +160,16 @@ pub fn run_codegen(config: &CodeGenConfig, root_path: &str) -> Result<(), CodeGe
                     .map_err(|e| e.in_file(&path))?;
             }
             CodeGenTarget::Nodes(n) => {
-                println!("Running node set code generation for {}", n.file);
+                info!("Running node set code generation for {}", n.file);
                 let node_set = cache.get_nodeset(&n.file)?;
-                println!("Found {} nodes in node set", node_set.xml.nodes.len());
+                info!("Found {} nodes in node set", node_set.xml.nodes.len());
 
                 let chunks = generate_target(n, &node_set.xml, &config.preferred_locale, &cache)
                     .map_err(|e| e.in_file(&node_set.path))?;
                 let module_file =
                     make_root_module(&chunks, n).map_err(|e| e.in_file(&node_set.path))?;
 
-                println!("Writing {} files to {}", chunks.len() + 1, n.output_dir);
+                info!("Writing {} files to {}", chunks.len() + 1, n.output_dir);
 
                 let header = make_header(&node_set.path, &[&config.extra_header, &n.extra_header]);
 
@@ -176,10 +177,10 @@ pub fn run_codegen(config: &CodeGenConfig, root_path: &str) -> Result<(), CodeGe
                 write_module_file(&n.output_dir, root_path, &header, module_file)?;
 
                 if let Some(events_target) = &n.events {
-                    println!("Generating events to {}", events_target.output_dir);
+                    info!("Generating events to {}", events_target.output_dir);
                     let mut sets = Vec::with_capacity(events_target.dependent_nodesets.len() + 1);
                     for nodeset_file in &events_target.dependent_nodesets {
-                        println!("Loading dependent node set {}", nodeset_file.file);
+                        info!("Loading dependent node set {}", nodeset_file.file);
                         let set = cache.get_nodeset(&nodeset_file.file)?;
                         sets.push((&set.xml, nodeset_file.import_path.as_str()));
                     }
@@ -202,11 +203,11 @@ pub fn run_codegen(config: &CodeGenConfig, root_path: &str) -> Result<(), CodeGe
                         create_module_file(modules),
                     )
                     .map_err(|e| e.in_file(&node_set.path))?;
-                    println!("Created {} event types", cnt);
+                    info!("Created {} event types", cnt);
                 }
             }
             CodeGenTarget::Ids(n) => {
-                println!("Running node ID code generation for {}", n.file_path);
+                info!("Running node ID code generation for {}", n.file_path);
                 let gen = generate_node_ids(n, root_path).map_err(|e| e.in_file(&n.file_path))?;
                 let mut file = std::fs::File::options()
                     .create(true)

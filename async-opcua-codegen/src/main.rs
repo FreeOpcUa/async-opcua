@@ -1,3 +1,4 @@
+use env_logger::Env;
 use opcua_codegen::{run_codegen, CodeGenConfig, CodeGenError};
 
 fn main() -> Result<(), CodeGenError> {
@@ -6,9 +7,10 @@ fn main() -> Result<(), CodeGenError> {
 
 fn run_cli() -> Result<(), CodeGenError> {
     let mut args = std::env::args();
-    env_logger::init();
+    env_logger::init_from_env(Env::new().filter_or("RUST_OPCUA_LOG", "debug"));
 
     if args.len() != 2 {
+        // Deliberately println instead of using the logger.
         println!(
             r#"Usage:
 async-opcua-codegen [config].yml

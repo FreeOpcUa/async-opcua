@@ -7,6 +7,7 @@ use std::collections::HashMap;
 
 pub use events::generate_events;
 pub use gen::{NodeGenMethod, NodeSetCodeGenerator};
+use log::info;
 use opcua_xml::schema::{
     ua_node_set::UANodeSet,
     xml_schema::{XsdFileItem, XsdFileType},
@@ -164,7 +165,7 @@ pub fn generate_target(
         );
     }
     fns.sort_by(|a, b| a.name.cmp(&b.name));
-    println!("Generated {} node creation methods", fns.len());
+    info!("Generated {} node creation methods", fns.len());
 
     let iter = fns.into_iter();
 

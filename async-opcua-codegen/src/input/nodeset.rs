@@ -3,7 +3,7 @@ use std::{
     sync::OnceLock,
 };
 
-use log::warn;
+use log::{info, warn};
 use opcua_xml::{
     load_nodeset2_file,
     schema::{
@@ -142,7 +142,7 @@ impl NodeSetInput {
         };
 
         if models.models.len() > 1 {
-            println!("Warning, multiple models found in nodeset file, this is not supported, and only the first will be used.");
+            warn!("Multiple models found in nodeset file, this is not supported, and only the first will be used.");
         }
 
         let Some(model) = models.models.first() else {
@@ -155,7 +155,7 @@ impl NodeSetInput {
             .map(|v| v.model_uri.clone())
             .collect();
 
-        println!(
+        info!(
             "Loaded nodeset {} with {} nodes",
             model.model_uri,
             nodeset.nodes.len(),
@@ -308,7 +308,7 @@ impl NodeSetInput {
                     let id = ParsedNodeId::parse(self.resolve_alias(&object.base.base.node_id.0))?;
                     known_encoding_nodes.insert(id.clone(), kind);
                     let Some(encodes) = encodes else {
-                        println!("{id:?} is missing an inverse encoding ref");
+                        warn!("{id:?} is missing an inverse encoding ref");
                         continue;
                     };
 

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use convert_case::{Case, Casing};
+use log::warn;
 use opcua_xml::schema::{
     opc_ua_types::{ExtensionObject, Variant, XmlElement},
     ua_node_set::Value,
@@ -123,7 +124,7 @@ impl<'a> ValueBuilder<'a> {
                 }
             }
             Variant::XmlElement(_) | Variant::ListOfXmlElement(_) => {
-                println!("XmlElement not yet supported in codegen");
+                warn!("XmlElement not yet supported in codegen");
                 return Ok(quote::quote! {
                     opcua::types::Variant::Empty
                 });

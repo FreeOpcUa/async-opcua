@@ -38,6 +38,9 @@ async fn main() {
             build_date: DateTime::now(),
         })
         .with_node_manager(simple_node_manager(
+            // Set the namespace for the node manager. For simple node managers this decides
+            // node ownership, so make sure to use a different value here than the application URI
+            // in server.conf, as that is the namespace used by the diagnostic node manager.
             NamespaceMetadata {
                 namespace_uri: "urn:SimpleServer".to_owned(),
                 ..Default::default()

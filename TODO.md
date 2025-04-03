@@ -14,3 +14,4 @@ This is a list of things that are known to be missing, or ideas that could be im
  - Look into running certain services concurrently. Currently they are sequential because that makes everything much simpler, but the services that don't have any cross node-manager interaction could run on all node managers concurrently.
  - Use NodeSet2 file for types code gen instead of the .bsd file. There is some info here (like data types being abstract), that you can't get from anywhere else.
    - In general, the codegen could use some more work. The current approach isn't really ideal. We should probably unify all the different code gen targets, since they generally depend on a lot of the same data and we risk reading the same data multiple times.
+ - Tracing and detailed logging in the server and client.

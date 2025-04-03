@@ -1,18 +1,22 @@
-#![no_main]
-#![cfg(feature = "nightly")]
-use libfuzzer_sys::fuzz_target;
+#![cfg_attr(feature = "nightly", no_main)]
 
-use opcua::types::{BinaryDecodable, ContextOwned, Error, Variant};
-use std::io::Cursor;
-
-pub fn deserialize(data: &[u8]) -> Result<Variant, Error> {
-    // Decode this, don't expect panics or whatever
-    let mut stream = Cursor::new(data);
-    let ctx_f = ContextOwned::default();
-    Variant::decode(&mut stream, &ctx_f.context())
+#[cfg(not(feature = "nightly"))]
+fn main() {
+    panic!("Fuzzing requires the nightly feature to be enabled.");
 }
 
-fuzz_target!(|data: &[u8]| {
+#[cfg(feature = "nightly")]
+libfuzzer_sys::fuzz_target!(|data: &[u8]| {
+    use opcua::types::{BinaryDecodable, ContextOwned, Error, Variant};
+    use std::io::Cursor;
+
+    pub fn deserialize(data: &[u8]) -> Result<Variant, Error> {
+        // Decode this, don't expect panics or whatever
+        let mut stream = Cursor::new(data);
+        let ctx_f = ContextOwned::default();
+        Variant::decode(&mut stream, &ctx_f.context())
+    }
+
     // With some random data, just try and deserialize it. The deserialize should either return
     // a Variant or an error. It shouldn't panic.
     let _ = deserialize(data);

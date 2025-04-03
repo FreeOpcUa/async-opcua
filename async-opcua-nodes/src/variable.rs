@@ -6,11 +6,11 @@
 
 use std::convert::Into;
 
-use log::error;
 use opcua_types::{
     AttributeId, AttributesMask, DataEncoding, DataTypeId, DataValue, DateTime, NumericRange,
     StatusCode, TimestampsToReturn, TryFromVariant, VariableAttributes, Variant,
 };
+use tracing::error;
 
 use crate::FromAttributesError;
 

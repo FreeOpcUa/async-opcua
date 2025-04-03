@@ -4,7 +4,7 @@
 
 //! Provides functions for parsing Urls from strings.
 
-use log::error;
+use tracing::error;
 use url::Url;
 
 use opcua_types::status_code::StatusCode;

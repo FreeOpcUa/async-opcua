@@ -46,7 +46,6 @@ xml = ["async-opcua-types/xml", "async-opcua-nodes/xml", "async-opcua-xml"]
 
 [dependencies]
 chrono = { workspace = true }
-log = { workspace = true }
 
 async-opcua-client = { path = "../async-opcua-client", optional = true, version = "0.14.0" }
 async-opcua-core = { path = "../async-opcua-core", version = "0.14.0" }
@@ -66,6 +65,7 @@ tempdir = "0.3"
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 env_logger = { workspace = true }
+log = { workspace = true }
 
 # Include json when building tests
 async-opcua = { path = ".", features = ["all", "json", "xml"] }

@@ -3,9 +3,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use log::info;
 use opcua_nodes::{DefaultTypeTree, TypeTree};
 use tokio_util::sync::CancellationToken;
+use tracing::info;
 
 use opcua_core::sync::RwLock;
 use opcua_types::{AttributeId, DataValue, LocalizedText, ServerState, VariableId};

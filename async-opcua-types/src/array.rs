@@ -1,8 +1,8 @@
 //! The [`Array`] type, used to contain OPC-UA arrays, which are potentially
 //! multi-dimensional, but stored as a single vector of Variants.
 
-use log::error;
 use thiserror::Error;
+use tracing::error;
 
 use crate::variant::*;
 

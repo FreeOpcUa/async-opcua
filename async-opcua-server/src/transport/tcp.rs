@@ -3,7 +3,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use log::error;
 use opcua_core::{
     comms::{
         buffer::SendBuffer,
@@ -16,6 +15,7 @@ use opcua_core::{
     },
     RequestMessage, ResponseMessage,
 };
+use tracing::error;
 
 use crate::info::ServerInfo;
 use opcua_types::{DecodingOptions, Error, ResponseHeader, ServiceFault, StatusCode};
@@ -269,7 +269,7 @@ impl TcpTransport {
         match self.send_buffer.write(request_id, message, channel) {
             Ok(_) => Ok(()),
             Err(e) => {
-                log::warn!("Failed to encode outgoing message: {e:?}");
+                tracing::warn!("Failed to encode outgoing message: {e:?}");
                 if let Some((request_id, request_handle)) = e.full_context() {
                     self.send_buffer.write(
                         request_id,

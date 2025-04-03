@@ -14,8 +14,8 @@
 use std::io;
 
 use bytes::{BufMut, BytesMut};
-use log::error;
 use tokio_util::codec::{Decoder, Encoder};
+use tracing::error;
 
 use opcua_types::{
     encoding::{DecodingOptions, SimpleBinaryDecodable, SimpleBinaryEncodable},

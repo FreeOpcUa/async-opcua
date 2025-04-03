@@ -4,7 +4,6 @@ use super::connect::{Connector, Transport};
 use super::core::{OutgoingMessage, TransportPollResult, TransportState};
 use async_trait::async_trait;
 use futures::StreamExt;
-use log::{debug, error};
 use opcua_core::comms::tcp_types::AcknowledgeMessage;
 use opcua_core::RequestMessage;
 use opcua_core::{
@@ -22,6 +21,7 @@ use parking_lot::RwLock;
 use tokio::io::{AsyncWriteExt, ReadHalf, WriteHalf};
 use tokio::net::TcpStream;
 use tokio_util::codec::FramedRead;
+use tracing::{debug, error};
 
 #[derive(Debug, Clone, Copy)]
 enum TransportCloseState {
@@ -105,7 +105,7 @@ impl TcpConnector {
             config.max_message_size,
             config.max_chunk_count,
         );
-        log::trace!("Send hello message: {hello:?}");
+        tracing::trace!("Send hello message: {hello:?}");
         let mut framed_read = {
             let secure_channel = trace_read_lock!(secure_channel);
             FramedRead::new(reader, TcpCodec::new(secure_channel.decoding_options()))
@@ -121,12 +121,12 @@ impl TcpConnector {
         let ack = match framed_read.next().await {
             Some(Ok(Message::Acknowledge(ack))) => {
                 if ack.send_buffer_size > hello.receive_buffer_size {
-                    log::warn!("Acknowledged send buffer size is greater than receive buffer size in hello message!")
+                    tracing::warn!("Acknowledged send buffer size is greater than receive buffer size in hello message!")
                 }
                 if ack.receive_buffer_size > hello.send_buffer_size {
-                    log::warn!("Acknowledged receive buffer size is greater than send buffer size in hello message!")
+                    tracing::warn!("Acknowledged receive buffer size is greater than send buffer size in hello message!")
                 }
-                log::trace!("Received acknowledgement: {:?}", ack);
+                tracing::trace!("Received acknowledgement: {:?}", ack);
                 ack
             }
             other => {

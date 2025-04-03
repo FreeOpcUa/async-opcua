@@ -9,8 +9,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use log::{trace, warn};
 use serde::{Deserialize, Serialize};
+use tracing::{trace, warn};
 
 use crate::constants;
 use opcua_core::{comms::url::url_matches_except_host, config::Config};

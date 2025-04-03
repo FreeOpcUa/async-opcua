@@ -9,13 +9,13 @@
 
 /// Contains debugging utility helper functions
 pub mod debug {
-    use log::{log_enabled, trace};
+    use tracing::{enabled, trace};
 
     /// Prints out the content of a slice in hex and visible char format to aid debugging. Format
     /// is similar to corresponding functionality in node-opcua
     pub fn log_buffer(message: &str, buf: &[u8]) {
         // No point doing anything unless debug level is on
-        if !log_enabled!(target: "hex", log::Level::Trace) {
+        if !enabled!(target: "hex", tracing::Level::TRACE) {
             return;
         }
 

@@ -8,8 +8,8 @@ use std::sync::atomic::{AtomicU16, AtomicU8, Ordering};
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
-use log::{debug, error, warn};
 use opcua_nodes::DefaultTypeTree;
+use tracing::{debug, error, warn};
 
 use crate::authenticator::{user_pass_security_policy_id, Password};
 use crate::node_manager::TypeTreeForUser;

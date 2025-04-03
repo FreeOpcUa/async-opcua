@@ -11,7 +11,7 @@ pub use opcua_core_namespace::CoreNamespace;
 use std::collections::VecDeque;
 
 use hashbrown::{HashMap, HashSet};
-use log::{debug, error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::node_manager::{ParsedReadValueId, ParsedWriteValue, RequestContext};
 use opcua_types::{

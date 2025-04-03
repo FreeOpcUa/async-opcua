@@ -10,10 +10,10 @@
 
 use std::fmt;
 
-use log::{error, trace};
 use opcua_types::{
     status_code::StatusCode, ByteString, EncodingResult, Error, SignatureData, UAString,
 };
+use tracing::{error, trace};
 pub use {
     aeskey::*, certificate_store::*, hash::*, pkey::*, security_policy::*, thumbprint::*,
     user_identity::*, x509::*,

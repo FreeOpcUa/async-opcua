@@ -14,12 +14,12 @@ use crate::{
     Message,
 };
 
-use log::{debug, error, trace};
 use opcua_crypto::SecurityPolicy;
 use opcua_types::{
     encoding::BinaryEncodable, node_id::NodeId, status_code::StatusCode, BinaryDecodable,
     EncodingResult, Error, ObjectId,
 };
+use tracing::{debug, error, trace};
 
 use super::message_chunk::MessageChunkType;
 

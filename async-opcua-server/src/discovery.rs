@@ -1,7 +1,7 @@
-use log::{debug, error};
 use opcua_client::{Client, ClientBuilder};
 use opcua_types::RegisteredServer;
 use std::{path::PathBuf, time::Duration};
+use tracing::{debug, error};
 
 use futures::never::Never;
 

@@ -18,13 +18,13 @@ name = "opcua_core"
 [dependencies]
 bytes = { workspace = true }
 chrono = { workspace = true }
-log = { workspace = true }
 parking_lot = { workspace = true }
 serde = { workspace = true }
 serde_yaml = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
+tracing = { workspace = true }
 url = { workspace = true }
 
 async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.14.0" }

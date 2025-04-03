@@ -6,7 +6,6 @@ use std::collections::HashMap;
 
 pub use events::generate_events;
 pub use gen::{NodeGenMethod, NodeSetCodeGenerator};
-use log::info;
 use opcua_xml::schema::{
     ua_node_set::UANodeSet,
     xml_schema::{XsdFileItem, XsdFileType},
@@ -15,6 +14,7 @@ use proc_macro2::Span;
 use quote::quote;
 use serde::{Deserialize, Serialize};
 use syn::{parse_quote, parse_str, File, Ident, Item, ItemFn, Path};
+use tracing::info;
 
 use crate::{input::SchemaCache, CodeGenError, GeneratedOutput};
 

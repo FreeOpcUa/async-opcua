@@ -1,10 +1,10 @@
 use crate::node_manager::{ParsedReadValueId, ParsedWriteValue, RequestContext, ServerContext};
-use log::debug;
 use opcua_nodes::TypeTree;
 use opcua_types::{
     AttributeId, DataEncoding, DataTypeId, DataValue, DateTime, NumericRange, StatusCode,
     TimestampsToReturn, Variant, WriteMask,
 };
+use tracing::debug;
 
 use super::{AccessLevel, AddressSpace, HasNodeId, NodeType, Variable};
 

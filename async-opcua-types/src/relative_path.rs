@@ -9,9 +9,9 @@
 
 use std::sync::LazyLock;
 
-use log::error;
 use regex::Regex;
 use thiserror::Error;
+use tracing::error;
 
 use crate::{
     node_id::{Identifier, NodeId},

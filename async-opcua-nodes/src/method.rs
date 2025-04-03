@@ -4,12 +4,12 @@
 
 //! Contains the implementation of `Method` and `MethodBuilder`.
 
-use log::error;
 use opcua_types::{
     Argument, AttributeId, AttributesMask, DataEncoding, DataTypeId, DataValue, ExtensionObject,
     MethodAttributes, NumericRange, StatusCode, TimestampsToReturn, VariableTypeId, Variant,
     VariantScalarTypeId,
 };
+use tracing::error;
 
 use crate::{FromAttributesError, NodeInsertTarget};
 

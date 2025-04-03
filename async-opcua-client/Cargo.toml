@@ -21,12 +21,12 @@ async-trait = { workspace = true }
 chrono = { workspace = true }
 futures = { workspace = true }
 hashbrown = { workspace = true }
-log = { workspace = true }
 parking_lot = { workspace = true }
 rsa = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
+tracing = { workspace = true }
 
 async-opcua-core = { path = "../async-opcua-core", version = "0.14.0" }
 async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.14.0" }

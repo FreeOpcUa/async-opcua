@@ -47,7 +47,6 @@ pub use client::Client;
 pub use connect::SessionConnectMode;
 pub use connection::SessionBuilder;
 pub use event_loop::{SessionActivity, SessionEventLoop, SessionPollResult};
-use log::{error, info};
 use opcua_core::handle::AtomicHandle;
 use opcua_core::sync::{Mutex, RwLock};
 use opcua_crypto::CertificateStore;
@@ -70,11 +69,12 @@ pub use services::subscriptions::{
 pub use services::view::{
     Browse, BrowseNext, RegisterNodes, TranslateBrowsePaths, UnregisterNodes,
 };
+use tracing::{error, info};
 
 #[allow(unused)]
 macro_rules! session_warn {
     ($session: expr, $($arg:tt)*) =>  {
-        log::warn!("session:{} {}", $session.session_id(), format!($($arg)*));
+        tracing::warn!("session:{} {}", $session.session_id(), format!($($arg)*));
     }
 }
 #[allow(unused)]
@@ -83,7 +83,7 @@ pub(crate) use session_warn;
 #[allow(unused)]
 macro_rules! session_error {
     ($session: expr, $($arg:tt)*) =>  {
-        log::error!("session:{} {}", $session.session_id(), format!($($arg)*));
+        tracing::error!("session:{} {}", $session.session_id(), format!($($arg)*));
     }
 }
 #[allow(unused)]
@@ -92,7 +92,7 @@ pub(crate) use session_error;
 #[allow(unused)]
 macro_rules! session_debug {
     ($session: expr, $($arg:tt)*) =>  {
-        log::debug!("session:{} {}", $session.session_id(), format!($($arg)*));
+        tracing::debug!("session:{} {}", $session.session_id(), format!($($arg)*));
     }
 }
 #[allow(unused)]
@@ -101,7 +101,7 @@ pub(crate) use session_debug;
 #[allow(unused)]
 macro_rules! session_trace {
     ($session: expr, $($arg:tt)*) =>  {
-        log::trace!("session:{} {}", $session.session_id(), format!($($arg)*));
+        tracing::trace!("session:{} {}", $session.session_id(), format!($($arg)*));
     }
 }
 #[allow(unused)]

@@ -6,12 +6,12 @@
 
 use std::io::{Cursor, Error, ErrorKind, Read, Result, Write};
 
-use log::error;
 use opcua_types::{
     process_decode_io_result, process_encode_io_result, read_u32, status_code::StatusCode,
     string::UAString, write_u32, write_u8, DecodingOptions, EncodingResult, EndpointDescription,
     SimpleBinaryDecodable, SimpleBinaryEncodable,
 };
+use tracing::error;
 
 use super::url::url_matches_except_host;
 

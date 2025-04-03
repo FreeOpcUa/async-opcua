@@ -4,11 +4,11 @@
 
 //! Contains the implementation of `ReferenceType` and `ReferenceTypeBuilder`.
 
-use log::error;
 use opcua_types::{
     AttributeId, AttributesMask, DataEncoding, DataValue, NumericRange, ReferenceTypeAttributes,
     StatusCode, TimestampsToReturn, Variant,
 };
+use tracing::error;
 
 use crate::FromAttributesError;
 

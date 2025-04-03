@@ -1,6 +1,6 @@
-use log::info;
 use opcua_core::trace_write_lock;
 use opcua_nodes::ParsedContentFilter;
+use tracing::info;
 
 use crate::{
     node_manager::{NodeManagers, ParsedNodeTypeDescription, QueryRequest},

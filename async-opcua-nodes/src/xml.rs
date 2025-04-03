@@ -5,7 +5,6 @@ use std::{
 };
 
 use hashbrown::HashMap;
-use log::warn;
 use opcua_types::{
     Context, DataTypeDefinition, DataValue, DecodingOptions, EnumDefinition, EnumField, Error,
     LocalizedText, NodeClass, NodeId, QualifiedName, StructureDefinition, StructureField,
@@ -20,6 +19,7 @@ use opcua_xml::{
     XmlError,
 };
 use regex::Regex;
+use tracing::warn;
 
 use crate::{
     Base, DataType, EventNotifier, ImportedItem, ImportedReference, Method, NodeSetImport, Object,

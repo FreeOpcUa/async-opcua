@@ -6,13 +6,13 @@ use std::{sync::Arc, time::Instant};
 
 use chrono::Utc;
 use hashbrown::{Equivalent, HashMap};
-use log::error;
 pub use monitored_item::{CreateMonitoredItem, MonitoredItem};
 use opcua_core::{trace_read_lock, trace_write_lock, ResponseMessage};
 use opcua_nodes::{Event, TypeTree};
 pub use session_subscriptions::SessionSubscriptions;
 use subscription::TickReason;
 pub use subscription::{MonitoredItemHandle, Subscription, SubscriptionState};
+use tracing::error;
 
 use opcua_core::sync::{Mutex, RwLock};
 
@@ -715,7 +715,7 @@ impl SubscriptionCache {
                 }
 
                 if let (Some(sub), notifs) = session_lck.remove(*sub_id) {
-                    log::debug!(
+                    tracing::debug!(
                         "Transfer subscription {} to session {}",
                         sub.id(),
                         session_id

@@ -18,8 +18,8 @@ name = "opcua_crypto"
 [dependencies]
 chrono = { workspace = true }
 gethostname = { workspace = true }
-log = { workspace = true }
 serde = { workspace = true }
+tracing = { workspace = true }
 
 async-opcua-types = { path = "../async-opcua-types", version = "0.14.0" }
 

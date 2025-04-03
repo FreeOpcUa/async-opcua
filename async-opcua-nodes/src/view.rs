@@ -3,11 +3,11 @@
 // Copyright (C) 2017-2024 Adam Lock
 
 //! Contains the implementation of `View` and `ViewBuilder`.
-use log::error;
 use opcua_types::{
     AttributeId, AttributesMask, DataEncoding, DataValue, NumericRange, StatusCode,
     TimestampsToReturn, Variant, ViewAttributes,
 };
+use tracing::error;
 
 use crate::FromAttributesError;
 

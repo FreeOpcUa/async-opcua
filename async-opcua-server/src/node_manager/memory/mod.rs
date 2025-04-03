@@ -13,10 +13,10 @@ mod core;
 pub use core::{CoreNodeManager, CoreNodeManagerBuilder, CoreNodeManagerImpl};
 
 pub use diagnostics::{DiagnosticsNodeManager, DiagnosticsNodeManagerBuilder, NamespaceMetadata};
-use log::warn;
 pub use memory_mgr_impl::*;
 use opcua_core::{trace_read_lock, trace_write_lock};
 pub use simple::*;
+use tracing::warn;
 
 use std::{
     collections::{HashSet, VecDeque},

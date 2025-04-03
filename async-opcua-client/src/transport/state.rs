@@ -3,8 +3,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-use log::{debug, trace};
 use tokio::sync::mpsc::error::SendTimeoutError;
+use tracing::{debug, trace};
 
 use crate::{session::process_unexpected_response, transport::OutgoingMessage};
 use arc_swap::ArcSwap;

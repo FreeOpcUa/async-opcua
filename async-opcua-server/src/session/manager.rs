@@ -7,11 +7,11 @@ use std::{
     time::{Duration, Instant},
 };
 
-use log::{error, info};
 use opcua_core::{comms::secure_channel::SecureChannel, trace_read_lock, trace_write_lock};
 use opcua_crypto::{random, security_policy::SecurityPolicy, CertificateStore};
 use parking_lot::RwLock;
 use tokio::sync::Notify;
+use tracing::{error, info};
 
 use crate::{identity_token::IdentityToken, info::ServerInfo};
 use opcua_types::{

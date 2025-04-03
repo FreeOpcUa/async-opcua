@@ -10,7 +10,7 @@
 
 use std::{error::Error, fmt};
 
-use log::debug;
+use tracing::debug;
 
 #[derive(Debug)]
 /// Error returned when working with an Attribute ID.

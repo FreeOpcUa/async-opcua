@@ -1,7 +1,7 @@
 use std::{path::PathBuf, sync::Arc};
 
-use log::warn;
 use tokio_util::sync::CancellationToken;
+use tracing::warn;
 
 use crate::{constants, node_manager::TypeTreeForUser};
 use opcua_core::config::Config;

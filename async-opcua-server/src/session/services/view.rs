@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use log::{error, info};
 use opcua_core::trace_write_lock;
+use tracing::{error, info};
 
 use crate::{
     node_manager::{

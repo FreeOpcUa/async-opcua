@@ -5,7 +5,6 @@
 use std::collections::{HashMap, HashSet};
 
 use futures::TryStreamExt;
-use log::warn;
 use opcua_types::{
     custom::{DataTypeTree, DataTypeVariant, EncodingIds, ParentIds, TypeInfo},
     match_extension_object_owned, AttributeId, BrowseDescription, BrowseDirection,
@@ -14,6 +13,7 @@ use opcua_types::{
     TimestampsToReturn, Variant,
 };
 use tokio_util::sync::CancellationToken;
+use tracing::warn;
 
 use crate::{
     browser::{BrowseFilter, BrowserConfig, NoneBrowserPolicy},

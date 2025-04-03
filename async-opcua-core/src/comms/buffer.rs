@@ -6,8 +6,8 @@ use std::{
     io::{BufRead, Cursor},
 };
 
-use log::trace;
 use tokio::io::AsyncWriteExt;
+use tracing::trace;
 
 use crate::{
     comms::{chunker::Chunker, message_chunk::MessageChunk, secure_channel::SecureChannel},

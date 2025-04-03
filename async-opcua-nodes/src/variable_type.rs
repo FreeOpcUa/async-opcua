@@ -4,11 +4,11 @@
 
 //! Contains the implementation of `VariableType` and `VariableTypeBuilder`.
 
-use log::error;
 use opcua_types::{
     AttributeId, AttributesMask, DataEncoding, DataValue, NumericRange, StatusCode,
     TimestampsToReturn, TryFromVariant, VariableTypeAttributes, Variant,
 };
+use tracing::error;
 
 use crate::FromAttributesError;
 

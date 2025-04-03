@@ -353,7 +353,7 @@ mod json {
                     }
                     #[cfg(not(feature = "xml"))]
                     {
-                        log::warn!("XML feature is not enabled, deserializing XML payloads in JSON extension objects is not supported");
+                        tracing::warn!("XML feature is not enabled, deserializing XML payloads in JSON extension objects is not supported");
                         Ok(ExtensionObject::null())
                     }
                 } else {
@@ -559,7 +559,7 @@ impl BinaryDecodable for ExtensionObject {
 
                 #[cfg(not(feature = "xml"))]
                 {
-                    log::warn!("XML feature is not enabled, deserializing XML payloads in JSON extension objects is not supported");
+                    tracing::warn!("XML feature is not enabled, deserializing XML payloads in JSON extension objects is not supported");
                     let size = i32::decode(stream, ctx)?;
                     if size > 0 {
                         crate::encoding::skip_bytes(stream, size as u64)?;

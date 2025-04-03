@@ -1,6 +1,5 @@
 use std::{sync::Arc, time::Duration};
 
-use log::error;
 use opcua_core::{
     comms::{secure_channel::SecureChannel, url::hostname_from_url},
     sync::RwLock,
@@ -18,6 +17,7 @@ use opcua_types::{
     UAString, UserTokenType, X509IdentityToken,
 };
 use rsa::RsaPrivateKey;
+use tracing::error;
 
 use crate::{
     session::{
@@ -179,7 +179,7 @@ impl UARequest for CreateSession<'_> {
         let response = channel.send(request, self.header.timeout).await?;
 
         if let ResponseMessage::CreateSession(response) = response {
-            log::debug!("create_session, success");
+            tracing::debug!("create_session, success");
             process_service_result(&response.response_header)?;
 
             let security_policy = channel.security_policy();
@@ -212,7 +212,7 @@ impl UARequest for CreateSession<'_> {
 
             Ok(*response)
         } else {
-            log::error!("create_session failed");
+            tracing::error!("create_session failed");
             Err(process_unexpected_response(response))
         }
     }
@@ -485,12 +485,12 @@ impl UARequest for ActivateSession {
         let response = channel.send(request, timeout).await?;
 
         if let ResponseMessage::ActivateSession(response) = response {
-            log::debug!("activate_session success");
+            tracing::debug!("activate_session success");
             // trace!("ActivateSessionResponse = {:#?}", response);
             process_service_result(&response.response_header)?;
             Ok(*response)
         } else {
-            log::error!("activate_session failed");
+            tracing::error!("activate_session failed");
             Err(process_unexpected_response(response))
         }
     }

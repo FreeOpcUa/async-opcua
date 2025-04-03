@@ -13,7 +13,7 @@ use std::{
 };
 
 use chrono::{Duration, SecondsFormat, TimeDelta, TimeZone, Timelike, Utc};
-use log::error;
+use tracing::error;
 
 use crate::{encoding::*, Context};
 

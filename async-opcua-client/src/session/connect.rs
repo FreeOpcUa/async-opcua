@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use log::info;
 use tokio::{pin, select};
+use tracing::info;
 
 use crate::transport::{SecureChannelEventLoop, TransportPollResult};
 use opcua_types::{NodeId, StatusCode};

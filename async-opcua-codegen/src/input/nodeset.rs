@@ -3,7 +3,6 @@ use std::{
     sync::OnceLock,
 };
 
-use log::{info, warn};
 use opcua_xml::{
     load_nodeset2_file,
     schema::{
@@ -12,6 +11,7 @@ use opcua_xml::{
     },
     XmlElement,
 };
+use tracing::{info, warn};
 
 use crate::{
     utils::{split_qualified_name, ParsedNodeId},

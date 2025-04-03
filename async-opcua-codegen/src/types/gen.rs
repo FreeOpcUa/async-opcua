@@ -1,12 +1,12 @@
 use std::collections::{HashMap, HashSet};
 
 use convert_case::{Case, Casing};
-use log::warn;
 use proc_macro2::Span;
 use syn::{
     parse_quote, parse_str, punctuated::Punctuated, FieldsNamed, File, Generics, Item, ItemEnum,
     ItemMacro, ItemStruct, Lit, LitByte, Path, Token, Type, Visibility,
 };
+use tracing::warn;
 
 use crate::{
     error::CodeGenError,

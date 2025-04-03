@@ -1,8 +1,8 @@
 //! These tests are specifically testing secure channel behaviour of signing, encrypting, decrypting and verifying
 //! chunks containing messages
 
-use log::{error, trace};
 use opcua_crypto::SecurityPolicy;
+use tracing::{error, trace};
 
 use crate::{
     comms::{chunker::*, secure_channel::*},

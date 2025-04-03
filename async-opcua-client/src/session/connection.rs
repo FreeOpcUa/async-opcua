@@ -1,11 +1,11 @@
 use std::{str::FromStr, sync::Arc};
 
-use log::error;
 use opcua_core::{comms::url::is_opc_ua_binary_url, config::Config, sync::RwLock};
 use opcua_crypto::{CertificateStore, SecurityPolicy};
 use opcua_types::{
     EndpointDescription, MessageSecurityMode, NodeId, StatusCode, TypeLoader, UserTokenType,
 };
+use tracing::error;
 
 use crate::{
     transport::{tcp::TcpConnector, Connector},

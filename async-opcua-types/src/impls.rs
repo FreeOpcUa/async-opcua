@@ -1,6 +1,6 @@
 use std::{self, fmt};
 
-use log::error;
+use tracing::error;
 
 use crate::{
     argument::Argument,

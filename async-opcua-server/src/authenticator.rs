@@ -2,11 +2,11 @@
 
 use async_trait::async_trait;
 
-use log::{debug, error};
 use opcua_crypto::{SecurityPolicy, Thumbprint};
 use opcua_types::{
     Error, MessageSecurityMode, NodeId, StatusCode, UAString, UserTokenPolicy, UserTokenType,
 };
+use tracing::{debug, error};
 
 use crate::identity_token::{
     POLICY_ID_ANONYMOUS, POLICY_ID_USER_PASS_NONE, POLICY_ID_USER_PASS_RSA_15,

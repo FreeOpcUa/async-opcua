@@ -12,7 +12,6 @@ use crate::{
     },
     Session, UARequest,
 };
-use log::{debug, log_enabled};
 use opcua_core::{handle::AtomicHandle, sync::Mutex, trace_lock, ResponseMessage};
 use opcua_types::{
     AttributeId, CreateMonitoredItemsRequest, CreateMonitoredItemsResponse,
@@ -27,6 +26,7 @@ use opcua_types::{
     SetTriggeringResponse, StatusCode, TimestampsToReturn, TransferResult,
     TransferSubscriptionsRequest, TransferSubscriptionsResponse,
 };
+use tracing::{debug, enabled};
 
 use super::{state::SubscriptionState, OnSubscriptionNotification};
 
@@ -1906,7 +1906,7 @@ impl Session {
             }
         };
 
-        if log_enabled!(log::Level::Debug) {
+        if enabled!(tracing::Level::DEBUG) {
             let sequence_nrs: Vec<u32> = acks
                 .iter()
                 .flatten()

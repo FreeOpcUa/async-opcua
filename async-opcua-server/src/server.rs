@@ -10,7 +10,6 @@ use std::{
 
 use arc_swap::ArcSwap;
 use futures::{future::Either, never::Never, stream::FuturesUnordered, FutureExt, StreamExt};
-use log::{error, info, warn};
 use opcua_core::{sync::RwLock, trace_read_lock, trace_write_lock};
 use opcua_nodes::DefaultTypeTree;
 use tokio::{
@@ -20,6 +19,7 @@ use tokio::{
     task::{JoinError, JoinHandle},
 };
 use tokio_util::sync::CancellationToken;
+use tracing::{error, info, warn};
 
 use opcua_core::{config::Config, handle::AtomicHandle};
 use opcua_crypto::CertificateStore;

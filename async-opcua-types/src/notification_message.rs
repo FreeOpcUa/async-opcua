@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (C) 2017-2024 Adam Lock
 //! Helpers for NotificationMessage types
-use log::{debug, trace};
+use tracing::{debug, trace};
 
 use crate::{
     date_time::DateTime, diagnostic_info::DiagnosticInfo, extension_object::ExtensionObject,

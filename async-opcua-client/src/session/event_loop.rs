@@ -4,7 +4,7 @@ use std::{
 };
 
 use futures::{future::BoxFuture, stream::BoxStream, FutureExt, Stream, StreamExt, TryStreamExt};
-use log::warn;
+use tracing::warn;
 
 use crate::{
     retry::{ExponentialBackoff, SessionRetryPolicy},

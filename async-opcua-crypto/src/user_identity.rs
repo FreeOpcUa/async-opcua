@@ -10,7 +10,6 @@
 use std::io::{Cursor, Write};
 use std::str::FromStr;
 
-use log::{error, warn};
 use opcua_types::Error;
 use opcua_types::{
     encoding::{read_u32, write_u32},
@@ -18,6 +17,7 @@ use opcua_types::{
     ByteString, UAString,
     {SignatureData, UserNameIdentityToken, UserTokenPolicy, X509IdentityToken},
 };
+use tracing::{error, warn};
 
 use super::{KeySize, PrivateKey, RsaPadding, SecurityPolicy, X509};
 

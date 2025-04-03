@@ -25,11 +25,11 @@ bitflags = { workspace = true }
 byteorder = { workspace = true }
 chrono = { workspace = true }
 hashbrown = { workspace = true }
-log = { workspace = true }
 percent-encoding-rfc3986 = "0.1.3"
 regex = { workspace = true }
 struson = { workspace = true, optional = true }
 thiserror = { workspace = true }
+tracing = { workspace = true }
 uuid = { workspace = true }
 
 async-opcua-macros = { path = "../async-opcua-macros", version = "0.14.0" }

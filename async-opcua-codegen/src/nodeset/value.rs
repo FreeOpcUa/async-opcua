@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use convert_case::{Case, Casing};
-use log::warn;
 use opcua_xml::schema::{
     opc_ua_types::{ExtensionObject, Variant, XmlElement},
     ua_node_set::Value,
@@ -13,6 +12,7 @@ use opcua_xml::schema::{
 use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
 use syn::Path;
+use tracing::warn;
 
 use crate::{
     utils::{safe_ident, RenderExpr},

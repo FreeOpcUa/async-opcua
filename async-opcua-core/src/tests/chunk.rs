@@ -1,11 +1,11 @@
 use std::io::{Cursor, Write};
 
-use log::trace;
 use opcua_types::{
     BinaryDecodable, ByteString, DataValue, DateTime, DecodingOptions, DiagnosticBits,
     ExtensionObject, MessageSecurityMode, NodeId, OpenSecureChannelRequest, ReadResponse,
     RequestHeader, ResponseHeader, SecurityTokenRequestType, UAString,
 };
+use tracing::trace;
 
 use crate::{
     comms::{chunker::*, message_chunk::*, secure_channel::*, tcp_types::MIN_CHUNK_SIZE},

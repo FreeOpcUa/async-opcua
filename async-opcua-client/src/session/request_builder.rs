@@ -102,7 +102,7 @@ pub(crate) use builder_base;
 #[allow(unused)]
 macro_rules! builder_warn {
     ($session: expr, $($arg:tt)*) =>  {
-        log::warn!("session:{} {}", $session.header.session_id, format!($($arg)*));
+        tracing::warn!("session:{} {}", $session.header.session_id, format!($($arg)*));
     }
 }
 #[allow(unused)]
@@ -111,7 +111,7 @@ pub(crate) use builder_warn;
 #[allow(unused)]
 macro_rules! builder_error {
     ($session: expr, $($arg:tt)*) =>  {
-        log::error!("session:{} {}", $session.header.session_id, format!($($arg)*));
+        tracing::error!("session:{} {}", $session.header.session_id, format!($($arg)*));
     }
 }
 #[allow(unused)]
@@ -120,7 +120,7 @@ pub(crate) use builder_error;
 #[allow(unused)]
 macro_rules! builder_debug {
     ($session: expr, $($arg:tt)*) =>  {
-        log::debug!("session:{} {}", $session.header.session_id, format!($($arg)*));
+        tracing::debug!("session:{} {}", $session.header.session_id, format!($($arg)*));
     }
 }
 #[allow(unused)]
@@ -129,7 +129,7 @@ pub(crate) use builder_debug;
 #[allow(unused)]
 macro_rules! builder_trace {
     ($session: expr, $($arg:tt)*) =>  {
-        log::trace!("session:{} {}", $session.header.session_id, format!($($arg)*));
+        tracing::trace!("session:{} {}", $session.header.session_id, format!($($arg)*));
     }
 }
 #[allow(unused)]

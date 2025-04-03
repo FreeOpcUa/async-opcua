@@ -4,11 +4,11 @@
 
 //! Contains the implementation of `Object` and `ObjectBuilder`.
 
-use log::error;
 use opcua_types::{
     AttributeId, AttributesMask, DataEncoding, DataValue, NumericRange, ObjectAttributes,
     ObjectTypeId, StatusCode, TimestampsToReturn, Variant,
 };
+use tracing::error;
 
 use crate::FromAttributesError;
 

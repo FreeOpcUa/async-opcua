@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwap;
-use log::error;
+use tracing::error;
 
 use super::continuation_points::ContinuationPoint;
 use super::manager::next_session_id;

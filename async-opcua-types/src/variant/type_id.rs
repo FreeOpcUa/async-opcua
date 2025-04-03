@@ -149,7 +149,7 @@ impl TryFrom<u32> for VariantScalarTypeId {
             24 => Self::Variant,
             25 => Self::DiagnosticInfo,
             r => {
-                log::error!("Got unexpected vlaue for enum VariantScalarTypeId: {r}");
+                tracing::error!("Got unexpected vlaue for enum VariantScalarTypeId: {r}");
                 return Err(StatusCode::BadDecodingError);
             }
         })

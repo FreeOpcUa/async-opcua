@@ -28,7 +28,7 @@ use std::{
     str::FromStr,
 };
 
-use log::error;
+use tracing::error;
 use uuid::Uuid;
 
 use crate::{

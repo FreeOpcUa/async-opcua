@@ -3,9 +3,9 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use futures::future::Either;
-use log::{debug, error, trace, warn};
 use opcua_core::{trace_read_lock, trace_write_lock, RequestMessage, ResponseMessage};
 use parking_lot::RwLock;
+use tracing::{debug, error, trace, warn};
 
 use opcua_core::comms::buffer::SendBuffer;
 use opcua_core::comms::message_chunk::MessageIsFinalType;

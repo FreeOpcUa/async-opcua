@@ -2,7 +2,6 @@ use std::{str::FromStr, sync::Arc, time::Duration};
 
 use crate::{session::SessionInfo, transport::core::TransportPollResult};
 use arc_swap::{ArcSwap, ArcSwapOption};
-use log::{debug, error};
 use opcua_core::{
     comms::secure_channel::{Role, SecureChannel},
     sync::RwLock,
@@ -13,6 +12,7 @@ use opcua_types::{
     ByteString, CloseSecureChannelRequest, ContextOwned, IntegerId, NodeId, RequestHeader,
     SecurityTokenRequestType, StatusCode,
 };
+use tracing::{debug, error};
 
 use super::{
     connect::{Connector, Transport},

@@ -1,7 +1,7 @@
 use std::collections::{BTreeSet, VecDeque};
 
-use log::error;
 use opcua_nodes::{Event, ParsedEventFilter, TypeTree};
+use tracing::error;
 
 use super::MonitoredItemHandle;
 use crate::{info::ServerInfo, node_manager::ParsedReadValueId};

@@ -1,10 +1,10 @@
 use std::{sync::Arc, time::Instant};
 
 use chrono::Utc;
-use log::{debug, warn};
 use opcua_core::{Message, RequestMessage, ResponseMessage};
 use parking_lot::RwLock;
 use tokio::task::JoinHandle;
+use tracing::{debug, warn};
 
 use crate::{
     authenticator::UserToken,

@@ -8,10 +8,10 @@ pub use encoding_ids::EncodingIds;
 pub use gen::{CodeGenItemConfig, CodeGenerator, GeneratedItem, ItemDefinition};
 use loaders::NodeSetTypeLoader;
 pub use loaders::{BsdTypeLoader, LoadedType, LoadedTypes};
-use log::info;
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{parse_quote, parse_str, Item, Path};
+use tracing::info;
 
 use crate::{
     input::{BinarySchemaInput, NodeSetInput, SchemaCache},

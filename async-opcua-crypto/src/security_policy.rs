@@ -7,7 +7,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-use log::error;
+use tracing::error;
 
 use opcua_types::{constants, status_code::StatusCode, ByteString, Error};
 
@@ -589,7 +589,7 @@ impl SecurityPolicy {
             #[cfg(debug_assertions)]
             if let Some(their_key) = their_private_key {
                 use crate::pkey::KeySize;
-                use log::trace;
+                use tracing::trace;
                 // Calculate the signature using their key, see what we were expecting versus theirs
                 let mut their_signature = vec![0u8; their_key.size()];
                 self.asymmetric_sign(&their_key, data, their_signature.as_mut_slice())?;

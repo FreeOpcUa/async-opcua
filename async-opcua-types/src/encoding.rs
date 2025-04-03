@@ -14,7 +14,7 @@ use std::{
 
 use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
 use chrono::Duration;
-use log::error;
+use tracing::error;
 
 use crate::{constants, status_code::StatusCode, Context, QualifiedName};
 

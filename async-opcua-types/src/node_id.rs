@@ -181,7 +181,7 @@ mod json {
     use std::io::{Read, Write};
     use std::str::FromStr;
 
-    use log::warn;
+    use tracing::warn;
 
     use crate::{json::*, ByteString, Error, Guid};
 

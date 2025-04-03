@@ -15,10 +15,10 @@ use std::{
 use config::{load_schemas, CodeGenSource};
 pub use error::CodeGenError;
 use ids::{generate_node_ids, NodeIdCodeGenTarget};
-use log::info;
 use nodeset::{generate_events, generate_target, make_root_module, NodeSetCodeGenTarget};
 use serde::{Deserialize, Serialize};
 use syn::{parse_str, File};
+use tracing::info;
 pub use types::{
     base_ignored_types, base_native_type_mappings, basic_types_import_map, BsdTypeLoader,
     CodeGenItemConfig, GeneratedItem, ItemDefinition, LoadedType, LoadedTypes,

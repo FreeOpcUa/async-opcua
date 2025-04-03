@@ -21,7 +21,7 @@ xml = ["async-opcua-types/xml", "async-opcua-xml"]
 [dependencies]
 bitflags = { workspace = true }
 hashbrown = { workspace = true }
-log = { workspace = true }
+tracing = { workspace = true }
 regex = { workspace = true }
 thiserror = { workspace = true }
 

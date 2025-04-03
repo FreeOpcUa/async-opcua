@@ -1,7 +1,7 @@
 use std::{path::PathBuf, time::Duration};
 
-use log::error;
 use opcua_core::config::{Config, ConfigError};
+use tracing::error;
 
 use super::{Client, ClientConfig, ClientEndpoint, ClientUserToken, ANONYMOUS_USER_TOKEN_ID};
 

@@ -14,7 +14,7 @@ use std::{
 
 use bytes::Buf;
 use chrono::Duration;
-use log::{error, trace};
+use tracing::{error, trace};
 
 use opcua_crypto::{
     aeskey::AesKey,

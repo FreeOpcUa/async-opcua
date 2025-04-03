@@ -1,8 +1,8 @@
 use std::{str::FromStr, sync::Arc};
 
 use chrono::Duration;
-use log::{debug, error};
 use tokio::{pin, select};
+use tracing::{debug, error};
 
 use crate::{
     transport::{

@@ -14,8 +14,8 @@ use std::{
     str::FromStr,
 };
 
-use log::warn;
 pub use opcua_xml::schema::opc_ua_types::XmlElement;
+use tracing::warn;
 
 use crate::{
     Array, ByteString, ExpandedNodeId, ExtensionObject, LocalizedText, NodeId, QualifiedName,

@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 
-use log::error;
 use regex::Regex;
+use tracing::error;
 
 use opcua_types::{
     AttributeId, EventFieldList, FilterOperator, NodeId, NumericRange, QualifiedName, Variant,

@@ -4,11 +4,11 @@
 
 //! Contains the implementation of `Method` and `MethodBuilder`.
 
-use log::error;
 use opcua_types::{
     AttributeId, AttributesMask, DataEncoding, DataTypeAttributes, DataTypeDefinition, DataValue,
     NumericRange, StatusCode, TimestampsToReturn, Variant,
 };
+use tracing::error;
 
 use crate::FromAttributesError;
 

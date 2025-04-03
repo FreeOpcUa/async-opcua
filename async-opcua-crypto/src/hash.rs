@@ -7,9 +7,9 @@
 use std::result::Result;
 
 use hmac::{digest, Hmac, Mac};
-use log::error;
 use sha1::Sha1;
 use sha2::Sha256;
+use tracing::error;
 
 use opcua_types::status_code::StatusCode;
 

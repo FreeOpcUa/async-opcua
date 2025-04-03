@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::Path};
 
-use log::warn;
 use pathdiff::diff_paths;
+use tracing::warn;
 
 use crate::CodeGenError;
 

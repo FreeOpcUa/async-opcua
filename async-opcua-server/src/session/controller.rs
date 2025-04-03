@@ -5,8 +5,8 @@ use std::{
 };
 
 use futures::{future::Either, stream::FuturesUnordered, Future, StreamExt};
-use log::{debug, error, trace, warn};
 use opcua_core::{trace_read_lock, trace_write_lock, Message, RequestMessage, ResponseMessage};
+use tracing::{debug, error, trace, warn};
 
 use opcua_core::{
     comms::{
@@ -133,7 +133,7 @@ impl<T: Connector> SessionStarter<T> {
                 match r {
                     Ok(t) => t,
                     Err(e) => {
-                        log::error!("Connection failed while waiting for channel to be established: {e}");
+                        tracing::error!("Connection failed while waiting for channel to be established: {e}");
                         return;
                     }
                 }

@@ -13,8 +13,8 @@ use std::{
 };
 
 use chrono::TimeDelta;
-use log::warn;
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 
 use opcua_core::config::Config;
 use opcua_crypto::SecurityPolicy;

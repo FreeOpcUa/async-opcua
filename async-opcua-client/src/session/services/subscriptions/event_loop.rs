@@ -1,8 +1,8 @@
 use std::{sync::Arc, time::Instant};
 
 use futures::{future::Either, stream::FuturesUnordered, Future, Stream, StreamExt};
-use log::debug;
 use opcua_types::StatusCode;
+use tracing::debug;
 
 use crate::{
     session::{session_debug, session_error},

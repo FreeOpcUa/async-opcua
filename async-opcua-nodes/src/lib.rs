@@ -72,8 +72,8 @@ pub trait NodeInsertTarget {
 // variables etc.
 macro_rules! node_builder_impl {
     ( $node_builder_ty:ident, $node_ty:ident ) => {
-        use log::trace;
         use opcua_types::{LocalizedText, NodeId, QualifiedName, ReferenceTypeId};
+        use tracing::trace;
         use $crate::ReferenceDirection;
         // use $crate::{address_space::AddressSpace, ReferenceDirection};
 

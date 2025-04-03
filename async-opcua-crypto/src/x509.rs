@@ -13,7 +13,7 @@ use std::{
 };
 
 use chrono::{DateTime, Utc};
-use log::{error, info, trace, warn};
+use tracing::{error, info, trace, warn};
 type ChronoUtc = DateTime<Utc>;
 
 use rsa;

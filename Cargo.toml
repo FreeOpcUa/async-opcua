@@ -40,6 +40,7 @@ thiserror = "^1"
 tokio = { version = "^1", features = ["full"] }
 tokio-util = { version = "^0.7", features = ["codec"] }
 tracing = { version = "0.1.41", features = ["log"] }
+tracing-futures = "0.2.5"
 url = "^2"
 uuid = { version = "^1", features = ["v4"] }
 

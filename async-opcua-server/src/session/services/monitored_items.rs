@@ -14,6 +14,8 @@ use opcua_types::{
     SetMonitoringModeRequest, SetMonitoringModeResponse, StatusCode, TimestampsToReturn,
     TranslateBrowsePathsToNodeIdsRequest, Variant,
 };
+use tracing::debug_span;
+use tracing_futures::Instrument;
 
 use super::{read, translate_browse_paths};
 
@@ -213,7 +215,11 @@ pub async fn create_monitored_items(
             continue;
         }
 
-        if let Err(e) = mgr.create_monitored_items(&context, &mut owned).await {
+        if let Err(e) = mgr
+            .create_monitored_items(&context, &mut owned)
+            .instrument(debug_span!("CreateMonitoredItems", node_manager = %mgr.name()))
+            .await
+        {
             for n in owned {
                 n.set_status(e);
             }
@@ -243,7 +249,9 @@ pub async fn create_monitored_items(
             // Should clean up any that failed to create though.
             for (idx, mgr) in node_managers.iter().enumerate() {
                 context.current_node_manager_index = idx;
-                mgr.delete_monitored_items(&context, &handles_ref).await;
+                mgr.delete_monitored_items(&context, &handles_ref)
+                    .instrument(debug_span!("DeleteMonitoredItems", node_manager = %mgr.name()))
+                    .await;
             }
             return service_fault!(request, e);
         }
@@ -299,7 +307,9 @@ pub async fn modify_monitored_items(
             continue;
         }
 
-        mgr.modify_monitored_items(&context, &owned).await;
+        mgr.modify_monitored_items(&context, &owned)
+            .instrument(debug_span!("ModifyMonitoredItems", node_manager = %mgr.name()))
+            .await;
     }
 
     Response {
@@ -347,6 +357,7 @@ pub async fn set_monitoring_mode(
         }
 
         mgr.set_monitoring_mode(&context, request.request.monitoring_mode, &owned)
+            .instrument(debug_span!("SetMonitoringMode", node_manager = %mgr.name()))
             .await;
     }
 
@@ -393,7 +404,9 @@ pub async fn delete_monitored_items(
             continue;
         }
 
-        mgr.delete_monitored_items(&context, &owned).await;
+        mgr.delete_monitored_items(&context, &owned)
+            .instrument(debug_span!("DeleteMonitoredItems", node_manager = %mgr.name()))
+            .await;
     }
 
     Response {

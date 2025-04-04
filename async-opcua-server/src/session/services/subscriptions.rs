@@ -7,6 +7,8 @@ use crate::{
 use opcua_types::{
     DeleteSubscriptionsRequest, DeleteSubscriptionsResponse, ResponseHeader, StatusCode,
 };
+use tracing::debug_span;
+use tracing_futures::Instrument;
 
 pub async fn delete_subscriptions(
     node_managers: NodeManagers,
@@ -62,7 +64,9 @@ pub async fn delete_subscriptions_inner(
             continue;
         }
 
-        mgr.delete_monitored_items(context, &owned).await;
+        mgr.delete_monitored_items(context, &owned)
+            .instrument(debug_span!("DeleteMonitoredItems", node_manager = %mgr.name()))
+            .await;
     }
 
     Ok(results.into_iter().map(|r| r.0).collect())

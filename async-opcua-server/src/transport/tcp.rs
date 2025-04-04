@@ -16,6 +16,7 @@ use opcua_core::{
     RequestMessage, ResponseMessage,
 };
 use tracing::error;
+use tracing_futures::Instrument;
 
 use crate::info::ServerInfo;
 use opcua_types::{DecodingOptions, Error, ResponseHeader, ServiceFault, StatusCode};
@@ -210,7 +211,7 @@ impl Connector for TcpConnector {
             _ = token.cancelled() => {
                 ErrorMessage::new(StatusCode::BadServerHalted, "Server closed")
             }
-            r = self.connect_inner(info) => {
+            r = self.connect_inner(info).instrument(tracing::info_span!("OPC-UA TCP handshake")) => {
                 match r {
                     Ok(r) => return Ok(TcpTransport::new(self.read, self.write, r)),
                     Err(e) => e,

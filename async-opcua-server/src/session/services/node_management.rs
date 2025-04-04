@@ -10,6 +10,8 @@ use opcua_types::{
     DeleteNodesRequest, DeleteNodesResponse, DeleteReferencesRequest, DeleteReferencesResponse,
     NodeId, ResponseHeader, StatusCode,
 };
+use tracing::debug_span;
+use tracing_futures::Instrument;
 
 pub async fn add_nodes(node_managers: NodeManagers, request: Request<AddNodesRequest>) -> Response {
     let mut context = request.context();
@@ -48,7 +50,11 @@ pub async fn add_nodes(node_managers: NodeManagers, request: Request<AddNodesReq
             continue;
         }
 
-        if let Err(e) = node_manager.add_nodes(&context, &mut owned).await {
+        if let Err(e) = node_manager
+            .add_nodes(&context, &mut owned)
+            .instrument(debug_span!("AddNodes", node_manager = %node_manager.name()))
+            .await
+        {
             for node in owned {
                 node.set_result(NodeId::null(), e);
             }
@@ -108,7 +114,11 @@ pub async fn add_references(
             continue;
         }
 
-        if let Err(e) = node_manager.add_references(&context, &mut owned).await {
+        if let Err(e) = node_manager
+            .add_references(&context, &mut owned)
+            .instrument(debug_span!("AddReferences", node_manager = %node_manager.name()))
+            .await
+        {
             for node in owned {
                 if node_manager.owns_node(node.source_node_id()) {
                     node.set_source_result(e);
@@ -167,7 +177,11 @@ pub async fn delete_nodes(
             continue;
         }
 
-        if let Err(e) = node_manager.delete_nodes(&context, &mut owned).await {
+        if let Err(e) = node_manager
+            .delete_nodes(&context, &mut owned)
+            .instrument(debug_span!("DeleteNodes", node_manager = %node_manager.name()))
+            .await
+        {
             for node in owned {
                 node.set_result(e);
             }
@@ -184,6 +198,7 @@ pub async fn delete_nodes(
 
         node_manager
             .delete_node_references(&context, &targets)
+            .instrument(debug_span!("delete node references", node_manager = %node_manager.name()))
             .await;
     }
 
@@ -240,7 +255,11 @@ pub async fn delete_references(
             continue;
         }
 
-        if let Err(e) = node_manager.delete_references(&context, &mut owned).await {
+        if let Err(e) = node_manager
+            .delete_references(&context, &mut owned)
+            .instrument(debug_span!("DeleteReferences", node_manager = %node_manager.name()))
+            .await
+        {
             for node in owned {
                 if node_manager.owns_node(node.source_node_id()) {
                     node.set_source_result(e);

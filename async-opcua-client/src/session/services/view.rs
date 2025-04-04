@@ -453,7 +453,7 @@ impl Session {
     /// # Returns
     ///
     /// * `Ok(Vec<BrowseResult>)` - A list [`BrowseResult`] corresponding to each node to browse. A browse result
-    ///                                    may contain a continuation point, for use with `browse_next()`.
+    ///   may contain a continuation point, for use with `browse_next()`.
     /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn browse(
@@ -485,7 +485,7 @@ impl Session {
     /// # Returns
     ///
     /// * `Ok(Option<Vec<BrowseResult>)` - A list [`BrowseResult`] corresponding to each node to browse. A browse result
-    ///                                    may contain a continuation point, for use with `browse_next()`.
+    ///   may contain a continuation point, for use with `browse_next()`.
     /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn browse_next(
@@ -516,8 +516,8 @@ impl Session {
     /// # Returns
     ///
     /// * `Ok(Vec<BrowsePathResult>>)` - List of [`BrowsePathResult`] for the list of browse
-    ///                       paths. The size and order of the list matches the size and order of the `browse_paths`
-    ///                       parameter.
+    ///   paths. The size and order of the list matches the size and order of the `browse_paths`
+    ///   parameter.
     /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn translate_browse_paths_to_node_ids(
@@ -545,7 +545,7 @@ impl Session {
     /// # Returns
     ///
     /// * `Ok(Vec<NodeId>)` - A list of [`NodeId`] corresponding to size and order of the input. The
-    ///                       server may return an alias for the input `NodeId`
+    ///   server may return an alias for the input `NodeId`
     /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn register_nodes(

@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use opcua_core::trace_write_lock;
-use tracing::{error, info};
+use tracing::{debug_span, error, info};
+use tracing_futures::Instrument;
 
 use crate::{
     node_manager::{
@@ -54,7 +55,11 @@ pub async fn browse(node_managers: NodeManagers, request: Request<BrowseRequest>
     for (node_manager_index, node_manager) in node_managers.iter().enumerate() {
         context.current_node_manager_index = node_manager_index;
 
-        if let Err(e) = node_manager.browse(&context, &mut nodes).await {
+        if let Err(e) = node_manager
+            .browse(&context, &mut nodes)
+            .instrument(debug_span!("Browse", node_manager = %node_manager.name()))
+            .await
+        {
             for node in &mut nodes {
                 if node_manager.owns_node(node.node_id()) {
                     node.set_status(e);
@@ -217,7 +222,11 @@ pub async fn browse_next(
                 }
             }
 
-            if let Err(e) = node_manager.browse(&context, &mut batch_nodes).await {
+            if let Err(e) = node_manager
+                .browse(&context, &mut batch_nodes)
+                .instrument(debug_span!("BrowseNext", node_manager = %node_manager.name()))
+                .await
+            {
                 for node in &mut nodes {
                     if node_manager.owns_node(node.node_id()) {
                         node.set_status(e);
@@ -375,6 +384,9 @@ pub async fn translate_browse_paths(
             // Call translate on any of the target IDs.
             if let Err(e) = mgr
                 .translate_browse_paths_to_node_ids(&context, &mut chunk)
+                .instrument(
+                    debug_span!("TranslateBrowsePathsToNodeIds", node_manager = %mgr.name()),
+                )
                 .await
             {
                 for n in &mut chunk {
@@ -493,7 +505,11 @@ pub async fn register_nodes(
         }
 
         // All errors are fatal in this case, node managers should avoid them.
-        if let Err(e) = mgr.register_nodes(&context, &mut owned).await {
+        if let Err(e) = mgr
+            .register_nodes(&context, &mut owned)
+            .instrument(debug_span!("RegisterNodes", node_manager = %mgr.name()))
+            .await
+        {
             error!("Register nodes failed for node manager {}: {e}", mgr.name());
             return service_fault!(request, e);
         }
@@ -540,7 +556,11 @@ pub async fn unregister_nodes(
         }
 
         // All errors are fatal in this case, node managers should avoid them.
-        if let Err(e) = mgr.unregister_nodes(&context, &owned).await {
+        if let Err(e) = mgr
+            .unregister_nodes(&context, &owned)
+            .instrument(debug_span!("UnregisterNodes", node_manager = %mgr.name()))
+            .await
+        {
             error!(
                 "Unregister nodes failed for node manager {}: {e}",
                 mgr.name()

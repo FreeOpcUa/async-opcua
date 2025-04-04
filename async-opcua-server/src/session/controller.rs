@@ -6,7 +6,7 @@ use std::{
 
 use futures::{future::Either, stream::FuturesUnordered, Future, StreamExt};
 use opcua_core::{trace_read_lock, trace_write_lock, Message, RequestMessage, ResponseMessage};
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, debug_span, error, trace, warn};
 
 use opcua_core::{
     comms::{
@@ -23,6 +23,7 @@ use opcua_types::{
     ServiceFault, StatusCode,
 };
 use tokio_util::sync::CancellationToken;
+use tracing_futures::Instrument;
 
 use crate::{
     authenticator::UserToken,
@@ -117,7 +118,11 @@ impl<T: Connector> SessionStarter<T> {
 
     pub async fn run(self, mut command: tokio::sync::mpsc::Receiver<ControllerCommand>) {
         let token = CancellationToken::new();
-        let fut = self.connector.connect(self.info.clone(), token.clone());
+        let span = tracing::info_span!("Establish TCP channel");
+        let fut = self
+            .connector
+            .connect(self.info.clone(), token.clone())
+            .instrument(span.clone());
         tokio::pin!(fut);
         let transport = tokio::select! {
             cmd = command.recv() => {
@@ -133,7 +138,9 @@ impl<T: Connector> SessionStarter<T> {
                 match r {
                     Ok(t) => t,
                     Err(e) => {
-                        tracing::error!("Connection failed while waiting for channel to be established: {e}");
+                        span.in_scope(|| {
+                            tracing::error!("Connection failed while waiting for channel to be established: {e}");
+                        });
                         return;
                     }
                 }
@@ -222,7 +229,6 @@ impl SessionController {
                     }
                 }
                 res = self.transport.poll(&mut self.channel) => {
-                    trace!("Transport poll result: {res:?}");
                     match res {
                         TransportPollResult::IncomingMessage(req) => {
                             if matches!(self.process_request(req).await, RequestProcessResult::Close) {
@@ -230,7 +236,7 @@ impl SessionController {
                             }
                         }
                         TransportPollResult::RecoverableError(s, id, handle) => {
-                            error!("Non-fatal transport error: {s}, with request id {id}, request handle {handle}");
+                            warn!("Non-fatal transport error: {s}, with request id {id}, request handle {handle}");
                             let msg = ServiceFault::new(handle, s).into();
                             if let Err(e) = self.transport.enqueue_message_for_send(&mut self.channel, msg, id) {
                                 error!("Failed to send response: {e}");
@@ -257,9 +263,17 @@ impl SessionController {
     }
 
     async fn process_request(&mut self, req: Request) -> RequestProcessResult {
+        let span = debug_span!(
+            "Incoming request",
+            request_id = req.request_id,
+            request_type = %req.message.type_name(),
+            request_handle = req.message.request_handle(),
+        );
+
         let id = req.request_id;
         match req.message {
             RequestMessage::OpenSecureChannel(r) => {
+                let _h = span.enter();
                 let res = self.open_secure_channel(
                     &req.chunk_info.security_header,
                     self.transport.client_protocol_version,
@@ -293,6 +307,7 @@ impl SessionController {
             RequestMessage::CloseSecureChannel(_r) => RequestProcessResult::Close,
 
             RequestMessage::CreateSession(request) => {
+                let _h = span.enter();
                 let mut mgr = trace_write_lock!(self.session_manager);
                 let res = mgr.create_session(&mut self.channel, &self.certificate_store, &request);
                 drop(mgr);
@@ -306,7 +321,9 @@ impl SessionController {
                     &request,
                     &mut self.message_handler,
                 )
+                .instrument(span.clone())
                 .await;
+                let _h = span.enter();
                 self.process_service_result(res, request.request_header.request_handle, id)
             }
 
@@ -317,7 +334,9 @@ impl SessionController {
                     &mut self.message_handler,
                     &request,
                 )
+                .instrument(span.clone())
                 .await;
+                let _h = span.enter();
                 self.process_service_result(res, request.request_header.request_handle, id)
             }
             RequestMessage::GetEndpoints(request) => {
@@ -326,6 +345,7 @@ impl SessionController {
 
                 // TODO audit - generate event for failed service invocation
 
+                let _h = span.enter();
                 let endpoints = self
                     .info
                     .endpoints(&request.endpoint_url, &request.profile_uris);
@@ -339,6 +359,7 @@ impl SessionController {
                 )
             }
             RequestMessage::FindServers(request) => {
+                let _h = span.enter();
                 let desc = self.info.config.application_description();
                 let mut servers = vec![desc];
 
@@ -368,6 +389,7 @@ impl SessionController {
                 )
             }
             RequestMessage::FindServersOnNetwork(request) => {
+                let _h = span.enter();
                 if let Err(e) = self.transport.enqueue_message_for_send(
                     &mut self.channel,
                     ServiceFault::new(&request.request_header, StatusCode::BadServiceUnsupported)
@@ -381,6 +403,7 @@ impl SessionController {
                 }
             }
             RequestMessage::RegisterServer(request) => {
+                let _h = span.enter();
                 if let Err(e) = self.transport.enqueue_message_for_send(
                     &mut self.channel,
                     ServiceFault::new(&request.request_header, StatusCode::BadServiceUnsupported)
@@ -394,6 +417,7 @@ impl SessionController {
                 }
             }
             RequestMessage::RegisterServer2(request) => {
+                let _h = span.enter();
                 if let Err(e) = self.transport.enqueue_message_for_send(
                     &mut self.channel,
                     ServiceFault::new(&request.request_header, StatusCode::BadServiceUnsupported)
@@ -408,6 +432,7 @@ impl SessionController {
             }
 
             message => {
+                let _h = span.enter();
                 let now = Instant::now();
                 let mgr = trace_read_lock!(self.session_manager);
                 let session = mgr.find_by_token(&message.request_header().authentication_token);
@@ -428,6 +453,9 @@ impl SessionController {
                             }
                         }
                     };
+
+                debug!("Received request on session {session_id}");
+
                 let deadline = {
                     let timeout = message.request_header().timeout_hint;
                     let max_timeout = self.info.config.max_timeout_ms;
@@ -459,17 +487,34 @@ impl SessionController {
                                 tokio::select! {
                                     biased;
                                     r = &mut handle => {
-                                        r.map_err(|e| e.to_string())
+                                        match r {
+                                            Ok(r) => {
+                                                debug!(
+                                                    status_code = %r.message.response_header().service_result,
+                                                    "Sending response of type {}", r.message.type_name()
+                                                );
+                                                Ok(r)
+                                            }
+                                            Err(e) => {
+                                                error!("Request panic! {e}");
+                                                Err(e.to_string())
+                                            }
+                                        }
                                     }
                                     _ = tokio::time::sleep_until(deadline.into()) => {
                                         handle.abort();
                                         Ok(Response { message: ServiceFault::new(request_handle, StatusCode::BadTimeout).into(), request_id: id })
                                     }
                                 }
-                            }));
+                            }.instrument(span.clone())));
                         RequestProcessResult::Ok
                     }
                     super::message_handler::HandleMessageResult::SyncMessage(s) => {
+                        debug!(
+                            status_code = %s.message.response_header().service_result,
+                            "Sending response of type {}", s.message.type_name()
+                        );
+
                         if let Err(e) = self.transport.enqueue_message_for_send(
                             &mut self.channel,
                             s.message,

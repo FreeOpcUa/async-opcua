@@ -42,6 +42,13 @@ macro_rules! request_enum {
                     $( Self::$name(value) => &value.request_header, )*
                 }
             }
+
+            /// Get the name of the request variant, for debugging and logging.
+            pub fn type_name(&self) -> &'static str {
+                match self {
+                    $( Self::$name(_) => stringify!($name), )*
+                }
+            }
         }
 
         impl Message for RequestMessage {

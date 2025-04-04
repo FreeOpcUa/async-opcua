@@ -81,7 +81,6 @@ impl SendBuffer {
             return Ok(());
         };
 
-        trace!("Sending chunk {:?}", next_chunk);
         let size = match next_chunk {
             PendingPayload::Chunk(c) => secure_channel.apply_security(&c, self.buffer.get_mut())?,
             PendingPayload::Ack(a) => {

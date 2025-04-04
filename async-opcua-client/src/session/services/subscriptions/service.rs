@@ -1743,7 +1743,7 @@ impl Session {
     /// # Returns
     ///
     /// * `Ok(Vec<MonitoredItemCreateResult>)` - A list of [`MonitoredItemCreateResult`] corresponding to the items to create.
-    ///    The size and order of the list matches the size and order of the `items_to_create` request parameter.
+    ///   The size and order of the list matches the size and order of the `items_to_create` request parameter.
     /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn create_monitored_items(
@@ -1774,7 +1774,7 @@ impl Session {
     /// # Returns
     ///
     /// * `Ok(Vec<MonitoredItemModifyResult>)` - A list of [`MonitoredItemModifyResult`] corresponding to the MonitoredItems to modify.
-    ///    The size and order of the list matches the size and order of the `items_to_modify` request parameter.
+    ///   The size and order of the list matches the size and order of the `items_to_modify` request parameter.
     /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn modify_monitored_items(

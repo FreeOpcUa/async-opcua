@@ -41,6 +41,7 @@ serde = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
+tracing-futures = { workspace = true }
 
 async-opcua-client = { path = "../async-opcua-client", optional = true, version = "0.14.0" }
 async-opcua-core = { path = "../async-opcua-core", version = "0.14.0" }

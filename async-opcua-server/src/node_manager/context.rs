@@ -10,6 +10,8 @@ use opcua_core::{sync::RwLock, trace_read_lock};
 use opcua_nodes::TypeTree;
 use opcua_types::{BrowseDescriptionResultMask, NodeId};
 use parking_lot::lock_api::{RawRwLock, RwLockReadGuard};
+use tracing::debug_span;
+use tracing_futures::Instrument;
 
 use super::{
     view::{ExternalReferenceRequest, NodeMetadata},
@@ -104,7 +106,9 @@ pub(crate) async fn resolve_external_references(
             .filter(|r| nm.owns_node(r.node_id()))
             .collect();
 
-        nm.resolve_external_references(context, &mut items).await;
+        nm.resolve_external_references(context, &mut items)
+            .instrument(debug_span!("resolve external references", node_manager = %nm.name()))
+            .await;
     }
 
     res.into_iter().map(|r| r.into_inner()).collect()

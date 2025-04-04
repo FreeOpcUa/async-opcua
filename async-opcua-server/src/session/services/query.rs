@@ -1,6 +1,7 @@
 use opcua_core::trace_write_lock;
 use opcua_nodes::ParsedContentFilter;
-use tracing::info;
+use tracing::{debug_span, info};
+use tracing_futures::Instrument;
 
 use crate::{
     node_manager::{NodeManagers, ParsedNodeTypeDescription, QueryRequest},
@@ -96,7 +97,11 @@ pub async fn query_first(
         // hard to quantify for query...
         // TODO: This is pretty much impossible to implement
         // until we actually implement this in the core node manager.
-        if let Err(e) = node_manager.query(&context, &mut query_request).await {
+        if let Err(e) = node_manager
+            .query(&context, &mut query_request)
+            .instrument(debug_span!("Query", node_manager = %node_manager.name()))
+            .await
+        {
             return Response {
                 message: QueryFirstResponse {
                     response_header: ResponseHeader::new_service_result(request.request_handle, e),
@@ -170,7 +175,11 @@ pub async fn query_next(
         }
         context.current_node_manager_index = index;
 
-        if let Err(e) = node_manager.query(&context, &mut query_request).await {
+        if let Err(e) = node_manager
+            .query(&context, &mut query_request)
+            .instrument(debug_span!("QueryNext", node_manager = %node_manager.name()))
+            .await
+        {
             return service_fault!(request, e);
         }
 

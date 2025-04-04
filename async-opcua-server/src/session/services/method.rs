@@ -3,6 +3,8 @@ use crate::{
     session::{controller::Response, message_handler::Request},
 };
 use opcua_types::{CallRequest, CallResponse, ResponseHeader, StatusCode};
+use tracing::debug_span;
+use tracing_futures::Instrument;
 
 pub async fn call(node_managers: NodeManagers, request: Request<CallRequest>) -> Response {
     let mut context = request.context();
@@ -30,7 +32,11 @@ pub async fn call(node_managers: NodeManagers, request: Request<CallRequest>) ->
             continue;
         }
 
-        if let Err(e) = node_manager.call(&context, &mut owned).await {
+        if let Err(e) = node_manager
+            .call(&context, &mut owned)
+            .instrument(debug_span!("Call", node_manager = %node_manager.name()))
+            .await
+        {
             for call in owned {
                 call.set_status(e);
             }

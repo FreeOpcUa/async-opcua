@@ -1,4 +1,5 @@
 use opcua_core::trace_write_lock;
+use tracing::{debug_span, Instrument};
 
 use crate::{
     node_manager::{
@@ -52,6 +53,7 @@ pub async fn read(node_managers: NodeManagers, request: Request<ReadRequest>) ->
                 request.request.timestamps_to_return,
                 &mut batch,
             )
+            .instrument(debug_span!("Read", node_manager = %node_manager.name()))
             .await
         {
             for node in &mut batch {
@@ -101,7 +103,11 @@ pub async fn write(node_managers: NodeManagers, request: Request<WriteRequest>) 
             continue;
         }
 
-        if let Err(e) = node_manager.write(&context, &mut batch).await {
+        if let Err(e) = node_manager
+            .write(&context, &mut batch)
+            .instrument(debug_span!("Write", node_manager = %node_manager.name()))
+            .await
+        {
             for node in &mut batch {
                 node.set_status(e);
             }
@@ -234,6 +240,9 @@ pub async fn history_read(
                         &mut batch,
                         request.request.timestamps_to_return,
                     )
+                    .instrument(
+                        debug_span!("HistoryReadRawModified", node_manager = %manager.name()),
+                    )
                     .await
             }
             HistoryReadDetails::AtTime(d) => {
@@ -244,6 +253,7 @@ pub async fn history_read(
                         &mut batch,
                         request.request.timestamps_to_return,
                     )
+                    .instrument(debug_span!("HistoryReadAtTime", node_manager = %manager.name()))
                     .await
             }
             HistoryReadDetails::Processed(d) => {
@@ -254,6 +264,7 @@ pub async fn history_read(
                         &mut batch,
                         request.request.timestamps_to_return,
                     )
+                    .instrument(debug_span!("HistoryReadProcessed", node_manager = %manager.name()))
                     .await
             }
             HistoryReadDetails::Events(d) => {
@@ -264,6 +275,7 @@ pub async fn history_read(
                         &mut batch,
                         request.request.timestamps_to_return,
                     )
+                    .instrument(debug_span!("HistoryReadEvents", node_manager = %manager.name()))
                     .await
             }
             HistoryReadDetails::Annotations(d) => {
@@ -273,6 +285,9 @@ pub async fn history_read(
                         d,
                         &mut batch,
                         request.request.timestamps_to_return,
+                    )
+                    .instrument(
+                        debug_span!("HistoryReadAnnotations", node_manager = %manager.name()),
                     )
                     .await
             }
@@ -358,7 +373,11 @@ pub async fn history_update(
             continue;
         }
 
-        if let Err(e) = manager.history_update(&context, &mut batch).await {
+        if let Err(e) = manager
+            .history_update(&context, &mut batch)
+            .instrument(debug_span!("HistoryUpdate", node_manager = %manager.name()))
+            .await
+        {
             for node in batch {
                 node.set_status(e);
             }

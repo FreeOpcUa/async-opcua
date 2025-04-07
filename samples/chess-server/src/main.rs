@@ -7,9 +7,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use opcua::server::address_space::VariableBuilder;
-use opcua::server::node_manager::memory::{
-    simple_node_manager, NamespaceMetadata, SimpleNodeManager,
-};
+use opcua::server::diagnostics::NamespaceMetadata;
+use opcua::server::node_manager::memory::{simple_node_manager, SimpleNodeManager};
 use opcua::server::{ServerBuilder, SubscriptionCache};
 use opcua::sync::Mutex;
 use opcua::types::*;

@@ -650,7 +650,6 @@ impl NodeManager for DiagnosticsNodeManager {
                 }
             } else if node.node_id().namespace == self.namespace_index {
                 let Some(node_desc) = from_opaque_node_id::<DiagnosticsNode>(node.node_id()) else {
-                    tracing::warn!("Unknown node...");
                     node.set_status(StatusCode::BadNodeIdUnknown);
                     continue;
                 };

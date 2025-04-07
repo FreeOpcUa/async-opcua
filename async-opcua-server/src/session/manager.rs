@@ -154,6 +154,12 @@ impl SessionManager {
         self.sessions
             .insert(session_id.clone(), Arc::new(RwLock::new(session)));
 
+        // Increment metrics.
+        self.info
+            .diagnostics
+            .set_current_session_count(self.sessions.len() as u32);
+        self.info.diagnostics.inc_session_count();
+
         self.notify.notify_waiters();
 
         Ok(CreateSessionResponse {
@@ -204,6 +210,10 @@ impl SessionManager {
         let Some(session) = self.sessions.remove(id) else {
             return;
         };
+        self.info
+            .diagnostics
+            .set_current_session_count(self.sessions.len() as u32);
+        self.info.diagnostics.inc_session_timeout_count();
 
         info!("Session {id} has expired, removing it from the session map. Subscriptions will remain until they individually expire");
 
@@ -261,6 +271,9 @@ pub(crate) async fn close_session(
             let mut session_lck = trace_write_lock!(session);
             session_lck.close();
         }
+        mgr.info
+            .diagnostics
+            .set_current_session_count(mgr.sessions.len() as u32);
         (session, id, token)
     };
 

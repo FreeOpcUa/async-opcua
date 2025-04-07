@@ -25,6 +25,7 @@ use opcua_core::{config::Config, handle::AtomicHandle};
 use opcua_crypto::CertificateStore;
 
 use crate::{
+    diagnostics::ServerDiagnostics,
     node_manager::{DefaultTypeTreeGetter, ServerContext},
     session::controller::{ControllerCommand, SessionStarter},
     transport::tcp::{TcpConnector, TransportConfig},
@@ -162,6 +163,10 @@ impl Server {
                 .type_tree_getter
                 .unwrap_or_else(|| Arc::new(DefaultTypeTreeGetter)),
             type_loaders: RwLock::new(builder.type_loaders),
+            diagnostics: ServerDiagnostics {
+                enabled: config.diagnostics,
+                ..Default::default()
+            },
         };
 
         let certificate_store = Arc::new(RwLock::new(certificate_store));

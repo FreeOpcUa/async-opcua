@@ -129,6 +129,10 @@ impl SubscriptionCache {
             for id in to_delete {
                 lck.session_subscriptions.remove(&id);
             }
+            context
+                .info
+                .diagnostics
+                .set_current_subscription_count(lck.subscription_to_session.len() as u32);
         }
         if !items_to_delete.is_empty() {
             Self::delete_expired_monitored_items(context, items_to_delete).await;
@@ -214,6 +218,9 @@ impl SubscriptionCache {
         let res = cache_lck.create_subscription(request, info)?;
         lck.subscription_to_session
             .insert(res.subscription_id, session_id);
+        info.diagnostics
+            .set_current_subscription_count(lck.subscription_to_session.len() as u32);
+        info.diagnostics.inc_subscription_count();
         Ok(res)
     }
 
@@ -605,6 +612,7 @@ impl SubscriptionCache {
         &self,
         session_id: u32,
         ids: &[u32],
+        info: &ServerInfo,
     ) -> Result<Vec<(StatusCode, Vec<MonitoredItemRef>)>, StatusCode> {
         let mut lck = trace_write_lock!(self.inner);
         let Some(cache) = lck.session_subscriptions.get(&session_id).cloned() else {
@@ -616,12 +624,15 @@ impl SubscriptionCache {
                 lck.subscription_to_session.remove(id);
             }
         }
+        info.diagnostics
+            .set_current_subscription_count(lck.subscription_to_session.len() as u32);
         let result = cache_lck.delete_subscriptions(ids);
 
         for (status, item_res) in &result {
             if !status.is_good() {
                 continue;
             }
+
             for rf in item_res {
                 if rf.attribute() == AttributeId::EventNotifier {
                     let key = MonitoredItemKeyRef {

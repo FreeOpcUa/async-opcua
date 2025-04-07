@@ -549,4 +549,11 @@ impl ServerBuilder {
         self.type_loaders.add(loader);
         self
     }
+
+    /// Set whether to enable diagnostics on the server or not.
+    /// Only users with the right permissions can read the diagnostics
+    pub fn diagnostics_enabled(mut self, enabled: bool) -> Self {
+        self.config.diagnostics = enabled;
+        self
+    }
 }

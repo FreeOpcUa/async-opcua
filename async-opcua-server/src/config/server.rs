@@ -49,6 +49,9 @@ pub struct ServerUserToken {
     /// X509 thumbprint.
     #[serde(skip)]
     pub thumbprint: Option<Thumbprint>,
+    #[serde(default)]
+    /// Access to read diagnostics on the server.
+    pub read_diagnostics: bool,
 }
 
 impl ServerUserToken {
@@ -62,6 +65,7 @@ impl ServerUserToken {
             pass: Some(pass.into()),
             x509: None,
             thumbprint: None,
+            read_diagnostics: false,
         }
     }
 
@@ -75,6 +79,7 @@ impl ServerUserToken {
             pass: None,
             x509: Some(cert_path.to_string_lossy().to_string()),
             thumbprint: None,
+            read_diagnostics: false,
         }
     }
 
@@ -131,6 +136,12 @@ impl ServerUserToken {
     /// Return `true` if this token is for X509-based auth.
     pub fn is_x509(&self) -> bool {
         self.x509.is_some()
+    }
+
+    /// Set the ability for the user to read diagnostics on the server.
+    pub fn read_diagnostics(mut self, read: bool) -> Self {
+        self.read_diagnostics = read;
+        self
     }
 }
 
@@ -223,6 +234,9 @@ pub struct ServerConfig {
     /// we will instantly time out.
     #[serde(default = "defaults::max_session_timeout_ms")]
     pub max_session_timeout_ms: u64,
+    /// Enable server diagnostics.
+    #[serde(default)]
+    pub diagnostics: bool,
 }
 
 mod defaults {
@@ -375,6 +389,7 @@ impl Default for ServerConfig {
             max_timeout_ms: defaults::max_timeout_ms(),
             max_secure_channel_token_lifetime_ms: defaults::max_secure_channel_token_lifetime_ms(),
             max_session_timeout_ms: defaults::max_session_timeout_ms(),
+            diagnostics: false,
         }
     }
 }

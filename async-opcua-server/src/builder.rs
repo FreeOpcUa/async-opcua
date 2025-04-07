@@ -45,7 +45,7 @@ impl Default for ServerBuilder {
                         super::node_manager::memory::CoreNodeManagerBuilder,
                     ),
                 )
-                .with_node_manager(super::node_manager::memory::DiagnosticsNodeManagerBuilder)
+                .with_node_manager(super::diagnostics::DiagnosticsNodeManagerBuilder)
         }
         #[cfg(not(feature = "generated-address-space"))]
         builder

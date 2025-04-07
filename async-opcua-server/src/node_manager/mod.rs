@@ -10,7 +10,6 @@ use std::{
 };
 
 use async_trait::async_trait;
-use memory::NamespaceMetadata;
 use opcua_core::sync::RwLock;
 use opcua_nodes::DefaultTypeTree;
 use opcua_types::{
@@ -31,9 +30,7 @@ mod query;
 mod utils;
 mod view;
 
-use crate::ServerStatusWrapper;
-
-use self::view::ExternalReferenceRequest;
+use crate::{diagnostics::NamespaceMetadata, ServerStatusWrapper};
 
 use super::{
     authenticator::AuthManager, info::ServerInfo, subscriptions::CreateMonitoredItem,
@@ -50,7 +47,10 @@ pub use {
     node_management::{AddNodeItem, AddReferenceItem, DeleteNodeItem, DeleteReferenceItem},
     query::{ParsedNodeTypeDescription, ParsedQueryDataDescription, QueryRequest},
     utils::*,
-    view::{AddReferenceResult, BrowseNode, BrowsePathItem, ExternalReference, RegisterNodeItem},
+    view::{
+        impl_translate_browse_paths_using_browse, AddReferenceResult, BrowseNode, BrowsePathItem,
+        ExternalReference, ExternalReferenceRequest, NodeMetadata, RegisterNodeItem,
+    },
 };
 
 pub(crate) use context::resolve_external_references;

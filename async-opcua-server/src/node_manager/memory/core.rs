@@ -7,6 +7,7 @@ use opcua_nodes::NodeType;
 
 use crate::{
     address_space::{read_node_value, AddressSpace, CoreNamespace},
+    diagnostics::NamespaceMetadata,
     load_method_args,
     node_manager::{
         MethodCall, MonitoredItemRef, MonitoredItemUpdateRef, NodeManagersRef, ParsedReadValueId,
@@ -22,9 +23,7 @@ use opcua_types::{
     VariableId, Variant, VariantScalarTypeId, VariantTypeId,
 };
 
-use super::{
-    InMemoryNodeManager, InMemoryNodeManagerImpl, InMemoryNodeManagerImplBuilder, NamespaceMetadata,
-};
+use super::{InMemoryNodeManager, InMemoryNodeManagerImpl, InMemoryNodeManagerImplBuilder};
 
 /// Node manager impl for the core namespace.
 pub struct CoreNodeManagerImpl {

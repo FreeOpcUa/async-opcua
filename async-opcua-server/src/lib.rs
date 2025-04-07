@@ -14,6 +14,7 @@ pub mod address_space;
 pub mod authenticator;
 mod builder;
 mod config;
+pub mod diagnostics;
 #[cfg(feature = "discovery-server-registration")]
 mod discovery;
 mod identity_token;

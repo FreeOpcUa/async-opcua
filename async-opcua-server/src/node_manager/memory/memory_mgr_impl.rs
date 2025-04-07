@@ -2,6 +2,7 @@ use async_trait::async_trait;
 
 use crate::{
     address_space::AddressSpace,
+    diagnostics::NamespaceMetadata,
     node_manager::{
         AddNodeItem, AddReferenceItem, DeleteNodeItem, DeleteReferenceItem, HistoryNode,
         HistoryUpdateNode, MethodCall, MonitoredItemRef, MonitoredItemUpdateRef, ParsedReadValueId,
@@ -15,8 +16,6 @@ use opcua_types::{
     ReadAtTimeDetails, ReadEventDetails, ReadProcessedDetails, ReadRawModifiedDetails, StatusCode,
     TimestampsToReturn,
 };
-
-use super::NamespaceMetadata;
 
 /// Trait for constructing an [InMemoryNodeManagerImpl].
 ///

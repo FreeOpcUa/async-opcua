@@ -6,20 +6,16 @@ use std::{
 
 use async_trait::async_trait;
 use opcua_core::trace_read_lock;
+use opcua_nodes::DefaultTypeTree;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     address_space::AccessLevel,
     node_manager::{
-        as_opaque_node_id,
-        build::NodeManagerBuilder,
-        from_opaque_node_id,
-        view::{
-            impl_translate_browse_paths_using_browse, AddReferenceResult, ExternalReferenceRequest,
-            NodeMetadata,
-        },
-        BrowseNode, BrowsePathItem, DefaultTypeTree, DynNodeManager, NodeManager, NodeManagersRef,
-        ReadNode, RequestContext, ServerContext, SyncSampler,
+        as_opaque_node_id, from_opaque_node_id, impl_translate_browse_paths_using_browse,
+        AddReferenceResult, BrowseNode, BrowsePathItem, DynNodeManager, ExternalReferenceRequest,
+        NodeManager, NodeManagerBuilder, NodeManagersRef, NodeMetadata, ReadNode, RequestContext,
+        ServerContext, SyncSampler,
     },
 };
 use opcua_types::{

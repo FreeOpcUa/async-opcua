@@ -1,6 +1,9 @@
 # Introduction
 
+[![crates.io](https://img.shields.io/crates/v/async-opcua.svg)](https://crates.io/crates/async-opcua)
 [![Build Status](https://github.com/freeopcua/async-opcua/workflows/OPC%20UA%20for%20Rust/badge.svg)](https://github.com/freeopcua/async-opcua/actions/workflows/main.yml)
+[![Documentation](https://docs.rs/async-opcua/badge.svg)](https://docs.rs/async-opcua)
+
 
 This is an [OPC UA](https://opcfoundation.org/about/opc-technologies/opc-ua/) server / client API implementation for Rust.
 

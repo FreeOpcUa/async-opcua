@@ -219,6 +219,8 @@ impl SessionController {
                         // Cannot happen, pending_messages is non-empty or this future never returns.
                         None => unreachable!(),
                     };
+                    self.response_metrics(&msg);
+
                     if let Err(e) = self.transport.enqueue_message_for_send(
                         &mut self.channel,
                         msg.message,
@@ -255,6 +257,23 @@ impl SessionController {
         }
     }
 
+    fn response_metrics(&self, msg: &Response) {
+        if self.info.diagnostics.enabled {
+            let status = msg.message.response_header().service_result;
+            if status.is_bad() {
+                self.info.diagnostics.inc_rejected_requests();
+                if matches!(
+                    status,
+                    StatusCode::BadSessionIdInvalid
+                        | StatusCode::BadSecurityChecksFailed
+                        | StatusCode::BadUserAccessDenied
+                ) {
+                    self.info.diagnostics.inc_security_rejected_requests();
+                }
+            }
+        }
+    }
+
     fn fatal_error(&mut self, err: StatusCode, msg: &str) {
         if !self.transport.is_closing() {
             self.transport.enqueue_error(ErrorMessage::new(err, msg));
@@ -281,6 +300,9 @@ impl SessionController {
                 );
                 if res.is_ok() {
                     self.deadline = self.channel.token_renewal_deadline();
+                } else {
+                    self.info.diagnostics.inc_rejected_requests();
+                    self.info.diagnostics.inc_security_rejected_requests();
                 }
                 match res {
                     Ok(r) => match self
@@ -441,6 +463,8 @@ impl SessionController {
                     match Self::validate_request(&message, session, &self.channel) {
                         Ok(s) => s,
                         Err(e) => {
+                            self.info.diagnostics.inc_rejected_requests();
+                            self.info.diagnostics.inc_security_rejected_requests();
                             match self
                                 .transport
                                 .enqueue_message_for_send(&mut self.channel, e, id)
@@ -514,6 +538,7 @@ impl SessionController {
                             status_code = %s.message.response_header().service_result,
                             "Sending response of type {}", s.message.type_name()
                         );
+                        self.response_metrics(&s);
 
                         if let Err(e) = self.transport.enqueue_message_for_send(
                             &mut self.channel,
@@ -542,7 +567,19 @@ impl SessionController {
     ) -> RequestProcessResult {
         let message = match res {
             Ok(m) => m.into(),
-            Err(e) => ServiceFault::new(request_handle, e).into(),
+            Err(e) => {
+                self.info.diagnostics.inc_rejected_requests();
+                if matches!(
+                    e,
+                    StatusCode::BadSessionIdInvalid
+                        | StatusCode::BadSecurityChecksFailed
+                        | StatusCode::BadUserAccessDenied
+                ) {
+                    self.info.diagnostics.inc_security_rejected_requests();
+                }
+
+                ServiceFault::new(request_handle, e).into()
+            }
         };
         if let Err(e) =
             self.transport

@@ -321,7 +321,7 @@ impl<'a> Iterator for ReferenceIterator<'a, '_> {
             upper = upper_i;
         }
 
-        if let Some(iter_t) = &self.iter_s {
+        if let Some(iter_t) = &self.iter_t {
             let (lower_i, upper_i) = iter_t.size_hint();
             lower += lower_i;
             upper = match (upper, upper_i) {

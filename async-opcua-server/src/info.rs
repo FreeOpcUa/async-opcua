@@ -12,6 +12,7 @@ use opcua_nodes::DefaultTypeTree;
 use tracing::{debug, error, warn};
 
 use crate::authenticator::{user_pass_security_policy_id, Password};
+use crate::diagnostics::{ServerDiagnostics, ServerDiagnosticsSummary};
 use crate::node_manager::TypeTreeForUser;
 use opcua_core::comms::url::{hostname_from_url, url_matches_except_host};
 use opcua_core::handle::AtomicHandle;
@@ -85,6 +86,8 @@ pub struct ServerInfo {
     pub port: AtomicU16,
     /// List of active type loaders
     pub type_loaders: RwLock<TypeLoaderCollection>,
+    /// Current server diagnostics.
+    pub diagnostics: ServerDiagnostics,
 }
 
 impl ServerInfo {
@@ -548,6 +551,11 @@ impl ServerInfo {
     /// work, but there will be a small performance overhead.
     pub fn add_type_loader(&self, type_loader: Arc<dyn TypeLoader>) {
         self.type_loaders.write().add(type_loader);
+    }
+
+    /// Convenience method to get the diagnostics summary.
+    pub fn summary(&self) -> &ServerDiagnosticsSummary {
+        &self.diagnostics.summary
     }
 
     /* pub(crate) fn raise_and_log<T>(&self, event: T) -> Result<NodeId, ()>

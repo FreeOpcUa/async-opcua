@@ -66,6 +66,13 @@ impl UserToken {
     }
 }
 
+/// Permissions for the core and diagnostics node managers.
+#[derive(Default, Debug, Clone)]
+pub struct CoreServerPermissions {
+    /// Whether the user can read the server diagnostics.
+    pub read_diagnostics: bool,
+}
+
 #[allow(unused)]
 #[async_trait]
 /// The AuthManager trait is used to let servers control access to the server.
@@ -158,6 +165,11 @@ pub trait AuthManager: Send + Sync + 'static {
         self.user_token_policies(endpoint)
             .iter()
             .any(|e| e.token_type == UserTokenType::Certificate)
+    }
+
+    /// Return the permissions for the core server for the given user.
+    fn core_permissions(&self, token: &UserToken) -> CoreServerPermissions {
+        CoreServerPermissions::default()
     }
 }
 
@@ -302,6 +314,15 @@ impl AuthManager for DefaultAuthenticator {
         }
 
         user_identity_tokens
+    }
+
+    fn core_permissions(&self, token: &UserToken) -> CoreServerPermissions {
+        self.users
+            .get(token.0.as_str())
+            .map(|r| CoreServerPermissions {
+                read_diagnostics: r.read_diagnostics,
+            })
+            .unwrap_or_default()
     }
 }
 

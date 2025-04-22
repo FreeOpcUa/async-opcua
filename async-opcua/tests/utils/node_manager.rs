@@ -11,10 +11,7 @@ use opcua::{
         },
         node_manager::{
             get_node_metadata,
-            memory::{
-                InMemoryNodeManager, InMemoryNodeManagerBuilder, InMemoryNodeManagerImpl,
-                NamespaceMetadata,
-            },
+            memory::{InMemoryNodeManager, InMemoryNodeManagerBuilder, InMemoryNodeManagerImpl},
             AddNodeItem, AddReferenceItem, DeleteNodeItem, DeleteReferenceItem, HistoryNode,
             HistoryUpdateNode, MethodCall, MonitoredItemRef, MonitoredItemUpdateRef,
             NodeManagerBuilder, NodeManagersRef, ParsedReadValueId, RequestContext, ServerContext,
@@ -31,7 +28,7 @@ use opcua::{
 };
 use opcua_core::{trace_read_lock, trace_write_lock};
 use opcua_nodes::{DefaultTypeTree, TypeTree, TypeTreeNode};
-use opcua_server::address_space::add_namespaces;
+use opcua_server::{address_space::add_namespaces, diagnostics::NamespaceMetadata};
 use opcua_types::DataEncoding;
 
 #[allow(unused)]

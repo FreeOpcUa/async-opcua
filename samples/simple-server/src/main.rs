@@ -11,9 +11,9 @@ use std::time::{Duration, Instant};
 
 use log::warn;
 use opcua::server::address_space::Variable;
+use opcua::server::diagnostics::NamespaceMetadata;
 use opcua::server::node_manager::memory::{
-    simple_node_manager, InMemoryNodeManager, NamespaceMetadata, SimpleNodeManager,
-    SimpleNodeManagerImpl,
+    simple_node_manager, InMemoryNodeManager, SimpleNodeManager, SimpleNodeManagerImpl,
 };
 use opcua::server::{ServerBuilder, SubscriptionCache};
 use opcua::types::{BuildInfo, DataValue, DateTime, NodeId, UAString};
@@ -48,6 +48,7 @@ async fn main() {
             "simple",
         ))
         .trust_client_certs(true)
+        .diagnostics_enabled(true)
         .build()
         .unwrap();
     let node_manager = handle

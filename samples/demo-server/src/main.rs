@@ -21,7 +21,8 @@ extern crate log;
 use std::{path::PathBuf, sync::Arc};
 
 use opcua::server::{
-    node_manager::memory::{simple_node_manager, NamespaceMetadata, SimpleNodeManager},
+    diagnostics::NamespaceMetadata,
+    node_manager::memory::{simple_node_manager, SimpleNodeManager},
     ServerBuilder,
 };
 

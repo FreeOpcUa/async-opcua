@@ -97,7 +97,8 @@ pub fn default_server() -> ServerBuilder {
             ServerUserToken::user_pass(
                 CLIENT_USERPASS_ID,
                 &format!("{CLIENT_USERPASS_ID}_password"),
-            ),
+            )
+            .read_diagnostics(true),
         )
         .add_user_token(
             CLIENT_X509_ID,

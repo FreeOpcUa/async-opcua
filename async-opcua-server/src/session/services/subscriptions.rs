@@ -50,7 +50,8 @@ pub async fn delete_subscriptions_inner(
     subscriptions: &SubscriptionCache,
     context: &mut RequestContext,
 ) -> Result<Vec<StatusCode>, StatusCode> {
-    let results = subscriptions.delete_subscriptions(context.session_id, &to_delete)?;
+    let results =
+        subscriptions.delete_subscriptions(context.session_id, &to_delete, &context.info)?;
 
     for (idx, mgr) in node_managers.iter().enumerate() {
         context.current_node_manager_index = idx;

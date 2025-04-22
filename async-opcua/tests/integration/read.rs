@@ -1,5 +1,7 @@
 use std::{sync::atomic::Ordering, time::Duration};
 
+use crate::utils::{client_user_token, default_server, Tester};
+
 use super::utils::{array_value, read_value_id, read_value_ids, setup};
 use chrono::TimeDelta;
 use opcua::{
@@ -1137,4 +1139,60 @@ async fn read_retry() {
         r.results.unwrap_or_default().first().unwrap().value,
         Some(Variant::Int32(1))
     );
+}
+
+#[tokio::test]
+async fn test_diagnostics() {
+    let server = default_server().diagnostics_enabled(true);
+    let mut tester = Tester::new(server, false).await;
+    let (session, lp) = tester
+        .connect(
+            opcua_crypto::SecurityPolicy::Aes128Sha256RsaOaep,
+            opcua_types::MessageSecurityMode::SignAndEncrypt,
+            client_user_token(),
+        )
+        .await
+        .unwrap();
+    lp.spawn();
+    tokio::time::timeout(Duration::from_secs(2), session.wait_for_connection())
+        .await
+        .unwrap();
+
+    // Make a request that should fail
+    session
+        .read(
+            &[read_value_id(AttributeId::DisplayName, ObjectId::Server)],
+            TimestampsToReturn::Both,
+            -15.0,
+        )
+        .await
+        .unwrap_err();
+
+    // Fetch a few diagnostics
+    let diagnostics = session
+        .read(
+            &[ReadValueId::new_value(
+                VariableId::Server_ServerDiagnostics_ServerDiagnosticsSummary_CumulatedSessionCount
+                    .into(),
+            ), ReadValueId::new_value(
+                VariableId::Server_ServerDiagnostics_ServerDiagnosticsSummary_CurrentSessionCount
+                    .into(),
+            ), ReadValueId::new_value(
+                VariableId::Server_ServerDiagnostics_ServerDiagnosticsSummary_RejectedRequestsCount
+                    .into(),
+            ), ReadValueId::new_value(
+                VariableId::Server_ServerDiagnostics_ServerDiagnosticsSummary_SecurityRejectedRequestsCount
+                    .into(),
+            )],
+            TimestampsToReturn::Both,
+            0.0,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(4, diagnostics.len());
+    assert_eq!(diagnostics[0].value, Some(Variant::UInt32(1)));
+    assert_eq!(diagnostics[1].value, Some(Variant::UInt32(1)));
+    assert_eq!(diagnostics[2].value, Some(Variant::UInt32(1)));
+    assert_eq!(diagnostics[3].value, Some(Variant::UInt32(0)));
 }

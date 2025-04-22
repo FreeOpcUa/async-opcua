@@ -7,6 +7,7 @@ use opcua_nodes::NodeType;
 
 use crate::{
     address_space::{read_node_value, AddressSpace, CoreNamespace},
+    diagnostics::NamespaceMetadata,
     load_method_args,
     node_manager::{
         MethodCall, MonitoredItemRef, MonitoredItemUpdateRef, NodeManagersRef, ParsedReadValueId,
@@ -17,14 +18,12 @@ use crate::{
 };
 use opcua_core::{sync::RwLock, trace_lock};
 use opcua_types::{
-    DataValue, DateTime, ExtensionObject, IdType, Identifier, MethodId, MonitoringMode,
+    DataValue, DateTime, ExtensionObject, IdType, Identifier, MethodId, MonitoringMode, NodeId,
     NumericRange, ObjectId, ReferenceTypeId, StatusCode, TimeZoneDataType, TimestampsToReturn,
     VariableId, Variant, VariantScalarTypeId, VariantTypeId,
 };
 
-use super::{
-    InMemoryNodeManager, InMemoryNodeManagerImpl, InMemoryNodeManagerImplBuilder, NamespaceMetadata,
-};
+use super::{InMemoryNodeManager, InMemoryNodeManagerImpl, InMemoryNodeManagerImplBuilder};
 
 /// Node manager impl for the core namespace.
 pub struct CoreNodeManagerImpl {
@@ -148,6 +147,10 @@ impl InMemoryNodeManagerImpl for CoreNodeManagerImpl {
                 0.0,
                 node.timestamps_to_return(),
             );
+            if value.status() == StatusCode::BadUserAccessDenied {
+                node.set_status(StatusCode::BadUserAccessDenied);
+                continue;
+            }
             if value.status() != StatusCode::BadAttributeIdInvalid {
                 node.set_initial_value(value);
             }
@@ -160,6 +163,10 @@ impl InMemoryNodeManagerImpl for CoreNodeManagerImpl {
                     node.handle(),
                     Duration::from_millis(node.sampling_interval() as u64),
                 );
+            } else if self.is_internal_sampled(&node.item_to_monitor().node_id, context) {
+                if let Err(e) = self.add_internal_sampler(node, context) {
+                    node.set_status(e);
+                }
             }
         }
     }
@@ -251,20 +258,55 @@ impl CoreNodeManagerImpl {
         }
     }
 
+    fn get_variable_id(&self, node: &NodeId) -> Option<VariableId> {
+        if node.namespace != 0 {
+            return None;
+        }
+        let Identifier::Numeric(identifier) = node.identifier else {
+            return None;
+        };
+        VariableId::try_from(identifier).ok()
+    }
+
+    fn is_internal_sampled(&self, node: &NodeId, context: &RequestContext) -> bool {
+        let Some(variable_id) = self.get_variable_id(node) else {
+            return false;
+        };
+
+        context.info.diagnostics.is_mapped(variable_id)
+    }
+
+    fn add_internal_sampler(
+        &self,
+        monitored_item: &mut CreateMonitoredItem,
+        context: &RequestContext,
+    ) -> Result<(), StatusCode> {
+        let Some(var_id) = self.get_variable_id(&monitored_item.item_to_monitor().node_id) else {
+            return Err(StatusCode::BadNodeIdUnknown);
+        };
+
+        if context.info.diagnostics.is_mapped(var_id) {
+            let info = context.info.clone();
+            self.sampler.add_sampler(
+                monitored_item.item_to_monitor().node_id.clone(),
+                monitored_item.item_to_monitor().attribute_id,
+                move || info.diagnostics.get(var_id),
+                monitored_item.monitoring_mode(),
+                monitored_item.handle(),
+                Duration::from_millis(monitored_item.sampling_interval() as u64),
+            );
+            Ok(())
+        } else {
+            Err(StatusCode::BadNodeIdUnknown)
+        }
+    }
+
     fn read_server_value(
         &self,
         context: &RequestContext,
         node: &ParsedReadValueId,
     ) -> Option<DataValue> {
-        if node.node_id.namespace != 0 {
-            return None;
-        }
-        let Identifier::Numeric(identifier) = node.node_id.identifier else {
-            return None;
-        };
-        let Ok(var_id) = VariableId::try_from(identifier) else {
-            return None;
-        };
+        let var_id = self.get_variable_id(&node.node_id)?;
 
         let limits = &context.info.config.limits;
         let hist_cap = &context.info.capabilities.history;
@@ -450,7 +492,17 @@ impl CoreNodeManagerImpl {
                 namespaces.into()
             }
 
+            r if context.info.diagnostics.is_mapped(r) => {
+                let perms = context.info.authenticator.core_permissions(&context.token);
+                if !perms.read_diagnostics {
+                    return Some(DataValue::new_now_status(Variant::Empty, StatusCode::BadUserAccessDenied));
+                } else {
+                    return Some(context.info.diagnostics.get(r).unwrap_or_default())
+                }
+            }
+
             _ => return None,
+
         };
 
         let v = if !matches!(node.index_range, NumericRange::None) {

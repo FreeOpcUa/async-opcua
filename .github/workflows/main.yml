@@ -24,9 +24,9 @@ jobs:
         with:
           toolchain: ${{ matrix.toolchain }}
       - name: Build
-        run: cargo check
+        run: cargo check --locked
       - name: Run tests
-        run: cargo test --verbose
+        run: cargo test --verbose --locked
 
   test-external-server:
     runs-on: ubuntu-latest
@@ -39,7 +39,7 @@ jobs:
       - name: Build .NET
         run: dotnet build
       - name: Run tests against external server
-        run: cargo run --bin external-tests
+        run: cargo run --bin external-tests --locked
 
   code-coverage:
     uses: ./.github/workflows/ci_code_coverage.yml

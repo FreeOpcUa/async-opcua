@@ -11,7 +11,7 @@ jobs:
 
       # Crypto tests are excluded because the way rust does coverage makes them take 100x longer.
       - name: Test with profiling data
-        run: cargo llvm-cov --workspace --exclude async-opcua-crypto --codecov --output-path codecov.json
+        run: cargo llvm-cov --workspace --exclude async-opcua-crypto --codecov --output-path codecov.json --locked
 
       - name: Upload lcov to codecov.io
         uses: codecov/codecov-action@v4

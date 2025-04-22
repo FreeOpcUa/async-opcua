@@ -8,7 +8,7 @@ jobs:
       - name: Checkout (GitHub)
         uses: actions/checkout@v4
       - name: Run code gen
-        run: cargo run --bin async-opcua-codegen code_gen_config.yml
+        run: cargo run --bin async-opcua-codegen code_gen_config.yml --locked
       - name: Format generated code
         run: cargo fmt --all
       - name: Verify generated code matches committed code

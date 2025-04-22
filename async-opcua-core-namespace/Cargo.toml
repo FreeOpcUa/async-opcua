@@ -1,6 +1,6 @@
 [package]
 name = "async-opcua-core-namespace"
-version = "0.14.0"
+version = "0.15.0"
 description = "OPC UA generated code for the core namespace"
 authors = ["Adam Lock <locka99@gmail.com>", "Einar Omang <einar@omang.com>"]
 homepage = "https://github.com/freeopcua/async-opcua"
@@ -16,5 +16,5 @@ edition = "2021"
 name = "opcua_core_namespace"
 
 [dependencies]
-async-opcua-types = { path = "../async-opcua-types", version = "0.14.0" }
-async-opcua-nodes = { path = "../async-opcua-nodes", version = "0.14.0" }
+async-opcua-types = { path = "../async-opcua-types", version = "0.15.0" }
+async-opcua-nodes = { path = "../async-opcua-nodes", version = "0.15.0" }

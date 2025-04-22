@@ -1,5 +1,51 @@
 # Changelog
 
+## [0.15.0] - 2025-04-22
+
+Further changes and polish of the library. This release adds more comprehensive support for XML and JSON encoding, fixes a few bugs, and improves the ergonomics of defining custom types on servers.
+
+### Common
+
+#### Added
+ - Support for `StructureWithOptionalFields`
+ - A common `OpcUaError` type used in a few places when parsing and building common types.
+ - Support for `Unions` in encoding macros, when `Encodable/Decodable` are derived on rust enums.
+ - Replace `FromXml` with `XmlEncodable` and `XmlDecodable`, adding full support for OPC-UA XML.
+ - Support for XML in JSON and binary extension object payloads.
+ - The `#[ua_encodable]` attribute macro, to automatically derive all the encodable traits with appropriate features.
+
+#### Fixed
+ - Fix issues related to unions in custom structs.
+ - Properly clear padding in legacy encrypted token secrets.
+
+#### Removed
+ - The `console_logging` feature has been removed. You need to use a library like [env_logger](https://docs.rs/env_logger/latest/env_logger/) to enable logging instead.
+
+### Server
+
+#### Added
+ - Implement a few more server diagnostics.
+
+#### Fixed
+ - Fix the data type of server capabilities, should be `u16`, not `u32`.
+ - Make `NodeId::next_numneric` start at 1, not 0.
+
+#### Changed
+ - The simple node manager will now write values to memory if nodes are set to writable but no write callback is provided.
+ - Logging now uses `tracing`. Behavior should be mostly the same, but if you want to have tracing on your server, it should now be much simpler to implement. We write tracing events to logging, so no additional action is necessary if you just want to log like before.
+
+### Codegen
+
+#### Added
+ - Support for using `NodeSet2.xml` files for types codegen.
+ - Better system for reusing XML files over different codegen targets.
+
+#### Fixed
+ - Numerous improvements to custom codegen.
+
+#### Changed
+ - Logging in `async-opcua-codegen` now uses `log`, enabled by default.
+
 ## [0.14.0] - 2025-01-22
 
 First release of the async-opcua library. Version number picks up where this forked from opcua. This changelog is almost certainly incomplete, the library has in large part been rewritten.

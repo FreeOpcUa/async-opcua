@@ -9,6 +9,7 @@ use std::{
     error::Error as StdError,
     fmt::{Debug, Display},
     io::{Cursor, Read, Result, Write},
+    num::{ParseFloatError, ParseIntError},
     sync::atomic::{AtomicU64, Ordering},
 };
 
@@ -163,6 +164,18 @@ impl From<Error> for std::io::Error {
 
 impl From<std::io::Error> for Error {
     fn from(value: std::io::Error) -> Self {
+        Self::decoding(value)
+    }
+}
+
+impl From<ParseIntError> for Error {
+    fn from(value: ParseIntError) -> Self {
+        Self::decoding(value)
+    }
+}
+
+impl From<ParseFloatError> for Error {
+    fn from(value: ParseFloatError) -> Self {
         Self::decoding(value)
     }
 }

@@ -230,7 +230,7 @@ impl UaNullable for ExtensionObject {}
 mod json {
     use std::io::{Cursor, Read};
 
-    use crate::{json::*, xml::enter_first_tag, ByteString, Error, NodeId};
+    use crate::{json::*, ByteString, Error, NodeId};
 
     use super::ExtensionObject;
 
@@ -345,7 +345,7 @@ mod json {
                         let mut cursor = Cursor::new(string_body.as_bytes());
                         let mut inner_stream =
                             crate::xml::XmlStreamReader::new(&mut cursor as &mut dyn Read);
-                        if enter_first_tag(&mut inner_stream)? {
+                        if crate::xml::enter_first_tag(&mut inner_stream)? {
                             Ok(ctx.load_from_xml(&type_id, &mut inner_stream)?)
                         } else {
                             Ok(ExtensionObject::null())

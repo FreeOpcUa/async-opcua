@@ -2,10 +2,7 @@
 //!
 //! Core utilities for JSON encoding and decoding from OPC-UA JSON.
 
-use std::{
-    io::{Cursor, Read, Write},
-    num::{ParseFloatError, ParseIntError},
-};
+use std::io::{Cursor, Read, Write};
 
 pub use crate::Context;
 use struson::writer::JsonNumberError;
@@ -30,18 +27,6 @@ pub trait JsonEncodable: UaNullable {
 
 impl From<struson::reader::ReaderError> for Error {
     fn from(value: struson::reader::ReaderError) -> Self {
-        Self::decoding(value)
-    }
-}
-
-impl From<ParseIntError> for Error {
-    fn from(value: ParseIntError) -> Self {
-        Self::decoding(value)
-    }
-}
-
-impl From<ParseFloatError> for Error {
-    fn from(value: ParseFloatError) -> Self {
         Self::decoding(value)
     }
 }

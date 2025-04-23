@@ -12,3 +12,9 @@ jobs:
       
       - name: No default features
         run: cargo clippy --locked --no-default-features -- -D warnings
+
+      - name: Just xml
+        run: cargo clippy --locked --no-default-features --features xml -- -D warnings
+
+      - name: Just json
+        run: cargo clippy --locked --no-default-features --features json -- -D warnings

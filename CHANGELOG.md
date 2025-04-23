@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.15.1] - 2025-04-23
+
+Fix to a build issue in `types` when compiling with the `xml` feature but not the `json` feature,
+or only `json` and not `xml`.
+
+### Common
+
+#### Fixed
+ - Fix build of `async-opcua-types` when only one of the `json` or `xml` features are enabled.
+
 ## [0.15.0] - 2025-04-22
 
 Further changes and polish of the library. This release adds more comprehensive support for XML and JSON encoding, fixes a few bugs, and improves the ergonomics of defining custom types on servers.

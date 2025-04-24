@@ -4,7 +4,7 @@ use opcua_types::{ByteString, MessageSecurityMode};
 use crate::comms::secure_channel::*;
 
 #[test]
-pub fn secure_channel_nonce_basic128rsa15() {
+fn secure_channel_nonce_basic128rsa15() {
     let mut sc = SecureChannel::new_no_certificate_store();
     sc.set_security_mode(MessageSecurityMode::SignAndEncrypt);
     sc.set_security_policy(SecurityPolicy::Basic128Rsa15);
@@ -36,7 +36,7 @@ pub fn secure_channel_nonce_basic128rsa15() {
 }
 
 #[test]
-pub fn secure_channel_nonce_basic256() {
+fn secure_channel_nonce_basic256() {
     let mut sc = SecureChannel::new_no_certificate_store();
     sc.set_security_mode(MessageSecurityMode::SignAndEncrypt);
     sc.set_security_policy(SecurityPolicy::Basic256);
@@ -65,7 +65,7 @@ pub fn secure_channel_nonce_basic256() {
 }
 
 #[test]
-pub fn secure_channel_nonce_none() {
+fn secure_channel_nonce_none() {
     // When the security policy is none, you can set the nonce, but it doesn't care what length it is
     let mut sc = SecureChannel::new_no_certificate_store();
     sc.set_security_mode(MessageSecurityMode::None);

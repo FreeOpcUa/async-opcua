@@ -33,7 +33,7 @@ bitflags! {
 
 #[allow(unused)]
 mod opcua {
-    pub use crate as types;
+    pub(super) use crate as types;
 }
 
 /// A data value is a value of a variable in the OPC UA server and contains information about its

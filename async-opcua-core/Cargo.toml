@@ -30,5 +30,5 @@ url = { workspace = true }
 async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.15.1" }
 async-opcua-types = { path = "../async-opcua-types", version = "0.15.1" }
 
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage)'] }
+[lints]
+workspace = true

@@ -13,7 +13,7 @@ use opcua_types::{
     HistoryReadResult, HistoryUpdateRequest, HistoryUpdateResponse, NodeId, ObjectId, ReadRequest,
     ReadResponse, ResponseHeader, StatusCode, TimestampsToReturn, WriteRequest, WriteResponse,
 };
-pub async fn read(node_managers: NodeManagers, request: Request<ReadRequest>) -> Response {
+pub(crate) async fn read(node_managers: NodeManagers, request: Request<ReadRequest>) -> Response {
     let mut context = request.context();
     let nodes_to_read = take_service_items!(
         request,
@@ -76,7 +76,7 @@ pub async fn read(node_managers: NodeManagers, request: Request<ReadRequest>) ->
     }
 }
 
-pub async fn write(node_managers: NodeManagers, request: Request<WriteRequest>) -> Response {
+pub(crate) async fn write(node_managers: NodeManagers, request: Request<WriteRequest>) -> Response {
     let mut context = request.context();
     let nodes_to_write = take_service_items!(
         request,
@@ -128,7 +128,7 @@ pub async fn write(node_managers: NodeManagers, request: Request<WriteRequest>) 
     }
 }
 
-pub async fn history_read(
+pub(crate) async fn history_read(
     node_managers: NodeManagers,
     request: Request<HistoryReadRequest>,
 ) -> Response {
@@ -318,7 +318,7 @@ pub async fn history_read(
     }
 }
 
-pub async fn history_update(
+pub(crate) async fn history_update(
     node_managers: NodeManagers,
     request: Request<HistoryUpdateRequest>,
 ) -> Response {

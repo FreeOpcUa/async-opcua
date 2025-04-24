@@ -422,11 +422,11 @@ fn from_xml_variant() {
 #[test]
 fn test_custom_union() {
     mod opcua {
-        pub use crate as types;
+        pub(super) use crate as types;
     }
 
     #[derive(Debug, PartialEq, Clone, XmlDecodable, XmlEncodable, UaNullable, XmlType)]
-    pub enum MyUnion {
+    enum MyUnion {
         Var1(i32),
         #[opcua(rename = "EUInfo")]
         Var2(EUInformation),
@@ -465,11 +465,11 @@ fn test_custom_union() {
 #[test]
 fn test_custom_union_nullable() {
     mod opcua {
-        pub use crate as types;
+        pub(super) use crate as types;
     }
 
     #[derive(Debug, PartialEq, Clone, XmlDecodable, XmlEncodable, UaNullable, XmlType)]
-    pub enum MyUnion {
+    enum MyUnion {
         Var1(i32),
         Null,
     }

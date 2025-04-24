@@ -20,7 +20,7 @@ use crate::{
 
 #[allow(unused)]
 mod opcua {
-    pub use crate as types;
+    pub(super) use crate as types;
 }
 
 /// An identifier for a error or condition that is associated with a value or an operation.

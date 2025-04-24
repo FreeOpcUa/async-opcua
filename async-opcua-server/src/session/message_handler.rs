@@ -52,7 +52,7 @@ impl PendingPublishRequest {
     /// Receive a publish request response.
     /// This may take a long time, since publish requests can be open for
     /// arbitrarily long waiting for new data to be produced.
-    pub async fn recv(self) -> Result<Response, String> {
+    pub(super) async fn recv(self) -> Result<Response, String> {
         match self.recv.await {
             Ok(msg) => Ok(Response {
                 message: msg,
@@ -96,7 +96,7 @@ macro_rules! service_fault {
 impl<T> Request<T> {
     /// Create a new request.
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    fn new(
         request: Box<T>,
         info: Arc<ServerInfo>,
         request_id: u32,
@@ -119,7 +119,7 @@ impl<T> Request<T> {
     }
 
     /// Get a request context object from this request.
-    pub fn context(&self) -> RequestContext {
+    pub(super) fn context(&self) -> RequestContext {
         RequestContext {
             session: self.session.clone(),
             authenticator: self.info.authenticator.clone(),
@@ -163,7 +163,7 @@ struct RequestData {
 
 impl MessageHandler {
     /// Create a new message handler.
-    pub fn new(
+    pub(super) fn new(
         info: Arc<ServerInfo>,
         node_managers: NodeManagers,
         subscriptions: Arc<SubscriptionCache>,
@@ -179,7 +179,7 @@ impl MessageHandler {
     /// This method returns synchronously, but the returned result object
     /// may take longer to resolve.
     /// Once this returns the request will either be resolved or will have been started.
-    pub fn handle_message(
+    pub(super) fn handle_message(
         &mut self,
         message: RequestMessage,
         session_id: u32,
@@ -351,7 +351,7 @@ impl MessageHandler {
     }
 
     /// Delete the subscriptions from a session.
-    pub async fn delete_session_subscriptions(
+    pub(super) async fn delete_session_subscriptions(
         &mut self,
         session_id: u32,
         session: Arc<RwLock<Session>>,
@@ -387,7 +387,7 @@ impl MessageHandler {
         }
     }
 
-    pub fn get_namespaces_for_user(
+    pub(super) fn get_namespaces_for_user(
         &mut self,
         session: Arc<RwLock<Session>>,
         session_id: u32,

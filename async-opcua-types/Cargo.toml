@@ -12,6 +12,9 @@ readme = "README.md"
 documentation = "https://docs.rs/async-opcua-types/"
 edition = "2021"
 
+[lints]
+workspace = true
+
 [features]
 json = ["struson", "async-opcua-macros/json"]
 xml = ["async-opcua-xml", "async-opcua-macros/xml"]

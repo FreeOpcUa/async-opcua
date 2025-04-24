@@ -764,11 +764,11 @@ fn extension_object_round_trip() {
 #[test]
 fn test_custom_struct_with_optional() {
     mod opcua {
-        pub use crate as types;
+        pub(super) use crate as types;
     }
 
     #[derive(Debug, PartialEq, Clone, JsonDecodable, JsonEncodable, UaNullable)]
-    pub struct MyStructWithOptionalFields {
+    struct MyStructWithOptionalFields {
         foo: i32,
         #[opcua(optional)]
         my_opt: Option<LocalizedText>,
@@ -835,11 +835,11 @@ fn test_custom_struct_with_optional() {
 #[test]
 fn test_custom_union() {
     mod opcua {
-        pub use crate as types;
+        pub(super) use crate as types;
     }
 
     #[derive(Debug, PartialEq, Clone, JsonDecodable, JsonEncodable, UaNullable)]
-    pub enum MyUnion {
+    enum MyUnion {
         Var1(i32),
         #[opcua(rename = "EUInfo")]
         Var2(EUInformation),
@@ -900,11 +900,11 @@ fn test_custom_union() {
 #[test]
 fn test_custom_union_nullable() {
     mod opcua {
-        pub use crate as types;
+        pub(super) use crate as types;
     }
 
     #[derive(Debug, PartialEq, Clone, JsonDecodable, JsonEncodable, UaNullable)]
-    pub enum MyUnion {
+    enum MyUnion {
         Var1(i32),
         Null,
     }

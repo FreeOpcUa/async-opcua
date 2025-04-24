@@ -44,7 +44,7 @@ pub(crate) struct SubscriptionStateParams {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum UpdateStateAction {
+pub(crate) enum UpdateStateAction {
     None,
     // Return a keep alive
     ReturnKeepAlive,

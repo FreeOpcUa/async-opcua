@@ -28,7 +28,7 @@ use crate::{
 
 #[allow(unused)]
 mod opcua {
-    pub use crate as types;
+    pub(super) use crate as types;
 }
 
 #[derive(Clone, Debug, PartialEq, Default, crate::UaNullable)]

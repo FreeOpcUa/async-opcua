@@ -29,6 +29,7 @@ mod transport;
 
 pub use builder::ServerBuilder;
 pub use config::*;
+pub use identity_token::IdentityToken;
 pub use info::ServerInfo;
 pub use opcua_types::event_field::EventField;
 pub use server::Server;

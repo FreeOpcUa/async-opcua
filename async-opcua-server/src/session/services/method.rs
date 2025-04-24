@@ -6,7 +6,7 @@ use opcua_types::{CallRequest, CallResponse, ResponseHeader, StatusCode};
 use tracing::debug_span;
 use tracing_futures::Instrument;
 
-pub async fn call(node_managers: NodeManagers, request: Request<CallRequest>) -> Response {
+pub(crate) async fn call(node_managers: NodeManagers, request: Request<CallRequest>) -> Response {
     let mut context = request.context();
     let method_calls = take_service_items!(
         request,

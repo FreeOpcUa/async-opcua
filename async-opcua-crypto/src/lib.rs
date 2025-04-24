@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (C) 2017-2024 Adam Lock
 
-#![warn(missing_docs)]
-
 //! Crypto related functionality. It is used for establishing
 //! trust between a client and server via certificate exchange and validation. It also used for
 //! encrypting / decrypting messages and signing messages.
@@ -46,31 +44,33 @@ pub(crate) mod algorithms {
     //pub const ENC_AES256_CBC: &str = "http://www.w3.org/2001/04/xmlenc#aes256-cbc";
 
     /// Asymmetric encryption algorithm RSA15
-    pub const ENC_RSA_15: &str = "http://www.w3.org/2001/04/xmlenc#rsa-1_5";
+    pub(crate) const ENC_RSA_15: &str = "http://www.w3.org/2001/04/xmlenc#rsa-1_5";
 
     /// Asymmetric encryption algorithm RSA-OAEP
-    pub const ENC_RSA_OAEP: &str = "http://www.w3.org/2001/04/xmlenc#rsa-oaep";
+    pub(crate) const ENC_RSA_OAEP: &str = "http://www.w3.org/2001/04/xmlenc#rsa-oaep";
 
     /// Asymmetrric encrypttion
-    pub const ENC_RSA_OAEP_SHA256: &str = "http://opcfoundation.org/UA/security/rsa-oaep-sha2-256";
+    pub(crate) const ENC_RSA_OAEP_SHA256: &str =
+        "http://opcfoundation.org/UA/security/rsa-oaep-sha2-256";
 
     // Asymmetric encryption algorithm RSA-OAEP-MGF1P
     //pub const ENC_RSA_OAEP_MGF1P: &str = "http://www.w3.org/2001/04/xmlenc#rsa-oaep-mgf1p";
 
     /// SymmetricSignatureAlgorithm – HmacSha1 – (http://www.w3.org/2000/09/xmldsig#hmac-sha1).
-    pub const DSIG_HMAC_SHA1: &str = "http://www.w3.org/2000/09/xmldsig#hmac-sha1";
+    pub(crate) const DSIG_HMAC_SHA1: &str = "http://www.w3.org/2000/09/xmldsig#hmac-sha1";
 
     /// SymmetricSignatureAlgorithm – HmacSha256 – (http://www.w3.org/2000/09/xmldsig#hmac-sha256).
-    pub const DSIG_HMAC_SHA256: &str = "http://www.w3.org/2000/09/xmldsig#hmac-sha256";
+    pub(crate) const DSIG_HMAC_SHA256: &str = "http://www.w3.org/2000/09/xmldsig#hmac-sha256";
 
     /// Asymmetric digital signature algorithm using RSA-SHA1
-    pub const DSIG_RSA_SHA1: &str = "http://www.w3.org/2000/09/xmldsig#rsa-sha1";
+    pub(crate) const DSIG_RSA_SHA1: &str = "http://www.w3.org/2000/09/xmldsig#rsa-sha1";
 
     /// Asymmetric digital signature algorithm using RSA-SHA256
-    pub const DSIG_RSA_SHA256: &str = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256";
+    pub(crate) const DSIG_RSA_SHA256: &str = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256";
 
     /// Asymmetric digital signature algorithm using RSA-PSS_SHA2-256
-    pub const DSIG_RSA_PSS_SHA2_256: &str = "http://opcfoundation.org/UA/security/rsa-pss-sha2-256";
+    pub(crate) const DSIG_RSA_PSS_SHA2_256: &str =
+        "http://opcfoundation.org/UA/security/rsa-pss-sha2-256";
 
     // Key derivation algorithm P_SHA1
     //pub const KEY_P_SHA1: &str = "http://docs.oasis-open.org/ws-sx/ws-secureconversation/200512/dk/p_sha1";

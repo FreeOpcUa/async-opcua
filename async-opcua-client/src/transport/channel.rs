@@ -45,11 +45,14 @@ pub struct AsyncSecureChannel {
     request_send: ArcSwapOption<RequestSend>,
 }
 
+/// Event loop for a secure channel. This must be polled to make progress.
 pub struct SecureChannelEventLoop {
     transport: TcpTransport,
 }
 
 impl SecureChannelEventLoop {
+    /// Poll the channel, processing any pending incoming or outgoing messages and returning the
+    /// action that was taken.
     pub async fn poll(&mut self) -> TransportPollResult {
         self.transport.poll().await
     }

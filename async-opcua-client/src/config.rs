@@ -144,7 +144,7 @@ impl ClientEndpoint {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
-pub struct DecodingOptions {
+pub(crate) struct DecodingOptions {
     /// Maximum size of a message chunk in bytes. 0 means no limit
     #[serde(default = "defaults::max_message_size")]
     pub(crate) max_message_size: usize,
@@ -169,7 +169,7 @@ pub struct DecodingOptions {
 }
 
 impl DecodingOptions {
-    pub fn as_comms_decoding_options(&self) -> opcua_types::DecodingOptions {
+    pub(crate) fn as_comms_decoding_options(&self) -> opcua_types::DecodingOptions {
         opcua_types::DecodingOptions {
             max_chunk_count: self.max_chunk_count,
             max_message_size: self.max_message_size,
@@ -197,7 +197,7 @@ impl Default for DecodingOptions {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
-pub struct Performance {
+pub(crate) struct Performance {
     /// Ignore clock skew allows the client to make a successful connection to the server, even
     /// when the client and server clocks are out of sync.
     #[serde(default)]
@@ -474,83 +474,83 @@ mod defaults {
 
     use crate::retry::SessionRetryPolicy;
 
-    pub fn verify_server_certs() -> bool {
+    pub(super) fn verify_server_certs() -> bool {
         true
     }
 
-    pub fn channel_lifetime() -> u32 {
+    pub(super) fn channel_lifetime() -> u32 {
         60_000
     }
 
-    pub fn session_retry_limit() -> i32 {
+    pub(super) fn session_retry_limit() -> i32 {
         SessionRetryPolicy::DEFAULT_RETRY_LIMIT as i32
     }
 
-    pub fn session_retry_initial() -> Duration {
+    pub(super) fn session_retry_initial() -> Duration {
         Duration::from_secs(1)
     }
 
-    pub fn session_retry_max() -> Duration {
+    pub(super) fn session_retry_max() -> Duration {
         Duration::from_secs(30)
     }
 
-    pub fn keep_alive_interval() -> Duration {
+    pub(super) fn keep_alive_interval() -> Duration {
         Duration::from_secs(10)
     }
 
-    pub fn max_array_length() -> usize {
+    pub(super) fn max_array_length() -> usize {
         opcua_types::constants::MAX_ARRAY_LENGTH
     }
 
-    pub fn max_byte_string_length() -> usize {
+    pub(super) fn max_byte_string_length() -> usize {
         opcua_types::constants::MAX_BYTE_STRING_LENGTH
     }
 
-    pub fn max_chunk_count() -> usize {
+    pub(super) fn max_chunk_count() -> usize {
         opcua_types::constants::MAX_CHUNK_COUNT
     }
 
-    pub fn max_chunk_size() -> usize {
+    pub(super) fn max_chunk_size() -> usize {
         65535
     }
 
-    pub fn max_failed_keep_alive_count() -> u64 {
+    pub(super) fn max_failed_keep_alive_count() -> u64 {
         0
     }
 
-    pub fn max_incoming_chunk_size() -> usize {
+    pub(super) fn max_incoming_chunk_size() -> usize {
         65535
     }
 
-    pub fn max_message_size() -> usize {
+    pub(super) fn max_message_size() -> usize {
         opcua_types::constants::MAX_MESSAGE_SIZE
     }
 
-    pub fn max_string_length() -> usize {
+    pub(super) fn max_string_length() -> usize {
         opcua_types::constants::MAX_STRING_LENGTH
     }
 
-    pub fn request_timeout() -> Duration {
+    pub(super) fn request_timeout() -> Duration {
         Duration::from_secs(60)
     }
 
-    pub fn publish_timeout() -> Duration {
+    pub(super) fn publish_timeout() -> Duration {
         Duration::from_secs(60)
     }
 
-    pub fn min_publish_interval() -> Duration {
+    pub(super) fn min_publish_interval() -> Duration {
         Duration::from_millis(100)
     }
 
-    pub fn recreate_monitored_items_chunk() -> usize {
+    pub(super) fn recreate_monitored_items_chunk() -> usize {
         1000
     }
 
-    pub fn recreate_subscriptions() -> bool {
+    pub(super) fn recreate_subscriptions() -> bool {
         true
     }
 
-    pub fn session_timeout() -> u32 {
+    pub(super) fn session_timeout() -> u32 {
         60_000
     }
 }
@@ -613,7 +613,7 @@ mod tests {
         path
     }
 
-    pub fn sample_builder() -> ClientBuilder {
+    fn sample_builder() -> ClientBuilder {
         ClientBuilder::new()
             .application_name("OPC UA Sample Client")
             .application_uri("urn:SampleClient")
@@ -671,7 +671,7 @@ mod tests {
             )
     }
 
-    pub fn default_sample_config() -> ClientConfig {
+    fn default_sample_config() -> ClientConfig {
         sample_builder().config()
     }
 

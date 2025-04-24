@@ -12,7 +12,7 @@ use opcua_types::{
     ResponseHeader, StatusCode,
 };
 
-pub async fn query_first(
+pub(crate) async fn query_first(
     node_managers: NodeManagers,
     request: Request<QueryFirstRequest>,
 ) -> Response {
@@ -143,7 +143,7 @@ pub async fn query_first(
     }
 }
 
-pub async fn query_next(
+pub(crate) async fn query_next(
     node_managers: NodeManagers,
     request: Request<QueryNextRequest>,
 ) -> Response {

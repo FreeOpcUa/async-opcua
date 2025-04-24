@@ -6,7 +6,7 @@ use quote::quote;
 
 use super::{enums::SimpleEnum, unions::AdvancedEnum, EncodingStruct};
 
-pub fn generate_json_encode_impl(strct: EncodingStruct) -> syn::Result<TokenStream> {
+pub(super) fn generate_json_encode_impl(strct: EncodingStruct) -> syn::Result<TokenStream> {
     let ident = strct.ident;
     let mut body = quote! {};
 
@@ -88,7 +88,7 @@ pub fn generate_json_encode_impl(strct: EncodingStruct) -> syn::Result<TokenStre
     })
 }
 
-pub fn generate_json_decode_impl(strct: EncodingStruct) -> syn::Result<TokenStream> {
+pub(super) fn generate_json_decode_impl(strct: EncodingStruct) -> syn::Result<TokenStream> {
     let ident = strct.ident;
     let mut items = quote! {};
     let mut items_match = quote! {};
@@ -196,7 +196,7 @@ pub fn generate_json_decode_impl(strct: EncodingStruct) -> syn::Result<TokenStre
     })
 }
 
-pub fn generate_simple_enum_json_decode_impl(en: SimpleEnum) -> syn::Result<TokenStream> {
+pub(super) fn generate_simple_enum_json_decode_impl(en: SimpleEnum) -> syn::Result<TokenStream> {
     let ident = en.ident;
     let repr = en.repr;
 
@@ -213,7 +213,7 @@ pub fn generate_simple_enum_json_decode_impl(en: SimpleEnum) -> syn::Result<Toke
     })
 }
 
-pub fn generate_simple_enum_json_encode_impl(en: SimpleEnum) -> syn::Result<TokenStream> {
+pub(super) fn generate_simple_enum_json_encode_impl(en: SimpleEnum) -> syn::Result<TokenStream> {
     let ident = en.ident;
     let repr = en.repr;
 
@@ -230,7 +230,7 @@ pub fn generate_simple_enum_json_encode_impl(en: SimpleEnum) -> syn::Result<Toke
     })
 }
 
-pub fn generate_union_json_decode_impl(en: AdvancedEnum) -> syn::Result<TokenStream> {
+pub(super) fn generate_union_json_decode_impl(en: AdvancedEnum) -> syn::Result<TokenStream> {
     let ident = en.ident;
 
     let mut decode_arms = quote! {};
@@ -288,7 +288,7 @@ pub fn generate_union_json_decode_impl(en: AdvancedEnum) -> syn::Result<TokenStr
     })
 }
 
-pub fn generate_union_json_encode_impl(en: AdvancedEnum) -> syn::Result<TokenStream> {
+pub(super) fn generate_union_json_encode_impl(en: AdvancedEnum) -> syn::Result<TokenStream> {
     let ident = en.ident;
 
     let mut encode_arms = quote! {};

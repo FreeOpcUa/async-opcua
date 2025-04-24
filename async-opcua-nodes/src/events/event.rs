@@ -205,8 +205,8 @@ mod method_event_field {
     use opcua_types::NodeId;
 
     mod opcua {
-        pub use crate as nodes;
-        pub use opcua_types as types;
+        pub(super) use crate as nodes;
+        pub(super) use opcua_types as types;
     }
     #[derive(Default, EventField, Debug)]
     /// A field of an event that references a method.
@@ -221,8 +221,8 @@ mod tests {
     use crate::NamespaceMap;
 
     mod opcua {
-        pub use crate as nodes;
-        pub use opcua_types as types;
+        pub(super) use crate as nodes;
+        pub(super) use opcua_types as types;
     }
 
     use crate::{BaseEventType, Event, EventField};

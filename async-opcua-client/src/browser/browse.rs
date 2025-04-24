@@ -332,7 +332,7 @@ impl<
         }
     }
 
-    pub fn process_result(
+    pub(crate) fn process_result(
         &mut self,
         next: Vec<InnerResultItem>,
     ) -> Result<Vec<BrowseNextItem>, Error> {

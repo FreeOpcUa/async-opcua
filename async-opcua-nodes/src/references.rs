@@ -335,7 +335,7 @@ impl<'a> Iterator for ReferenceIterator<'a, '_> {
 }
 
 impl<'a, 'b> ReferenceIterator<'a, 'b> {
-    pub fn new(
+    fn new(
         source_node: &'b NodeId,
         direction: BrowseDirection,
         references: &'a References,

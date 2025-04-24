@@ -8,13 +8,13 @@ use super::parse::EventFieldAttribute;
 
 use quote::quote;
 
-pub type EventFieldStruct = StructItem<EventFieldAttribute, EmptyAttribute>;
+pub(crate) type EventFieldStruct = StructItem<EventFieldAttribute, EmptyAttribute>;
 
-pub fn parse_event_field_struct(input: DeriveInput) -> syn::Result<EventFieldStruct> {
+pub(crate) fn parse_event_field_struct(input: DeriveInput) -> syn::Result<EventFieldStruct> {
     EventFieldStruct::from_input(expect_struct(input.data)?, input.attrs, input.ident)
 }
 
-pub fn generate_event_field_impls(event: EventFieldStruct) -> syn::Result<TokenStream> {
+pub(crate) fn generate_event_field_impls(event: EventFieldStruct) -> syn::Result<TokenStream> {
     let ident = event.ident;
     let mut get_arms = quote! {};
     let mut final_arm = quote! {

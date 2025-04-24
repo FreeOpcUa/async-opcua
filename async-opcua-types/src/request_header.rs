@@ -22,7 +22,7 @@ use crate::{
 
 #[allow(unused)]
 mod opcua {
-    pub use crate as types;
+    pub(super) use crate as types;
 }
 
 /// The `RequestHeader` contains information common to every request from a client to the server.

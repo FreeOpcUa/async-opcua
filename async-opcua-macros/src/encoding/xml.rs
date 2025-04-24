@@ -8,7 +8,7 @@ use super::{
     attribute::EncodingItemAttribute, enums::SimpleEnum, unions::AdvancedEnum, EncodingStruct,
 };
 
-pub fn generate_xml_encode_impl(strct: EncodingStruct) -> syn::Result<TokenStream> {
+pub(super) fn generate_xml_encode_impl(strct: EncodingStruct) -> syn::Result<TokenStream> {
     let ident = strct.ident;
     let mut body = quote! {
         use opcua::types::xml::XmlWriteExt;
@@ -83,7 +83,7 @@ pub fn generate_xml_encode_impl(strct: EncodingStruct) -> syn::Result<TokenStrea
     })
 }
 
-pub fn generate_xml_decode_impl(strct: EncodingStruct) -> syn::Result<TokenStream> {
+pub(super) fn generate_xml_decode_impl(strct: EncodingStruct) -> syn::Result<TokenStream> {
     let ident = strct.ident;
     let mut items = quote! {};
     let mut items_match = quote! {};
@@ -192,7 +192,7 @@ pub fn generate_xml_decode_impl(strct: EncodingStruct) -> syn::Result<TokenStrea
     })
 }
 
-pub fn generate_simple_enum_xml_decode_impl(en: SimpleEnum) -> syn::Result<TokenStream> {
+pub(super) fn generate_simple_enum_xml_decode_impl(en: SimpleEnum) -> syn::Result<TokenStream> {
     let ident = en.ident;
 
     Ok(quote! {
@@ -209,7 +209,7 @@ pub fn generate_simple_enum_xml_decode_impl(en: SimpleEnum) -> syn::Result<Token
     })
 }
 
-pub fn generate_simple_enum_xml_encode_impl(en: SimpleEnum) -> syn::Result<TokenStream> {
+pub(super) fn generate_simple_enum_xml_encode_impl(en: SimpleEnum) -> syn::Result<TokenStream> {
     let ident = en.ident;
 
     Ok(quote! {
@@ -226,7 +226,10 @@ pub fn generate_simple_enum_xml_encode_impl(en: SimpleEnum) -> syn::Result<Token
     })
 }
 
-pub fn generate_xml_type_impl(idt: Ident, attr: EncodingItemAttribute) -> syn::Result<TokenStream> {
+pub(super) fn generate_xml_type_impl(
+    idt: Ident,
+    attr: EncodingItemAttribute,
+) -> syn::Result<TokenStream> {
     let name = attr.rename.unwrap_or_else(|| idt.to_string());
     Ok(quote! {
         impl opcua::types::xml::XmlType for #idt {
@@ -235,7 +238,7 @@ pub fn generate_xml_type_impl(idt: Ident, attr: EncodingItemAttribute) -> syn::R
     })
 }
 
-pub fn generate_union_xml_decode_impl(en: AdvancedEnum) -> syn::Result<TokenStream> {
+pub(super) fn generate_union_xml_decode_impl(en: AdvancedEnum) -> syn::Result<TokenStream> {
     let ident = en.ident;
 
     let mut decode_arms = quote! {};
@@ -295,7 +298,7 @@ pub fn generate_union_xml_decode_impl(en: AdvancedEnum) -> syn::Result<TokenStre
     })
 }
 
-pub fn generate_union_xml_encode_impl(en: AdvancedEnum) -> syn::Result<TokenStream> {
+pub(super) fn generate_union_xml_encode_impl(en: AdvancedEnum) -> syn::Result<TokenStream> {
     let ident = en.ident;
 
     let mut encode_arms = quote! {};

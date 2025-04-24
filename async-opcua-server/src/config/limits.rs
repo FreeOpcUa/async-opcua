@@ -210,126 +210,126 @@ impl Default for OperationalLimits {
 
 mod defaults {
     use crate::constants;
-    pub fn max_array_length() -> usize {
+    pub(super) fn max_array_length() -> usize {
         opcua_types::constants::MAX_ARRAY_LENGTH
     }
-    pub fn max_string_length() -> usize {
+    pub(super) fn max_string_length() -> usize {
         opcua_types::constants::MAX_STRING_LENGTH
     }
-    pub fn max_byte_string_length() -> usize {
+    pub(super) fn max_byte_string_length() -> usize {
         opcua_types::constants::MAX_BYTE_STRING_LENGTH
     }
-    pub fn max_message_size() -> usize {
+    pub(super) fn max_message_size() -> usize {
         opcua_types::constants::MAX_MESSAGE_SIZE
     }
-    pub fn max_chunk_count() -> usize {
+    pub(super) fn max_chunk_count() -> usize {
         opcua_types::constants::MAX_CHUNK_COUNT
     }
-    pub fn send_buffer_size() -> usize {
+    pub(super) fn send_buffer_size() -> usize {
         constants::SEND_BUFFER_SIZE
     }
-    pub fn receive_buffer_size() -> usize {
+    pub(super) fn receive_buffer_size() -> usize {
         constants::RECEIVE_BUFFER_SIZE
     }
-    pub fn max_browse_continuation_points() -> usize {
+    pub(super) fn max_browse_continuation_points() -> usize {
         constants::MAX_BROWSE_CONTINUATION_POINTS
     }
-    pub fn max_history_continuation_points() -> usize {
+    pub(super) fn max_history_continuation_points() -> usize {
         constants::MAX_HISTORY_CONTINUATION_POINTS
     }
-    pub fn max_query_continuation_points() -> usize {
+    pub(super) fn max_query_continuation_points() -> usize {
         constants::MAX_QUERY_CONTINUATION_POINTS
     }
-    pub fn max_sessions() -> usize {
+    pub(super) fn max_sessions() -> usize {
         constants::MAX_SESSIONS
     }
 
-    pub fn max_subscriptions_per_session() -> usize {
+    pub(super) fn max_subscriptions_per_session() -> usize {
         constants::MAX_SUBSCRIPTIONS_PER_SESSION
     }
-    pub fn max_pending_publish_requests() -> usize {
+    pub(super) fn max_pending_publish_requests() -> usize {
         constants::MAX_PENDING_PUBLISH_REQUESTS
     }
-    pub fn max_publish_requests_per_subscription() -> usize {
+    pub(super) fn max_publish_requests_per_subscription() -> usize {
         constants::MAX_PUBLISH_REQUESTS_PER_SUBSCRIPTION
     }
-    pub fn min_sampling_interval_ms() -> f64 {
+    pub(super) fn min_sampling_interval_ms() -> f64 {
         constants::MIN_SAMPLING_INTERVAL_MS
     }
-    pub fn min_publishing_interval_ms() -> f64 {
+    pub(super) fn min_publishing_interval_ms() -> f64 {
         constants::MIN_PUBLISHING_INTERVAL_MS
     }
-    pub fn max_keep_alive_count() -> u32 {
+    pub(super) fn max_keep_alive_count() -> u32 {
         constants::MAX_KEEP_ALIVE_COUNT
     }
-    pub fn default_keep_alive_count() -> u32 {
+    pub(super) fn default_keep_alive_count() -> u32 {
         constants::DEFAULT_KEEP_ALIVE_COUNT
     }
-    pub fn max_monitored_items_per_sub() -> usize {
+    pub(super) fn max_monitored_items_per_sub() -> usize {
         constants::DEFAULT_MAX_MONITORED_ITEMS_PER_SUB
     }
-    pub fn max_monitored_item_queue_size() -> usize {
+    pub(super) fn max_monitored_item_queue_size() -> usize {
         constants::MAX_DATA_CHANGE_QUEUE_SIZE
     }
-    pub fn max_lifetime_count() -> u32 {
+    pub(super) fn max_lifetime_count() -> u32 {
         constants::MAX_KEEP_ALIVE_COUNT * 3
     }
-    pub fn max_notifications_per_publish() -> u64 {
+    pub(super) fn max_notifications_per_publish() -> u64 {
         constants::MAX_NOTIFICATIONS_PER_PUBLISH
     }
-    pub fn max_queued_notifications() -> usize {
+    pub(super) fn max_queued_notifications() -> usize {
         constants::MAX_QUEUED_NOTIFICATIONS
     }
 
-    pub fn max_nodes_per_translate_browse_paths_to_node_ids() -> usize {
+    pub(super) fn max_nodes_per_translate_browse_paths_to_node_ids() -> usize {
         constants::MAX_NODES_PER_TRANSLATE_BROWSE_PATHS_TO_NODE_IDS
     }
-    pub fn max_nodes_per_read() -> usize {
+    pub(super) fn max_nodes_per_read() -> usize {
         constants::MAX_NODES_PER_READ
     }
-    pub fn max_nodes_per_write() -> usize {
+    pub(super) fn max_nodes_per_write() -> usize {
         constants::MAX_NODES_PER_WRITE
     }
-    pub fn max_nodes_per_method_call() -> usize {
+    pub(super) fn max_nodes_per_method_call() -> usize {
         constants::MAX_NODES_PER_METHOD_CALL
     }
-    pub fn max_nodes_per_browse() -> usize {
+    pub(super) fn max_nodes_per_browse() -> usize {
         constants::MAX_NODES_PER_BROWSE
     }
-    pub fn max_nodes_per_register_nodes() -> usize {
+    pub(super) fn max_nodes_per_register_nodes() -> usize {
         constants::MAX_NODES_PER_REGISTER_NODES
     }
-    pub fn max_monitored_items_per_call() -> usize {
+    pub(super) fn max_monitored_items_per_call() -> usize {
         constants::MAX_MONITORED_ITEMS_PER_CALL
     }
-    pub fn max_nodes_per_history_read_data() -> usize {
+    pub(super) fn max_nodes_per_history_read_data() -> usize {
         constants::MAX_NODES_PER_HISTORY_READ_DATA
     }
-    pub fn max_nodes_per_history_read_events() -> usize {
+    pub(super) fn max_nodes_per_history_read_events() -> usize {
         constants::MAX_NODES_PER_HISTORY_READ_EVENTS
     }
-    pub fn max_nodes_per_history_update() -> usize {
+    pub(super) fn max_nodes_per_history_update() -> usize {
         constants::MAX_NODES_PER_HISTORY_UPDATE
     }
-    pub fn max_references_per_browse_node() -> usize {
+    pub(super) fn max_references_per_browse_node() -> usize {
         constants::MAX_REFERENCES_PER_BROWSE_NODE
     }
-    pub fn max_node_descs_per_query() -> usize {
+    pub(super) fn max_node_descs_per_query() -> usize {
         constants::MAX_NODE_DESCS_PER_QUERY
     }
-    pub fn max_data_sets_query_return() -> usize {
+    pub(super) fn max_data_sets_query_return() -> usize {
         constants::MAX_DATA_SETS_QUERY_RETURN
     }
-    pub fn max_references_query_return() -> usize {
+    pub(super) fn max_references_query_return() -> usize {
         constants::MAX_REFERENCES_QUERY_RETURN
     }
-    pub fn max_nodes_per_node_management() -> usize {
+    pub(super) fn max_nodes_per_node_management() -> usize {
         constants::MAX_NODES_PER_NODE_MANAGEMENT
     }
-    pub fn max_references_per_references_management() -> usize {
+    pub(super) fn max_references_per_references_management() -> usize {
         constants::MAX_REFERENCES_PER_REFERENCE_MANAGEMENT
     }
-    pub fn max_subscriptions_per_call() -> usize {
+    pub(super) fn max_subscriptions_per_call() -> usize {
         constants::MAX_SUBSCRIPTIONS_PER_CALL
     }
 }

@@ -18,7 +18,10 @@ use opcua_types::{
     TranslateBrowsePathsToNodeIdsResponse, UnregisterNodesRequest, UnregisterNodesResponse,
 };
 
-pub async fn browse(node_managers: NodeManagers, request: Request<BrowseRequest>) -> Response {
+pub(crate) async fn browse(
+    node_managers: NodeManagers,
+    request: Request<BrowseRequest>,
+) -> Response {
     let mut context: RequestContext = request.context();
     let nodes_to_browse = take_service_items!(
         request,
@@ -163,7 +166,7 @@ pub async fn browse(node_managers: NodeManagers, request: Request<BrowseRequest>
     }
 }
 
-pub async fn browse_next(
+pub(crate) async fn browse_next(
     node_managers: NodeManagers,
     request: Request<BrowseNextRequest>,
 ) -> Response {
@@ -333,7 +336,7 @@ pub async fn browse_next(
     }
 }
 
-pub async fn translate_browse_paths(
+pub(crate) async fn translate_browse_paths(
     node_managers: NodeManagers,
     request: Request<TranslateBrowsePathsToNodeIdsRequest>,
 ) -> Response {
@@ -471,7 +474,7 @@ pub async fn translate_browse_paths(
     }
 }
 
-pub async fn register_nodes(
+pub(crate) async fn register_nodes(
     node_managers: NodeManagers,
     request: Request<RegisterNodesRequest>,
 ) -> Response {
@@ -527,7 +530,7 @@ pub async fn register_nodes(
     }
 }
 
-pub async fn unregister_nodes(
+pub(crate) async fn unregister_nodes(
     node_managers: NodeManagers,
     request: Request<UnregisterNodesRequest>,
 ) -> Response {

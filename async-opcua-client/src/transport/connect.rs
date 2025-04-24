@@ -50,5 +50,8 @@ pub trait Connector: Send + Sync {
 ///
 /// Streams are also cancellation safe, a pattern frequently used in this library.
 pub trait Transport: Send + Sync + 'static {
+    /// Poll the transport, processing any pending incoming or outgoing messages and returning the
+    /// action that was taken.
+    /// Note that this method _must_ be cancellation safe.
     fn poll(&mut self) -> impl Future<Output = TransportPollResult> + Send + Sync;
 }

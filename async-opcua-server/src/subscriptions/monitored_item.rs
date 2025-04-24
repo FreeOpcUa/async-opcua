@@ -13,7 +13,7 @@ use opcua_types::{
 };
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Notification {
+pub(crate) enum Notification {
     MonitoredItemNotification(MonitoredItemNotification),
     Event(EventFieldList),
 }
@@ -615,7 +615,7 @@ pub(super) mod tests {
 
     use super::{FilterType, MonitoredItem};
 
-    pub fn new_monitored_item(
+    pub(crate) fn new_monitored_item(
         id: u32,
         item_to_monitor: ReadValueId,
         monitoring_mode: MonitoringMode,

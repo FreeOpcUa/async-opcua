@@ -48,6 +48,7 @@ pub struct TransportConfiguration {
     pub max_chunk_count: usize,
 }
 
+/// Connector for `opc.tcp` transport.
 pub struct TcpConnector;
 
 impl TcpConnector {

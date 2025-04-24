@@ -1,3 +1,3 @@
 mod connect;
-pub mod tcp;
-pub use connect::Connector;
+pub(crate) mod tcp;
+pub(crate) use connect::Connector;

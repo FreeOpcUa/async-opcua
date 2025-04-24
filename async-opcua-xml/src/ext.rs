@@ -2,7 +2,7 @@ use roxmltree::Node;
 
 use crate::{error::XmlError, FromValue, XmlLoad};
 
-pub trait NodeExt<'a, 'input: 'a> {
+pub(crate) trait NodeExt<'a, 'input: 'a> {
     fn first_child_with_name(&self, name: &str) -> Result<Node<'a, 'input>, XmlError>;
 
     fn with_name(&self, name: &str) -> impl Iterator<Item = Node<'a, 'input>>;
@@ -33,7 +33,7 @@ impl<'a, 'input: 'a> NodeExt<'a, 'input> for Node<'a, 'input> {
     }
 }
 
-pub fn children_with_name<'input, T: XmlLoad<'input>>(
+pub(crate) fn children_with_name<'input, T: XmlLoad<'input>>(
     node: &Node<'_, 'input>,
     name: &str,
 ) -> Result<Vec<T>, XmlError> {
@@ -41,14 +41,14 @@ pub fn children_with_name<'input, T: XmlLoad<'input>>(
 }
 
 #[allow(unused)]
-pub fn first_child_with_name<'input, T: XmlLoad<'input>>(
+pub(crate) fn first_child_with_name<'input, T: XmlLoad<'input>>(
     node: &Node<'_, 'input>,
     name: &str,
 ) -> Result<T, XmlError> {
     T::load(&node.first_child_with_name(name)?)
 }
 
-pub fn first_child_with_name_opt<'input, T: XmlLoad<'input>>(
+pub(crate) fn first_child_with_name_opt<'input, T: XmlLoad<'input>>(
     node: &Node<'_, 'input>,
     name: &str,
 ) -> Result<Option<T>, XmlError> {
@@ -58,30 +58,35 @@ pub fn first_child_with_name_opt<'input, T: XmlLoad<'input>>(
     T::load(&child).map(|v| Some(v))
 }
 
-pub fn uint_attr(node: &Node<'_, '_>, name: &str) -> Result<Option<u64>, XmlError> {
+pub(crate) fn uint_attr(node: &Node<'_, '_>, name: &str) -> Result<Option<u64>, XmlError> {
     node.attribute(name)
         .map(|a| a.parse())
         .transpose()
         .map_err(|e| XmlError::parse_int(node, name, e))
 }
 
-pub fn int_attr(node: &Node<'_, '_>, name: &str) -> Result<Option<i64>, XmlError> {
+pub(crate) fn int_attr(node: &Node<'_, '_>, name: &str) -> Result<Option<i64>, XmlError> {
     node.attribute(name)
         .map(|a| a.parse())
         .transpose()
         .map_err(|e| XmlError::parse_int(node, name, e))
 }
 
-pub fn value_from_contents<T: FromValue>(node: &Node<'_, '_>) -> Result<T, XmlError> {
+pub(crate) fn value_from_contents<T: FromValue>(node: &Node<'_, '_>) -> Result<T, XmlError> {
     T::from_value(node, "content", node.try_contents()?)
 }
 
-pub fn value_from_attr<T: FromValue>(node: &Node<'_, '_>, attr: &str) -> Result<T, XmlError> {
+pub(crate) fn value_from_attr<T: FromValue>(
+    node: &Node<'_, '_>,
+    attr: &str,
+) -> Result<T, XmlError> {
     T::from_value(node, attr, node.try_attribute(attr)?)
 }
 
 #[allow(unused)]
-pub fn value_from_contents_opt<T: FromValue>(node: &Node<'_, '_>) -> Result<Option<T>, XmlError> {
+pub(crate) fn value_from_contents_opt<T: FromValue>(
+    node: &Node<'_, '_>,
+) -> Result<Option<T>, XmlError> {
     let Some(c) = node.text() else {
         return Ok(None);
     };
@@ -89,7 +94,7 @@ pub fn value_from_contents_opt<T: FromValue>(node: &Node<'_, '_>) -> Result<Opti
     T::from_value(node, "content", c).map(Some)
 }
 
-pub fn value_from_attr_opt<T: FromValue>(
+pub(crate) fn value_from_attr_opt<T: FromValue>(
     node: &Node<'_, '_>,
     attr: &str,
 ) -> Result<Option<T>, XmlError> {
@@ -100,7 +105,7 @@ pub fn value_from_attr_opt<T: FromValue>(
     T::from_value(node, attr, c).map(Some)
 }
 
-pub fn children_of_type<'input, T>(node: &Node<'_, 'input>) -> Result<Vec<T>, XmlError>
+pub(crate) fn children_of_type<'input, T>(node: &Node<'_, 'input>) -> Result<Vec<T>, XmlError>
 where
     Option<T>: XmlLoad<'input>,
 {
@@ -110,7 +115,7 @@ where
 }
 
 #[allow(unused)]
-pub fn first_child_of_type<'input, T>(node: &Node<'_, 'input>) -> Result<Option<T>, XmlError>
+pub(crate) fn first_child_of_type<'input, T>(node: &Node<'_, 'input>) -> Result<Option<T>, XmlError>
 where
     Option<T>: XmlLoad<'input>,
 {
@@ -121,7 +126,10 @@ where
 }
 
 #[allow(unused)]
-pub fn first_child_of_type_req<'input, T>(node: &Node<'_, 'input>, ctx: &str) -> Result<T, XmlError>
+pub(crate) fn first_child_of_type_req<'input, T>(
+    node: &Node<'_, 'input>,
+    ctx: &str,
+) -> Result<T, XmlError>
 where
     Option<T>: XmlLoad<'input>,
 {

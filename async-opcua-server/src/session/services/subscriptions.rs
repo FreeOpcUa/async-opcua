@@ -10,7 +10,7 @@ use opcua_types::{
 use tracing::debug_span;
 use tracing_futures::Instrument;
 
-pub async fn delete_subscriptions(
+pub(crate) async fn delete_subscriptions(
     node_managers: NodeManagers,
     request: Request<DeleteSubscriptionsRequest>,
 ) -> Response {
@@ -44,7 +44,7 @@ pub async fn delete_subscriptions(
     }
 }
 
-pub async fn delete_subscriptions_inner(
+pub(crate) async fn delete_subscriptions_inner(
     node_managers: NodeManagers,
     to_delete: Vec<u32>,
     subscriptions: &SubscriptionCache,

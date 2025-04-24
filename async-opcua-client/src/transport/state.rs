@@ -20,7 +20,7 @@ use opcua_types::{
 
 pub(crate) type RequestSend = tokio::sync::mpsc::Sender<OutgoingMessage>;
 
-pub struct SecureChannelState {
+pub(super) struct SecureChannelState {
     /// Time offset between the client and the server.
     client_offset: ArcSwap<chrono::Duration>,
     /// Ignore clock skew between the client and the server.
@@ -40,7 +40,11 @@ pub(super) struct Request {
 }
 
 impl Request {
-    pub fn new(payload: impl Into<RequestMessage>, sender: RequestSend, timeout: Duration) -> Self {
+    pub(super) fn new(
+        payload: impl Into<RequestMessage>,
+        sender: RequestSend,
+        timeout: Duration,
+    ) -> Self {
         Self {
             payload: payload.into(),
             sender,
@@ -48,7 +52,7 @@ impl Request {
         }
     }
 
-    pub async fn send_no_response(self) -> Result<(), StatusCode> {
+    pub(super) async fn send_no_response(self) -> Result<(), StatusCode> {
         let message = OutgoingMessage {
             request: self.payload,
             callback: None,
@@ -62,7 +66,7 @@ impl Request {
         }
     }
 
-    pub async fn send(self) -> Result<ResponseMessage, StatusCode> {
+    pub(super) async fn send(self) -> Result<ResponseMessage, StatusCode> {
         let (cb_send, cb_recv) = tokio::sync::oneshot::channel();
 
         let message = OutgoingMessage {
@@ -88,7 +92,7 @@ impl Request {
 impl SecureChannelState {
     const FIRST_REQUEST_HANDLE: u32 = 1;
 
-    pub fn new(
+    pub(super) fn new(
         ignore_clock_skew: bool,
         secure_channel: Arc<RwLock<SecureChannel>>,
         authentication_token: Arc<ArcSwap<NodeId>>,
@@ -138,7 +142,7 @@ impl SecureChannelState {
         Request::new(request, sender, timeout)
     }
 
-    pub fn set_client_offset(&self, offset: chrono::Duration) {
+    pub(super) fn set_client_offset(&self, offset: chrono::Duration) {
         // This is not strictly speaking thread safe, but it doesn't really matter in this case,
         // the assumption is that this is only called from a single thread at once.
         self.client_offset
@@ -190,7 +194,7 @@ impl SecureChannelState {
 
     /// Construct a request header for the session. All requests after create session are expected
     /// to supply an authentication token.
-    pub fn make_request_header(&self, timeout: Duration) -> RequestHeader {
+    pub(super) fn make_request_header(&self, timeout: Duration) -> RequestHeader {
         RequestHeader {
             authentication_token: self.authentication_token.load().as_ref().clone(),
             timestamp: DateTime::now_with_offset(**self.client_offset.load()),
@@ -201,7 +205,7 @@ impl SecureChannelState {
         }
     }
 
-    pub fn request_handle(&self) -> IntegerId {
+    pub(super) fn request_handle(&self) -> IntegerId {
         self.request_handle.next()
     }
 }

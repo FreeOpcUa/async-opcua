@@ -1,8 +1,8 @@
-pub mod event_loop;
+pub(crate) mod event_loop;
 pub use event_loop::SubscriptionActivity;
 
 mod service;
-pub mod state;
+pub(crate) mod state;
 
 use std::{
     collections::{BTreeSet, HashMap},
@@ -474,7 +474,7 @@ impl PublishLimits {
     const MIN_MESSAGE_ROUNDTRIP: Duration = Duration::from_millis(10);
     const REQUESTS_PER_SUBSCRIPTION: usize = 2;
 
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             message_roundtrip: Self::MIN_MESSAGE_ROUNDTRIP,
             publish_interval: Duration::ZERO,
@@ -484,12 +484,16 @@ impl PublishLimits {
         }
     }
 
-    pub fn update_message_roundtrip(&mut self, message_roundtrip: Duration) {
+    pub(crate) fn update_message_roundtrip(&mut self, message_roundtrip: Duration) {
         self.message_roundtrip = message_roundtrip.max(Self::MIN_MESSAGE_ROUNDTRIP);
         self.calculate_publish_limits();
     }
 
-    pub fn update_subscriptions(&mut self, subscriptions: usize, publish_interval: Duration) {
+    pub(crate) fn update_subscriptions(
+        &mut self,
+        subscriptions: usize,
+        publish_interval: Duration,
+    ) {
         self.subscriptions = subscriptions;
         self.publish_interval = publish_interval;
         self.calculate_publish_limits();

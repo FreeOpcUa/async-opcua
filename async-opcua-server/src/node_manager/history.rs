@@ -29,7 +29,7 @@ pub(crate) enum HistoryReadDetails {
 }
 
 impl HistoryReadDetails {
-    pub fn from_extension_object(obj: ExtensionObject) -> Result<Self, StatusCode> {
+    pub(crate) fn from_extension_object(obj: ExtensionObject) -> Result<Self, StatusCode> {
         match_extension_object_owned!(obj,
             v: ReadRawModifiedDetails => Ok(Self::RawModified(v)),
             v: ReadAtTimeDetails => Ok(Self::AtTime(v)),

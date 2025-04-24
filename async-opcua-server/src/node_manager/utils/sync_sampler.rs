@@ -24,7 +24,7 @@ struct SamplerItem {
 }
 
 impl SamplerItem {
-    pub fn refresh_values(&mut self) {
+    fn refresh_values(&mut self) {
         let mut interval = Duration::MAX;
         let mut enabled = false;
         for item in self.items.values() {

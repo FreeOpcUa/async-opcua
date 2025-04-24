@@ -46,7 +46,7 @@ pub(crate) struct Response {
 }
 
 impl Response {
-    pub fn from_result(
+    pub(super) fn from_result(
         result: Result<impl Into<ResponseMessage>, StatusCode>,
         request_handle: u32,
         request_id: u32,
@@ -88,7 +88,7 @@ enum RequestProcessResult {
     Close,
 }
 
-pub struct SessionStarter<T> {
+pub(crate) struct SessionStarter<T> {
     connector: T,
     info: Arc<ServerInfo>,
     session_manager: Arc<RwLock<SessionManager>>,
@@ -98,7 +98,7 @@ pub struct SessionStarter<T> {
 }
 
 impl<T: Connector> SessionStarter<T> {
-    pub fn new(
+    pub(crate) fn new(
         connector: T,
         info: Arc<ServerInfo>,
         session_manager: Arc<RwLock<SessionManager>>,
@@ -116,7 +116,7 @@ impl<T: Connector> SessionStarter<T> {
         }
     }
 
-    pub async fn run(self, mut command: tokio::sync::mpsc::Receiver<ControllerCommand>) {
+    pub(crate) async fn run(self, mut command: tokio::sync::mpsc::Receiver<ControllerCommand>) {
         let token = CancellationToken::new();
         let span = tracing::info_span!("Establish TCP channel");
         let fut = self
@@ -160,7 +160,7 @@ impl<T: Connector> SessionStarter<T> {
 }
 
 impl SessionController {
-    pub fn new(
+    fn new(
         transport: TcpTransport,
         session_manager: Arc<RwLock<SessionManager>>,
         certificate_store: Arc<RwLock<CertificateStore>>,
@@ -188,7 +188,7 @@ impl SessionController {
         }
     }
 
-    pub async fn run(mut self, mut command: tokio::sync::mpsc::Receiver<ControllerCommand>) {
+    async fn run(mut self, mut command: tokio::sync::mpsc::Receiver<ControllerCommand>) {
         loop {
             let resp_fut = if self.pending_messages.is_empty() {
                 Either::Left(futures::future::pending::<Option<Result<Response, String>>>())
@@ -762,7 +762,7 @@ struct SecureChannelState {
 }
 
 impl SecureChannelState {
-    pub fn new(handle: Arc<AtomicHandle>) -> SecureChannelState {
+    fn new(handle: Arc<AtomicHandle>) -> SecureChannelState {
         SecureChannelState {
             secure_channel_id: handle,
             issued: false,
@@ -771,11 +771,11 @@ impl SecureChannelState {
         }
     }
 
-    pub fn create_secure_channel_id(&mut self) -> u32 {
+    fn create_secure_channel_id(&mut self) -> u32 {
         self.secure_channel_id.next()
     }
 
-    pub fn create_token_id(&mut self) -> u32 {
+    fn create_token_id(&mut self) -> u32 {
         self.last_token_id += 1;
         self.last_token_id
     }

@@ -25,11 +25,11 @@ pub enum SessionConnectMode {
 }
 
 impl SessionConnector {
-    pub fn new(session: Arc<Session>) -> Self {
+    pub(super) fn new(session: Arc<Session>) -> Self {
         Self { inner: session }
     }
 
-    pub async fn try_connect(
+    pub(super) async fn try_connect(
         &self,
     ) -> Result<(SecureChannelEventLoop, SessionConnectMode), StatusCode> {
         self.connect_and_activate().await

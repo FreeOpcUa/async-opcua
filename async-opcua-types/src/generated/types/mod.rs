@@ -7,7 +7,7 @@
 // Copyright (C) 2017-2024 Adam Lock, Einar Omang
 #[allow(unused)]
 mod opcua {
-    pub use crate as types;
+    pub(super) use crate as types;
 }
 pub mod enums;
 pub use enums::*;

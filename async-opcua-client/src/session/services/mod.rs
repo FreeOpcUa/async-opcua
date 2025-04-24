@@ -1,6 +1,6 @@
-pub mod attributes;
-pub mod method;
-pub mod node_management;
-pub mod session;
-pub mod subscriptions;
-pub mod view;
+pub(super) mod attributes;
+pub(super) mod method;
+pub(super) mod node_management;
+pub(super) mod session;
+pub(super) mod subscriptions;
+pub(super) mod view;

@@ -1,4 +1,5 @@
 #![warn(missing_docs)]
+#![warn(unreachable_pub)]
 
 //! This is an [OPC UA](https://opcfoundation.org/about/opc-technologies/opc-ua/)
 //! server / client API implementation for Rust.

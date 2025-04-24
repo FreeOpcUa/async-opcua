@@ -7,7 +7,7 @@
 // Copyright (C) 2017-2024 Adam Lock, Einar Omang
 #[allow(unused)]
 mod opcua {
-    pub use crate as types;
+    pub(super) use crate as types;
 }
 #[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part5/12.36

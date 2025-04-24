@@ -134,9 +134,9 @@ impl ItemAttr for EventAttribute {
     }
 }
 
-pub type EventStruct = StructItem<EventFieldAttribute, EventAttribute>;
+pub(crate) type EventStruct = StructItem<EventFieldAttribute, EventAttribute>;
 
-pub fn parse_event_struct(input: DeriveInput) -> syn::Result<EventStruct> {
+pub(crate) fn parse_event_struct(input: DeriveInput) -> syn::Result<EventStruct> {
     let mut parsed = EventStruct::from_input(expect_struct(input.data)?, input.attrs, input.ident)?;
 
     let mut filtered_fields = Vec::with_capacity(parsed.fields.len());

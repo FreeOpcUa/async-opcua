@@ -138,7 +138,7 @@ async fn get_eu_range(
     res
 }
 
-pub async fn create_monitored_items(
+pub(crate) async fn create_monitored_items(
     node_managers: NodeManagers,
     request: Request<CreateMonitoredItemsRequest>,
 ) -> Response {
@@ -268,7 +268,7 @@ pub async fn create_monitored_items(
     }
 }
 
-pub async fn modify_monitored_items(
+pub(crate) async fn modify_monitored_items(
     node_managers: NodeManagers,
     request: Request<ModifyMonitoredItemsRequest>,
 ) -> Response {
@@ -323,7 +323,7 @@ pub async fn modify_monitored_items(
     }
 }
 
-pub async fn set_monitoring_mode(
+pub(crate) async fn set_monitoring_mode(
     node_managers: NodeManagers,
     request: Request<SetMonitoringModeRequest>,
 ) -> Response {
@@ -372,7 +372,7 @@ pub async fn set_monitoring_mode(
     }
 }
 
-pub async fn delete_monitored_items(
+pub(crate) async fn delete_monitored_items(
     node_managers: NodeManagers,
     request: Request<DeleteMonitoredItemsRequest>,
 ) -> Response {

@@ -1,5 +1,3 @@
-#![warn(missing_docs)]
-
 //! Crate containing various procedural macros used by rust OPC-UA.
 
 mod encoding;

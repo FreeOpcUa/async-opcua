@@ -167,7 +167,7 @@ fn make_test_cert_4096() -> (X509, PrivateKey) {
 struct Test;
 
 impl Test {
-    pub fn setup() -> Test {
+    fn setup() -> Test {
         Test {}
     }
 }

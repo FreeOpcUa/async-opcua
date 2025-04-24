@@ -37,7 +37,7 @@ pub(crate) enum EncodingInput {
 }
 
 impl EncodingInput {
-    pub fn from_derive_input(input: DeriveInput) -> syn::Result<Self> {
+    pub(crate) fn from_derive_input(input: DeriveInput) -> syn::Result<Self> {
         match input.data {
             syn::Data::Struct(data_struct) => Ok(Self::Struct(EncodingStruct::from_input(
                 data_struct,
@@ -67,7 +67,7 @@ impl EncodingInput {
     }
 }
 
-pub enum EncodingToImpl {
+pub(crate) enum EncodingToImpl {
     BinaryEncode,
     BinaryDecode,
     UaEnum,
@@ -83,7 +83,7 @@ pub enum EncodingToImpl {
     XmlType,
 }
 
-pub fn generate_encoding_impl(
+pub(crate) fn generate_encoding_impl(
     input: DeriveInput,
     target: EncodingToImpl,
 ) -> syn::Result<TokenStream> {

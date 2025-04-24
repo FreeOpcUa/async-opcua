@@ -12,6 +12,9 @@ readme = "README.md"
 documentation = "https://docs.rs/async-opcua-client/"
 edition = "2021"
 
+[lints]
+workspace = true
+
 [lib]
 name = "opcua_client"
 

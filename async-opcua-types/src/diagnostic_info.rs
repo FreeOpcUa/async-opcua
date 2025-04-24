@@ -129,7 +129,7 @@ mod xml {
 
 #[allow(unused)]
 mod opcua {
-    pub use crate as types;
+    pub(super) use crate as types;
 }
 
 /// Diagnostic information.

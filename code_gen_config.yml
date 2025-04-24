@@ -15,7 +15,7 @@ targets:
         add_to_type_loader: true
     extra_header: |
       #[allow(unused)]
-      mod opcua { pub use crate as types; }
+      mod opcua { pub(super) use crate as types; }
     default_excluded:
       - AnonymousIdentityToken
       - HistoryUpdateType
@@ -37,13 +37,13 @@ targets:
       output_dir: async-opcua-core-namespace/src/events
       extra_header: |
         #[allow(unused)]
-        mod opcua { pub use opcua_types as types; pub use opcua_nodes as nodes; pub use opcua_nodes::{Event, EventField}; }
+        mod opcua { pub(super) use opcua_types as types; pub(super) use opcua_nodes as nodes; pub(super) use opcua_nodes::{Event, EventField}; }
         #[allow(unused)]
         use opcua_types as types;
   - type: ids
     file_path: schemas/1.05/NodeIds.csv
     extra_header: |
-      mod opcua { pub use crate as types; }
+      mod opcua { pub(super) use crate as types; }
     output_file: async-opcua-types/src/generated/node_ids.rs
 
 sources:

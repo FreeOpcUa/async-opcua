@@ -466,8 +466,8 @@ mod tests {
     }
 
     mod opcua {
-        pub use crate as nodes;
-        pub use opcua_types as types;
+        pub(super) use crate as nodes;
+        pub(super) use opcua_types as types;
     }
 
     #[derive(Event)]
@@ -479,7 +479,7 @@ mod tests {
     }
 
     impl TestEvent {
-        pub fn new(
+        pub(super) fn new(
             type_id: impl Into<NodeId>,
             event_id: ByteString,
             message: impl Into<LocalizedText>,

@@ -3,7 +3,7 @@ use convert_case::{Case, Casing};
 use proc_macro2::TokenStream;
 use quote::quote;
 
-pub fn generate_event_impls(event: EventStruct) -> syn::Result<TokenStream> {
+pub(crate) fn generate_event_impls(event: EventStruct) -> syn::Result<TokenStream> {
     let ident = event.ident;
     let mut get_arms = quote! {};
     let mut init_items = quote! {};

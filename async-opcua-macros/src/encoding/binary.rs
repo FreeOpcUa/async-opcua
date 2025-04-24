@@ -3,7 +3,7 @@ use quote::quote;
 
 use super::{enums::SimpleEnum, unions::AdvancedEnum, EncodingStruct};
 
-pub fn generate_binary_encode_impl(strct: EncodingStruct) -> syn::Result<TokenStream> {
+pub(super) fn generate_binary_encode_impl(strct: EncodingStruct) -> syn::Result<TokenStream> {
     let mut byte_len_body = quote! {};
     let mut encode_body = quote! {};
 
@@ -95,7 +95,7 @@ pub fn generate_binary_encode_impl(strct: EncodingStruct) -> syn::Result<TokenSt
     })
 }
 
-pub fn generate_binary_decode_impl(strct: EncodingStruct) -> syn::Result<TokenStream> {
+pub(super) fn generate_binary_decode_impl(strct: EncodingStruct) -> syn::Result<TokenStream> {
     let mut decode_impl = quote! {};
     let mut decode_build = quote! {};
 
@@ -181,7 +181,7 @@ pub fn generate_binary_decode_impl(strct: EncodingStruct) -> syn::Result<TokenSt
     })
 }
 
-pub fn generate_simple_enum_binary_decode_impl(en: SimpleEnum) -> syn::Result<TokenStream> {
+pub(super) fn generate_simple_enum_binary_decode_impl(en: SimpleEnum) -> syn::Result<TokenStream> {
     let ident = en.ident;
     let repr = en.repr;
 
@@ -196,7 +196,7 @@ pub fn generate_simple_enum_binary_decode_impl(en: SimpleEnum) -> syn::Result<To
     })
 }
 
-pub fn generate_simple_enum_binary_encode_impl(en: SimpleEnum) -> syn::Result<TokenStream> {
+pub(super) fn generate_simple_enum_binary_encode_impl(en: SimpleEnum) -> syn::Result<TokenStream> {
     let ident = en.ident;
     let repr = en.repr;
 
@@ -218,7 +218,7 @@ pub fn generate_simple_enum_binary_encode_impl(en: SimpleEnum) -> syn::Result<To
     })
 }
 
-pub fn generate_union_binary_decode_impl(en: AdvancedEnum) -> syn::Result<TokenStream> {
+pub(super) fn generate_union_binary_decode_impl(en: AdvancedEnum) -> syn::Result<TokenStream> {
     let ident = en.ident;
 
     let mut decode_arms = quote! {};
@@ -258,7 +258,7 @@ pub fn generate_union_binary_decode_impl(en: AdvancedEnum) -> syn::Result<TokenS
     })
 }
 
-pub fn generate_union_binary_encode_impl(en: AdvancedEnum) -> syn::Result<TokenStream> {
+pub(super) fn generate_union_binary_encode_impl(en: AdvancedEnum) -> syn::Result<TokenStream> {
     let ident = en.ident;
 
     let mut byte_len_arms = quote! {};

@@ -18,6 +18,25 @@ use super::{
     random, SHA1_SIZE, SHA256_SIZE,
 };
 
+/// Trait for a security policy supported by the library.
+pub trait SecurityPolicyConstants {
+    /// The name of the policy.
+    const SECURITY_POLICY: &'static str;
+    /// The URI of the policy, as defined in the OPC-UA standard.
+    const SECURITY_POLICY_URI: &'static str;
+
+    /// The algorithm used for symmetric signing.
+    const SYMMETRIC_SIGNATURE_ALGORITHM: &'static str;
+    /// The algorithm used for asymmetric signing.
+    const ASYMMETRIC_SIGNATURE_ALGORITHM: &'static str;
+    /// The algorithm used for asymmetric encryption.
+    const ASYMMETRIC_ENCRYPTION_ALGORITHM: &'static str;
+    /// The length of the derived signature key in bits.
+    const DERIVED_SIGNATURE_KEY_LENGTH: usize;
+    /// The length of the asymmetric key in bits.
+    const ASYMMETRIC_KEY_LENGTH: (usize, usize);
+}
+
 // These are constants that govern the different encryption / signing modes for OPC UA. In some
 // cases these algorithm string constants will be passed over the wire and code needs to test the
 // string to see if the algorithm is supported.
@@ -36,18 +55,17 @@ use super::{
 ///   DerivedSignatureKeyLength – 256 bits
 ///   AsymmetricKeyLength - 2048-4096 bits
 ///   SecureChannelNonceLength - 32 bytes
-mod aes_128_sha_256_rsa_oaep {
-    use crate::algorithms::*;
-
-    pub const SECURITY_POLICY: &str = "Aes128-Sha256-RsaOaep";
-    pub const SECURITY_POLICY_URI: &str =
+pub struct Aes128Sha256RsaOaep;
+impl SecurityPolicyConstants for Aes128Sha256RsaOaep {
+    const SECURITY_POLICY: &str = "Aes128-Sha256-RsaOaep";
+    const SECURITY_POLICY_URI: &str =
         "http://opcfoundation.org/UA/SecurityPolicy#Aes128_Sha256_RsaOaep";
 
-    pub const SYMMETRIC_SIGNATURE_ALGORITHM: &str = DSIG_HMAC_SHA256;
-    pub const ASYMMETRIC_SIGNATURE_ALGORITHM: &str = DSIG_RSA_SHA256;
-    pub const ASYMMETRIC_ENCRYPTION_ALGORITHM: &str = ENC_RSA_OAEP;
-    pub const DERIVED_SIGNATURE_KEY_LENGTH: usize = 256;
-    pub const ASYMMETRIC_KEY_LENGTH: (usize, usize) = (2048, 4096);
+    const SYMMETRIC_SIGNATURE_ALGORITHM: &str = crate::algorithms::DSIG_HMAC_SHA256;
+    const ASYMMETRIC_SIGNATURE_ALGORITHM: &str = crate::algorithms::DSIG_RSA_SHA256;
+    const ASYMMETRIC_ENCRYPTION_ALGORITHM: &str = crate::algorithms::ENC_RSA_OAEP;
+    const DERIVED_SIGNATURE_KEY_LENGTH: usize = 256;
+    const ASYMMETRIC_KEY_LENGTH: (usize, usize) = (2048, 4096);
 }
 
 /// Aes256-Sha256-RsaPss security policy
@@ -64,18 +82,17 @@ mod aes_128_sha_256_rsa_oaep {
 ///   DerivedSignatureKeyLength – 256 bits
 ///   AsymmetricKeyLength - 2048-4096 bits
 ///   SecureChannelNonceLength - 32 bytes
-mod aes_256_sha_256_rsa_pss {
-    use crate::algorithms::*;
-
-    pub const SECURITY_POLICY: &str = "Aes256-Sha256-RsaPss";
-    pub const SECURITY_POLICY_URI: &str =
+pub struct Aes256Sha256RsaPss;
+impl SecurityPolicyConstants for Aes256Sha256RsaPss {
+    const SECURITY_POLICY: &str = "Aes256-Sha256-RsaPss";
+    const SECURITY_POLICY_URI: &str =
         "http://opcfoundation.org/UA/SecurityPolicy#Aes256_Sha256_RsaPss";
 
-    pub const SYMMETRIC_SIGNATURE_ALGORITHM: &str = DSIG_HMAC_SHA256;
-    pub const ASYMMETRIC_SIGNATURE_ALGORITHM: &str = DSIG_RSA_PSS_SHA2_256;
-    pub const ASYMMETRIC_ENCRYPTION_ALGORITHM: &str = ENC_RSA_OAEP_SHA256;
-    pub const DERIVED_SIGNATURE_KEY_LENGTH: usize = 256;
-    pub const ASYMMETRIC_KEY_LENGTH: (usize, usize) = (2048, 4096);
+    const SYMMETRIC_SIGNATURE_ALGORITHM: &str = crate::algorithms::DSIG_HMAC_SHA256;
+    const ASYMMETRIC_SIGNATURE_ALGORITHM: &str = crate::algorithms::DSIG_RSA_PSS_SHA2_256;
+    const ASYMMETRIC_ENCRYPTION_ALGORITHM: &str = crate::algorithms::ENC_RSA_OAEP_SHA256;
+    const DERIVED_SIGNATURE_KEY_LENGTH: usize = 256;
+    const ASYMMETRIC_KEY_LENGTH: (usize, usize) = (2048, 4096);
 }
 
 /// Basic256Sha256 security policy
@@ -92,18 +109,16 @@ mod aes_256_sha_256_rsa_pss {
 ///   DerivedSignatureKeyLength – 256 bits
 ///   AsymmetricKeyLength - 2048-4096 bits
 ///   SecureChannelNonceLength - 32 bytes
-mod basic_256_sha_256 {
-    use crate::algorithms::*;
+pub struct Basic256Sha256;
+impl SecurityPolicyConstants for Basic256Sha256 {
+    const SECURITY_POLICY: &str = "Basic256Sha256";
+    const SECURITY_POLICY_URI: &str = "http://opcfoundation.org/UA/SecurityPolicy#Basic256Sha256";
 
-    pub const SECURITY_POLICY: &str = "Basic256Sha256";
-    pub const SECURITY_POLICY_URI: &str =
-        "http://opcfoundation.org/UA/SecurityPolicy#Basic256Sha256";
-
-    pub const SYMMETRIC_SIGNATURE_ALGORITHM: &str = DSIG_HMAC_SHA256;
-    pub const ASYMMETRIC_SIGNATURE_ALGORITHM: &str = DSIG_RSA_SHA256;
-    pub const ASYMMETRIC_ENCRYPTION_ALGORITHM: &str = ENC_RSA_OAEP;
-    pub const DERIVED_SIGNATURE_KEY_LENGTH: usize = 256;
-    pub const ASYMMETRIC_KEY_LENGTH: (usize, usize) = (2048, 4096);
+    const SYMMETRIC_SIGNATURE_ALGORITHM: &str = crate::algorithms::DSIG_HMAC_SHA256;
+    const ASYMMETRIC_SIGNATURE_ALGORITHM: &str = crate::algorithms::DSIG_RSA_SHA256;
+    const ASYMMETRIC_ENCRYPTION_ALGORITHM: &str = crate::algorithms::ENC_RSA_OAEP;
+    const DERIVED_SIGNATURE_KEY_LENGTH: usize = 256;
+    const ASYMMETRIC_KEY_LENGTH: (usize, usize) = (2048, 4096);
 }
 
 /// Basic128Rsa15 security policy (deprecated in OPC UA 1.04)
@@ -119,18 +134,16 @@ mod basic_256_sha_256 {
 ///   DerivedSignatureKeyLength – 128 bits
 ///   AsymmetricKeyLength - 1024-2048 bits
 ///   SecureChannelNonceLength - 16 bytes
-mod basic_128_rsa_15 {
-    use crate::algorithms::*;
+pub struct Basic128Rsa15;
+impl SecurityPolicyConstants for Basic128Rsa15 {
+    const SECURITY_POLICY: &str = "Basic128Rsa15";
+    const SECURITY_POLICY_URI: &str = "http://opcfoundation.org/UA/SecurityPolicy#Basic128Rsa15";
 
-    pub const SECURITY_POLICY: &str = "Basic128Rsa15";
-    pub const SECURITY_POLICY_URI: &str =
-        "http://opcfoundation.org/UA/SecurityPolicy#Basic128Rsa15";
-
-    pub const SYMMETRIC_SIGNATURE_ALGORITHM: &str = DSIG_HMAC_SHA1;
-    pub const ASYMMETRIC_SIGNATURE_ALGORITHM: &str = DSIG_RSA_SHA1;
-    pub const ASYMMETRIC_ENCRYPTION_ALGORITHM: &str = ENC_RSA_15;
-    pub const DERIVED_SIGNATURE_KEY_LENGTH: usize = 128;
-    pub const ASYMMETRIC_KEY_LENGTH: (usize, usize) = (1024, 2048);
+    const SYMMETRIC_SIGNATURE_ALGORITHM: &str = crate::algorithms::DSIG_HMAC_SHA1;
+    const ASYMMETRIC_SIGNATURE_ALGORITHM: &str = crate::algorithms::DSIG_RSA_SHA1;
+    const ASYMMETRIC_ENCRYPTION_ALGORITHM: &str = crate::algorithms::ENC_RSA_15;
+    const DERIVED_SIGNATURE_KEY_LENGTH: usize = 128;
+    const ASYMMETRIC_KEY_LENGTH: (usize, usize) = (1024, 2048);
 }
 
 /// Basic256 security policy (deprecated in OPC UA 1.04)
@@ -146,17 +159,16 @@ mod basic_128_rsa_15 {
 ///   DerivedSignatureKeyLength – 192 bits
 ///   AsymmetricKeyLength - 1024-2048 bits
 ///   SecureChannelNonceLength - 32 bytes
-mod basic_256 {
-    use crate::algorithms::*;
+pub struct Basic256;
+impl SecurityPolicyConstants for Basic256 {
+    const SECURITY_POLICY: &str = "Basic256";
+    const SECURITY_POLICY_URI: &str = "http://opcfoundation.org/UA/SecurityPolicy#Basic256";
 
-    pub const SECURITY_POLICY: &str = "Basic256";
-    pub const SECURITY_POLICY_URI: &str = "http://opcfoundation.org/UA/SecurityPolicy#Basic256";
-
-    pub const SYMMETRIC_SIGNATURE_ALGORITHM: &str = DSIG_HMAC_SHA1;
-    pub const ASYMMETRIC_SIGNATURE_ALGORITHM: &str = DSIG_RSA_SHA1;
-    pub const ASYMMETRIC_ENCRYPTION_ALGORITHM: &str = ENC_RSA_OAEP;
-    pub const DERIVED_SIGNATURE_KEY_LENGTH: usize = 192;
-    pub const ASYMMETRIC_KEY_LENGTH: (usize, usize) = (1024, 2048);
+    const SYMMETRIC_SIGNATURE_ALGORITHM: &str = crate::algorithms::DSIG_HMAC_SHA1;
+    const ASYMMETRIC_SIGNATURE_ALGORITHM: &str = crate::algorithms::DSIG_RSA_SHA1;
+    const ASYMMETRIC_ENCRYPTION_ALGORITHM: &str = crate::algorithms::ENC_RSA_OAEP;
+    const DERIVED_SIGNATURE_KEY_LENGTH: usize = 192;
+    const ASYMMETRIC_KEY_LENGTH: (usize, usize) = (1024, 2048);
 }
 
 /// SecurityPolicy implies what encryption and signing algorithms and their relevant key strengths
@@ -193,17 +205,19 @@ impl FromStr for SecurityPolicy {
             constants::SECURITY_POLICY_NONE | constants::SECURITY_POLICY_NONE_URI => {
                 SecurityPolicy::None
             }
-            basic_128_rsa_15::SECURITY_POLICY | basic_128_rsa_15::SECURITY_POLICY_URI => {
+            Basic128Rsa15::SECURITY_POLICY | Basic128Rsa15::SECURITY_POLICY_URI => {
                 SecurityPolicy::Basic128Rsa15
             }
-            basic_256::SECURITY_POLICY | basic_256::SECURITY_POLICY_URI => SecurityPolicy::Basic256,
-            basic_256_sha_256::SECURITY_POLICY | basic_256_sha_256::SECURITY_POLICY_URI => {
+            Basic256::SECURITY_POLICY | Basic256::SECURITY_POLICY_URI => SecurityPolicy::Basic256,
+            Basic256Sha256::SECURITY_POLICY | Basic256Sha256::SECURITY_POLICY_URI => {
                 SecurityPolicy::Basic256Sha256
             }
-            aes_128_sha_256_rsa_oaep::SECURITY_POLICY
-            | aes_128_sha_256_rsa_oaep::SECURITY_POLICY_URI => SecurityPolicy::Aes128Sha256RsaOaep,
-            aes_256_sha_256_rsa_pss::SECURITY_POLICY
-            | aes_256_sha_256_rsa_pss::SECURITY_POLICY_URI => SecurityPolicy::Aes256Sha256RsaPss,
+            Aes128Sha256RsaOaep::SECURITY_POLICY | Aes128Sha256RsaOaep::SECURITY_POLICY_URI => {
+                SecurityPolicy::Aes128Sha256RsaOaep
+            }
+            Aes256Sha256RsaPss::SECURITY_POLICY | Aes256Sha256RsaPss::SECURITY_POLICY_URI => {
+                SecurityPolicy::Aes256Sha256RsaPss
+            }
             _ => {
                 error!("Specified security policy \"{}\" is not recognized", s);
                 SecurityPolicy::Unknown
@@ -225,11 +239,11 @@ impl SecurityPolicy {
     pub fn to_uri(&self) -> &'static str {
         match self {
             SecurityPolicy::None => constants::SECURITY_POLICY_NONE_URI,
-            SecurityPolicy::Basic128Rsa15 => basic_128_rsa_15::SECURITY_POLICY_URI,
-            SecurityPolicy::Basic256 => basic_256::SECURITY_POLICY_URI,
-            SecurityPolicy::Basic256Sha256 => basic_256_sha_256::SECURITY_POLICY_URI,
-            SecurityPolicy::Aes128Sha256RsaOaep => aes_128_sha_256_rsa_oaep::SECURITY_POLICY_URI,
-            SecurityPolicy::Aes256Sha256RsaPss => aes_256_sha_256_rsa_pss::SECURITY_POLICY_URI,
+            SecurityPolicy::Basic128Rsa15 => Basic128Rsa15::SECURITY_POLICY_URI,
+            SecurityPolicy::Basic256 => Basic256::SECURITY_POLICY_URI,
+            SecurityPolicy::Basic256Sha256 => Basic256Sha256::SECURITY_POLICY_URI,
+            SecurityPolicy::Aes128Sha256RsaOaep => Aes128Sha256RsaOaep::SECURITY_POLICY_URI,
+            SecurityPolicy::Aes256Sha256RsaPss => Aes256Sha256RsaPss::SECURITY_POLICY_URI,
             _ => {
                 panic!("Shouldn't be turning an unknown policy into a uri");
             }
@@ -264,11 +278,11 @@ impl SecurityPolicy {
     pub fn to_str(&self) -> &'static str {
         match self {
             SecurityPolicy::None => constants::SECURITY_POLICY_NONE,
-            SecurityPolicy::Basic128Rsa15 => basic_128_rsa_15::SECURITY_POLICY,
-            SecurityPolicy::Basic256 => basic_256::SECURITY_POLICY,
-            SecurityPolicy::Basic256Sha256 => basic_256_sha_256::SECURITY_POLICY,
-            SecurityPolicy::Aes128Sha256RsaOaep => aes_128_sha_256_rsa_oaep::SECURITY_POLICY,
-            SecurityPolicy::Aes256Sha256RsaPss => aes_256_sha_256_rsa_pss::SECURITY_POLICY,
+            SecurityPolicy::Basic128Rsa15 => Basic128Rsa15::SECURITY_POLICY,
+            SecurityPolicy::Basic256 => Basic256::SECURITY_POLICY,
+            SecurityPolicy::Basic256Sha256 => Basic256Sha256::SECURITY_POLICY,
+            SecurityPolicy::Aes128Sha256RsaOaep => Aes128Sha256RsaOaep::SECURITY_POLICY,
+            SecurityPolicy::Aes256Sha256RsaPss => Aes256Sha256RsaPss::SECURITY_POLICY,
             _ => {
                 panic!("Shouldn't be turning an unknown policy into a string");
             }
@@ -280,14 +294,14 @@ impl SecurityPolicy {
     /// This will panic if the security policy is `Unknown` or `None`.
     pub fn asymmetric_encryption_algorithm(&self) -> &'static str {
         match self {
-            SecurityPolicy::Basic128Rsa15 => basic_128_rsa_15::ASYMMETRIC_ENCRYPTION_ALGORITHM,
-            SecurityPolicy::Basic256 => basic_256::ASYMMETRIC_ENCRYPTION_ALGORITHM,
-            SecurityPolicy::Basic256Sha256 => basic_256_sha_256::ASYMMETRIC_ENCRYPTION_ALGORITHM,
+            SecurityPolicy::Basic128Rsa15 => Basic128Rsa15::ASYMMETRIC_ENCRYPTION_ALGORITHM,
+            SecurityPolicy::Basic256 => Basic256::ASYMMETRIC_ENCRYPTION_ALGORITHM,
+            SecurityPolicy::Basic256Sha256 => Basic256Sha256::ASYMMETRIC_ENCRYPTION_ALGORITHM,
             SecurityPolicy::Aes128Sha256RsaOaep => {
-                aes_128_sha_256_rsa_oaep::ASYMMETRIC_ENCRYPTION_ALGORITHM
+                Aes128Sha256RsaOaep::ASYMMETRIC_ENCRYPTION_ALGORITHM
             }
             SecurityPolicy::Aes256Sha256RsaPss => {
-                aes_256_sha_256_rsa_pss::ASYMMETRIC_ENCRYPTION_ALGORITHM
+                Aes256Sha256RsaPss::ASYMMETRIC_ENCRYPTION_ALGORITHM
             }
             _ => {
                 panic!("Invalid policy");
@@ -300,14 +314,14 @@ impl SecurityPolicy {
     /// This will panic if the security policy is `Unknown` or `None`.
     pub fn asymmetric_signature_algorithm(&self) -> &'static str {
         match self {
-            SecurityPolicy::Basic128Rsa15 => basic_128_rsa_15::ASYMMETRIC_SIGNATURE_ALGORITHM,
-            SecurityPolicy::Basic256 => basic_256::ASYMMETRIC_SIGNATURE_ALGORITHM,
-            SecurityPolicy::Basic256Sha256 => basic_256_sha_256::ASYMMETRIC_SIGNATURE_ALGORITHM,
+            SecurityPolicy::Basic128Rsa15 => Basic128Rsa15::ASYMMETRIC_SIGNATURE_ALGORITHM,
+            SecurityPolicy::Basic256 => Basic256::ASYMMETRIC_SIGNATURE_ALGORITHM,
+            SecurityPolicy::Basic256Sha256 => Basic256Sha256::ASYMMETRIC_SIGNATURE_ALGORITHM,
             SecurityPolicy::Aes128Sha256RsaOaep => {
-                aes_128_sha_256_rsa_oaep::ASYMMETRIC_SIGNATURE_ALGORITHM
+                Aes128Sha256RsaOaep::ASYMMETRIC_SIGNATURE_ALGORITHM
             }
             SecurityPolicy::Aes256Sha256RsaPss => {
-                aes_256_sha_256_rsa_pss::ASYMMETRIC_SIGNATURE_ALGORITHM
+                Aes256Sha256RsaPss::ASYMMETRIC_SIGNATURE_ALGORITHM
             }
             _ => {
                 panic!("Invalid policy");
@@ -320,15 +334,13 @@ impl SecurityPolicy {
     /// This will panic if the security policy is `Unknown` or `None`.
     pub fn symmetric_signature_algorithm(&self) -> &'static str {
         match self {
-            SecurityPolicy::Basic128Rsa15 => basic_128_rsa_15::SYMMETRIC_SIGNATURE_ALGORITHM,
-            SecurityPolicy::Basic256 => basic_256::SYMMETRIC_SIGNATURE_ALGORITHM,
-            SecurityPolicy::Basic256Sha256 => basic_256_sha_256::SYMMETRIC_SIGNATURE_ALGORITHM,
+            SecurityPolicy::Basic128Rsa15 => Basic128Rsa15::SYMMETRIC_SIGNATURE_ALGORITHM,
+            SecurityPolicy::Basic256 => Basic256::SYMMETRIC_SIGNATURE_ALGORITHM,
+            SecurityPolicy::Basic256Sha256 => Basic256Sha256::SYMMETRIC_SIGNATURE_ALGORITHM,
             SecurityPolicy::Aes128Sha256RsaOaep => {
-                aes_128_sha_256_rsa_oaep::SYMMETRIC_SIGNATURE_ALGORITHM
+                Aes128Sha256RsaOaep::SYMMETRIC_SIGNATURE_ALGORITHM
             }
-            SecurityPolicy::Aes256Sha256RsaPss => {
-                aes_256_sha_256_rsa_pss::SYMMETRIC_SIGNATURE_ALGORITHM
-            }
+            SecurityPolicy::Aes256Sha256RsaPss => Aes256Sha256RsaPss::SYMMETRIC_SIGNATURE_ALGORITHM,
             _ => {
                 panic!("Invalid policy");
             }
@@ -372,15 +384,13 @@ impl SecurityPolicy {
     /// This will panic if the security policy is `Unknown` or `None`.
     pub fn derived_signature_key_size(&self) -> usize {
         let length = match self {
-            SecurityPolicy::Basic128Rsa15 => basic_128_rsa_15::DERIVED_SIGNATURE_KEY_LENGTH,
-            SecurityPolicy::Basic256 => basic_256::DERIVED_SIGNATURE_KEY_LENGTH,
-            SecurityPolicy::Basic256Sha256 => basic_256_sha_256::DERIVED_SIGNATURE_KEY_LENGTH,
+            SecurityPolicy::Basic128Rsa15 => Basic128Rsa15::DERIVED_SIGNATURE_KEY_LENGTH,
+            SecurityPolicy::Basic256 => Basic256::DERIVED_SIGNATURE_KEY_LENGTH,
+            SecurityPolicy::Basic256Sha256 => Basic256Sha256::DERIVED_SIGNATURE_KEY_LENGTH,
             SecurityPolicy::Aes128Sha256RsaOaep => {
-                aes_128_sha_256_rsa_oaep::DERIVED_SIGNATURE_KEY_LENGTH
+                Aes128Sha256RsaOaep::DERIVED_SIGNATURE_KEY_LENGTH
             }
-            SecurityPolicy::Aes256Sha256RsaPss => {
-                aes_256_sha_256_rsa_pss::DERIVED_SIGNATURE_KEY_LENGTH
-            }
+            SecurityPolicy::Aes256Sha256RsaPss => Aes256Sha256RsaPss::DERIVED_SIGNATURE_KEY_LENGTH,
             _ => {
                 panic!("Invalid policy");
             }
@@ -391,11 +401,11 @@ impl SecurityPolicy {
     /// Returns the min and max (inclusive) key length in bits
     pub fn min_max_asymmetric_keylength(&self) -> (usize, usize) {
         match self {
-            SecurityPolicy::Basic128Rsa15 => basic_128_rsa_15::ASYMMETRIC_KEY_LENGTH,
-            SecurityPolicy::Basic256 => basic_256::ASYMMETRIC_KEY_LENGTH,
-            SecurityPolicy::Basic256Sha256 => basic_256_sha_256::ASYMMETRIC_KEY_LENGTH,
-            SecurityPolicy::Aes128Sha256RsaOaep => aes_128_sha_256_rsa_oaep::ASYMMETRIC_KEY_LENGTH,
-            SecurityPolicy::Aes256Sha256RsaPss => aes_256_sha_256_rsa_pss::ASYMMETRIC_KEY_LENGTH,
+            SecurityPolicy::Basic128Rsa15 => Basic128Rsa15::ASYMMETRIC_KEY_LENGTH,
+            SecurityPolicy::Basic256 => Basic256::ASYMMETRIC_KEY_LENGTH,
+            SecurityPolicy::Basic256Sha256 => Basic256Sha256::ASYMMETRIC_KEY_LENGTH,
+            SecurityPolicy::Aes128Sha256RsaOaep => Aes128Sha256RsaOaep::ASYMMETRIC_KEY_LENGTH,
+            SecurityPolicy::Aes256Sha256RsaPss => Aes256Sha256RsaPss::ASYMMETRIC_KEY_LENGTH,
             _ => {
                 panic!("Invalid policy");
             }
@@ -436,11 +446,11 @@ impl SecurityPolicy {
     pub fn from_uri(uri: &str) -> SecurityPolicy {
         match uri {
             constants::SECURITY_POLICY_NONE_URI => SecurityPolicy::None,
-            basic_128_rsa_15::SECURITY_POLICY_URI => SecurityPolicy::Basic128Rsa15,
-            basic_256::SECURITY_POLICY_URI => SecurityPolicy::Basic256,
-            basic_256_sha_256::SECURITY_POLICY_URI => SecurityPolicy::Basic256Sha256,
-            aes_128_sha_256_rsa_oaep::SECURITY_POLICY_URI => SecurityPolicy::Aes128Sha256RsaOaep,
-            aes_256_sha_256_rsa_pss::SECURITY_POLICY_URI => SecurityPolicy::Aes256Sha256RsaPss,
+            Basic128Rsa15::SECURITY_POLICY_URI => SecurityPolicy::Basic128Rsa15,
+            Basic256::SECURITY_POLICY_URI => SecurityPolicy::Basic256,
+            Basic256Sha256::SECURITY_POLICY_URI => SecurityPolicy::Basic256Sha256,
+            Aes128Sha256RsaOaep::SECURITY_POLICY_URI => SecurityPolicy::Aes128Sha256RsaOaep,
+            Aes256Sha256RsaPss::SECURITY_POLICY_URI => SecurityPolicy::Aes256Sha256RsaPss,
             _ => {
                 error!(
                     "Specified security policy uri \"{}\" is not recognized",

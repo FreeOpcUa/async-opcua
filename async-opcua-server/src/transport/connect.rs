@@ -7,7 +7,7 @@ use crate::info::ServerInfo;
 
 use super::tcp::TcpTransport;
 
-pub trait Connector {
+pub(crate) trait Connector {
     fn connect(
         self,
         info: Arc<ServerInfo>,

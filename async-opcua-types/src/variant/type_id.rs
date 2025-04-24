@@ -341,35 +341,36 @@ pub(crate) struct EncodingMask;
 
 impl EncodingMask {
     // These are values, not bits
-    pub const BOOLEAN: u8 = DataTypeId::Boolean as u8;
-    pub const SBYTE: u8 = DataTypeId::SByte as u8;
-    pub const BYTE: u8 = DataTypeId::Byte as u8;
-    pub const INT16: u8 = DataTypeId::Int16 as u8;
-    pub const UINT16: u8 = DataTypeId::UInt16 as u8;
-    pub const INT32: u8 = DataTypeId::Int32 as u8;
-    pub const UINT32: u8 = DataTypeId::UInt32 as u8;
-    pub const INT64: u8 = DataTypeId::Int64 as u8;
-    pub const UINT64: u8 = DataTypeId::UInt64 as u8;
-    pub const FLOAT: u8 = DataTypeId::Float as u8;
-    pub const DOUBLE: u8 = DataTypeId::Double as u8;
-    pub const STRING: u8 = DataTypeId::String as u8;
-    pub const DATE_TIME: u8 = DataTypeId::DateTime as u8;
-    pub const GUID: u8 = DataTypeId::Guid as u8;
-    pub const BYTE_STRING: u8 = DataTypeId::ByteString as u8;
-    pub const XML_ELEMENT: u8 = DataTypeId::XmlElement as u8;
-    pub const NODE_ID: u8 = DataTypeId::NodeId as u8;
-    pub const EXPANDED_NODE_ID: u8 = DataTypeId::ExpandedNodeId as u8;
-    pub const STATUS_CODE: u8 = DataTypeId::StatusCode as u8;
-    pub const QUALIFIED_NAME: u8 = DataTypeId::QualifiedName as u8;
-    pub const LOCALIZED_TEXT: u8 = DataTypeId::LocalizedText as u8;
-    pub const EXTENSION_OBJECT: u8 = 22; // DataTypeId::ExtensionObject as u8;
-    pub const DATA_VALUE: u8 = DataTypeId::DataValue as u8;
-    pub const VARIANT: u8 = 24;
-    pub const DIAGNOSTIC_INFO: u8 = DataTypeId::DiagnosticInfo as u8;
+    pub(crate) const BOOLEAN: u8 = DataTypeId::Boolean as u8;
+    pub(crate) const SBYTE: u8 = DataTypeId::SByte as u8;
+    pub(crate) const BYTE: u8 = DataTypeId::Byte as u8;
+    pub(crate) const INT16: u8 = DataTypeId::Int16 as u8;
+    pub(crate) const UINT16: u8 = DataTypeId::UInt16 as u8;
+    pub(crate) const INT32: u8 = DataTypeId::Int32 as u8;
+    pub(crate) const UINT32: u8 = DataTypeId::UInt32 as u8;
+    pub(crate) const INT64: u8 = DataTypeId::Int64 as u8;
+    pub(crate) const UINT64: u8 = DataTypeId::UInt64 as u8;
+    pub(crate) const FLOAT: u8 = DataTypeId::Float as u8;
+    pub(crate) const DOUBLE: u8 = DataTypeId::Double as u8;
+    pub(crate) const STRING: u8 = DataTypeId::String as u8;
+    pub(crate) const DATE_TIME: u8 = DataTypeId::DateTime as u8;
+    pub(crate) const GUID: u8 = DataTypeId::Guid as u8;
+    pub(crate) const BYTE_STRING: u8 = DataTypeId::ByteString as u8;
+    pub(crate) const XML_ELEMENT: u8 = DataTypeId::XmlElement as u8;
+    pub(crate) const NODE_ID: u8 = DataTypeId::NodeId as u8;
+    pub(crate) const EXPANDED_NODE_ID: u8 = DataTypeId::ExpandedNodeId as u8;
+    pub(crate) const STATUS_CODE: u8 = DataTypeId::StatusCode as u8;
+    pub(crate) const QUALIFIED_NAME: u8 = DataTypeId::QualifiedName as u8;
+    pub(crate) const LOCALIZED_TEXT: u8 = DataTypeId::LocalizedText as u8;
+    pub(crate) const EXTENSION_OBJECT: u8 = 22; // DataTypeId::ExtensionObject as u8;
+    pub(crate) const DATA_VALUE: u8 = DataTypeId::DataValue as u8;
+    pub(crate) const VARIANT: u8 = 24;
+    pub(crate) const DIAGNOSTIC_INFO: u8 = DataTypeId::DiagnosticInfo as u8;
     /// Bit indicates an array with dimensions
-    pub const ARRAY_DIMENSIONS_BIT: u8 = 1 << 6;
+    pub(crate) const ARRAY_DIMENSIONS_BIT: u8 = 1 << 6;
     /// Bit indicates an array with values
-    pub const ARRAY_VALUES_BIT: u8 = 1 << 7;
+    pub(crate) const ARRAY_VALUES_BIT: u8 = 1 << 7;
 
-    pub const ARRAY_MASK: u8 = EncodingMask::ARRAY_DIMENSIONS_BIT | EncodingMask::ARRAY_VALUES_BIT;
+    pub(crate) const ARRAY_MASK: u8 =
+        EncodingMask::ARRAY_DIMENSIONS_BIT | EncodingMask::ARRAY_VALUES_BIT;
 }

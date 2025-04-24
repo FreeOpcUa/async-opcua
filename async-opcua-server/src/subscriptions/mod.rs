@@ -778,11 +778,7 @@ struct PersistentSessionKey {
 }
 
 impl PersistentSessionKey {
-    pub fn new(
-        token: &UserToken,
-        security_mode: MessageSecurityMode,
-        application_uri: &str,
-    ) -> Self {
+    fn new(token: &UserToken, security_mode: MessageSecurityMode, application_uri: &str) -> Self {
         Self {
             token: token.clone(),
             security_mode,
@@ -790,7 +786,7 @@ impl PersistentSessionKey {
         }
     }
 
-    pub fn is_equivalent_for_transfer(&self, other: &PersistentSessionKey) -> bool {
+    fn is_equivalent_for_transfer(&self, other: &PersistentSessionKey) -> bool {
         if self.token.is_anonymous() {
             other.token.is_anonymous()
                 && matches!(

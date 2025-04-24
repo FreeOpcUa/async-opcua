@@ -242,23 +242,23 @@ pub struct ServerConfig {
 mod defaults {
     use crate::constants;
 
-    pub fn subscription_poll_interval_ms() -> u64 {
+    pub(super) fn subscription_poll_interval_ms() -> u64 {
         constants::SUBSCRIPTION_TIMER_RATE_MS
     }
 
-    pub fn publish_timeout_default_ms() -> u64 {
+    pub(super) fn publish_timeout_default_ms() -> u64 {
         constants::DEFAULT_PUBLISH_TIMEOUT_MS
     }
 
-    pub fn max_timeout_ms() -> u32 {
+    pub(super) fn max_timeout_ms() -> u32 {
         300_000
     }
 
-    pub fn max_secure_channel_token_lifetime_ms() -> u32 {
+    pub(super) fn max_secure_channel_token_lifetime_ms() -> u32 {
         300_000
     }
 
-    pub fn max_session_timeout_ms() -> u64 {
+    pub(super) fn max_session_timeout_ms() -> u64 {
         constants::MAX_SESSION_TIMEOUT
     }
 }

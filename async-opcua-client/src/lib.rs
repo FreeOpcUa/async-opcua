@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (C) 2017-2024 Adam Lock
 
-#![warn(missing_docs)]
-
 //! The OPC UA Client module contains the functionality necessary for a client to connect to an OPC UA server,
 //! authenticate itself, send messages, receive responses, get values, browse the address space and
 //! provide callbacks for things to be propagated to the client.
@@ -119,7 +117,7 @@ mod config;
 pub mod custom_types;
 mod retry;
 mod session;
-mod transport;
+pub mod transport;
 
 use std::path::PathBuf;
 

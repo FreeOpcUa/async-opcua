@@ -474,7 +474,7 @@ mod tests {
     }
 
     #[test]
-    pub fn hello() {
+    fn hello() {
         let mut stream = Cursor::new(hello_data());
         let decoding_options = DecodingOptions::test();
         let hello = HelloMessage::decode(&mut stream, &decoding_options).unwrap();
@@ -493,7 +493,7 @@ mod tests {
     }
 
     #[test]
-    pub fn acknowledge() {
+    fn acknowledge() {
         let mut stream = Cursor::new(ack_data());
         let decoding_options = DecodingOptions::test();
         let ack = AcknowledgeMessage::decode(&mut stream, &decoding_options).unwrap();

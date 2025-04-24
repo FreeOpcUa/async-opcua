@@ -15,7 +15,7 @@ use crate::{
 
 #[allow(unused)]
 mod opcua {
-    pub use crate as types;
+    pub(super) use crate as types;
 }
 /// A human readable text with an optional locale identifier.
 #[derive(PartialEq, Default, Debug, Clone, crate::UaNullable)]

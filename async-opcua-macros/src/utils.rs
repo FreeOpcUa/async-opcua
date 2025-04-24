@@ -2,7 +2,7 @@ use proc_macro2::Span;
 use syn::{parse::Parse, Attribute, Data, DataStruct, Field, Ident, Type};
 
 #[derive(Debug, Default)]
-pub struct EmptyAttribute;
+pub(crate) struct EmptyAttribute;
 
 impl Parse for EmptyAttribute {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
@@ -17,17 +17,17 @@ impl ItemAttr for EmptyAttribute {
     fn combine(&mut self, _other: Self) {}
 }
 
-pub trait ItemAttr {
+pub(crate) trait ItemAttr {
     fn combine(&mut self, other: Self);
 }
 
-pub struct StructField<T> {
+pub(crate) struct StructField<T> {
     pub ident: Ident,
     pub typ: Type,
     pub attr: T,
 }
 
-pub struct StructItem<TFieldAttr, TAttr> {
+pub(crate) struct StructItem<TFieldAttr, TAttr> {
     pub ident: Ident,
     pub fields: Vec<StructField<TFieldAttr>>,
     pub attribute: TAttr,
@@ -36,7 +36,7 @@ pub struct StructItem<TFieldAttr, TAttr> {
 impl<TFieldAttr: Parse + ItemAttr + Default, TAttr: Parse + ItemAttr + Default>
     StructItem<TFieldAttr, TAttr>
 {
-    pub fn from_input(
+    pub(crate) fn from_input(
         input: DataStruct,
         attributes: Vec<Attribute>,
         ident: Ident,
@@ -70,7 +70,7 @@ impl<TFieldAttr: Parse + ItemAttr + Default, TAttr: Parse + ItemAttr + Default>
 }
 
 impl<T: Parse + ItemAttr + Default> StructField<T> {
-    pub fn from_field(field: Field) -> syn::Result<Self> {
+    pub(crate) fn from_field(field: Field) -> syn::Result<Self> {
         let Some(ident) = field.ident else {
             return Err(syn::Error::new_spanned(
                 field,
@@ -98,7 +98,7 @@ impl<T: Parse + ItemAttr + Default> StructField<T> {
     }
 }
 
-pub fn expect_struct(input: Data) -> syn::Result<DataStruct> {
+pub(crate) fn expect_struct(input: Data) -> syn::Result<DataStruct> {
     match input {
         syn::Data::Struct(s) => Ok(s),
         _ => Err(syn::Error::new(

@@ -1,5 +1,3 @@
-#![warn(missing_docs)]
-
 //! The nodes crate contains core types for generated address spaces.
 //!
 //! This includes types for each node class, some common enums for references,

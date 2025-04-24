@@ -4,14 +4,14 @@ use crate::utils::ItemAttr;
 
 use super::attribute::{EncodingItemAttribute, EncodingVariantAttribute};
 
-pub struct AdvancedEnumVariant {
+pub(crate) struct AdvancedEnumVariant {
     pub name: Ident,
     #[allow(unused)]
     pub attr: EncodingVariantAttribute,
     pub is_null: bool,
 }
 
-pub struct AdvancedEnum {
+pub(crate) struct AdvancedEnum {
     pub variants: Vec<AdvancedEnumVariant>,
     pub ident: Ident,
     pub null_variant: Option<Ident>,
@@ -20,7 +20,7 @@ pub struct AdvancedEnum {
 }
 
 impl AdvancedEnumVariant {
-    pub fn from_variant(variant: Variant) -> syn::Result<Self> {
+    pub(crate) fn from_variant(variant: Variant) -> syn::Result<Self> {
         let mut final_attr = EncodingVariantAttribute::default();
         for attr in variant.attrs {
             if attr.path().segments.len() == 1
@@ -52,7 +52,7 @@ impl AdvancedEnumVariant {
 }
 
 impl AdvancedEnum {
-    pub fn from_input(
+    pub(crate) fn from_input(
         input: syn::DataEnum,
         attributes: Vec<syn::Attribute>,
         ident: Ident,

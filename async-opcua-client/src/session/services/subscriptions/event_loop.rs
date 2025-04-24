@@ -23,7 +23,7 @@ pub enum SubscriptionActivity {
 ///
 /// This handles publshing on a fixed interval, republishing failed requests,
 /// and subscription keep-alive.
-pub struct SubscriptionEventLoop {
+pub(crate) struct SubscriptionEventLoop {
     session: Arc<Session>,
     trigger_publish_recv: tokio::sync::watch::Receiver<Instant>,
     last_external_trigger: Instant,
@@ -41,7 +41,7 @@ impl SubscriptionEventLoop {
     ///  * `trigger_publish_recv` - A channel used to transmit external publish triggers.
     ///    This is used to trigger publish outside of the normal schedule, for example when
     ///    a new subscription is created.
-    pub fn new(
+    pub(crate) fn new(
         session: Arc<Session>,
         trigger_publish_recv: tokio::sync::watch::Receiver<Instant>,
     ) -> Self {
@@ -56,7 +56,7 @@ impl SubscriptionEventLoop {
 
     /// Run the subscription event loop, returning a stream that produces
     /// [SubscriptionActivity] enums, reporting activity to the session event loop.
-    pub fn run(self) -> impl Stream<Item = SubscriptionActivity> {
+    pub(crate) fn run(self) -> impl Stream<Item = SubscriptionActivity> {
         futures::stream::unfold(
             (self, FuturesUnordered::new()),
             |(mut slf, mut futures)| async move {

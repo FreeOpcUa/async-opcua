@@ -152,7 +152,7 @@ pub(crate) fn process_unexpected_response(response: ResponseMessage) -> StatusCo
 }
 
 #[derive(Clone, Copy)]
-pub enum SessionState {
+pub(super) enum SessionState {
     Disconnected,
     Connected,
     Connecting,

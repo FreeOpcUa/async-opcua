@@ -7,9 +7,9 @@
 // Copyright (C) 2017-2024 Adam Lock, Einar Omang
 #[allow(unused)]
 mod opcua {
-    pub use opcua_nodes as nodes;
-    pub use opcua_nodes::{Event, EventField};
-    pub use opcua_types as types;
+    pub(super) use opcua_nodes as nodes;
+    pub(super) use opcua_nodes::{Event, EventField};
+    pub(super) use opcua_types as types;
 }
 #[allow(unused)]
 use opcua_types as types;

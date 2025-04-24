@@ -85,7 +85,7 @@ fn min_zero_infinite(server: u32, client: u32) -> u32 {
     }
 }
 
-pub struct TcpConnector {
+pub(crate) struct TcpConnector {
     read: FramedRead<ReadHalf<TcpStream>, TcpCodec>,
     write: WriteHalf<TcpStream>,
     deadline: Instant,
@@ -94,7 +94,7 @@ pub struct TcpConnector {
 }
 
 impl TcpConnector {
-    pub fn new(
+    pub(crate) fn new(
         stream: TcpStream,
         config: TransportConfig,
         decoding_options: DecodingOptions,
@@ -231,7 +231,7 @@ impl Connector for TcpConnector {
 }
 
 impl TcpTransport {
-    pub fn new(
+    pub(crate) fn new(
         read: FramedRead<ReadHalf<TcpStream>, TcpCodec>,
         write: WriteHalf<TcpStream>,
         send_buffer: SendBuffer,
@@ -249,19 +249,19 @@ impl TcpTransport {
 
     /// Set the transport state to closing, once the final message is sent
     /// the connection will be closed.
-    pub fn set_closing(&mut self) {
+    pub(crate) fn set_closing(&mut self) {
         self.state = TransportState::Closing;
     }
 
-    pub fn is_closing(&self) -> bool {
+    pub(crate) fn is_closing(&self) -> bool {
         matches!(self.state, TransportState::Closing)
     }
 
-    pub fn enqueue_error(&mut self, message: ErrorMessage) {
+    pub(crate) fn enqueue_error(&mut self, message: ErrorMessage) {
         self.send_buffer.write_error(message);
     }
 
-    pub fn enqueue_message_for_send(
+    pub(crate) fn enqueue_message_for_send(
         &mut self,
         channel: &mut SecureChannel,
         message: ResponseMessage,
@@ -290,7 +290,7 @@ impl TcpTransport {
         }
     }
 
-    pub async fn poll(&mut self, channel: &mut SecureChannel) -> TransportPollResult {
+    pub(crate) async fn poll(&mut self, channel: &mut SecureChannel) -> TransportPollResult {
         // Either we've got something in the send buffer, which we can send,
         // or we're waiting for more outgoing messages.
         // We won't wait for outgoing messages while sending, since that

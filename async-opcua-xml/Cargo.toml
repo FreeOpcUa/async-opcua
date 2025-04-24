@@ -11,6 +11,9 @@ keywords = ["opcua", "opc", "ua"]
 readme = "README.md"
 documentation = "https://docs.rs/async-opcua-xml/"
 
+[lints]
+workspace = true
+
 [lib]
 name = "opcua_xml"
 

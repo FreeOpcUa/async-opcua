@@ -6,13 +6,13 @@ use quote::{quote, ToTokens};
 
 use super::attribute::{EncodingItemAttribute, EncodingVariantAttribute};
 
-pub struct SimpleEnumVariant {
+pub(crate) struct SimpleEnumVariant {
     pub value: LitInt,
     pub name: Ident,
     pub attr: EncodingVariantAttribute,
 }
 
-pub struct SimpleEnum {
+pub(crate) struct SimpleEnum {
     pub repr: Type,
     pub variants: Vec<SimpleEnumVariant>,
     pub ident: Ident,
@@ -21,7 +21,7 @@ pub struct SimpleEnum {
 }
 
 impl SimpleEnumVariant {
-    pub fn from_variant(variant: Variant) -> syn::Result<Self> {
+    pub(super) fn from_variant(variant: Variant) -> syn::Result<Self> {
         let Some((_, value)) = variant.discriminant else {
             return Err(syn::Error::new_spanned(
                 variant,
@@ -57,7 +57,7 @@ impl SimpleEnumVariant {
 }
 
 impl SimpleEnum {
-    pub fn from_input(
+    pub(super) fn from_input(
         input: DataEnum,
         attributes: Vec<Attribute>,
         ident: Ident,
@@ -100,7 +100,7 @@ impl SimpleEnum {
     }
 }
 
-pub fn derive_ua_enum_impl(en: SimpleEnum) -> syn::Result<TokenStream> {
+pub(super) fn derive_ua_enum_impl(en: SimpleEnum) -> syn::Result<TokenStream> {
     let ident = en.ident;
     let repr = en.repr;
 

@@ -9,6 +9,11 @@ members = [
   "fuzz",
 ]
 
+[workspace.lints.rust]
+missing_docs = "warn"
+unreachable_pub = "warn"
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage)'] }
+
 [workspace.dependencies]
 arc-swap = "^1"
 async-trait = "^0.1"

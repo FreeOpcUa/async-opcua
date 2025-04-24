@@ -15,14 +15,14 @@ use crate::{
     argument::Argument, status_code::StatusCode, BinaryDecodable, BinaryEncodable, ContextOwned,
 };
 
-pub fn serialize_test_and_return<T>(value: T) -> T
+fn serialize_test_and_return<T>(value: T) -> T
 where
     T: BinaryEncodable + BinaryDecodable + Debug + PartialEq + Clone,
 {
     serialize_test_and_return_expected(value.clone(), value)
 }
 
-pub fn serialize_as_stream<T>(value: T) -> Cursor<Vec<u8>>
+fn serialize_as_stream<T>(value: T) -> Cursor<Vec<u8>>
 where
     T: BinaryEncodable + Debug,
 {
@@ -46,7 +46,7 @@ where
     Cursor::new(actual)
 }
 
-pub fn serialize_test_and_return_expected<T>(value: T, expected_value: T) -> T
+fn serialize_test_and_return_expected<T>(value: T, expected_value: T) -> T
 where
     T: BinaryEncodable + BinaryDecodable + Debug + PartialEq,
 {
@@ -60,21 +60,21 @@ where
     new_value
 }
 
-pub fn serialize_test<T>(value: T)
+fn serialize_test<T>(value: T)
 where
     T: BinaryEncodable + BinaryDecodable + Debug + PartialEq + Clone,
 {
     let _ = serialize_test_and_return(value);
 }
 
-pub fn serialize_test_expected<T>(value: T, expected_value: T)
+fn serialize_test_expected<T>(value: T, expected_value: T)
 where
     T: BinaryEncodable + BinaryDecodable + Debug + PartialEq,
 {
     let _ = serialize_test_and_return_expected(value, expected_value);
 }
 
-pub fn serialize_and_compare<T>(value: T, expected: &[u8])
+fn serialize_and_compare<T>(value: T, expected: &[u8])
 where
     T: BinaryEncodable + Debug + PartialEq,
 {

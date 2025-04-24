@@ -44,11 +44,19 @@ pub(super) struct TransportState {
 }
 
 #[derive(Debug)]
+/// Result of polling a transport implementation.
+/// This represents a single iteration of the transport event loop.
 pub enum TransportPollResult {
+    /// An outgoing message was received and enqueued.
     OutgoingMessage,
+    /// An outgoing message was sent to the server.
     OutgoingMessageSent,
+    /// An incoming message was received from the server.
     IncomingMessage,
+    /// An error occured that is recoverable, so the transport can continue and
+    /// simply fail the request.
     RecoverableError(StatusCode),
+    /// The transport was closed with the given status code.
     Closed(StatusCode),
 }
 
@@ -59,7 +67,7 @@ pub struct OutgoingMessage {
 }
 
 impl TransportState {
-    pub fn new(
+    pub(super) fn new(
         secure_channel: Arc<RwLock<SecureChannel>>,
         outgoing_recv: tokio::sync::mpsc::Receiver<OutgoingMessage>,
         max_pending_incoming: usize,
@@ -76,7 +84,7 @@ impl TransportState {
     }
 
     /// Wait for an outgoing message. Will also check for timed out messages.
-    pub async fn wait_for_outgoing_message(
+    pub(super) async fn wait_for_outgoing_message(
         &mut self,
         send_buffer: &mut SendBuffer,
     ) -> Option<(RequestMessage, u32)> {
@@ -109,7 +117,7 @@ impl TransportState {
     }
 
     /// Store incoming messages in the message state.
-    pub fn handle_incoming_message(&mut self, message: Message) -> Result<(), StatusCode> {
+    pub(super) fn handle_incoming_message(&mut self, message: Message) -> Result<(), StatusCode> {
         let status = match message {
             Message::Acknowledge(ack) => {
                 debug!("Reader got an unexpected ack {:?}", ack);
@@ -136,7 +144,7 @@ impl TransportState {
         }
     }
 
-    pub fn message_send_failed(&mut self, request_id: u32, err: StatusCode) {
+    pub(super) fn message_send_failed(&mut self, request_id: u32, err: StatusCode) {
         if let Some(message_state) = self.message_states.remove(&request_id) {
             let _ = message_state.callback.send(Err(err));
         }
@@ -287,7 +295,7 @@ impl TransportState {
     /// Close the transport, aborting any pending requests.
     /// If `status` is good, the pending requests will be terminated with
     /// `BadConnectionClosed`.
-    pub async fn close(&mut self, status: StatusCode) -> StatusCode {
+    pub(super) async fn close(&mut self, status: StatusCode) -> StatusCode {
         // If the status is good, we still want to send a bad status code
         // to the pending requests. They didn't succeed, after all.
         let request_status = if status.is_good() {

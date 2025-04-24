@@ -28,7 +28,9 @@ pub(crate) struct RequestHeaderBuilder {
 }
 
 impl RequestHeaderBuilder {
-    pub fn new_from_session(session: &Session) -> Self {
+    /// Create a new request header builder from a session.
+    /// This will use the session's authentication token and timeout.
+    pub(super) fn new_from_session(session: &Session) -> Self {
         Self {
             header: session.make_request_header(),
             timeout: session.request_timeout,
@@ -36,7 +38,10 @@ impl RequestHeaderBuilder {
         }
     }
 
-    pub fn new(
+    /// Create a new request header builder for a request without an associated session object.
+    /// This makes it possible to manually implement OPC-UA clients without relying on the
+    /// session event loop for automatic connect/reconnect/keep-alive.
+    pub(super) fn new(
         session_id: u32,
         timeout: Duration,
         auth_token: NodeId,

@@ -1,7 +1,7 @@
-pub mod continuation_points;
-pub mod controller;
-pub mod instance;
-pub mod manager;
+pub(crate) mod continuation_points;
+pub(crate) mod controller;
+pub(crate) mod instance;
+pub(crate) mod manager;
 #[macro_use]
-pub mod message_handler;
+pub(crate) mod message_handler;
 mod services;

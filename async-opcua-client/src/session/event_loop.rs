@@ -290,14 +290,14 @@ struct SessionIntervals {
 }
 
 impl SessionIntervals {
-    pub fn new(keep_alive_interval: Duration) -> Self {
+    fn new(keep_alive_interval: Duration) -> Self {
         let mut keep_alive = tokio::time::interval(keep_alive_interval);
         keep_alive.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
         Self { keep_alive }
     }
 
-    pub async fn next(&mut self) -> SessionTickEvent {
+    async fn next(&mut self) -> SessionTickEvent {
         tokio::select! {
             _ = self.keep_alive.tick() => SessionTickEvent::KeepAlive
         }
@@ -310,14 +310,14 @@ struct SessionActivityLoop {
 }
 
 impl SessionActivityLoop {
-    pub fn new(inner: Arc<Session>, keep_alive_interval: Duration) -> Self {
+    fn new(inner: Arc<Session>, keep_alive_interval: Duration) -> Self {
         Self {
             inner,
             tick_gen: SessionIntervals::new(keep_alive_interval),
         }
     }
 
-    pub fn run(self) -> impl Stream<Item = SessionActivity> {
+    fn run(self) -> impl Stream<Item = SessionActivity> {
         futures::stream::unfold(self, |mut slf| async move {
             match slf.tick_gen.next().await {
                 SessionTickEvent::KeepAlive => {

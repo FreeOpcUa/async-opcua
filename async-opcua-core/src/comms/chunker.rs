@@ -37,7 +37,7 @@ struct ReceiveStream<'a, T> {
     index: usize,
 }
 impl<'a, T: Iterator<Item = &'a MessageChunk>> ReceiveStream<'a, T> {
-    pub fn new(channel: &'a SecureChannel, mut items: T, num_items: usize) -> Result<Self, Error> {
+    fn new(channel: &'a SecureChannel, mut items: T, num_items: usize) -> Result<Self, Error> {
         let Some(chunk) = items.next() else {
             return Err(Error::new(
                 StatusCode::BadUnexpectedError,
@@ -116,7 +116,7 @@ struct ChunkingStream<'a> {
 }
 
 impl<'a> ChunkingStream<'a> {
-    pub fn new(
+    fn new(
         message_type: MessageChunkType,
         secure_channel: &'a SecureChannel,
         max_chunk_size: usize,

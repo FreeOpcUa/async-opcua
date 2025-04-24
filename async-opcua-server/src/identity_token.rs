@@ -15,10 +15,15 @@ pub(crate) const POLICY_ID_X509: &str = "x509";
 
 /// Identity token representation on the server, decoded from the client.
 pub enum IdentityToken {
+    /// No identity token specified at all.
     None,
+    /// Identity token for anonymous access.
     Anonymous(AnonymousIdentityToken),
+    /// Identity token for user name and password.
     UserName(UserNameIdentityToken),
+    /// Identity token for X.509 certificate.
     X509(X509IdentityToken),
+    /// Invalid identity token with some unknown structure.
     Invalid(ExtensionObject),
 }
 

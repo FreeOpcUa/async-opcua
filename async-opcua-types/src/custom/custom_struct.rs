@@ -976,7 +976,7 @@ pub(crate) mod tests {
     }
 
     mod opcua {
-        pub use crate as types;
+        pub(super) use crate as types;
     }
 
     const TYPE_NAMESPACE: &str = "my.custom.namespace.uri";

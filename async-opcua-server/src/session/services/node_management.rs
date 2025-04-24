@@ -13,7 +13,10 @@ use opcua_types::{
 use tracing::debug_span;
 use tracing_futures::Instrument;
 
-pub async fn add_nodes(node_managers: NodeManagers, request: Request<AddNodesRequest>) -> Response {
+pub(crate) async fn add_nodes(
+    node_managers: NodeManagers,
+    request: Request<AddNodesRequest>,
+) -> Response {
     let mut context = request.context();
 
     let nodes_to_add = take_service_items!(
@@ -75,7 +78,7 @@ pub async fn add_nodes(node_managers: NodeManagers, request: Request<AddNodesReq
     }
 }
 
-pub async fn add_references(
+pub(crate) async fn add_references(
     node_managers: NodeManagers,
     request: Request<AddReferencesRequest>,
 ) -> Response {
@@ -144,7 +147,7 @@ pub async fn add_references(
     }
 }
 
-pub async fn delete_nodes(
+pub(crate) async fn delete_nodes(
     node_managers: NodeManagers,
     request: Request<DeleteNodesRequest>,
 ) -> Response {
@@ -216,7 +219,7 @@ pub async fn delete_nodes(
     }
 }
 
-pub async fn delete_references(
+pub(crate) async fn delete_references(
     node_managers: NodeManagers,
     request: Request<DeleteReferencesRequest>,
 ) -> Response {

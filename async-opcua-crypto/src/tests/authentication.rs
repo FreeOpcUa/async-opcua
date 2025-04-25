@@ -1,8 +1,9 @@
-use opcua_types::{ByteString, UAString, UserNameIdentityToken, UserTokenType};
+use opcua_types::{
+    ByteString, MessageSecurityMode, UAString, UserNameIdentityToken, UserTokenType,
+};
 
 use crate::{
-    self as crypto, decrypt_user_identity_token_password, make_user_name_identity_token, random,
-    tests::*, SecurityPolicy,
+    self as crypto, legacy_decrypt_secret, legacy_encrypt_secret, random, tests::*, SecurityPolicy,
 };
 
 #[test]
@@ -21,33 +22,6 @@ fn user_name_identity_token_valid() {
     assert!(!id.is_valid());
     id.user_name = UAString::from("x");
     assert!(id.is_valid());
-}
-
-#[test]
-fn user_name_identity_token_plaintext() {
-    let mut id = UserNameIdentityToken {
-        policy_id: UAString::null(),
-        user_name: UAString::from("xyz"),
-        password: ByteString::from(b"pwd1"),
-        encryption_algorithm: UAString::null(),
-    };
-
-    let result = id.authenticate("xyz", b"pwd1");
-    assert!(result.is_ok());
-
-    let result = id.authenticate("xyz", b"pwd2");
-    assert!(result.is_err());
-
-    let result = id.authenticate("xyz2", b"pwd1");
-    assert!(result.is_err());
-
-    id.password = ByteString::from(b"");
-    let result = id.authenticate("xyz", b"");
-    assert!(result.is_ok());
-
-    id.user_name = UAString::from("");
-    let result = id.authenticate("", b"");
-    assert!(result.is_ok());
 }
 
 #[test]
@@ -70,120 +44,121 @@ fn user_name_identity_token_encrypted() {
     // or the correct encryption to happen.
 
     // #1 This should be plaintext since channel security policy is none, token policy is empty
-    let token = make_user_name_identity_token(
+    let token = legacy_encrypt_secret(
         SecurityPolicy::None,
+        MessageSecurityMode::None,
         &user_token_policy,
         nonce.as_ref(),
         &cert,
-        "user1",
-        &password,
+        password.as_bytes(),
     )
     .unwrap();
     assert!(token.encryption_algorithm.is_null());
-    assert_eq!(token.password.as_ref(), password.as_bytes());
-    let password1 = decrypt_user_identity_token_password(&token, nonce.as_ref(), &pkey).unwrap();
+    assert_eq!(token.secret.as_ref(), password.as_bytes());
+    let password1 = legacy_decrypt_secret(&token, nonce.as_ref(), &pkey).unwrap();
     assert_eq!(password, password1);
 
     // #2 This should be plaintext since channel security policy is none, token policy is none
     user_token_policy.security_policy_uri = UAString::from(SecurityPolicy::None.to_uri());
-    let token = make_user_name_identity_token(
+    let token = legacy_encrypt_secret(
         SecurityPolicy::None,
+        MessageSecurityMode::None,
         &user_token_policy,
         nonce.as_ref(),
         &cert,
-        "user1",
-        &password,
+        password.as_bytes(),
     )
     .unwrap();
     assert!(token.encryption_algorithm.is_null());
-    assert_eq!(token.password.as_ref(), password.as_bytes());
-    let password1 = decrypt_user_identity_token_password(&token, nonce.as_ref(), &pkey).unwrap();
+    assert_eq!(token.secret.as_ref(), password.as_bytes());
+    let password1 = legacy_decrypt_secret(&token, nonce.as_ref(), &pkey).unwrap();
     assert_eq!(password, password1);
 
     // #3 This should be Rsa15 since channel security policy is none, token policy is Rsa15
     user_token_policy.security_policy_uri = UAString::from(SecurityPolicy::Basic128Rsa15.to_uri());
-    let token = make_user_name_identity_token(
+    let token = legacy_encrypt_secret(
         SecurityPolicy::None,
+        MessageSecurityMode::None,
         &user_token_policy,
         nonce.as_ref(),
         &cert,
-        "user1",
-        &password,
+        password.as_bytes(),
     )
     .unwrap();
     assert_eq!(
         token.encryption_algorithm.as_ref(),
         crypto::algorithms::ENC_RSA_15
     );
-    let password1 = decrypt_user_identity_token_password(&token, nonce.as_ref(), &pkey).unwrap();
+    let password1 = legacy_decrypt_secret(&token, nonce.as_ref(), &pkey).unwrap();
     assert_eq!(password, password1);
 
     // #4 This should be Rsa-15 since channel security policy is Rsa15, token policy is empty
     user_token_policy.security_policy_uri = UAString::null();
-    let token = make_user_name_identity_token(
+    let token = legacy_encrypt_secret(
         SecurityPolicy::Basic128Rsa15,
+        MessageSecurityMode::SignAndEncrypt,
         &user_token_policy,
         nonce.as_ref(),
         &cert,
-        "user1",
-        &password,
+        password.as_bytes(),
     )
     .unwrap();
     assert_eq!(
         token.encryption_algorithm.as_ref(),
         crypto::algorithms::ENC_RSA_15
     );
-    let password1 = decrypt_user_identity_token_password(&token, nonce.as_ref(), &pkey).unwrap();
+    let password1 = legacy_decrypt_secret(&token, nonce.as_ref(), &pkey).unwrap();
     assert_eq!(password, password1);
 
     // #5 This should be Rsa-OAEP since channel security policy is Rsa-15, token policy is Rsa-OAEP
     user_token_policy.security_policy_uri = UAString::from(SecurityPolicy::Basic256Sha256.to_uri());
-    let token = make_user_name_identity_token(
+    let token = legacy_encrypt_secret(
         SecurityPolicy::Basic128Rsa15,
+        MessageSecurityMode::SignAndEncrypt,
         &user_token_policy,
         nonce.as_ref(),
         &cert,
-        "user1",
-        &password,
+        password.as_bytes(),
     )
     .unwrap();
     assert_eq!(
         token.encryption_algorithm.as_ref(),
         crypto::algorithms::ENC_RSA_OAEP
     );
-    let password1 = decrypt_user_identity_token_password(&token, nonce.as_ref(), &pkey).unwrap();
+    let password1 = legacy_decrypt_secret(&token, nonce.as_ref(), &pkey).unwrap();
     assert_eq!(password, password1);
 
     // #6 This should be Rsa-OAEP since channel security policy is Rsa-OAEP,  token policy is Rsa-OAEP
-    user_token_policy.security_policy_uri = UAString::from(SecurityPolicy::Basic256Sha256.to_uri());
-    let token = make_user_name_identity_token(
+    user_token_policy.security_policy_uri =
+        UAString::from(SecurityPolicy::Aes256Sha256RsaPss.to_uri());
+    let token = legacy_encrypt_secret(
         SecurityPolicy::Basic256Sha256,
+        MessageSecurityMode::SignAndEncrypt,
         &user_token_policy,
         nonce.as_ref(),
         &cert,
-        "user1",
-        &password,
+        password.as_bytes(),
     )
     .unwrap();
     assert_eq!(
         token.encryption_algorithm.as_ref(),
-        crypto::algorithms::ENC_RSA_OAEP
+        crypto::algorithms::ENC_RSA_OAEP_SHA256
     );
-    let password1 = decrypt_user_identity_token_password(&token, nonce.as_ref(), &pkey).unwrap();
+    let password1 = legacy_decrypt_secret(&token, nonce.as_ref(), &pkey).unwrap();
     assert_eq!(password, password1);
 
     // #7 This should be None since channel security policy is Rsa-15, token policy is None
     user_token_policy.security_policy_uri = UAString::from(SecurityPolicy::None.to_uri());
-    let token = make_user_name_identity_token(
+    let token = legacy_encrypt_secret(
         SecurityPolicy::Basic128Rsa15,
+        MessageSecurityMode::SignAndEncrypt,
         &user_token_policy,
         nonce.as_ref(),
         &cert,
-        "user1",
-        &password,
+        password.as_bytes(),
     )
     .unwrap();
     assert!(token.encryption_algorithm.is_empty());
-    let password1 = decrypt_user_identity_token_password(&token, nonce.as_ref(), &pkey).unwrap();
+    let password1 = legacy_decrypt_secret(&token, nonce.as_ref(), &pkey).unwrap();
     assert_eq!(password, password1);
 }

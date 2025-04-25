@@ -6,15 +6,14 @@ use opcua_core::{
     trace_read_lock, trace_write_lock, ResponseMessage,
 };
 use opcua_crypto::{
-    self, certificate_store::CertificateStore, user_identity::make_user_name_identity_token, PKey,
-    SecurityPolicy,
+    self, certificate_store::CertificateStore, legacy_encrypt_secret, PKey, SecurityPolicy,
 };
 use opcua_types::{
     ActivateSessionRequest, ActivateSessionResponse, AnonymousIdentityToken,
     ApplicationDescription, ByteString, CancelRequest, CancelResponse, CloseSessionRequest,
     CloseSessionResponse, CreateSessionRequest, CreateSessionResponse, EndpointDescription,
     ExtensionObject, IntegerId, NodeId, SignatureData, SignedSoftwareCertificate, StatusCode,
-    UAString, UserTokenType, X509IdentityToken,
+    UAString, UserNameIdentityToken, UserTokenType, X509IdentityToken,
 };
 use rsa::RsaPrivateKey;
 use tracing::error;
@@ -359,14 +358,20 @@ impl ActivateSession {
                 let channel_sec_policy = secure_channel.security_policy();
                 let nonce = secure_channel.remote_nonce();
                 let cert = secure_channel.remote_cert();
-                let identity_token = make_user_name_identity_token(
+                let secret = legacy_encrypt_secret(
                     channel_sec_policy,
+                    secure_channel.security_mode(),
                     policy,
                     nonce,
                     &cert,
-                    user,
-                    pass,
+                    pass.as_bytes(),
                 )?;
+                let identity_token = UserNameIdentityToken {
+                    policy_id: secret.policy,
+                    user_name: UAString::from(user.as_str()),
+                    password: secret.secret,
+                    encryption_algorithm: secret.encryption_algorithm,
+                };
                 Ok((
                     ExtensionObject::from_message(identity_token),
                     SignatureData::null(),

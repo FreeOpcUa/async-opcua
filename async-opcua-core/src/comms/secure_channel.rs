@@ -512,7 +512,10 @@ impl SecureChannel {
                     (self.security_policy.plain_block_size(), signature_size)
                 } else {
                     // Padding requires we look at the remote certificate and security policy
-                    let padding = self.security_policy.asymmetric_encryption_padding();
+                    let padding = self
+                        .security_policy
+                        .asymmetric_encryption_padding()
+                        .expect("Invalid algorithm");
                     let x509 = self.remote_cert().unwrap();
                     let pk = x509.public_key().unwrap();
                     (
@@ -884,7 +887,9 @@ impl SecureChannel {
         // Encryption will change the size of the chunk. Since we sign before encrypting, we need to
         // compute that size and change the message header to be that new size
         let cipher_text_size = {
-            let padding = security_policy.asymmetric_encryption_padding();
+            let padding = security_policy
+                .asymmetric_encryption_padding()
+                .expect("Invalid algorithm");
             let plain_text_size = encrypted_range.end - encrypted_range.start;
             let cipher_text_size =
                 encryption_key.calculate_cipher_text_size(plain_text_size, padding);

@@ -10,97 +10,66 @@
 use std::io::{Cursor, Write};
 use std::str::FromStr;
 
-use opcua_types::Error;
 use opcua_types::{
     encoding::{read_u32, write_u32},
     status_code::StatusCode,
     ByteString, UAString,
     {SignatureData, UserNameIdentityToken, UserTokenPolicy, X509IdentityToken},
 };
+use opcua_types::{Error, IssuedIdentityToken, MessageSecurityMode};
 use tracing::{error, warn};
 
 use super::{KeySize, PrivateKey, RsaPadding, SecurityPolicy, X509};
 
-/// Create a filled in UserNameIdentityToken by using the supplied channel security policy, user token policy, nonce, cert, user name and password.
-pub fn make_user_name_identity_token(
-    channel_security_policy: SecurityPolicy,
-    user_token_policy: &UserTokenPolicy,
-    nonce: &[u8],
-    cert: &Option<X509>,
-    user: &str,
-    pass: &str,
-) -> Result<UserNameIdentityToken, StatusCode> {
-    // This is a condensed version of Table 187 Opc Part 4 that details the EncryptionAlgorithm
-    // selection.
-    //
-    // This is mostly along the lines of: The UserTokenPolicy.SecurityPolicy takes precedence over the
-    // SecureChannel.SecurityPolicy, except there's a distinction between the cases when
-    // UserTokenPolicy.SecurityPolicy is null/empty and explicitly set to SecurityPolicy::None. In
-    // the first case, the SecureChannel.SecurityPolicy is to be used, and in the latter case the
-    // policy is explicitly set to None.
-    //
-    let security_policy = if user_token_policy.security_policy_uri.is_empty() {
-        // If no SecurityPolicy is explicitly set for UserIdentityToken, use the one defined in
-        // SecureChannel.
-        channel_security_policy
-    } else {
-        let security_policy =
-            SecurityPolicy::from_str(user_token_policy.security_policy_uri.as_ref()).unwrap();
-        if security_policy == SecurityPolicy::Unknown {
-            SecurityPolicy::None
-        } else {
-            security_policy
-        }
-    };
-
-    // Now it should be a matter of using the policy (or lack thereof) to encrypt the password
-    // using the secure channel's cert and nonce.
-    let (password, encryption_algorithm) = match security_policy {
-        SecurityPolicy::None => {
-            // Plain text
-            if channel_security_policy == SecurityPolicy::None {
-                warn!("A user identity's password is being sent over the network in plain text. This could be a serious security issue");
-            }
-            (ByteString::from(pass.as_bytes()), UAString::null())
-        }
-        SecurityPolicy::Unknown => {
-            // This should only happen if channel_security_policy were Unknown when it shouldn't be
-            panic!("Don't know how to make the token for this server");
-        }
-        security_policy => {
-            // Create a password which is encrypted using the secure channel info and the user token policy for the endpoint
-            let password = legacy_password_encrypt(
-                pass,
-                nonce,
-                cert.as_ref().unwrap(),
-                security_policy.asymmetric_encryption_padding(),
-            )?;
-            let encryption_algorithm =
-                UAString::from(security_policy.asymmetric_encryption_algorithm());
-            (password, encryption_algorithm)
-        }
-    };
-
-    Ok(UserNameIdentityToken {
-        policy_id: user_token_policy.policy_id.clone(),
-        user_name: UAString::from(user),
-        password,
-        encryption_algorithm,
-    })
+/// Trait for a type with a secret encrypted with legacy secret encryption.
+pub trait LegacySecret {
+    /// The raw encrypted secret.
+    fn raw_secret(&self) -> &ByteString;
+    /// The encryption algorithm used to encrypt the secret.
+    fn encryption_algorithm(&self) -> &UAString;
 }
 
-/// Decrypt the password inside of a user identity token.
-pub fn decrypt_user_identity_token_password(
-    user_identity_token: &UserNameIdentityToken,
+impl LegacySecret for UserNameIdentityToken {
+    fn raw_secret(&self) -> &ByteString {
+        &self.password
+    }
+
+    fn encryption_algorithm(&self) -> &UAString {
+        &self.encryption_algorithm
+    }
+}
+
+impl LegacySecret for IssuedIdentityToken {
+    fn raw_secret(&self) -> &ByteString {
+        &self.token_data
+    }
+
+    fn encryption_algorithm(&self) -> &UAString {
+        &self.encryption_algorithm
+    }
+}
+
+impl LegacySecret for LegacyEncryptedSecret {
+    fn raw_secret(&self) -> &ByteString {
+        &self.secret
+    }
+
+    fn encryption_algorithm(&self) -> &UAString {
+        &self.encryption_algorithm
+    }
+}
+
+/// Decrypt a legacy secret using the server's nonce and private key.
+pub fn legacy_decrypt_secret(
+    secret: &impl LegacySecret,
     server_nonce: &[u8],
     server_key: &PrivateKey,
 ) -> Result<String, Error> {
-    if user_identity_token.encryption_algorithm.is_empty() {
-        // Assumed to be UTF-8 plain text
-        user_identity_token.plaintext_password()
+    if secret.encryption_algorithm().is_empty() {
+        String::from_utf8(secret.raw_secret().as_ref().to_vec()).map_err(Error::decoding)
     } else {
         // Determine the padding from the algorithm.
-        let encryption_algorithm = user_identity_token.encryption_algorithm.as_ref();
+        let encryption_algorithm = secret.encryption_algorithm().as_ref();
         let padding = match encryption_algorithm {
             super::algorithms::ENC_RSA_15 => RsaPadding::Pkcs1,
             super::algorithms::ENC_RSA_OAEP => RsaPadding::OaepSha1,
@@ -113,19 +82,140 @@ pub fn decrypt_user_identity_token_password(
                 ));
             }
         };
-        legacy_password_decrypt(
-            &user_identity_token.password,
-            server_nonce,
-            server_key,
-            padding,
-        )
+        legacy_secret_decrypt(secret.raw_secret(), server_nonce, server_key, padding)
+    }
+}
+
+/// A generic legacy encrypted secret.
+pub struct LegacyEncryptedSecret {
+    /// The user token policy the encrypted secret conforms to.
+    pub policy: UAString,
+    /// The encrypted secret.
+    pub secret: ByteString,
+    /// The encryption algorithm used to encrypt the secret.
+    pub encryption_algorithm: UAString,
+}
+
+enum EncryptionMode {
+    None,
+    AsymmetricFor(SecurityPolicy),
+}
+
+/// Encrypt a client side user's password using the server nonce and cert.
+/// This is described in part 4, 7.41 of the OPC-UA standard.
+pub fn legacy_encrypt_secret(
+    channel_security_policy: SecurityPolicy,
+    channel_security_mode: MessageSecurityMode,
+    user_token_policy: &UserTokenPolicy,
+    nonce: &[u8],
+    cert: &Option<X509>,
+    secret_to_encrypt: &[u8],
+) -> Result<LegacyEncryptedSecret, Error> {
+    let token_security_policy = if user_token_policy.security_policy_uri.is_empty() {
+        None
+    } else {
+        Some(SecurityPolicy::from_str(user_token_policy.security_policy_uri.as_ref()).unwrap())
+    };
+
+    // This is an implementation of Table 193 in OPC-UA Part 4, 7.41
+    let encryption_mode = match (
+        channel_security_policy,
+        channel_security_mode,
+        token_security_policy,
+    ) {
+        // Check for unknown security policies
+        (_, _, Some(SecurityPolicy::Unknown)) | (SecurityPolicy::Unknown, _, _) => {
+            // Unknown security policy is not allowed
+            return Err(Error::new(
+                StatusCode::BadSecurityPolicyRejected,
+                "Unknown user token security policy",
+            ));
+        }
+
+        // Table implementation begins here
+        (SecurityPolicy::None, MessageSecurityMode::None, Some(SecurityPolicy::None) | None) => {
+            EncryptionMode::None
+        }
+        (SecurityPolicy::None, MessageSecurityMode::None, Some(p)) => {
+            EncryptionMode::AsymmetricFor(p)
+        }
+        (p, MessageSecurityMode::Sign | MessageSecurityMode::SignAndEncrypt, None) => {
+            EncryptionMode::AsymmetricFor(p)
+        }
+        (_, MessageSecurityMode::SignAndEncrypt, Some(SecurityPolicy::None)) => {
+            EncryptionMode::None
+        }
+        (_, MessageSecurityMode::Sign, Some(SecurityPolicy::None)) => {
+            return Err(Error::new(
+                StatusCode::BadSecurityPolicyRejected,
+                "User token policy security policy is None but message security mode is Sign",
+            ))
+        }
+        (_, MessageSecurityMode::Sign | MessageSecurityMode::SignAndEncrypt, Some(p)) => {
+            EncryptionMode::AsymmetricFor(p)
+        }
+        // Check for invalid message security modes
+        (_, MessageSecurityMode::None | MessageSecurityMode::Invalid, _) => {
+            return Err(Error::new(
+                StatusCode::BadSecurityChecksFailed,
+                "Invalid message security mode",
+            ));
+        }
+    };
+
+    match encryption_mode {
+        EncryptionMode::None => {
+            if matches!(channel_security_policy, SecurityPolicy::None)
+                || matches!(
+                    channel_security_mode,
+                    MessageSecurityMode::None | MessageSecurityMode::Sign
+                )
+            {
+                warn!("A user identity's password is being sent over the network in plain text. This could be a serious security issue");
+            }
+            Ok(LegacyEncryptedSecret {
+                secret: ByteString::from(secret_to_encrypt),
+                encryption_algorithm: UAString::null(),
+                policy: user_token_policy.policy_id.clone(),
+            })
+        }
+        EncryptionMode::AsymmetricFor(security_policy) => {
+            let password = legacy_secret_encrypt(
+                secret_to_encrypt,
+                nonce,
+                cert.as_ref().unwrap(),
+                security_policy
+                    .asymmetric_encryption_padding()
+                    .ok_or_else(|| {
+                        Error::new(
+                            StatusCode::BadSecurityPolicyRejected,
+                            "Security policy does not support asymmetric encryption",
+                        )
+                    })?,
+            )?;
+
+            Ok(LegacyEncryptedSecret {
+                secret: password,
+                encryption_algorithm: UAString::from(
+                    security_policy
+                        .asymmetric_encryption_algorithm()
+                        .ok_or_else(|| {
+                            Error::new(
+                                StatusCode::BadSecurityPolicyRejected,
+                                "Security policy does not support asymmetric encryption",
+                            )
+                        })?,
+                ),
+                policy: user_token_policy.policy_id.clone(),
+            })
+        }
     }
 }
 
 /// Encrypt a client side user's password using the server nonce and cert. This is described in table 176
 /// OPC UA part 4. This function is prefixed "legacy" because 1.04 describes another way of encrypting passwords.
-pub fn legacy_password_encrypt(
-    password: &str,
+pub(crate) fn legacy_secret_encrypt(
+    password: &[u8],
     server_nonce: &[u8],
     server_cert: &X509,
     padding: RsaPadding,
@@ -136,7 +226,7 @@ pub fn legacy_password_encrypt(
 
     // Write the length of the data to be encrypted excluding the length itself)
     write_u32(&mut src, (plaintext_size - 4) as u32)?;
-    src.write(password.as_bytes()).map_err(Error::decoding)?;
+    src.write(password).map_err(Error::decoding)?;
     src.write(server_nonce).map_err(Error::decoding)?;
 
     // Encrypt the data with the public key from the server's certificate
@@ -155,7 +245,7 @@ pub fn legacy_password_encrypt(
 
 /// Decrypt the client's password using the server's nonce and private key. This function is prefixed
 /// "legacy" because 1.04 describes another way of encrypting passwords.
-pub fn legacy_password_decrypt(
+pub(crate) fn legacy_secret_decrypt(
     secret: &ByteString,
     server_nonce: &[u8],
     server_key: &PrivateKey,

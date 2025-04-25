@@ -292,8 +292,8 @@ impl SecurityPolicy {
     /// Get the asymmetric encryption algorithm for this security policy.
     ///
     /// This will panic if the security policy is `Unknown` or `None`.
-    pub fn asymmetric_encryption_algorithm(&self) -> &'static str {
-        match self {
+    pub fn asymmetric_encryption_algorithm(&self) -> Option<&'static str> {
+        Some(match self {
             SecurityPolicy::Basic128Rsa15 => Basic128Rsa15::ASYMMETRIC_ENCRYPTION_ALGORITHM,
             SecurityPolicy::Basic256 => Basic256::ASYMMETRIC_ENCRYPTION_ALGORITHM,
             SecurityPolicy::Basic256Sha256 => Basic256Sha256::ASYMMETRIC_ENCRYPTION_ALGORITHM,
@@ -304,9 +304,9 @@ impl SecurityPolicy {
                 Aes256Sha256RsaPss::ASYMMETRIC_ENCRYPTION_ALGORITHM
             }
             _ => {
-                panic!("Invalid policy");
+                return None;
             }
-        }
+        })
     }
 
     /// Get the asymmetric signature algorithm for this security policy.
@@ -617,8 +617,8 @@ impl SecurityPolicy {
 
     /// Returns the padding algorithm used for this security policy for asymettric encryption
     /// and decryption.
-    pub fn asymmetric_encryption_padding(&self) -> RsaPadding {
-        match self {
+    pub fn asymmetric_encryption_padding(&self) -> Option<RsaPadding> {
+        Some(match self {
             SecurityPolicy::Basic128Rsa15 => RsaPadding::Pkcs1,
             SecurityPolicy::Basic256
             | SecurityPolicy::Basic256Sha256
@@ -626,9 +626,9 @@ impl SecurityPolicy {
             // PSS uses OAEP-SHA256 for encryption, but PSS for signing
             SecurityPolicy::Aes256Sha256RsaPss => RsaPadding::OaepSha256,
             _ => {
-                panic!("Security policy is not supported, shouldn't have gotten here");
+                return None;
             }
-        }
+        })
     }
 
     /// Encrypts a message using the supplied encryption key, returns the encrypted size. Destination
@@ -638,11 +638,16 @@ impl SecurityPolicy {
         encryption_key: &PublicKey,
         src: &[u8],
         dst: &mut [u8],
-    ) -> Result<usize, StatusCode> {
-        let padding = self.asymmetric_encryption_padding();
+    ) -> Result<usize, Error> {
+        let padding = self.asymmetric_encryption_padding().ok_or_else(|| {
+            Error::new(
+                StatusCode::BadSecurityPolicyRejected,
+                "Security policy does not support asymmetric encryption",
+            )
+        })?;
         encryption_key
             .public_encrypt(src, dst, padding)
-            .map_err(|_| StatusCode::BadUnexpectedError)
+            .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e))
     }
 
     /// Decrypts a message whose thumbprint matches the x509 cert and private key pair.
@@ -654,7 +659,12 @@ impl SecurityPolicy {
         src: &[u8],
         dst: &mut [u8],
     ) -> Result<usize, Error> {
-        let padding = self.asymmetric_encryption_padding();
+        let padding = self.asymmetric_encryption_padding().ok_or_else(|| {
+            Error::new(
+                StatusCode::BadSecurityPolicyRejected,
+                "Security policy does not support asymmetric encryption",
+            )
+        })?;
         decryption_key
             .private_decrypt(src, dst, padding)
             .map_err(|e| Error::new(StatusCode::BadSecurityChecksFailed, e))

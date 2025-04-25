@@ -125,48 +125,6 @@ impl UserNameIdentityToken {
         }
         String::from_utf8(self.password.as_ref().to_vec()).map_err(Error::decoding)
     }
-
-    /// Authenticates the token against the supplied username and password.
-    pub fn authenticate(&self, username: &str, password: &[u8]) -> Result<(), StatusCode> {
-        // No comparison will be made unless user and pass are explicitly set to something in the token
-        // Even if someone has a blank password, client should pass an empty string, not null.
-        let valid = if self.is_valid() {
-            // Plaintext encryption
-            if self.encryption_algorithm.is_null() {
-                // Password shall be a UTF-8 encoded string
-                let id_user = self.user_name.as_ref();
-                let id_pass = self.password.value.as_ref().unwrap();
-                if username == id_user {
-                    if password == id_pass.as_slice() {
-                        true
-                    } else {
-                        error!("Authentication error: User name {} supplied by client is recognised but password is not", username);
-                        false
-                    }
-                } else {
-                    error!("Authentication error: User name supplied by client is unrecognised");
-                    false
-                }
-            } else {
-                // TODO See 7.36.3. UserTokenPolicy and SecurityPolicy should be used to provide
-                //  a means to encrypt a password and not send it plain text. Sending a plaintext
-                //  password over unsecured network is a bad thing!!!
-                error!(
-                    "Authentication error: Unsupported encryption algorithm {}",
-                    self.encryption_algorithm.as_ref()
-                );
-                false
-            }
-        } else {
-            error!("Authentication error: User / pass credentials not supplied in token");
-            false
-        };
-        if valid {
-            Ok(())
-        } else {
-            Err(StatusCode::BadIdentityTokenRejected)
-        }
-    }
 }
 
 impl<'a> From<&'a NodeId> for ReadValueId {

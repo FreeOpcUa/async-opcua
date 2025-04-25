@@ -443,11 +443,7 @@ impl ServerInfo {
             );
             let token_password = if !token.encryption_algorithm.is_null() {
                 if let Some(ref server_key) = server_key {
-                    user_identity::decrypt_user_identity_token_password(
-                        token,
-                        server_nonce.as_ref(),
-                        server_key,
-                    )?
+                    user_identity::legacy_decrypt_secret(token, server_nonce.as_ref(), server_key)?
                 } else {
                     error!("Identity token password is encrypted but no server private key was supplied");
                     return Err(Error::new(

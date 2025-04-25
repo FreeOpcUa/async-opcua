@@ -13,7 +13,7 @@ use crate::{
         make_certificate_store, make_test_cert_1024, make_test_cert_2048, APPLICATION_HOSTNAME,
         APPLICATION_URI,
     },
-    user_identity::{legacy_password_decrypt, legacy_password_encrypt},
+    user_identity::{legacy_secret_decrypt, legacy_secret_encrypt},
     x509::{X509Data, X509},
     SecurityPolicy, SHA1_SIZE, SHA256_SIZE,
 };
@@ -599,8 +599,9 @@ fn encrypt_decrypt_password() {
     let (cert, pkey) = make_test_cert_1024();
 
     let padding = RsaPadding::OaepSha1;
-    let secret = legacy_password_encrypt(&password, nonce.as_ref(), &cert, padding).unwrap();
-    let password2 = legacy_password_decrypt(&secret, nonce.as_ref(), &pkey, padding).unwrap();
+    let secret =
+        legacy_secret_encrypt(password.as_bytes(), nonce.as_ref(), &cert, padding).unwrap();
+    let password2 = legacy_secret_decrypt(&secret, nonce.as_ref(), &pkey, padding).unwrap();
 
     assert_eq!(password, password2);
 }

@@ -256,11 +256,14 @@ Using `event_loop.spawn` is convenient if you do not care what the session is do
 
 You can watch these events yourself by using `event_loop.enter`, which returns a `Stream` of `SessionPollResult` items.
 
+If you're running inside an async context (like a `#[actix_web::main]` function, async handler, etc) use `tokio::task::spawn_blocking`
+
 ```rust
 
 tokio::task::spawn(async move {
     // Using `next` requires the futures_util package.
-    while let Some(evt) = event_loop.next() {
+    let mut stream = Box::pin(event_loop.enter());
+    while let Some(evt) = stream.next().await {
         match evt {
             Ok(SessionPollResult::ConnectionLost(status)) => { /* connection lost */ },
             Ok(SessionPollResult::Reconnected(mode)) => { /* connection established */ },

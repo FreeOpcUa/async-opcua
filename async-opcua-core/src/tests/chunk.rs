@@ -8,7 +8,10 @@ use opcua_types::{
 use tracing::trace;
 
 use crate::{
-    comms::{chunker::*, message_chunk::*, secure_channel::*, tcp_types::MIN_CHUNK_SIZE},
+    comms::{
+        chunker::*, message_chunk::*, secure_channel::*, sequence_number::SequenceNumberHandle,
+        tcp_types::MIN_CHUNK_SIZE,
+    },
     tests::*,
     RequestMessage, ResponseMessage,
 };
@@ -116,7 +119,7 @@ fn chunk_multi_encode_decode() {
     let response = make_large_read_response();
 
     // Create a very large message
-    let sequence_number = 1000;
+    let sequence_number = SequenceNumberHandle::new_at(true, 1000);
     let request_id = 100;
     let chunks = Chunker::encode(
         sequence_number,
@@ -150,7 +153,7 @@ fn chunk_multi_chunk_intermediate_final() {
     let response = make_large_read_response();
 
     // Create a very large message
-    let sequence_number = 1000;
+    let sequence_number = SequenceNumberHandle::new_at(true, 1000);
     let request_id = 100;
     let chunks = Chunker::encode(
         sequence_number,
@@ -189,10 +192,10 @@ fn max_message_size() {
     let ctx = ctx_r.context();
     let max_message_size = response.byte_len(&ctx);
 
-    let sequence_number = 1000;
+    let sequence_number = SequenceNumberHandle::new_at(true, 1000);
     let request_id = 100;
     let chunks = Chunker::encode(
-        sequence_number,
+        sequence_number.clone(),
         request_id,
         max_message_size,
         0,
@@ -224,10 +227,10 @@ fn validate_chunks_secure_channel_id() {
     let response = make_large_read_response();
 
     // Create a very large message
-    let sequence_number = 1000;
+    let sequence_number = SequenceNumberHandle::new_at(true, 1000);
     let request_id = 100;
     let chunks = Chunker::encode(
-        sequence_number,
+        sequence_number.clone(),
         request_id,
         0,
         MIN_CHUNK_SIZE,
@@ -238,13 +241,13 @@ fn validate_chunks_secure_channel_id() {
     assert!(chunks.len() > 1);
 
     // Expect this to work
-    let _ = Chunker::validate_chunks(sequence_number, &secure_channel, &chunks).unwrap();
+    let _ = Chunker::validate_chunks(sequence_number.clone(), &secure_channel, &chunks).unwrap();
 
     // Test secure channel id mismatch
     let old_secure_channel_id = secure_channel.secure_channel_id();
     secure_channel.set_secure_channel_id(old_secure_channel_id + 1);
     assert_eq!(
-        Chunker::validate_chunks(sequence_number, &secure_channel, &chunks)
+        Chunker::validate_chunks(sequence_number.clone(), &secure_channel, &chunks)
             .unwrap_err()
             .status(),
         StatusCode::BadSecureChannelIdInvalid
@@ -260,10 +263,10 @@ fn validate_chunks_sequence_number() {
     let response = make_large_read_response();
 
     // Create a very large message
-    let sequence_number = 1000;
+    let seq_handle = SequenceNumberHandle::new_at(true, 1000);
     let request_id = 100;
     let mut chunks = Chunker::encode(
-        sequence_number,
+        seq_handle.clone(),
         request_id,
         0,
         MIN_CHUNK_SIZE,
@@ -275,20 +278,24 @@ fn validate_chunks_sequence_number() {
 
     // Test sequence number cannot be < starting sequence number
     assert_eq!(
-        Chunker::validate_chunks(sequence_number + 5000, &secure_channel, &chunks)
-            .unwrap_err()
-            .status(),
+        Chunker::validate_chunks(
+            SequenceNumberHandle::new_at(true, 5000),
+            &secure_channel,
+            &chunks
+        )
+        .unwrap_err()
+        .status(),
         StatusCode::BadSequenceNumberInvalid
     );
 
     // Test sequence number is returned properly
-    let result = Chunker::validate_chunks(sequence_number, &secure_channel, &chunks).unwrap();
-    assert_eq!(sequence_number + chunks.len() as u32 - 1, result);
+    let result = Chunker::validate_chunks(seq_handle.clone(), &secure_channel, &chunks).unwrap();
+    assert_eq!(seq_handle.current() + chunks.len() as u32, result);
 
     // Hack one of the chunks to alter its seq id
     let old_sequence_nr = set_chunk_sequence_number(&mut chunks[0], &secure_channel, 1001);
     assert_eq!(
-        Chunker::validate_chunks(sequence_number, &secure_channel, &chunks)
+        Chunker::validate_chunks(seq_handle.clone(), &secure_channel, &chunks)
             .unwrap_err()
             .status(),
         StatusCode::BadSequenceNumberInvalid
@@ -298,7 +305,7 @@ fn validate_chunks_sequence_number() {
     set_chunk_sequence_number(&mut chunks[0], &secure_channel, old_sequence_nr);
     let _ = set_chunk_sequence_number(&mut chunks[5], &secure_channel, 1008);
     assert_eq!(
-        Chunker::validate_chunks(sequence_number, &secure_channel, &chunks)
+        Chunker::validate_chunks(seq_handle.clone(), &secure_channel, &chunks)
             .unwrap_err()
             .status(),
         StatusCode::BadSequenceNumberInvalid
@@ -314,10 +321,10 @@ fn validate_chunks_request_id() {
     let response = make_large_read_response();
 
     // Create a very large message
-    let sequence_number = 1000;
+    let sequence_number = SequenceNumberHandle::new_at(true, 1000);
     let request_id = 100;
     let mut chunks = Chunker::encode(
-        sequence_number,
+        sequence_number.clone(),
         request_id,
         0,
         MIN_CHUNK_SIZE,
@@ -328,7 +335,7 @@ fn validate_chunks_request_id() {
     assert!(chunks.len() > 1);
 
     // Expect this to work
-    let _ = Chunker::validate_chunks(sequence_number, &secure_channel, &chunks).unwrap();
+    let _ = Chunker::validate_chunks(sequence_number.clone(), &secure_channel, &chunks).unwrap();
 
     // Hack the request id so first chunk request id says 101 while the rest say 100
     let _ = set_chunk_request_id(&mut chunks[0], &secure_channel, 101);
@@ -370,8 +377,9 @@ fn chunk_open_secure_channel() {
     // Encode the message up again to chunks, decode and compare to original
     trace!("Encoding back to chunks");
 
+    let seq_handle = SequenceNumberHandle::new_at(true, 1);
     let chunks = Chunker::encode(
-        1,
+        seq_handle,
         1,
         0,
         0,

@@ -5,7 +5,7 @@ use opcua_crypto::SecurityPolicy;
 use tracing::{error, trace};
 
 use crate::{
-    comms::{chunker::*, secure_channel::*},
+    comms::{chunker::*, secure_channel::*, sequence_number::SequenceNumberHandle},
     tests::*,
     Message,
 };
@@ -18,7 +18,15 @@ fn test_symmetric_encrypt_decrypt(
     let (secure_channel1, mut secure_channel2) =
         make_secure_channels(security_mode, security_policy);
 
-    let mut chunks = Chunker::encode(1, 1, 0, 0, &secure_channel1, &message).unwrap();
+    let mut chunks = Chunker::encode(
+        SequenceNumberHandle::new(true),
+        1,
+        0,
+        0,
+        &secure_channel1,
+        &message,
+    )
+    .unwrap();
     assert_eq!(chunks.len(), 1);
 
     {
@@ -74,7 +82,15 @@ fn test_asymmetric_encrypt_decrypt(
         secure_channel.set_remote_cert(Some(their_cert));
         secure_channel.set_private_key(Some(our_key));
 
-        let mut chunks = Chunker::encode(1, 1, 0, 0, &secure_channel, &message).unwrap();
+        let mut chunks = Chunker::encode(
+            SequenceNumberHandle::new(true),
+            1,
+            0,
+            0,
+            &secure_channel,
+            &message,
+        )
+        .unwrap();
         assert_eq!(chunks.len(), 1);
 
         let chunk = &mut chunks[0];

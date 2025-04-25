@@ -16,7 +16,10 @@ use crate::{
 
 use opcua_types::{Error, SimpleBinaryEncodable, StatusCode};
 
-use super::tcp_types::{AcknowledgeMessage, ErrorMessage};
+use super::{
+    sequence_number::SequenceNumberHandle,
+    tcp_types::{AcknowledgeMessage, ErrorMessage},
+};
 
 #[derive(Copy, Clone, Debug)]
 enum SendBufferState {
@@ -40,7 +43,7 @@ pub struct SendBuffer {
     /// The last request id
     last_request_id: u32,
     /// Last sent sequence number
-    last_sent_sequence_number: u32,
+    sequence_numbers: SequenceNumberHandle,
     /// Maximum size of a message, total. Use 0 for no limit
     pub max_message_size: usize,
     /// Maximum number of chunks in a message.
@@ -58,12 +61,17 @@ pub struct SendBuffer {
 //  - `write` cannot be called while we are writing to the output.
 impl SendBuffer {
     /// Create a new send buffer with the given initial limits.
-    pub fn new(buffer_size: usize, max_message_size: usize, max_chunk_count: usize) -> Self {
+    pub fn new(
+        buffer_size: usize,
+        max_message_size: usize,
+        max_chunk_count: usize,
+        sequence_numbers_legacy: bool,
+    ) -> Self {
         Self {
             buffer: Cursor::new(vec![0u8; buffer_size + 1024]),
             chunks: VecDeque::with_capacity(max_chunk_count),
             last_request_id: 1000,
-            last_sent_sequence_number: 0,
+            sequence_numbers: SequenceNumberHandle::new(sequence_numbers_legacy),
             max_message_size,
             max_chunk_count,
             send_buffer_size: buffer_size,
@@ -98,6 +106,12 @@ impl SendBuffer {
         Ok(())
     }
 
+    /// Set whether we are using legacy sequence numbers or not.
+    /// This depends on the active security policy.
+    pub fn set_sequence_number_legacy(&mut self, is_legacy: bool) {
+        self.sequence_numbers.set_is_legacy(is_legacy);
+    }
+
     /// Clear the list of pending messages, then
     /// add an error.
     pub fn write_error(&mut self, error: ErrorMessage) {
@@ -124,7 +138,7 @@ impl SendBuffer {
 
         // Turn message to chunk(s)
         let chunks = Chunker::encode(
-            self.last_sent_sequence_number + 1,
+            self.sequence_numbers.clone(),
             request_id,
             self.max_message_size,
             self.send_buffer_size,
@@ -145,7 +159,7 @@ impl SendBuffer {
             .with_context(Some(request_id), Some(message.request_handle())))
         } else {
             // Sequence number monotonically increases per chunk
-            self.last_sent_sequence_number += chunks.len() as u32;
+            self.sequence_numbers.increment(chunks.len() as u32);
 
             // Send chunks
             self.chunks
@@ -241,7 +255,7 @@ mod tests {
     };
 
     fn get_buffer_and_channel() -> (SendBuffer, SecureChannel) {
-        let buffer = SendBuffer::new(8196, 81960, 5);
+        let buffer = SendBuffer::new(8196, 81960, 5, true);
         let channel = SecureChannel::new(
             Arc::new(RwLock::new(CertificateStore::new(std::path::Path::new(
                 "./pki",

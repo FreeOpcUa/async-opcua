@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use futures::future::Either;
+use opcua_core::comms::sequence_number::SequenceNumberHandle;
 use opcua_core::{trace_read_lock, trace_write_lock, RequestMessage, ResponseMessage};
 use parking_lot::RwLock;
 use tracing::{debug, error, trace, warn};
@@ -37,7 +38,7 @@ pub(super) struct TransportState {
     /// Max pending incoming messages
     max_pending_incoming: usize,
     /// Last decoded sequence number
-    last_received_sequence_number: u32,
+    sequence_numbers: SequenceNumberHandle,
     /// Max size of incoming chunks
     #[allow(unused)]
     receive_buffer_size: usize,
@@ -73,12 +74,16 @@ impl TransportState {
         max_pending_incoming: usize,
         receive_buffer_size: usize,
     ) -> Self {
+        let legacy_sequence_numbers = secure_channel
+            .read()
+            .security_policy()
+            .legacy_sequence_numbers();
         Self {
             secure_channel,
             outgoing_recv,
             message_states: HashMap::new(),
+            sequence_numbers: SequenceNumberHandle::new(legacy_sequence_numbers),
             max_pending_incoming,
-            last_received_sequence_number: 0,
             receive_buffer_size,
         }
     }
@@ -246,11 +251,11 @@ impl TransportState {
     ) -> Result<ResponseMessage, Error> {
         // Validate that all chunks have incrementing sequence numbers and valid chunk types
         let secure_channel = trace_read_lock!(self.secure_channel);
-        self.last_received_sequence_number = Chunker::validate_chunks(
-            self.last_received_sequence_number + 1,
+        self.sequence_numbers.set(Chunker::validate_chunks(
+            self.sequence_numbers.clone(),
             &secure_channel,
             chunks,
-        )?;
+        )?);
         // Now decode
         Chunker::decode(chunks, &secure_channel, None)
     }

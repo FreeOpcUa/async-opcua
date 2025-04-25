@@ -10,6 +10,7 @@ use opcua_core::{
         message_chunk::{MessageChunk, MessageIsFinalType},
         message_chunk_info::ChunkInfo,
         secure_channel::SecureChannel,
+        sequence_number::SequenceNumberHandle,
         tcp_codec::{Message, TcpCodec},
         tcp_types::{AcknowledgeMessage, ErrorMessage},
     },
@@ -40,7 +41,7 @@ pub(crate) struct TcpTransport {
     /// Client protocol version set during HELLO
     pub(crate) client_protocol_version: u32,
     /// Last decoded sequence number
-    last_received_sequence_number: u32,
+    sequence_numbers: SequenceNumberHandle,
 }
 
 enum TransportState {
@@ -134,6 +135,7 @@ impl TcpConnector {
             self.config.send_buffer_size,
             self.config.max_message_size,
             self.config.max_chunk_count,
+            true,
         );
 
         let endpoints = info.endpoints(&hello.endpoint_url, &None);
@@ -231,7 +233,7 @@ impl Connector for TcpConnector {
 }
 
 impl TcpTransport {
-    pub(crate) fn new(
+    fn new(
         read: FramedRead<ReadHalf<TcpStream>, TcpCodec>,
         write: WriteHalf<TcpStream>,
         send_buffer: SendBuffer,
@@ -241,7 +243,7 @@ impl TcpTransport {
             write,
             state: TransportState::Running,
             pending_chunks: Vec::new(),
-            last_received_sequence_number: 0,
+            sequence_numbers: SequenceNumberHandle::new(true),
             client_protocol_version: 0,
             send_buffer,
         }
@@ -389,11 +391,11 @@ impl TcpTransport {
 
                     let chunk_info = self.pending_chunks[0].chunk_info(channel)?;
 
-                    self.last_received_sequence_number = Chunker::validate_chunks(
-                        self.last_received_sequence_number + 1,
+                    self.sequence_numbers.set(Chunker::validate_chunks(
+                        self.sequence_numbers.clone(),
                         channel,
                         &self.pending_chunks,
-                    )?;
+                    )?);
 
                     let request = Chunker::decode(&self.pending_chunks, channel, None)
                         .map_err(|e| e.with_request_id(chunk_info.sequence_header.request_id))?;

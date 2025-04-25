@@ -11,6 +11,7 @@ pub mod message_chunk;
 pub mod message_chunk_info;
 pub mod secure_channel;
 pub mod security_header;
+pub mod sequence_number;
 pub mod tcp_codec;
 pub mod tcp_types;
 pub mod url;

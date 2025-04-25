@@ -461,6 +461,12 @@ impl SecurityPolicy {
         }
     }
 
+    /// Returns whether the security policy uses legacy sequence numbers.
+    pub fn legacy_sequence_numbers(&self) -> bool {
+        // All the ones we currently support do...
+        true
+    }
+
     /// Pseudo random function is used as a key derivation algorithm. It creates pseudo random bytes
     /// from a secret and seed specified by the parameters.
     fn prf(&self, secret: &[u8], seed: &[u8], length: usize, offset: usize) -> Vec<u8> {

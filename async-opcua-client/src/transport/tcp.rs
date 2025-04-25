@@ -16,6 +16,7 @@ use opcua_core::{
     },
     trace_read_lock,
 };
+use opcua_crypto::SecurityPolicy;
 use opcua_types::StatusCode;
 use parking_lot::RwLock;
 use tokio::io::{AsyncWriteExt, ReadHalf, WriteHalf};
@@ -61,6 +62,7 @@ impl TcpConnector {
             FramedRead<ReadHalf<TcpStream>, TcpCodec>,
             WriteHalf<TcpStream>,
             AcknowledgeMessage,
+            SecurityPolicy,
         ),
         StatusCode,
     > {
@@ -107,9 +109,12 @@ impl TcpConnector {
             config.max_chunk_count,
         );
         tracing::trace!("Send hello message: {hello:?}");
-        let mut framed_read = {
+        let (mut framed_read, policy) = {
             let secure_channel = trace_read_lock!(secure_channel);
-            FramedRead::new(reader, TcpCodec::new(secure_channel.decoding_options()))
+            (
+                FramedRead::new(reader, TcpCodec::new(secure_channel.decoding_options())),
+                secure_channel.security_policy(),
+            )
         };
 
         writer
@@ -139,7 +144,7 @@ impl TcpConnector {
             }
         };
 
-        Ok((framed_read, writer, ack))
+        Ok((framed_read, writer, ack, policy))
     }
 }
 
@@ -152,7 +157,7 @@ impl Connector for TcpConnector {
         config: TransportConfiguration,
         endpoint_url: &str,
     ) -> Result<TcpTransport, StatusCode> {
-        let (framed_read, writer, ack) =
+        let (framed_read, writer, ack, policy) =
             match Self::connect_inner(&channel, &config, endpoint_url).await {
                 Ok(k) => k,
                 Err(status) => return Err(status),
@@ -161,6 +166,7 @@ impl Connector for TcpConnector {
             config.send_buffer_size,
             config.max_message_size,
             config.max_chunk_count,
+            policy.legacy_sequence_numbers(),
         );
         buffer.revise(
             ack.receive_buffer_size as usize,

@@ -10,6 +10,7 @@ use crate::{
     comms::{
         message_chunk::{MessageChunk, MessageIsFinalType},
         secure_channel::SecureChannel,
+        sequence_number::SequenceNumberHandle,
     },
     Message,
 };
@@ -109,7 +110,7 @@ struct ChunkingStream<'a> {
     next_buf: Vec<u8>,
     buf_position: usize,
     is_closed: bool,
-    sequence_number: u32,
+    sequence_number: SequenceNumberHandle,
     request_id: u32,
     message_size: usize,
     message_type: MessageChunkType,
@@ -123,7 +124,7 @@ impl<'a> ChunkingStream<'a> {
         message_size: usize,
         request_id: u32,
         request_handle: u32,
-        sequence_number: u32,
+        sequence_number: SequenceNumberHandle,
     ) -> Result<Self, Error> {
         if max_chunk_size > 0 {
             let max_body_per_chunk = MessageChunk::body_size_from_message_size(
@@ -202,13 +203,14 @@ impl<'a> ChunkingStream<'a> {
         };
 
         let chunk = MessageChunk::new(
-            self.sequence_number + self.chunks.len() as u32,
+            self.sequence_number.current(),
             self.request_id,
             self.message_type,
             is_final,
             self.secure_channel,
             &buf,
         )?;
+        self.sequence_number.increment(1);
         self.chunks.push(chunk);
 
         if !self.is_closed {
@@ -264,10 +266,10 @@ impl Chunker {
     /// Ensure all of the supplied chunks have a valid secure channel id, and sequence numbers
     /// greater than the input sequence number and the preceding chunk
     ///
-    /// The function returns the last sequence number in the series for success, or
+    /// The function returns the next expected sequence number, or
     /// `BadSequenceNumberInvalid` or `BadSecureChannelIdInvalid` for failure.
     pub fn validate_chunks(
-        starting_sequence_number: u32,
+        mut sequence_numbers: SequenceNumberHandle,
         secure_channel: &SecureChannel,
         chunks: &[MessageChunk],
     ) -> Result<u32, Error> {
@@ -279,39 +281,45 @@ impl Chunker {
             "Received chunk with sequence number {}",
             first_sequence_number
         );
-        if first_sequence_number < starting_sequence_number {
-            Err(Error::new(
-                StatusCode::BadSequenceNumberInvalid,
-                format!(
-                    "First sequence number of {} is less than last value {}",
-                    first_sequence_number, starting_sequence_number
-                ),
-            ))
-        } else {
-            let secure_channel_id = secure_channel.secure_channel_id();
 
-            // Validate that all chunks have incrementing sequence numbers and valid chunk types
-            let mut expected_request_id: u32 = 0;
-            for (i, chunk) in chunks.iter().enumerate() {
-                let chunk_info = chunk.chunk_info(secure_channel)?;
+        let secure_channel_id = secure_channel.secure_channel_id();
 
-                // Check the channel id of each chunk
-                if secure_channel_id != 0
-                    && chunk_info.message_header.secure_channel_id != secure_channel_id
+        // Validate that all chunks have incrementing sequence numbers and valid chunk types
+        let mut expected_request_id: u32 = 0;
+        for (i, chunk) in chunks.iter().enumerate() {
+            let chunk_info = chunk.chunk_info(secure_channel)?;
+
+            // Check the channel id of each chunk
+            if secure_channel_id != 0
+                && chunk_info.message_header.secure_channel_id != secure_channel_id
+            {
+                return Err(Error::new(
+                    StatusCode::BadSecureChannelIdInvalid,
+                    format!(
+                        "Secure channel id {} does not match expected id {}",
+                        chunk_info.message_header.secure_channel_id, secure_channel_id
+                    ),
+                ));
+            }
+
+            // Check the sequence id - should be larger than the last one decoded
+            let sequence_number = chunk_info.sequence_header.sequence_number;
+            let expected_sequence_number = sequence_numbers.current();
+
+            if sequence_number != expected_sequence_number {
+                // If the expected sequence number is 0, and we are in legacy mode, then allow
+                // any value less than 1024.
+                if expected_sequence_number == sequence_numbers.min_value()
+                    && sequence_numbers.is_legacy()
+                    && sequence_number < 1024
                 {
-                    return Err(Error::new(
-                        StatusCode::BadSecureChannelIdInvalid,
-                        format!(
-                            "Secure channel id {} does not match expected id {}",
-                            chunk_info.message_header.secure_channel_id, secure_channel_id
-                        ),
-                    ));
-                }
-
-                // Check the sequence id - should be larger than the last one decoded
-                let sequence_number = chunk_info.sequence_header.sequence_number;
-                let expected_sequence_number = first_sequence_number + i as u32;
-                if sequence_number != expected_sequence_number {
+                    sequence_numbers.set(sequence_number);
+                } else {
+                    trace!(
+                        "Expected sequence number {}, got {}",
+                        expected_sequence_number,
+                        sequence_number
+                    );
                     return Err(Error::new(
                         StatusCode::BadSequenceNumberInvalid,
                         format!(
@@ -320,19 +328,20 @@ impl Chunker {
                         ),
                     ));
                 }
-
-                // Check the request id against the first chunk's request id
-                if i == 0 {
-                    expected_request_id = chunk_info.sequence_header.request_id;
-                } else if chunk_info.sequence_header.request_id != expected_request_id {
-                    return Err(Error::new(StatusCode::BadSequenceNumberInvalid, format!(
-                        "Chunk sequence number of {} has a request id {} which is not the expected value of {}, idx {}",
-                        sequence_number, chunk_info.sequence_header.request_id, expected_request_id, i
-                    )));
-                }
             }
-            Ok(first_sequence_number + chunks.len() as u32 - 1)
+            sequence_numbers.increment(1);
+
+            // Check the request id against the first chunk's request id
+            if i == 0 {
+                expected_request_id = chunk_info.sequence_header.request_id;
+            } else if chunk_info.sequence_header.request_id != expected_request_id {
+                return Err(Error::new(StatusCode::BadSequenceNumberInvalid, format!(
+                    "Chunk sequence number of {} has a request id {} which is not the expected value of {}, idx {}",
+                    sequence_number, chunk_info.sequence_header.request_id, expected_request_id, i
+                )));
+            }
         }
+        Ok(sequence_numbers.current())
     }
 
     /// Encodes a message using the supplied sequence number and secure channel info and emits the corresponding chunks
@@ -341,7 +350,7 @@ impl Chunker {
     /// max_message_size refers to the maximum byte length of a message or 0 for no limit
     ///
     pub fn encode(
-        sequence_number: u32,
+        sequence_number: SequenceNumberHandle,
         request_id: u32,
         max_message_size: usize,
         max_chunk_size: usize,

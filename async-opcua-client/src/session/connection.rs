@@ -106,6 +106,10 @@ impl<T, R> SessionBuilder<'_, T, R> {
                 .user_identity_tokens
                 .as_ref()
                 .is_some_and(|e| e.iter().any(|p| p.token_type == UserTokenType::Certificate)),
+            IdentityToken::IssuedToken(_) => endpoint
+                .user_identity_tokens
+                .as_ref()
+                .is_some_and(|e| e.iter().any(|p| p.token_type == UserTokenType::IssuedToken)),
         }
     }
 }
@@ -158,13 +162,10 @@ impl<'a> SessionBuilder<'a, (), Vec<EndpointDescription>> {
                 default_endpoint_id
             ));
         };
-        let Some(user_identity_token) = self.config.client_identity_token(&endpoint.user_token_id)
-        else {
-            return Err(format!(
-                "User token id {} not found",
-                endpoint.user_token_id
-            ));
-        };
+        let user_identity_token = self
+            .config
+            .client_identity_token(&endpoint.user_token_id)
+            .map_err(|e| e.to_string())?;
         let endpoint = self
             .config
             .endpoint_description_for_client_endpoint(&endpoint, &self.endpoints)?;
@@ -189,13 +190,10 @@ impl<'a> SessionBuilder<'a, (), Vec<EndpointDescription>> {
             .endpoints
             .get(&endpoint_id)
             .ok_or_else(|| format!("Cannot find endpoint with id {endpoint_id}"))?;
-        let Some(user_identity_token) = self.config.client_identity_token(&endpoint.user_token_id)
-        else {
-            return Err(format!(
-                "User token id {} not found",
-                endpoint.user_token_id
-            ));
-        };
+        let user_identity_token = self
+            .config
+            .client_identity_token(&endpoint.user_token_id)
+            .map_err(|e| e.to_string())?;
 
         let endpoint = self
             .config

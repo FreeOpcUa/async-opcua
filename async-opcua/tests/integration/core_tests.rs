@@ -224,7 +224,7 @@ async fn connect_basic128rsa15_with_x509_token() {
     conn_test(
         SecurityPolicy::Basic128Rsa15,
         MessageSecurityMode::SignAndEncrypt,
-        client_x509_token(),
+        client_x509_token().unwrap(),
     )
     .await;
 }
@@ -236,7 +236,7 @@ async fn connect_basic128rsa_15_with_invalid_token() {
         .connect(
             SecurityPolicy::Basic128Rsa15,
             MessageSecurityMode::SignAndEncrypt,
-            IdentityToken::UserName(CLIENT_USERPASS_ID.to_owned(), "invalid".to_owned()),
+            IdentityToken::UserName(CLIENT_USERPASS_ID.to_owned(), "invalid".into()),
         )
         .await
         .unwrap();
@@ -307,7 +307,7 @@ async fn multi_client_test() {
             MessageSecurityMode::SignAndEncrypt,
             IdentityToken::UserName(
                 CLIENT_USERPASS_ID.to_owned(),
-                format!("{CLIENT_USERPASS_ID}_password"),
+                format!("{CLIENT_USERPASS_ID}_password").into(),
             ),
         )
         .await
@@ -319,7 +319,7 @@ async fn multi_client_test() {
             MessageSecurityMode::SignAndEncrypt,
             IdentityToken::UserName(
                 CLIENT_USERPASS_ID.to_owned(),
-                format!("{CLIENT_USERPASS_ID}_password"),
+                format!("{CLIENT_USERPASS_ID}_password").into(),
             ),
         )
         .await

@@ -31,7 +31,7 @@ macro_rules! run_encrypted_test {
                     $test,
                     SecurityPolicy::Aes256Sha256RsaPss,
                     MessageSecurityMode::SignAndEncrypt,
-                    IdentityToken::UserName("test".to_owned(), "pass".to_owned()),
+                    IdentityToken::UserName("test".to_owned(), "pass".into()),
                     &mut $ctx,
                 ),
             )

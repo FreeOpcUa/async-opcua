@@ -115,11 +115,10 @@ pub mod browser;
 mod builder;
 mod config;
 pub mod custom_types;
+mod identity_token;
 mod retry;
 mod session;
 pub mod transport;
-
-use std::path::PathBuf;
 
 pub use builder::ClientBuilder;
 pub use config::{ClientConfig, ClientEndpoint, ClientUserToken, ANONYMOUS_USER_TOKEN_ID};
@@ -148,13 +147,4 @@ pub mod services {
     };
 }
 
-#[derive(Debug, Clone)]
-/// Client-side identity token representation.
-pub enum IdentityToken {
-    /// Anonymous identity token
-    Anonymous,
-    /// User name and a password
-    UserName(String, String),
-    /// X5090 cert - a path to the cert.der, and private.pem
-    X509(PathBuf, PathBuf),
-}
+pub use identity_token::{IdentityToken, IssuedTokenSource, IssuedTokenWrapper, Password};

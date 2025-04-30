@@ -38,7 +38,7 @@ async fn test_connect(
         test_connect_inner,
         policy,
         mode,
-        IdentityToken::UserName("test".to_owned(), "pass".to_owned()),
+        IdentityToken::UserName("test".to_owned(), "pass".into()),
         ctx,
     )
     .await;

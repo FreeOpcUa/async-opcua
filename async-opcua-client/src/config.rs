@@ -18,7 +18,9 @@ use tracing::warn;
 
 use opcua_core::config::Config;
 use opcua_crypto::SecurityPolicy;
-use opcua_types::{ApplicationType, EndpointDescription, MessageSecurityMode, UAString};
+use opcua_types::{
+    ApplicationType, EndpointDescription, Error, MessageSecurityMode, StatusCode, UAString,
+};
 
 use crate::{Client, IdentityToken, SessionRetryPolicy};
 
@@ -403,24 +405,36 @@ impl ClientConfig {
 
     /// Returns an identity token corresponding to the matching user in the configuration. Or None
     /// if there is no matching token.
-    pub fn client_identity_token(&self, user_token_id: impl Into<String>) -> Option<IdentityToken> {
+    pub fn client_identity_token(
+        &self,
+        user_token_id: impl Into<String>,
+    ) -> Result<IdentityToken, Error> {
         let user_token_id = user_token_id.into();
         if user_token_id == ANONYMOUS_USER_TOKEN_ID {
-            Some(IdentityToken::Anonymous)
+            Ok(IdentityToken::Anonymous)
         } else {
-            let token = self.user_tokens.get(&user_token_id)?;
+            let Some(token) = self.user_tokens.get(&user_token_id) else {
+                return Err(Error::new(
+                    StatusCode::BadInvalidArgument,
+                    format!("Requested user token: {user_token_id} not found in config",),
+                ));
+            };
 
             if let Some(ref password) = token.password {
-                Some(IdentityToken::UserName(
-                    token.user.clone(),
-                    password.clone(),
-                ))
+                Ok(IdentityToken::UserName(token.user.clone(), password.into()))
             } else if let Some(ref cert_path) = token.cert_path {
-                token.private_key_path.as_ref().map(|private_key_path| {
-                    IdentityToken::X509(PathBuf::from(cert_path), PathBuf::from(private_key_path))
-                })
+                let Some(private_key_path) = &token.private_key_path else {
+                    return Err(Error::new(
+                        StatusCode::BadInvalidArgument,
+                        "Client identity token with certificate does not have a private key",
+                    ));
+                };
+                IdentityToken::new_x509_path(cert_path, private_key_path)
             } else {
-                None
+                Err(Error::new(
+                    StatusCode::BadInvalidArgument,
+                    "Non-anonymous client identity token with neither password nor certificate",
+                ))
             }
         }
     }

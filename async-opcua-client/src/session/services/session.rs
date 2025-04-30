@@ -1,19 +1,18 @@
 use std::{sync::Arc, time::Duration};
 
 use opcua_core::{
-    comms::{secure_channel::SecureChannel, url::hostname_from_url},
-    sync::RwLock,
-    trace_read_lock, trace_write_lock, ResponseMessage,
+    comms::url::hostname_from_url, sync::RwLock, trace_read_lock, trace_write_lock, ResponseMessage,
 };
 use opcua_crypto::{
-    self, certificate_store::CertificateStore, legacy_encrypt_secret, PKey, SecurityPolicy,
+    self, certificate_store::CertificateStore, legacy_encrypt_secret, PKey, SecurityPolicy, X509,
 };
 use opcua_types::{
     ActivateSessionRequest, ActivateSessionResponse, AnonymousIdentityToken,
     ApplicationDescription, ByteString, CancelRequest, CancelResponse, CloseSessionRequest,
-    CloseSessionResponse, CreateSessionRequest, CreateSessionResponse, EndpointDescription,
-    ExtensionObject, IntegerId, NodeId, SignatureData, SignedSoftwareCertificate, StatusCode,
-    UAString, UserNameIdentityToken, UserTokenType, X509IdentityToken,
+    CloseSessionResponse, CreateSessionRequest, CreateSessionResponse, EndpointDescription, Error,
+    ExtensionObject, IntegerId, IssuedIdentityToken, MessageSecurityMode, NodeId, SignatureData,
+    SignedSoftwareCertificate, StatusCode, UAString, UserNameIdentityToken, UserTokenType,
+    X509IdentityToken,
 };
 use rsa::RsaPrivateKey;
 use tracing::error;
@@ -317,14 +316,18 @@ impl ActivateSession {
         self
     }
 
-    fn user_identity_token(
+    async fn user_identity_token(
         &self,
-        secure_channel: &SecureChannel,
-    ) -> Result<(ExtensionObject, SignatureData), StatusCode> {
+        remote_nonce: &ByteString,
+        remote_cert: &Option<X509>,
+        security_mode: MessageSecurityMode,
+        channel_security_policy: SecurityPolicy,
+    ) -> Result<(ExtensionObject, SignatureData), Error> {
         let user_token_type = match &self.identity_token {
             IdentityToken::Anonymous => UserTokenType::Anonymous,
             IdentityToken::UserName(_, _) => UserTokenType::UserName,
             IdentityToken::X509(_, _) => UserTokenType::Certificate,
+            IdentityToken::IssuedToken(_) => UserTokenType::IssuedToken,
         };
         let Some(policy) = self.endpoint.find_policy(user_token_type) else {
             builder_error!(
@@ -332,7 +335,13 @@ impl ActivateSession {
                 "Cannot find user token type {:?} for this endpoint, cannot connect",
                 user_token_type
             );
-            return Err(StatusCode::BadSecurityPolicyRejected);
+            return Err(Error::new(
+                StatusCode::BadSecurityPolicyRejected,
+                format!(
+                    "Cannot find user token type {:?} for this endpoint, cannot connect",
+                    user_token_type
+                ),
+            ));
         };
         let security_policy = if policy.security_policy_uri.is_null() {
             // Assume None
@@ -343,7 +352,10 @@ impl ActivateSession {
 
         if security_policy == SecurityPolicy::Unknown {
             error!("Unknown security policy {}", policy.security_policy_uri);
-            return Err(StatusCode::BadSecurityPolicyRejected);
+            return Err(Error::new(
+                StatusCode::BadSecurityPolicyRejected,
+                format!("Unknown security policy {}", policy.security_policy_uri),
+            ));
         }
 
         match &self.identity_token {
@@ -355,16 +367,15 @@ impl ActivateSession {
                 Ok((identity_token, SignatureData::null()))
             }
             IdentityToken::UserName(user, pass) => {
-                let channel_sec_policy = secure_channel.security_policy();
-                let nonce = secure_channel.remote_nonce();
-                let cert = secure_channel.remote_cert();
+                let nonce = remote_nonce.as_ref();
+                let cert = remote_cert;
                 let secret = legacy_encrypt_secret(
-                    channel_sec_policy,
-                    secure_channel.security_mode(),
+                    channel_security_policy,
+                    security_mode,
                     policy,
                     nonce,
-                    &cert,
-                    pass.as_bytes(),
+                    cert,
+                    pass.0.as_bytes(),
                 )?;
                 let identity_token = UserNameIdentityToken {
                     policy_id: secret.policy,
@@ -377,40 +388,26 @@ impl ActivateSession {
                     SignatureData::null(),
                 ))
             }
-            IdentityToken::X509(cert_path, private_key_path) => {
-                let nonce = secure_channel.remote_nonce();
-                let cert = secure_channel.remote_cert();
-                let Some(server_cert) = &cert else {
+            IdentityToken::X509(cert, private_key) => {
+                let nonce = remote_nonce.as_ref();
+                let server_cert = remote_cert;
+                let Some(server_cert) = &server_cert else {
                     error!("Cannot create an X509IdentityToken because the remote server has no cert with which to create a signature");
-                    return Err(StatusCode::BadCertificateInvalid);
+                    return Err(Error::new(StatusCode::BadCertificateInvalid, "Cannot create an X509IdentityToken because the remote server has no cert with which to create a signature"));
                 };
-                let certificate_data = CertificateStore::read_cert(cert_path).map_err(|e| {
-                    error!(
-                        "Certificate cannot be loaded from path {}, error = {}",
-                        cert_path.to_str().unwrap(),
-                        e
-                    );
-                    StatusCode::BadSecurityPolicyRejected
-                })?;
-                let private_key = CertificateStore::read_pkey(private_key_path).map_err(|e| {
-                    error!(
-                        "Private key cannot be loaded from path {}, error = {}",
-                        private_key_path.to_str().unwrap(),
-                        e
-                    );
-                    StatusCode::BadSecurityPolicyRejected
-                })?;
+
                 let user_token_signature = opcua_crypto::create_signature_data(
-                    &private_key,
+                    private_key,
                     security_policy,
                     &server_cert.as_byte_string(),
                     &ByteString::from(&nonce),
-                )?;
+                )
+                .map_err(|s| Error::new(s, "Failed to create token signature"))?;
 
                 // Create identity token
                 let identity_token = X509IdentityToken {
                     policy_id: policy.policy_id.clone(),
-                    certificate_data: certificate_data.as_byte_string(),
+                    certificate_data: cert.as_byte_string(),
                 };
 
                 Ok((
@@ -418,17 +415,52 @@ impl ActivateSession {
                     user_token_signature,
                 ))
             }
+            IdentityToken::IssuedToken(source) => {
+                let token = source.0.get_issued_token().await?;
+                let nonce = remote_nonce.as_ref();
+                let cert = remote_cert;
+                let secret = legacy_encrypt_secret(
+                    channel_security_policy,
+                    security_mode,
+                    policy,
+                    nonce,
+                    cert,
+                    token.as_ref(),
+                )?;
+                let identity_token = IssuedIdentityToken {
+                    policy_id: secret.policy,
+                    encryption_algorithm: secret.encryption_algorithm,
+                    token_data: secret.secret,
+                };
+                Ok((
+                    ExtensionObject::from_message(identity_token),
+                    SignatureData::null(),
+                ))
+            }
         }
     }
 
-    fn build_request(
+    async fn build_request(
         self,
         channel: &AsyncSecureChannel,
     ) -> Result<ActivateSessionRequest, StatusCode> {
-        let secure_channel = trace_read_lock!(channel.secure_channel);
-        let (user_identity_token, user_token_signature) =
-            self.user_identity_token(&secure_channel)?;
-        let security_policy = secure_channel.security_policy();
+        let (remote_cert, remote_nonce, security_policy, message_security_mode) = {
+            let secure_channel = trace_read_lock!(channel.secure_channel);
+            (
+                secure_channel.remote_cert(),
+                secure_channel.remote_nonce_as_byte_string(),
+                secure_channel.security_policy(),
+                secure_channel.security_mode(),
+            )
+        };
+        let (user_identity_token, user_token_signature) = self
+            .user_identity_token(
+                &remote_nonce,
+                &remote_cert,
+                message_security_mode,
+                security_policy,
+            )
+            .await?;
         let client_signature = match security_policy {
             SecurityPolicy::None => SignatureData::null(),
             _ => {
@@ -437,12 +469,12 @@ impl ActivateSession {
                     return Err(StatusCode::BadUnexpectedError);
                 };
 
-                let Some(server_cert) = secure_channel.remote_cert() else {
+                let Some(server_cert) = remote_cert else {
                     error!("Cannot sign server certificate because server cert is null");
                     return Err(StatusCode::BadUnexpectedError);
                 };
 
-                let server_nonce = secure_channel.remote_nonce_as_byte_string();
+                let server_nonce = remote_nonce;
                 if server_nonce.is_empty() {
                     error!("Cannot sign server certificate because server nonce is empty");
                     return Err(StatusCode::BadUnexpectedError);
@@ -485,7 +517,7 @@ impl UARequest for ActivateSession {
         Self: 'a,
     {
         let timeout = self.header.timeout;
-        let request = self.build_request(channel)?;
+        let request = self.build_request(channel).await?;
 
         let response = channel.send(request, timeout).await?;
 

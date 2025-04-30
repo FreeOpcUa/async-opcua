@@ -15,7 +15,7 @@ pub trait UARequest {
     fn send<'a>(
         self,
         channel: &'a AsyncSecureChannel,
-    ) -> impl Future<Output = Result<Self::Out, StatusCode>> + Send + Sync + 'a
+    ) -> impl Future<Output = Result<Self::Out, StatusCode>> + Send + 'a
     where
         Self: 'a;
 }

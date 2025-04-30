@@ -70,16 +70,13 @@ pub async fn setup() -> (Tester, Arc<TestNodeManager>, Arc<Session>) {
 pub fn client_user_token() -> IdentityToken {
     IdentityToken::UserName(
         CLIENT_USERPASS_ID.to_owned(),
-        format!("{CLIENT_USERPASS_ID}_password"),
+        format!("{CLIENT_USERPASS_ID}_password").into(),
     )
 }
 
 #[allow(unused)]
-pub fn client_x509_token() -> IdentityToken {
-    IdentityToken::X509(
-        PathBuf::from(USER_X509_CERTIFICATE_PATH),
-        PathBuf::from(USER_X509_PRIVATE_KEY_PATH),
-    )
+pub fn client_x509_token() -> Result<IdentityToken, opcua::types::Error> {
+    IdentityToken::new_x509_path(USER_X509_CERTIFICATE_PATH, USER_X509_PRIVATE_KEY_PATH)
 }
 
 pub fn default_server() -> ServerBuilder {

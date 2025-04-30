@@ -1,6 +1,10 @@
-use std::{sync::atomic::Ordering, time::Duration};
+use std::{
+    sync::{atomic::Ordering, Arc},
+    time::Duration,
+};
 
 use super::utils::hostname;
+use async_trait::async_trait;
 use bytes::BytesMut;
 use log::debug;
 use opcua::{
@@ -13,6 +17,12 @@ use opcua::{
         TimestampsToReturn, VariableId, Variant,
     },
 };
+use opcua_client::IssuedTokenWrapper;
+use opcua_server::{
+    authenticator::{issued_token_security_policy, AuthManager, UserToken},
+    ServerEndpoint,
+};
+use opcua_types::{ByteString, Error, UAString, UserTokenPolicy, UserTokenType};
 use tokio::{
     io::AsyncReadExt,
     net::{TcpListener, TcpStream},
@@ -385,6 +395,85 @@ async fn recoverable_error_test_server() {
         .await
         .unwrap_err();
     assert_eq!(res, StatusCode::BadDecodingError);
+
+    session
+        .read(
+            &[ReadValueId::from(<VariableId as Into<NodeId>>::into(
+                VariableId::Server_ServiceLevel,
+            ))],
+            TimestampsToReturn::Both,
+            0.0,
+        )
+        .await
+        .unwrap();
+}
+
+struct IssuedTokenAuthenticator;
+
+#[async_trait]
+impl AuthManager for IssuedTokenAuthenticator {
+    fn user_token_policies(&self, endpoint: &ServerEndpoint) -> Vec<UserTokenPolicy> {
+        if endpoint.path == "/issued_token" {
+            vec![UserTokenPolicy {
+                policy_id: issued_token_security_policy(endpoint),
+                token_type: UserTokenType::IssuedToken,
+                issued_token_type: opcua::types::issued_token_types::JSON_WEB_TOKEN.into(),
+                // Yes this is JSON in a string. The real thing would have a lot more fields.
+                issuer_endpoint_url: "{\"ua:tokenEndpoint\": \"example.com/token\"}".into(),
+                security_policy_uri: UAString::null(),
+            }]
+        } else {
+            vec![]
+        }
+    }
+
+    async fn authenticate_issued_identity_token(
+        &self,
+        _endpoint: &ServerEndpoint,
+        token: &ByteString,
+    ) -> Result<UserToken, Error> {
+        let token_str =
+            String::from_utf8(token.value.clone().unwrap_or_default()).map_err(Error::decoding)?;
+        if token_str == "valid" {
+            Ok(UserToken("valid".into()))
+        } else {
+            Err(Error::new(
+                StatusCode::BadIdentityTokenRejected,
+                "Invalid token",
+            ))
+        }
+    }
+}
+
+#[tokio::test]
+async fn issued_token_test() {
+    let server = test_server()
+        .add_endpoint(
+            "issued_token",
+            (
+                "/issued_token",
+                SecurityPolicy::Aes128Sha256RsaOaep,
+                MessageSecurityMode::SignAndEncrypt,
+                &[] as &[&str],
+            ),
+        )
+        .with_authenticator(Arc::new(IssuedTokenAuthenticator));
+    let mut tester = Tester::new(server, false).await;
+    let (session, lp) = tester
+        .connect_path(
+            SecurityPolicy::Aes128Sha256RsaOaep,
+            MessageSecurityMode::SignAndEncrypt,
+            IdentityToken::IssuedToken(IssuedTokenWrapper::new_source(ByteString::from(
+                "valid".as_bytes(),
+            ))),
+            "issued_token",
+        )
+        .await
+        .unwrap();
+    lp.spawn();
+    tokio::time::timeout(Duration::from_secs(2), session.wait_for_connection())
+        .await
+        .unwrap();
 
     session
         .read(

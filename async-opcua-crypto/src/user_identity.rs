@@ -64,9 +64,9 @@ pub fn legacy_decrypt_secret(
     secret: &impl LegacySecret,
     server_nonce: &[u8],
     server_key: &PrivateKey,
-) -> Result<String, Error> {
+) -> Result<ByteString, Error> {
     if secret.encryption_algorithm().is_empty() {
-        String::from_utf8(secret.raw_secret().as_ref().to_vec()).map_err(Error::decoding)
+        Ok(secret.raw_secret().clone())
     } else {
         // Determine the padding from the algorithm.
         let encryption_algorithm = secret.encryption_algorithm().as_ref();
@@ -250,7 +250,7 @@ pub(crate) fn legacy_secret_decrypt(
     server_nonce: &[u8],
     server_key: &PrivateKey,
     padding: RsaPadding,
-) -> Result<String, Error> {
+) -> Result<ByteString, Error> {
     if secret.is_null() {
         Err(Error::decoding("Missing server secret"))
     } else {
@@ -299,8 +299,7 @@ pub(crate) fn legacy_secret_decrypt(
                 Err(Error::decoding("Invalid nonce"))
             } else {
                 let password = &dst[4..nonce_begin];
-                let password = String::from_utf8(password.to_vec()).map_err(Error::decoding)?;
-                Ok(password)
+                Ok(ByteString::from(password))
             }
         }
     }

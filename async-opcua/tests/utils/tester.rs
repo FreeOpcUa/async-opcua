@@ -400,6 +400,25 @@ impl Tester {
             .await
     }
 
+    pub async fn connect_path(
+        &mut self,
+        security_policy: SecurityPolicy,
+        security_mode: MessageSecurityMode,
+        user_identity: IdentityToken,
+        path: &str,
+    ) -> Result<(Arc<Session>, SessionEventLoop), StatusCode> {
+        self.client
+            .connect_to_matching_endpoint(
+                (
+                    &format!("{}{}", self.endpoint(), path) as &str,
+                    security_policy.to_str(),
+                    security_mode,
+                ),
+                user_identity,
+            )
+            .await
+    }
+
     #[allow(unused)]
     pub async fn connect_and_wait(
         &mut self,

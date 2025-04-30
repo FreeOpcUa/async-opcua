@@ -121,9 +121,13 @@ impl UserNameIdentityToken {
     pub fn plaintext_password(&self) -> Result<String, Error> {
         if !self.encryption_algorithm.is_empty() {
             // Should not be calling this function at all encryption is applied
-            panic!();
+            return Err(Error::new(
+                StatusCode::BadSecurityChecksFailed,
+                "Password is encrypted",
+            ));
         }
-        String::from_utf8(self.password.as_ref().to_vec()).map_err(Error::decoding)
+        String::from_utf8(self.password.as_ref().to_vec())
+            .map_err(|e| Error::new(StatusCode::BadSecurityChecksFailed, e))
     }
 }
 

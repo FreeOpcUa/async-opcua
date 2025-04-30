@@ -4,13 +4,16 @@ use async_trait::async_trait;
 
 use opcua_crypto::{SecurityPolicy, Thumbprint};
 use opcua_types::{
-    Error, MessageSecurityMode, NodeId, StatusCode, UAString, UserTokenPolicy, UserTokenType,
+    ByteString, Error, MessageSecurityMode, NodeId, StatusCode, UAString, UserTokenPolicy,
+    UserTokenType,
 };
 use tracing::{debug, error};
 
 use crate::identity_token::{
-    POLICY_ID_ANONYMOUS, POLICY_ID_USER_PASS_NONE, POLICY_ID_USER_PASS_RSA_15,
-    POLICY_ID_USER_PASS_RSA_OAEP, POLICY_ID_X509,
+    POLICY_ID_ANONYMOUS, POLICY_ID_ISSUED_TOKEN_NONE, POLICY_ID_ISSUED_TOKEN_RSA_15,
+    POLICY_ID_ISSUED_TOKEN_RSA_OAEP, POLICY_ID_ISSUED_TOKEN_RSA_OAEP_SHA256,
+    POLICY_ID_USER_PASS_NONE, POLICY_ID_USER_PASS_RSA_15, POLICY_ID_USER_PASS_RSA_OAEP,
+    POLICY_ID_USER_PASS_RSA_OAEP_SHA256, POLICY_ID_X509,
 };
 
 use super::{
@@ -126,6 +129,19 @@ pub trait AuthManager: Send + Sync + 'static {
         ))
     }
 
+    /// Validate the given issued identity token for `endpoint`.
+    /// This should return a user token associated with the user.
+    async fn authenticate_issued_identity_token(
+        &self,
+        endpoint: &ServerEndpoint,
+        token: &ByteString,
+    ) -> Result<UserToken, Error> {
+        Err(Error::new(
+            StatusCode::BadIdentityTokenRejected,
+            "Issued identity token unsupported",
+        ))
+    }
+
     /// Return the effective user access level for the given node ID
     fn effective_user_access_level(
         &self,
@@ -165,6 +181,13 @@ pub trait AuthManager: Send + Sync + 'static {
         self.user_token_policies(endpoint)
             .iter()
             .any(|e| e.token_type == UserTokenType::Certificate)
+    }
+
+    /// Returns whether the endpoint supports issued-token authentication.
+    fn supports_issued_token(&self, endpoint: &ServerEndpoint) -> bool {
+        self.user_token_policies(endpoint)
+            .iter()
+            .any(|e| e.token_type == UserTokenType::IssuedToken)
     }
 
     /// Return the permissions for the core server for the given user.
@@ -326,18 +349,33 @@ impl AuthManager for DefaultAuthenticator {
     }
 }
 
-/// Get the username and password policy ID for the given endpioint.
+/// Get the username and password policy ID for the given endpoint.
 pub fn user_pass_security_policy_id(endpoint: &ServerEndpoint) -> UAString {
     match endpoint.password_security_policy() {
         SecurityPolicy::None => POLICY_ID_USER_PASS_NONE,
         SecurityPolicy::Basic128Rsa15 => POLICY_ID_USER_PASS_RSA_15,
-        SecurityPolicy::Basic256 | SecurityPolicy::Basic256Sha256 => POLICY_ID_USER_PASS_RSA_OAEP,
-        // TODO this is a placeholder
-        SecurityPolicy::Aes128Sha256RsaOaep | SecurityPolicy::Aes256Sha256RsaPss => {
-            POLICY_ID_USER_PASS_RSA_OAEP
-        }
+        SecurityPolicy::Basic256
+        | SecurityPolicy::Basic256Sha256
+        | SecurityPolicy::Aes128Sha256RsaOaep => POLICY_ID_USER_PASS_RSA_OAEP,
+        SecurityPolicy::Aes256Sha256RsaPss => POLICY_ID_USER_PASS_RSA_OAEP_SHA256,
         _ => {
-            panic!()
+            panic!("Invalid security policy for username and password")
+        }
+    }
+    .into()
+}
+
+/// Get the issued token policy ID for the given endpoint.
+pub fn issued_token_security_policy(endpoint: &ServerEndpoint) -> UAString {
+    match endpoint.password_security_policy() {
+        SecurityPolicy::None => POLICY_ID_ISSUED_TOKEN_NONE,
+        SecurityPolicy::Basic128Rsa15 => POLICY_ID_ISSUED_TOKEN_RSA_15,
+        SecurityPolicy::Basic256
+        | SecurityPolicy::Basic256Sha256
+        | SecurityPolicy::Aes128Sha256RsaOaep => POLICY_ID_ISSUED_TOKEN_RSA_OAEP,
+        SecurityPolicy::Aes256Sha256RsaPss => POLICY_ID_ISSUED_TOKEN_RSA_OAEP_SHA256,
+        _ => {
+            panic!("Invalid security policy for username and password")
         }
     }
     .into()

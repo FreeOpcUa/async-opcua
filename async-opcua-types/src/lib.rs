@@ -56,6 +56,12 @@ pub mod constants {
     pub const SECURITY_POLICY_NONE: &str = "None";
 }
 
+/// Contains constants for known issued token types as defined in the OPC-UA standard.
+pub mod issued_token_types {
+    /// JSON Web Tokens (JWT).
+    pub const JSON_WEB_TOKEN: &str = "http://opcfoundation.org/UA/UserToken#JWT";
+}
+
 use bitflags::bitflags;
 
 // Attributes mask bits

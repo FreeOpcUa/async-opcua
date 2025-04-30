@@ -25,8 +25,9 @@ use opcua_types::{
     X509IdentityToken,
 };
 use opcua_types::{
-    ByteString, ContextOwned, DateTime, DecodingOptions, Error, ExtensionObject, LocalizedText,
-    MessageSecurityMode, NamespaceMap, TypeLoader, TypeLoaderCollection, UAString,
+    ByteString, ContextOwned, DateTime, DecodingOptions, Error, ExtensionObject,
+    IssuedIdentityToken, LocalizedText, MessageSecurityMode, NamespaceMap, TypeLoader,
+    TypeLoaderCollection, UAString,
 };
 
 use crate::config::{ServerConfig, ServerEndpoint};
@@ -368,6 +369,15 @@ impl ServerInfo {
                     )
                     .await
                 }
+                IdentityToken::IssuedToken(token) => {
+                    self.authenticate_issued_identity_token(
+                        endpoint,
+                        &token,
+                        &self.server_pkey,
+                        server_nonce,
+                    )
+                    .await
+                }
                 IdentityToken::Invalid(o) => Err(Error::new(
                     StatusCode::BadIdentityTokenInvalid,
                     format!(
@@ -443,7 +453,17 @@ impl ServerInfo {
             );
             let token_password = if !token.encryption_algorithm.is_null() {
                 if let Some(ref server_key) = server_key {
-                    user_identity::legacy_decrypt_secret(token, server_nonce.as_ref(), server_key)?
+                    let decrypted = user_identity::legacy_decrypt_secret(
+                        token,
+                        server_nonce.as_ref(),
+                        server_key,
+                    )?;
+                    String::from_utf8(decrypted.value.unwrap_or_default()).map_err(|e| {
+                        Error::new(
+                            StatusCode::BadIdentityTokenInvalid,
+                            format!("Failed to decode identity token to string: {e}"),
+                        )
+                    })?
                 } else {
                     error!("Identity token password is encrypted but no server private key was supplied");
                     return Err(Error::new(
@@ -528,6 +548,49 @@ impl ServerInfo {
 
             self.authenticator
                 .authenticate_x509_identity_token(endpoint, &signing_thumbprint)
+                .await
+        }
+    }
+
+    async fn authenticate_issued_identity_token(
+        &self,
+        endpoint: &ServerEndpoint,
+        token: &IssuedIdentityToken,
+        server_key: &Option<PrivateKey>,
+        server_nonce: &ByteString,
+    ) -> Result<UserToken, Error> {
+        if !self.authenticator.supports_issued_token(endpoint) {
+            Err(Error::new(
+                StatusCode::BadIdentityTokenRejected,
+                "Endpoint doesn't support issued tokens",
+            ))
+        } else if token.policy_id != user_pass_security_policy_id(endpoint) {
+            Err(Error::new(
+                StatusCode::BadIdentityTokenRejected,
+                "Token doesn't possess the correct policy id",
+            ))
+        } else {
+            debug!(
+                "policy id = {}, encryption algorithm = {}",
+                token.policy_id.as_ref(),
+                token.encryption_algorithm.as_ref()
+            );
+            let decrypted_token = if !token.encryption_algorithm.is_null() {
+                if let Some(ref server_key) = server_key {
+                    user_identity::legacy_decrypt_secret(token, server_nonce.as_ref(), server_key)?
+                } else {
+                    error!("Identity token password is encrypted but no server private key was supplied");
+                    return Err(Error::new(
+                        StatusCode::BadIdentityTokenInvalid,
+                        "Failed to decrypt identity token issued token",
+                    ));
+                }
+            } else {
+                token.token_data.clone()
+            };
+
+            self.authenticator
+                .authenticate_issued_identity_token(endpoint, &decrypted_token)
                 .await
         }
     }

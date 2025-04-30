@@ -603,5 +603,8 @@ fn encrypt_decrypt_password() {
         legacy_secret_encrypt(password.as_bytes(), nonce.as_ref(), &cert, padding).unwrap();
     let password2 = legacy_secret_decrypt(&secret, nonce.as_ref(), &pkey, padding).unwrap();
 
-    assert_eq!(password, password2);
+    assert_eq!(
+        password,
+        String::from_utf8(password2.value.unwrap()).unwrap()
+    );
 }

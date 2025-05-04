@@ -261,6 +261,11 @@ impl DefaultTypeTree {
         &mut self.namespaces
     }
 
+    /// Get a reference to the namespaces used by this type tree.
+    pub fn namespaces(&self) -> &NamespaceMap {
+        &self.namespaces
+    }
+
     /// Get a vector of all the descendants of the given root node.
     pub fn get_all_children<'a>(&'a self, root: &'a NodeId) -> Vec<&'a NodeId> {
         let mut res = Vec::new();

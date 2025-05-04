@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use opcua_nodes::{DefaultTypeTree, TypeTree};
+use opcua_nodes::DefaultTypeTree;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 

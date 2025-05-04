@@ -14,7 +14,7 @@ pub fn as_opaque_node_id<T: Serialize>(value: &T, namespace: u16) -> Option<Node
 }
 
 /// Deserialize some node ID that was originally created using [as_opaque_node_id].
-pub fn from_opaque_node_id<T: DeserializeOwned + std::fmt::Debug>(id: &NodeId) -> Option<T> {
+pub fn from_opaque_node_id<T: DeserializeOwned>(id: &NodeId) -> Option<T> {
     let v = match &id.identifier {
         Identifier::ByteString(b) => b.value.as_ref()?,
         _ => return None,

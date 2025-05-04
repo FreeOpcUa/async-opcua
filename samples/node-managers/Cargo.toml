@@ -1,0 +1,16 @@
+[package]
+name = "async-opcua-node-manager-sample"
+version = "0.13.0"
+authors = ["Einar Omang <einar@omang.com>"]
+edition = "2021"
+
+[dependencies]
+async-trait = { workspace = true }
+env_logger = { workspace = true }
+log = { workspace = true }
+serde = { workspace = true }
+tokio = { workspace = true }
+
+[dependencies.async-opcua]
+path = "../../async-opcua"
+features = ["server"]

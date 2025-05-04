@@ -78,3 +78,4 @@ The full list of samples:
 5. [`demo-server`](samples/demo-server) - an OPC UA server that is more complex than the simple server and can be used for compliance testing.
 6. [`mqtt-client`](samples/mqtt-client) - an OPC UA client that subscribes to some values and publishes them to an MQTT broker.
 7. [`event-client`](samples/event-client) - an OPC UA client that will connect to a server and subscribe to alarms / events.
+8. [`node-managers`](samples/node-managers) - an OPC UA server exposing a simple simulated namespace using two custom node managers.

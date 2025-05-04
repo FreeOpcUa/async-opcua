@@ -314,6 +314,22 @@ impl BrowseNode {
                 .contains(NodeClassMask::from_bits_truncate(node_class as u32))
     }
 
+    /// Return `true` if references with forward direction should be returned.
+    pub fn allows_forward(&self) -> bool {
+        matches!(
+            self.browse_direction,
+            BrowseDirection::Both | BrowseDirection::Forward
+        )
+    }
+
+    /// Return `true` if references with inverse direction should be returned.
+    pub fn allows_inverse(&self) -> bool {
+        matches!(
+            self.browse_direction,
+            BrowseDirection::Both | BrowseDirection::Inverse
+        )
+    }
+
     /// Return `true` if the given reference should be returned.
     pub fn matches_filter(
         &self,

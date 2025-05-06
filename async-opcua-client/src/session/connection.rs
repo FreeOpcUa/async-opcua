@@ -1,19 +1,14 @@
 use std::{str::FromStr, sync::Arc};
 
+use crate::{
+    transport::{tcp::TransportConfiguration, Connector, ConnectorBuilder},
+    AsyncSecureChannel, ClientConfig, IdentityToken,
+};
 use opcua_core::{comms::url::is_opc_ua_binary_url, config::Config, sync::RwLock};
 use opcua_crypto::{CertificateStore, SecurityPolicy};
 use opcua_types::{
-    ContextOwned, EndpointDescription, MessageSecurityMode, NamespaceMap, NodeId, StatusCode,
-    TypeLoader, UserTokenType,
-};
-use tracing::error;
-
-use crate::{
-    transport::{
-        tcp::{TcpConnector, TransportConfiguration},
-        Connector,
-    },
-    AsyncSecureChannel, ClientConfig, IdentityToken,
+    ContextOwned, EndpointDescription, Error, MessageSecurityMode, NamespaceMap, NodeId,
+    StatusCode, TypeLoader, UserTokenType,
 };
 
 use super::{Client, EndpointInfo, Session, SessionEventLoop};
@@ -21,22 +16,57 @@ use super::{Client, EndpointInfo, Session, SessionEventLoop};
 struct SessionBuilderInner {
     session_id: Option<NodeId>,
     user_identity_token: IdentityToken,
-    connector: Box<dyn Connector>,
     type_loaders: Vec<Arc<dyn TypeLoader>>,
+}
+
+/// Trait for getting a connection builder for a given endpoint.
+/// This is not the neatest interface, but it makes it possible to use a different
+/// connection source in the session builder.
+///
+/// Essentially, ConnectionSource takes an endpoint, and returns a connector builder,
+/// which is directly converted into a connector, which is then used to create a
+/// transport.
+///
+/// In practice:
+///
+///  - A ConnectionSource uses an EndpointDescription to get a ConnectorBuilder.
+///  - A ConnectorBuilder is directly converted into a Connector. This trait exists
+///    so that methods that connect to an endpoint can take a type that implements ConnectorBuilder,
+///    for example an endpoint description.
+///  - A Connector is used to create a transport, which is then used to connect to the server.
+pub trait ConnectionSource {
+    /// The type of connector builder returned by this connection source.
+    type Builder: ConnectorBuilder;
+
+    /// Get a connector builder for the given endpoint description.
+    fn get_connector(&self, endpoint: &EndpointDescription) -> Result<Self::Builder, Error>;
+}
+
+/// Connection source for a direct OPC/TCP binary connection.
+/// This is the default connection source used by the session builder, and by far the most
+/// common when connecting to an OPC-UA server.
+pub struct DirectConnectionSource;
+
+impl ConnectionSource for DirectConnectionSource {
+    type Builder = String;
+    fn get_connector(&self, endpoint: &EndpointDescription) -> Result<Self::Builder, Error> {
+        Ok(endpoint.endpoint_url.as_ref().to_string())
+    }
 }
 
 /// Type-state builder for a session and session event loop.
 /// To use, you will typically first call [SessionBuilder::with_endpoints] to set
 /// a list of available endpoints, then one of the `connect_to` methods, then finally
 /// [SessionBuilder::build].
-pub struct SessionBuilder<'a, T = (), R = ()> {
+pub struct SessionBuilder<'a, T = (), R = (), C = DirectConnectionSource> {
     endpoint: T,
     config: &'a ClientConfig,
     endpoints: R,
     inner: SessionBuilderInner,
+    connection_source: C,
 }
 
-impl<'a> SessionBuilder<'a, (), ()> {
+impl<'a> SessionBuilder<'a, (), (), DirectConnectionSource> {
     /// Create a new, empty session builder.
     pub fn new(config: &'a ClientConfig) -> Self {
         Self {
@@ -46,31 +76,32 @@ impl<'a> SessionBuilder<'a, (), ()> {
             inner: SessionBuilderInner {
                 session_id: None,
                 user_identity_token: IdentityToken::Anonymous,
-                connector: Box::new(TcpConnector),
                 type_loaders: Vec::new(),
             },
+            connection_source: DirectConnectionSource,
         }
     }
 }
 
-impl<'a, T> SessionBuilder<'a, T, ()> {
+impl<'a, T, C> SessionBuilder<'a, T, (), C> {
     /// Set a list of available endpoints on the server.
     ///
     /// You'll typically get this from [Client::get_server_endpoints].
     pub fn with_endpoints(
         self,
         endpoints: Vec<EndpointDescription>,
-    ) -> SessionBuilder<'a, T, Vec<EndpointDescription>> {
+    ) -> SessionBuilder<'a, T, Vec<EndpointDescription>, C> {
         SessionBuilder {
             inner: self.inner,
             endpoint: self.endpoint,
             config: self.config,
             endpoints,
+            connection_source: self.connection_source,
         }
     }
 }
 
-impl<T, R> SessionBuilder<'_, T, R> {
+impl<'a, T, R, C> SessionBuilder<'a, T, R, C> {
     /// Set the user identity token to use.
     pub fn user_identity_token(mut self, identity_token: IdentityToken) -> Self {
         self.inner.user_identity_token = identity_token;
@@ -116,37 +147,61 @@ impl<T, R> SessionBuilder<'_, T, R> {
                 .is_some_and(|e| e.iter().any(|p| p.token_type == UserTokenType::IssuedToken)),
         }
     }
+
+    /// Set the connection source to use. This is used to create the transport
+    /// connector. Defaults to a direct TCP connection, implemented by `()`.
+    pub fn with_connector<C2>(self, connection_source: C2) -> SessionBuilder<'a, T, R, C2>
+    where
+        C2: ConnectionSource,
+    {
+        SessionBuilder {
+            inner: self.inner,
+            endpoint: self.endpoint,
+            config: self.config,
+            endpoints: self.endpoints,
+            connection_source,
+        }
+    }
 }
 
-impl<'a> SessionBuilder<'a, (), Vec<EndpointDescription>> {
+impl<'a, C> SessionBuilder<'a, (), Vec<EndpointDescription>, C> {
     /// Connect to an endpoint matching the given endpoint description.
     pub fn connect_to_matching_endpoint(
         self,
         endpoint: impl Into<EndpointDescription>,
-    ) -> Result<SessionBuilder<'a, EndpointDescription, Vec<EndpointDescription>>, StatusCode> {
+    ) -> Result<SessionBuilder<'a, EndpointDescription, Vec<EndpointDescription>, C>, Error> {
         let endpoint = endpoint.into();
 
         let security_policy = SecurityPolicy::from_str(endpoint.security_policy_uri.as_ref())
-            .map_err(|_| StatusCode::BadSecurityPolicyRejected)?;
+            .map_err(|_| {
+                Error::new(
+                    StatusCode::BadSecurityPolicyRejected,
+                    format!(
+                        "Invalid security policy: {}",
+                        endpoint.security_policy_uri.as_ref()
+                    ),
+                )
+            })?;
         let server_endpoint = Client::find_matching_endpoint(
             &self.endpoints,
             endpoint.endpoint_url.as_ref(),
             security_policy,
             endpoint.security_mode,
         )
-        .ok_or(StatusCode::BadTcpEndpointUrlInvalid)
-        .inspect_err(|_| {
-            error!(
+        .ok_or(Error::new(
+            StatusCode::BadTcpEndpointUrlInvalid,
+            format!(
                 "Cannot find matching endpoint for {}",
                 endpoint.endpoint_url.as_ref()
-            );
-        })?;
+            ),
+        ))?;
 
         Ok(SessionBuilder {
             inner: self.inner,
             endpoint: server_endpoint,
             config: self.config,
             endpoints: self.endpoints,
+            connection_source: self.connection_source,
         })
     }
 
@@ -154,21 +209,22 @@ impl<'a> SessionBuilder<'a, (), Vec<EndpointDescription>> {
     /// default endpoint.
     pub fn connect_to_default_endpoint(
         mut self,
-    ) -> Result<SessionBuilder<'a, EndpointDescription, Vec<EndpointDescription>>, String> {
+    ) -> Result<SessionBuilder<'a, EndpointDescription, Vec<EndpointDescription>, C>, Error> {
         let default_endpoint_id = self.config.default_endpoint.clone();
         let endpoint = if default_endpoint_id.is_empty() {
-            return Err("No default endpoint has been specified".to_string());
+            return Err(Error::new(
+                StatusCode::BadConfigurationError,
+                "No default endpoint has been specified",
+            ));
         } else if let Some(endpoint) = self.config.endpoints.get(&default_endpoint_id) {
             endpoint.clone()
         } else {
-            return Err(format!(
-                "Cannot find default endpoint with id {default_endpoint_id}"
+            return Err(Error::new(
+                StatusCode::BadInvalidArgument,
+                format!("Cannot find default endpoint with id {default_endpoint_id}"),
             ));
         };
-        let user_identity_token = self
-            .config
-            .client_identity_token(&endpoint.user_token_id)
-            .map_err(|e| e.to_string())?;
+        let user_identity_token = self.config.client_identity_token(&endpoint.user_token_id)?;
         let endpoint = self
             .config
             .endpoint_description_for_client_endpoint(&endpoint, &self.endpoints)?;
@@ -178,6 +234,7 @@ impl<'a> SessionBuilder<'a, (), Vec<EndpointDescription>> {
             endpoint,
             config: self.config,
             endpoints: self.endpoints,
+            connection_source: self.connection_source,
         })
     }
 
@@ -186,17 +243,15 @@ impl<'a> SessionBuilder<'a, (), Vec<EndpointDescription>> {
     pub fn connect_to_endpoint_id(
         mut self,
         endpoint_id: impl Into<String>,
-    ) -> Result<SessionBuilder<'a, EndpointDescription, Vec<EndpointDescription>>, String> {
+    ) -> Result<SessionBuilder<'a, EndpointDescription, Vec<EndpointDescription>, C>, Error> {
         let endpoint_id = endpoint_id.into();
-        let endpoint = self
-            .config
-            .endpoints
-            .get(&endpoint_id)
-            .ok_or_else(|| format!("Cannot find endpoint with id {endpoint_id}"))?;
-        let user_identity_token = self
-            .config
-            .client_identity_token(&endpoint.user_token_id)
-            .map_err(|e| e.to_string())?;
+        let endpoint = self.config.endpoints.get(&endpoint_id).ok_or_else(|| {
+            Error::new(
+                StatusCode::BadInvalidArgument,
+                format!("Cannot find endpoint with id {endpoint_id}"),
+            )
+        })?;
+        let user_identity_token = self.config.client_identity_token(&endpoint.user_token_id)?;
 
         let endpoint = self
             .config
@@ -207,6 +262,7 @@ impl<'a> SessionBuilder<'a, (), Vec<EndpointDescription>> {
             endpoint,
             config: self.config,
             endpoints: self.endpoints,
+            connection_source: self.connection_source,
         })
     }
 
@@ -217,7 +273,7 @@ impl<'a> SessionBuilder<'a, (), Vec<EndpointDescription>> {
     pub fn connect_to_best_endpoint(
         self,
         secure: bool,
-    ) -> Result<SessionBuilder<'a, EndpointDescription, Vec<EndpointDescription>>, String> {
+    ) -> Result<SessionBuilder<'a, EndpointDescription, Vec<EndpointDescription>, C>, Error> {
         let endpoint = if secure {
             self.endpoints
                 .iter()
@@ -229,29 +285,36 @@ impl<'a> SessionBuilder<'a, (), Vec<EndpointDescription>> {
             })
         };
         let Some(endpoint) = endpoint else {
-            return Err("No suitable endpoint found".to_owned());
+            return Err(Error::new(
+                StatusCode::BadInvalidArgument,
+                "No suitable endpoint found",
+            ));
         };
         Ok(SessionBuilder {
             inner: self.inner,
             endpoint: endpoint.clone(),
             config: self.config,
             endpoints: self.endpoints,
+            connection_source: self.connection_source,
         })
     }
 }
 
-impl<'a, R> SessionBuilder<'a, (), R> {
+impl<'a, R, C> SessionBuilder<'a, (), R, C> {
     /// Connect directly to an endpoint description, this does not require you to list
     /// endpoints on the server first.
     pub fn connect_to_endpoint_directly(
         self,
         endpoint: impl Into<EndpointDescription>,
-    ) -> Result<SessionBuilder<'a, EndpointDescription, R>, String> {
+    ) -> Result<SessionBuilder<'a, EndpointDescription, R, C>, Error> {
         let endpoint = endpoint.into();
         if !is_opc_ua_binary_url(endpoint.endpoint_url.as_ref()) {
-            return Err(format!(
-                "Endpoint url {} is not a valid / supported url",
-                endpoint.endpoint_url
+            return Err(Error::new(
+                StatusCode::BadTcpEndpointUrlInvalid,
+                format!(
+                    "Endpoint url {} is not a valid / supported url",
+                    endpoint.endpoint_url
+                ),
             ));
         }
         Ok(SessionBuilder {
@@ -259,25 +322,33 @@ impl<'a, R> SessionBuilder<'a, (), R> {
             config: self.config,
             endpoints: self.endpoints,
             inner: self.inner,
+            connection_source: self.connection_source,
         })
     }
 }
 
-impl<R> SessionBuilder<'_, EndpointDescription, R> {
+impl<R, C> SessionBuilder<'_, EndpointDescription, R, C>
+where
+    C: ConnectionSource,
+{
     /// Build the session and session event loop. Note that you will need to
     /// start polling the event loop before a connection is actually established.
     pub fn build(
         self,
         certificate_store: Arc<RwLock<CertificateStore>>,
-    ) -> (Arc<Session>, SessionEventLoop) {
+    ) -> Result<(Arc<Session>, SessionEventLoop), Error> {
+        let connector = self
+            .connection_source
+            .get_connector(&self.endpoint)?
+            .build()?;
         let ctx = self.make_encoding_context();
-        Session::new(
+        Ok(Session::new(
             Self::build_channel_inner(
                 certificate_store,
                 self.inner.user_identity_token,
                 self.endpoint,
                 self.config,
-                self.inner.connector,
+                connector,
                 ctx,
             ),
             self.config.session_name.clone().into(),
@@ -286,7 +357,7 @@ impl<R> SessionBuilder<'_, EndpointDescription, R> {
             self.config.decoding_options.as_comms_decoding_options(),
             self.config,
             self.inner.session_id,
-        )
+        ))
     }
 
     fn make_encoding_context(&self) -> ContextOwned {
@@ -307,7 +378,7 @@ impl<R> SessionBuilder<'_, EndpointDescription, R> {
         identity_token: IdentityToken,
         endpoint: EndpointDescription,
         config: &ClientConfig,
-        connector: Box<dyn Connector>,
+        connector: Arc<dyn Connector + Send + Sync + 'static>,
         ctx: ContextOwned,
     ) -> AsyncSecureChannel {
         AsyncSecureChannel::new(
@@ -337,15 +408,19 @@ impl<R> SessionBuilder<'_, EndpointDescription, R> {
     pub fn build_channel(
         self,
         certificate_store: Arc<RwLock<CertificateStore>>,
-    ) -> AsyncSecureChannel {
+    ) -> Result<AsyncSecureChannel, Error> {
         let ctx = self.make_encoding_context();
-        Self::build_channel_inner(
+        let connector = self
+            .connection_source
+            .get_connector(&self.endpoint)?
+            .build()?;
+        Ok(Self::build_channel_inner(
             certificate_store,
             self.inner.user_identity_token,
             self.endpoint,
             self.config,
-            self.inner.connector,
+            connector,
             ctx,
-        )
+        ))
     }
 }

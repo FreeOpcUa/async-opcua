@@ -5,6 +5,7 @@ use super::core::{OutgoingMessage, TransportPollResult, TransportState};
 use async_trait::async_trait;
 use futures::StreamExt;
 use opcua_core::comms::tcp_types::AcknowledgeMessage;
+use opcua_core::comms::url::is_opc_ua_binary_url;
 use opcua_core::RequestMessage;
 use opcua_core::{
     comms::{
@@ -17,7 +18,7 @@ use opcua_core::{
     trace_read_lock,
 };
 use opcua_crypto::SecurityPolicy;
-use opcua_types::StatusCode;
+use opcua_types::{Error, StatusCode};
 use parking_lot::RwLock;
 use tokio::io::{AsyncWriteExt, ReadHalf, WriteHalf};
 use tokio::net::TcpStream;
@@ -38,6 +39,7 @@ pub struct TcpTransport {
     send_buffer: SendBuffer,
     should_close: bool,
     closed: TransportCloseState,
+    connected_url: String,
 }
 
 #[derive(Debug, Clone)]
@@ -49,9 +51,68 @@ pub struct TransportConfiguration {
 }
 
 /// Connector for `opc.tcp` transport.
-pub struct TcpConnector;
+pub struct TcpConnector {
+    endpoint_url: String,
+}
 
 impl TcpConnector {
+    /// Create a new `TcpConnector` with the given endpoint URL.
+    pub fn new(endpoint_url: &str) -> Result<Self, Error> {
+        if is_opc_ua_binary_url(endpoint_url) {
+            Ok(Self {
+                endpoint_url: endpoint_url.to_string(),
+            })
+        } else {
+            Err(Error::new(
+                StatusCode::BadInvalidArgument,
+                format!("Invalid OPC-UA URL: {}", endpoint_url),
+            ))
+        }
+    }
+
+    async fn hello_exchange(
+        reader: &mut FramedRead<ReadHalf<TcpStream>, TcpCodec>,
+        writer: &mut WriteHalf<TcpStream>,
+        endpoint_url: &str,
+        config: &TransportConfiguration,
+    ) -> Result<AcknowledgeMessage, StatusCode> {
+        let hello = HelloMessage::new(
+            endpoint_url,
+            config.send_buffer_size,
+            config.recv_buffer_size,
+            config.max_message_size,
+            config.max_chunk_count,
+        );
+        tracing::trace!("Send hello message: {hello:?}");
+
+        writer
+            .write_all(&opcua_types::SimpleBinaryEncodable::encode_to_vec(&hello))
+            .await
+            .map_err(|err| {
+                error!("Cannot send hello to server, err = {}", err);
+                StatusCode::BadCommunicationError
+            })?;
+        match reader.next().await {
+            Some(Ok(Message::Acknowledge(ack))) => {
+                if ack.send_buffer_size > hello.receive_buffer_size {
+                    tracing::warn!("Acknowledged send buffer size is greater than receive buffer size in hello message!")
+                }
+                if ack.receive_buffer_size > hello.send_buffer_size {
+                    tracing::warn!("Acknowledged receive buffer size is greater than send buffer size in hello message!")
+                }
+                tracing::trace!("Received acknowledgement: {:?}", ack);
+                Ok(ack)
+            }
+            other => {
+                error!(
+                    "Unexpected error while waiting for server ACK. Expected ACK, got {:?}",
+                    other
+                );
+                Err(StatusCode::BadConnectionClosed)
+            }
+        }
+    }
+
     async fn connect_inner(
         secure_channel: &RwLock<SecureChannel>,
         config: &TransportConfiguration,
@@ -100,14 +161,6 @@ impl TcpConnector {
 
         let (reader, mut writer) = tokio::io::split(socket);
 
-        let hello = HelloMessage::new(
-            endpoint_url,
-            config.send_buffer_size,
-            config.recv_buffer_size,
-            config.max_message_size,
-            config.max_chunk_count,
-        );
-        tracing::trace!("Send hello message: {hello:?}");
         let (mut framed_read, policy) = {
             let secure_channel = trace_read_lock!(secure_channel);
             (
@@ -116,32 +169,7 @@ impl TcpConnector {
             )
         };
 
-        writer
-            .write_all(&opcua_types::SimpleBinaryEncodable::encode_to_vec(&hello))
-            .await
-            .map_err(|err| {
-                error!("Cannot send hello to server, err = {}", err);
-                StatusCode::BadCommunicationError
-            })?;
-        let ack = match framed_read.next().await {
-            Some(Ok(Message::Acknowledge(ack))) => {
-                if ack.send_buffer_size > hello.receive_buffer_size {
-                    tracing::warn!("Acknowledged send buffer size is greater than receive buffer size in hello message!")
-                }
-                if ack.receive_buffer_size > hello.send_buffer_size {
-                    tracing::warn!("Acknowledged receive buffer size is greater than send buffer size in hello message!")
-                }
-                tracing::trace!("Received acknowledgement: {:?}", ack);
-                ack
-            }
-            other => {
-                error!(
-                    "Unexpected error while waiting for server ACK. Expected ACK, got {:?}",
-                    other
-                );
-                return Err(StatusCode::BadConnectionClosed);
-            }
-        };
+        let ack = Self::hello_exchange(&mut framed_read, &mut writer, endpoint_url, config).await?;
 
         Ok((framed_read, writer, ack, policy))
     }
@@ -154,10 +182,9 @@ impl Connector for TcpConnector {
         channel: Arc<RwLock<SecureChannel>>,
         outgoing_recv: tokio::sync::mpsc::Receiver<OutgoingMessage>,
         config: TransportConfiguration,
-        endpoint_url: &str,
     ) -> Result<TcpTransport, StatusCode> {
         let (framed_read, writer, ack, policy) =
-            match Self::connect_inner(&channel, &config, endpoint_url).await {
+            match Self::connect_inner(&channel, &config, &self.endpoint_url).await {
                 Ok(k) => k,
                 Err(status) => return Err(status),
             };
@@ -185,7 +212,12 @@ impl Connector for TcpConnector {
             send_buffer: buffer,
             should_close: false,
             closed: TransportCloseState::Open,
+            connected_url: self.endpoint_url.to_string(),
         })
+    }
+
+    fn default_endpoint(&self) -> opcua_types::EndpointDescription {
+        opcua_types::EndpointDescription::from(self.endpoint_url.as_str())
     }
 }
 
@@ -278,6 +310,10 @@ impl TcpTransport {
                 }
             }
         }
+    }
+
+    pub fn connected_url(&self) -> &str {
+        &self.connected_url
     }
 }
 

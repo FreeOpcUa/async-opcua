@@ -39,7 +39,7 @@ pub struct AsyncSecureChannel {
     transport_config: TransportConfiguration,
     state: SecureChannelState,
     issue_channel_lock: tokio::sync::Mutex<()>,
-    connector: Box<dyn Connector>,
+    connector: Arc<dyn Connector>,
     channel_lifetime: u32,
 
     request_send: ArcSwapOption<RequestSend>,
@@ -56,6 +56,13 @@ impl SecureChannelEventLoop {
     /// action that was taken.
     pub async fn poll(&mut self) -> TransportPollResult {
         self.transport.poll().await
+    }
+
+    /// Get the URL of the connected server.
+    /// This was either the URL used to establish the connection, or the URL
+    /// reported by the server in ReverseHello.
+    pub fn connected_url(&self) -> &str {
+        self.transport.connected_url()
     }
 }
 
@@ -127,7 +134,7 @@ impl AsyncSecureChannel {
         ignore_clock_skew: bool,
         auth_token: Arc<ArcSwap<NodeId>>,
         transport_config: TransportConfiguration,
-        connector: Box<dyn Connector>,
+        connector: Arc<dyn Connector>,
         channel_lifetime: u32,
         encoding_context: Arc<RwLock<ContextOwned>>,
     ) -> Self {
@@ -259,7 +266,6 @@ impl AsyncSecureChannel {
     async fn create_transport(
         &self,
     ) -> Result<(TcpTransport, tokio::sync::mpsc::Sender<OutgoingMessage>), StatusCode> {
-        let endpoint_url = self.endpoint_info.endpoint.endpoint_url.clone();
         debug!("Connect");
         let security_policy =
             SecurityPolicy::from_str(self.endpoint_info.endpoint.security_policy_uri.as_ref())
@@ -303,7 +309,6 @@ impl AsyncSecureChannel {
                     self.secure_channel.clone(),
                     recv,
                     self.transport_config.clone(),
-                    endpoint_url.as_ref(),
                 )
                 .await?;
 

@@ -5,16 +5,13 @@ use tokio::{pin, select};
 use tracing::{debug, error};
 
 use crate::{
-    transport::{
-        tcp::{TcpConnector, TransportConfiguration},
-        TransportPollResult,
-    },
+    transport::{tcp::TransportConfiguration, Connector, ConnectorBuilder, TransportPollResult},
     AsyncSecureChannel, ClientConfig, ClientEndpoint, IdentityToken,
 };
 use opcua_core::{
     comms::url::{
-        hostname_from_url, is_opc_ua_binary_url, is_valid_opc_ua_url, server_url_from_endpoint_url,
-        url_matches_except_host, url_with_replaced_hostname,
+        hostname_from_url, server_url_from_endpoint_url, url_matches_except_host,
+        url_with_replaced_hostname,
     },
     config::Config,
     sync::RwLock,
@@ -85,8 +82,8 @@ impl Client {
     }
 
     /// Get a new session builder that can be used to build a session dynamically.
-    pub fn session_builder(&self) -> SessionBuilder<'_, (), ()> {
-        SessionBuilder::<'_, (), ()>::new(&self.config)
+    pub fn session_builder(&self) -> SessionBuilder<'_> {
+        SessionBuilder::<'_>::new(&self.config)
     }
 
     /// Connects to a named endpoint that you have defined in the `ClientConfig`
@@ -110,7 +107,7 @@ impl Client {
                 error!("{}", e);
                 StatusCode::BadConfigurationError
             })?
-            .build(self.certificate_store.clone()))
+            .build(self.certificate_store.clone())?)
     }
 
     /// Connects to an ad-hoc server endpoint description.
@@ -147,7 +144,7 @@ impl Client {
             .with_endpoints(self.get_server_endpoints_from_url(server_url).await?)
             .connect_to_matching_endpoint(endpoint)?
             .user_identity_token(user_identity_token)
-            .build(self.certificate_store.clone()))
+            .build(self.certificate_store.clone())?)
     }
 
     /// Connects to a server directly using provided [`EndpointDescription`].
@@ -177,7 +174,8 @@ impl Client {
             .session_builder()
             .connect_to_endpoint_directly(endpoint)?
             .user_identity_token(identity_token)
-            .build(self.certificate_store.clone()))
+            .build(self.certificate_store.clone())
+            .map_err(|e| e.to_string())?)
     }
 
     /// Creates a new [`Session`] using the default endpoint specified in the config. If
@@ -209,7 +207,8 @@ impl Client {
                     .map_err(|e| format!("Failed to fetch server endpoints: {e}"))?,
             )
             .connect_to_default_endpoint()?
-            .build(self.certificate_store.clone()))
+            .build(self.certificate_store.clone())
+            .map_err(|e| e.to_string())?)
     }
 
     /// Create a secure channel using the provided [`SessionInfo`].
@@ -220,6 +219,7 @@ impl Client {
         &self,
         endpoint_info: EndpointInfo,
         channel_lifetime: u32,
+        connector: Arc<dyn Connector + Send + Sync>,
     ) -> AsyncSecureChannel {
         AsyncSecureChannel::new(
             self.certificate_store.clone(),
@@ -233,7 +233,7 @@ impl Client {
                 max_message_size: self.config.decoding_options.max_message_size,
                 max_chunk_count: self.config.decoding_options.max_chunk_count,
             },
-            Box::new(TcpConnector),
+            connector,
             channel_lifetime,
             // We should only ever need the default decoding context for temporary connections.
             Arc::new(RwLock::new(ContextOwned::new_default(
@@ -329,7 +329,8 @@ impl Client {
     ///
     /// # Arguments
     ///
-    /// * `server_url` - URL of the discovery server to get endpoints from.
+    /// * `server` - Connector to an OPC-UA server. This is implemented for `String` and `&str`, which will
+    ///   do a direct connection.
     ///
     /// # Returns
     ///
@@ -337,16 +338,17 @@ impl Client {
     /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
     pub async fn get_server_endpoints_from_url(
         &self,
-        server_url: impl Into<String>,
+        server: impl ConnectorBuilder,
     ) -> Result<Vec<EndpointDescription>, StatusCode> {
-        self.get_endpoints(server_url, &[], &[]).await
+        self.get_endpoints(server, &[], &[]).await
     }
 
     /// Get the list of endpoints for the server at the given URL.
     ///
     /// # Arguments
     ///
-    /// * `server_url` - URL of the discovery server to get endpoints from.
+    /// * `server` - Connector to an OPC-UA server. This is implemented for `String` and `&str`, which will
+    ///   do a direct connection.
     /// * `locale_ids` - List of required locale IDs on the given server endpoint.
     /// * `profile_uris` - Returned endpoints should match one of these profile URIs.
     ///
@@ -356,23 +358,21 @@ impl Client {
     /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
     pub async fn get_endpoints(
         &self,
-        server_url: impl Into<String>,
+        server: impl ConnectorBuilder,
         locale_ids: &[&str],
         profile_uris: &[&str],
     ) -> Result<Vec<EndpointDescription>, StatusCode> {
-        let server_url = server_url.into();
-        if !is_opc_ua_binary_url(&server_url) {
-            return Err(StatusCode::BadTcpEndpointUrlInvalid);
-        }
+        let server = server.build()?;
         let preferred_locales = Vec::new();
         // Most of these fields mean nothing when getting endpoints
-        let endpoint = EndpointDescription::from(server_url.as_ref());
+        let endpoint = server.default_endpoint();
         let endpoint_info = EndpointInfo {
             endpoint: endpoint.clone(),
             user_identity_token: IdentityToken::Anonymous,
             preferred_locales,
         };
-        let channel = self.channel_from_endpoint_info(endpoint_info, self.config.channel_lifetime);
+        let channel =
+            self.channel_from_endpoint_info(endpoint_info, self.config.channel_lifetime, server);
 
         let mut evt_loop = channel.connect().await?;
 
@@ -452,24 +452,31 @@ impl Client {
     /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
     pub async fn find_servers(
         &self,
-        discovery_endpoint_url: impl Into<String>,
+        discovery_endpoint: impl ConnectorBuilder,
         locale_ids: Option<Vec<UAString>>,
         server_uris: Option<Vec<UAString>>,
     ) -> Result<Vec<ApplicationDescription>, StatusCode> {
-        let discovery_endpoint_url = discovery_endpoint_url.into();
-        debug!("find_servers, {}", discovery_endpoint_url);
-        let endpoint = EndpointDescription::from(discovery_endpoint_url.as_ref());
-        let endpoint_info = EndpointInfo {
+        let discovery_endpoint = discovery_endpoint.build()?;
+        let endpoint = discovery_endpoint.default_endpoint();
+        let session_info = EndpointInfo {
             endpoint: endpoint.clone(),
             user_identity_token: IdentityToken::Anonymous,
             preferred_locales: Vec::new(),
         };
-        let channel = self.channel_from_endpoint_info(endpoint_info, self.config.channel_lifetime);
+        let channel = self.channel_from_endpoint_info(
+            session_info,
+            self.config.channel_lifetime,
+            discovery_endpoint,
+        );
 
         let mut evt_loop = channel.connect().await?;
 
-        let send_fut =
-            self.find_servers_inner(discovery_endpoint_url, &channel, locale_ids, server_uris);
+        let send_fut = self.find_servers_inner(
+            evt_loop.connected_url().to_owned(),
+            &channel,
+            locale_ids,
+            server_uris,
+        );
         pin!(send_fut);
 
         let res = loop {
@@ -523,7 +530,7 @@ impl Client {
     ///
     /// # Arguments
     ///
-    /// * `discovery_endpoint_url` - Endpoint URL to connect to.
+    /// * `discovery_endpoint_url` - Endpoint to connect to.
     /// * `starting_record_id` - Only records with an identifier greater than this number
     ///   will be returned.
     /// * `max_records_to_return` - The maximum number of records to return in the response.
@@ -537,20 +544,23 @@ impl Client {
     /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
     pub async fn find_servers_on_network(
         &self,
-        discovery_endpoint_url: impl Into<String>,
+        discovery_endpoint: impl ConnectorBuilder,
         starting_record_id: u32,
         max_records_to_return: u32,
         server_capability_filter: Option<Vec<UAString>>,
     ) -> Result<FindServersOnNetworkResponse, StatusCode> {
-        let discovery_endpoint_url = discovery_endpoint_url.into();
-        debug!("find_servers, {}", discovery_endpoint_url);
-        let endpoint = EndpointDescription::from(discovery_endpoint_url.as_ref());
-        let endpoint_info = EndpointInfo {
+        let discovery_endpoint = discovery_endpoint.build()?;
+        let endpoint = discovery_endpoint.default_endpoint();
+        let session_info = EndpointInfo {
             endpoint: endpoint.clone(),
             user_identity_token: IdentityToken::Anonymous,
             preferred_locales: Vec::new(),
         };
-        let channel = self.channel_from_endpoint_info(endpoint_info, self.config.channel_lifetime);
+        let channel = self.channel_from_endpoint_info(
+            session_info,
+            self.config.channel_lifetime,
+            discovery_endpoint,
+        );
 
         let mut evt_loop = channel.connect().await?;
 
@@ -681,21 +691,12 @@ impl Client {
     ///
     pub async fn register_server(
         &mut self,
-        discovery_endpoint_url: impl Into<String>,
+        discovery_endpoint: impl ConnectorBuilder,
         server: RegisteredServer,
     ) -> Result<(), StatusCode> {
-        let discovery_endpoint_url = discovery_endpoint_url.into();
-        if !is_valid_opc_ua_url(&discovery_endpoint_url) {
-            error!(
-                "Discovery endpoint url \"{}\" is not a valid OPC UA url",
-                discovery_endpoint_url
-            );
-            return Err(StatusCode::BadTcpEndpointUrlInvalid);
-        }
-
-        debug!("register_server({}, {:?}", discovery_endpoint_url, server);
+        let discovery_endpoint = discovery_endpoint.build()?;
         let endpoints = self
-            .get_server_endpoints_from_url(discovery_endpoint_url.clone())
+            .get_server_endpoints_from_url(discovery_endpoint.clone())
             .await?;
         if endpoints.is_empty() {
             return Err(StatusCode::BadUnexpectedError);
@@ -720,7 +721,11 @@ impl Client {
             user_identity_token: IdentityToken::Anonymous,
             preferred_locales: Vec::new(),
         };
-        let channel = self.channel_from_endpoint_info(endpoint_info, self.config.channel_lifetime);
+        let channel = self.channel_from_endpoint_info(
+            endpoint_info,
+            self.config.channel_lifetime,
+            discovery_endpoint,
+        );
 
         let mut evt_loop = channel.connect().await?;
 

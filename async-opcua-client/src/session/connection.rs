@@ -1,17 +1,18 @@
-use std::{str::FromStr, sync::Arc};
+use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
 use opcua_core::{comms::url::is_opc_ua_binary_url, config::Config, sync::RwLock};
 use opcua_crypto::{CertificateStore, SecurityPolicy};
 use opcua_types::{
-    ContextOwned, EndpointDescription, MessageSecurityMode, NamespaceMap, NodeId, StatusCode,
-    TypeLoader, UserTokenType,
+    ContextOwned, EndpointDescription, Error, MessageSecurityMode, NamespaceMap, NodeId,
+    StatusCode, TypeLoader, UserTokenType,
 };
+use tokio::net::TcpListener;
 use tracing::error;
 
 use crate::{
     transport::{
-        tcp::{TcpConnector, TransportConfiguration},
-        Connector,
+        tcp::{TcpConnectorReceiver, TransportConfiguration},
+        Connector, ConnectorBuilder, ReverseHelloVerifier, ReverseTcpConnector,
     },
     AsyncSecureChannel, ClientConfig, IdentityToken,
 };
@@ -21,22 +22,112 @@ use super::{Client, EndpointInfo, Session, SessionEventLoop};
 struct SessionBuilderInner {
     session_id: Option<NodeId>,
     user_identity_token: IdentityToken,
-    connector: Box<dyn Connector>,
     type_loaders: Vec<Arc<dyn TypeLoader>>,
+}
+
+/// Trait for getting a connection builder for a given endpoint.
+/// This is not the neatest interface, but it makes it possible to use a different
+/// connection source in the session builder.
+///
+/// Essentially, ConnectionSource takes an endpoint, and returns a connector builder,
+/// which is directly converted into a connector, which is then used to create a
+/// transport.
+///
+/// In practice:
+///
+///  - A ConnectionSource uses an EndpointDescription to get a ConnectorBuilder.
+///  - A ConnectorBuilder is directly converted into a Connector. This trait exists
+///    so that methods that connect to an endpoint can take a type that implements ConnectorBuilder,
+///    for example an endpoint description.
+///  - A Connector is used to create a transport, which is then used to connect to the server.
+pub trait ConnectionSource {
+    /// The type of connector builder returned by this connection source.
+    type Builder: ConnectorBuilder;
+
+    /// Get a connector builder for the given endpoint description.
+    fn get_connector(&self, endpoint: &EndpointDescription) -> Result<Self::Builder, Error>;
+}
+
+/// Connection source for a direct OPC/TCP binary connection.
+/// This is the default connection source used by the session builder, and by far the most
+/// common when connecting to an OPC-UA server.
+pub struct DirectConnectionSource;
+
+impl ConnectionSource for DirectConnectionSource {
+    type Builder = String;
+    fn get_connector(&self, endpoint: &EndpointDescription) -> Result<Self::Builder, Error> {
+        Ok(endpoint.endpoint_url.as_ref().to_string())
+    }
+}
+
+/// Connection source for a reverse connection.
+/// When using this, the server will initiate the connection to the client.
+pub struct ReverseConnectionSource {
+    listener: TcpConnectorReceiver,
+    verifier: Option<Arc<dyn ReverseHelloVerifier + Send + Sync>>,
+}
+
+impl ReverseConnectionSource {
+    /// Create a new reverse connection source with a TCP listener.
+    pub fn new_listener(listener: TcpListener) -> Self {
+        Self {
+            listener: TcpConnectorReceiver::Listener(Arc::new(listener)),
+            verifier: None,
+        }
+    }
+
+    /// Create a new reverse connection source listening on the given address.
+    pub fn new_address(address: SocketAddr) -> Self {
+        Self {
+            listener: TcpConnectorReceiver::Address(address),
+            verifier: None,
+        }
+    }
+
+    /// Set a custom verifier for the reverse connection source.
+    /// If not set, the default verifier will be used, which
+    /// simply compares the endpoint URL with the configured endpoint URL.
+    pub fn with_verifier(
+        mut self,
+        verifier: impl ReverseHelloVerifier + Send + Sync + 'static,
+    ) -> Self {
+        self.verifier = Some(Arc::new(verifier));
+        self
+    }
+}
+
+impl ConnectionSource for ReverseConnectionSource {
+    type Builder = ReverseTcpConnector;
+
+    fn get_connector(&self, endpoint: &EndpointDescription) -> Result<Self::Builder, Error> {
+        if let Some(verifier) = self.verifier.clone() {
+            Ok(ReverseTcpConnector::new(
+                self.listener.clone(),
+                verifier,
+                endpoint.clone(),
+            ))
+        } else {
+            Ok(ReverseTcpConnector::new_default(
+                endpoint.clone(),
+                self.listener.clone(),
+            ))
+        }
+    }
 }
 
 /// Type-state builder for a session and session event loop.
 /// To use, you will typically first call [SessionBuilder::with_endpoints] to set
 /// a list of available endpoints, then one of the `connect_to` methods, then finally
 /// [SessionBuilder::build].
-pub struct SessionBuilder<'a, T = (), R = ()> {
+pub struct SessionBuilder<'a, T = (), R = (), C = DirectConnectionSource> {
     endpoint: T,
     config: &'a ClientConfig,
     endpoints: R,
     inner: SessionBuilderInner,
+    connection_source: C,
 }
 
-impl<'a> SessionBuilder<'a, (), ()> {
+impl<'a> SessionBuilder<'a, (), (), DirectConnectionSource> {
     /// Create a new, empty session builder.
     pub fn new(config: &'a ClientConfig) -> Self {
         Self {
@@ -46,31 +137,32 @@ impl<'a> SessionBuilder<'a, (), ()> {
             inner: SessionBuilderInner {
                 session_id: None,
                 user_identity_token: IdentityToken::Anonymous,
-                connector: Box::new(TcpConnector),
                 type_loaders: Vec::new(),
             },
+            connection_source: DirectConnectionSource,
         }
     }
 }
 
-impl<'a, T> SessionBuilder<'a, T, ()> {
+impl<'a, T, C> SessionBuilder<'a, T, (), C> {
     /// Set a list of available endpoints on the server.
     ///
     /// You'll typically get this from [Client::get_server_endpoints].
     pub fn with_endpoints(
         self,
         endpoints: Vec<EndpointDescription>,
-    ) -> SessionBuilder<'a, T, Vec<EndpointDescription>> {
+    ) -> SessionBuilder<'a, T, Vec<EndpointDescription>, C> {
         SessionBuilder {
             inner: self.inner,
             endpoint: self.endpoint,
             config: self.config,
             endpoints,
+            connection_source: self.connection_source,
         }
     }
 }
 
-impl<T, R> SessionBuilder<'_, T, R> {
+impl<'a, T, R, C> SessionBuilder<'a, T, R, C> {
     /// Set the user identity token to use.
     pub fn user_identity_token(mut self, identity_token: IdentityToken) -> Self {
         self.inner.user_identity_token = identity_token;
@@ -116,14 +208,30 @@ impl<T, R> SessionBuilder<'_, T, R> {
                 .is_some_and(|e| e.iter().any(|p| p.token_type == UserTokenType::IssuedToken)),
         }
     }
+
+    /// Set the connection source to use. This is used to create the transport
+    /// connector. Defaults to a direct TCP connection, implemented by `()`.
+    pub fn with_connector<C2>(self, connection_source: C2) -> SessionBuilder<'a, T, R, C2>
+    where
+        C2: ConnectionSource,
+    {
+        SessionBuilder {
+            inner: self.inner,
+            endpoint: self.endpoint,
+            config: self.config,
+            endpoints: self.endpoints,
+            connection_source,
+        }
+    }
 }
 
-impl<'a> SessionBuilder<'a, (), Vec<EndpointDescription>> {
+impl<'a, C> SessionBuilder<'a, (), Vec<EndpointDescription>, C> {
     /// Connect to an endpoint matching the given endpoint description.
     pub fn connect_to_matching_endpoint(
         self,
         endpoint: impl Into<EndpointDescription>,
-    ) -> Result<SessionBuilder<'a, EndpointDescription, Vec<EndpointDescription>>, StatusCode> {
+    ) -> Result<SessionBuilder<'a, EndpointDescription, Vec<EndpointDescription>, C>, StatusCode>
+    {
         let endpoint = endpoint.into();
 
         let security_policy = SecurityPolicy::from_str(endpoint.security_policy_uri.as_ref())
@@ -147,6 +255,7 @@ impl<'a> SessionBuilder<'a, (), Vec<EndpointDescription>> {
             endpoint: server_endpoint,
             config: self.config,
             endpoints: self.endpoints,
+            connection_source: self.connection_source,
         })
     }
 
@@ -154,7 +263,7 @@ impl<'a> SessionBuilder<'a, (), Vec<EndpointDescription>> {
     /// default endpoint.
     pub fn connect_to_default_endpoint(
         mut self,
-    ) -> Result<SessionBuilder<'a, EndpointDescription, Vec<EndpointDescription>>, String> {
+    ) -> Result<SessionBuilder<'a, EndpointDescription, Vec<EndpointDescription>, C>, String> {
         let default_endpoint_id = self.config.default_endpoint.clone();
         let endpoint = if default_endpoint_id.is_empty() {
             return Err("No default endpoint has been specified".to_string());
@@ -178,6 +287,7 @@ impl<'a> SessionBuilder<'a, (), Vec<EndpointDescription>> {
             endpoint,
             config: self.config,
             endpoints: self.endpoints,
+            connection_source: self.connection_source,
         })
     }
 
@@ -186,7 +296,7 @@ impl<'a> SessionBuilder<'a, (), Vec<EndpointDescription>> {
     pub fn connect_to_endpoint_id(
         mut self,
         endpoint_id: impl Into<String>,
-    ) -> Result<SessionBuilder<'a, EndpointDescription, Vec<EndpointDescription>>, String> {
+    ) -> Result<SessionBuilder<'a, EndpointDescription, Vec<EndpointDescription>, C>, String> {
         let endpoint_id = endpoint_id.into();
         let endpoint = self
             .config
@@ -207,6 +317,7 @@ impl<'a> SessionBuilder<'a, (), Vec<EndpointDescription>> {
             endpoint,
             config: self.config,
             endpoints: self.endpoints,
+            connection_source: self.connection_source,
         })
     }
 
@@ -217,7 +328,7 @@ impl<'a> SessionBuilder<'a, (), Vec<EndpointDescription>> {
     pub fn connect_to_best_endpoint(
         self,
         secure: bool,
-    ) -> Result<SessionBuilder<'a, EndpointDescription, Vec<EndpointDescription>>, String> {
+    ) -> Result<SessionBuilder<'a, EndpointDescription, Vec<EndpointDescription>, C>, String> {
         let endpoint = if secure {
             self.endpoints
                 .iter()
@@ -236,17 +347,18 @@ impl<'a> SessionBuilder<'a, (), Vec<EndpointDescription>> {
             endpoint: endpoint.clone(),
             config: self.config,
             endpoints: self.endpoints,
+            connection_source: self.connection_source,
         })
     }
 }
 
-impl<'a, R> SessionBuilder<'a, (), R> {
+impl<'a, R, C> SessionBuilder<'a, (), R, C> {
     /// Connect directly to an endpoint description, this does not require you to list
     /// endpoints on the server first.
     pub fn connect_to_endpoint_directly(
         self,
         endpoint: impl Into<EndpointDescription>,
-    ) -> Result<SessionBuilder<'a, EndpointDescription, R>, String> {
+    ) -> Result<SessionBuilder<'a, EndpointDescription, R, C>, String> {
         let endpoint = endpoint.into();
         if !is_opc_ua_binary_url(endpoint.endpoint_url.as_ref()) {
             return Err(format!(
@@ -259,25 +371,33 @@ impl<'a, R> SessionBuilder<'a, (), R> {
             config: self.config,
             endpoints: self.endpoints,
             inner: self.inner,
+            connection_source: self.connection_source,
         })
     }
 }
 
-impl<R> SessionBuilder<'_, EndpointDescription, R> {
+impl<R, C> SessionBuilder<'_, EndpointDescription, R, C>
+where
+    C: ConnectionSource,
+{
     /// Build the session and session event loop. Note that you will need to
     /// start polling the event loop before a connection is actually established.
     pub fn build(
         self,
         certificate_store: Arc<RwLock<CertificateStore>>,
-    ) -> (Arc<Session>, SessionEventLoop) {
+    ) -> Result<(Arc<Session>, SessionEventLoop), Error> {
+        let connector = self
+            .connection_source
+            .get_connector(&self.endpoint)?
+            .build()?;
         let ctx = self.make_encoding_context();
-        Session::new(
+        Ok(Session::new(
             Self::build_channel_inner(
                 certificate_store,
                 self.inner.user_identity_token,
                 self.endpoint,
                 self.config,
-                self.inner.connector,
+                connector,
                 ctx,
             ),
             self.config.session_name.clone().into(),
@@ -286,7 +406,7 @@ impl<R> SessionBuilder<'_, EndpointDescription, R> {
             self.config.decoding_options.as_comms_decoding_options(),
             self.config,
             self.inner.session_id,
-        )
+        ))
     }
 
     fn make_encoding_context(&self) -> ContextOwned {
@@ -307,7 +427,7 @@ impl<R> SessionBuilder<'_, EndpointDescription, R> {
         identity_token: IdentityToken,
         endpoint: EndpointDescription,
         config: &ClientConfig,
-        connector: Box<dyn Connector>,
+        connector: Arc<dyn Connector + Send + Sync + 'static>,
         ctx: ContextOwned,
     ) -> AsyncSecureChannel {
         AsyncSecureChannel::new(
@@ -337,15 +457,19 @@ impl<R> SessionBuilder<'_, EndpointDescription, R> {
     pub fn build_channel(
         self,
         certificate_store: Arc<RwLock<CertificateStore>>,
-    ) -> AsyncSecureChannel {
+    ) -> Result<AsyncSecureChannel, Error> {
         let ctx = self.make_encoding_context();
-        Self::build_channel_inner(
+        let connector = self
+            .connection_source
+            .get_connector(&self.endpoint)?
+            .build()?;
+        Ok(Self::build_channel_inner(
             certificate_store,
             self.inner.user_identity_token,
             self.endpoint,
             self.config,
-            self.inner.connector,
+            connector,
             ctx,
-        )
+        ))
     }
 }

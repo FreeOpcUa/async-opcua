@@ -124,13 +124,22 @@ pub use builder::ClientBuilder;
 pub use config::{ClientConfig, ClientEndpoint, ClientUserToken, ANONYMOUS_USER_TOKEN_ID};
 pub use retry::{ExponentialBackoff, SessionRetryPolicy};
 pub use session::{
-    Client, DataChangeCallback, DefaultRetryPolicy, EventCallback, HistoryReadAction,
-    HistoryUpdateAction, MonitoredItem, OnSubscriptionNotification, OnSubscriptionNotificationCore,
-    RequestRetryPolicy, Session, SessionActivity, SessionBuilder, SessionConnectMode,
-    SessionEventLoop, SessionPollResult, Subscription, SubscriptionActivity, SubscriptionCallbacks,
-    UARequest,
+    Client, ConnectionSource, DataChangeCallback, DefaultRetryPolicy, DirectConnectionSource,
+    EventCallback, HistoryReadAction, HistoryUpdateAction, MonitoredItem,
+    OnSubscriptionNotification, OnSubscriptionNotificationCore, RequestRetryPolicy, Session,
+    SessionActivity, SessionBuilder, SessionConnectMode, SessionEventLoop, SessionPollResult,
+    Subscription, SubscriptionActivity, SubscriptionCallbacks, UARequest,
 };
 pub use transport::AsyncSecureChannel;
+
+/// This module contains utilities for reverse connect. Allowing you to
+/// connect to a server by having the server initiate the connection to the client.
+pub mod reverese_connect {
+    pub use super::session::ReverseConnectionSource;
+    pub use super::transport::tcp::{
+        ReverseHelloVerifier, ReverseTcpConnector, TcpConnectorReceiver,
+    };
+}
 
 pub mod services {
     //! This module contains request builders for most OPC-UA services.

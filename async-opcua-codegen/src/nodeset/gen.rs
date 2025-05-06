@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
 use opcua_xml::schema::ua_node_set::{
-    AliasTable, ArrayDimensions, DataTypeDefinition, LocalizedText, NodeId, Reference, UADataType,
-    UAMethod, UANode, UANodeBase, UAObject, UAObjectType, UAReferenceType, UAVariable,
-    UAVariableType, UAView,
+    ArrayDimensions, DataTypeDefinition, LocalizedText, NodeId, Reference, UADataType, UAMethod,
+    UANode, UANodeBase, UAObject, UAObjectType, UAReferenceType, UAVariable, UAVariableType,
+    UAView,
 };
 use proc_macro2::{Span, TokenStream};
 use syn::{parse_quote, parse_str, Expr, Ident, ItemFn};
@@ -22,7 +22,7 @@ pub struct NodeGenMethod {
 pub struct NodeSetCodeGenerator<'a> {
     preferred_locale: String,
     empty_text: LocalizedText,
-    aliases: HashMap<&'a str, &'a str>,
+    aliases: &'a HashMap<String, String>,
     node_counter: usize,
     types: HashMap<String, XsdTypeWithPath>,
 }
@@ -30,15 +30,9 @@ pub struct NodeSetCodeGenerator<'a> {
 impl<'a> NodeSetCodeGenerator<'a> {
     pub fn new(
         preferred_locale: &str,
-        alias_table: Option<&'a AliasTable>,
+        aliases: &'a HashMap<String, String>,
         types: HashMap<String, XsdTypeWithPath>,
     ) -> Result<Self, CodeGenError> {
-        let mut aliases = HashMap::new();
-        if let Some(alias_table) = alias_table {
-            for alias in &alias_table.aliases {
-                aliases.insert(alias.alias.as_str(), alias.id.0.as_str());
-            }
-        }
         Ok(Self {
             preferred_locale: preferred_locale.to_owned(),
             empty_text: LocalizedText::default(),
@@ -49,7 +43,7 @@ impl<'a> NodeSetCodeGenerator<'a> {
     }
 
     fn resolve_node_id(&self, node_id: &NodeId) -> Result<TokenStream, CodeGenError> {
-        if let Some(&aliased) = self.aliases.get(node_id.0.as_str()) {
+        if let Some(aliased) = self.aliases.get(node_id.0.as_str()) {
             NodeId(aliased.to_owned()).render()
         } else {
             node_id.render()

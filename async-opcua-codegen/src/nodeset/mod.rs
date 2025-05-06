@@ -6,17 +6,17 @@ use std::collections::HashMap;
 
 pub use events::generate_events;
 pub use gen::{NodeGenMethod, NodeSetCodeGenerator};
-use opcua_xml::schema::{
-    ua_node_set::UANodeSet,
-    xml_schema::{XsdFileItem, XsdFileType},
-};
+use opcua_xml::schema::xml_schema::{XsdFileItem, XsdFileType};
 use proc_macro2::Span;
 use quote::quote;
 use serde::{Deserialize, Serialize};
 use syn::{parse_quote, parse_str, File, Ident, Item, ItemFn, Path};
 use tracing::info;
 
-use crate::{input::SchemaCache, CodeGenError, GeneratedOutput};
+use crate::{
+    input::{NodeSetInput, SchemaCache},
+    CodeGenError, GeneratedOutput,
+};
 
 pub struct XsdTypeWithPath {
     pub ty: XsdFileType,
@@ -35,8 +35,6 @@ pub struct NodeSetCodeGenTarget {
     pub output_dir: String,
     pub max_nodes_per_file: usize,
     pub types: Vec<NodeSetTypes>,
-    pub own_namespaces: Vec<String>,
-    pub imported_namespaces: Vec<String>,
     pub name: String,
     #[serde(default)]
     pub extra_header: String,
@@ -147,16 +145,16 @@ pub fn make_root_fun(chunk: &[NodeGenMethod]) -> ItemFn {
 
 pub fn generate_target(
     config: &NodeSetCodeGenTarget,
-    nodes: &UANodeSet,
+    input: &NodeSetInput,
     preferred_locale: &str,
     cache: &SchemaCache,
 ) -> Result<Vec<NodeSetChunk>, CodeGenError> {
     let types = make_type_dict(config, cache)?;
 
-    let mut generator = NodeSetCodeGenerator::new(preferred_locale, nodes.aliases.as_ref(), types)?;
+    let mut generator = NodeSetCodeGenerator::new(preferred_locale, &input.aliases, types)?;
 
-    let mut fns = Vec::with_capacity(nodes.nodes.len());
-    for node in &nodes.nodes {
+    let mut fns = Vec::with_capacity(input.xml.nodes.len());
+    for node in &input.xml.nodes {
         fns.push(
             generator
                 .generate_item(node)
@@ -196,6 +194,7 @@ pub fn generate_target(
 pub fn make_root_module(
     chunks: &[NodeSetChunk],
     config: &NodeSetCodeGenTarget,
+    input: &NodeSetInput,
 ) -> Result<File, CodeGenError> {
     let mut items: Vec<Item> = Vec::new();
     let mut names = Vec::new();
@@ -214,24 +213,17 @@ pub fn make_root_module(
     });
 
     let mut namespace_adds = quote! {};
-    for (idx, ns) in config
-        .imported_namespaces
-        .iter()
-        .chain(config.own_namespaces.iter())
-        .enumerate()
-    {
+    for (idx, ns) in input.namespaces.iter().enumerate() {
         let idx = idx as u16;
         namespace_adds.extend(quote! {
             map.add_namespace(#ns, #idx);
         });
     }
 
-    let mut namespace_out = quote! {};
-    for ns in config.own_namespaces.iter() {
-        namespace_out.extend(quote! {
-            #ns.to_owned(),
-        })
-    }
+    let own_ns = &input.uri;
+    let namespace_out = quote! {
+        #own_ns.to_owned(),
+    };
 
     items.push(parse_quote! {
         impl opcua::nodes::NodeSetImport for #name_ident {

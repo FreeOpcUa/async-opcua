@@ -20,10 +20,6 @@ targets:
         root_path: crate::generated::types
       - file: Opc.Ua.Types.xsd
         root_path: opcua::types
-    own_namespaces:
-      - "http://opcfoundation.org/UA/PROFINET/"
-    imported_namespaces:
-      - "http://opcfoundation.org/UA/"
     name: ProfinetNamespace
     events:
       output_dir: src/generated/events

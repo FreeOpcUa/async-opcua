@@ -29,9 +29,6 @@ targets:
     types:
       - file: Opc.Ua.Types.xsd
         root_path: opcua::types
-    own_namespaces:
-      - "http://opcfoundation.org/UA/"
-    imported_namespaces: []
     name: CoreNamespace
     events:
       output_dir: async-opcua-core-namespace/src/events

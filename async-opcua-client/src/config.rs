@@ -447,19 +447,25 @@ impl ClientConfig {
         &self,
         client_endpoint: &ClientEndpoint,
         endpoints: &[EndpointDescription],
-    ) -> Result<EndpointDescription, String> {
+    ) -> Result<EndpointDescription, Error> {
         let security_policy =
             SecurityPolicy::from_str(&client_endpoint.security_policy).map_err(|_| {
-                format!(
-                    "Endpoint {} security policy {} is invalid",
-                    client_endpoint.url, client_endpoint.security_policy
+                Error::new(
+                    StatusCode::BadSecurityPolicyRejected,
+                    format!(
+                        "Endpoint {} security policy {} is invalid",
+                        client_endpoint.url, client_endpoint.security_policy
+                    ),
                 )
             })?;
         let security_mode = MessageSecurityMode::from(client_endpoint.security_mode.as_ref());
         if security_mode == MessageSecurityMode::Invalid {
-            return Err(format!(
-                "Endpoint {} security mode {} is invalid",
-                client_endpoint.url, client_endpoint.security_mode
+            return Err(Error::new(
+                StatusCode::BadSecurityModeRejected,
+                format!(
+                    "Endpoint {} security mode {} is invalid",
+                    client_endpoint.url, client_endpoint.security_mode
+                ),
             ));
         }
         let endpoint_url = client_endpoint.url.clone();
@@ -470,8 +476,11 @@ impl ClientConfig {
             security_mode,
         )
         .ok_or_else(|| {
-            format!(
-                "Endpoint {endpoint_url}, {security_policy:?} / {security_mode:?} does not match any supplied by the server"
+            Error::new(
+                StatusCode::BadTcpEndpointUrlInvalid,
+                format!(
+                    "Endpoint {endpoint_url}, {security_policy:?} / {security_mode:?} does not match any supplied by the server"
+                ),
             )
         })?;
 

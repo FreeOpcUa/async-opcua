@@ -2,11 +2,11 @@ use std::{future::Future, sync::Arc};
 
 use async_trait::async_trait;
 use opcua_core::{comms::secure_channel::SecureChannel, sync::RwLock};
-use opcua_types::StatusCode;
+use opcua_types::{EndpointDescription, Error, StatusCode};
 
 use super::{
     tcp::{TcpTransport, TransportConfiguration},
-    OutgoingMessage, TransportPollResult,
+    OutgoingMessage, TcpConnector, TransportPollResult,
 };
 
 #[async_trait]
@@ -26,8 +26,50 @@ pub trait Connector: Send + Sync {
         channel: Arc<RwLock<SecureChannel>>,
         outgoing_recv: tokio::sync::mpsc::Receiver<OutgoingMessage>,
         config: TransportConfiguration,
-        endpoint_url: &str,
     ) -> Result<TcpTransport, StatusCode>;
+
+    /// Get the default endpoint for this connector.
+    fn default_endpoint(&self) -> EndpointDescription;
+}
+
+/// Trait for types that can be used to create a connector.
+/// Implemented for `String`, `&str`, `&String`, and any type that implements the `Connector` trait.
+pub trait ConnectorBuilder: Send + Sync {
+    /// Create a new connector for the specific endpoint URL.
+    fn build(self) -> Result<Arc<dyn Connector + Send + Sync>, Error>;
+}
+
+impl ConnectorBuilder for String {
+    fn build(self) -> Result<Arc<dyn Connector + Send + Sync>, Error> {
+        ConnectorBuilder::build(self.as_str())
+    }
+}
+
+impl ConnectorBuilder for &str {
+    fn build(self) -> Result<Arc<dyn Connector + Send + Sync>, Error> {
+        Ok(Arc::new(TcpConnector::new(self)?))
+    }
+}
+
+impl ConnectorBuilder for &String {
+    fn build(self) -> Result<Arc<dyn Connector + Send + Sync>, Error> {
+        ConnectorBuilder::build(self.as_str())
+    }
+}
+
+impl<T> ConnectorBuilder for T
+where
+    T: Connector + Send + Sync + 'static,
+{
+    fn build(self) -> Result<Arc<dyn Connector + Send + Sync>, Error> {
+        Ok(Arc::new(self))
+    }
+}
+
+impl ConnectorBuilder for Arc<dyn Connector + Send + Sync> {
+    fn build(self) -> Result<Arc<dyn Connector + Send + Sync>, Error> {
+        Ok(self)
+    }
 }
 
 /// Trait for client transport channels.

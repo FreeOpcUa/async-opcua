@@ -7,7 +7,7 @@ mod state;
 pub(super) mod tcp;
 
 pub use channel::{AsyncSecureChannel, SecureChannelEventLoop};
-pub use connect::{Connector, Transport};
+pub use connect::{Connector, ConnectorBuilder, Transport};
 pub(crate) use core::OutgoingMessage;
 pub use core::TransportPollResult;
 pub use tcp::TcpConnector;

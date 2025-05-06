@@ -17,7 +17,7 @@ use opcua::{
 };
 use opcua_core::config::Config;
 use opcua_crypto::CertificateStore;
-use opcua_types::ApplicationDescription;
+use opcua_types::{ApplicationDescription, Error};
 use tokio::net::TcpListener;
 use tokio_util::sync::{CancellationToken, DropGuard};
 
@@ -387,7 +387,7 @@ impl Tester {
         security_policy: SecurityPolicy,
         security_mode: MessageSecurityMode,
         user_identity: IdentityToken,
-    ) -> Result<(Arc<Session>, SessionEventLoop), StatusCode> {
+    ) -> Result<(Arc<Session>, SessionEventLoop), Error> {
         self.client
             .connect_to_matching_endpoint(
                 (
@@ -406,7 +406,7 @@ impl Tester {
         security_mode: MessageSecurityMode,
         user_identity: IdentityToken,
         path: &str,
-    ) -> Result<(Arc<Session>, SessionEventLoop), StatusCode> {
+    ) -> Result<(Arc<Session>, SessionEventLoop), Error> {
         self.client
             .connect_to_matching_endpoint(
                 (
@@ -448,9 +448,7 @@ impl Tester {
     }
 
     #[allow(unused)]
-    pub async fn connect_default(
-        &mut self,
-    ) -> Result<(Arc<Session>, SessionEventLoop), StatusCode> {
+    pub async fn connect_default(&mut self) -> Result<(Arc<Session>, SessionEventLoop), Error> {
         self.connect(
             SecurityPolicy::None,
             MessageSecurityMode::None,

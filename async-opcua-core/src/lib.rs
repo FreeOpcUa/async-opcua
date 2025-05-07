@@ -67,49 +67,106 @@ pub mod config;
 pub mod handle;
 
 pub mod messages;
+use std::sync::atomic::AtomicBool;
+
 pub use messages::{Message, MessageType, RequestMessage, ResponseMessage};
+
+/// Check for the environment variable OPCUA_TRACE_LOCKS. If it is set to 1 or true, then
+/// tracing will be enabled for locks. This is useful for debugging deadlocks.
+pub fn trace_locks() -> bool {
+    static ENABLED: AtomicBool = AtomicBool::new(false);
+    if ENABLED.load(std::sync::atomic::Ordering::Relaxed) {
+        return true;
+    }
+    let enabled = match std::env::var("OPCUA_TRACE_LOCKS") {
+        Ok(s) => s != "0",
+        Err(_) => false,
+    };
+
+    ENABLED.store(enabled, std::sync::atomic::Ordering::Relaxed);
+
+    enabled
+}
+/// Re-export the tracing crate. This is used for logging and debugging.
+pub use tracing;
 
 /// Tracing macro for obtaining a lock on a `Mutex`. Sometimes deadlocks can happen in code,
 /// and if they do, this macro is useful for finding out where they happened.
 #[macro_export]
 macro_rules! trace_lock {
-    ( $x:expr ) => {
-        {
-//            use std::thread;
-//            trace!("Thread {:?}, {} locking at {}, line {}", thread::current().id(), stringify!($x), file!(), line!());
-            let v = $x.lock();
-//            trace!("Thread {:?}, {} lock completed", thread::current().id(), stringify!($x));
-            v
+    ( $x:expr ) => {{
+        use std::thread;
+        if $crate::trace_locks() {
+            $crate::tracing::trace!(
+                "Thread {:?}, {} locking at {}, line {}",
+                thread::current().id(),
+                stringify!($x),
+                file!(),
+                line!()
+            );
         }
-    }
+        let v = $x.lock();
+        if $crate::trace_locks() {
+            $crate::tracing::trace!(
+                "Thread {:?}, {} lock completed",
+                thread::current().id(),
+                stringify!($x)
+            );
+        }
+        v
+    }};
 }
 
 /// Tracing macro for obtaining a read lock on a `RwLock`.
 #[macro_export]
 macro_rules! trace_read_lock {
-    ( $x:expr ) => {
-        {
-//            use std::thread;
-//            trace!("Thread {:?}, {} read locking at {}, line {}", thread::current().id(), stringify!($x), file!(), line!());
-            let v = $x.read();
-//            trace!("Thread {:?}, {} read lock completed", thread::current().id(), stringify!($x));
-            v
+    ( $x:expr ) => {{
+        use std::thread;
+        if $crate::trace_locks() {
+            $crate::tracing::trace!(
+                "Thread {:?}, {} read locking at {}, line {}",
+                thread::current().id(),
+                stringify!($x),
+                file!(),
+                line!()
+            );
         }
-    }
+        let v = $x.read();
+        if $crate::trace_locks() {
+            $crate::tracing::trace!(
+                "Thread {:?}, {} read lock completed",
+                thread::current().id(),
+                stringify!($x)
+            );
+        }
+        v
+    }};
 }
 
 /// Tracing macro for obtaining a write lock on a `RwLock`.
 #[macro_export]
 macro_rules! trace_write_lock {
-    ( $x:expr ) => {
-        {
-//            use std::thread;
-//            trace!("Thread {:?}, {} write locking at {}, line {}", thread::current().id(), stringify!($x), file!(), line!());
-            let v = $x.write();
-//            trace!("Thread {:?}, {} write lock completed", thread::current().id(), stringify!($x));
-            v
+    ( $x:expr ) => {{
+        use std::thread;
+        if $crate::trace_locks() {
+            $crate::tracing::trace!(
+                "Thread {:?}, {} write locking at {}, line {}",
+                thread::current().id(),
+                stringify!($x),
+                file!(),
+                line!()
+            );
         }
-    }
+        let v = $x.write();
+        if $crate::trace_locks() {
+            $crate::tracing::trace!(
+                "Thread {:?}, {} write lock completed",
+                thread::current().id(),
+                stringify!($x)
+            );
+        }
+        v
+    }};
 }
 
 /// Common synchronous locks. Re-exports locks from parking_lot used internally.

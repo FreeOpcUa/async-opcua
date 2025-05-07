@@ -551,7 +551,9 @@ mod tests {
         h.endpoint_url = UAString::from("opc.tcp://bar/"); // Ignore hostname
         assert!(h.matches_endpoint(&endpoints));
         h.endpoint_url = UAString::from((0..4096).map(|_| 'A').collect::<String>());
-        assert!(h.is_endpoint_valid_length())
+        assert!(h.is_endpoint_valid_length());
+        h.endpoint_url = UAString::from("opc.tcp://foo:1234"); // Ignore port
+        assert!(h.matches_endpoint(&endpoints));
     }
 
     #[test]

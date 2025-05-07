@@ -37,13 +37,12 @@ pub fn url_with_replaced_hostname(url: &str, hostname: &str) -> Result<String, u
 /// Test if the two urls match except for the hostname. Can be used by a server whose endpoint doesn't
 /// exactly match the incoming connection, e.g. 127.0.0.1 vs localhost.
 pub fn url_matches_except_host(url1: &str, url2: &str) -> bool {
-    if let Ok(mut url1) = opc_url_from_str(url1) {
-        if let Ok(mut url2) = opc_url_from_str(url2) {
-            // Both hostnames are set to xxxx so the comparison should come out as the same url
-            // if they actually match one another.
-            if url1.set_host(Some("xxxx")).is_ok() && url2.set_host(Some("xxxx")).is_ok() {
-                return url1.as_str().trim_end_matches("/") == url2.as_str().trim_end_matches("/");
-            }
+    if let Ok(url1) = opc_url_from_str(url1) {
+        if let Ok(url2) = opc_url_from_str(url2) {
+            return url1.scheme() == url2.scheme() // Scheme must match
+                && url1.path().trim_end_matches("/") == url2.path().trim_end_matches("/") // Path must match, except for trailing /
+                && url1.query() == url2.query() // Scheme and query must match, most OPC-UA endpoints won't have these.
+                && url1.fragment() == url2.fragment();
         } else {
             error!("Cannot parse url \"{}\"", url2);
         }

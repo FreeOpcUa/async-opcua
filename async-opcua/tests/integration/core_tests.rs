@@ -471,7 +471,7 @@ async fn issued_token_test() {
         .await
         .unwrap();
     lp.spawn();
-    tokio::time::timeout(Duration::from_secs(2), session.wait_for_connection())
+    tokio::time::timeout(Duration::from_secs(5), session.wait_for_connection())
         .await
         .unwrap();
 

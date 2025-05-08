@@ -456,10 +456,10 @@ impl Variable {
     /// Read the value of the variable.
     pub fn value(
         &self,
-        _timestamps_to_return: TimestampsToReturn,
+        timestamps_to_return: TimestampsToReturn,
         index_range: &NumericRange,
         _data_encoding: &DataEncoding,
-        max_age: f64,
+        _max_age: f64,
     ) -> DataValue {
         let data_value = &self.value;
         let mut result = DataValue {
@@ -483,10 +483,25 @@ impl Variable {
                 }
             }
         }
-        if max_age > 0.0 && max_age <= i32::MAX as f64 {
-            // Update the server timestamp to now as a "best effort" attempt to get the latest value
-            result.server_timestamp = Some(DateTime::now());
+
+        match timestamps_to_return {
+            TimestampsToReturn::Source => {
+                result.server_timestamp = None;
+                result.server_picoseconds = None;
+            }
+            TimestampsToReturn::Server => {
+                result.source_timestamp = None;
+                result.source_picoseconds = None;
+            }
+            TimestampsToReturn::Neither => {
+                result.server_timestamp = None;
+                result.source_timestamp = None;
+                result.server_picoseconds = None;
+                result.source_picoseconds = None;
+            }
+            _ => (),
         }
+
         result
         //}
     }

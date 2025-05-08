@@ -370,11 +370,20 @@ impl MonitoredItem {
             return true;
         };
 
-        let elapsed = new
+        let elapsed = match new
             .as_chrono()
             .signed_duration_since(old.as_chrono())
             .to_std()
-            .unwrap();
+        {
+            Ok(e) => e,
+            Err(_) => {
+                // We somehow assigned a value in the past, but the old value is in the future.
+                // This isn't really a good situation to be in, but there isn't a lot we can do about it here.
+                // Node managers should avoid this, if possible. The standard doesn't specify what we should do,
+                // so we just allow the value through.
+                return true;
+            }
+        };
         let sampling_interval =
             std::time::Duration::from_micros((self.sampling_interval * 1000f64) as u64);
         elapsed >= sampling_interval

@@ -35,6 +35,11 @@ impl Handle {
         next
     }
 
+    /// Peek the next value of the handle, without incrementing.
+    pub fn peek_next(&self) -> u32 {
+        self.next
+    }
+
     /// Set the next handle value manually.
     pub fn set_next(&mut self, next: u32) {
         self.next = next;

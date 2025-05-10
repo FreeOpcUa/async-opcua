@@ -119,10 +119,6 @@ pub struct Subscription {
     resend_data: bool,
     /// The next sequence number to be sent
     sequence_number: Handle,
-    /// Last notification's sequence number. This is a sanity check since sequence numbers should start from
-    /// 1 and be sequential - it that doesn't happen the server will panic because something went
-    /// wrong somewhere.
-    last_sequence_number: u32,
     // The time that the subscription interval last fired
     last_time_publishing_interval_elapsed: Instant,
     // Currently outstanding notifications to send
@@ -168,7 +164,6 @@ impl Subscription {
             publishing_enabled,
             // Counters for new items
             sequence_number: Handle::new(1),
-            last_sequence_number: 0,
             last_time_publishing_interval_elapsed: Instant::now(),
             notifications: VecDeque::new(),
             max_queued_notifications,
@@ -505,7 +500,11 @@ impl Subscription {
             UpdateStateAction::None => TickResult::None,
             UpdateStateAction::ReturnKeepAlive => {
                 let notification = NotificationMessage::keep_alive(
-                    self.sequence_number.next(),
+                    // OPC-UA part 4 5.13.1.1
+                    // "Each keep-alive Message is a response to a Publish request in which the notificationMessage parameter does not
+                    // contain any Notifications and that contains the sequence number of the next NotificationMessage that is to be sent."
+                    // Very vague, but the correct interpretation appears to be to not increment the sequence number.
+                    self.sequence_number.peek_next(),
                     DateTime::from(*now),
                 );
                 self.enqueue_notification(notification);
@@ -535,25 +534,12 @@ impl Subscription {
     }
 
     fn enqueue_notification(&mut self, notification: NotificationMessage) {
-        // For sanity, check the sequence number is the expected sequence number.
-        let expected_sequence_number = if self.last_sequence_number == u32::MAX {
-            1
-        } else {
-            self.last_sequence_number + 1
-        };
-        if notification.sequence_number != expected_sequence_number {
-            panic!(
-                "Notification's sequence number is not sequential, expecting {}, got {}",
-                expected_sequence_number, notification.sequence_number
-            );
-        }
         if self.notifications.len() >= self.max_queued_notifications {
             warn!("Maximum number of queued notifications exceeded, dropping oldest. Subscription ID: {}", self.id);
             self.notifications.pop_front();
         }
 
         // debug!("Enqueuing notification {:?}", notification);
-        self.last_sequence_number = notification.sequence_number;
         self.notifications.push_back(notification);
     }
 
@@ -887,6 +873,7 @@ mod tests {
         let notif = sub.take_notification().unwrap();
         let its = get_notifications(&notif);
         assert_eq!(its.len(), 1);
+        assert_eq!(notif.sequence_number, 1);
         let Notification::MonitoredItemNotification(m) = &its[0] else {
             panic!("Wrong notification type");
         };
@@ -918,6 +905,7 @@ mod tests {
         assert_eq!(sub.lifetime_counter, 99);
         let notif = sub.take_notification().unwrap();
         let its = get_notifications(&notif);
+        assert_eq!(notif.sequence_number, 2);
         assert_eq!(its.len(), 1);
         let Notification::MonitoredItemNotification(m) = &its[0] else {
             panic!("Wrong notification type");
@@ -944,6 +932,8 @@ mod tests {
         let notif = sub.take_notification().unwrap();
         let its = get_notifications(&notif);
         assert!(its.is_empty());
+        // The next sequence number...
+        assert_eq!(notif.sequence_number, 3);
 
         // Tick another 20 times to become late
         for i in 0..19 {
@@ -966,6 +956,7 @@ mod tests {
         sub.tick(&time, time_inst, TickReason::TickTimerFired, false);
         assert_eq!(sub.state, SubscriptionState::Closed);
         let notif = sub.take_notification().unwrap();
+        assert_eq!(notif.sequence_number, 3);
         assert_eq!(1, notif.notification_data.as_ref().unwrap().len());
         let status_change = notif.notification_data.as_ref().unwrap()[0]
             .inner_as::<StatusChangeNotification>()

@@ -602,6 +602,7 @@ impl SessionSubscriptions {
             // Get notifications and publish request pairs while there are any of either left.
             while !self.publish_request_queue.is_empty() {
                 if let Some(notification_message) = subscription.take_notification() {
+                    tracing::trace!("Sending notification message {:?}", notification_message);
                     let publish_request = self.publish_request_queue.pop_front().unwrap();
                     responses.push((publish_request, notification_message, sub_id));
                 } else {

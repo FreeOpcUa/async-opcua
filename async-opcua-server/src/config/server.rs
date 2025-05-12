@@ -26,6 +26,7 @@ use super::{endpoint::ServerEndpoint, limits::Limits};
 pub const ANONYMOUS_USER_TOKEN_ID: &str = "ANONYMOUS";
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+/// Configuration for the TCP transport.
 pub struct TcpConfig {
     /// Timeout for hello on a session in seconds
     pub hello_timeout: u32,
@@ -146,6 +147,7 @@ impl ServerUserToken {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+/// Configuration for certificate validation.
 pub struct CertificateValidation {
     /// Auto trusts client certificates. For testing/samples only unless you're sure what you're
     /// doing.

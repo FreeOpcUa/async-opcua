@@ -3,16 +3,20 @@ use std::{str::FromStr, sync::Arc};
 use opcua_core::{comms::url::is_opc_ua_binary_url, config::Config, sync::RwLock};
 use opcua_crypto::{CertificateStore, SecurityPolicy};
 use opcua_types::{
-    EndpointDescription, MessageSecurityMode, NodeId, StatusCode, TypeLoader, UserTokenType,
+    ContextOwned, EndpointDescription, MessageSecurityMode, NamespaceMap, NodeId, StatusCode,
+    TypeLoader, UserTokenType,
 };
 use tracing::error;
 
 use crate::{
-    transport::{tcp::TcpConnector, Connector},
-    ClientConfig, IdentityToken,
+    transport::{
+        tcp::{TcpConnector, TransportConfiguration},
+        Connector,
+    },
+    AsyncSecureChannel, ClientConfig, IdentityToken,
 };
 
-use super::{Client, Session, SessionEventLoop, SessionInfo};
+use super::{Client, EndpointInfo, Session, SessionEventLoop};
 
 struct SessionBuilderInner {
     session_id: Option<NodeId>,
@@ -267,21 +271,83 @@ impl<R> SessionBuilder<'_, EndpointDescription, R> {
         self,
         certificate_store: Arc<RwLock<CertificateStore>>,
     ) -> (Arc<Session>, SessionEventLoop) {
+        let ctx = self.make_encoding_context();
         Session::new(
-            certificate_store,
-            SessionInfo {
-                endpoint: self.endpoint,
-                user_identity_token: self.inner.user_identity_token,
-                preferred_locales: self.config.preferred_locales.clone(),
-            },
+            Self::build_channel_inner(
+                certificate_store,
+                self.inner.user_identity_token,
+                self.endpoint,
+                self.config,
+                self.inner.connector,
+                ctx,
+            ),
             self.config.session_name.clone().into(),
             self.config.application_description(),
             self.config.session_retry_policy(),
             self.config.decoding_options.as_comms_decoding_options(),
             self.config,
             self.inner.session_id,
+        )
+    }
+
+    fn make_encoding_context(&self) -> ContextOwned {
+        let mut encoding_context = ContextOwned::new_default(
+            NamespaceMap::new(),
+            self.config.decoding_options.as_comms_decoding_options(),
+        );
+
+        for loader in self.inner.type_loaders.iter().cloned() {
+            encoding_context.loaders_mut().add(loader);
+        }
+
+        encoding_context
+    }
+
+    fn build_channel_inner(
+        certificate_store: Arc<RwLock<CertificateStore>>,
+        identity_token: IdentityToken,
+        endpoint: EndpointDescription,
+        config: &ClientConfig,
+        connector: Box<dyn Connector>,
+        ctx: ContextOwned,
+    ) -> AsyncSecureChannel {
+        AsyncSecureChannel::new(
+            certificate_store,
+            EndpointInfo {
+                endpoint,
+                user_identity_token: identity_token,
+                preferred_locales: config.preferred_locales.clone(),
+            },
+            config.session_retry_policy(),
+            config.performance.ignore_clock_skew,
+            Arc::default(),
+            TransportConfiguration {
+                max_pending_incoming: 5,
+                send_buffer_size: config.decoding_options.max_chunk_size,
+                recv_buffer_size: config.decoding_options.max_incoming_chunk_size,
+                max_message_size: config.decoding_options.max_message_size,
+                max_chunk_count: config.decoding_options.max_chunk_count,
+            },
+            connector,
+            config.channel_lifetime,
+            Arc::new(RwLock::new(ctx)),
+        )
+    }
+
+    /// Build a channel only, not creating a session.
+    /// This is useful if you want to manage the session lifetime yourself.
+    pub fn build_channel(
+        self,
+        certificate_store: Arc<RwLock<CertificateStore>>,
+    ) -> AsyncSecureChannel {
+        let ctx = self.make_encoding_context();
+        Self::build_channel_inner(
+            certificate_store,
+            self.inner.user_identity_token,
+            self.endpoint,
+            self.config,
             self.inner.connector,
-            self.inner.type_loaders,
+            ctx,
         )
     }
 }

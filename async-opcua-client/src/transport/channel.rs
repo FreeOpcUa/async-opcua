@@ -1,13 +1,13 @@
 use std::{str::FromStr, sync::Arc, time::Duration};
 
-use crate::{session::SessionInfo, transport::core::TransportPollResult};
+use crate::{session::EndpointInfo, transport::core::TransportPollResult};
 use arc_swap::{ArcSwap, ArcSwapOption};
 use opcua_core::{
     comms::secure_channel::{Role, SecureChannel},
     sync::RwLock,
     trace_read_lock, trace_write_lock, RequestMessage, ResponseMessage,
 };
-use opcua_crypto::{CertificateStore, SecurityPolicy};
+use opcua_crypto::{CertificateStore, PrivateKey, SecurityPolicy, X509};
 use opcua_types::{
     ByteString, CloseSecureChannelRequest, ContextOwned, IntegerId, NodeId, RequestHeader,
     SecurityTokenRequestType, StatusCode,
@@ -32,7 +32,7 @@ const MAX_INFLIGHT_MESSAGES: usize = 1_000_000;
 
 /// Wrapper around an open secure channel
 pub struct AsyncSecureChannel {
-    session_info: SessionInfo,
+    endpoint_info: EndpointInfo,
     session_retry_policy: SessionRetryPolicy,
     pub(crate) secure_channel: Arc<RwLock<SecureChannel>>,
     certificate_store: Arc<RwLock<CertificateStore>>,
@@ -43,6 +43,7 @@ pub struct AsyncSecureChannel {
     channel_lifetime: u32,
 
     request_send: ArcSwapOption<RequestSend>,
+    encoding_context: Arc<RwLock<ContextOwned>>,
 }
 
 /// Event loop for a secure channel. This must be polled to make progress.
@@ -77,16 +78,47 @@ impl AsyncSecureChannel {
         &self,
         nonce: &ByteString,
         certificate: &ByteString,
+        auth_token: &NodeId,
     ) -> Result<(), StatusCode> {
         let mut secure_channel = trace_write_lock!(self.secure_channel);
         secure_channel.set_remote_nonce_from_byte_string(nonce)?;
         secure_channel.set_remote_cert_from_byte_string(certificate)?;
+        self.set_auth_token(auth_token.clone());
         Ok(())
     }
 
     pub(crate) fn security_policy(&self) -> SecurityPolicy {
         let secure_channel = trace_read_lock!(self.secure_channel);
         secure_channel.security_policy()
+    }
+
+    /// Get the target endpoint of the secure channel.
+    pub fn endpoint_info(&self) -> &EndpointInfo {
+        &self.endpoint_info
+    }
+
+    /// Get the current global encoding context in use by this channel.
+    pub fn encoding_context(&self) -> &RwLock<ContextOwned> {
+        &self.encoding_context
+    }
+
+    /// Set the active authentication token for this channel.
+    pub fn set_auth_token(&self, token: NodeId) {
+        self.state.set_auth_token(token);
+    }
+
+    pub(crate) fn read_own_private_key(&self) -> Option<PrivateKey> {
+        let cert_store = trace_read_lock!(self.certificate_store);
+        cert_store.read_own_pkey().ok()
+    }
+
+    pub(crate) fn read_own_certificate(&self) -> Option<X509> {
+        let cert_store = trace_read_lock!(self.certificate_store);
+        cert_store.read_own_cert().ok()
+    }
+
+    pub(crate) fn certificate_store(&self) -> &RwLock<CertificateStore> {
+        &self.certificate_store
     }
 }
 
@@ -95,7 +127,7 @@ impl AsyncSecureChannel {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         certificate_store: Arc<RwLock<CertificateStore>>,
-        session_info: SessionInfo,
+        endpoint_info: EndpointInfo,
         session_retry_policy: SessionRetryPolicy,
         ignore_clock_skew: bool,
         auth_token: Arc<ArcSwap<NodeId>>,
@@ -107,20 +139,21 @@ impl AsyncSecureChannel {
         let secure_channel = Arc::new(RwLock::new(SecureChannel::new(
             certificate_store.clone(),
             Role::Client,
-            encoding_context,
+            encoding_context.clone(),
         )));
 
         Self {
             transport_config,
             issue_channel_lock: tokio::sync::Mutex::new(()),
             state: SecureChannelState::new(ignore_clock_skew, secure_channel.clone(), auth_token),
-            session_info,
+            endpoint_info,
             secure_channel,
             certificate_store,
             session_retry_policy,
             request_send: Default::default(),
             connector,
             channel_lifetime,
+            encoding_context,
         }
     }
 
@@ -231,16 +264,16 @@ impl AsyncSecureChannel {
     async fn create_transport(
         &self,
     ) -> Result<(TcpTransport, tokio::sync::mpsc::Sender<OutgoingMessage>), StatusCode> {
-        let endpoint_url = self.session_info.endpoint.endpoint_url.clone();
+        let endpoint_url = self.endpoint_info.endpoint.endpoint_url.clone();
         debug!("Connect");
         let security_policy =
-            SecurityPolicy::from_str(self.session_info.endpoint.security_policy_uri.as_ref())
+            SecurityPolicy::from_str(self.endpoint_info.endpoint.security_policy_uri.as_ref())
                 .unwrap();
 
         if security_policy == SecurityPolicy::Unknown {
             error!(
                 "connect, security policy \"{}\" is unknown",
-                self.session_info.endpoint.security_policy_uri.as_ref()
+                self.endpoint_info.endpoint.security_policy_uri.as_ref()
             );
             Err(StatusCode::BadSecurityPolicyRejected)
         } else {
@@ -257,14 +290,14 @@ impl AsyncSecureChannel {
                 secure_channel.set_private_key(key);
                 secure_channel.set_cert(cert);
                 secure_channel.set_security_policy(security_policy);
-                secure_channel.set_security_mode(self.session_info.endpoint.security_mode);
+                secure_channel.set_security_mode(self.endpoint_info.endpoint.security_mode);
                 let _ = secure_channel.set_remote_cert_from_byte_string(
-                    &self.session_info.endpoint.server_certificate,
+                    &self.endpoint_info.endpoint.server_certificate,
                 );
                 debug!("Security policy = {:?}", security_policy);
                 debug!(
                     "Security mode = {:?}",
-                    self.session_info.endpoint.security_mode
+                    self.endpoint_info.endpoint.security_mode
                 );
             }
 

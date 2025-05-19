@@ -208,4 +208,8 @@ impl SecureChannelState {
     pub(super) fn request_handle(&self) -> IntegerId {
         self.request_handle.next()
     }
+
+    pub(super) fn set_auth_token(&self, token: NodeId) {
+        self.authentication_token.store(Arc::new(token));
+    }
 }

@@ -29,8 +29,8 @@ use opcua_types::{
 };
 
 use super::{
-    connection::SessionBuilder, process_service_result, process_unexpected_response, Session,
-    SessionEventLoop, SessionInfo,
+    connection::SessionBuilder, process_service_result, process_unexpected_response, EndpointInfo,
+    Session, SessionEventLoop,
 };
 
 /// Wrapper around common data for generating sessions and performing requests
@@ -216,14 +216,14 @@ impl Client {
     ///
     /// This is used when creating temporary connections to the server, when creating a session,
     /// [`Session`] manages its own channel.
-    fn channel_from_session_info(
+    fn channel_from_endpoint_info(
         &self,
-        session_info: SessionInfo,
+        endpoint_info: EndpointInfo,
         channel_lifetime: u32,
     ) -> AsyncSecureChannel {
         AsyncSecureChannel::new(
             self.certificate_store.clone(),
-            session_info,
+            endpoint_info,
             self.config.session_retry_policy(),
             self.config.performance.ignore_clock_skew,
             Arc::default(),
@@ -369,12 +369,12 @@ impl Client {
         let preferred_locales = Vec::new();
         // Most of these fields mean nothing when getting endpoints
         let endpoint = EndpointDescription::from(server_url.as_ref());
-        let session_info = SessionInfo {
+        let endpoint_info = EndpointInfo {
             endpoint: endpoint.clone(),
             user_identity_token: IdentityToken::Anonymous,
             preferred_locales,
         };
-        let channel = self.channel_from_session_info(session_info, self.config.channel_lifetime);
+        let channel = self.channel_from_endpoint_info(endpoint_info, self.config.channel_lifetime);
 
         let mut evt_loop = channel.connect().await?;
 
@@ -461,12 +461,12 @@ impl Client {
         let discovery_endpoint_url = discovery_endpoint_url.into();
         debug!("find_servers, {}", discovery_endpoint_url);
         let endpoint = EndpointDescription::from(discovery_endpoint_url.as_ref());
-        let session_info = SessionInfo {
+        let endpoint_info = EndpointInfo {
             endpoint: endpoint.clone(),
             user_identity_token: IdentityToken::Anonymous,
             preferred_locales: Vec::new(),
         };
-        let channel = self.channel_from_session_info(session_info, self.config.channel_lifetime);
+        let channel = self.channel_from_endpoint_info(endpoint_info, self.config.channel_lifetime);
 
         let mut evt_loop = channel.connect().await?;
 
@@ -547,12 +547,12 @@ impl Client {
         let discovery_endpoint_url = discovery_endpoint_url.into();
         debug!("find_servers, {}", discovery_endpoint_url);
         let endpoint = EndpointDescription::from(discovery_endpoint_url.as_ref());
-        let session_info = SessionInfo {
+        let endpoint_info = EndpointInfo {
             endpoint: endpoint.clone(),
             user_identity_token: IdentityToken::Anonymous,
             preferred_locales: Vec::new(),
         };
-        let channel = self.channel_from_session_info(session_info, self.config.channel_lifetime);
+        let channel = self.channel_from_endpoint_info(endpoint_info, self.config.channel_lifetime);
 
         let mut evt_loop = channel.connect().await?;
 
@@ -717,12 +717,12 @@ impl Client {
             endpoint
         );
 
-        let session_info = SessionInfo {
+        let endpoint_info = EndpointInfo {
             endpoint: endpoint.clone(),
             user_identity_token: IdentityToken::Anonymous,
             preferred_locales: Vec::new(),
         };
-        let channel = self.channel_from_session_info(session_info, self.config.channel_lifetime);
+        let channel = self.channel_from_endpoint_info(endpoint_info, self.config.channel_lifetime);
 
         let mut evt_loop = channel.connect().await?;
 

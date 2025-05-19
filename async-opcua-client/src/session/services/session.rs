@@ -59,20 +59,17 @@ impl<'a> CreateSession<'a> {
     /// Crate private since there is no way to safely use this.
     pub(crate) fn new(session: &'a Session) -> Self {
         Self {
-            endpoint_url: session.session_info.endpoint.endpoint_url.clone(),
+            endpoint_url: session.endpoint_info().endpoint.endpoint_url.clone(),
             server_uri: UAString::null(),
             client_description: session.application_description.clone(),
             session_name: session.session_name.clone(),
-            client_certificate: {
-                let cert_store = trace_read_lock!(session.certificate_store);
-                cert_store
-                    .read_own_cert()
-                    .ok()
-                    .map(|m| m.as_byte_string())
-                    .unwrap_or_default()
-            },
-            endpoint: &session.session_info.endpoint,
-            certificate_store: &session.certificate_store,
+            client_certificate: session
+                .channel
+                .read_own_certificate()
+                .map(|r| r.as_byte_string())
+                .unwrap_or_default(),
+            endpoint: &session.endpoint_info().endpoint,
+            certificate_store: session.channel.certificate_store(),
             session_timeout: session.session_timeout,
             max_response_message_size: 0,
             header: RequestHeaderBuilder::new_from_session(session),
@@ -206,6 +203,7 @@ impl UARequest for CreateSession<'_> {
             channel.update_from_created_session(
                 &response.server_nonce,
                 &response.server_certificate,
+                &response.authentication_token,
             )?;
 
             Ok(*response)
@@ -242,19 +240,16 @@ impl ActivateSession {
     /// Crate private since there is no way to safely use this.
     pub(crate) fn new(session: &Session) -> Self {
         Self {
-            identity_token: session.session_info.user_identity_token.clone(),
-            private_key: {
-                let cert_store = trace_read_lock!(session.certificate_store);
-                cert_store.read_own_pkey().ok()
-            },
+            identity_token: session.endpoint_info().user_identity_token.clone(),
+            private_key: session.channel.read_own_private_key(),
             locale_ids: session
-                .session_info
+                .endpoint_info()
                 .preferred_locales
                 .iter()
                 .map(UAString::from)
                 .collect(),
             client_software_certificates: Vec::new(),
-            endpoint: session.session_info.endpoint.clone(),
+            endpoint: session.endpoint_info().endpoint.clone(),
             header: RequestHeaderBuilder::new_from_session(session),
         }
     }
@@ -675,8 +670,6 @@ impl Session {
             self.session_id.store(Arc::new(response.session_id.clone()));
             response.session_id.clone()
         };
-        self.auth_token
-            .store(Arc::new(response.authentication_token));
 
         Ok(session_id)
     }

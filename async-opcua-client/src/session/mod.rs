@@ -9,7 +9,7 @@ mod services;
 /// Information about the server endpoint, security policy, security mode and user identity that the session will
 /// will use to establish a connection.
 #[derive(Debug, Clone)]
-pub struct SessionInfo {
+pub struct EndpointInfo {
     /// The endpoint
     pub endpoint: EndpointDescription,
     /// User identity token
@@ -18,7 +18,7 @@ pub struct SessionInfo {
     pub preferred_locales: Vec<String>,
 }
 
-impl From<EndpointDescription> for SessionInfo {
+impl From<EndpointDescription> for EndpointInfo {
     fn from(value: EndpointDescription) -> Self {
         Self {
             endpoint: value,
@@ -28,7 +28,7 @@ impl From<EndpointDescription> for SessionInfo {
     }
 }
 
-impl From<(EndpointDescription, IdentityToken)> for SessionInfo {
+impl From<(EndpointDescription, IdentityToken)> for EndpointInfo {
     fn from(value: (EndpointDescription, IdentityToken)) -> Self {
         Self {
             endpoint: value.0,
@@ -49,7 +49,6 @@ pub use connection::SessionBuilder;
 pub use event_loop::{SessionActivity, SessionEventLoop, SessionPollResult};
 use opcua_core::handle::AtomicHandle;
 use opcua_core::sync::{Mutex, RwLock};
-use opcua_crypto::CertificateStore;
 pub use request_builder::UARequest;
 pub use retry::{DefaultRetryPolicy, RequestRetryPolicy};
 pub use services::attributes::{
@@ -115,8 +114,6 @@ use opcua_types::{
 };
 
 use crate::browser::Browser;
-use crate::transport::tcp::TransportConfiguration;
-use crate::transport::Connector;
 use crate::{AsyncSecureChannel, ClientConfig, ExponentialBackoff, SessionRetryPolicy};
 
 use super::IdentityToken;
@@ -170,11 +167,8 @@ pub struct Session {
     pub(super) channel: AsyncSecureChannel,
     pub(super) state_watch_rx: tokio::sync::watch::Receiver<SessionState>,
     pub(super) state_watch_tx: tokio::sync::watch::Sender<SessionState>,
-    pub(super) certificate_store: Arc<RwLock<CertificateStore>>,
     pub(super) session_id: Arc<ArcSwap<NodeId>>,
-    pub(super) auth_token: Arc<ArcSwap<NodeId>>,
     pub(super) internal_session_id: AtomicU32,
-    pub(super) session_info: SessionInfo,
     pub(super) session_name: UAString,
     pub(super) application_description: ApplicationDescription,
     pub(super) request_timeout: Duration,
@@ -190,66 +184,33 @@ pub struct Session {
     pub(super) monitored_item_handle: AtomicHandle,
     pub(super) trigger_publish_tx: tokio::sync::watch::Sender<Instant>,
     decoding_options: DecodingOptions,
-    pub(super) encoding_context: Arc<RwLock<ContextOwned>>,
 }
 
 impl Session {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        certificate_store: Arc<RwLock<CertificateStore>>,
-        session_info: SessionInfo,
+        channel: AsyncSecureChannel,
         session_name: UAString,
         application_description: ApplicationDescription,
         session_retry_policy: SessionRetryPolicy,
         decoding_options: DecodingOptions,
         config: &ClientConfig,
         session_id: Option<NodeId>,
-        connector: Box<dyn Connector>,
-        extra_type_loaders: Vec<Arc<dyn TypeLoader>>,
     ) -> (Arc<Self>, SessionEventLoop) {
-        let auth_token: Arc<ArcSwap<NodeId>> = Arc::default();
         let (publish_limits_watch_tx, publish_limits_watch_rx) =
             tokio::sync::watch::channel(PublishLimits::new());
         let (state_watch_tx, state_watch_rx) =
             tokio::sync::watch::channel(SessionState::Disconnected);
         let (trigger_publish_tx, trigger_publish_rx) = tokio::sync::watch::channel(Instant::now());
 
-        let mut encoding_context =
-            ContextOwned::new_default(NamespaceMap::new(), decoding_options.clone());
-
-        for loader in extra_type_loaders {
-            encoding_context.loaders_mut().add(loader);
-        }
-
-        let encoding_context = Arc::new(RwLock::new(encoding_context));
-
         let session = Arc::new(Session {
-            channel: AsyncSecureChannel::new(
-                certificate_store.clone(),
-                session_info.clone(),
-                session_retry_policy.clone(),
-                config.performance.ignore_clock_skew,
-                auth_token.clone(),
-                TransportConfiguration {
-                    max_pending_incoming: 5,
-                    send_buffer_size: config.decoding_options.max_chunk_size,
-                    recv_buffer_size: config.decoding_options.max_incoming_chunk_size,
-                    max_message_size: config.decoding_options.max_message_size,
-                    max_chunk_count: config.decoding_options.max_chunk_count,
-                },
-                connector,
-                config.channel_lifetime,
-                encoding_context.clone(),
-            ),
+            channel,
             internal_session_id: AtomicU32::new(NEXT_SESSION_ID.fetch_add(1, Ordering::Relaxed)),
             state_watch_rx,
             state_watch_tx,
             session_id: Arc::new(ArcSwap::new(Arc::new(session_id.unwrap_or_default()))),
-            session_info,
-            auth_token,
             session_name,
             application_description,
-            certificate_store,
             request_timeout: config.request_timeout,
             session_timeout: config.session_timeout as f64,
             publish_timeout: config.publish_timeout,
@@ -265,7 +226,6 @@ impl Session {
             publish_limits_watch_tx,
             trigger_publish_tx,
             decoding_options,
-            encoding_context,
         });
 
         (
@@ -397,11 +357,21 @@ impl Session {
         self.channel.request_handle()
     }
 
+    /// Get a reference to the global encoding context.
+    pub fn encoding_context(&self) -> &RwLock<ContextOwned> {
+        self.channel.encoding_context()
+    }
+
+    /// Get the target endpoint for the session.
+    pub fn endpoint_info(&self) -> &EndpointInfo {
+        self.channel.endpoint_info()
+    }
+
     /// Set the namespace array on the session.
     /// Make sure that this namespace array contains the base namespace,
     /// or the session may behave unexpectedly.
     pub fn set_namespaces(&self, namespaces: NamespaceMap) {
-        *self.encoding_context.write().namespaces_mut() = namespaces;
+        *self.encoding_context().write().namespaces_mut() = namespaces;
     }
 
     /// Add a type loader to the encoding context.
@@ -409,7 +379,10 @@ impl Session {
     /// you should avoid adding the same type loader more than once, it will
     /// work, but there will be a small performance overhead.
     pub fn add_type_loader(&self, type_loader: Arc<dyn TypeLoader>) {
-        self.encoding_context.write().loaders_mut().add(type_loader);
+        self.encoding_context()
+            .write()
+            .loaders_mut()
+            .add(type_loader);
     }
 
     /// Get a reference to the encoding
@@ -465,7 +438,7 @@ impl Session {
 
     /// Return index of supplied namespace url from cache
     pub fn get_namespace_index_from_cache(&self, url: &str) -> Option<u16> {
-        self.encoding_context.read().namespaces().get_index(url)
+        self.encoding_context().read().namespaces().get_index(url)
     }
 
     /// Return index of supplied namespace url

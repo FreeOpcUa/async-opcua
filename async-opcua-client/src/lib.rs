@@ -142,8 +142,9 @@ pub mod services {
         ActivateSession, AddNodes, AddReferences, Browse, BrowseNext, Call, Cancel, CloseSession,
         CreateMonitoredItems, CreateSession, CreateSubscription, DeleteMonitoredItems, DeleteNodes,
         DeleteReferences, DeleteSubscriptions, HistoryRead, HistoryUpdate, ModifyMonitoredItems,
-        ModifySubscription, Read, RegisterNodes, SetMonitoringMode, SetPublishingMode,
-        SetTriggering, TransferSubscriptions, TranslateBrowsePaths, UnregisterNodes, Write,
+        ModifySubscription, Publish, Read, RegisterNodes, Republish, SetMonitoringMode,
+        SetPublishingMode, SetTriggering, TransferSubscriptions, TranslateBrowsePaths,
+        UnregisterNodes, Write,
     };
 }
 

@@ -224,7 +224,7 @@ pub async fn test_subscriptions(session: Arc<Session>, ctx: &mut ClientTestState
 
     assert_eq!(res.len(), 1);
     let it = &res[0];
-    assert_eq!(it.status_code, StatusCode::Good);
+    assert_eq!(it.result.status_code, StatusCode::Good);
 
     // We should quickly get a data value, this is due to the initial queued publish request.
     let (_, v) = timeout(Duration::from_millis(2000), data.recv())

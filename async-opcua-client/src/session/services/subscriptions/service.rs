@@ -14,29 +14,26 @@ use crate::{
 };
 use opcua_core::{handle::AtomicHandle, sync::Mutex, trace_lock, ResponseMessage};
 use opcua_types::{
-    AttributeId, CreateMonitoredItemsRequest, CreateMonitoredItemsResponse,
-    CreateSubscriptionRequest, CreateSubscriptionResponse, DeleteMonitoredItemsRequest,
-    DeleteMonitoredItemsResponse, DeleteSubscriptionsRequest, DeleteSubscriptionsResponse,
-    IntegerId, ModifyMonitoredItemsRequest, ModifyMonitoredItemsResponse,
-    ModifySubscriptionRequest, ModifySubscriptionResponse, MonitoredItemCreateRequest,
-    MonitoredItemCreateResult, MonitoredItemModifyRequest, MonitoredItemModifyResult,
-    MonitoringMode, MonitoringParameters, NodeId, NotificationMessage, PublishRequest, ReadValueId,
-    RepublishRequest, SetMonitoringModeRequest, SetMonitoringModeResponse,
+    AttributeId, CreateMonitoredItemsRequest, CreateSubscriptionRequest,
+    CreateSubscriptionResponse, DeleteMonitoredItemsRequest, DeleteMonitoredItemsResponse,
+    DeleteSubscriptionsRequest, DeleteSubscriptionsResponse, DiagnosticInfo, IntegerId,
+    ModifyMonitoredItemsRequest, ModifyMonitoredItemsResponse, ModifySubscriptionRequest,
+    ModifySubscriptionResponse, MonitoredItemCreateRequest, MonitoredItemCreateResult,
+    MonitoredItemModifyRequest, MonitoredItemModifyResult, MonitoringMode, MonitoringParameters,
+    NodeId, NotificationMessage, PublishRequest, PublishResponse, ReadValueId, RepublishRequest,
+    RepublishResponse, ResponseHeader, SetMonitoringModeRequest, SetMonitoringModeResponse,
     SetPublishingModeRequest, SetPublishingModeResponse, SetTriggeringRequest,
-    SetTriggeringResponse, StatusCode, TimestampsToReturn, TransferResult,
-    TransferSubscriptionsRequest, TransferSubscriptionsResponse,
+    SetTriggeringResponse, StatusCode, SubscriptionAcknowledgement, TimestampsToReturn,
+    TransferResult, TransferSubscriptionsRequest, TransferSubscriptionsResponse,
 };
-use tracing::{debug, enabled};
+use tracing::enabled;
 
 use super::{state::SubscriptionState, OnSubscriptionNotification};
 
 /// Create a subscription by sending a [`CreateSubscriptionRequest`] to the server.
 ///
 /// See OPC UA Part 4 - Services 5.13.2 for complete description of the service and error responses.
-pub struct CreateSubscription<'a> {
-    subscriptions: &'a Mutex<SubscriptionState>,
-    callback: Box<dyn OnSubscriptionNotification>,
-
+pub struct CreateSubscription {
     publishing_interval: Duration,
     lifetime_count: u32,
     keep_alive_count: u32,
@@ -47,11 +44,11 @@ pub struct CreateSubscription<'a> {
     header: RequestHeaderBuilder,
 }
 
-builder_base!(CreateSubscription<'a>);
+builder_base!(CreateSubscription);
 
-impl<'a> CreateSubscription<'a> {
+impl CreateSubscription {
     /// Construct a new call to the `CreateSubscription` service.
-    pub fn new(session: &'a Session, callback: Box<dyn OnSubscriptionNotification>) -> Self {
+    pub fn new(session: &Session) -> Self {
         Self {
             publishing_interval: Duration::from_millis(500),
             lifetime_count: 60,
@@ -59,24 +56,18 @@ impl<'a> CreateSubscription<'a> {
             max_notifications_per_publish: 0,
             publishing_enabled: true,
             priority: 0,
-            subscriptions: session.subscription_state(),
             header: RequestHeaderBuilder::new_from_session(session),
-            callback,
         }
     }
 
     /// Construct a new call to the `CreateSubscription` service, setting header parameters manually.
     pub fn new_manual(
-        subscriptions: &'a Mutex<SubscriptionState>,
-        callback: Box<dyn OnSubscriptionNotification>,
         session_id: u32,
         timeout: Duration,
         auth_token: NodeId,
         request_handle: IntegerId,
     ) -> Self {
         Self {
-            subscriptions,
-            callback,
             publishing_interval: Duration::from_millis(500),
             lifetime_count: 60,
             keep_alive_count: 20,
@@ -146,7 +137,7 @@ impl<'a> CreateSubscription<'a> {
     }
 }
 
-impl UARequest for CreateSubscription<'_> {
+impl UARequest for CreateSubscription {
     type Out = CreateSubscriptionResponse;
 
     async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
@@ -167,20 +158,6 @@ impl UARequest for CreateSubscription<'_> {
 
         if let ResponseMessage::CreateSubscription(response) = response {
             process_service_result(&response.response_header)?;
-            let subscription = Subscription::new(
-                response.subscription_id,
-                Duration::from_millis(response.revised_publishing_interval.max(0.0).floor() as u64),
-                response.revised_lifetime_count,
-                response.revised_max_keep_alive_count,
-                self.max_notifications_per_publish,
-                self.priority,
-                self.publishing_enabled,
-                self.callback,
-            );
-            {
-                let mut subscription_state = trace_lock!(self.subscriptions);
-                subscription_state.add_subscription(subscription);
-            }
             builder_debug!(
                 self,
                 "create_subscription, created a subscription with id {}",
@@ -198,8 +175,7 @@ impl UARequest for CreateSubscription<'_> {
 ///
 /// See OPC UA Part 4 - Services 5.13.3 for complete description of the service and error responses.
 #[derive(Clone)]
-pub struct ModifySubscription<'a> {
-    subscriptions: &'a Mutex<SubscriptionState>,
+pub struct ModifySubscription {
     subscription_id: u32,
     publishing_interval: Duration,
     lifetime_count: u32,
@@ -210,11 +186,11 @@ pub struct ModifySubscription<'a> {
     header: RequestHeaderBuilder,
 }
 
-builder_base!(ModifySubscription<'a>);
+builder_base!(ModifySubscription);
 
-impl<'a> ModifySubscription<'a> {
+impl ModifySubscription {
     /// Construct a new call to the `ModifySubscription` service.
-    pub fn new(subscription_id: u32, session: &'a Session) -> Self {
+    pub fn new(subscription_id: u32, session: &Session) -> Self {
         Self {
             subscription_id,
             publishing_interval: Duration::from_millis(500),
@@ -222,7 +198,6 @@ impl<'a> ModifySubscription<'a> {
             keep_alive_count: 20,
             max_notifications_per_publish: 0,
             priority: 0,
-            subscriptions: session.subscription_state(),
             header: RequestHeaderBuilder::new_from_session(session),
         }
     }
@@ -230,7 +205,6 @@ impl<'a> ModifySubscription<'a> {
     /// Construct a new call to the `ModifySubscription` service, setting header parameters manually.
     pub fn new_manual(
         subscription_id: u32,
-        subscriptions: &'a Mutex<SubscriptionState>,
         session_id: u32,
         timeout: Duration,
         auth_token: NodeId,
@@ -238,7 +212,6 @@ impl<'a> ModifySubscription<'a> {
     ) -> Self {
         Self {
             subscription_id,
-            subscriptions,
             publishing_interval: Duration::from_millis(500),
             lifetime_count: 60,
             keep_alive_count: 20,
@@ -298,7 +271,7 @@ impl<'a> ModifySubscription<'a> {
     }
 }
 
-impl UARequest for ModifySubscription<'_> {
+impl UARequest for ModifySubscription {
     type Out = ModifySubscriptionResponse;
 
     async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
@@ -327,15 +300,6 @@ impl UARequest for ModifySubscription<'_> {
 
         if let ResponseMessage::ModifySubscription(response) = response {
             process_service_result(&response.response_header)?;
-            let mut subscription_state = trace_lock!(self.subscriptions);
-            subscription_state.modify_subscription(
-                self.subscription_id,
-                Duration::from_millis(response.revised_publishing_interval.max(0.0).floor() as u64),
-                response.revised_lifetime_count,
-                response.revised_max_keep_alive_count,
-                self.max_notifications_per_publish,
-                self.priority,
-            );
             builder_debug!(
                 self,
                 "modify_subscription success for {}",
@@ -353,23 +317,21 @@ impl UARequest for ModifySubscription<'_> {
 ///
 /// See OPC UA Part 4 - Services 5.13.4 for complete description of the service and error responses.
 #[derive(Clone)]
-pub struct SetPublishingMode<'a> {
-    subscriptions: &'a Mutex<SubscriptionState>,
+pub struct SetPublishingMode {
     subscription_ids: Vec<u32>,
     publishing_enabled: bool,
 
     header: RequestHeaderBuilder,
 }
 
-builder_base!(SetPublishingMode<'a>);
+builder_base!(SetPublishingMode);
 
-impl<'a> SetPublishingMode<'a> {
+impl SetPublishingMode {
     /// Construct a new call to the `SetPublishingMode` service.
-    pub fn new(publishing_enabled: bool, session: &'a Session) -> Self {
+    pub fn new(publishing_enabled: bool, session: &Session) -> Self {
         Self {
             subscription_ids: Vec::new(),
             publishing_enabled,
-            subscriptions: session.subscription_state(),
             header: RequestHeaderBuilder::new_from_session(session),
         }
     }
@@ -377,7 +339,6 @@ impl<'a> SetPublishingMode<'a> {
     /// Construct a new call to the `SetPublishingMode` service, setting header parameters manually.
     pub fn new_manual(
         publishing_enabled: bool,
-        subscriptions: &'a Mutex<SubscriptionState>,
         session_id: u32,
         timeout: Duration,
         auth_token: NodeId,
@@ -386,7 +347,6 @@ impl<'a> SetPublishingMode<'a> {
         Self {
             subscription_ids: Vec::new(),
             publishing_enabled,
-            subscriptions,
             header: RequestHeaderBuilder::new(session_id, timeout, auth_token, request_handle),
         }
     }
@@ -404,7 +364,7 @@ impl<'a> SetPublishingMode<'a> {
     }
 }
 
-impl UARequest for SetPublishingMode<'_> {
+impl UARequest for SetPublishingMode {
     type Out = SetPublishingModeResponse;
 
     async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
@@ -449,23 +409,159 @@ impl UARequest for SetPublishingMode<'_> {
                 return Err(StatusCode::BadUnexpectedError);
             }
 
-            {
-                // Update all subscriptions where the returned status is good.
-                let mut subscription_state = trace_lock!(self.subscriptions);
-                let ids = self
-                    .subscription_ids
-                    .iter()
-                    .zip(response.results.iter().flat_map(|f| f.iter()))
-                    .filter(|(_, s)| s.is_good())
-                    .map(|(v, _)| *v)
-                    .collect::<Vec<_>>();
-                subscription_state.set_publishing_mode(&ids, self.publishing_enabled);
-            }
-
             builder_debug!(self, "set_publishing_mode success");
             Ok(*response)
         } else {
             builder_error!(self, "set_publishing_mode failed {:?}", response);
+            Err(process_unexpected_response(response))
+        }
+    }
+}
+
+#[derive(Clone)]
+/// Send a [`PublishRequest`] to the server to receive notifications from subscriptions.
+///
+/// See OPC UA Part 4 - Services 5.13.5 for complete description of the service and error responses.
+pub struct Publish {
+    header: RequestHeaderBuilder,
+    acks: Vec<SubscriptionAcknowledgement>,
+}
+
+builder_base!(Publish);
+
+impl Publish {
+    /// Construct a new call to the `Publish` service.
+    pub fn new(session: &Session) -> Self {
+        Self {
+            header: RequestHeaderBuilder::new_from_session(session),
+            acks: Vec::new(),
+        }
+        .timeout(session.publish_timeout)
+    }
+
+    /// Construct a new call to the `Publish` service, setting header parameters manually.
+    pub fn new_manual(
+        session_id: u32,
+        timeout: Duration,
+        auth_token: NodeId,
+        request_handle: IntegerId,
+    ) -> Self {
+        Self {
+            header: RequestHeaderBuilder::new(session_id, timeout, auth_token, request_handle),
+            acks: Vec::new(),
+        }
+    }
+
+    /// Set the subscription acknowledgements to send, overwriting any that were added previously.
+    pub fn acks(mut self, acks: Vec<SubscriptionAcknowledgement>) -> Self {
+        self.acks = acks;
+        self
+    }
+
+    /// Add a subscription acknowledgement to send.
+    pub fn ack(mut self, subscription_id: u32, sequence_number: u32) -> Self {
+        self.acks.push(SubscriptionAcknowledgement {
+            subscription_id,
+            sequence_number,
+        });
+        self
+    }
+}
+
+impl UARequest for Publish {
+    type Out = PublishResponse;
+
+    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    where
+        Self: 'a,
+    {
+        if enabled!(tracing::Level::DEBUG) {
+            let sequence_nrs: Vec<u32> = self.acks.iter().map(|ack| ack.sequence_number).collect();
+            builder_debug!(
+                self,
+                "publish, acknowledging subscription acknowledgements with sequence nrs {:?}",
+                sequence_nrs
+            );
+        }
+        let request = PublishRequest {
+            request_header: self.header.header,
+            subscription_acknowledgements: if self.acks.is_empty() {
+                None
+            } else {
+                Some(self.acks)
+            },
+        };
+        let response = channel.send(request, self.header.timeout).await?;
+        if let ResponseMessage::Publish(response) = response {
+            process_service_result(&response.response_header)?;
+            builder_debug!(self, "publish success");
+            Ok(*response)
+        } else {
+            builder_error!(self, "publish failed {:?}", response);
+            Err(process_unexpected_response(response))
+        }
+    }
+}
+
+/// Republishes notifications from a subscription by sending a [`RepublishRequest`] to the server.
+///
+/// See OPC UA Part 4 - Services 5.13.6 for complete description of the service and error responses.
+pub struct Republish {
+    subscription_id: u32,
+    retransmit_sequence_number: u32,
+
+    header: RequestHeaderBuilder,
+}
+
+builder_base!(Republish);
+
+impl Republish {
+    /// Construct a new call to the `Republish` service.
+    pub fn new(subscription_id: u32, retransmit_sequence_number: u32, session: &Session) -> Self {
+        Self {
+            subscription_id,
+            retransmit_sequence_number,
+            header: RequestHeaderBuilder::new_from_session(session),
+        }
+    }
+
+    /// Construct a new call to the `Republish` service, setting header parameters manually.
+    pub fn new_manual(
+        subscription_id: u32,
+        retransmit_sequence_number: u32,
+        session_id: u32,
+        timeout: Duration,
+        auth_token: NodeId,
+        request_handle: IntegerId,
+    ) -> Self {
+        Self {
+            subscription_id,
+            retransmit_sequence_number,
+            header: RequestHeaderBuilder::new(session_id, timeout, auth_token, request_handle),
+        }
+    }
+}
+
+impl UARequest for Republish {
+    type Out = RepublishResponse;
+    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    where
+        Self: 'a,
+    {
+        let request = RepublishRequest {
+            request_header: self.header.header,
+            subscription_id: self.subscription_id,
+            retransmit_sequence_number: self.retransmit_sequence_number,
+        };
+
+        let response = channel.send(request, self.header.timeout).await?;
+
+        if let ResponseMessage::Republish(response) = response {
+            process_service_result(&response.response_header)?;
+            builder_debug!(self, "republish success");
+            Ok(*response)
+        } else {
+            builder_error!(self, "republish failed {:?}", response);
             Err(process_unexpected_response(response))
         }
     }
@@ -573,28 +669,25 @@ impl UARequest for TransferSubscriptions {
 /// of subscriptions to delete.
 ///
 /// See OPC UA Part 4 - Services 5.13.8 for complete description of the service and error responses.
-pub struct DeleteSubscriptions<'a> {
+pub struct DeleteSubscriptions {
     subscription_ids: Vec<u32>,
-    subscriptions: &'a Mutex<SubscriptionState>,
 
     header: RequestHeaderBuilder,
 }
 
-builder_base!(DeleteSubscriptions<'a>);
+builder_base!(DeleteSubscriptions);
 
-impl<'a> DeleteSubscriptions<'a> {
+impl DeleteSubscriptions {
     /// Construct a new call to the `DeleteSubscriptions` service.
-    pub fn new(session: &'a Session) -> Self {
+    pub fn new(session: &Session) -> Self {
         Self {
             subscription_ids: Vec::new(),
-            subscriptions: session.subscription_state(),
             header: RequestHeaderBuilder::new_from_session(session),
         }
     }
 
     /// Construct a new call to the `DeleteSubscriptions` service, setting header parameters manually.
     pub fn new_manual(
-        subscriptions: &'a Mutex<SubscriptionState>,
         session_id: u32,
         timeout: Duration,
         auth_token: NodeId,
@@ -602,7 +695,6 @@ impl<'a> DeleteSubscriptions<'a> {
     ) -> Self {
         Self {
             subscription_ids: Vec::new(),
-            subscriptions,
             header: RequestHeaderBuilder::new(session_id, timeout, auth_token, request_handle),
         }
     }
@@ -620,7 +712,7 @@ impl<'a> DeleteSubscriptions<'a> {
     }
 }
 
-impl UARequest for DeleteSubscriptions<'_> {
+impl UARequest for DeleteSubscriptions {
     type Out = DeleteSubscriptionsResponse;
 
     async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
@@ -638,13 +730,7 @@ impl UARequest for DeleteSubscriptions<'_> {
         let response = channel.send(request, self.header.timeout).await?;
         if let ResponseMessage::DeleteSubscriptions(response) = response {
             process_service_result(&response.response_header)?;
-            {
-                // Clear out deleted subscriptions, assuming the delete worked
-                let mut subscription_state = trace_lock!(self.subscriptions);
-                for id in self.subscription_ids {
-                    subscription_state.delete_subscription(id);
-                }
-            }
+
             builder_debug!(self, "delete_subscriptions success");
             Ok(*response)
         } else {
@@ -662,7 +748,6 @@ pub struct CreateMonitoredItems<'a> {
     subscription_id: u32,
     timestamps_to_return: TimestampsToReturn,
     items_to_create: Vec<MonitoredItemCreateRequest>,
-    subscriptions: &'a Mutex<SubscriptionState>,
     handle: &'a AtomicHandle,
 
     header: RequestHeaderBuilder,
@@ -677,7 +762,6 @@ impl<'a> CreateMonitoredItems<'a> {
             subscription_id,
             timestamps_to_return: TimestampsToReturn::Neither,
             items_to_create: Vec::new(),
-            subscriptions: session.subscription_state(),
             handle: &session.monitored_item_handle,
             header: RequestHeaderBuilder::new_from_session(session),
         }
@@ -686,7 +770,6 @@ impl<'a> CreateMonitoredItems<'a> {
     /// Construct a new call to the `CreateMonitoredItems` service, setting header parameters manually.
     pub fn new_manual(
         subscription_id: u32,
-        subscriptions: &'a Mutex<SubscriptionState>,
         monitored_item_handle: &'a AtomicHandle,
         session_id: u32,
         timeout: Duration,
@@ -697,7 +780,6 @@ impl<'a> CreateMonitoredItems<'a> {
             subscription_id,
             timestamps_to_return: TimestampsToReturn::Neither,
             items_to_create: Vec::new(),
-            subscriptions,
             handle: monitored_item_handle,
             header: RequestHeaderBuilder::new(session_id, timeout, auth_token, request_handle),
         }
@@ -743,8 +825,34 @@ impl<'a> CreateMonitoredItems<'a> {
     }
 }
 
+#[derive(Debug, Clone)]
+/// The result of a [`CreateMonitoredItems`] request, including
+/// the requested parameters.
+pub struct CreatedMonitoredItem {
+    /// The monitored item result, including revised parameters.
+    pub result: MonitoredItemCreateResult,
+    /// The requested parameters.
+    pub requested_parameters: MonitoringParameters,
+    /// The requested monitoring mode.
+    pub monitoring_mode: MonitoringMode,
+    /// The requested item to monitor.
+    pub item_to_monitor: ReadValueId,
+}
+
+#[derive(Debug, Clone)]
+/// The result of a [`CreateMonitoredItems`] request, including
+/// the requested items.
+pub struct CreateMonitoredItemsResult {
+    /// The original response header.
+    pub response_header: ResponseHeader,
+    /// Optional diagnostic information, if requested.
+    pub diagnostic_infos: Option<Vec<DiagnosticInfo>>,
+    /// Created monitored items, with the requested parameters.
+    pub results: Vec<CreatedMonitoredItem>,
+}
+
 impl UARequest for CreateMonitoredItems<'_> {
-    type Out = CreateMonitoredItemsResponse;
+    type Out = CreateMonitoredItemsResult;
 
     async fn send<'a>(
         mut self,
@@ -763,17 +871,7 @@ impl UARequest for CreateMonitoredItems<'_> {
             builder_error!(self, "create_monitored_items, subscription id 0 is invalid");
             return Err(StatusCode::BadSubscriptionIdInvalid);
         }
-        {
-            let state = trace_lock!(self.subscriptions);
-            if !state.subscription_exists(self.subscription_id) {
-                builder_error!(
-                    self,
-                    "create_monitored_items, subscription id {} does not exist",
-                    self.subscription_id
-                );
-                return Err(StatusCode::BadSubscriptionIdInvalid);
-            }
-        }
+
         if self.items_to_create.is_empty() {
             builder_error!(
                 self,
@@ -787,6 +885,7 @@ impl UARequest for CreateMonitoredItems<'_> {
             }
         }
 
+        let num_items = self.items_to_create.len();
         let request = CreateMonitoredItemsRequest {
             request_header: self.header.header,
             subscription_id: self.subscription_id,
@@ -799,41 +898,16 @@ impl UARequest for CreateMonitoredItems<'_> {
         if let ResponseMessage::CreateMonitoredItems(response) = response {
             process_service_result(&response.response_header)?;
             if let Some(ref results) = response.results {
-                if results.len() != self.items_to_create.len() {
+                if results.len() != num_items {
                     builder_error!(
                         self,
                         "create_monitored_items, unexpected number of results. Got {}, expected {}",
                         results.len(),
-                        self.items_to_create.len()
+                        num_items
                     );
                     return Err(StatusCode::BadUnexpectedError);
                 }
-                builder_debug!(
-                    self,
-                    "create_monitored_items, {} items created",
-                    self.items_to_create.len()
-                );
-                // Set the items in our internal state
-                let items_to_create = self
-                    .items_to_create
-                    .into_iter()
-                    .zip(results)
-                    .map(|(i, r)| CreateMonitoredItem {
-                        id: r.monitored_item_id,
-                        client_handle: i.requested_parameters.client_handle,
-                        discard_oldest: i.requested_parameters.discard_oldest,
-                        item_to_monitor: i.item_to_monitor.clone(),
-                        monitoring_mode: i.monitoring_mode,
-                        queue_size: r.revised_queue_size,
-                        sampling_interval: r.revised_sampling_interval,
-                        filter: i.requested_parameters.filter,
-                    })
-                    .collect::<Vec<CreateMonitoredItem>>();
-                {
-                    let mut subscription_state = trace_lock!(self.subscriptions);
-                    subscription_state
-                        .insert_monitored_items(self.subscription_id, items_to_create);
-                }
+                builder_debug!(self, "create_monitored_items, {} items created", num_items);
             } else {
                 builder_error!(
                     self,
@@ -841,7 +915,25 @@ impl UARequest for CreateMonitoredItems<'_> {
                 );
                 return Err(StatusCode::BadUnexpectedError);
             }
-            Ok(*response)
+
+            let created = response
+                .results
+                .unwrap_or_default()
+                .into_iter()
+                .zip(self.items_to_create)
+                .map(|(result, item)| CreatedMonitoredItem {
+                    result,
+                    requested_parameters: item.requested_parameters,
+                    monitoring_mode: item.monitoring_mode,
+                    item_to_monitor: item.item_to_monitor,
+                })
+                .collect();
+
+            Ok(CreateMonitoredItemsResult {
+                response_header: response.response_header,
+                diagnostic_infos: response.diagnostic_infos,
+                results: created,
+            })
         } else {
             builder_error!(self, "create_monitored_items failed {:?}", response);
             Err(process_unexpected_response(response))
@@ -853,25 +945,23 @@ impl UARequest for CreateMonitoredItems<'_> {
 /// Modifies monitored items on a subscription by sending a [`ModifyMonitoredItemsRequest`] to the server.
 ///
 /// See OPC UA Part 4 - Services 5.12.3 for complete description of the service and error responses.
-pub struct ModifyMonitoredItems<'a> {
+pub struct ModifyMonitoredItems {
     subscription_id: u32,
     timestamps_to_return: TimestampsToReturn,
     items_to_modify: Vec<MonitoredItemModifyRequest>,
-    subscriptions: &'a Mutex<SubscriptionState>,
 
     header: RequestHeaderBuilder,
 }
 
-builder_base!(ModifyMonitoredItems<'a>);
+builder_base!(ModifyMonitoredItems);
 
-impl<'a> ModifyMonitoredItems<'a> {
+impl ModifyMonitoredItems {
     /// Construct a new call to the `ModifyMonitoredItems` service.
-    pub fn new(subscription_id: u32, session: &'a Session) -> Self {
+    pub fn new(subscription_id: u32, session: &Session) -> Self {
         Self {
             subscription_id,
             timestamps_to_return: TimestampsToReturn::Neither,
             items_to_modify: Vec::new(),
-            subscriptions: session.subscription_state(),
             header: RequestHeaderBuilder::new_from_session(session),
         }
     }
@@ -879,7 +969,6 @@ impl<'a> ModifyMonitoredItems<'a> {
     /// Construct a new call to the `ModifyMonitoredItems` service, setting header parameters manually.
     pub fn new_manual(
         subscription_id: u32,
-        subscriptions: &'a Mutex<SubscriptionState>,
         session_id: u32,
         timeout: Duration,
         auth_token: NodeId,
@@ -889,7 +978,6 @@ impl<'a> ModifyMonitoredItems<'a> {
             subscription_id,
             timestamps_to_return: TimestampsToReturn::Neither,
             items_to_modify: Vec::new(),
-            subscriptions,
             header: RequestHeaderBuilder::new(session_id, timeout, auth_token, request_handle),
         }
     }
@@ -913,7 +1001,7 @@ impl<'a> ModifyMonitoredItems<'a> {
     }
 }
 
-impl UARequest for ModifyMonitoredItems<'_> {
+impl UARequest for ModifyMonitoredItems {
     type Out = ModifyMonitoredItemsResponse;
 
     async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
@@ -930,17 +1018,6 @@ impl UARequest for ModifyMonitoredItems<'_> {
             builder_error!(self, "modify_monitored_items, subscription id 0 is invalid");
             return Err(StatusCode::BadInvalidArgument);
         }
-        {
-            let state = trace_lock!(self.subscriptions);
-            if !state.subscription_exists(self.subscription_id) {
-                builder_error!(
-                    self,
-                    "modify_monitored_items, subscription id {} does not exist",
-                    self.subscription_id
-                );
-                return Err(StatusCode::BadSubscriptionIdInvalid);
-            }
-        }
         if self.items_to_modify.is_empty() {
             builder_error!(
                 self,
@@ -948,11 +1025,7 @@ impl UARequest for ModifyMonitoredItems<'_> {
             );
             return Err(StatusCode::BadNothingToDo);
         }
-        let ids = self
-            .items_to_modify
-            .iter()
-            .map(|i| i.monitored_item_id)
-            .collect::<Vec<_>>();
+        let num_items = self.items_to_modify.len();
         let request = ModifyMonitoredItemsRequest {
             request_header: self.header.header,
             subscription_id: self.subscription_id,
@@ -966,28 +1039,16 @@ impl UARequest for ModifyMonitoredItems<'_> {
                 builder_error!(self, "modify_monitored_items, got empty response");
                 return Err(StatusCode::BadUnexpectedError);
             };
-            if results.len() != ids.len() {
+            if results.len() != num_items {
                 builder_error!(
                     self,
                     "modify_monitored_items, unexpected number of results. Expected {}, got {}",
-                    ids.len(),
+                    num_items,
                     results.len()
                 );
                 return Err(StatusCode::BadUnexpectedError);
             }
-            let items_to_modify = ids
-                .iter()
-                .zip(results.iter())
-                .map(|(id, r)| ModifyMonitoredItem {
-                    id: *id,
-                    queue_size: r.revised_queue_size,
-                    sampling_interval: r.revised_sampling_interval,
-                })
-                .collect::<Vec<ModifyMonitoredItem>>();
-            {
-                let mut subscription_state = trace_lock!(self.subscriptions);
-                subscription_state.modify_monitored_items(self.subscription_id, &items_to_modify);
-            }
+
             builder_debug!(self, "modify_monitored_items, success");
             Ok(*response)
         } else {
@@ -1002,29 +1063,23 @@ impl UARequest for ModifyMonitoredItems<'_> {
 /// to the server.
 ///
 /// See OPC UA Part 4 - Services 5.12.4 for complete description of the service and error responses.
-pub struct SetMonitoringMode<'a> {
+pub struct SetMonitoringMode {
     subscription_id: u32,
     monitoring_mode: MonitoringMode,
     monitored_item_ids: Vec<u32>,
-    subscriptions: &'a Mutex<SubscriptionState>,
 
     header: RequestHeaderBuilder,
 }
 
-builder_base!(SetMonitoringMode<'a>);
+builder_base!(SetMonitoringMode);
 
-impl<'a> SetMonitoringMode<'a> {
+impl SetMonitoringMode {
     /// Construct a new call to the `SetMonitoringMode` service.
-    pub fn new(
-        subscription_id: u32,
-        monitoring_mode: MonitoringMode,
-        session: &'a Session,
-    ) -> Self {
+    pub fn new(subscription_id: u32, monitoring_mode: MonitoringMode, session: &Session) -> Self {
         Self {
             subscription_id,
             monitored_item_ids: Vec::new(),
             monitoring_mode,
-            subscriptions: session.subscription_state(),
             header: RequestHeaderBuilder::new_from_session(session),
         }
     }
@@ -1033,7 +1088,6 @@ impl<'a> SetMonitoringMode<'a> {
     pub fn new_manual(
         subscription_id: u32,
         monitoring_mode: MonitoringMode,
-        subscriptions: &'a Mutex<SubscriptionState>,
         session_id: u32,
         timeout: Duration,
         auth_token: NodeId,
@@ -1043,7 +1097,6 @@ impl<'a> SetMonitoringMode<'a> {
             subscription_id,
             monitored_item_ids: Vec::new(),
             monitoring_mode,
-            subscriptions,
             header: RequestHeaderBuilder::new(session_id, timeout, auth_token, request_handle),
         }
     }
@@ -1061,7 +1114,7 @@ impl<'a> SetMonitoringMode<'a> {
     }
 }
 
-impl UARequest for SetMonitoringMode<'_> {
+impl UARequest for SetMonitoringMode {
     type Out = SetMonitoringModeResponse;
 
     async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
@@ -1078,27 +1131,17 @@ impl UARequest for SetMonitoringMode<'_> {
             builder_error!(self, "set_monitoring_mode, subscription id 0 is invalid");
             return Err(StatusCode::BadInvalidArgument);
         }
-        {
-            let state = trace_lock!(self.subscriptions);
-            if !state.subscription_exists(self.subscription_id) {
-                builder_error!(
-                    self,
-                    "set_monitoring_mode, subscription id {} does not exist",
-                    self.subscription_id
-                );
-                return Err(StatusCode::BadSubscriptionIdInvalid);
-            }
-        }
         if self.monitored_item_ids.is_empty() {
             builder_error!(self, "set_monitoring_mode, called with no items to modify");
             return Err(StatusCode::BadNothingToDo);
         }
 
+        let num_items = self.monitored_item_ids.len();
         let request = SetMonitoringModeRequest {
             request_header: self.header.header,
             subscription_id: self.subscription_id,
             monitoring_mode: self.monitoring_mode,
-            monitored_item_ids: Some(self.monitored_item_ids.clone()),
+            monitored_item_ids: Some(self.monitored_item_ids),
         };
         let response = channel.send(request, self.header.timeout).await?;
         if let ResponseMessage::SetMonitoringMode(response) = response {
@@ -1106,29 +1149,14 @@ impl UARequest for SetMonitoringMode<'_> {
                 builder_error!(self, "set_monitoring_mode, got empty response");
                 return Err(StatusCode::BadUnexpectedError);
             };
-            if results.len() != self.monitored_item_ids.len() {
+            if results.len() != num_items {
                 builder_error!(
                     self,
                     "set_monitoring_mode, unexpected number of results. Expected {}, got {}",
-                    self.monitored_item_ids.len(),
+                    num_items,
                     results.len()
                 );
                 return Err(StatusCode::BadUnexpectedError);
-            }
-            let ok_ids: Vec<_> = self
-                .monitored_item_ids
-                .iter()
-                .zip(results.iter())
-                .filter(|(_, s)| s.is_good())
-                .map(|(v, _)| *v)
-                .collect();
-            {
-                let mut subscription_state = trace_lock!(self.subscriptions);
-                subscription_state.set_monitoring_mode(
-                    self.subscription_id,
-                    &ok_ids,
-                    self.monitoring_mode,
-                );
             }
 
             Ok(*response)
@@ -1145,27 +1173,25 @@ impl UARequest for SetMonitoringMode<'_> {
 /// Note that `items_to_remove` is applied before `items_to_add`.
 ///
 /// See OPC UA Part 4 - Services 5.12.5 for complete description of the service and error responses.
-pub struct SetTriggering<'a> {
+pub struct SetTriggering {
     subscription_id: u32,
     triggering_item_id: u32,
     links_to_add: Vec<u32>,
     links_to_remove: Vec<u32>,
-    subscriptions: &'a Mutex<SubscriptionState>,
 
     header: RequestHeaderBuilder,
 }
 
-builder_base!(SetTriggering<'a>);
+builder_base!(SetTriggering);
 
-impl<'a> SetTriggering<'a> {
+impl SetTriggering {
     /// Construct a new call to the `SetTriggering` service.
-    pub fn new(subscription_id: u32, triggering_item_id: u32, session: &'a Session) -> Self {
+    pub fn new(subscription_id: u32, triggering_item_id: u32, session: &Session) -> Self {
         Self {
             subscription_id,
             triggering_item_id,
             links_to_add: Vec::new(),
             links_to_remove: Vec::new(),
-            subscriptions: session.subscription_state(),
             header: RequestHeaderBuilder::new_from_session(session),
         }
     }
@@ -1174,7 +1200,6 @@ impl<'a> SetTriggering<'a> {
     pub fn new_manual(
         subscription_id: u32,
         triggering_item_id: u32,
-        subscriptions: &'a Mutex<SubscriptionState>,
         session_id: u32,
         timeout: Duration,
         auth_token: NodeId,
@@ -1185,7 +1210,6 @@ impl<'a> SetTriggering<'a> {
             triggering_item_id,
             links_to_add: Vec::new(),
             links_to_remove: Vec::new(),
-            subscriptions,
             header: RequestHeaderBuilder::new(session_id, timeout, auth_token, request_handle),
         }
     }
@@ -1215,7 +1239,7 @@ impl<'a> SetTriggering<'a> {
     }
 }
 
-impl UARequest for SetTriggering<'_> {
+impl UARequest for SetTriggering {
     type Out = SetTriggeringResponse;
 
     async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
@@ -1233,17 +1257,7 @@ impl UARequest for SetTriggering<'_> {
             builder_error!(self, "set_triggering, subscription id 0 is invalid");
             return Err(StatusCode::BadInvalidArgument);
         }
-        {
-            let state = trace_lock!(self.subscriptions);
-            if !state.subscription_exists(self.subscription_id) {
-                builder_error!(
-                    self,
-                    "set_triggering, subscription id {} does not exist",
-                    self.subscription_id
-                );
-                return Err(StatusCode::BadSubscriptionIdInvalid);
-            }
-        }
+
         if self.links_to_add.is_empty() && self.links_to_remove.is_empty() {
             builder_error!(self, "set_triggering, called with nothing to add or remove");
             return Err(StatusCode::BadNothingToDo);
@@ -1286,27 +1300,7 @@ impl UARequest for SetTriggering<'_> {
                 );
                 return Err(StatusCode::BadUnexpectedError);
             }
-            let ok_adds = to_add_res
-                .iter()
-                .zip(self.links_to_add)
-                .filter(|(s, _)| s.is_good())
-                .map(|(_, v)| v)
-                .collect::<Vec<_>>();
-            let ok_removes = to_remove_res
-                .iter()
-                .zip(self.links_to_remove)
-                .filter(|(s, _)| s.is_good())
-                .map(|(_, v)| v)
-                .collect::<Vec<_>>();
 
-            // Update client side state
-            let mut subscription_state = trace_lock!(self.subscriptions);
-            subscription_state.set_triggering(
-                self.subscription_id,
-                self.triggering_item_id,
-                &ok_adds,
-                &ok_removes,
-            );
             Ok(*response)
         } else {
             builder_error!(self, "set_triggering failed {:?}", response);
@@ -1319,23 +1313,21 @@ impl UARequest for SetTriggering<'_> {
 /// Deletes monitored items from a subscription by sending a [`DeleteMonitoredItemsRequest`] to the server.
 ///
 /// See OPC UA Part 4 - Services 5.12.6 for complete description of the service and error responses.
-pub struct DeleteMonitoredItems<'a> {
+pub struct DeleteMonitoredItems {
     subscription_id: u32,
     items_to_delete: Vec<u32>,
-    subscriptions: &'a Mutex<SubscriptionState>,
 
     header: RequestHeaderBuilder,
 }
 
-builder_base!(DeleteMonitoredItems<'a>);
+builder_base!(DeleteMonitoredItems);
 
-impl<'a> DeleteMonitoredItems<'a> {
+impl DeleteMonitoredItems {
     /// Construct a new call to the `DeleteMonitoredItems` service.
-    pub fn new(subscription_id: u32, session: &'a Session) -> Self {
+    pub fn new(subscription_id: u32, session: &Session) -> Self {
         Self {
             subscription_id,
             items_to_delete: Vec::new(),
-            subscriptions: session.subscription_state(),
             header: RequestHeaderBuilder::new_from_session(session),
         }
     }
@@ -1343,7 +1335,6 @@ impl<'a> DeleteMonitoredItems<'a> {
     /// Construct a new call to the `DeleteMonitoredItems` service, setting header parameters manually.
     pub fn new_manual(
         subscription_id: u32,
-        subscriptions: &'a Mutex<SubscriptionState>,
         session_id: u32,
         timeout: Duration,
         auth_token: NodeId,
@@ -1352,7 +1343,6 @@ impl<'a> DeleteMonitoredItems<'a> {
         Self {
             subscription_id,
             items_to_delete: Vec::new(),
-            subscriptions,
             header: RequestHeaderBuilder::new(session_id, timeout, auth_token, request_handle),
         }
     }
@@ -1370,7 +1360,7 @@ impl<'a> DeleteMonitoredItems<'a> {
     }
 }
 
-impl UARequest for DeleteMonitoredItems<'_> {
+impl UARequest for DeleteMonitoredItems {
     type Out = DeleteMonitoredItemsResponse;
 
     async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
@@ -1386,17 +1376,6 @@ impl UARequest for DeleteMonitoredItems<'_> {
         if self.subscription_id == 0 {
             builder_error!(self, "delete_monitored_items, subscription id 0 is invalid");
             return Err(StatusCode::BadInvalidArgument);
-        }
-        {
-            let state = trace_lock!(self.subscriptions);
-            if !state.subscription_exists(self.subscription_id) {
-                builder_error!(
-                    self,
-                    "delete_monitored_items, subscription id {} does not exist",
-                    self.subscription_id
-                );
-                return Err(StatusCode::BadSubscriptionIdInvalid);
-            }
         }
         if self.items_to_delete.is_empty() {
             builder_error!(
@@ -1414,11 +1393,6 @@ impl UARequest for DeleteMonitoredItems<'_> {
         let response = channel.send(request, self.header.timeout).await?;
         if let ResponseMessage::DeleteMonitoredItems(response) = response {
             process_service_result(&response.response_header)?;
-            if response.results.is_some() {
-                let mut subscription_state = trace_lock!(self.subscriptions);
-                subscription_state
-                    .delete_monitored_items(self.subscription_id, &self.items_to_delete);
-            }
             builder_debug!(self, "delete_monitored_items, success");
             Ok(*response)
         } else {
@@ -1450,7 +1424,7 @@ impl Session {
         priority: u8,
         callback: Box<dyn OnSubscriptionNotification>,
     ) -> Result<u32, StatusCode> {
-        let response = CreateSubscription::new(self, callback)
+        let response = CreateSubscription::new(self)
             .publishing_interval(publishing_interval)
             .max_lifetime_count(lifetime_count)
             .max_keep_alive_count(max_keep_alive_count)
@@ -1459,6 +1433,21 @@ impl Session {
             .priority(priority)
             .send(&self.channel)
             .await?;
+
+        let subscription = Subscription::new(
+            response.subscription_id,
+            Duration::from_millis(response.revised_publishing_interval.max(0.0).floor() as u64),
+            response.revised_lifetime_count,
+            response.revised_max_keep_alive_count,
+            max_notifications_per_publish,
+            priority,
+            publishing_enabled,
+            callback,
+        );
+        {
+            let mut subscription_state = trace_lock!(self.subscription_state);
+            subscription_state.add_subscription(subscription);
+        }
 
         self.trigger_publish_now();
 
@@ -1586,7 +1575,7 @@ impl Session {
             return Err(StatusCode::BadInvalidArgument);
         }
 
-        ModifySubscription::new(subscription_id, self)
+        let response = ModifySubscription::new(subscription_id, self)
             .publishing_interval(publishing_interval)
             .max_lifetime_count(lifetime_count)
             .max_keep_alive_count(max_keep_alive_count)
@@ -1594,6 +1583,18 @@ impl Session {
             .priority(priority)
             .send(&self.channel)
             .await?;
+
+        {
+            let mut subscription_state = trace_lock!(self.subscription_state);
+            subscription_state.modify_subscription(
+                subscription_id,
+                Duration::from_millis(response.revised_publishing_interval.max(0.0).floor() as u64),
+                response.revised_lifetime_count,
+                response.revised_max_keep_alive_count,
+                max_notifications_per_publish,
+                priority,
+            );
+        }
 
         Ok(())
     }
@@ -1618,16 +1619,29 @@ impl Session {
         subscription_ids: &[u32],
         publishing_enabled: bool,
     ) -> Result<Vec<StatusCode>, StatusCode> {
-        let r = SetPublishingMode::new(publishing_enabled, self)
+        let results = SetPublishingMode::new(publishing_enabled, self)
             .subscription_ids(subscription_ids.to_vec())
             .send(&self.channel)
             .await?
             .results
             .unwrap_or_default();
+
+        {
+            // Update all subscriptions where the returned status is good.
+            let mut subscription_state = trace_lock!(self.subscription_state);
+            let ids = subscription_ids
+                .iter()
+                .zip(results.iter())
+                .filter(|(_, s)| s.is_good())
+                .map(|(v, _)| *v)
+                .collect::<Vec<_>>();
+            subscription_state.set_publishing_mode(&ids, publishing_enabled);
+        }
+
         if publishing_enabled {
             self.trigger_publish_now();
         }
-        Ok(r)
+        Ok(results)
     }
 
     /// Transfers Subscriptions and their MonitoredItems from one Session to another. For example,
@@ -1722,12 +1736,21 @@ impl Session {
         &self,
         subscription_ids: &[u32],
     ) -> Result<Vec<StatusCode>, StatusCode> {
-        Ok(DeleteSubscriptions::new(self)
+        let result = DeleteSubscriptions::new(self)
             .subscription_ids(subscription_ids.to_vec())
             .send(&self.channel)
             .await?
             .results
-            .unwrap_or_default())
+            .unwrap_or_default();
+        {
+            // Clear out deleted subscriptions, assuming the delete worked
+            let mut subscription_state = trace_lock!(self.subscription_state);
+            for id in subscription_ids {
+                subscription_state.delete_subscription(*id);
+            }
+        }
+
+        Ok(result)
     }
 
     /// Creates monitored items on a subscription by sending a [`CreateMonitoredItemsRequest`] to the server.
@@ -1751,14 +1774,44 @@ impl Session {
         subscription_id: u32,
         timestamps_to_return: TimestampsToReturn,
         items_to_create: Vec<MonitoredItemCreateRequest>,
-    ) -> Result<Vec<MonitoredItemCreateResult>, StatusCode> {
-        Ok(CreateMonitoredItems::new(subscription_id, self)
+    ) -> Result<Vec<CreatedMonitoredItem>, StatusCode> {
+        {
+            let state = trace_lock!(self.subscription_state);
+            if !state.subscription_exists(subscription_id) {
+                session_error!(
+                    self,
+                    "create_monitored_items, subscription id {} does not exist",
+                    subscription_id
+                );
+                return Err(StatusCode::BadSubscriptionIdInvalid);
+            }
+        }
+        let result = CreateMonitoredItems::new(subscription_id, self)
             .items_to_create(items_to_create)
             .timestamps_to_return(timestamps_to_return)
             .send(&self.channel)
-            .await?
+            .await?;
+        // Set the items in our internal state
+        let items_to_create = result
             .results
-            .unwrap_or_default())
+            .iter()
+            .map(|item| CreateMonitoredItem {
+                id: item.result.monitored_item_id,
+                client_handle: item.requested_parameters.client_handle,
+                discard_oldest: item.requested_parameters.discard_oldest,
+                item_to_monitor: item.item_to_monitor.clone(),
+                monitoring_mode: item.monitoring_mode,
+                queue_size: item.result.revised_queue_size,
+                sampling_interval: item.result.revised_sampling_interval,
+                filter: item.requested_parameters.filter.clone(),
+            })
+            .collect::<Vec<CreateMonitoredItem>>();
+        {
+            let mut subscription_state = trace_lock!(self.subscription_state);
+            subscription_state.insert_monitored_items(subscription_id, items_to_create);
+        }
+
+        Ok(result.results)
     }
 
     /// Modifies monitored items on a subscription by sending a [`ModifyMonitoredItemsRequest`] to the server.
@@ -1783,13 +1836,44 @@ impl Session {
         timestamps_to_return: TimestampsToReturn,
         items_to_modify: &[MonitoredItemModifyRequest],
     ) -> Result<Vec<MonitoredItemModifyResult>, StatusCode> {
-        Ok(ModifyMonitoredItems::new(subscription_id, self)
+        {
+            let state = trace_lock!(self.subscription_state);
+            if !state.subscription_exists(subscription_id) {
+                session_error!(
+                    self,
+                    "modify_monitored_items, subscription id {} does not exist",
+                    subscription_id
+                );
+                return Err(StatusCode::BadSubscriptionIdInvalid);
+            }
+        }
+        let ids = items_to_modify
+            .iter()
+            .map(|i| i.monitored_item_id)
+            .collect::<Vec<_>>();
+        let results = ModifyMonitoredItems::new(subscription_id, self)
             .timestamps_to_return(timestamps_to_return)
             .items_to_modify(items_to_modify.to_vec())
             .send(&self.channel)
             .await?
             .results
-            .unwrap_or_default())
+            .unwrap_or_default();
+
+        let items_to_modify = ids
+            .iter()
+            .zip(results.iter())
+            .map(|(id, r)| ModifyMonitoredItem {
+                id: *id,
+                queue_size: r.revised_queue_size,
+                sampling_interval: r.revised_sampling_interval,
+            })
+            .collect::<Vec<ModifyMonitoredItem>>();
+        {
+            let mut subscription_state = trace_lock!(self.subscription_state);
+            subscription_state.modify_monitored_items(subscription_id, &items_to_modify);
+        }
+
+        Ok(results)
     }
 
     /// Sets the monitoring mode on one or more monitored items by sending a [`SetMonitoringModeRequest`]
@@ -1814,14 +1898,36 @@ impl Session {
         monitoring_mode: MonitoringMode,
         monitored_item_ids: &[u32],
     ) -> Result<Vec<StatusCode>, StatusCode> {
-        Ok(
-            SetMonitoringMode::new(subscription_id, monitoring_mode, self)
-                .monitored_item_ids(monitored_item_ids.to_vec())
-                .send(&self.channel)
-                .await?
-                .results
-                .unwrap_or_default(),
-        )
+        {
+            let state = trace_lock!(self.subscription_state);
+            if !state.subscription_exists(subscription_id) {
+                session_error!(
+                    self,
+                    "set_monitoring_mode, subscription id {} does not exist",
+                    subscription_id
+                );
+                return Err(StatusCode::BadSubscriptionIdInvalid);
+            }
+        }
+        let results = SetMonitoringMode::new(subscription_id, monitoring_mode, self)
+            .monitored_item_ids(monitored_item_ids.to_vec())
+            .send(&self.channel)
+            .await?
+            .results
+            .unwrap_or_default();
+
+        let ok_ids: Vec<_> = monitored_item_ids
+            .iter()
+            .zip(results.iter())
+            .filter(|(_, s)| s.is_good())
+            .map(|(v, _)| *v)
+            .collect();
+        {
+            let mut subscription_state = trace_lock!(self.subscription_state);
+            subscription_state.set_monitoring_mode(subscription_id, &ok_ids, monitoring_mode);
+        }
+
+        Ok(results)
     }
 
     /// Sets a monitored item so it becomes the trigger that causes other monitored items to send
@@ -1849,11 +1955,49 @@ impl Session {
         links_to_add: &[u32],
         links_to_remove: &[u32],
     ) -> Result<(Option<Vec<StatusCode>>, Option<Vec<StatusCode>>), StatusCode> {
+        {
+            let state = trace_lock!(self.subscription_state);
+            if !state.subscription_exists(subscription_id) {
+                session_error!(
+                    self,
+                    "set_triggering, subscription id {} does not exist",
+                    subscription_id
+                );
+                return Err(StatusCode::BadSubscriptionIdInvalid);
+            }
+        }
         let response = SetTriggering::new(subscription_id, triggering_item_id, self)
             .links_to_add(links_to_add.to_vec())
             .links_to_remove(links_to_remove.to_vec())
             .send(&self.channel)
             .await?;
+
+        let to_add_res = response.add_results.as_deref().unwrap_or(&[]);
+        let to_remove_res = response.remove_results.as_deref().unwrap_or(&[]);
+
+        let ok_adds = to_add_res
+            .iter()
+            .zip(links_to_add)
+            .filter(|(s, _)| s.is_good())
+            .map(|(_, v)| v)
+            .copied()
+            .collect::<Vec<_>>();
+        let ok_removes = to_remove_res
+            .iter()
+            .zip(links_to_remove)
+            .filter(|(s, _)| s.is_good())
+            .map(|(_, v)| v)
+            .copied()
+            .collect::<Vec<_>>();
+
+        // Update client side state
+        let mut subscription_state = trace_lock!(self.subscription_state);
+        subscription_state.set_triggering(
+            subscription_id,
+            triggering_item_id,
+            &ok_adds,
+            &ok_removes,
+        );
         Ok((response.add_results, response.remove_results))
     }
 
@@ -1877,12 +2021,26 @@ impl Session {
         subscription_id: u32,
         items_to_delete: &[u32],
     ) -> Result<Vec<StatusCode>, StatusCode> {
-        Ok(DeleteMonitoredItems::new(subscription_id, self)
+        {
+            let state = trace_lock!(self.subscription_state);
+            if !state.subscription_exists(subscription_id) {
+                session_error!(
+                    self,
+                    "delete_monitored_items, subscription id {} does not exist",
+                    subscription_id
+                );
+                return Err(StatusCode::BadSubscriptionIdInvalid);
+            }
+        }
+        let response = DeleteMonitoredItems::new(subscription_id, self)
             .items_to_delete(items_to_delete.to_vec())
             .send(&self.channel)
             .await?
             .results
-            .unwrap_or_default())
+            .unwrap_or_default();
+        let mut subscription_state = trace_lock!(self.subscription_state);
+        subscription_state.delete_monitored_items(subscription_id, items_to_delete);
+        Ok(response)
     }
 
     pub(crate) fn next_publish_time(&self, set_last_publish: bool) -> Option<Instant> {
@@ -1906,50 +2064,24 @@ impl Session {
             }
         };
 
-        if enabled!(tracing::Level::DEBUG) {
-            let sequence_nrs: Vec<u32> = acks
-                .iter()
-                .flatten()
-                .map(|ack| ack.sequence_number)
-                .collect();
-            debug!(
-                "publish is acknowledging subscription acknowledgements with sequence nrs {:?}",
-                sequence_nrs
-            );
-        }
-
-        let request = PublishRequest {
-            request_header: self.channel.make_request_header(self.publish_timeout),
-            subscription_acknowledgements: acks.clone(),
-        };
-
-        let response = self.channel.send(request, self.publish_timeout).await;
-
-        let err_status = match response {
-            Ok(ResponseMessage::Publish(r)) => {
-                session_debug!(self, "PublishResponse");
-
-                {
-                    let mut subscription_state = trace_lock!(self.subscription_state);
-                    subscription_state
-                        .handle_notification(r.subscription_id, r.notification_message);
-                }
-
-                return Ok(r.more_notifications);
-            }
-            Err(e) => e,
+        match Publish::new(self)
+            .acks(acks.clone().unwrap_or_default())
+            .send(&self.channel)
+            .await
+        {
             Ok(r) => {
-                session_error!(self, "publish failed {:?}", r);
-                process_unexpected_response(r)
+                let mut subscription_state = trace_lock!(self.subscription_state);
+                subscription_state.handle_notification(r.subscription_id, r.notification_message);
+                Ok(r.more_notifications)
             }
-        };
-
-        if let Some(acks) = acks {
-            let mut subscription_state = trace_lock!(self.subscription_state);
-            subscription_state.re_queue_acknowledgements(acks);
+            Err(e) => {
+                if let Some(acks) = acks {
+                    let mut subscription_state = trace_lock!(self.subscription_state);
+                    subscription_state.re_queue_acknowledgements(acks);
+                }
+                Err(e)
+            }
         }
-
-        Err(err_status)
     }
 
     /// Send a request to re-publish an unacknowledged notification message from the server.
@@ -1971,26 +2103,16 @@ impl Session {
         subscription_id: u32,
         sequence_number: u32,
     ) -> Result<NotificationMessage, StatusCode> {
-        let request = RepublishRequest {
-            request_header: self.channel.make_request_header(self.request_timeout),
-            subscription_id,
-            retransmit_sequence_number: sequence_number,
-        };
+        let res = Republish::new(subscription_id, sequence_number, self)
+            .send(&self.channel)
+            .await?;
 
-        let response = self.channel.send(request, self.request_timeout).await?;
-
-        if let ResponseMessage::Republish(response) = response {
-            process_service_result(&response.response_header)?;
-            session_debug!(self, "republish, success");
-            {
-                let mut lck = trace_lock!(self.subscription_state);
-                lck.add_acknowledgement(subscription_id, sequence_number);
-            }
-            Ok(response.notification_message)
-        } else {
-            session_error!(self, "republish failed {:?}", response);
-            Err(process_unexpected_response(response))
+        {
+            let mut lck = trace_lock!(self.subscription_state);
+            lck.add_acknowledgement(subscription_id, sequence_number);
         }
+
+        Ok(res.notification_message)
     }
 
     /// This code attempts to take the existing subscriptions created by a previous session and

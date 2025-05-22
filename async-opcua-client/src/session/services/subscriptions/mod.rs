@@ -17,8 +17,8 @@ use opcua_types::{
 
 pub use service::{
     CreateMonitoredItems, CreateSubscription, DeleteMonitoredItems, DeleteSubscriptions,
-    ModifyMonitoredItems, ModifySubscription, SetMonitoringMode, SetPublishingMode, SetTriggering,
-    TransferSubscriptions,
+    ModifyMonitoredItems, ModifySubscription, Publish, Republish, SetMonitoringMode,
+    SetPublishingMode, SetTriggering, TransferSubscriptions,
 };
 
 pub(crate) struct CreateMonitoredItem {
@@ -347,6 +347,11 @@ impl Subscription {
     pub fn insert_existing_monitored_item(&mut self, item: MonitoredItem) {
         let client_handle = item.client_handle();
         let monitored_item_id = item.id();
+        tracing::debug!(
+            "Inserting monitored item {} with client handle {}",
+            monitored_item_id,
+            client_handle
+        );
         self.monitored_items.insert(monitored_item_id, item);
         self.client_handles.insert(client_handle, monitored_item_id);
     }
@@ -438,6 +443,8 @@ impl Subscription {
 
                         if let Some(item) = item {
                             self.callback.on_data_value(notif.value, item);
+                        } else {
+                            tracing::warn!("Received notification for unknown monitored item {}", notif.client_handle);
                         }
                     }
                 },

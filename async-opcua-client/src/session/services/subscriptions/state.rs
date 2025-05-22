@@ -216,6 +216,11 @@ impl SubscriptionState {
         self.add_acknowledgement(subscription_id, notification.sequence_number);
         if let Some(sub) = self.subscriptions.get_mut(&subscription_id) {
             sub.on_notification(notification);
+        } else {
+            tracing::warn!(
+                "Received notification for unknown subscription {}",
+                subscription_id
+            );
         }
     }
 

@@ -11,7 +11,12 @@ use opcua::{
         StatusCode, TimestampsToReturn, VariableTypeId, Variant,
     },
 };
-use opcua_client::{services::TransferSubscriptions, IdentityToken, Subscription, UARequest};
+use opcua_client::{
+    services::{
+        CreateMonitoredItems, CreateSubscription, Publish, Republish, TransferSubscriptions,
+    },
+    IdentityToken, Subscription, UARequest,
+};
 use opcua_crypto::SecurityPolicy;
 use opcua_types::{
     DataChangeFilter, DataChangeTrigger, DeadbandType, ExtensionObject, MessageSecurityMode, Range,
@@ -71,7 +76,7 @@ async fn simple_subscriptions() {
         .unwrap();
     assert_eq!(res.len(), 1);
     let it = &res[0];
-    assert_eq!(it.status_code, StatusCode::Good);
+    assert_eq!(it.result.status_code, StatusCode::Good);
 
     // We should quickly get a data value, this is due to the initial queued publish request.
     let (r, v) = timeout(Duration::from_millis(500), data.recv())
@@ -175,7 +180,7 @@ async fn many_subscriptions() {
         .unwrap();
 
     for r in res {
-        assert_eq!(r.status_code, StatusCode::Good);
+        assert_eq!(r.result.status_code, StatusCode::Good);
     }
 
     // Should get 1000 notifications, note that since the max notifications per publish is 100,
@@ -247,8 +252,8 @@ async fn modify_subscription() {
         .unwrap();
     assert_eq!(res.len(), 1);
     let it = &res[0];
-    assert_eq!(it.status_code, StatusCode::Good);
-    let monitored_item_id = it.monitored_item_id;
+    assert_eq!(it.result.status_code, StatusCode::Good);
+    let monitored_item_id = it.result.monitored_item_id;
 
     let session_id = session.server_session_id();
     println!("{session_id:?}");
@@ -512,7 +517,7 @@ async fn transfer_subscriptions() {
         .unwrap();
     assert_eq!(res.len(), 1);
     let it = &res[0];
-    assert_eq!(it.status_code, StatusCode::Good);
+    assert_eq!(it.result.status_code, StatusCode::Good);
 
     // We should quickly get a data value, this is due to the initial queued publish request.
     let (r, v) = timeout(Duration::from_millis(500), data.recv())
@@ -716,9 +721,9 @@ async fn test_data_change_filters() {
         .unwrap();
     assert_eq!(res.len(), 2);
     let it = &res[0];
-    assert_eq!(it.status_code, StatusCode::Good);
+    assert_eq!(it.result.status_code, StatusCode::Good);
     let it = &res[1];
-    assert_eq!(it.status_code, StatusCode::Good);
+    assert_eq!(it.result.status_code, StatusCode::Good);
 
     // We should quickly get two data values, this is due to the initial queued publish request.
     let (r1, v1) = timeout(Duration::from_millis(500), data.recv())
@@ -789,6 +794,96 @@ async fn test_data_change_filters() {
         .unwrap();
     assert_eq!(r.node_id, id2);
     assert_eq!(v.value.unwrap(), Variant::Double(9.0));
+}
+
+#[tokio::test]
+async fn test_manual_republish() {
+    let (tester, nm, session) = setup().await;
+
+    let id = nm.inner().next_node_id();
+    nm.inner().add_node(
+        nm.address_space(),
+        tester.handle.type_tree(),
+        VariableBuilder::new(&id, "TestVar1", "TestVar1")
+            .value(-1)
+            .data_type(DataTypeId::Int32)
+            .access_level(AccessLevel::CURRENT_READ)
+            .user_access_level(AccessLevel::CURRENT_READ)
+            .build()
+            .into(),
+        &ObjectId::ObjectsFolder.into(),
+        &ReferenceTypeId::Organizes.into(),
+        Some(&VariableTypeId::BaseDataVariableType.into()),
+        Vec::new(),
+    );
+
+    // Create a subscription
+    let res = CreateSubscription::new(&session)
+        .publishing_interval(Duration::from_millis(100))
+        .max_lifetime_count(100)
+        .max_keep_alive_count(20)
+        .max_notifications_per_publish(1000)
+        .priority(0)
+        .publishing_enabled(true)
+        .send(session.channel())
+        .await
+        .unwrap();
+    let sub_id = res.subscription_id;
+
+    let res = CreateMonitoredItems::new(sub_id, &session)
+        .item(MonitoredItemCreateRequest {
+            item_to_monitor: ReadValueId {
+                node_id: id.clone(),
+                attribute_id: AttributeId::Value as u32,
+                ..Default::default()
+            },
+            monitoring_mode: opcua::types::MonitoringMode::Reporting,
+            requested_parameters: MonitoringParameters {
+                sampling_interval: 0.0,
+                queue_size: 10,
+                discard_oldest: true,
+                ..Default::default()
+            },
+        })
+        .timestamps_to_return(TimestampsToReturn::Both)
+        .send(session.channel())
+        .await
+        .unwrap();
+
+    assert_eq!(res.results.len(), 1);
+    let it = &res.results[0];
+    assert_eq!(it.result.status_code, StatusCode::Good);
+
+    // Send a publish request, this should return a notification.
+    let pubres = Publish::new(&session)
+        .timeout(Duration::from_millis(500))
+        .send(session.channel())
+        .await
+        .unwrap();
+
+    assert_eq!(pubres.subscription_id, sub_id);
+    let sequence_number = pubres.notification_message.sequence_number;
+    let notifs = pubres.notification_message.into_notifications().unwrap().0;
+    assert_eq!(notifs.len(), 1);
+    let notif = &notifs[0];
+    let items = notif.monitored_items.as_ref().unwrap();
+    assert_eq!(items.len(), 1);
+    let value = items[0].value.value.as_ref().unwrap();
+    assert_eq!(value, &Variant::Int32(-1));
+
+    // Then, request a re-publish of the same notification.
+    let res = Republish::new(sub_id, sequence_number, &session)
+        .timeout(Duration::from_millis(500))
+        .send(session.channel())
+        .await
+        .unwrap();
+    let notifs = res.notification_message.into_notifications().unwrap().0;
+    assert_eq!(notifs.len(), 1);
+    let notif = &notifs[0];
+    let items = notif.monitored_items.as_ref().unwrap();
+    assert_eq!(items.len(), 1);
+    let value = items[0].value.value.as_ref().unwrap();
+    assert_eq!(value, &Variant::Int32(-1));
 }
 
 // TODO: Add more detailed high level tests on subscriptions.

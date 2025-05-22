@@ -98,7 +98,6 @@ impl ParsedDataChangeFilter {
                         .is_changed_option(v1.value.as_ref(), v2.value.as_ref())
             }
             DataChangeTrigger::StatusValueTimestamp => {
-                println!("Statusvaluetimestamp");
                 v1.status != v2.status
                     || v1.source_timestamp != v2.source_timestamp
                     || v1.source_picoseconds != v2.source_picoseconds

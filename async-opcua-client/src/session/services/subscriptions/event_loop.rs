@@ -29,7 +29,10 @@ pub(crate) struct SubscriptionEventLoop {
     last_external_trigger: Instant,
     // This is true if the client has received BadTooManyPublishRequests
     // and is waiting for a response before making further requests.
-    is_waiting_for_response: bool,
+    waiting_for_response: bool,
+    // This is true if the client has received a no_subscriptions response,
+    // and is waiting for a manual trigger or successful response before resuming publishing.
+    no_active_subscription: bool,
 }
 
 impl SubscriptionEventLoop {
@@ -50,7 +53,8 @@ impl SubscriptionEventLoop {
             last_external_trigger,
             trigger_publish_recv,
             session,
-            is_waiting_for_response: false,
+            waiting_for_response: false,
+            no_active_subscription: false,
         }
     }
 
@@ -70,7 +74,7 @@ impl SubscriptionEventLoop {
                     // if there are no active subscriptions. In this case, simply return the
                     // non-terminating future.
                     let next_tick_fut = if let Some(next) = next {
-                        if slf.is_waiting_for_response && !futures.is_empty() {
+                        if slf.waiting_for_response && !futures.is_empty() {
                             Either::Right(futures::future::pending::<()>())
                         } else {
                             Either::Left(tokio::time::sleep_until(next.into()))
@@ -91,7 +95,7 @@ impl SubscriptionEventLoop {
                         // Both internal ticks and external triggers result in publish requests.
                         v = recv.wait_for(|i| i > &slf.last_external_trigger) => {
                             if let Ok(v) = v {
-                                if !slf.is_waiting_for_response {
+                                if !slf.waiting_for_response {
                                     debug!("Sending publish due to external trigger");
                                     // On an external trigger, we always publish.
                                     futures.push(slf.static_publish());
@@ -101,17 +105,18 @@ impl SubscriptionEventLoop {
                                     debug!("Skipping publish due BadTooManyPublishRequests");
                                 }
                             }
+                            slf.no_active_subscription = false;
                         }
                         _ = next_tick_fut => {
                             // Avoid publishing if there are too many inflight publish requests.
-                            if futures.len()
+                            if !slf.no_active_subscription && futures.len()
                                 < slf
                                     .session
                                     .publish_limits_watch_rx
                                     .borrow()
                                     .max_publish_requests
                             {
-                                if !slf.is_waiting_for_response {
+                                if !slf.waiting_for_response {
                                     debug!("Sending publish due to internal tick");
                                     futures.push(slf.static_publish());
                                 } else {
@@ -131,7 +136,7 @@ impl SubscriptionEventLoop {
                                                 .borrow()
                                                 .min_publish_requests
                                     {
-                                        if !slf.is_waiting_for_response {
+                                        if !slf.waiting_for_response {
                                             debug!("Sending publish after receiving response");
                                             futures.push(slf.static_publish());
                                             // Set the last publish time to to avoid a buildup
@@ -142,7 +147,8 @@ impl SubscriptionEventLoop {
                                             debug!("Skipping publish due BadTooManyPublishRequests");
                                         }
                                     }
-                                    slf.is_waiting_for_response = false;
+                                    slf.waiting_for_response = false;
+                                    slf.no_active_subscription = false;
                                     break SubscriptionActivity::Publish
                                 }
                                 Some(Err(e)) => {
@@ -155,23 +161,20 @@ impl SubscriptionEventLoop {
                                                 slf.session,
                                                 "Server returned BadTooManyPublishRequests, backing off",
                                             );
-                                            slf.is_waiting_for_response = true;
+                                            slf.waiting_for_response = true;
                                         }
                                         StatusCode::BadSessionClosed
                                         | StatusCode::BadSessionIdInvalid => {
                                             // If this happens we will probably eventually fail keep-alive, defer to that.
                                             session_error!(slf.session, "Publish response indicates session is dead");
                                         }
-                                        StatusCode::BadNoSubscription
-                                        | StatusCode::BadSubscriptionIdInvalid => {
-                                            // TODO: Maybe do something here? This could happen when
-                                            // subscriptions are in the process of being recreated.
-                                            // Make sure to avoid race conditions.
-                                            session_error!(
+                                        StatusCode::BadNoSubscription => {
+                                            session_debug!(
                                                 slf.session,
-                                                "Publish response indicates subscription is dead",
+                                                "Publish response indicates that there are no subscriptions"
                                             );
-                                        }
+                                            slf.no_active_subscription = true;
+                                        },
                                         _ => ()
                                     }
                                     break SubscriptionActivity::PublishFailed(e)

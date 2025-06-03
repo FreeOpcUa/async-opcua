@@ -77,10 +77,10 @@ pub struct SubscriptionLimits {
     /// The smallest of this and `max_pending_publish_requests` is used.
     #[serde(default = "defaults::max_publish_requests_per_subscription")]
     pub max_publish_requests_per_subscription: usize,
-    /// Specifies the minimum sampling interval for this server in seconds.
+    /// Specifies the minimum sampling interval for this server in milliseconds.
     #[serde(default = "defaults::min_sampling_interval_ms")]
     pub min_sampling_interval_ms: f64,
-    /// Specifies the minimum publishing interval for this server in seconds.
+    /// Specifies the minimum publishing interval for this server in milliseconds.
     #[serde(default = "defaults::min_publishing_interval_ms")]
     pub min_publishing_interval_ms: f64,
     /// Maximum value of `KeepAliveCount`

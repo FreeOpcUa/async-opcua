@@ -414,7 +414,7 @@ impl BinaryDecodable for Variant {
                 })?;
             if encoding_mask & EncodingMask::ARRAY_DIMENSIONS_BIT != 0 {
                 if let Some(dimensions) = <Option<Vec<_>>>::decode(stream, ctx)? {
-                    if dimensions.iter().any(|d| *d == 0) {
+                    if dimensions.contains(&0) {
                         Err(Error::decoding(
                             "Invalid variant array dimensions, one or more dimensions are 0",
                         ))

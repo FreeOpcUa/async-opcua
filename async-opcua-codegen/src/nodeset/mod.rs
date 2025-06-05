@@ -69,14 +69,14 @@ pub fn make_type_dict(
             let (ty, name) = match it {
                 XsdFileItem::SimpleType(i) => {
                     if let Some(name) = i.name.clone() {
-                        (XsdFileType::Simple(i.clone()), name)
+                        (XsdFileType::Simple(Box::new(i.clone())), name)
                     } else {
                         continue;
                     }
                 }
                 XsdFileItem::ComplexType(i) => {
                     if let Some(name) = i.name.clone() {
-                        (XsdFileType::Complex(i.clone()), name)
+                        (XsdFileType::Complex(Box::new(i.clone())), name)
                     } else {
                         continue;
                     }

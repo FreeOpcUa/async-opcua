@@ -393,9 +393,7 @@ impl SessionController {
                 if let Some(ref server_uris) = request.server_uris {
                     if !server_uris.is_empty() {
                         // Filter the servers down
-                        servers.retain(|server| {
-                            server_uris.iter().any(|uri| *uri == server.application_uri)
-                        });
+                        servers.retain(|server| server_uris.contains(&server.application_uri));
                     }
                 }
 

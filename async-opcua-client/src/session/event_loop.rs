@@ -54,6 +54,9 @@ struct ConnectedState {
     disconnect_fut: BoxFuture<'static, Result<(), StatusCode>>,
 }
 
+// The way this is passed around, the Connected state being larger is
+// not generally a problem, since it should be the most common state by far.
+#[allow(clippy::large_enum_variant)]
 enum SessionEventLoopState {
     Connected(ConnectedState),
     Connecting(SessionConnector, ExponentialBackoff, Instant),

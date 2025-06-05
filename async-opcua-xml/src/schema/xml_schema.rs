@@ -437,16 +437,16 @@ impl<'input> XmlLoad<'input> for ComplexType {
 /// Contents of an element.
 pub enum ElementContents {
     /// A simple type.
-    SimpleType(SimpleType),
+    SimpleType(Box<SimpleType>),
     /// A complex type.
-    ComplexType(ComplexType),
+    ComplexType(Box<ComplexType>),
 }
 
 impl<'input> XmlLoad<'input> for Option<ElementContents> {
     fn load(node: &Node<'_, 'input>) -> Result<Self, XmlError> {
         Ok(Some(match node.tag_name().name() {
-            "simpleType" => ElementContents::SimpleType(XmlLoad::load(node)?),
-            "complexType" => ElementContents::ComplexType(XmlLoad::load(node)?),
+            "simpleType" => ElementContents::SimpleType(Box::new(XmlLoad::load(node)?)),
+            "complexType" => ElementContents::ComplexType(Box::new(XmlLoad::load(node)?)),
             _ => return Ok(None),
         }))
     }
@@ -624,7 +624,7 @@ impl<'input> XmlLoad<'input> for XmlSchema {
 /// Top level element in an XML schema when it is a type.
 pub enum XsdFileType {
     /// Simple type.
-    Simple(SimpleType),
+    Simple(Box<SimpleType>),
     /// Complex type.
-    Complex(ComplexType),
+    Complex(Box<ComplexType>),
 }

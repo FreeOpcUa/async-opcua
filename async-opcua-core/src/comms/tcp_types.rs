@@ -4,7 +4,7 @@
 
 //! Contains the implementation of various UA over TCP types.
 
-use std::io::{Cursor, Error, ErrorKind, Read, Result, Write};
+use std::io::{Cursor, Error, Read, Result, Write};
 
 use opcua_types::{
     process_decode_io_result, process_encode_io_result, read_u32, status_code::StatusCode,
@@ -120,14 +120,13 @@ impl MessageHeader {
         let mut header = [0u8; 4];
         stream.read_exact(&mut header)?;
         if MessageHeader::message_type(&header) == MessageType::Invalid {
-            return Err(Error::new(
-                ErrorKind::Other,
+            return Err(Error::other(
                 "Message type is not recognized, cannot read bytes",
             ));
         }
         let message_size = u32::decode(stream, decoding_options);
         if message_size.is_err() {
-            return Err(Error::new(ErrorKind::Other, "Cannot decode message_size"));
+            return Err(Error::other("Cannot decode message_size"));
         }
         let message_size = message_size.unwrap();
 
@@ -135,18 +134,12 @@ impl MessageHeader {
         let mut out = Cursor::new(Vec::with_capacity(message_size as usize));
         let result = out.write_all(&header);
         if result.is_err() {
-            return Err(Error::new(
-                ErrorKind::Other,
-                "Cannot write message header to buffer ",
-            ));
+            return Err(Error::other("Cannot write message header to buffer "));
         }
 
         let result = message_size.encode(&mut out);
         if result.is_err() {
-            return Err(Error::new(
-                ErrorKind::Other,
-                "Cannot write message size to buffer ",
-            ));
+            return Err(Error::other("Cannot write message size to buffer "));
         }
 
         let pos = out.position() as usize;

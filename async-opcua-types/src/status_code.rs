@@ -356,7 +356,7 @@ impl From<u32> for StatusCode {
 
 impl From<StatusCode> for std::io::Error {
     fn from(value: StatusCode) -> Self {
-        std::io::Error::new(std::io::ErrorKind::Other, format!("StatusCode {value}"))
+        std::io::Error::other(format!("StatusCode {value}"))
     }
 }
 

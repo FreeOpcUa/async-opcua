@@ -290,6 +290,7 @@ pub struct ClientConfig {
     pub(crate) min_publish_interval: Duration,
 
     /// Client performance settings
+    #[serde(default)]
     pub(crate) performance: Performance,
     /// Automatically recreate subscriptions on reconnect, by first calling
     /// `transfer_subscriptions`, then attempting to recreate subscriptions if that fails.

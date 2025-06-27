@@ -7,7 +7,10 @@ use crate::{
     session::{
         process_service_result, process_unexpected_response,
         request_builder::{builder_base, builder_debug, builder_error, RequestHeaderBuilder},
-        services::subscriptions::{CreateMonitoredItem, ModifyMonitoredItem, Subscription},
+        services::subscriptions::{
+            callbacks::OnSubscriptionNotificationCore, CreateMonitoredItem, ModifyMonitoredItem,
+            Subscription,
+        },
         session_debug, session_error, session_warn,
     },
     Session, UARequest,
@@ -28,7 +31,7 @@ use opcua_types::{
 };
 use tracing::enabled;
 
-use super::{state::SubscriptionState, OnSubscriptionNotification};
+use super::state::SubscriptionState;
 
 /// Create a subscription by sending a [`CreateSubscriptionRequest`] to the server.
 ///
@@ -1422,7 +1425,7 @@ impl Session {
         max_notifications_per_publish: u32,
         publishing_enabled: bool,
         priority: u8,
-        callback: Box<dyn OnSubscriptionNotification>,
+        callback: Box<dyn OnSubscriptionNotificationCore>,
     ) -> Result<u32, StatusCode> {
         let response = CreateSubscription::new(self)
             .publishing_interval(publishing_interval)
@@ -1504,7 +1507,7 @@ impl Session {
         max_notifications_per_publish: u32,
         priority: u8,
         publishing_enabled: bool,
-        callback: impl OnSubscriptionNotification + 'static,
+        callback: impl OnSubscriptionNotificationCore + 'static,
     ) -> Result<u32, StatusCode> {
         self.create_subscription_inner(
             publishing_interval,

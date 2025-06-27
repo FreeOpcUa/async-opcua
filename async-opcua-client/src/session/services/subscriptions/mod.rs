@@ -1,19 +1,21 @@
 pub(crate) mod event_loop;
 pub use event_loop::SubscriptionActivity;
 
+mod callbacks;
 mod service;
 pub(crate) mod state;
+
+pub use callbacks::{
+    DataChangeCallback, EventCallback, OnSubscriptionNotification, OnSubscriptionNotificationCore,
+    SubscriptionCallbacks,
+};
 
 use std::{
     collections::{BTreeSet, HashMap},
     time::Duration,
 };
 
-use opcua_types::{
-    match_extension_object_owned, DataChangeNotification, DataValue, EventNotificationList,
-    ExtensionObject, MonitoringMode, NotificationMessage, ReadValueId, StatusChangeNotification,
-    Variant,
-};
+use opcua_types::{ExtensionObject, MonitoringMode, NotificationMessage, ReadValueId};
 
 pub use service::{
     CreateMonitoredItems, CreateSubscription, DeleteMonitoredItems, DeleteSubscriptions,
@@ -36,121 +38,6 @@ pub(crate) struct ModifyMonitoredItem {
     pub id: u32,
     pub sampling_interval: f64,
     pub queue_size: u32,
-}
-
-/// A set of callbacks for notifications on a subscription.
-/// You may implement this on your own struct, or simply use [SubscriptionCallbacks]
-/// for a simple collection of closures.
-pub trait OnSubscriptionNotification: Send + Sync {
-    /// Called when a subscription changes state on the server.
-    #[allow(unused)]
-    fn on_subscription_status_change(&mut self, notification: StatusChangeNotification) {}
-
-    /// Called for each data value change.
-    #[allow(unused)]
-    fn on_data_value(&mut self, notification: DataValue, item: &MonitoredItem) {}
-
-    /// Called for each received event.
-    #[allow(unused)]
-    fn on_event(&mut self, event_fields: Option<Vec<Variant>>, item: &MonitoredItem) {}
-}
-
-type StatusChangeCallbackFun = dyn FnMut(StatusChangeNotification) + Send + Sync;
-type DataChangeCallbackFun = dyn FnMut(DataValue, &MonitoredItem) + Send + Sync;
-type EventCallbackFun = dyn FnMut(Option<Vec<Variant>>, &MonitoredItem) + Send + Sync;
-
-/// A convenient wrapper around a set of callback functions that implements [OnSubscriptionNotification]
-pub struct SubscriptionCallbacks {
-    status_change: Box<StatusChangeCallbackFun>,
-    data_value: Box<DataChangeCallbackFun>,
-    event: Box<EventCallbackFun>,
-}
-
-impl SubscriptionCallbacks {
-    /// Create a new subscription callback wrapper.
-    ///
-    /// # Arguments
-    ///
-    /// * `status_change` - Called when a subscription changes state on the server.
-    /// * `data_value` - Called for each received data value.
-    /// * `event` - Called for each received event.
-    pub fn new(
-        status_change: impl FnMut(StatusChangeNotification) + Send + Sync + 'static,
-        data_value: impl FnMut(DataValue, &MonitoredItem) + Send + Sync + 'static,
-        event: impl FnMut(Option<Vec<Variant>>, &MonitoredItem) + Send + Sync + 'static,
-    ) -> Self {
-        Self {
-            status_change: Box::new(status_change) as Box<StatusChangeCallbackFun>,
-            data_value: Box::new(data_value) as Box<DataChangeCallbackFun>,
-            event: Box::new(event) as Box<EventCallbackFun>,
-        }
-    }
-}
-
-impl OnSubscriptionNotification for SubscriptionCallbacks {
-    fn on_subscription_status_change(&mut self, notification: StatusChangeNotification) {
-        (self.status_change)(notification);
-    }
-
-    fn on_data_value(&mut self, notification: DataValue, item: &MonitoredItem) {
-        (self.data_value)(notification, item);
-    }
-
-    fn on_event(&mut self, event_fields: Option<Vec<Variant>>, item: &MonitoredItem) {
-        (self.event)(event_fields, item);
-    }
-}
-
-/// A wrapper around a data change callback that implements [OnSubscriptionNotification]
-pub struct DataChangeCallback {
-    data_value: Box<DataChangeCallbackFun>,
-}
-
-impl DataChangeCallback {
-    /// Create a new data change callback wrapper.
-    ///
-    /// # Arguments
-    ///
-    /// * `data_value` - Called for each received data value.
-    pub fn new(data_value: impl FnMut(DataValue, &MonitoredItem) + Send + Sync + 'static) -> Self {
-        Self {
-            data_value: Box::new(data_value)
-                as Box<dyn FnMut(DataValue, &MonitoredItem) + Send + Sync>,
-        }
-    }
-}
-
-impl OnSubscriptionNotification for DataChangeCallback {
-    fn on_data_value(&mut self, notification: DataValue, item: &MonitoredItem) {
-        (self.data_value)(notification, item);
-    }
-}
-
-/// A wrapper around an event callback that implements [OnSubscriptionNotification]
-pub struct EventCallback {
-    event: Box<EventCallbackFun>,
-}
-
-impl EventCallback {
-    /// Create a new event callback wrapper.
-    ///
-    /// # Arguments
-    ///
-    /// * `data_value` - Called for each received data value.
-    pub fn new(
-        event: impl FnMut(Option<Vec<Variant>>, &MonitoredItem) + Send + Sync + 'static,
-    ) -> Self {
-        Self {
-            event: Box::new(event)
-                as Box<dyn FnMut(Option<Vec<Variant>>, &MonitoredItem) + Send + Sync>,
-        }
-    }
-}
-
-impl OnSubscriptionNotification for EventCallback {
-    fn on_event(&mut self, event_fields: Option<Vec<Variant>>, item: &MonitoredItem) {
-        (self.event)(event_fields, item);
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -270,7 +157,7 @@ pub struct Subscription {
     /// A map of client handle to monitored item id
     client_handles: HashMap<u32, u32>,
 
-    callback: Box<dyn OnSubscriptionNotification>,
+    callback: Box<dyn OnSubscriptionNotificationCore>,
 }
 
 impl Subscription {
@@ -284,7 +171,7 @@ impl Subscription {
         max_notifications_per_publish: u32,
         priority: u8,
         publishing_enabled: bool,
-        status_change_callback: Box<dyn OnSubscriptionNotification>,
+        status_change_callback: Box<dyn OnSubscriptionNotificationCore>,
     ) -> Subscription {
         Subscription {
             subscription_id,
@@ -428,43 +315,36 @@ impl Subscription {
     }
 
     pub(crate) fn on_notification(&mut self, notification: NotificationMessage) {
-        let Some(notifications) = notification.notification_data else {
-            return;
-        };
+        self.callback.on_subscription_notification(
+            notification,
+            MonitoredItemMap::new(&self.monitored_items, &self.client_handles),
+        );
+    }
+}
 
-        for obj in notifications {
-            match_extension_object_owned!(obj,
-                v: DataChangeNotification => {
-                    for notif in v.monitored_items.into_iter().flatten() {
-                        let item = self
-                            .client_handles
-                            .get(&notif.client_handle)
-                            .and_then(|handle| self.monitored_items.get(handle));
+/// A map of monitored items associated with a subscription, allowing lookup by client handle.
+pub struct MonitoredItemMap<'a> {
+    /// A map of monitored items associated with the subscription (key = monitored_item_id)
+    monitored_items: &'a HashMap<u32, MonitoredItem>,
+    /// A map of client handle to monitored item id
+    client_handles: &'a HashMap<u32, u32>,
+}
 
-                        if let Some(item) = item {
-                            self.callback.on_data_value(notif.value, item);
-                        } else {
-                            tracing::warn!("Received notification for unknown monitored item {}", notif.client_handle);
-                        }
-                    }
-                },
-                v: EventNotificationList => {
-                    for notif in v.events.into_iter().flatten() {
-                        let item = self
-                            .client_handles
-                            .get(&notif.client_handle)
-                            .and_then(|handle| self.monitored_items.get(handle));
-
-                        if let Some(item) = item {
-                            self.callback.on_event(notif.event_fields, item);
-                        }
-                    }
-                },
-                v: StatusChangeNotification => {
-                    self.callback.on_subscription_status_change(v);
-                }
-            )
+impl<'a> MonitoredItemMap<'a> {
+    fn new(
+        monitored_items: &'a HashMap<u32, MonitoredItem>,
+        client_handles: &'a HashMap<u32, u32>,
+    ) -> Self {
+        Self {
+            monitored_items,
+            client_handles,
         }
+    }
+
+    pub fn get(&self, client_handle: u32) -> Option<&'a MonitoredItem> {
+        self.client_handles
+            .get(&client_handle)
+            .and_then(|id| self.monitored_items.get(id))
     }
 }
 

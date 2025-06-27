@@ -62,9 +62,9 @@ use services::subscriptions::PublishLimits;
 pub use services::subscriptions::{
     CreateMonitoredItems, CreateSubscription, DataChangeCallback, DeleteMonitoredItems,
     DeleteSubscriptions, EventCallback, ModifyMonitoredItems, ModifySubscription, MonitoredItem,
-    OnSubscriptionNotification, Publish, Republish, SetMonitoringMode, SetPublishingMode,
-    SetTriggering, Subscription, SubscriptionActivity, SubscriptionCallbacks,
-    TransferSubscriptions,
+    OnSubscriptionNotification, OnSubscriptionNotificationCore, Publish, Republish,
+    SetMonitoringMode, SetPublishingMode, SetTriggering, Subscription, SubscriptionActivity,
+    SubscriptionCallbacks, TransferSubscriptions,
 };
 pub use services::view::{
     Browse, BrowseNext, RegisterNodes, TranslateBrowsePaths, UnregisterNodes,

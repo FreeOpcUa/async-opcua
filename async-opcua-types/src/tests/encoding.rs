@@ -146,14 +146,11 @@ fn encoding_datetime() {
 #[test]
 fn encoding_guid() {
     let guid = Guid::from_str("F0001234-FACE-BEEF-0102-030405060708").unwrap();
-    assert_eq!(
-        "f0001234-face-beef-0102-030405060708",
-        format!("{:?}", guid)
-    );
+    assert_eq!("f0001234-face-beef-0102-030405060708", format!("{guid:?}"));
     let new_guid = serialize_test_and_return(guid.clone());
     assert_eq!(
         "f0001234-face-beef-0102-030405060708",
-        format!("{:?}", new_guid)
+        format!("{new_guid:?}")
     );
     serialize_test(guid);
 }
@@ -682,10 +679,10 @@ fn test_xml_in_binary() {
     write_u8(&mut stream, 0x2).unwrap();
     let mut xml_buf = Vec::new();
     let mut xml_stream = Cursor::new(&mut xml_buf);
-    xml_stream.write(b"<EUInformation>").unwrap();
+    let _ = xml_stream.write(b"<EUInformation>").unwrap();
     let mut xml_writer = XmlStreamWriter::new(&mut xml_stream as &mut dyn Write);
     crate::xml::XmlEncodable::encode(&rf, &mut xml_writer, &ctx).unwrap();
-    xml_stream.write(b"</EUInformation>").unwrap();
+    let _ = xml_stream.write(b"</EUInformation>").unwrap();
     let str = UAString::from(String::from_utf8(xml_buf).unwrap());
     str.encode(&mut stream, &ctx).unwrap();
 

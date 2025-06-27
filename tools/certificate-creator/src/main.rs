@@ -22,9 +22,9 @@ fn main() {
             .enumerate()
             .for_each(|(idx, addr)| {
                 if idx == 0 {
-                    println!("  Application URI = \"{}\"", addr);
+                    println!("  Application URI = \"{addr}\"");
                 } else {
-                    println!("  DNS = \"{}\"", addr);
+                    println!("  DNS = \"{addr}\"");
                 }
             });
 
@@ -44,10 +44,7 @@ fn main() {
             &x509_data, overwrite, &cert_path, &pkey_path,
         )
         .map_err(|err| {
-            eprintln!(
-                "Certificate creation failed, check above and reason \"{}\" for errors",
-                err
-            );
+            eprintln!("Certificate creation failed, check above and reason \"{err}\" for errors");
         })
         .map(|_| {
             println!(
@@ -138,32 +135,21 @@ prefilled from defaults, but for production purposes all defaults should be over
 Usage:
   -h, --help            Show help.
   -o, --overwrite       Overwrites existing files.
-  --key-size size       Sets the key size in bits - [2048, 4096] (default: {})
-  --pki-path path       Path to write the certificate and key. (default: {})
-  --cert-name           Name of certificate file relative to pki-path. (default: {})
-  --pkey-name           Name of private key file relative to pki-path. (default: {})
-  --duration days       The duration in days of this certificate before it expires. (default: {})
-  --application-uri     The application's uri used by OPC UA for authentication purposes. (default: {})
+  --key-size size       Sets the key size in bits - [2048, 4096] (default: {DEFAULT_KEY_SIZE})
+  --pki-path path       Path to write the certificate and key. (default: {DEFAULT_PKI_PATH})
+  --cert-name           Name of certificate file relative to pki-path. (default: {DEFAULT_CERT_PATH})
+  --pkey-name           Name of private key file relative to pki-path. (default: {DEFAULT_PKEY_PATH})
+  --duration days       The duration in days of this certificate before it expires. (default: {DEFAULT_DURATION})
+  --application-uri     The application's uri used by OPC UA for authentication purposes. (default: {DEFAULT_APPLICATION_URI})
   --add-computer-name   Add this computer's name (inferred from COMPUTERNAME / NAME environment variables) to the alt host names.
   --add-localhost-name  Add localhost (and also 127.0.0.1, ::1 if --add-ip-addresses) to the alt host names.
   --add-ip-addresses    Add IP addresses from host name lookup to the alt host names.
   --hostnames names     Comma separated list of DNS/IP names to add as subject alt host names.
-  --CN name             Specifies the Common Name for the cert (default: {}).
-  --O name              Specifies the Organization for the cert (default: {}).
-  --OU name             Specifies the Organization Unit for the cert (default: {}).
-  --C name              Specifies the Country for the cert (default: {}).
-  --ST name             "Specifies the State for the cert. (default: {})"#,
-            DEFAULT_KEY_SIZE,
-            DEFAULT_PKI_PATH,
-            DEFAULT_CERT_PATH,
-            DEFAULT_PKEY_PATH,
-            DEFAULT_DURATION,
-            DEFAULT_APPLICATION_URI,
-            DEFAULT_CN,
-            DEFAULT_O,
-            DEFAULT_OU,
-            DEFAULT_C,
-            DEFAULT_ST
+  --CN name             Specifies the Common Name for the cert (default: {DEFAULT_CN}).
+  --O name              Specifies the Organization for the cert (default: {DEFAULT_O}).
+  --OU name             Specifies the Organization Unit for the cert (default: {DEFAULT_OU}).
+  --C name              Specifies the Country for the cert (default: {DEFAULT_C}).
+  --ST name             "Specifies the State for the cert. (default: {DEFAULT_ST})"#
         );
     }
 }

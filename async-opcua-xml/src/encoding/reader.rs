@@ -43,7 +43,7 @@ impl<T: Read> XmlStreamReader<T> {
     }
 
     /// Get the next event from the stream.
-    pub fn next_event(&mut self) -> Result<quick_xml::events::Event, XmlReadError> {
+    pub fn next_event(&mut self) -> Result<quick_xml::events::Event<'_>, XmlReadError> {
         self.buffer.clear();
         Ok(self.reader.read_event_into(&mut self.buffer)?)
     }
@@ -287,6 +287,6 @@ mod test {
         assert!(matches!(reader.next_event().unwrap(), Event::Start(_)));
         let raw = reader.consume_raw().unwrap();
         println!("{}", String::from_utf8_lossy(&raw));
-        assert_eq!(xml[5..(xml.len() - 6)].as_bytes(), &*raw);
+        assert_eq!(&xml.as_bytes()[5..(xml.len() - 6)], &*raw);
     }
 }

@@ -766,7 +766,7 @@ impl SecureChannel {
             match security_policy {
                 SecurityPolicy::Unknown => {
                     return Err(Error::new(StatusCode::BadSecurityPolicyRejected, format!(
-                        "Security policy \"{}\" provided by client is unknown so it is has been rejected", security_policy_uri
+                        "Security policy \"{security_policy_uri}\" provided by client is unknown so it is has been rejected"
                     )));
                 }
                 SecurityPolicy::None => {
@@ -838,10 +838,7 @@ impl SecureChannel {
             let SecurityHeader::Symmetric(security_header) = security_header else {
                 return Err(Error::new(
                     StatusCode::BadUnexpectedError,
-                    format!(
-                        "Expected symmetric security header, got {:?}",
-                        security_header
-                    ),
+                    format!("Expected symmetric security header, got {security_header:?}"),
                 ));
             };
 
@@ -922,8 +919,7 @@ impl SecureChannel {
         // Validate encrypted size is right
         if encrypted_size != cipher_text_size {
             panic!(
-                "Encrypted block size {} is not the same as calculated cipher text size {}",
-                encrypted_size, cipher_text_size
+                "Encrypted block size {encrypted_size} is not the same as calculated cipher text size {cipher_text_size}"
             );
         }
 
@@ -1020,7 +1016,7 @@ impl SecureChannel {
         // Asymmetric encrypt requires the caller supply the security policy
         if !security_policy.is_supported() {
             return Err(Error::new(StatusCode::BadSecurityPolicyRejected, format!(
-                "Security policy {} is not supported by asymmetric_decrypt_and_verify and has been rejected", security_policy
+                "Security policy {security_policy} is not supported by asymmetric_decrypt_and_verify and has been rejected"
             )));
         }
 

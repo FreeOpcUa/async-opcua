@@ -31,7 +31,7 @@ async fn read_structure_var(session: &Arc<Session>, ns: u16) -> Result<(), OpcUa
     let res = session
         .translate_browse_paths_to_node_ids(&[BrowsePath {
             starting_node: ObjectId::ObjectsFolder.into(),
-            relative_path: format!("/{0}:ErrorFolder/{0}:ErrorData", ns).try_into()?,
+            relative_path: format!("/{ns}:ErrorFolder/{ns}:ErrorData").try_into()?,
         }])
         .await?;
     let Some(target) = &res[0].targets else {

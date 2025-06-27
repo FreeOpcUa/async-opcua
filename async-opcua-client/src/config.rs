@@ -316,8 +316,7 @@ impl Config for ClientConfig {
         }
         if self.user_tokens.contains_key(ANONYMOUS_USER_TOKEN_ID) {
             errors.push(format!(
-                "User tokens contains the reserved \"{}\" id",
-                ANONYMOUS_USER_TOKEN_ID
+                "User tokens contains the reserved \"{ANONYMOUS_USER_TOKEN_ID}\" id"
             ));
         }
         if self.user_tokens.contains_key("") {
@@ -469,8 +468,7 @@ impl ClientConfig {
         )
         .ok_or_else(|| {
             format!(
-                "Endpoint {}, {:?} / {:?} does not match any supplied by the server",
-                endpoint_url, security_policy, security_mode
+                "Endpoint {endpoint_url}, {security_policy:?} / {security_mode:?} does not match any supplied by the server"
             )
         })?;
 
@@ -699,10 +697,10 @@ mod tests {
         path.push("..");
         path.push("samples");
         path.push("client.conf");
-        println!("Path is {:?}", path);
+        println!("Path is {path:?}");
 
         let saved = config.save(&path);
-        println!("Saved = {:?}", saved);
+        println!("Saved = {saved:?}");
         assert!(saved.is_ok());
         config.validate().unwrap();
     }
@@ -710,10 +708,10 @@ mod tests {
     #[test]
     fn client_config() {
         let path = make_test_file("client_config.yaml");
-        println!("Client path = {:?}", path);
+        println!("Client path = {path:?}");
         let config = default_sample_config();
         let saved = config.save(&path);
-        println!("Saved = {:?}", saved);
+        println!("Saved = {saved:?}");
         assert!(config.save(&path).is_ok());
         if let Ok(config2) = ClientConfig::load(&path) {
             assert_eq!(config, config2);

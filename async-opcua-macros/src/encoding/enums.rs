@@ -139,7 +139,7 @@ pub(super) fn derive_ua_enum_impl(en: SimpleEnum) -> syn::Result<TokenStream> {
         });
     }
 
-    let error_msg = format!("Got unexpected value for enum {}: {{}}", ident);
+    let error_msg = format!("Got unexpected value for enum {ident}: {{}}");
 
     let default_impl = if let Some(default_ident) = default_ident {
         quote! {

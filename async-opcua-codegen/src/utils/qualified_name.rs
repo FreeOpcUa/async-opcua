@@ -15,12 +15,12 @@ static QUALIFIED_NAME_REGEX: LazyLock<Regex> =
 pub fn split_qualified_name(name: &str) -> Result<(&str, u16), CodeGenError> {
     let captures = QUALIFIED_NAME_REGEX
         .captures(name)
-        .ok_or_else(|| CodeGenError::other(format!("Invalid qualifiedname: {}", name)))?;
+        .ok_or_else(|| CodeGenError::other(format!("Invalid qualifiedname: {name}")))?;
 
     let namespace = if let Some(ns) = captures.name("ns") {
         ns.as_str()
             .parse::<u16>()
-            .map_err(|_| CodeGenError::other(format!("Invalid nodeId: {}", name)))?
+            .map_err(|_| CodeGenError::other(format!("Invalid nodeId: {name}")))?
     } else {
         0
     };

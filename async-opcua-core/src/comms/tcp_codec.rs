@@ -117,7 +117,7 @@ impl TcpCodec {
         buf.reserve(msg.byte_len());
         msg.encode(&mut buf.writer()).map(|_| ()).map_err(|err| {
             error!("Error writing message {:?}, err = {}", msg, err);
-            io::Error::other(format!("Error = {}", err))
+            io::Error::other(format!("Error = {err}"))
         })
     }
 

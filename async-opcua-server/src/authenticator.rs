@@ -263,7 +263,7 @@ impl AuthManager for DefaultAuthenticator {
         );
         Err(Error::new(
             StatusCode::BadIdentityTokenRejected,
-            format!("Cannot authenticate \"{}\"", username),
+            format!("Cannot authenticate \"{username}\""),
         ))
     }
 

@@ -41,7 +41,7 @@ fn aes_test() {
             ciphertext.len()
         );
         let r = aes_key.encrypt(plaintext, &iv, &mut ciphertext);
-        println!("result = {:?}", r);
+        println!("result = {r:?}");
         assert!(r.is_ok());
         &ciphertext[..r.unwrap()]
     };
@@ -51,7 +51,7 @@ fn aes_test() {
 
     let plaintext2 = {
         let r = aes_key.decrypt(ciphertext, &iv, &mut plaintext2);
-        println!("result = {:?}", r);
+        println!("result = {r:?}");
         assert!(r.is_ok());
         &plaintext2[..r.unwrap()]
     };
@@ -63,9 +63,9 @@ fn aes_test() {
 fn create_cert() {
     let (x509, _) = make_test_cert_1024();
     let not_before = x509.not_before().unwrap().to_string();
-    println!("Not before = {}", not_before);
+    println!("Not before = {not_before}");
     let not_after = x509.not_after().unwrap().to_string();
-    println!("Not after = {}", not_after);
+    println!("Not after = {not_after}");
 }
 
 #[test]
@@ -149,7 +149,7 @@ fn test_and_trust_application_instance_cert() {
     let mut cert_trusted_path = cert_store.trusted_certs_dir();
     cert_trusted_path.push(CertificateStore::cert_file_name(&cert));
     {
-        println!("Writing der file to {:?}", cert_trusted_path);
+        println!("Writing der file to {cert_trusted_path:?}");
         let mut file = File::create(cert_trusted_path).unwrap();
         assert!(file.write(&der).is_ok());
     }
@@ -209,17 +209,17 @@ fn test_asymmetric_encrypt_and_decrypt(
     let mut ciphertext = vec![0u8; plaintext_size + 8192];
     let mut plaintext2 = vec![0u8; plaintext_size + 8192];
 
-    println!("Encrypt with security policy {:?}", security_policy);
-    println!("Encrypting data of length {}", plaintext_size);
+    println!("Encrypt with security policy {security_policy:?}");
+    println!("Encrypting data of length {plaintext_size}");
     let encrypted_size = security_policy
         .asymmetric_encrypt(&cert.public_key().unwrap(), &plaintext, &mut ciphertext)
         .unwrap();
-    println!("Encrypted size = {}", encrypted_size);
+    println!("Encrypted size = {encrypted_size}");
     println!("Decrypting cipher text back");
     let decrypted_size = security_policy
         .asymmetric_decrypt(key, &ciphertext[..encrypted_size], &mut plaintext2)
         .unwrap();
-    println!("Decrypted size = {}", decrypted_size);
+    println!("Decrypted size = {decrypted_size}");
 
     assert_eq!(plaintext_size, decrypted_size);
     assert_eq!(&plaintext[..], &plaintext2[..decrypted_size]);
@@ -295,8 +295,7 @@ fn calculate_cipher_text_size2() {
             let actual_size = public_key.public_encrypt(&src, &mut dst, *padding).unwrap();
             if expected_size != actual_size {
                 println!(
-                    "Expected size {} != actual size {} for src length {}",
-                    expected_size, actual_size, src_len
+                    "Expected size {expected_size} != actual size {actual_size} for src length {src_len}"
                 );
                 assert_eq!(expected_size, actual_size);
             }
@@ -562,7 +561,7 @@ fn derive_keys_from_nonce_basic128rsa15() {
 #[test]
 fn certificate_with_hostname_mismatch() {
     let (cert, _) = make_test_cert_2048();
-    let wrong_host_name = format!("wrong_{}", APPLICATION_HOSTNAME);
+    let wrong_host_name = format!("wrong_{APPLICATION_HOSTNAME}");
 
     // Create a certificate and ensure that when the hostname does not match, the verification fails
     // with the correct error

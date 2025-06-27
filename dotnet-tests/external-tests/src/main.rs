@@ -18,7 +18,7 @@ pub async fn main() {
 }
 
 fn colored(r: i32, g: i32, b: i32, text: &str) -> String {
-    format!("\x1B[38;2;{};{};{}m{}\x1B[0m", r, g, b, text)
+    format!("\x1B[38;2;{r};{g};{b}m{text}\x1B[0m")
 }
 
 pub struct Runner {

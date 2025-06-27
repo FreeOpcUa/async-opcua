@@ -259,8 +259,7 @@ impl Client {
             Ok(endpoint.clone())
         } else {
             Err(format!(
-                "Cannot find default endpoint with id {}",
-                default_endpoint_id
+                "Cannot find default endpoint with id {default_endpoint_id}"
             ))
         }
     }

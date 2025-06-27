@@ -49,11 +49,10 @@ impl Args {
             r#"MQTT client
 Usage:
   -h, --help        Show help
-  --config file     Sets the configuration file to read settings and endpoints from (default: {})
+  --config file     Sets the configuration file to read settings and endpoints from (default: {DEFAULT_CONFIG_FILE})
   --endpoint-id id  Sets the endpoint id from the config file to connect to
-  --host host       Address or name of the MQTT server to connect with (default: {})
-  --port port       Port number of MQTT server to connect with (default: {})"#,
-            DEFAULT_CONFIG_FILE, DEFAULT_MQTT_HOST, DEFAULT_MQTT_PORT
+  --host host       Address or name of the MQTT server to connect with (default: {DEFAULT_MQTT_HOST})
+  --port port       Port number of MQTT server to connect with (default: {DEFAULT_MQTT_PORT})"#
         );
     }
 }
@@ -104,11 +103,11 @@ async fn main() -> Result<(), ()> {
                     node_id.namespace, node_id.identifier
                 );
                 let value = if let Some(ref value) = data_value.value {
-                    format!("{:?}", value)
+                    format!("{value:?}")
                 } else {
                     "null".to_string()
                 };
-                println!("Publishing {} = {}", topic, value);
+                println!("Publishing {topic} = {value}");
 
                 let value = value.into_bytes();
                 let _ = mqtt_client.publish(topic, QoS::AtLeastOnce, false, value).await;
@@ -131,7 +130,7 @@ async fn main() -> Result<(), ()> {
     session.wait_for_connection().await;
 
     subscribe_to_events(session, tx, ns).await.map_err(|err| {
-        println!("ERROR: Got an error while performing action - {}", err);
+        println!("ERROR: Got an error while performing action - {err}");
     })?;
 
     handle.await.unwrap();
@@ -164,7 +163,7 @@ async fn subscribe_to_events(
             }),
         )
         .await?;
-    println!("Created a subscription with id = {}", subscription_id);
+    println!("Created a subscription with id = {subscription_id}");
 
     // Create some monitored items
     let items_to_create: Vec<MonitoredItemCreateRequest> = ["v1", "v2", "v3", "v4"]

@@ -471,7 +471,7 @@ mod tests {
         let mut stream = Cursor::new(hello_data());
         let decoding_options = DecodingOptions::test();
         let hello = HelloMessage::decode(&mut stream, &decoding_options).unwrap();
-        println!("hello = {:?}", hello);
+        println!("hello = {hello:?}");
         assert_eq!(hello.message_header.message_type, MessageType::Hello);
         assert_eq!(hello.message_header.message_size, 57);
         assert_eq!(hello.protocol_version, 0);
@@ -490,7 +490,7 @@ mod tests {
         let mut stream = Cursor::new(ack_data());
         let decoding_options = DecodingOptions::test();
         let ack = AcknowledgeMessage::decode(&mut stream, &decoding_options).unwrap();
-        println!("ack = {:?}", ack);
+        println!("ack = {ack:?}");
         assert_eq!(ack.message_header.message_type, MessageType::Acknowledge);
         assert_eq!(ack.message_header.message_size, 28);
         assert_eq!(ack.protocol_version, 0);

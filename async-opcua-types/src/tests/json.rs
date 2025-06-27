@@ -70,18 +70,18 @@ fn serialize_string() {
     assert!(s.is_null());
 
     let json = to_string(&UAString::null()).unwrap();
-    println!("null str = {}", json);
+    println!("null str = {json}");
     assert_eq!(json, "null");
 
     let s: UAString = from_value(json!("Hello World!")).unwrap();
     assert_eq!(s.as_ref(), "Hello World!");
 
     let json = to_string(&UAString::from("Hello World!")).unwrap();
-    println!("hw str = {}", json);
+    println!("hw str = {json}");
     assert_eq!(json, r#""Hello World!""#);
 
     let json = to_string(&UAString::from("")).unwrap();
-    println!("empty str = {}", json);
+    println!("empty str = {json}");
     assert_eq!(json, r#""""#);
 }
 
@@ -89,7 +89,7 @@ fn serialize_string() {
 fn serialize_date_time() {
     let dt1 = DateTime::rfc3339_now();
     let vs = to_string(&dt1).unwrap();
-    println!("date_time = {}", vs);
+    println!("date_time = {vs}");
     let dt2 = from_str::<DateTime>(&vs).unwrap();
     assert_eq!(dt1, dt2);
 }
@@ -98,7 +98,7 @@ fn serialize_date_time() {
 fn serialize_guid() {
     let g1 = Guid::new();
     let vs = to_string(&g1).unwrap();
-    println!("guid = {}", vs);
+    println!("guid = {vs}");
     let g2: Guid = from_str(&vs).unwrap();
     assert_eq!(g1, g2);
 
@@ -309,20 +309,14 @@ fn test_ser_de_variant(variant: Variant, expected: Value) {
     assert_eq!(value, expected);
     // Parse value back to json and compare to Variant
     let value = from_value::<Variant>(expected).unwrap();
-    println!(
-        "Comparing parsed variant {:?} to expected variant {:?}",
-        value, variant
-    );
+    println!("Comparing parsed variant {value:?} to expected variant {variant:?}");
     assert_eq!(value, variant);
 }
 
 /// Deserializes JSON into a Variant and compare to the expected value.
 fn test_json_to_variant(json: Value, expected: Variant) {
     let value = from_value::<Variant>(json).unwrap();
-    println!(
-        "Comparing parsed variant {:?} to expected variant {:?}",
-        value, expected
-    );
+    println!("Comparing parsed variant {value:?} to expected variant {expected:?}");
     assert_eq!(value, expected);
 }
 
@@ -481,7 +475,7 @@ fn serialize_variant_guid() {
         json!({"Type": 14, "Body": guid.to_string()}),
     );
     test_ser_de_variant(
-        Variant::Guid(Box::new(Guid::null())),
+        Variant::Guid(Box::default()),
         json!({"Type": 14, "Body": "00000000-0000-0000-0000-000000000000"}),
     );
 }
@@ -545,7 +539,7 @@ fn serialize_variant_status_code() {
 fn serialize_variant_qualified_name() {
     // QualifiedName (20)
     test_ser_de_variant(
-        Variant::QualifiedName(Box::new(QualifiedName::null())),
+        Variant::QualifiedName(Box::default()),
         json!({"Type": 20, "Body": null}),
     );
 }
@@ -639,7 +633,7 @@ fn serialize_variant_variant() {
 fn serialize_variant_diagnostic_info() {
     // DiagnosticInfo (25)
     test_ser_de_variant(
-        Variant::DiagnosticInfo(Box::new(DiagnosticInfo::null())),
+        Variant::DiagnosticInfo(Box::default()),
         json!({"Type": 25, "Body": {}}),
     );
 

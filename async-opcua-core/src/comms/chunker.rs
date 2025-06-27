@@ -136,8 +136,7 @@ impl<'a> ChunkingStream<'a> {
                 Error::new(
                     StatusCode::BadTcpInternalError,
                     format!(
-                        "body_size_from_message_size error for max_chunk_size = {}",
-                        max_chunk_size
+                        "body_size_from_message_size error for max_chunk_size = {max_chunk_size}"
                     ),
                 )
                 .with_context(
@@ -323,8 +322,7 @@ impl Chunker {
                     return Err(Error::new(
                         StatusCode::BadSequenceNumberInvalid,
                         format!(
-                            "Chunk sequence number of {} is not the expected value of {}, idx {}",
-                            sequence_number, expected_sequence_number, i
+                            "Chunk sequence number of {sequence_number} is not the expected value of {expected_sequence_number}, idx {i}"
                         ),
                     ));
                 }
@@ -384,8 +382,7 @@ impl Chunker {
                     StatusCode::BadResponseTooLarge
                 },
                 format!(
-                    "Max message size is {} and message {} exceeds that",
-                    max_message_size, message_size
+                    "Max message size is {max_message_size} and message {message_size} exceeds that"
                 ),
             )
             .with_context(ctx_id, ctx_handle));

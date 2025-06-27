@@ -152,8 +152,7 @@ impl SimpleBinaryDecodable for ByteString {
             Ok(ByteString::null())
         } else if len < -1 {
             Err(Error::decoding(format!(
-                "ByteString buf length is a negative number {}",
-                len
+                "ByteString buf length is a negative number {len}"
             )))
         } else if len as usize > decoding_options.max_byte_string_length {
             Err(Error::decoding(format!(

@@ -41,8 +41,8 @@ where
     assert_eq!((end_pos - start_pos) as usize, byte_len);
 
     let actual = stream.into_inner();
-    println!("value = {:?}", value);
-    println!("encoded bytes = {:?}", actual);
+    println!("value = {value:?}");
+    println!("encoded bytes = {actual:?}");
     Cursor::new(actual)
 }
 
@@ -55,7 +55,7 @@ where
     let ctx_f = ContextOwned::default();
     let ctx = ctx_f.context();
     let new_value: T = T::decode(&mut stream, &ctx).unwrap();
-    println!("new value = {:?}", new_value);
+    println!("new value = {new_value:?}");
     assert_eq!(expected_value, new_value);
     new_value
 }
@@ -88,8 +88,8 @@ where
 
     let actual = stream.into_inner();
 
-    println!("actual {:?}", actual);
-    println!("expected {:?}", expected);
+    println!("actual {actual:?}");
+    println!("expected {expected:?}");
 
     for i in 0..expected.len() {
         assert_eq!(actual[i], expected[i])

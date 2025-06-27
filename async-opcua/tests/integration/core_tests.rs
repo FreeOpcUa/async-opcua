@@ -78,20 +78,14 @@ async fn hello_timeout() {
     match result {
         Ok(v) => {
             if v > 0 {
-                panic!(
-                    "Hello timeout exceeded and socket is still open, result = {}",
-                    v
-                )
+                panic!("Hello timeout exceeded and socket is still open, result = {v}")
             } else {
                 // From
                 debug!("Client got a read of 0 bytes on the socket, so treating by terminating with success");
             }
         }
         Err(err) => {
-            debug!(
-                "Client got an error {:?} on the socket terminating successfully",
-                err
-            );
+            debug!("Client got an error {err:?} on the socket terminating successfully");
         }
     }
     debug!("Test passed, closing server");

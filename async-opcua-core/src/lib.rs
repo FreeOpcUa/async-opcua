@@ -32,10 +32,10 @@ pub mod debug {
             let value = { *b };
             if i > 0 && i % line_len == 0 {
                 trace!(target: "hex", "{} {}", hex_line, char_line);
-                hex_line = format!("{:08}: ", i);
+                hex_line = format!("{i:08}: ");
                 char_line.clear();
             }
-            hex_line = format!("{} {:02x}", hex_line, value);
+            hex_line = format!("{hex_line} {value:02x}");
             char_line.push(if (32..=126).contains(&value) {
                 value as char
             } else {

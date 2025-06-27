@@ -29,7 +29,7 @@ pub struct UAString {
 impl fmt::Display for UAString {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(ref value) = self.value {
-            write!(f, "{}", value)
+            write!(f, "{value}")
         } else {
             write!(f, "[null]")
         }
@@ -119,8 +119,7 @@ impl SimpleBinaryDecodable for UAString {
             Ok(UAString::null())
         } else if len < -1 {
             Err(Error::decoding(format!(
-                "String buf length is a negative number {}",
-                len
+                "String buf length is a negative number {len}"
             )))
         } else if len as usize > decoding_options.max_string_length {
             Err(Error::decoding(format!(
@@ -132,7 +131,7 @@ impl SimpleBinaryDecodable for UAString {
             let mut buf = vec![0u8; len as usize];
             process_decode_io_result(stream.read_exact(&mut buf))?;
             let value = String::from_utf8(buf).map_err(|err| {
-                Error::decoding(format!("Decoded string was not valid UTF-8 - {}", err))
+                Error::decoding(format!("Decoded string was not valid UTF-8 - {err}"))
             })?;
             Ok(UAString::from(value))
         }

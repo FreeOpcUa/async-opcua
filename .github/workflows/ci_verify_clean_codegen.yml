@@ -7,6 +7,10 @@ jobs:
     steps:
       - name: Checkout (GitHub)
         uses: actions/checkout@v4
+      - name: Provision toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
       - name: Run code gen
         run: cargo run --bin async-opcua-codegen code_gen_config.yml --locked
       - name: Format generated code

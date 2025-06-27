@@ -169,7 +169,7 @@ impl SimpleBinaryDecodable for MessageChunk {
             MessageChunkHeader::decode(in_stream, decoding_options).map_err(|err| {
                 Error::new(
                     StatusCode::BadCommunicationError,
-                    format!("Cannot decode chunk header {:?}", err),
+                    format!("Cannot decode chunk header {err:?}"),
                 )
             })?;
 

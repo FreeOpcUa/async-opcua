@@ -205,7 +205,7 @@ mod tests {
         let v: [u8; 5] = [1, 2, 3, 4, 5];
         let k = AesKey::new(SecurityPolicy::Basic256, &v);
         let child = thread::spawn(move || {
-            println!("k={:?}", k);
+            println!("k={k:?}");
         });
         let _ = child.join();
     }

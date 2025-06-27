@@ -287,7 +287,7 @@ impl ServerEndpoint {
                 continue;
             }
             if !user_tokens.contains_key(id) {
-                errors.push(format!("Cannot find user token with id {}", id));
+                errors.push(format!("Cannot find user token with id {id}"));
             }
         }
 
@@ -295,7 +295,7 @@ impl ServerEndpoint {
             let password_security_policy =
                 SecurityPolicy::from_str(password_security_policy).unwrap();
             if password_security_policy == SecurityPolicy::Unknown {
-                errors.push(format!("Endpoint {} is invalid. Password security policy \"{}\" is invalid. Valid values are None, Basic128Rsa15, Basic256, Basic256Sha256", id, password_security_policy));
+                errors.push(format!("Endpoint {id} is invalid. Password security policy \"{password_security_policy}\" is invalid. Valid values are None, Basic128Rsa15, Basic256, Basic256Sha256"));
             }
         }
 
@@ -311,11 +311,11 @@ impl ServerEndpoint {
             || (security_policy != SecurityPolicy::None
                 && security_mode == MessageSecurityMode::None)
         {
-            errors.push(format!("Endpoint {} is invalid. Security policy and security mode must both contain None or neither of them should (1).", id));
+            errors.push(format!("Endpoint {id} is invalid. Security policy and security mode must both contain None or neither of them should (1)."));
         } else if security_policy != SecurityPolicy::None
             && security_mode == MessageSecurityMode::None
         {
-            errors.push(format!("Endpoint {} is invalid. Security policy and security mode must both contain None or neither of them should (2).", id));
+            errors.push(format!("Endpoint {id} is invalid. Security policy and security mode must both contain None or neither of them should (2)."));
         }
 
         if errors.is_empty() {
@@ -347,10 +347,7 @@ impl ServerEndpoint {
         if let Some(ref security_policy) = self.password_security_policy {
             match SecurityPolicy::from_str(security_policy).unwrap() {
                 SecurityPolicy::Unknown => {
-                    panic!(
-                        "Password security policy {} is unrecognized",
-                        security_policy
-                    );
+                    panic!("Password security policy {security_policy} is unrecognized");
                 }
                 security_policy => {
                     password_security_policy = security_policy;

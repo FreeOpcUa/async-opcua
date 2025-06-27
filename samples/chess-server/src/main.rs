@@ -41,7 +41,7 @@ async fn main() {
     } else {
         default_engine_path()
     };
-    println!("Launching chess engine \"{}\"", engine_path);
+    println!("Launching chess engine \"{engine_path}\"");
     let game = Arc::new(Mutex::new(game::Game::new(&engine_path)));
 
     // Create an OPC UA server with sample configuration and default node set
@@ -84,7 +84,7 @@ async fn main() {
                 .insert(&mut *address_space);
 
             // Another variable is a highlighting flag for the square
-            let browse_name = format!("{}.highlight", square);
+            let browse_name = format!("{square}.highlight");
             let node_id = NodeId::new(ns, browse_name.clone());
             VariableBuilder::new(&node_id, browse_name, "")
                 .organized_by(&board_node_id)
@@ -126,7 +126,7 @@ async fn main() {
                     // Reset the board
                     game.reset();
                 } else {
-                    println!("best move = {}", bestmove);
+                    println!("best move = {bestmove}");
                     game.make_move(bestmove);
                     game.print_board();
 
@@ -163,7 +163,7 @@ fn update_board_state(
         .unwrap();
 
         // Highlight the square
-        let node_id = NodeId::new(ns, format!("{}.highlight", square));
+        let node_id = NodeId::new(ns, format!("{square}.highlight"));
         let highlight_square = if let Some(ref last_move) = game.last_move {
             last_move.contains(square)
         } else {

@@ -298,7 +298,7 @@ impl fmt::Display for MessageSecurityMode {
             MessageSecurityMode::SignAndEncrypt => MESSAGE_SECURITY_MODE_SIGN_AND_ENCRYPT,
             _ => "",
         };
-        write!(f, "{}", name)
+        write!(f, "{name}")
     }
 }
 

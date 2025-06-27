@@ -366,8 +366,7 @@ impl BinaryDecodable for Variant {
             let array_length = i32::decode(stream, ctx)?;
             if array_length < -1 {
                 return Err(Error::decoding(format!(
-                    "Invalid array_length {}",
-                    array_length
+                    "Invalid array_length {array_length}"
                 )));
             }
 
@@ -431,8 +430,7 @@ impl BinaryDecodable for Variant {
                         }
                         if array_dimensions_length != array_length as u32 {
                             Err(Error::decoding(format!(
-                                "Array dimensions does not match array length {}",
-                                array_length
+                                "Array dimensions does not match array length {array_length}"
                             )))
                         } else {
                             // Note Array::new_multi can fail
@@ -468,24 +466,24 @@ impl BinaryDecodable for Variant {
 impl fmt::Display for Variant {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Variant::SByte(v) => write!(f, "{}", v),
-            Variant::Byte(v) => write!(f, "{}", v),
-            Variant::Int16(v) => write!(f, "{}", v),
-            Variant::UInt16(v) => write!(f, "{}", v),
-            Variant::Int32(v) => write!(f, "{}", v),
-            Variant::UInt32(v) => write!(f, "{}", v),
-            Variant::Int64(v) => write!(f, "{}", v),
-            Variant::UInt64(v) => write!(f, "{}", v),
-            Variant::Float(v) => write!(f, "{}", v),
-            Variant::Double(v) => write!(f, "{}", v),
-            Variant::Boolean(v) => write!(f, "{}", v),
-            Variant::String(ref v) => write!(f, "{}", v),
-            Variant::Guid(ref v) => write!(f, "{}", v),
-            Variant::DateTime(ref v) => write!(f, "{}", v),
-            Variant::NodeId(ref v) => write!(f, "{}", v),
-            Variant::ExpandedNodeId(ref v) => write!(f, "{}", v),
-            Variant::Variant(ref v) => write!(f, "Variant({})", v),
-            value => write!(f, "{:?}", value),
+            Variant::SByte(v) => write!(f, "{v}"),
+            Variant::Byte(v) => write!(f, "{v}"),
+            Variant::Int16(v) => write!(f, "{v}"),
+            Variant::UInt16(v) => write!(f, "{v}"),
+            Variant::Int32(v) => write!(f, "{v}"),
+            Variant::UInt32(v) => write!(f, "{v}"),
+            Variant::Int64(v) => write!(f, "{v}"),
+            Variant::UInt64(v) => write!(f, "{v}"),
+            Variant::Float(v) => write!(f, "{v}"),
+            Variant::Double(v) => write!(f, "{v}"),
+            Variant::Boolean(v) => write!(f, "{v}"),
+            Variant::String(ref v) => write!(f, "{v}"),
+            Variant::Guid(ref v) => write!(f, "{v}"),
+            Variant::DateTime(ref v) => write!(f, "{v}"),
+            Variant::NodeId(ref v) => write!(f, "{v}"),
+            Variant::ExpandedNodeId(ref v) => write!(f, "{v}"),
+            Variant::Variant(ref v) => write!(f, "Variant({v})"),
+            value => write!(f, "{value:?}"),
         }
     }
 }
@@ -659,7 +657,7 @@ impl Variant {
             },
             Variant::Byte(v) => match target_type {
                 VariantScalarTypeId::Boolean => cast_to_bool!(v),
-                VariantScalarTypeId::String => format!("{}", v).into(),
+                VariantScalarTypeId::String => format!("{v}").into(),
                 _ => Variant::Empty,
             },
             Variant::Double(v) => {
@@ -673,7 +671,7 @@ impl Variant {
                     VariantScalarTypeId::Int32 => cast_to_integer!(vt, f64, i32),
                     VariantScalarTypeId::Int64 => cast_to_integer!(vt, f64, i64),
                     VariantScalarTypeId::SByte => cast_to_integer!(vt, f64, i8),
-                    VariantScalarTypeId::String => format!("{}", v).into(),
+                    VariantScalarTypeId::String => format!("{v}").into(),
                     VariantScalarTypeId::UInt16 => cast_to_integer!(vt, f64, u16),
                     VariantScalarTypeId::UInt32 => cast_to_integer!(vt, f64, u32),
                     VariantScalarTypeId::UInt64 => cast_to_integer!(vt, f64, u64),
@@ -703,7 +701,7 @@ impl Variant {
                     VariantScalarTypeId::Int32 => cast_to_integer!(vt, f32, i32),
                     VariantScalarTypeId::Int64 => cast_to_integer!(vt, f32, i64),
                     VariantScalarTypeId::SByte => cast_to_integer!(vt, f32, i8),
-                    VariantScalarTypeId::String => format!("{}", v).into(),
+                    VariantScalarTypeId::String => format!("{v}").into(),
                     VariantScalarTypeId::UInt16 => cast_to_integer!(vt, f32, u16),
                     VariantScalarTypeId::UInt32 => cast_to_integer!(vt, f32, u32),
                     VariantScalarTypeId::UInt64 => cast_to_integer!(vt, f32, u64),
@@ -719,7 +717,7 @@ impl Variant {
                 VariantScalarTypeId::Boolean => cast_to_bool!(v),
                 VariantScalarTypeId::Byte => cast_to_integer!(v, i16, u8),
                 VariantScalarTypeId::SByte => cast_to_integer!(v, i16, i8),
-                VariantScalarTypeId::String => format!("{}", v).into(),
+                VariantScalarTypeId::String => format!("{v}").into(),
                 VariantScalarTypeId::UInt16 => cast_to_integer!(v, i16, u16),
                 _ => Variant::Empty,
             },
@@ -729,7 +727,7 @@ impl Variant {
                 VariantScalarTypeId::Int16 => cast_to_integer!(v, i32, i16),
                 VariantScalarTypeId::SByte => cast_to_integer!(v, i32, i8),
                 VariantScalarTypeId::StatusCode => (StatusCode::from(v as u32)).into(),
-                VariantScalarTypeId::String => format!("{}", v).into(),
+                VariantScalarTypeId::String => format!("{v}").into(),
                 VariantScalarTypeId::UInt16 => cast_to_integer!(v, i32, u16),
                 VariantScalarTypeId::UInt32 => cast_to_integer!(v, i32, u32),
                 _ => Variant::Empty,
@@ -741,7 +739,7 @@ impl Variant {
                 VariantScalarTypeId::Int32 => cast_to_integer!(v, i64, i32),
                 VariantScalarTypeId::SByte => cast_to_integer!(v, i64, i8),
                 VariantScalarTypeId::StatusCode => StatusCode::from(v as u32).into(),
-                VariantScalarTypeId::String => format!("{}", v).into(),
+                VariantScalarTypeId::String => format!("{v}").into(),
                 VariantScalarTypeId::UInt16 => cast_to_integer!(v, i64, u16),
                 VariantScalarTypeId::UInt32 => cast_to_integer!(v, i64, u32),
                 VariantScalarTypeId::UInt64 => cast_to_integer!(v, i64, u64),
@@ -750,7 +748,7 @@ impl Variant {
             Variant::SByte(v) => match target_type {
                 VariantScalarTypeId::Boolean => cast_to_bool!(v),
                 VariantScalarTypeId::Byte => cast_to_integer!(v, i8, u8),
-                VariantScalarTypeId::String => format!("{}", v).into(),
+                VariantScalarTypeId::String => format!("{v}").into(),
                 _ => Variant::Empty,
             },
             Variant::StatusCode(v) => match target_type {
@@ -805,7 +803,7 @@ impl Variant {
                 VariantScalarTypeId::Boolean => cast_to_bool!(v),
                 VariantScalarTypeId::Byte => cast_to_integer!(v, u16, u8),
                 VariantScalarTypeId::SByte => cast_to_integer!(v, u16, i8),
-                VariantScalarTypeId::String => format!("{}", v).into(),
+                VariantScalarTypeId::String => format!("{v}").into(),
                 _ => Variant::Empty,
             },
             Variant::UInt32(v) => match target_type {
@@ -814,7 +812,7 @@ impl Variant {
                 VariantScalarTypeId::Int16 => cast_to_integer!(v, u32, i16),
                 VariantScalarTypeId::SByte => cast_to_integer!(v, u32, i8),
                 VariantScalarTypeId::StatusCode => StatusCode::from(v).into(),
-                VariantScalarTypeId::String => format!("{}", v).into(),
+                VariantScalarTypeId::String => format!("{v}").into(),
                 VariantScalarTypeId::UInt16 => cast_to_integer!(v, u32, u16),
                 _ => Variant::Empty,
             },
@@ -826,7 +824,7 @@ impl Variant {
                 VariantScalarTypeId::StatusCode => {
                     StatusCode::from((v & 0x0000_0000_ffff_ffff) as u32).into()
                 }
-                VariantScalarTypeId::String => format!("{}", v).into(),
+                VariantScalarTypeId::String => format!("{v}").into(),
                 VariantScalarTypeId::UInt16 => cast_to_integer!(v, u64, u16),
                 VariantScalarTypeId::UInt32 => cast_to_integer!(v, u64, u32),
                 _ => Variant::Empty,
@@ -945,7 +943,7 @@ impl Variant {
             Variant::ExpandedNodeId(ref v) => {
                 // Everything is X or E except to String
                 match target_type {
-                    VariantScalarTypeId::String => format!("{}", v).into(),
+                    VariantScalarTypeId::String => format!("{v}").into(),
                     _ => Variant::Empty,
                 }
             }
@@ -1001,7 +999,7 @@ impl Variant {
                 // Guid - everything is X or E except to ExpandedNodeId and String
                 match target_type {
                     VariantScalarTypeId::ExpandedNodeId => ExpandedNodeId::from(*v.clone()).into(),
-                    VariantScalarTypeId::String => format!("{}", v).into(),
+                    VariantScalarTypeId::String => format!("{v}").into(),
                     _ => Variant::Empty,
                 }
             }

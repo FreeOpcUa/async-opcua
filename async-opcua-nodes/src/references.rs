@@ -91,10 +91,7 @@ impl References {
         reference_type: impl Into<NodeId>,
     ) {
         if source_node == target_node {
-            panic!(
-                "Node id from == node id to {}, self reference is not allowed",
-                source_node
-            );
+            panic!("Node id from == node id to {source_node}, self reference is not allowed");
         }
 
         let forward_refs = match self.by_source.get_mut(source_node) {
@@ -136,10 +133,7 @@ impl References {
     /// Import a reference from a nodeset.
     pub fn import_reference(&mut self, source_node: NodeId, rf: ImportedReference) {
         if source_node == rf.target_id {
-            panic!(
-                "Node id from == node id to {}, self reference is not allowed",
-                source_node
-            );
+            panic!("Node id from == node id to {source_node}, self reference is not allowed");
         }
 
         let mut source = source_node;

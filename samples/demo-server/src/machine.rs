@@ -158,7 +158,7 @@ fn add_machine(
         .has_type_definition(machine_type_id(ns))
         .insert(address_space);
 
-    let counter_id = NodeId::new(ns, format!("{} Counter", name));
+    let counter_id = NodeId::new(ns, format!("{name} Counter"));
     VariableBuilder::new(&counter_id, "Counter", "Counter")
         .property_of(machine_id.clone())
         .data_type(DataTypeId::UInt16)
@@ -190,7 +190,7 @@ impl MachineCycledEventType {
             base: BaseEventType::new(
                 event_type_id,
                 random::byte_string(128),
-                format!("A machine cycled event from machine {}", source_node),
+                format!("A machine cycled event from machine {source_node}"),
                 time,
             )
             .set_source_node(source_node.clone())

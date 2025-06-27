@@ -527,7 +527,7 @@ fn from_hex(v: &str) -> Vec<u8> {
             }
             _ => {
                 let ch = v[idx..].chars().next().unwrap();
-                panic!("Invalid hex character {} at {}", ch, idx);
+                panic!("Invalid hex character {ch} at {idx}");
             }
         }
 
@@ -584,7 +584,7 @@ fn test_x509_cross_thread() {
     let their_cert_data = include_bytes!("test_data/their_cert.der");
     let their_cert = X509::from_der(&their_cert_data[..]).unwrap();
     let child = thread::spawn(move || {
-        println!("k={:?}", their_cert);
+        println!("k={their_cert:?}");
     });
     let _ = child.join();
 }

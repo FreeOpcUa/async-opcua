@@ -239,7 +239,7 @@ impl<'a> NodeSetTypeLoader<'a> {
                 .get(id)
                 .cloned()
                 .ok_or_else(|| {
-                    CodeGenError::other(format!("Did not find type name for data type {}", id))
+                    CodeGenError::other(format!("Did not find type name for data type {id}"))
                 })?
         } else {
             let ns = self
@@ -263,7 +263,7 @@ impl<'a> NodeSetTypeLoader<'a> {
                 .get(&next_id)
                 .cloned()
                 .ok_or_else(|| {
-                    CodeGenError::other(format!("Did not find type name for data type {}", id))
+                    CodeGenError::other(format!("Did not find type name for data type {id}"))
                 })?
         };
         if let Some(native) = self.native_type_mappings.get(&r.name) {
@@ -299,8 +299,7 @@ impl<'a> NodeSetTypeLoader<'a> {
         if id.namespace == schema.own_namespace_index {
             let Some(parent) = schema.get_parent_type_ids()?.get(id) else {
                 return Err(CodeGenError::other(format!(
-                    "Did not find parent of data type {}. Last known parent is {}",
-                    orig, id
+                    "Did not find parent of data type {orig}. Last known parent is {id}"
                 )));
             };
             Self::find_builtin_type_variant(orig, parent, schema, cache)
@@ -322,8 +321,7 @@ impl<'a> NodeSetTypeLoader<'a> {
             };
             let Some(parent) = schema.get_parent_type_ids()?.get(&next_id) else {
                 return Err(CodeGenError::other(format!(
-                    "Did not find parent of data type {}",
-                    id
+                    "Did not find parent of data type {id}"
                 )));
             };
 

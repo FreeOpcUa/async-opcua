@@ -141,7 +141,7 @@ impl CertificateStore {
             return Ok(pkey);
         }
 
-        Err(format!("Cannot read pkey from path {:?}", path))
+        Err(format!("Cannot read pkey from path {path:?}"))
     }
 
     /// Reads the store's own certificate
@@ -401,9 +401,9 @@ impl CertificateStore {
         let thumbprint = cert.thumbprint().as_hex_string();
 
         if !prefix.is_empty() {
-            format!("{} [{}].der", prefix, thumbprint)
+            format!("{prefix} [{thumbprint}].der")
         } else {
-            format!("{}.der", thumbprint)
+            format!("{thumbprint}.der")
         }
     }
 

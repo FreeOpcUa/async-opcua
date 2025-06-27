@@ -742,54 +742,6 @@ pub fn skip_bytes<R: Read + ?Sized>(stream: &mut R, bytes: u64) -> EncodingResul
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-
-    use super::{constants, DepthGauge, DepthLock};
-    use crate::StatusCode;
-
-    #[test]
-    fn depth_gauge() {
-        let dg = Arc::new(DepthGauge::default());
-
-        let max_depth = dg.max_depth();
-        assert_eq!(max_depth, constants::MAX_DECODING_DEPTH);
-
-        // Iterate the depth
-        {
-            let mut v = Vec::new();
-            for _ in 0..max_depth {
-                v.push(DepthLock::obtain(&dg).unwrap());
-            }
-
-            // Depth should now be MAX_DECODING_DEPTH
-            {
-                assert_eq!(
-                    dg.current_depth.load(std::sync::atomic::Ordering::Relaxed),
-                    max_depth
-                );
-            }
-
-            // Next obtain should fail
-            assert_eq!(
-                DepthLock::obtain(&dg).unwrap_err().status,
-                StatusCode::BadDecodingError
-            );
-
-            // DepthLocks drop here
-        }
-
-        // Depth should be zero
-        {
-            assert_eq!(
-                dg.current_depth.load(std::sync::atomic::Ordering::Relaxed),
-                0
-            );
-        }
-    }
-}
-
 #[macro_export]
 /// Implement the encodable traits for a type, using the provided
 /// functions to convert to and from some other type.
@@ -866,3 +818,51 @@ macro_rules! impl_encoded_as {
 }
 
 pub use impl_encoded_as;
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::{constants, DepthGauge, DepthLock};
+    use crate::StatusCode;
+
+    #[test]
+    fn depth_gauge() {
+        let dg = Arc::new(DepthGauge::default());
+
+        let max_depth = dg.max_depth();
+        assert_eq!(max_depth, constants::MAX_DECODING_DEPTH);
+
+        // Iterate the depth
+        {
+            let mut v = Vec::new();
+            for _ in 0..max_depth {
+                v.push(DepthLock::obtain(&dg).unwrap());
+            }
+
+            // Depth should now be MAX_DECODING_DEPTH
+            {
+                assert_eq!(
+                    dg.current_depth.load(std::sync::atomic::Ordering::Relaxed),
+                    max_depth
+                );
+            }
+
+            // Next obtain should fail
+            assert_eq!(
+                DepthLock::obtain(&dg).unwrap_err().status,
+                StatusCode::BadDecodingError
+            );
+
+            // DepthLocks drop here
+        }
+
+        // Depth should be zero
+        {
+            assert_eq!(
+                dg.current_depth.load(std::sync::atomic::Ordering::Relaxed),
+                0
+            );
+        }
+    }
+}

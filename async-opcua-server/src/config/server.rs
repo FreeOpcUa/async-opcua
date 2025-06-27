@@ -104,22 +104,19 @@ impl ServerUserToken {
         let mut errors = Vec::new();
         if id == ANONYMOUS_USER_TOKEN_ID {
             errors.push(format!(
-                "User token {} is invalid because id is a reserved value, use another value.",
-                id
+                "User token {id} is invalid because id is a reserved value, use another value."
             ));
         }
         if self.user.is_empty() {
-            errors.push(format!("User token {} has an empty user name.", id));
+            errors.push(format!("User token {id} has an empty user name."));
         }
         if self.pass.is_some() && self.x509.is_some() {
             errors.push(format!(
-                "User token {} holds a password and certificate info - it cannot be both.",
-                id
+                "User token {id} holds a password and certificate info - it cannot be both."
             ));
         } else if self.pass.is_none() && self.x509.is_none() {
             errors.push(format!(
-                "User token {} fails to provide a password or certificate info.",
-                id
+                "User token {id} fails to provide a password or certificate info."
             ));
         }
         if errors.is_empty() {
@@ -414,8 +411,8 @@ impl ServerConfig {
         let port = constants::DEFAULT_RUST_OPC_UA_SERVER_PORT;
 
         let application_name = application_name.into();
-        let application_uri = format!("urn:{}", application_name);
-        let product_uri = format!("urn:{}", application_name);
+        let application_uri = format!("urn:{application_name}");
+        let product_uri = format!("urn:{application_name}");
         let discovery_server_url = Some(constants::DEFAULT_DISCOVERY_SERVER_URL.to_string());
         let discovery_urls = vec![format!("opc.tcp://{}:{}/", host, port)];
         let locale_ids = vec!["en".to_string()];

@@ -333,8 +333,7 @@ impl ActivateSession {
             return Err(Error::new(
                 StatusCode::BadSecurityPolicyRejected,
                 format!(
-                    "Cannot find user token type {:?} for this endpoint, cannot connect",
-                    user_token_type
+                    "Cannot find user token type {user_token_type:?} for this endpoint, cannot connect"
                 ),
             ));
         };

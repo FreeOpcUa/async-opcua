@@ -197,7 +197,7 @@ fn from_hex(v: &str) -> Vec<u8> {
             }
             _ => {
                 let ch = v[idx..].chars().next().unwrap();
-                panic!("Invalid hex character {} at {}", ch, idx);
+                panic!("Invalid hex character {ch} at {idx}");
             }
         }
 

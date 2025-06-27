@@ -469,7 +469,7 @@ impl NodeSetImport for NodeSet2Import {
                 offset = 0;
                 continue;
             }
-            println!("Adding new namespace: {} {}", idx, ns);
+            println!("Adding new namespace: {idx} {ns}");
             namespaces.add_namespace(ns, idx as u16 + offset);
         }
     }

@@ -384,8 +384,7 @@ impl BinaryDecodable for ExpandedNodeId {
             }
             _ => {
                 return Err(Error::encoding(format!(
-                    "Unrecognized expanded node id type {}",
-                    identifier
+                    "Unrecognized expanded node id type {identifier}"
                 )));
             }
         };

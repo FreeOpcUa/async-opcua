@@ -6,10 +6,10 @@ fn size() {
     // are not too big.
     use std::mem;
     let size = mem::size_of::<ResponseMessage>();
-    println!("ResponseMessage size = {}", size);
+    println!("ResponseMessage size = {size}");
     assert!(size <= 16);
 
     let size = mem::size_of::<RequestMessage>();
-    println!("ResponseMessage size = {}", size);
+    println!("ResponseMessage size = {size}");
     assert!(size <= 16);
 }

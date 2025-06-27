@@ -48,10 +48,9 @@ impl Args {
             r#"Event Client
 Usage:
   -h, --help                Show help
-  --url [url]               Url to connect to (default: {})
-  --event-source [node-id]  Node id to monitor for events (default: {})
-  --event-fields [fields]   Comma separated list of variables within the event to print out (default: {})"#,
-            DEFAULT_URL, DEFAULT_EVENT_SOURCE, DEFAULT_EVENT_FIELDS
+  --url [url]               Url to connect to (default: {DEFAULT_URL})
+  --event-source [node-id]  Node id to monitor for events (default: {DEFAULT_EVENT_SOURCE})
+  --event-fields [fields]   Comma separated list of variables within the event to print out (default: {DEFAULT_EVENT_FIELDS})"#
         );
     }
 }
@@ -101,10 +100,7 @@ async fn main() -> Result<(), ()> {
     if let Err(result) =
         subscribe_to_events(session.clone(), &args.event_source, &args.event_fields).await
     {
-        println!(
-            "ERROR: Got an error while subscribing to variables - {}",
-            result
-        );
+        println!("ERROR: Got an error while subscribing to variables - {result}");
         let _ = session.disconnect().await;
     }
 
@@ -145,15 +141,12 @@ async fn subscribe_to_events(
             event_callback,
         )
         .await?;
-    println!("Created a subscription with id = {}", subscription_id);
+    println!("Created a subscription with id = {subscription_id}");
 
     // Create monitored item on an event
 
     let event_source = NodeId::from_str(event_source).unwrap();
-    println!(
-        "Creating a subscription to events from the event source {}",
-        event_source
-    );
+    println!("Creating a subscription to events from the event source {event_source}");
 
     // The where clause is looking for events that are change events
     let where_clause = ContentFilter { elements: None };
@@ -189,7 +182,7 @@ async fn subscribe_to_events(
         )
         .await
     {
-        println!("Result of subscribing to event = {:?}", result);
+        println!("Result of subscribing to event = {result:?}");
     } else {
         println!("Cannot create monitored event!");
     }

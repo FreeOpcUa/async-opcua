@@ -44,8 +44,8 @@ impl fmt::Display for Identifier {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Identifier::Numeric(v) => write!(f, "i={}", *v),
-            Identifier::String(v) => write!(f, "s={}", v),
-            Identifier::Guid(v) => write!(f, "g={:?}", v),
+            Identifier::String(v) => write!(f, "s={v}"),
+            Identifier::Guid(v) => write!(f, "g={v:?}"),
             Identifier::ByteString(v) => write!(f, "b={}", v.as_base64()),
         }
     }
@@ -482,8 +482,7 @@ impl BinaryDecodable for NodeId {
             }
             _ => {
                 return Err(Error::decoding(format!(
-                    "Unrecognized node id type {}",
-                    identifier
+                    "Unrecognized node id type {identifier}"
                 )));
             }
         };

@@ -404,7 +404,7 @@ impl Server {
             Ok(listener) => listener,
             Err(e) => {
                 error!("Failed to bind socket: {:?}", e);
-                return Err(format!("Failed to bind socket: {:?}", e));
+                return Err(format!("Failed to bind socket: {e:?}"));
             }
         };
 

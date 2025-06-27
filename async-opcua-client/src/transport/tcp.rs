@@ -72,7 +72,7 @@ impl TcpConnector {
         )?;
 
         let addr = {
-            let addr = format!("{}:{}", host, port);
+            let addr = format!("{host}:{port}");
             match tokio::net::lookup_host(addr).await {
                 Ok(mut addrs) => {
                     if let Some(addr) = addrs.next() {

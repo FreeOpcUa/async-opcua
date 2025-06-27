@@ -30,8 +30,7 @@ impl Args {
             r#"Simple Client
 Usage:
   -h, --help   Show help
-  --url [url]  Url to connect to (default: {})"#,
-            DEFAULT_URL
+  --url [url]  Url to connect to (default: {DEFAULT_URL})"#
         );
     }
 }
@@ -79,7 +78,7 @@ pub async fn client_connect(
     let ns = session
         .get_namespace_index(NAMESPACE_URI)
         .await
-        .map_err(|e| format!("Error getting namespace index {:?}", e))?;
+        .map_err(|e| format!("Error getting namespace index {e:?}"))?;
 
     Ok((session, handle, ns))
 }

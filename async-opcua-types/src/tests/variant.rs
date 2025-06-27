@@ -31,7 +31,7 @@ fn size() {
     // amount.
     use std::mem;
     let vsize = mem::size_of::<Variant>();
-    println!("Variant size = {}", vsize);
+    println!("Variant size = {vsize}");
     assert!(vsize <= 32);
 }
 
@@ -955,7 +955,7 @@ fn variant_convert_string() {
 fn variant_cast_string() {
     // DateTime
     let now = DateTime::now();
-    let now_s = format!("{}", now);
+    let now_s = format!("{now}");
     let now_v: Variant = now.into();
     assert_eq!(
         Variant::from(now_s).cast(VariantScalarTypeId::DateTime),
@@ -1317,7 +1317,7 @@ fn variant_cast_uint64() {
 #[test]
 fn variant_cast_date_time() {
     let now = DateTime::now();
-    let now_s = format!("{}", now);
+    let now_s = format!("{now}");
     assert_eq!(
         Variant::from(now).cast(VariantScalarTypeId::String),
         now_s.into()
@@ -1363,7 +1363,7 @@ fn variant_cast_guid() {
     let b = ByteString::from(g.clone());
     assert_eq!(v.cast(VariantScalarTypeId::ByteString), b.into());
     // String
-    assert_eq!(v.cast(VariantScalarTypeId::String), format!("{}", g).into());
+    assert_eq!(v.cast(VariantScalarTypeId::String), format!("{g}").into());
 }
 
 #[test]

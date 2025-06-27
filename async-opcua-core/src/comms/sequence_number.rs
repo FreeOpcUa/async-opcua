@@ -93,7 +93,7 @@ mod tests {
         assert_eq!(seq.current(), 1);
         assert_eq!(seq.max_value(), u32::MAX - 1024);
         assert_eq!(seq.min_value(), 1);
-        assert_eq!(seq.is_legacy(), true);
+        assert!(seq.is_legacy());
         seq.increment(1);
         assert_eq!(seq.current(), 2);
 
@@ -116,7 +116,7 @@ mod tests {
         assert_eq!(seq.current(), 0);
         assert_eq!(seq.max_value(), u32::MAX);
         assert_eq!(seq.min_value(), 0);
-        assert_eq!(seq.is_legacy(), false);
+        assert!(!seq.is_legacy());
         seq.increment(1);
         assert_eq!(seq.current(), 1);
 

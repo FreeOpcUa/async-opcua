@@ -248,7 +248,7 @@ mod json {
             let type_id = body.json_type_id();
 
             let id = type_id.try_resolve(ctx.namespaces()).ok_or_else(|| {
-                Error::encoding(format!("Missing namespace for encoding ID: {}", type_id))
+                Error::encoding(format!("Missing namespace for encoding ID: {type_id}"))
             })?;
 
             stream.begin_object()?;
@@ -291,8 +291,7 @@ mod json {
                         ValueType::Object => {
                             if encoding.is_some_and(|e| e != 0) {
                                 return Err(Error::decoding(format!(
-                                    "Invalid encoding, expected 0 or null, got {:?}",
-                                    encoding
+                                    "Invalid encoding, expected 0 or null, got {encoding:?}"
                                 )));
                             }
                             if let Some(type_id) = &type_id {
@@ -322,8 +321,7 @@ mod json {
             } else if let Some(raw_body) = raw_body {
                 if encoding != 0 {
                     return Err(Error::decoding(format!(
-                        "Invalid encoding, expected 0 or null, got {}",
-                        encoding
+                        "Invalid encoding, expected 0 or null, got {encoding}"
                     )));
                 }
                 let mut cursor = Cursor::new(raw_body);
@@ -569,8 +567,7 @@ impl BinaryDecodable for ExtensionObject {
             }
             _ => {
                 return Err(Error::decoding(format!(
-                    "Invalid encoding type {} in stream",
-                    encoding_type
+                    "Invalid encoding type {encoding_type} in stream"
                 )));
             }
         };

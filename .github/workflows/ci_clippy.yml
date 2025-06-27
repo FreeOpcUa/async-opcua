@@ -7,6 +7,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Provision toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
       - name: Run clippy
         run: cargo clippy --locked -- -D warnings
       

@@ -384,8 +384,7 @@ impl<'a> ValueBuilder<'a> {
             .is_some_and(|m| !matches!(m, MaxOccurs::Count(1)));
         let Some(type_name) = &field.r#type else {
             return Err(CodeGenError::other(format!(
-                "Failed to render field, element {} has no type",
-                name
+                "Failed to render field, element {name} has no type"
             )));
         };
         let type_name = if let Some((_, t)) = type_name.split_once(":") {
@@ -732,16 +731,14 @@ impl<'a> ValueBuilder<'a> {
                     // a struct that inherits fields from another struct.
                     Some(ComplexTypeContents::Complex(ComplexContent::Extension(e))) => {
                         let (_, base_name) = e.base.as_str().split_once(":").ok_or_else(|| {
-                            format!(
-                                "Type {} has a base type not on the form namespace:name",
-                                name
-                            )
+                            format!("Type {name} has a base type not on the form namespace:name")
                         })?;
-                        let base_type = self.types.get(base_name).ok_or_else(|| {
-                            format!("Base type of {}, {} not found", name, base_name)
-                        })?;
+                        let base_type = self
+                            .types
+                            .get(base_name)
+                            .ok_or_else(|| format!("Base type of {name}, {base_name} not found"))?;
                         let TypeRef::Struct(base_type) = self.make_type_ref(base_type)? else {
-                            return Err(format!("Base type of struct {} must be a struct", name));
+                            return Err(format!("Base type of struct {name} must be a struct"));
                         };
                         let s = e
                             .content
@@ -752,7 +749,7 @@ impl<'a> ValueBuilder<'a> {
                             })
                             .next()
                             .ok_or_else(|| {
-                                format!("Type {} extension does not contain a sequence", name)
+                                format!("Type {name} extension does not contain a sequence")
                             })?;
 
                         (Some(base_type), s)
@@ -762,16 +759,15 @@ impl<'a> ValueBuilder<'a> {
                         let TypeDefParticle::Sequence(s) = c
                             .particle
                             .as_ref()
-                            .ok_or_else(|| format!("Type {} does not contain a particle", name))?
+                            .ok_or_else(|| format!("Type {name} does not contain a particle"))?
                         else {
                             return Err(format!(
-                                "Type is complex but does not contain a sequence: {}",
-                                name
+                                "Type is complex but does not contain a sequence: {name}"
                             ));
                         };
                         (None, s)
                     }
-                    Some(_) => return Err(format!("Unsupported content type of type {}", name)),
+                    Some(_) => return Err(format!("Unsupported content type of type {name}")),
                 };
 
                 // The sequence should be a list of elements, we only care about those.
@@ -779,8 +775,7 @@ impl<'a> ValueBuilder<'a> {
                 for it in sequence.content.iter() {
                     if matches!(it, NestedParticle::Any(_)) {
                         return Err(format!(
-                            "Structure contains any element, this type cannot be inferred: {}",
-                            name
+                            "Structure contains any element, this type cannot be inferred: {name}"
                         ));
                     }
 
@@ -789,8 +784,7 @@ impl<'a> ValueBuilder<'a> {
                     };
                     let Some(name) = e.name.as_ref() else {
                         return Err(format!(
-                            "Structure contains element with null name, this type is invalid: {}",
-                            name
+                            "Structure contains element with null name, this type is invalid: {name}"
                         ));
                     };
                     elements.insert(name.as_str(), e);

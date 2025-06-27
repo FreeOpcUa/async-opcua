@@ -209,10 +209,10 @@ fn invalid_numeric_ranges() {
         "4294967296:0",
     ];
     for vr in invalid_ranges {
-        println!("vr = {}", vr);
+        println!("vr = {vr}");
         let range = vr.parse::<NumericRange>();
         if range.is_ok() {
-            println!("Range {} is ok when it should be in error", vr);
+            println!("Range {vr} is ok when it should be in error");
         }
         assert!(range.is_err());
     }
@@ -258,8 +258,8 @@ impl Display for NumericRange {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             NumericRange::None => write!(f, ""),
-            NumericRange::Index(idx) => write!(f, "{}", idx),
-            NumericRange::Range(min, max) => write!(f, "{}:{}", min, max),
+            NumericRange::Index(idx) => write!(f, "{idx}"),
+            NumericRange::Range(min, max) => write!(f, "{min}:{max}"),
             NumericRange::MultipleRanges(vec) => {
                 let mut needs_comma = false;
                 for r in vec {
@@ -267,7 +267,7 @@ impl Display for NumericRange {
                         write!(f, ",")?;
                     }
                     needs_comma = true;
-                    write!(f, "{}", r)?;
+                    write!(f, "{r}")?;
                 }
                 Ok(())
             }

@@ -199,7 +199,7 @@ impl CodeGenerator {
             self.import_map.insert(
                 item.name().to_owned(),
                 ImportType {
-                    path: format!("super::{}", name),
+                    path: format!("super::{name}"),
                     // Determined later
                     has_default: None,
                     base_type: match &item {
@@ -247,7 +247,7 @@ impl CodeGenerator {
             return name.to_owned();
         }
         // Assume the type is a builtin.
-        format!("opcua::types::{}", name)
+        format!("opcua::types::{name}")
     }
 
     fn has_default(&self, name: &str) -> bool {
@@ -276,8 +276,7 @@ impl CodeGenerator {
                 EnumReprType::u8 => {
                     let value: u8 = value.try_into().map_err(|_| {
                         CodeGenError::other(format!(
-                            "Unexpected error converting to u8, {} is out of range",
-                            value
+                            "Unexpected error converting to u8, {value} is out of range"
                         ))
                     })?;
                     Lit::Byte(LitByte::new(value, Span::call_site()))
@@ -285,8 +284,7 @@ impl CodeGenerator {
                 EnumReprType::i16 => {
                     let value: i16 = value.try_into().map_err(|_| {
                         CodeGenError::other(format!(
-                            "Unexpected error converting to i16, {} is out of range",
-                            value
+                            "Unexpected error converting to i16, {value} is out of range"
                         ))
                     })?;
                     parse_quote! { #value }
@@ -294,8 +292,7 @@ impl CodeGenerator {
                 EnumReprType::i32 => {
                     let value: i32 = value.try_into().map_err(|_| {
                         CodeGenError::other(format!(
-                            "Unexpected error converting to i32, {} is out of range",
-                            value
+                            "Unexpected error converting to i32, {value} is out of range"
                         ))
                     })?;
                     parse_quote! { #value }
@@ -421,8 +418,7 @@ impl CodeGenerator {
                 EnumReprType::u8 => {
                     let value: u8 = value.try_into().map_err(|_| {
                         CodeGenError::other(format!(
-                            "Unexpected error converting to u8, {} is out of range",
-                            value
+                            "Unexpected error converting to u8, {value} is out of range"
                         ))
                     })?;
                     Lit::Byte(LitByte::new(value, Span::call_site()))
@@ -430,8 +426,7 @@ impl CodeGenerator {
                 EnumReprType::i16 => {
                     let value: i16 = value.try_into().map_err(|_| {
                         CodeGenError::other(format!(
-                            "Unexpected error converting to i16, {} is out of range",
-                            value
+                            "Unexpected error converting to i16, {value} is out of range"
                         ))
                     })?;
                     parse_quote! { #value }
@@ -439,8 +434,7 @@ impl CodeGenerator {
                 EnumReprType::i32 => {
                     let value: i32 = value.try_into().map_err(|_| {
                         CodeGenError::other(format!(
-                            "Unexpected error converting to i32, {} is out of range",
-                            value
+                            "Unexpected error converting to i32, {value} is out of range"
                         ))
                     })?;
                     parse_quote! { #value }

@@ -338,8 +338,7 @@ impl TypeInfo {
                 for (idx, v) in d.fields.into_iter().flatten().enumerate() {
                     let Some(builtin) = parent_ids.get_builtin_type(&v.data_type) else {
                         return Err(format!(
-                            "Failed to resolve type id {} to scalar type",
-                            node_id
+                            "Failed to resolve type id {node_id} to scalar type"
                         ));
                     };
                     let f = ParsedStructureField::from_field(v, builtin)?;

@@ -40,8 +40,7 @@ impl Args {
             r#"Simple Client
 Usage:
   -h, --help   Show help
-  --url [url]  Url to connect to (default: {})"#,
-            DEFAULT_URL
+  --url [url]  Url to connect to (default: {DEFAULT_URL})"#
         );
     }
 }
@@ -86,10 +85,7 @@ async fn main() -> Result<(), ()> {
     session.wait_for_connection().await;
 
     if let Err(result) = subscribe_to_variables(session.clone(), 2).await {
-        println!(
-            "ERROR: Got an error while subscribing to variables - {}",
-            result
-        );
+        println!("ERROR: Got an error while subscribing to variables - {result}");
         let _ = session.disconnect().await;
     }
 
@@ -126,7 +122,7 @@ async fn subscribe_to_variables(session: Arc<Session>, ns: u16) -> Result<(), St
             }),
         )
         .await?;
-    println!("Created a subscription with id = {}", subscription_id);
+    println!("Created a subscription with id = {subscription_id}");
 
     // Create some monitored items
     let items_to_create: Vec<MonitoredItemCreateRequest> = ["v1", "v2", "v3", "v4", "v5"]
@@ -143,7 +139,7 @@ async fn subscribe_to_variables(session: Arc<Session>, ns: u16) -> Result<(), St
 fn print_value(data_value: &DataValue, item: &MonitoredItem) {
     let node_id = &item.item_to_monitor().node_id;
     if let Some(ref value) = data_value.value {
-        println!("Item \"{}\", Value = {:?}", node_id, value);
+        println!("Item \"{node_id}\", Value = {value:?}");
     } else {
         println!(
             "Item \"{}\", Value not found, error: {}",

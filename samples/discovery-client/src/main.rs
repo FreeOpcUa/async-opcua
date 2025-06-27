@@ -33,8 +33,7 @@ impl Args {
             r#"OPC UA Discovery client
 Usage:
   -h, --help  Show help
-  --url       The url for the discovery server (default: {})"#,
-            DEFAULT_DISCOVERY_URL
+  --url       The url for the discovery server (default: {DEFAULT_DISCOVERY_URL})"#
         );
     }
 }
@@ -50,7 +49,7 @@ async fn main() -> Result<(), ()> {
         // Read the argument
         let url = args.url;
 
-        println!("Attempting to connect to discovery server {} ...", url);
+        println!("Attempting to connect to discovery server {url} ...");
         // Optional - enable OPC UA logging
         env_logger::init();
 
@@ -73,8 +72,7 @@ async fn main() -> Result<(), ()> {
             }
             Err(err) => {
                 println!(
-                    "ERROR: Cannot find servers on discovery server - check this error - {:?}",
-                    err
+                    "ERROR: Cannot find servers on discovery server - check this error - {err:?}"
                 );
             }
         }
@@ -83,7 +81,7 @@ async fn main() -> Result<(), ()> {
 }
 
 async fn print_server_endpoints(discovery_url: &str) {
-    println!("  {}", discovery_url);
+    println!("  {discovery_url}");
     if is_opc_ua_binary_url(discovery_url) {
         // Try to talk with it and get some endpoints
         let client_config = ClientConfig::new("discovery-client", "urn:discovery-client");
@@ -104,8 +102,7 @@ async fn print_server_endpoints(discovery_url: &str) {
             }
             Result::Err(status_code) => {
                 println!(
-                    "    ERROR: Cannot get endpoints for this server url, error - {}",
-                    status_code
+                    "    ERROR: Cannot get endpoints for this server url, error - {status_code}"
                 );
             }
         }

@@ -30,12 +30,12 @@ fn parse_node_id_integer() {
     let node_id = NodeId::from_str("i=13").unwrap();
     assert_eq!(node_id.namespace, 0);
     assert_eq!(node_id.identifier, Identifier::Numeric(13));
-    assert_eq!(format!("{}", node_id), "i=13");
+    assert_eq!(format!("{node_id}"), "i=13");
 
     let node_id = NodeId::from_str("ns=99;i=35").unwrap();
     assert_eq!(node_id.namespace, 99);
     assert_eq!(node_id.identifier, Identifier::Numeric(35));
-    assert_eq!(format!("{}", node_id), "ns=99;i=35");
+    assert_eq!(format!("{node_id}"), "ns=99;i=35");
 }
 
 #[test]
@@ -47,7 +47,7 @@ fn parse_node_id_string() {
         node_id.identifier,
         Identifier::String(UAString::from("Hello World"))
     );
-    assert_eq!(format!("{}", node_id), "ns=1;s=Hello World");
+    assert_eq!(format!("{node_id}"), "ns=1;s=Hello World");
 
     let node_id = NodeId::from_str("s=No NS this time").unwrap();
     assert_eq!(node_id.namespace, 0);
@@ -55,7 +55,7 @@ fn parse_node_id_string() {
         node_id.identifier,
         Identifier::String(UAString::from("No NS this time"))
     );
-    assert_eq!(format!("{}", node_id), "s=No NS this time");
+    assert_eq!(format!("{node_id}"), "s=No NS this time");
 }
 
 #[test]
@@ -69,7 +69,7 @@ fn parse_node_id_guid() {
     );
     // All lower case when returned
     assert_eq!(
-        format!("{}", node_id),
+        format!("{node_id}"),
         "g=72962b91-fa75-4ae6-8d28-b404dc7daf63"
     );
 }
@@ -84,7 +84,7 @@ fn parse_node_id_byte_string() {
         Identifier::ByteString(ByteString::from_base64("M/RbKBsRVkePCePcx24oRA==").unwrap())
     );
     // Turn byte string back to string, compare to original
-    assert_eq!(format!("{}", node_id), "ns=1;b=M/RbKBsRVkePCePcx24oRA==");
+    assert_eq!(format!("{node_id}"), "ns=1;b=M/RbKBsRVkePCePcx24oRA==");
 }
 
 #[test]
@@ -108,8 +108,7 @@ fn expanded_node_id() {
     .for_each(|s| {
         assert!(
             ExpandedNodeId::from_str(s).is_err(),
-            "{} is supposed to be invalid expanded node id",
-            s
+            "{s} is supposed to be invalid expanded node id"
         );
     });
 
@@ -129,7 +128,7 @@ fn expanded_node_id() {
         server_index: 33, // Note this should not display because the urn is present
     };
     assert_eq!(
-        format!("{}", node_id),
+        format!("{node_id}"),
         "svr=33;nsu=http://foo%3bblah%25;s=Hello World"
     );
 
@@ -139,7 +138,7 @@ fn expanded_node_id() {
         namespace_uri: UAString::null(),
         server_index: 33,
     };
-    assert_eq!(format!("{}", node_id), "svr=33;ns=1;s=Hello World");
+    assert_eq!(format!("{node_id}"), "svr=33;ns=1;s=Hello World");
     assert_eq!(
         ExpandedNodeId::from_str("svr=33;ns=1;s=Hello World").unwrap(),
         node_id

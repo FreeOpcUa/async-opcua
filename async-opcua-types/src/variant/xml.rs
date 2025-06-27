@@ -268,7 +268,7 @@ impl XmlEncodable for Variant {
                         return Ok(());
                     }
                 }
-                let tag_name = format!("ListOf{}", xml_name);
+                let tag_name = format!("ListOf{xml_name}");
                 stream.write_start(&tag_name)?;
                 for item in &v.values {
                     item.encode(stream, ctx)?;

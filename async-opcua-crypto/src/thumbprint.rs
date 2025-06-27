@@ -46,7 +46,7 @@ impl Thumbprint {
     pub fn as_hex_string(&self) -> String {
         let mut hex_string = String::with_capacity(self.value.len() * 2);
         for b in self.value.iter() {
-            hex_string.push_str(&format!("{:02x}", b))
+            hex_string.push_str(&format!("{b:02x}"))
         }
         hex_string
     }

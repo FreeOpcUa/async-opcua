@@ -162,8 +162,7 @@ impl<'a> SessionBuilder<'a, (), Vec<EndpointDescription>> {
             endpoint.clone()
         } else {
             return Err(format!(
-                "Cannot find default endpoint with id {}",
-                default_endpoint_id
+                "Cannot find default endpoint with id {default_endpoint_id}"
             ));
         };
         let user_identity_token = self

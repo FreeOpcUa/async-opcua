@@ -1,3 +1,5 @@
+#![cfg_attr(coverage, allow(unused))]
+
 use std::cmp::PartialEq;
 use std::fmt::Debug;
 use std::io::Cursor;
@@ -35,12 +37,12 @@ where
     assert_eq!((end_pos - start_pos) as usize, byte_len);
 
     let actual = stream.into_inner();
-    println!("value = {:?}", value);
-    println!("encoded bytes = {:?}", actual);
+    println!("value = {value:?}");
+    println!("encoded bytes = {actual:?}");
     let mut stream = Cursor::new(actual);
 
     let new_value: T = T::decode(&mut stream, &ctx).unwrap();
-    println!("new value = {:?}", new_value);
+    println!("new value = {new_value:?}");
     assert_eq!(value, new_value);
     new_value
 }

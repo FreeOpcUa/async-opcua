@@ -325,7 +325,7 @@ pub fn add_stress_variables(
     ns: u16,
 ) {
     let node_ids = (0..1000)
-        .map(|i| NodeId::new(ns, format!("v{:04}", i)))
+        .map(|i| NodeId::new(ns, format!("v{i:04}")))
         .collect::<Vec<NodeId>>();
 
     {
@@ -336,7 +336,7 @@ pub fn add_stress_variables(
         address_space.add_folder(&folder_id, "Stress", "Stress", &NodeId::objects_folder_id());
 
         node_ids.iter().enumerate().for_each(|(i, node_id)| {
-            let name = format!("v{:04}", i);
+            let name = format!("v{i:04}");
             VariableBuilder::new(node_id, &name, &name)
                 .data_type(DataTypeId::Int32)
                 .value(0i32)

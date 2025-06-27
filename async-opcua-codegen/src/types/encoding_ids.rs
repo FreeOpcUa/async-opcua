@@ -20,12 +20,9 @@ pub struct EncodingIds {
 impl EncodingIds {
     pub fn new(id_path: Path, root: &str) -> Result<Self, CodeGenError> {
         let data_type = Ident::new(root, Span::call_site());
-        let xml = Ident::new(&format!("{}_Encoding_DefaultXml", root), Span::call_site());
-        let json = Ident::new(&format!("{}_Encoding_DefaultJson", root), Span::call_site());
-        let bin = Ident::new(
-            &format!("{}_Encoding_DefaultBinary", root),
-            Span::call_site(),
-        );
+        let xml = Ident::new(&format!("{root}_Encoding_DefaultXml"), Span::call_site());
+        let json = Ident::new(&format!("{root}_Encoding_DefaultJson"), Span::call_site());
+        let bin = Ident::new(&format!("{root}_Encoding_DefaultBinary"), Span::call_site());
         Ok(Self {
             data_type: parse_quote! { #id_path::DataTypeId::#data_type as u32 },
             xml: parse_quote! { #id_path::ObjectId::#xml as u32 },

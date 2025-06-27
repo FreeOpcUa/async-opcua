@@ -395,7 +395,7 @@ impl Session {
     ///
     /// You must call `handler` on the returned browser and set a browse policy
     /// before it can be used. You can, for example, use [BrowseFilter](crate::browser::BrowseFilter)
-    pub fn browser(&self) -> Browser<'_, (), DefaultRetryPolicy> {
+    pub fn browser(&self) -> Browser<'_, (), DefaultRetryPolicy<'_>> {
         Browser::new(
             self,
             (),
@@ -429,10 +429,7 @@ impl Session {
         } else {
             Err(Error::new(
                 StatusCode::BadNoValue,
-                format!(
-                    "Server namespace array is None. The server has an issue {:?}",
-                    result
-                ),
+                format!("Server namespace array is None. The server has an issue {result:?}"),
             ))
         }
     }

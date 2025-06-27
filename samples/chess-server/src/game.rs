@@ -269,14 +269,14 @@ impl Game {
                 empty += 1;
             } else {
                 if empty != 0 {
-                    result.push_str(&format!("{}", empty));
+                    result.push_str(&format!("{empty}"));
                     empty = 0;
                 }
                 result.push(square.as_char());
             }
         }
         if empty != 0 {
-            result.push_str(&format!("{}", empty));
+            result.push_str(&format!("{empty}"));
         }
         result
     }
@@ -342,7 +342,7 @@ impl Game {
 
     pub fn set_position(&self) {
         let fen = self.as_fen();
-        println!("Setting position {}", fen);
+        println!("Setting position {fen}");
         let _ = self.engine.set_position(&fen);
     }
 
@@ -502,11 +502,11 @@ impl Game {
         let mut line = String::new();
         for idx in 0..self.squares.len() {
             if idx % 8 == 0 && !line.is_empty() {
-                println!("{}", line);
+                println!("{line}");
                 line.clear();
             }
             line.push(self.squares[idx].as_char());
         }
-        println!("{}", line);
+        println!("{line}");
     }
 }

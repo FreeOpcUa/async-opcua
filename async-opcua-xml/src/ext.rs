@@ -136,7 +136,7 @@ where
     node.children()
         .filter_map(|n| XmlLoad::load(&n).transpose())
         .next()
-        .ok_or_else(|| XmlError::other(node, &format!("Expected child of type {}", ctx)))?
+        .ok_or_else(|| XmlError::other(node, &format!("Expected child of type {ctx}")))?
 }
 
 impl<T> FromValue for Vec<T>

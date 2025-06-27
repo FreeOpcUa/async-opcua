@@ -842,7 +842,7 @@ async fn history_read_raw() {
         if i == 8 {
             assert!(v.continuation_point.is_null());
         } else {
-            assert!(!v.continuation_point.is_null(), "Expected cp for i = {}", i);
+            assert!(!v.continuation_point.is_null(), "Expected cp for i = {i}");
         }
         assert_eq!(v.status_code, StatusCode::Good);
         let next_data = v

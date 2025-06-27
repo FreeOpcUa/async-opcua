@@ -19,8 +19,8 @@ impl BinarySchemaInput {
     }
 
     pub fn load(root_path: &str, file_path: &str) -> Result<Self, CodeGenError> {
-        let data = std::fs::read_to_string(format!("{}/{}", root_path, file_path))
-            .map_err(|e| CodeGenError::io(&format!("Failed to read file {}", file_path), e))?;
+        let data = std::fs::read_to_string(format!("{root_path}/{file_path}"))
+            .map_err(|e| CodeGenError::io(&format!("Failed to read file {file_path}"), e))?;
         Self::parse(&data, file_path)
     }
 }

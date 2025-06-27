@@ -116,13 +116,12 @@ impl TcpConnector {
             Some(Ok(Message::Hello(hello))) => Ok(hello),
             Some(Ok(bad_msg)) => Err(ErrorMessage::new(
                 StatusCode::BadCommunicationError,
-                &format!("Expected a hello message, got {:?} instead", bad_msg),
+                &format!("Expected a hello message, got {bad_msg:?} instead"),
             )),
             Some(Err(communication_err)) => Err(ErrorMessage::new(
                 StatusCode::BadCommunicationError,
                 &format!(
-                    "Communication error while waiting for Hello message: {}",
-                    communication_err
+                    "Communication error while waiting for Hello message: {communication_err}"
                 ),
             )),
             None => Err(ErrorMessage::new(
@@ -408,7 +407,7 @@ impl TcpTransport {
             }
             unexpected => Err(Error::new(
                 StatusCode::BadUnexpectedError,
-                format!("Received unexpected message: {:?}", unexpected),
+                format!("Received unexpected message: {unexpected:?}"),
             )),
         }
     }

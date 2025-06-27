@@ -421,7 +421,7 @@ const BROWSE_NAME_RESERVED_CHARS: &str = "&/.<>:#!";
 fn escape_browse_name(name: &str) -> String {
     let mut result = String::from(name);
     BROWSE_NAME_RESERVED_CHARS.chars().for_each(|c| {
-        result = result.replace(c, &format!("&{}", c));
+        result = result.replace(c, &format!("&{c}"));
     });
     result
 }
@@ -430,7 +430,7 @@ fn escape_browse_name(name: &str) -> String {
 fn unescape_browse_name(name: &str) -> String {
     let mut result = String::from(name);
     BROWSE_NAME_RESERVED_CHARS.chars().for_each(|c| {
-        result = result.replace(&format!("&{}", c), &c.to_string());
+        result = result.replace(&format!("&{c}"), &c.to_string());
     });
     result
 }

@@ -215,7 +215,7 @@ impl<'a> NodeSetCodeGenerator<'a> {
         let name = self.get_localized_text(&node.display_names).render()?;
         let description = self.get_localized_text_opt(&node.description).render()?;
         let browse_name = node.browse_name.render()?;
-        let node_class: Expr = syn::parse_str(&format!("opcua::types::NodeClass::{}", node_class))?;
+        let node_class: Expr = syn::parse_str(&format!("opcua::types::NodeClass::{node_class}"))?;
         let write_mask = node.write_mask.0;
         let user_write_mask = node.user_write_mask.0;
         let node_id = self.resolve_node_id(&node.node_id)?;

@@ -388,7 +388,7 @@ impl ServerInfo {
             }
         } else {
             Err(Error::new(StatusCode::BadIdentityTokenRejected, format!(
-                "Cannot find endpoint that matches path \"{}\", security policy {:?}, and security mode {:?}", endpoint_url, security_policy, security_mode
+                "Cannot find endpoint that matches path \"{endpoint_url}\", security policy {security_policy:?}, and security mode {security_mode:?}"
             )))
         }
     }

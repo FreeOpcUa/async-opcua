@@ -195,7 +195,7 @@ impl JsonDecodable for Variant {
                     let ty: u32 = stream.next_number()??;
                     if ty != 0 {
                         type_id = Some(VariantScalarTypeId::try_from(ty).map_err(|_| {
-                            Error::decoding(format!("Unexpected variant type: {}", ty))
+                            Error::decoding(format!("Unexpected variant type: {ty}"))
                         })?);
                     }
                 }

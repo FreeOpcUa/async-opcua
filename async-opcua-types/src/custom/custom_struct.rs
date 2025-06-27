@@ -117,7 +117,7 @@ impl DynamicStructure {
         let Some(field) = type_def.fields.get(discriminant as usize - 1) else {
             return Err(Error::new(
                 StatusCode::BadInvalidArgument,
-                format!("Invalid discriminant {}", discriminant),
+                format!("Invalid discriminant {discriminant}"),
             ));
         };
         field.validate(&data)?;
@@ -579,8 +579,7 @@ impl DynamicTypeLoader {
                 }
                 let Some(field) = t.fields.get(discriminant as usize - 1) else {
                     return Err(Error::decoding(format!(
-                        "Invalid discriminant: {}",
-                        discriminant
+                        "Invalid discriminant: {discriminant}"
                     )));
                 };
                 let values = vec![self.decode_field(field, stream, ctx)?];

@@ -152,7 +152,7 @@ impl ClientBuilder {
     ) -> Self {
         let user_token_id = user_token_id.into();
         if user_token_id == ANONYMOUS_USER_TOKEN_ID {
-            panic!("User token id {} is reserved", user_token_id);
+            panic!("User token id {user_token_id} is reserved");
         }
         self.config.user_tokens.insert(user_token_id, user_token);
         self

@@ -1146,10 +1146,10 @@ mod tests {
                     assert_eq!(argument.array_dimensions, None);
                     assert_eq!(argument.description, LocalizedText::null());
                 } else {
-                    panic!("Variant was expected to be extension object, was {:?}", v);
+                    panic!("Variant was expected to be extension object, was {v:?}");
                 }
             } else {
-                panic!("Variant was expected to be array, was {:?}", v);
+                panic!("Variant was expected to be array, was {v:?}");
             }
         } else {
             panic!();

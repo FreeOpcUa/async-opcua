@@ -21,12 +21,12 @@ pub enum NodeIdVariant {
 impl Display for NodeIdVariant {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            NodeIdVariant::Numeric(i) => write!(f, "i={}", i),
-            NodeIdVariant::String(s) => write!(f, "s={}", s),
-            NodeIdVariant::Guid(g) => write!(f, "g={}", g),
+            NodeIdVariant::Numeric(i) => write!(f, "i={i}"),
+            NodeIdVariant::String(s) => write!(f, "s={s}"),
+            NodeIdVariant::Guid(g) => write!(f, "g={g}"),
             NodeIdVariant::ByteString(b) => {
                 let b64 = base64::engine::general_purpose::STANDARD.encode(b);
-                write!(f, "b={}", b64)
+                write!(f, "b={b64}")
             }
         }
     }
@@ -54,11 +54,11 @@ impl ParsedNodeId {
     pub fn parse(id: &str) -> Result<Self, CodeGenError> {
         let captures = NODEID_REGEX
             .captures(id)
-            .ok_or_else(|| CodeGenError::other(format!("Invalid nodeId: {}", id)))?;
+            .ok_or_else(|| CodeGenError::other(format!("Invalid nodeId: {id}")))?;
         let namespace = if let Some(ns) = captures.name("ns") {
             ns.as_str()
                 .parse::<u16>()
-                .map_err(|_| CodeGenError::other(format!("Invalid nodeId: {}", id)))?
+                .map_err(|_| CodeGenError::other(format!("Invalid nodeId: {id}")))?
         } else {
             0
         };
@@ -66,7 +66,7 @@ impl ParsedNodeId {
         let t = captures.name("t").unwrap();
         let idf = t.as_str();
         if idf.len() < 2 {
-            Err(CodeGenError::other(format!("Invalid nodeId: {}", id)))?;
+            Err(CodeGenError::other(format!("Invalid nodeId: {id}")))?;
         }
         let k = &idf[..2];
         let v = &idf[2..];
@@ -75,22 +75,22 @@ impl ParsedNodeId {
             "i=" => {
                 let i = v
                     .parse::<u32>()
-                    .map_err(|_| CodeGenError::other(format!("Invalid nodeId: {}", id)))?;
+                    .map_err(|_| CodeGenError::other(format!("Invalid nodeId: {id}")))?;
                 NodeIdVariant::Numeric(i)
             }
             "s=" => NodeIdVariant::String(v.to_owned()),
             "g=" => {
                 let uuid = Uuid::parse_str(v)
-                    .map_err(|e| CodeGenError::other(format!("Invalid nodeId: {}, {e}", id)))?;
+                    .map_err(|e| CodeGenError::other(format!("Invalid nodeId: {id}, {e}")))?;
                 NodeIdVariant::Guid(uuid)
             }
             "b=" => {
                 let bytes = base64::engine::general_purpose::STANDARD
                     .decode(v)
-                    .map_err(|e| CodeGenError::other(format!("Invalid nodeId: {}, {e}", id)))?;
+                    .map_err(|e| CodeGenError::other(format!("Invalid nodeId: {id}, {e}")))?;
                 NodeIdVariant::ByteString(bytes)
             }
-            _ => return Err(CodeGenError::other(format!("Invalid nodeId: {}", id)))?,
+            _ => return Err(CodeGenError::other(format!("Invalid nodeId: {id}")))?,
         };
         Ok(Self {
             value: variant,

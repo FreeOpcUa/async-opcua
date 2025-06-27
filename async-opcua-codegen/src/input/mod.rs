@@ -167,20 +167,20 @@ impl SchemaCache {
     }
 
     pub fn get_nodeset(&self, key: &str) -> Result<&NodeSetInput, CodeGenError> {
-        self.nodesets.get(key).ok_or_else(|| {
-            CodeGenError::other(format!("Missing required nodeset with key {}", key))
-        })
+        self.nodesets
+            .get(key)
+            .ok_or_else(|| CodeGenError::other(format!("Missing required nodeset with key {key}")))
     }
 
     pub fn get_binary_schema(&self, key: &str) -> Result<&BinarySchemaInput, CodeGenError> {
         self.binary_schemas.get(key).ok_or_else(|| {
-            CodeGenError::other(format!("Missing required binary schema with key {}", key))
+            CodeGenError::other(format!("Missing required binary schema with key {key}"))
         })
     }
 
     pub fn get_xml_schema(&self, key: &str) -> Result<&XmlSchemaInput, CodeGenError> {
         self.xml_schemas.get(key).ok_or_else(|| {
-            CodeGenError::other(format!("Missing required xml schema with key {}", key))
+            CodeGenError::other(format!("Missing required xml schema with key {key}"))
         })
     }
 }

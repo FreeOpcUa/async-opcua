@@ -214,12 +214,12 @@ impl NodeSetInput {
         file_path: &str,
         docs_path: Option<&str>,
     ) -> Result<Self, CodeGenError> {
-        let data = std::fs::read_to_string(format!("{}/{}", root_path, file_path))
-            .map_err(|e| CodeGenError::io(&format!("Failed to read file {}", file_path), e))?;
+        let data = std::fs::read_to_string(format!("{root_path}/{file_path}"))
+            .map_err(|e| CodeGenError::io(&format!("Failed to read file {file_path}"), e))?;
         let docs = docs_path
             .map(|p| {
-                std::fs::read_to_string(format!("{}/{}", root_path, p))
-                    .map_err(|e| CodeGenError::io(&format!("Failed to read file {}", p), e))
+                std::fs::read_to_string(format!("{root_path}/{p}"))
+                    .map_err(|e| CodeGenError::io(&format!("Failed to read file {p}"), e))
             })
             .transpose()?;
         Self::parse(&data, file_path, docs.as_deref()).map_err(|e| e.in_file(file_path))

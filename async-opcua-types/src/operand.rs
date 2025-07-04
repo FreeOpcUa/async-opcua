@@ -10,9 +10,10 @@ use std::convert::TryFrom;
 
 use crate::{
     attribute::AttributeId, match_extension_object_owned, status_code::StatusCode,
-    AttributeOperand, ContentFilter, ContentFilterElement, ElementOperand, ExtensionObject,
-    FilterOperator, LiteralOperand, NodeId, NumericRange, QualifiedName, SimpleAttributeOperand,
-    Variant,
+    AttributeOperand, ContentFilter, ContentFilterElement, DataTypeId, ElementOperand,
+    ExtensionObject, FilterOperator, LiteralOperand, MethodId, NodeId, NumericRange, ObjectId,
+    ObjectTypeId, QualifiedName, ReferenceTypeId, SimpleAttributeOperand, VariableId,
+    VariableTypeId, Variant,
 };
 
 #[derive(PartialEq)]
@@ -98,6 +99,54 @@ impl From<bool> for LiteralOperand {
 impl From<&str> for LiteralOperand {
     fn from(v: &str) -> Self {
         Self::from(Variant::from(v))
+    }
+}
+
+impl From<NodeId> for LiteralOperand {
+    fn from(v: NodeId) -> Self {
+        Self::from(Variant::from(v))
+    }
+}
+
+impl From<ObjectId> for LiteralOperand {
+    fn from(v: ObjectId) -> Self {
+        Self::from(Variant::NodeId(Box::new(v.into())))
+    }
+}
+
+impl From<VariableId> for LiteralOperand {
+    fn from(v: VariableId) -> Self {
+        Self::from(Variant::NodeId(Box::new(v.into())))
+    }
+}
+
+impl From<MethodId> for LiteralOperand {
+    fn from(v: MethodId) -> Self {
+        Self::from(Variant::NodeId(Box::new(v.into())))
+    }
+}
+
+impl From<DataTypeId> for LiteralOperand {
+    fn from(v: DataTypeId) -> Self {
+        Self::from(Variant::NodeId(Box::new(v.into())))
+    }
+}
+
+impl From<ObjectTypeId> for LiteralOperand {
+    fn from(v: ObjectTypeId) -> Self {
+        Self::from(Variant::NodeId(Box::new(v.into())))
+    }
+}
+
+impl From<VariableTypeId> for LiteralOperand {
+    fn from(v: VariableTypeId) -> Self {
+        Self::from(Variant::NodeId(Box::new(v.into())))
+    }
+}
+
+impl From<ReferenceTypeId> for LiteralOperand {
+    fn from(v: ReferenceTypeId) -> Self {
+        Self::from(Variant::NodeId(Box::new(v.into())))
     }
 }
 
@@ -409,6 +458,14 @@ impl ContentFilterBuilder {
         self.add_element(FilterOperator::BitwiseOr, vec![o1.into(), o2.into()])
     }
 
+    /// Add an "of type" operand. `type_id` must resolve to a node ID.
+    pub fn of_type<T>(self, type_id: T) -> Self
+    where
+        T: Into<Operand>,
+    {
+        self.add_element(FilterOperator::OfType, vec![type_id.into()])
+    }
+
     /// Build a content filter.
     pub fn build(self) -> ContentFilter {
         ContentFilter {
@@ -445,5 +502,19 @@ impl SimpleAttributeOperand {
             attribute_id: attribute_id as u32,
             index_range,
         }
+    }
+
+    /// Create a new simple attribute operand targeting the `Value` attribute with
+    /// no index range.
+    pub fn new_value<T>(type_definition_id: T, browse_path: &str) -> Self
+    where
+        T: Into<NodeId>,
+    {
+        Self::new(
+            type_definition_id,
+            browse_path,
+            AttributeId::Value,
+            NumericRange::None,
+        )
     }
 }

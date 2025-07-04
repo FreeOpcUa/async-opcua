@@ -198,9 +198,8 @@ impl SubscriptionCache {
     pub(crate) fn create_subscription(
         &self,
         session_id: u32,
-        session: &Arc<RwLock<Session>>,
         request: &CreateSubscriptionRequest,
-        info: &ServerInfo,
+        context: &RequestContext,
     ) -> Result<CreateSubscriptionResponse, StatusCode> {
         let mut lck = trace_write_lock!(self.inner);
         let cache = lck
@@ -209,18 +208,21 @@ impl SubscriptionCache {
             .or_insert_with(|| {
                 Arc::new(Mutex::new(SessionSubscriptions::new(
                     self.limits,
-                    Self::get_key(session),
-                    session.clone(),
+                    Self::get_key(&context.session),
+                    context.session.clone(),
+                    context.info.type_tree_getter.get_type_tree_static(context),
                 )))
             })
             .clone();
         let mut cache_lck = cache.lock();
-        let res = cache_lck.create_subscription(request, info)?;
+        let res = cache_lck.create_subscription(request, &context.info)?;
         lck.subscription_to_session
             .insert(res.subscription_id, session_id);
-        info.diagnostics
+        context
+            .info
+            .diagnostics
             .set_current_subscription_count(lck.subscription_to_session.len() as u32);
-        info.diagnostics.inc_subscription_count();
+        context.info.diagnostics.inc_subscription_count();
         Ok(res)
     }
 
@@ -664,8 +666,7 @@ impl SubscriptionCache {
     pub(crate) fn transfer(
         &self,
         req: &TransferSubscriptionsRequest,
-        session_id: u32,
-        session: &Arc<RwLock<Session>>,
+        context: &RequestContext,
     ) -> TransferSubscriptionsResponse {
         let mut results: Vec<_> = req
             .subscription_ids
@@ -682,17 +683,18 @@ impl SubscriptionCache {
             })
             .collect();
 
-        let key = Self::get_key(session);
+        let key = Self::get_key(&context.session);
         {
             let mut lck = trace_write_lock!(self.inner);
             let session_subs = lck
                 .session_subscriptions
-                .entry(session_id)
+                .entry(context.session_id)
                 .or_insert_with(|| {
                     Arc::new(Mutex::new(SessionSubscriptions::new(
                         self.limits,
                         key.clone(),
-                        session.clone(),
+                        context.session.clone(),
+                        context.info.type_tree_getter.get_type_tree_static(context),
                     )))
                 })
                 .clone();
@@ -702,7 +704,7 @@ impl SubscriptionCache {
                 let Some(current_owner_session_id) = lck.subscription_to_session.get(sub_id) else {
                     continue;
                 };
-                if session_id == *current_owner_session_id {
+                if context.session_id == *current_owner_session_id {
                     res.status_code = StatusCode::Good;
                     res.available_sequence_numbers =
                         session_subs_lck.available_sequence_numbers(*sub_id);
@@ -729,7 +731,7 @@ impl SubscriptionCache {
                     tracing::debug!(
                         "Transfer subscription {} to session {}",
                         sub.id(),
-                        session_id
+                        context.session_id
                     );
                     res.status_code = StatusCode::Good;
                     res.available_sequence_numbers =
@@ -744,7 +746,8 @@ impl SubscriptionCache {
                                 sub.set_resend_data();
                             }
                         }
-                        lck.subscription_to_session.insert(*sub_id, session_id);
+                        lck.subscription_to_session
+                            .insert(*sub_id, context.session_id);
                     }
                 }
             }

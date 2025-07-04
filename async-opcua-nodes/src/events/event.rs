@@ -21,6 +21,9 @@ pub trait Event: EventField {
 
     /// Get the `Time` of this event.
     fn time(&self) -> &DateTime;
+
+    /// Get the event type ID of this event.
+    fn event_type_id(&self) -> &NodeId;
 }
 
 #[derive(Debug, Default)]
@@ -86,6 +89,10 @@ impl Event for BaseEventType {
         } else {
             Variant::Empty
         }
+    }
+
+    fn event_type_id(&self) -> &NodeId {
+        &self.event_type
     }
 }
 

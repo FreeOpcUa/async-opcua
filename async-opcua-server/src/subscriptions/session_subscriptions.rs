@@ -14,7 +14,7 @@ use opcua_nodes::{Event, TypeTree};
 
 use crate::{
     info::ServerInfo,
-    node_manager::{MonitoredItemRef, MonitoredItemUpdateRef},
+    node_manager::{MonitoredItemRef, MonitoredItemUpdateRef, TypeTreeForUserStatic},
     session::instance::Session,
     SubscriptionLimits,
 };
@@ -44,6 +44,8 @@ pub struct SessionSubscriptions {
 
     /// Static reference to the session owning this, required to cleanly handle deletion.
     session: Arc<RwLock<Session>>,
+    /// Static reference to the type-tree for the user owning this.
+    type_tree_for_user: Arc<dyn TypeTreeForUserStatic>,
 }
 
 impl SessionSubscriptions {
@@ -51,6 +53,7 @@ impl SessionSubscriptions {
         limits: SubscriptionLimits,
         user_token: PersistentSessionKey,
         session: Arc<RwLock<Session>>,
+        type_tree_for_user: Arc<dyn TypeTreeForUserStatic>,
     ) -> Self {
         Self {
             user_token,
@@ -59,6 +62,7 @@ impl SessionSubscriptions {
             retransmission_queue: VecDeque::new(),
             limits,
             session,
+            type_tree_for_user,
         }
     }
 
@@ -763,11 +767,14 @@ impl SessionSubscriptions {
     }
 
     pub(super) fn notify_events(&mut self, events: Vec<(MonitoredItemHandle, &dyn Event)>) {
+        // Only get the inner type tree if we need to, for performance.
+        let mut lck = None;
         for (handle, event) in events {
             let Some(sub) = self.subscriptions.get_mut(&handle.subscription_id) else {
                 continue;
             };
-            sub.notify_event(&handle.monitored_item_id, event);
+            let type_tree = lck.get_or_insert_with(|| self.type_tree_for_user.get_type_tree());
+            sub.notify_event(&handle.monitored_item_id, event, type_tree.get());
         }
     }
 

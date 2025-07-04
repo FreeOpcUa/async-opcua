@@ -127,19 +127,20 @@ impl ParsedContentFilter {
     /// If `allow_attribute_operands` is false, parsing will fail
     /// if it encounters an attribute operand.
     ///
-    /// If `allow_complex_operators` is false, parsing will fail
-    /// if it encounters operators `InView`, `OfType`, or `RelatedTo`.
+    /// `banned_operators` is a list of operators that are not allowed in the filter.
+    /// If any of these operators are present, the parsing will fail with
+    /// `StatusCode::BadFilterOperatorUnsupported`.
     pub fn parse(
         filter: ContentFilter,
         type_tree: &dyn TypeTree,
         allow_attribute_operands: bool,
-        allow_complex_operators: bool,
+        banned_operators: &[FilterOperator],
     ) -> (ContentFilterResult, Result<ParsedContentFilter, StatusCode>) {
         validate_where_clause(
             filter,
             type_tree,
             allow_attribute_operands,
-            allow_complex_operators,
+            banned_operators,
         )
     }
 }
@@ -172,8 +173,12 @@ fn validate(
             Err(e) => select_clause_results.push(e),
         }
     }
-    let (where_clause_result, parsed_where_clause) =
-        validate_where_clause(event_filter.where_clause, type_tree, false, false);
+    let (where_clause_result, parsed_where_clause) = validate_where_clause(
+        event_filter.where_clause,
+        type_tree,
+        false,
+        &[FilterOperator::InView, FilterOperator::RelatedTo],
+    );
 
     (
         EventFilterResult {
@@ -258,7 +263,7 @@ fn validate_where_clause(
     where_clause: ContentFilter,
     type_tree: &dyn TypeTree,
     allow_attribute_operand: bool,
-    allow_complex_operators: bool,
+    banned_operators: &[FilterOperator],
 ) -> (ContentFilterResult, Result<ParsedContentFilter, StatusCode>) {
     // The ContentFilter structure defines a collection of elements that define filtering criteria.
     // Each element in the collection describes an operator and an array of operands to be used by
@@ -324,12 +329,7 @@ fn validate_where_clause(
                 FilterOperator::RelatedTo => filter_operands.len() != 6,
             };
 
-            if !allow_complex_operators
-                && matches!(
-                    e.filter_operator,
-                    FilterOperator::InView | FilterOperator::OfType | FilterOperator::RelatedTo
-                )
-            {
+            if banned_operators.contains(&e.filter_operator) {
                 return (
                     ContentFilterElementResult {
                         status_code: StatusCode::BadFilterOperatorUnsupported,
@@ -465,7 +465,7 @@ mod tests {
         let type_tree = DefaultTypeTree::new();
         // check for at least one filter operand
         let where_clause = ContentFilter { elements: None };
-        let (result, filter) = validate_where_clause(where_clause, &type_tree, false, false);
+        let (result, filter) = validate_where_clause(where_clause, &type_tree, false, &[]);
         assert_eq!(
             result,
             ContentFilterResult {
@@ -518,7 +518,7 @@ mod tests {
             ]),
         };
         // Check for less than required number of operands
-        let (result, filter) = validate_where_clause(where_clause, &type_tree, false, false);
+        let (result, filter) = validate_where_clause(where_clause, &type_tree, false, &[]);
         result
             .element_results
             .unwrap()
@@ -540,7 +540,7 @@ mod tests {
                 filter_operands: Some(vec![bad_operator]),
             }]),
         };
-        let (result, filter) = validate_where_clause(where_clause, &type_tree, false, false);
+        let (result, filter) = validate_where_clause(where_clause, &type_tree, false, &[]);
         let element_results = result.element_results.unwrap();
         assert_eq!(element_results.len(), 1);
         assert_eq!(
@@ -591,7 +591,7 @@ mod tests {
             ]),
         };
 
-        let (result, filter) = validate_where_clause(where_clause, &type_tree, false, false);
+        let (result, filter) = validate_where_clause(where_clause, &type_tree, false, &[]);
         let element_results = result.element_results.unwrap();
         assert_eq!(element_results.len(), 2);
         assert_eq!(element_results[0].status_code, StatusCode::Good);
@@ -624,7 +624,7 @@ mod tests {
             ]),
         };
 
-        let (_result, filter) = validate_where_clause(where_clause, &type_tree, false, false);
+        let (_result, filter) = validate_where_clause(where_clause, &type_tree, false, &[]);
         assert_eq!(filter.unwrap_err(), StatusCode::BadEventFilterInvalid);
     }
 }

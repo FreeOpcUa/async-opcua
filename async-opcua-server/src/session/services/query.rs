@@ -8,8 +8,8 @@ use crate::{
     session::{controller::Response, message_handler::Request},
 };
 use opcua_types::{
-    ByteString, QueryFirstRequest, QueryFirstResponse, QueryNextRequest, QueryNextResponse,
-    ResponseHeader, StatusCode,
+    ByteString, FilterOperator, QueryFirstRequest, QueryFirstResponse, QueryNextRequest,
+    QueryNextResponse, ResponseHeader, StatusCode,
 };
 
 pub(crate) async fn query_first(
@@ -55,7 +55,12 @@ pub(crate) async fn query_first(
 
     let (filter_result, filter) = {
         let type_tree = context.get_type_tree_for_user();
-        ParsedContentFilter::parse(request.request.filter, type_tree.get(), false, false)
+        ParsedContentFilter::parse(
+            request.request.filter,
+            type_tree.get(),
+            false,
+            &[FilterOperator::RelatedTo, FilterOperator::InView],
+        )
     };
 
     let content_filter = match filter {

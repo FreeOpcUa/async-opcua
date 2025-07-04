@@ -3,6 +3,7 @@ use std::{collections::HashMap, time::Duration};
 use crate::utils::{test_server, ChannelNotifications, TestNodeManager, Tester};
 
 use super::utils::setup;
+use chrono::DateTime;
 use opcua::{
     server::address_space::{AccessLevel, VariableBuilder},
     types::{
@@ -17,9 +18,15 @@ use opcua_client::{
     },
     IdentityToken, Subscription, UARequest,
 };
-use opcua_crypto::SecurityPolicy;
+use opcua_core_namespace::events::{
+    AuditHistoryBulkInsertEventType, AuditSecurityEventType, ProgressEventType,
+};
+use opcua_crypto::{random, SecurityPolicy};
+use opcua_nodes::Event;
 use opcua_types::{
-    DataChangeFilter, DataChangeTrigger, DeadbandType, ExtensionObject, MessageSecurityMode, Range,
+    ContentFilterBuilder, DataChangeFilter, DataChangeTrigger, DeadbandType, EventFilter,
+    ExtensionObject, LiteralOperand, MessageSecurityMode, ObjectTypeId, Operand, Range,
+    SimpleAttributeOperand,
 };
 use tokio::{sync::mpsc::UnboundedReceiver, time::timeout};
 
@@ -884,6 +891,121 @@ async fn test_manual_republish() {
     assert_eq!(items.len(), 1);
     let value = items[0].value.value.as_ref().unwrap();
     assert_eq!(value, &Variant::Int32(-1));
+}
+
+#[tokio::test]
+async fn test_event_subscriptions() {
+    let (tester, _nm, session) = setup().await;
+
+    // Create a subscription
+    let (notifs, _, mut events) = ChannelNotifications::new();
+    let sub_id = session
+        .create_subscription(Duration::from_millis(100), 100, 20, 1000, 0, true, notifs)
+        .await
+        .unwrap();
+
+    // Create a monitored item for audit events with OfType filter and a simple equality filter on Status.
+    session
+        .create_monitored_items(
+            sub_id,
+            TimestampsToReturn::Both,
+            vec![MonitoredItemCreateRequest {
+                item_to_monitor: ReadValueId {
+                    node_id: ObjectId::Server.into(),
+                    attribute_id: AttributeId::EventNotifier as u32,
+                    ..Default::default()
+                },
+                monitoring_mode: opcua::types::MonitoringMode::Reporting,
+                requested_parameters: MonitoringParameters {
+                    sampling_interval: 0.0,
+                    queue_size: 10,
+                    discard_oldest: true,
+                    filter: ExtensionObject::new(EventFilter {
+                        select_clauses: Some(vec![
+                            SimpleAttributeOperand::new_value(
+                                ObjectTypeId::BaseEventType,
+                                "EventId",
+                            ),
+                            SimpleAttributeOperand::new_value(
+                                ObjectTypeId::BaseEventType,
+                                "Message",
+                            ),
+                            SimpleAttributeOperand::new_value(
+                                ObjectTypeId::AuditEventType,
+                                "Status",
+                            ),
+                            SimpleAttributeOperand::new_value(
+                                ObjectTypeId::AuditHistoryBulkInsertEventType,
+                                "StartTime",
+                            ),
+                        ]),
+                        where_clause: ContentFilterBuilder::new()
+                            .and(Operand::element(1), Operand::element(2))
+                            .of_type(LiteralOperand::from(ObjectTypeId::AuditEventType))
+                            .eq(
+                                LiteralOperand::from(true),
+                                SimpleAttributeOperand::new_value(
+                                    ObjectTypeId::AuditEventType,
+                                    "Status",
+                                ),
+                            )
+                            .build(),
+                    }),
+                    ..Default::default()
+                },
+            }],
+        )
+        .await
+        .unwrap();
+
+    // Publish a few events.
+    let miss_evt_1 = ProgressEventType::new_event_now(
+        ProgressEventType::event_type_id(),
+        random::byte_string(6),
+        "Hello",
+        &tester.handle.type_tree().read().namespaces(),
+    );
+    let miss_evt_2 = AuditSecurityEventType::new_event_now(
+        AuditSecurityEventType::event_type_id(),
+        random::byte_string(6),
+        "Hello 2",
+        &tester.handle.type_tree().read().namespaces(),
+    );
+    let mut hit_evt = AuditHistoryBulkInsertEventType::new_event_now(
+        AuditHistoryBulkInsertEventType::event_type_id(),
+        random::byte_string(6),
+        "Hello 3",
+        tester.handle.type_tree().read().namespaces(),
+    );
+    hit_evt.base.status = true;
+    hit_evt.start_time = DateTime::from_timestamp(10_000, 0).unwrap().into();
+    hit_evt.base.base.severity = 50;
+
+    let server_id = ObjectId::Server.into();
+    tester.handle.subscriptions().notify_events(
+        [
+            (&miss_evt_1 as &dyn Event, &server_id),
+            (&miss_evt_2, &server_id),
+            (&hit_evt, &server_id),
+        ]
+        .into_iter(),
+    );
+
+    // Only the last event should be received, due to the filter.
+    let (r1, v1) = timeout(Duration::from_millis(500), events.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(r1.node_id, server_id);
+    let evt = v1.unwrap();
+    assert_eq!(4, evt.len());
+    assert_eq!(Variant::from(hit_evt.base.base.event_id.clone()), evt[0]);
+    assert_eq!(Variant::from(hit_evt.base.base.message.clone()), evt[1]);
+    assert_eq!(Variant::from(hit_evt.base.status), evt[2]);
+    assert_eq!(
+        Variant::from(DateTime::from_timestamp(10_000, 0).unwrap()),
+        evt[3]
+    );
 }
 
 // TODO: Add more detailed high level tests on subscriptions.

@@ -156,6 +156,10 @@ pub(crate) fn generate_event_impls(event: EventStruct) -> syn::Result<TokenStrea
             fn time(&self) -> &opcua::types::DateTime {
                 self.base.time()
             }
+
+            fn event_type_id(&self) -> &opcua::types::NodeId {
+                self.base.event_type_id()
+            }
         }
 
         impl opcua::nodes::EventField for #ident {

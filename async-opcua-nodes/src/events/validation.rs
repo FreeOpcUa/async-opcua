@@ -173,7 +173,7 @@ fn validate(
         }
     }
     let (where_clause_result, parsed_where_clause) =
-        validate_where_clause(event_filter.where_clause, type_tree, false, false);
+        validate_where_clause(event_filter.where_clause, type_tree, false, true);
 
     (
         EventFilterResult {

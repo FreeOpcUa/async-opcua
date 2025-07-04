@@ -249,15 +249,16 @@ impl MessageHandler {
             }
 
             RequestMessage::CreateSubscription(request) => {
+                let request = self.get_request(data, *request);
+                let context = request.context();
                 HandleMessageResult::SyncMessage(Response::from_result(
                     self.subscriptions.create_subscription(
-                        data.session_id,
-                        &data.session,
-                        &request,
-                        &self.info,
+                        request.session_id,
+                        &request.request,
+                        &context,
                     ),
-                    data.request_handle,
-                    data.request_id,
+                    request.request_handle,
+                    request.request_id,
                 ))
             }
 
@@ -280,12 +281,14 @@ impl MessageHandler {
             }
 
             RequestMessage::TransferSubscriptions(request) => {
+                let request = self.get_request(data, *request);
+                let context = request.context();
                 HandleMessageResult::SyncMessage(Response {
                     message: self
                         .subscriptions
-                        .transfer(&request, data.session_id, &data.session)
+                        .transfer(&request.request, &context)
                         .into(),
-                    request_id: data.request_id,
+                    request_id: request.request_id,
                 })
             }
 
@@ -434,6 +437,19 @@ impl MessageHandler {
             data.request_handle,
             data.request_id,
         ))
+    }
+
+    fn get_request<T>(&self, dt: RequestData, request: T) -> Request<T> {
+        Request::new(
+            Box::new(request),
+            self.info.clone(),
+            dt.request_id,
+            dt.request_handle,
+            dt.session,
+            dt.token,
+            self.subscriptions.clone(),
+            dt.session_id,
+        )
     }
 
     fn publish(&self, request: Box<PublishRequest>, data: RequestData) -> HandleMessageResult {

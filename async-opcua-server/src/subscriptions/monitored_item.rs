@@ -453,7 +453,7 @@ impl MonitoredItem {
         true
     }
 
-    pub(super) fn notify_event(&mut self, event: &dyn Event) -> bool {
+    pub(super) fn notify_event(&mut self, event: &dyn Event, type_tree: &dyn TypeTree) -> bool {
         if self.monitoring_mode == MonitoringMode::Disabled {
             return false;
         }
@@ -462,7 +462,7 @@ impl MonitoredItem {
             return false;
         };
 
-        let Some(notif) = filter.evaluate(event, self.client_handle) else {
+        let Some(notif) = filter.evaluate(event, self.client_handle, type_tree) else {
             return false;
         };
 

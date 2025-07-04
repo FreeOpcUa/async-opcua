@@ -18,6 +18,22 @@ use super::{
     DefaultTypeTree, NodeManagers,
 };
 
+/// Trait for providing a static reference to the type tree for a specific user.
+/// This allows subscriptions to hold a reference to the type tree.
+pub trait TypeTreeForUserStatic: Send + Sync {
+    /// Get the type tree read context. This may lock.
+    fn get_type_tree<'a>(&'a self) -> Box<dyn TypeTreeReadContext + 'a>;
+}
+
+impl<T> TypeTreeForUserStatic for RwLock<T>
+where
+    T: TypeTree + Send + Sync + 'static,
+{
+    fn get_type_tree<'a>(&'a self) -> Box<dyn TypeTreeReadContext + 'a> {
+        Box::new(trace_read_lock!(self))
+    }
+}
+
 /// Trait for providing a dynamic type tree for a user.
 /// This is a bit complex, it doesn't return a type tree directly,
 /// instead it returns something that wraps a type tree, for example
@@ -31,6 +47,11 @@ pub trait TypeTreeForUser: Send + Sync {
         &'a self,
         ctx: &'a RequestContext,
     ) -> Box<dyn TypeTreeReadContext + 'a>;
+
+    /// Get a static reference to a type tree getter for the current user.
+    /// This is used to allow subscriptions to hold a reference
+    /// to the type tree for events.
+    fn get_type_tree_static(&self, ctx: &RequestContext) -> Arc<dyn TypeTreeForUserStatic>;
 }
 
 pub(crate) struct DefaultTypeTreeGetter;
@@ -41,6 +62,10 @@ impl TypeTreeForUser for DefaultTypeTreeGetter {
         ctx: &'a RequestContext,
     ) -> Box<dyn TypeTreeReadContext + 'a> {
         Box::new(trace_read_lock!(ctx.type_tree))
+    }
+
+    fn get_type_tree_static(&self, ctx: &RequestContext) -> Arc<dyn TypeTreeForUserStatic> {
+        ctx.type_tree.clone()
     }
 }
 

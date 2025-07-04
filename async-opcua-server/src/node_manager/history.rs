@@ -4,8 +4,8 @@ use opcua_types::{
     match_extension_object_owned, ByteString, DeleteAtTimeDetails, DeleteEventDetails,
     DeleteRawModifiedDetails, DynEncodable, ExtensionObject, HistoryData, HistoryEvent,
     HistoryModifiedData, HistoryReadResult, HistoryReadValueId, HistoryUpdateResult, NodeId,
-    NumericRange, QualifiedName, ReadAnnotationDataDetails, ReadAtTimeDetails, ReadEventDetails,
-    ReadProcessedDetails, ReadRawModifiedDetails, StatusCode, UpdateDataDetails,
+    NumericRange, ObjectId, QualifiedName, ReadAnnotationDataDetails, ReadAtTimeDetails,
+    ReadEventDetails, ReadProcessedDetails, ReadRawModifiedDetails, StatusCode, UpdateDataDetails,
     UpdateEventDetails, UpdateStructureDataDetails,
 };
 
@@ -220,7 +220,13 @@ impl HistoryUpdateNode {
         self.operation_results = operation_results;
     }
 
-    pub(crate) fn into_result(self) -> HistoryUpdateResult {
+    pub(crate) fn into_result(mut self) -> HistoryUpdateResult {
+        // Special case reads on the server node, to return a proper error if no node manager supports it...
+        if self.details.node_id() == &ObjectId::Server
+            && matches!(self.status, StatusCode::BadNodeIdUnknown)
+        {
+            self.status = StatusCode::BadHistoryOperationUnsupported;
+        }
         HistoryUpdateResult {
             diagnostic_infos: None,
             status_code: self.status,

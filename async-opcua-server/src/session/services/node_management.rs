@@ -1,9 +1,15 @@
+use std::sync::Arc;
+
 use crate::{
     node_manager::{
         consume_results, AddNodeItem, AddReferenceItem, DeleteNodeItem, DeleteReferenceItem,
-        NodeManagers,
+        DynNodeManager, NodeManagers, RequestContext,
     },
-    session::{controller::Response, message_handler::Request},
+    session::{
+        controller::Response,
+        message_handler::Request,
+        services::{invoke_service_concurrently_mut, ServiceCb},
+    },
 };
 use opcua_types::{
     AddNodesRequest, AddNodesResponse, AddReferencesRequest, AddReferencesResponse,
@@ -17,7 +23,7 @@ pub(crate) async fn add_nodes(
     node_managers: NodeManagers,
     request: Request<AddNodesRequest>,
 ) -> Response {
-    let mut context = request.context();
+    let context = request.context();
 
     let nodes_to_add = take_service_items!(
         request,
@@ -33,36 +39,44 @@ pub(crate) async fn add_nodes(
         .map(|it| AddNodeItem::new(it, request.request.request_header.return_diagnostics))
         .collect();
 
-    for (idx, node_manager) in node_managers.iter().enumerate() {
-        context.current_node_manager_index = idx;
-        let mut owned: Vec<_> = to_add
-            .iter_mut()
-            .filter(|c| {
-                if c.status() != StatusCode::BadNotSupported {
-                    return false;
-                }
-                if c.requested_new_node_id().is_null() {
-                    node_manager.handle_new_node(c.parent_node_id())
-                } else {
-                    node_manager.owns_node(c.requested_new_node_id())
-                }
-            })
-            .collect();
+    struct AddNodesServiceCb;
 
-        if owned.is_empty() {
-            continue;
-        }
-
-        if let Err(e) = node_manager
-            .add_nodes(&context, &mut owned)
-            .instrument(debug_span!("AddNodes", node_manager = %node_manager.name()))
-            .await
-        {
-            for node in owned {
-                node.set_result(NodeId::null(), e);
+    impl ServiceCb<AddNodeItem> for AddNodesServiceCb {
+        async fn call(
+            &self,
+            items: &mut [&mut AddNodeItem],
+            node_manager: &Arc<DynNodeManager>,
+            context: RequestContext,
+        ) {
+            if let Err(e) = node_manager
+                .add_nodes(&context, items)
+                .instrument(debug_span!("AddNodes", node_manager = %node_manager.name()))
+                .await
+            {
+                for item in items {
+                    item.set_result(NodeId::null(), e);
+                }
             }
         }
     }
+
+    invoke_service_concurrently_mut(
+        context,
+        &mut to_add,
+        &node_managers,
+        AddNodesServiceCb,
+        |item, node_manager| {
+            if item.status() != StatusCode::BadNotSupported {
+                return false;
+            }
+            if item.requested_new_node_id().is_null() {
+                node_manager.handle_new_node(item.parent_node_id())
+            } else {
+                node_manager.owns_node(item.requested_new_node_id())
+            }
+        },
+    )
+    .await;
 
     let (results, diagnostic_infos) =
         consume_results(to_add, request.request.request_header.return_diagnostics);
@@ -98,6 +112,9 @@ pub(crate) async fn add_references(
         .map(|it| AddReferenceItem::new(it, request.request.request_header.return_diagnostics))
         .collect();
 
+    // We can't really do this concurrently, since
+    // we don't know which node manager will actually create the reference
+    // if it goes cross-node-manager.
     for (idx, node_manager) in node_managers.iter().enumerate() {
         context.current_node_manager_index = idx;
         let mut owned: Vec<_> = to_add
@@ -167,6 +184,38 @@ pub(crate) async fn delete_nodes(
         .map(|v| DeleteNodeItem::new(v, request.request.request_header.return_diagnostics))
         .collect();
 
+    struct DeleteNodesServiceCb;
+
+    impl ServiceCb<DeleteNodeItem> for DeleteNodesServiceCb {
+        async fn call(
+            &self,
+            items: &mut [&mut DeleteNodeItem],
+            node_manager: &Arc<DynNodeManager>,
+            context: RequestContext,
+        ) {
+            if let Err(e) = node_manager
+                .delete_nodes(&context, items)
+                .instrument(debug_span!("DeleteNodes", node_manager = %node_manager.name()))
+                .await
+            {
+                for item in items {
+                    item.set_result(e);
+                }
+            }
+        }
+    }
+
+    invoke_service_concurrently_mut(
+        context.clone(),
+        &mut to_delete,
+        &node_managers,
+        DeleteNodesServiceCb,
+        |item, node_manager| {
+            item.status() == StatusCode::BadNodeIdUnknown && node_manager.owns_node(item.node_id())
+        },
+    )
+    .await;
+
     for (idx, node_manager) in node_managers.iter().enumerate() {
         context.current_node_manager_index = idx;
         let mut owned: Vec<_> = to_delete
@@ -191,7 +240,10 @@ pub(crate) async fn delete_nodes(
         }
     }
 
-    // Then delete references where necessary.
+    // Then delete references where necessary. This is not done in parallel at the moment,
+    // because our parallel implementation relies on each item bing owned by a single node manager,
+    // and here each deleted node is attempted deleted from every other node manager.
+    // If necessary we can improve on this later, it would require copying the references.
     for (idx, node_manager) in node_managers.iter().enumerate() {
         context.current_node_manager_index = idx;
         let targets: Vec<_> = to_delete

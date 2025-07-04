@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{ops::Deref, sync::Arc};
 
 use crate::{
     authenticator::{AuthManager, UserToken},
@@ -83,9 +83,27 @@ impl<R: RawRwLock, T: TypeTree> TypeTreeReadContext for RwLockReadGuard<'_, R, T
 }
 
 #[derive(Clone)]
-/// Context object passed during writes, contains useful context the node
+/// Context object passed during requests, contains useful context the node
 /// managers can use to execute service calls.
 pub struct RequestContext {
+    /// Index of the current node manager.
+    pub current_node_manager_index: usize,
+    /// Inner request context object, shared between service calls.
+    pub(crate) inner: Arc<RequestContextInner>,
+}
+
+// This isn't ideal, but the breaking change from having every field on
+// RequestContext be private is too big for now.
+impl Deref for RequestContext {
+    type Target = RequestContextInner;
+
+    fn deref(&self) -> &RequestContextInner {
+        &self.inner
+    }
+}
+
+/// Inner request context object, shared between service calls.
+pub struct RequestContextInner {
     /// The full session object for the session responsible for this service call.
     pub session: Arc<RwLock<Session>>,
     /// The session ID for the session responsible for this service call.
@@ -94,8 +112,6 @@ pub struct RequestContext {
     pub authenticator: Arc<dyn AuthManager>,
     /// The current user token.
     pub token: UserToken,
-    /// Index of the current node manager.
-    pub current_node_manager_index: usize,
     /// Global type tree object.
     pub type_tree: Arc<RwLock<DefaultTypeTree>>,
     /// Wrapper to get a type tree
@@ -111,6 +127,42 @@ impl RequestContext {
     /// Get the type tree for the current user.
     pub fn get_type_tree_for_user<'a>(&'a self) -> Box<dyn TypeTreeReadContext + 'a> {
         self.type_tree_getter.get_type_tree_for_user(self)
+    }
+
+    /// Get the session object responsible for this service call.
+    pub fn session(&self) -> &RwLock<Session> {
+        &self.session
+    }
+
+    /// Get the session ID for the session responsible for this service call.
+    pub fn session_id(&self) -> u32 {
+        self.session_id
+    }
+
+    /// Get the global `AuthManager` object.
+    pub fn authenticator(&self) -> &dyn AuthManager {
+        self.authenticator.as_ref()
+    }
+
+    /// Get the current user token.
+    pub fn user_token(&self) -> &UserToken {
+        &self.token
+    }
+
+    /// Get the global type tree object. If your server needs per-user type trees,
+    /// use `get_type_tree_for_user` instead.
+    pub fn type_tree(&self) -> &RwLock<DefaultTypeTree> {
+        &self.type_tree
+    }
+
+    /// Get the subscription cache.
+    pub fn subscriptions(&self) -> &SubscriptionCache {
+        &self.subscriptions
+    }
+
+    /// Get the server info object.
+    pub fn info(&self) -> &ServerInfo {
+        &self.info
     }
 }
 

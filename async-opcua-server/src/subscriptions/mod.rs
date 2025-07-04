@@ -33,6 +33,8 @@ use opcua_types::{
     TransferSubscriptionsResponse,
 };
 
+use crate::node_manager::RequestContextInner;
+
 use super::{
     authenticator::UserToken,
     info::ServerInfo,
@@ -178,15 +180,17 @@ impl SubscriptionCache {
                 (lck.session_id_numeric(), token.clone())
             };
             let ctx = RequestContext {
-                session,
-                session_id: id,
-                authenticator: context.authenticator.clone(),
-                token,
                 current_node_manager_index: 0,
-                type_tree: context.type_tree.clone(),
-                subscriptions: context.subscriptions.clone(),
-                info: context.info.clone(),
-                type_tree_getter: context.type_tree_getter.clone(),
+                inner: Arc::new(RequestContextInner {
+                    session,
+                    session_id: id,
+                    authenticator: context.authenticator.clone(),
+                    token,
+                    type_tree: context.type_tree.clone(),
+                    subscriptions: context.subscriptions.clone(),
+                    info: context.info.clone(),
+                    type_tree_getter: context.type_tree_getter.clone(),
+                }),
             };
 
             for mgr in context.node_managers.iter() {

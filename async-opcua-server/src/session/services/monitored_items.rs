@@ -1,16 +1,24 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{
-    node_manager::{MonitoredItemRef, NodeManagers, RequestContext},
-    session::{controller::Response, message_handler::Request},
+    node_manager::{
+        DynNodeManager, MonitoredItemRef, MonitoredItemUpdateRef, NodeManagers, RequestContext,
+    },
+    session::{
+        controller::Response,
+        message_handler::Request,
+        services::{
+            invoke_service_concurrently, invoke_service_concurrently_mut, ServiceCb, ServiceCbRef,
+        },
+    },
     subscriptions::CreateMonitoredItem,
 };
 use opcua_core::ResponseMessage;
 use opcua_types::{
     AttributeId, BrowsePath, CreateMonitoredItemsRequest, CreateMonitoredItemsResponse,
     DataChangeFilter, DeadbandType, DeleteMonitoredItemsRequest, DeleteMonitoredItemsResponse,
-    ModifyMonitoredItemsRequest, ModifyMonitoredItemsResponse, NodeId, Range, ReadRequest,
-    ReferenceTypeId, RelativePath, RelativePathElement, RequestHeader, ResponseHeader,
+    ModifyMonitoredItemsRequest, ModifyMonitoredItemsResponse, MonitoringMode, NodeId, Range,
+    ReadRequest, ReferenceTypeId, RelativePath, RelativePathElement, RequestHeader, ResponseHeader,
     SetMonitoringModeRequest, SetMonitoringModeResponse, StatusCode, TimestampsToReturn,
     TranslateBrowsePathsToNodeIdsRequest, Variant,
 };
@@ -142,7 +150,7 @@ pub(crate) async fn create_monitored_items(
     node_managers: NodeManagers,
     request: Request<CreateMonitoredItemsRequest>,
 ) -> Response {
-    let mut context = request.context();
+    let context = request.context();
     let items_to_create = take_service_items!(
         request,
         request.request.items_to_create,
@@ -201,42 +209,40 @@ pub(crate) async fn create_monitored_items(
             .collect()
     };
 
-    for (idx, mgr) in node_managers.iter().enumerate() {
-        context.current_node_manager_index = idx;
-        let mut owned: Vec<_> = items
-            .iter_mut()
-            .filter(|n| {
-                n.status_code() == StatusCode::BadNodeIdUnknown
-                    && mgr.owns_node(&n.item_to_monitor().node_id)
-            })
-            .collect();
+    struct CreateMonitoredItemsServiceCb;
 
-        if owned.is_empty() {
-            continue;
-        }
-
-        if let Err(e) = mgr
-            .create_monitored_items(&context, &mut owned)
-            .instrument(debug_span!("CreateMonitoredItems", node_manager = %mgr.name()))
-            .await
-        {
-            for n in owned {
-                n.set_status(e);
+    impl ServiceCb<CreateMonitoredItem> for CreateMonitoredItemsServiceCb {
+        async fn call(
+            &self,
+            items: &mut [&mut CreateMonitoredItem],
+            node_manager: &Arc<DynNodeManager>,
+            context: RequestContext,
+        ) {
+            if let Err(e) = node_manager
+                .create_monitored_items(&context, items)
+                .instrument(
+                    debug_span!("CreateMonitoredItems", node_manager = %node_manager.name()),
+                )
+                .await
+            {
+                for item in items {
+                    item.set_status(e);
+                }
             }
         }
     }
 
-    let handles: Vec<_> = items
-        .iter()
-        .map(|i| {
-            MonitoredItemRef::new(
-                i.handle(),
-                i.item_to_monitor().node_id.clone(),
-                i.item_to_monitor().attribute_id,
-            )
-        })
-        .collect();
-    let handles_ref: Vec<_> = handles.iter().collect();
+    invoke_service_concurrently_mut(
+        context.clone(),
+        &mut items,
+        &node_managers,
+        CreateMonitoredItemsServiceCb,
+        |node, node_manager| {
+            node.status_code() == StatusCode::BadNodeIdUnknown
+                && node_manager.owns_node(&node.item_to_monitor().node_id)
+        },
+    )
+    .await;
 
     let res = match request.subscriptions.create_monitored_items(
         request.session_id,
@@ -246,13 +252,41 @@ pub(crate) async fn create_monitored_items(
         Ok(r) => r,
         // Shouldn't happen, would be due to a race condition. If it does happen we're fine with failing.
         Err(e) => {
-            // Should clean up any that failed to create though.
-            for (idx, mgr) in node_managers.iter().enumerate() {
-                context.current_node_manager_index = idx;
-                mgr.delete_monitored_items(&context, &handles_ref)
-                    .instrument(debug_span!("DeleteMonitoredItems", node_manager = %mgr.name()))
-                    .await;
+            let handles: Vec<_> = items
+                .iter()
+                .map(|i| {
+                    MonitoredItemRef::new(
+                        i.handle(),
+                        i.item_to_monitor().node_id.clone(),
+                        i.item_to_monitor().attribute_id,
+                    )
+                })
+                .collect();
+            struct CleanupCb;
+            impl ServiceCbRef<MonitoredItemRef> for CleanupCb {
+                async fn call(
+                    &self,
+                    items: &[&MonitoredItemRef],
+                    node_manager: &Arc<DynNodeManager>,
+                    context: RequestContext,
+                ) {
+                    node_manager
+                        .delete_monitored_items(&context, items)
+                        .instrument(
+                            debug_span!("DeleteMonitoredItems", node_manager = %node_manager.name()),
+                        )
+                        .await;
+                }
             }
+            invoke_service_concurrently(
+                context,
+                &handles,
+                &node_managers,
+                CleanupCb,
+                |node, node_manager| node_manager.owns_node(node.node_id()),
+            )
+            .await;
+
             return service_fault!(request, e);
         }
     };
@@ -272,7 +306,7 @@ pub(crate) async fn modify_monitored_items(
     node_managers: NodeManagers,
     request: Request<ModifyMonitoredItemsRequest>,
 ) -> Response {
-    let mut context = request.context();
+    let context = request.context();
     let items_to_modify = take_service_items!(
         request,
         request.request.items_to_modify,
@@ -296,21 +330,32 @@ pub(crate) async fn modify_monitored_items(
         }
     };
 
-    for (idx, mgr) in node_managers.iter().enumerate() {
-        context.current_node_manager_index = idx;
-        let owned: Vec<_> = results
-            .iter()
-            .filter(|n| n.status_code().is_good() && mgr.owns_node(n.node_id()))
-            .collect();
+    struct ModifyMonitoredItemsServiceCb;
 
-        if owned.is_empty() {
-            continue;
+    impl ServiceCbRef<MonitoredItemUpdateRef> for ModifyMonitoredItemsServiceCb {
+        async fn call(
+            &self,
+            items: &[&MonitoredItemUpdateRef],
+            node_manager: &Arc<DynNodeManager>,
+            context: RequestContext,
+        ) {
+            node_manager
+                .modify_monitored_items(&context, items)
+                .instrument(
+                    debug_span!("ModifyMonitoredItems", node_manager = %node_manager.name()),
+                )
+                .await;
         }
-
-        mgr.modify_monitored_items(&context, &owned)
-            .instrument(debug_span!("ModifyMonitoredItems", node_manager = %mgr.name()))
-            .await;
     }
+
+    invoke_service_concurrently(
+        context,
+        &results,
+        &node_managers,
+        ModifyMonitoredItemsServiceCb,
+        |node, node_manager| node.status_code().is_good() && node_manager.owns_node(node.node_id()),
+    )
+    .await;
 
     Response {
         message: ModifyMonitoredItemsResponse {
@@ -327,7 +372,7 @@ pub(crate) async fn set_monitoring_mode(
     node_managers: NodeManagers,
     request: Request<SetMonitoringModeRequest>,
 ) -> Response {
-    let mut context = request.context();
+    let context = request.context();
     let items = take_service_items!(
         request,
         request.request.monitored_item_ids,
@@ -344,22 +389,38 @@ pub(crate) async fn set_monitoring_mode(
         Err(e) => return service_fault!(request, e),
     };
 
-    for (idx, mgr) in node_managers.iter().enumerate() {
-        context.current_node_manager_index = idx;
-        let owned: Vec<_> = results
-            .iter()
-            .filter(|n| n.0.is_good() && mgr.owns_node(n.1.node_id()))
-            .map(|n| &n.1)
-            .collect();
-
-        if owned.is_empty() {
-            continue;
-        }
-
-        mgr.set_monitoring_mode(&context, request.request.monitoring_mode, &owned)
-            .instrument(debug_span!("SetMonitoringMode", node_manager = %mgr.name()))
-            .await;
+    struct SetMonitoringModeServiceCb {
+        mode: MonitoringMode,
     }
+
+    impl ServiceCbRef<(StatusCode, MonitoredItemRef)> for SetMonitoringModeServiceCb {
+        async fn call(
+            &self,
+            items: &[&(StatusCode, MonitoredItemRef)],
+            node_manager: &Arc<DynNodeManager>,
+            context: RequestContext,
+        ) {
+            node_manager
+                .set_monitoring_mode(
+                    &context,
+                    self.mode,
+                    &items.iter().map(|n| &n.1).collect::<Vec<_>>(),
+                )
+                .instrument(debug_span!("SetMonitoringMode", node_manager = %node_manager.name()))
+                .await;
+        }
+    }
+
+    invoke_service_concurrently(
+        context.clone(),
+        &results,
+        &node_managers,
+        SetMonitoringModeServiceCb {
+            mode: request.request.monitoring_mode,
+        },
+        |node, node_manager| node.0.is_good() && node_manager.owns_node(node.1.node_id()),
+    )
+    .await;
 
     Response {
         message: SetMonitoringModeResponse {
@@ -376,7 +437,7 @@ pub(crate) async fn delete_monitored_items(
     node_managers: NodeManagers,
     request: Request<DeleteMonitoredItemsRequest>,
 ) -> Response {
-    let mut context = request.context();
+    let context = request.context();
     let items = take_service_items!(
         request,
         request.request.monitored_item_ids,
@@ -392,22 +453,32 @@ pub(crate) async fn delete_monitored_items(
         Err(e) => return service_fault!(request, e),
     };
 
-    for (idx, mgr) in node_managers.iter().enumerate() {
-        context.current_node_manager_index = idx;
-        let owned: Vec<_> = results
-            .iter()
-            .filter(|n| n.0.is_good() && mgr.owns_node(n.1.node_id()))
-            .map(|n| &n.1)
-            .collect();
+    struct DeleteMonitoredItemsServiceCb;
 
-        if owned.is_empty() {
-            continue;
+    impl ServiceCbRef<(StatusCode, MonitoredItemRef)> for DeleteMonitoredItemsServiceCb {
+        async fn call(
+            &self,
+            items: &[&(StatusCode, MonitoredItemRef)],
+            node_manager: &Arc<DynNodeManager>,
+            context: RequestContext,
+        ) {
+            node_manager
+                .delete_monitored_items(&context, &items.iter().map(|n| &n.1).collect::<Vec<_>>())
+                .instrument(
+                    debug_span!("DeleteMonitoredItems", node_manager = %node_manager.name()),
+                )
+                .await;
         }
-
-        mgr.delete_monitored_items(&context, &owned)
-            .instrument(debug_span!("DeleteMonitoredItems", node_manager = %mgr.name()))
-            .await;
     }
+
+    invoke_service_concurrently(
+        context.clone(),
+        &results,
+        &node_managers,
+        DeleteMonitoredItemsServiceCb,
+        |node, node_manager| node.0.is_good() && node_manager.owns_node(node.1.node_id()),
+    )
+    .await;
 
     Response {
         message: DeleteMonitoredItemsResponse {

@@ -1,12 +1,18 @@
+use std::sync::Arc;
+
 use opcua_core::trace_write_lock;
 use tracing::{debug_span, Instrument};
 
 use crate::{
     node_manager::{
-        consume_results, HistoryNode, HistoryReadDetails, HistoryUpdateDetails, HistoryUpdateNode,
-        NodeManagers, ReadNode, WriteNode,
+        consume_results, DynNodeManager, HistoryNode, HistoryReadDetails, HistoryUpdateDetails,
+        HistoryUpdateNode, NodeManagers, ReadNode, RequestContext, WriteNode,
     },
-    session::{controller::Response, message_handler::Request},
+    session::{
+        controller::Response,
+        message_handler::Request,
+        services::{invoke_service_concurrently_mut, ServiceCb},
+    },
 };
 use opcua_types::{
     ByteString, DeleteAtTimeDetails, ExtensionObject, HistoryReadRequest, HistoryReadResponse,
@@ -14,7 +20,7 @@ use opcua_types::{
     ReadResponse, ResponseHeader, StatusCode, TimestampsToReturn, WriteRequest, WriteResponse,
 };
 pub(crate) async fn read(node_managers: NodeManagers, request: Request<ReadRequest>) -> Response {
-    let mut context = request.context();
+    let context = request.context();
     let nodes_to_read = take_service_items!(
         request,
         request.request.nodes_to_read,
@@ -32,35 +38,45 @@ pub(crate) async fn read(node_managers: NodeManagers, request: Request<ReadReque
         .map(|n| ReadNode::new(n, request.request.request_header.return_diagnostics))
         .collect();
 
-    for (idx, node_manager) in node_managers.into_iter().enumerate() {
-        context.current_node_manager_index = idx;
-        let mut batch: Vec<_> = results
-            .iter_mut()
-            .filter(|n| {
-                node_manager.owns_node(&n.node().node_id)
-                    && n.status() == StatusCode::BadNodeIdUnknown
-            })
-            .collect();
+    let max_age = request.request.max_age;
+    let timestamps_to_return = request.request.timestamps_to_return;
 
-        if batch.is_empty() {
-            continue;
-        }
-
-        if let Err(e) = node_manager
-            .read(
-                &context,
-                request.request.max_age,
-                request.request.timestamps_to_return,
-                &mut batch,
-            )
-            .instrument(debug_span!("Read", node_manager = %node_manager.name()))
-            .await
-        {
-            for node in &mut batch {
-                node.set_error(e);
+    struct ReadServiceCb {
+        max_age: f64,
+        timestamps_to_return: TimestampsToReturn,
+    }
+    impl ServiceCb<ReadNode> for ReadServiceCb {
+        async fn call(
+            &self,
+            batch: &mut [&mut ReadNode],
+            node_manager: &Arc<DynNodeManager>,
+            context: RequestContext,
+        ) {
+            if let Err(e) = node_manager
+                .read(&context, self.max_age, self.timestamps_to_return, batch)
+                .instrument(debug_span!("Read", node_manager = %node_manager.name()))
+                .await
+            {
+                for node in batch {
+                    node.set_error(e);
+                }
             }
         }
     }
+    invoke_service_concurrently_mut(
+        context,
+        &mut results,
+        &node_managers,
+        ReadServiceCb {
+            max_age,
+            timestamps_to_return,
+        },
+        |node, node_manager| {
+            node_manager.owns_node(&node.node().node_id)
+                && node.status() == StatusCode::BadNodeIdUnknown
+        },
+    )
+    .await;
 
     let (results, diagnostic_infos) =
         consume_results(results, request.request.request_header.return_diagnostics);
@@ -77,7 +93,7 @@ pub(crate) async fn read(node_managers: NodeManagers, request: Request<ReadReque
 }
 
 pub(crate) async fn write(node_managers: NodeManagers, request: Request<WriteRequest>) -> Response {
-    let mut context = request.context();
+    let context = request.context();
     let nodes_to_write = take_service_items!(
         request,
         request.request.nodes_to_write,
@@ -89,30 +105,38 @@ pub(crate) async fn write(node_managers: NodeManagers, request: Request<WriteReq
         .map(|n| WriteNode::new(n, request.request.request_header.return_diagnostics))
         .collect();
 
-    for (idx, node_manager) in node_managers.into_iter().enumerate() {
-        context.current_node_manager_index = idx;
-        let mut batch: Vec<_> = results
-            .iter_mut()
-            .filter(|n| {
-                node_manager.owns_node(&n.value().node_id)
-                    && n.status() == StatusCode::BadNodeIdUnknown
-            })
-            .collect();
+    struct WriteServiceCb;
 
-        if batch.is_empty() {
-            continue;
-        }
-
-        if let Err(e) = node_manager
-            .write(&context, &mut batch)
-            .instrument(debug_span!("Write", node_manager = %node_manager.name()))
-            .await
-        {
-            for node in &mut batch {
-                node.set_status(e);
+    impl ServiceCb<WriteNode> for WriteServiceCb {
+        async fn call(
+            &self,
+            batch: &mut [&mut WriteNode],
+            node_manager: &Arc<DynNodeManager>,
+            context: RequestContext,
+        ) {
+            if let Err(e) = node_manager
+                .write(&context, batch)
+                .instrument(debug_span!("Write", node_manager = %node_manager.name()))
+                .await
+            {
+                for node in batch {
+                    node.set_status(e);
+                }
             }
         }
     }
+
+    invoke_service_concurrently_mut(
+        context,
+        &mut results,
+        &node_managers,
+        WriteServiceCb,
+        |node, node_manager| {
+            node_manager.owns_node(&node.value().node_id)
+                && node.status() == StatusCode::BadNodeIdUnknown
+        },
+    )
+    .await;
 
     let (results, diagnostic_infos) =
         consume_results(results, request.request.request_header.return_diagnostics);
@@ -132,7 +156,7 @@ pub(crate) async fn history_read(
     node_managers: NodeManagers,
     request: Request<HistoryReadRequest>,
 ) -> Response {
-    let mut context = request.context();
+    let context = request.context();
     let Some(items) = request.request.nodes_to_read else {
         return service_fault!(request, StatusCode::BadNothingToDo);
     };
@@ -212,93 +236,85 @@ pub(crate) async fn history_read(
         };
     }
 
-    for (idx, manager) in node_managers.into_iter().enumerate() {
-        context.current_node_manager_index = idx;
-        let mut batch: Vec<_> = nodes
-            .iter_mut()
-            .filter(|n| {
-                if n.node_id() == &ObjectId::Server
-                    && matches!(details, HistoryReadDetails::Events(_))
-                {
-                    manager.owns_server_events() && n.status() == StatusCode::BadNodeIdUnknown
-                } else {
-                    manager.owns_node(n.node_id()) && n.status() == StatusCode::BadNodeIdUnknown
+    struct HistoryReadServiceCb {
+        details: HistoryReadDetails,
+        timestamps_to_return: TimestampsToReturn,
+    }
+
+    impl ServiceCb<HistoryNode> for HistoryReadServiceCb {
+        async fn call(
+            &self,
+            batch: &mut [&mut HistoryNode],
+            node_manager: &Arc<DynNodeManager>,
+            context: RequestContext,
+        ) {
+            let result = match &self.details {
+                HistoryReadDetails::RawModified(d) => node_manager
+                    .history_read_raw_modified(&context, d, &mut *batch, self.timestamps_to_return)
+                    .instrument(
+                        debug_span!("HistoryReadRawModified", node_manager = %node_manager.name()),
+                    )
+                    .await,
+                HistoryReadDetails::AtTime(d) => {
+                    node_manager
+                        .history_read_at_time(&context, d, &mut *batch, self.timestamps_to_return)
+                        .instrument(
+                            debug_span!("HistoryReadAtTime", node_manager = %node_manager.name()),
+                        )
+                        .await
                 }
-            })
-            .collect();
-
-        if batch.is_empty() {
-            continue;
-        }
-
-        let result = match &details {
-            HistoryReadDetails::RawModified(d) => {
-                manager
-                    .history_read_raw_modified(
-                        &context,
-                        d,
-                        &mut batch,
-                        request.request.timestamps_to_return,
-                    )
+                HistoryReadDetails::Processed(d) => node_manager
+                    .history_read_processed(&context, d, &mut *batch, self.timestamps_to_return)
                     .instrument(
-                        debug_span!("HistoryReadRawModified", node_manager = %manager.name()),
+                        debug_span!("HistoryReadProcessed", node_manager = %node_manager.name()),
                     )
-                    .await
-            }
-            HistoryReadDetails::AtTime(d) => {
-                manager
-                    .history_read_at_time(
-                        &context,
-                        d,
-                        &mut batch,
-                        request.request.timestamps_to_return,
-                    )
-                    .instrument(debug_span!("HistoryReadAtTime", node_manager = %manager.name()))
-                    .await
-            }
-            HistoryReadDetails::Processed(d) => {
-                manager
-                    .history_read_processed(
-                        &context,
-                        d,
-                        &mut batch,
-                        request.request.timestamps_to_return,
-                    )
-                    .instrument(debug_span!("HistoryReadProcessed", node_manager = %manager.name()))
-                    .await
-            }
-            HistoryReadDetails::Events(d) => {
-                manager
-                    .history_read_events(
-                        &context,
-                        d,
-                        &mut batch,
-                        request.request.timestamps_to_return,
-                    )
-                    .instrument(debug_span!("HistoryReadEvents", node_manager = %manager.name()))
-                    .await
-            }
-            HistoryReadDetails::Annotations(d) => {
-                manager
-                    .history_read_annotations(
-                        &context,
-                        d,
-                        &mut batch,
-                        request.request.timestamps_to_return,
-                    )
+                    .await,
+                HistoryReadDetails::Events(d) => {
+                    node_manager
+                        .history_read_events(&context, d, &mut *batch, self.timestamps_to_return)
+                        .instrument(
+                            debug_span!("HistoryReadEvents", node_manager = %node_manager.name()),
+                        )
+                        .await
+                }
+                HistoryReadDetails::Annotations(d) => node_manager
+                    .history_read_annotations(&context, d, &mut *batch, self.timestamps_to_return)
                     .instrument(
-                        debug_span!("HistoryReadAnnotations", node_manager = %manager.name()),
+                        debug_span!("HistoryReadAnnotations", node_manager = %node_manager.name()),
                     )
-                    .await
-            }
-        };
+                    .await,
+            };
 
-        if let Err(e) = result {
-            for node in batch {
-                node.set_status(e);
+            if let Err(e) = result {
+                for node in batch {
+                    node.set_status(e);
+                }
             }
         }
     }
+
+    let is_events = matches!(details, HistoryReadDetails::Events(_));
+    invoke_service_concurrently_mut(
+        context,
+        &mut nodes,
+        &node_managers,
+        HistoryReadServiceCb {
+            details,
+            timestamps_to_return: request.request.timestamps_to_return,
+        },
+        |node, node_manager| {
+            if node.status() != StatusCode::BadNodeIdUnknown {
+                return false;
+            }
+            if node.node_id() == &ObjectId::Server && is_events {
+                node_manager.owns_server_events()
+            } else {
+                node_manager.owns_node(node.node_id())
+            }
+        },
+    )
+    .await;
+
     let results: Vec<_> = {
         let mut session = trace_write_lock!(request.session);
         nodes
@@ -322,7 +338,7 @@ pub(crate) async fn history_update(
     node_managers: NodeManagers,
     request: Request<HistoryUpdateRequest>,
 ) -> Response {
-    let mut context = request.context();
+    let context = request.context();
     let items = take_service_items!(
         request,
         request.request.history_update_details,
@@ -350,39 +366,49 @@ pub(crate) async fn history_update(
         })
         .collect();
 
-    for (idx, manager) in node_managers.into_iter().enumerate() {
-        context.current_node_manager_index = idx;
-        let mut batch: Vec<_> = nodes
-            .iter_mut()
-            .filter(|n| {
-                if n.details().node_id() == &ObjectId::Server
-                    && matches!(
-                        n.details(),
-                        HistoryUpdateDetails::UpdateEvent(_) | HistoryUpdateDetails::DeleteEvent(_)
-                    )
-                {
-                    manager.owns_server_events()
-                } else {
-                    manager.owns_node(n.details().node_id())
-                        && n.status() == StatusCode::BadNodeIdUnknown
+    struct HistoryWriteServiceCb;
+
+    impl ServiceCb<HistoryUpdateNode> for HistoryWriteServiceCb {
+        async fn call(
+            &self,
+            items: &mut [&mut HistoryUpdateNode],
+            node_manager: &Arc<DynNodeManager>,
+            context: RequestContext,
+        ) {
+            if let Err(e) = node_manager
+                .history_update(&context, &mut *items)
+                .instrument(debug_span!("HistoryUpdate", node_manager = %node_manager.name()))
+                .await
+            {
+                for node in items {
+                    node.set_status(e);
                 }
-            })
-            .collect();
-
-        if batch.is_empty() {
-            continue;
-        }
-
-        if let Err(e) = manager
-            .history_update(&context, &mut batch)
-            .instrument(debug_span!("HistoryUpdate", node_manager = %manager.name()))
-            .await
-        {
-            for node in batch {
-                node.set_status(e);
             }
         }
     }
+
+    invoke_service_concurrently_mut(
+        context,
+        &mut nodes,
+        &node_managers,
+        HistoryWriteServiceCb,
+        |node, node_manager| {
+            // If the node is a server event, we need to check if the manager owns server events.
+            if node.details().node_id() == &ObjectId::Server
+                && matches!(
+                    node.details(),
+                    HistoryUpdateDetails::UpdateEvent(_) | HistoryUpdateDetails::DeleteEvent(_)
+                )
+            {
+                node_manager.owns_server_events()
+            } else {
+                node_manager.owns_node(node.details().node_id())
+                    && node.status() == StatusCode::BadNodeIdUnknown
+            }
+        },
+    )
+    .await;
+
     let results: Vec<_> = nodes.into_iter().map(|n| n.into_result()).collect();
 
     Response {

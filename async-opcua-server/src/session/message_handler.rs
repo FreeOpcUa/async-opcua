@@ -9,7 +9,7 @@ use tracing::{debug, warn};
 use crate::{
     authenticator::UserToken,
     info::ServerInfo,
-    node_manager::{get_namespaces_for_user, NodeManagers, RequestContext},
+    node_manager::{get_namespaces_for_user, NodeManagers, RequestContext, RequestContextInner},
     session::services,
     subscriptions::{PendingPublish, SubscriptionCache},
 };
@@ -121,15 +121,17 @@ impl<T> Request<T> {
     /// Get a request context object from this request.
     pub(super) fn context(&self) -> RequestContext {
         RequestContext {
-            session: self.session.clone(),
-            authenticator: self.info.authenticator.clone(),
-            token: self.token.clone(),
             current_node_manager_index: 0,
-            type_tree: self.info.type_tree.clone(),
-            type_tree_getter: self.info.type_tree_getter.clone(),
-            subscriptions: self.subscriptions.clone(),
-            session_id: self.session_id,
-            info: self.info.clone(),
+            inner: Arc::new(RequestContextInner {
+                session: self.session.clone(),
+                authenticator: self.info.authenticator.clone(),
+                token: self.token.clone(),
+                type_tree: self.info.type_tree.clone(),
+                type_tree_getter: self.info.type_tree_getter.clone(),
+                subscriptions: self.subscriptions.clone(),
+                session_id: self.session_id,
+                info: self.info.clone(),
+            }),
         }
     }
 }
@@ -366,15 +368,17 @@ impl MessageHandler {
         }
 
         let mut context = RequestContext {
-            session,
-            session_id,
-            authenticator: self.info.authenticator.clone(),
-            token,
             current_node_manager_index: 0,
-            type_tree: self.info.type_tree.clone(),
-            subscriptions: self.subscriptions.clone(),
-            info: self.info.clone(),
-            type_tree_getter: self.info.type_tree_getter.clone(),
+            inner: Arc::new(RequestContextInner {
+                session,
+                session_id,
+                authenticator: self.info.authenticator.clone(),
+                token,
+                type_tree: self.info.type_tree.clone(),
+                subscriptions: self.subscriptions.clone(),
+                info: self.info.clone(),
+                type_tree_getter: self.info.type_tree_getter.clone(),
+            }),
         };
 
         // Ignore the result
@@ -397,15 +401,17 @@ impl MessageHandler {
         token: UserToken,
     ) -> NamespaceMap {
         let ctx = RequestContext {
-            session,
-            authenticator: self.info.authenticator.clone(),
-            token,
             current_node_manager_index: 0,
-            type_tree: self.info.type_tree.clone(),
-            type_tree_getter: self.info.type_tree_getter.clone(),
-            subscriptions: self.subscriptions.clone(),
-            session_id,
-            info: self.info.clone(),
+            inner: Arc::new(RequestContextInner {
+                session,
+                session_id,
+                authenticator: self.info.authenticator.clone(),
+                token,
+                type_tree: self.info.type_tree.clone(),
+                subscriptions: self.subscriptions.clone(),
+                info: self.info.clone(),
+                type_tree_getter: self.info.type_tree_getter.clone(),
+            }),
         };
         get_namespaces_for_user(&ctx, &self.node_managers)
     }

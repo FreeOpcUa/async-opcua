@@ -1,5 +1,45 @@
 # Changelog
 
+## [0.16.0] - 2025-06-11
+
+Various fixes and adjustments. Support for `IssuedToken` authentication and `OfType` event filters.
+
+### Common
+
+#### Changed
+ - Improve logic for dealing with sequence numbers, and add internal support for the new kind of sequence numbers defined in recent versions of the OPC-UA standard.
+
+#### Added
+ - Added a comprehensive sample with multiple node managers to showcase more complex uses of the server SDK.
+ - Option to enable lock tracing. Set the environment variable `OPCUA_TRACE_LOCKS` to enable. This can be useful for debugging deadlocks.
+
+### Client
+
+#### Added
+ - Support for `IssuedToken` based authentication. Actually obtaining the token will require custom code.
+ - Pause the publishing loop when receiving `BadNoSubscription` from the server. This typically happens due to a race-condition or an issue on the server.
+ - The `OnSubscriptionNotificationCore` trait is used as a base for subscription notifications, making it possible to control, on a low-level, the exact behavior when a publish notification is received.
+
+#### Changed
+ - Ignore port when matching server endpoints, which better adheres to the standard and is in general more correct.
+ - Make the subscription services stateless. This is a breaking change if you are using the low-level subscription services directly. They no longer require the session subscription state, instead assuming that the caller will correctly track state and produce publish requests.
+
+### Server
+
+#### Added
+ - Support for `IssuedToken` based authentication, you will need to use a custom authenticator that does the necessary validation.
+ - Support for the `OfType` operator in event subscriptions. This uses the `TypeTreeForUser`, so different users can see different type trees here too, like in other services.
+ - Expose the `TcpConfig` and `CertificateValidation` structs in server config.
+
+#### Fixed
+ - Fixed a panic caused by updating a variable to a time _before_ the latest value while clients were subscribed to that value.
+ - Fixed an issue where we would incorrectly increment subscription sequence numbers for keep-alive messages.
+
+### Codegen
+
+#### Changed
+ - Infer namespace URIs from the schema instead of requiring them to be specified in config. This makes it easier to configure custom codegen, and is less likely to cause issues.
+
 ## [0.15.1] - 2025-04-23
 
 Fix to a build issue in `types` when compiling with the `xml` feature but not the `json` feature,

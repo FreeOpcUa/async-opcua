@@ -1,6 +1,6 @@
 [package]
 name = "async-opcua-core"
-version = "0.15.1"
+version = "0.16.0"
 description = "OPC UA core utils for client and server"
 authors = ["Adam Lock <locka99@gmail.com>", "Einar Omang <einar@omang.com>"]
 homepage = "https://github.com/freeopcua/async-opcua"
@@ -27,8 +27,8 @@ tokio-util = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 
-async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.15.1" }
-async-opcua-types = { path = "../async-opcua-types", version = "0.15.1" }
+async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.16.0" }
+async-opcua-types = { path = "../async-opcua-types", version = "0.16.0" }
 
 [lints]
 workspace = true

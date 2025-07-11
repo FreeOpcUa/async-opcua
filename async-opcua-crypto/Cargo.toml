@@ -1,6 +1,6 @@
 [package]
 name = "async-opcua-crypto"
-version = "0.15.1"
+version = "0.16.0"
 description = "OPC UA cryptography library"
 authors = ["Adam Lock <locka99@gmail.com>", "Einar Omang <einar@omang.com>"]
 homepage = "https://github.com/freeopcua/async-opcua"
@@ -24,7 +24,7 @@ gethostname = { workspace = true }
 serde = { workspace = true }
 tracing = { workspace = true }
 
-async-opcua-types = { path = "../async-opcua-types", version = "0.15.1" }
+async-opcua-types = { path = "../async-opcua-types", version = "0.16.0" }
 
 aes = { workspace = true }
 cbc = { workspace = true }

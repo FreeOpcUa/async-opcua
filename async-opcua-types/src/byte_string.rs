@@ -26,11 +26,22 @@ pub struct ByteString {
 
 impl AsRef<[u8]> for ByteString {
     fn as_ref(&self) -> &[u8] {
-        if self.value.is_none() {
-            &[]
-        } else {
-            self.value.as_ref().unwrap()
+        match self.value.as_ref() {
+            Some(v) => v.as_slice(),
+            None => &[],
         }
+    }
+}
+
+impl PartialEq<&[u8]> for ByteString {
+    fn eq(&self, other: &&[u8]) -> bool {
+        self.as_ref() == *other
+    }
+}
+
+impl PartialEq<[u8]> for ByteString {
+    fn eq(&self, other: &[u8]) -> bool {
+        self.as_ref() == other
     }
 }
 

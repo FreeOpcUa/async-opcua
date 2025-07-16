@@ -315,7 +315,7 @@ pub use self::{
     impls::*,
     localized_text::*,
     namespaces::*,
-    node_id::*,
+    node_id::{Identifier, NodeId, NodeIdError},
     numeric_range::*,
     operand::*,
     qualified_name::*,

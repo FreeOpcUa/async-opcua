@@ -199,11 +199,11 @@ async fn add_delete_reference_limits() {
         .add_references(
             &(0..(limit + 1))
                 .map(|i| AddReferencesItem {
-                    source_node_id: NodeId::new(2, i as i32),
+                    source_node_id: NodeId::new(2, i as u32),
                     reference_type_id: ReferenceTypeId::HasCause.into(),
                     is_forward: true,
                     target_server_uri: Default::default(),
-                    target_node_id: NodeId::new(2, (i + 1) as i32).into(),
+                    target_node_id: NodeId::new(2, (i + 1) as u32).into(),
                     target_node_class: NodeClass::Object,
                 })
                 .collect::<Vec<_>>(),

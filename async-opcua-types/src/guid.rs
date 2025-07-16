@@ -15,9 +15,17 @@ use uuid::Uuid;
 use crate::encoding::*;
 
 /// A Guid is a 16 byte Globally Unique Identifier.
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Clone)]
 pub struct Guid {
     uuid: Uuid,
+}
+
+// Explicit implementation of hash to avoid any issues
+// when implementing Equivalent elsewhere.
+impl std::hash::Hash for Guid {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.as_bytes().hash(state);
+    }
 }
 
 impl From<Guid> for Uuid {
@@ -187,5 +195,46 @@ impl Guid {
         Ok(Guid {
             uuid: Uuid::from_slice(bytes)?,
         })
+    }
+}
+
+impl AsRef<[u8; 16]> for Guid {
+    fn as_ref(&self) -> &[u8; 16] {
+        self.as_bytes()
+    }
+}
+
+impl PartialEq<[u8; 16]> for Guid {
+    fn eq(&self, other: &[u8; 16]) -> bool {
+        self.as_ref() == other
+    }
+}
+
+/// Reference to a Guid that can be created without allocating a
+/// Guid object. Used when comparing with NodeIds,
+/// to distinguish from the generic ByteString case.
+pub struct GuidRef<'a>(pub &'a [u8; 16]);
+
+impl PartialEq<Guid> for GuidRef<'_> {
+    fn eq(&self, other: &Guid) -> bool {
+        self.as_ref() == other.as_bytes()
+    }
+}
+
+impl PartialEq<GuidRef<'_>> for Guid {
+    fn eq(&self, other: &GuidRef<'_>) -> bool {
+        other == self
+    }
+}
+
+impl std::hash::Hash for GuidRef<'_> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+    }
+}
+
+impl AsRef<[u8; 16]> for GuidRef<'_> {
+    fn as_ref(&self) -> &[u8; 16] {
+        self.0
     }
 }

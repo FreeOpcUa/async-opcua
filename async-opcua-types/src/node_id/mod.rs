@@ -18,7 +18,12 @@ mod json;
 #[cfg(feature = "xml")]
 mod xml;
 
+pub use id_ref::{IdentifierRef, IntoNodeIdRef, NodeIdRef};
 pub use identifier::Identifier;
+pub use identifier::{
+    IDENTIFIER_HASH_BYTE_STRING, IDENTIFIER_HASH_GUID, IDENTIFIER_HASH_NUMERIC,
+    IDENTIFIER_HASH_STRING,
+};
 
 use crate::{
     read_u16, read_u32, read_u8, write_u16, write_u32, write_u8, BinaryDecodable, BinaryEncodable,

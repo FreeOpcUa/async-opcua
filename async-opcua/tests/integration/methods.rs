@@ -252,7 +252,7 @@ async fn call_limits() {
             (0..(limit + 1))
                 .map(|i| CallMethodRequest {
                     object_id: ObjectId::ObjectsFolder.into(),
-                    method_id: NodeId::new(2, i as i32),
+                    method_id: NodeId::new(2, i as u32),
                     input_arguments: None,
                 })
                 .collect(),

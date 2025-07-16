@@ -556,7 +556,7 @@ async fn write_limits() {
 
     // Too many operations
     let ops: Vec<_> = (0..(write_limit + 1))
-        .map(|r| write_value(AttributeId::Value, 123, NodeId::new(2, r as i32)))
+        .map(|r| write_value(AttributeId::Value, 123, NodeId::new(2, r as u32)))
         .collect();
 
     let r = session.write(&ops).await.unwrap_err();
@@ -564,7 +564,7 @@ async fn write_limits() {
 
     // Exact number of operations
     let ops: Vec<_> = (0..write_limit)
-        .map(|r| write_value(AttributeId::Value, 123, NodeId::new(2, r as i32)))
+        .map(|r| write_value(AttributeId::Value, 123, NodeId::new(2, r as u32)))
         .collect();
 
     session.write(&ops).await.unwrap();
@@ -841,7 +841,7 @@ async fn history_update_fail() {
             &(0..(history_update_limit + 1))
                 .map(|i| {
                     HistoryUpdateAction::UpdateDataDetails(UpdateDataDetails {
-                        node_id: NodeId::new(2, i as i32),
+                        node_id: NodeId::new(2, i as u32),
                         perform_insert_replace: opcua::types::PerformUpdateType::Insert,
                         update_values: None,
                     })

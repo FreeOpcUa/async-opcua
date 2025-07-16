@@ -367,7 +367,7 @@ async fn browse_limits() {
 
     // Too many operations
     let ops: Vec<_> = (0..(browse_limit + 1))
-        .map(|r| hierarchical_desc(NodeId::new(2, r as i32)))
+        .map(|r| hierarchical_desc(NodeId::new(2, r as u32)))
         .collect();
     let r = session.browse(&ops, 1000, None).await.unwrap_err();
     assert_eq!(r, StatusCode::BadTooManyOperations);
@@ -511,7 +511,7 @@ async fn translate_browse_paths_limits() {
     // Translate too many
     let ops: Vec<_> = (0..(limit + 1))
         .map(|r| BrowsePath {
-            starting_node: NodeId::new(2, r as i32),
+            starting_node: NodeId::new(2, r as u32),
             relative_path: RelativePath { elements: None },
         })
         .collect();

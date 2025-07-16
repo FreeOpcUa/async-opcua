@@ -230,6 +230,33 @@ impl PartialEq<str> for UAString {
     }
 }
 
+impl PartialEq<&str> for UAString {
+    fn eq(&self, other: &&str) -> bool {
+        match self.value {
+            None => false,
+            Some(ref v) => v.eq(other),
+        }
+    }
+}
+
+impl PartialEq<&String> for UAString {
+    fn eq(&self, other: &&String) -> bool {
+        match self.value {
+            None => false,
+            Some(ref v) => v.eq(*other),
+        }
+    }
+}
+
+impl PartialEq<String> for UAString {
+    fn eq(&self, other: &String) -> bool {
+        match self.value {
+            None => false,
+            Some(ref v) => v.eq(other),
+        }
+    }
+}
+
 impl UAString {
     /// Get the inner raw value.
     pub fn value(&self) -> &Option<String> {

@@ -1,5 +1,10 @@
+use std::hash::Hasher;
+
 use hashbrown::{Equivalent, HashMap, HashSet};
-use opcua_types::{BrowseDirection, NodeId};
+use opcua_types::{
+    node_id::{IdentifierRef, IntoNodeIdRef, NodeIdRef},
+    BrowseDirection, Identifier, NodeId,
+};
 
 use crate::{ImportedReference, ReferenceDirection, TypeTree};
 
@@ -13,23 +18,39 @@ pub struct Reference {
 }
 
 // Note, must have same hash and eq implementation as Reference.
-#[derive(PartialEq, Eq, Clone, Debug, Hash)]
-struct ReferenceKey<'a> {
-    pub reference_type: &'a NodeId,
-    pub target_node: &'a NodeId,
+#[derive(PartialEq, Eq, Clone, Debug)]
+struct ReferenceKey<R: IdentifierRef, R2: IdentifierRef> {
+    pub reference_type: NodeIdRef<R2>,
+    pub target_node: NodeIdRef<R>,
 }
 
-impl Equivalent<Reference> for ReferenceKey<'_> {
-    fn equivalent(&self, key: &Reference) -> bool {
-        &key.reference_type == self.reference_type && &key.target_node == self.target_node
+impl<R, R2> std::hash::Hash for ReferenceKey<R, R2>
+where
+    R: IdentifierRef,
+    R2: IdentifierRef,
+{
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.reference_type.hash(state);
+        self.target_node.hash(state);
     }
 }
 
-impl<'a> From<&'a Reference> for ReferenceKey<'a> {
+impl<R, R2> Equivalent<Reference> for ReferenceKey<R, R2>
+where
+    R: IdentifierRef,
+    R2: IdentifierRef,
+{
+    fn equivalent(&self, key: &Reference) -> bool {
+        self.reference_type.equivalent(&key.reference_type)
+            && self.target_node.equivalent(&key.target_node)
+    }
+}
+
+impl<'a> From<&'a Reference> for ReferenceKey<&'a Identifier, &'a Identifier> {
     fn from(value: &'a Reference) -> Self {
         Self {
-            reference_type: &value.reference_type,
-            target_node: &value.target_node,
+            reference_type: (&value.reference_type).into_node_id_ref(),
+            target_node: (&value.target_node).into_node_id_ref(),
         }
     }
 }
@@ -167,32 +188,34 @@ impl References {
     }
 
     /// Delete a reference.
-    pub fn delete_reference(
+    pub fn delete_reference<'a>(
         &mut self,
-        source_node: &NodeId,
-        target_node: &NodeId,
-        reference_type: impl Into<NodeId>,
+        source_node: impl IntoNodeIdRef<'a>,
+        target_node: impl IntoNodeIdRef<'a>,
+        reference_type: impl IntoNodeIdRef<'a>,
     ) -> bool {
         let mut found = false;
-        let reference_type = reference_type.into();
+        let reference_type = reference_type.into_node_id_ref();
+        let source_node = source_node.into_node_id_ref();
+        let target_node = target_node.into_node_id_ref();
         let rf = ReferenceKey {
-            reference_type: &reference_type,
+            reference_type,
             target_node,
         };
         found |= self
             .by_source
-            .get_mut(source_node)
+            .get_mut(&source_node)
             .map(|f| f.remove(&rf))
             .unwrap_or_default();
 
         let rf = ReferenceKey {
-            reference_type: &reference_type,
+            reference_type,
             target_node: source_node,
         };
 
         found |= self
             .by_target
-            .get_mut(target_node)
+            .get_mut(&target_node)
             .map(|f| f.remove(&rf))
             .unwrap_or_default();
 
@@ -203,33 +226,34 @@ impl References {
     /// Optionally deleting references _to_ the given node.
     ///
     /// Returns whether any references were found.
-    pub fn delete_node_references(
+    pub fn delete_node_references<'a>(
         &mut self,
-        source_node: &NodeId,
+        source_node: impl IntoNodeIdRef<'a>,
         delete_target_references: bool,
     ) -> bool {
         let mut found = false;
-        let source = self.by_source.remove(source_node);
+        let source_node = source_node.into_node_id_ref();
+        let source = self.by_source.remove(&source_node);
         found |= source.is_some();
         if delete_target_references {
             for rf in source.into_iter().flatten() {
                 if let Some(rec) = self.by_target.get_mut(&rf.target_node) {
                     rec.remove(&ReferenceKey {
-                        reference_type: &rf.reference_type,
+                        reference_type: (&rf.reference_type).into_node_id_ref(),
                         target_node: source_node,
                     });
                 }
             }
         }
 
-        let target = self.by_target.remove(source_node);
+        let target = self.by_target.remove(&source_node);
         found |= target.is_some();
 
         if delete_target_references {
             for rf in target.into_iter().flatten() {
                 if let Some(rec) = self.by_source.get_mut(&rf.target_node) {
                     rec.remove(&ReferenceKey {
-                        reference_type: &rf.reference_type,
+                        reference_type: (&rf.reference_type).into_node_id_ref(),
                         target_node: source_node,
                     });
                 }
@@ -240,18 +264,19 @@ impl References {
     }
 
     /// Return `true` if the given reference exists.
-    pub fn has_reference(
+    pub fn has_reference<'a>(
         &self,
-        source_node: &NodeId,
-        target_node: &NodeId,
-        reference_type: impl Into<NodeId>,
+        source_node: impl IntoNodeIdRef<'a>,
+        target_node: impl IntoNodeIdRef<'a>,
+        reference_type: impl IntoNodeIdRef<'a>,
     ) -> bool {
-        let reference_type = reference_type.into();
+        let reference_type = reference_type.into_node_id_ref();
+        let target_node = target_node.into_node_id_ref();
         self.by_source
-            .get(source_node)
+            .get(&source_node.into_node_id_ref())
             .map(|n| {
                 n.contains(&ReferenceKey {
-                    reference_type: &reference_type,
+                    reference_type,
                     target_node,
                 })
             })
@@ -261,13 +286,13 @@ impl References {
     /// Return an iterator over references matching the given filters.
     pub fn find_references<'a: 'b, 'b>(
         &'a self,
-        source_node: &'b NodeId,
+        source_node: impl IntoNodeIdRef<'b>,
         filter: Option<(impl Into<NodeId>, bool)>,
         type_tree: &'b dyn TypeTree,
         direction: BrowseDirection,
     ) -> impl Iterator<Item = ReferenceRef<'a>> + 'b {
         ReferenceIterator::new(
-            source_node,
+            source_node.into_node_id_ref(),
             direction,
             self,
             filter.map(|f| (f.0.into(), f.1)),
@@ -329,8 +354,8 @@ impl<'a> Iterator for ReferenceIterator<'a, '_> {
 }
 
 impl<'a, 'b> ReferenceIterator<'a, 'b> {
-    fn new(
-        source_node: &'b NodeId,
+    fn new<R: IdentifierRef + 'b>(
+        source_node: NodeIdRef<R>,
         direction: BrowseDirection,
         references: &'a References,
         filter: Option<(NodeId, bool)>,
@@ -340,11 +365,11 @@ impl<'a, 'b> ReferenceIterator<'a, 'b> {
             filter,
             type_tree,
             iter_s: matches!(direction, BrowseDirection::Both | BrowseDirection::Forward)
-                .then(|| references.by_source.get(source_node))
+                .then(|| references.by_source.get(&source_node))
                 .flatten()
                 .map(|r| r.iter()),
             iter_t: matches!(direction, BrowseDirection::Both | BrowseDirection::Inverse)
-                .then(|| references.by_target.get(source_node))
+                .then(|| references.by_target.get(&source_node))
                 .flatten()
                 .map(|r| r.iter()),
         }

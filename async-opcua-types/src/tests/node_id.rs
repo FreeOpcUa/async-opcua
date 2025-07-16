@@ -1,4 +1,9 @@
-use std::str::FromStr;
+use std::{
+    hash::{Hash, Hasher},
+    str::FromStr,
+};
+
+use crate::node_id::IntoNodeIdRef;
 
 use crate::*;
 
@@ -142,5 +147,41 @@ fn expanded_node_id() {
     assert_eq!(
         ExpandedNodeId::from_str("svr=33;ns=1;s=Hello World").unwrap(),
         node_id
+    );
+}
+
+#[test]
+fn test_hash_node_id() {
+    fn hash<T: Hash>(value: &T) -> u64 {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        value.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    assert_eq!(
+        hash(&NodeId::new(1, "test")),
+        hash(&(1, "test").into_node_id_ref())
+    );
+    assert_eq!(hash(&NodeId::new(1, 2)), hash(&(1, 2).into_node_id_ref()));
+    assert_eq!(
+        hash(&NodeId::new(
+            1,
+            Guid::from_str("72962B91-FA75-4ae6-8D28-B404DC7DAF63").unwrap()
+        )),
+        hash(
+            &(
+                1,
+                &Guid::from_str("72962B91-FA75-4ae6-8D28-B404DC7DAF63").unwrap()
+            )
+                .into_node_id_ref()
+        )
+    );
+    assert_eq!(
+        hash(&NodeId::new(1, UAString::from("test"))),
+        hash(&(1, &UAString::from("test")).into_node_id_ref())
+    );
+    assert_eq!(
+        hash(&NodeId::new(1, ByteString::from(&[1, 2, 3]))),
+        hash(&(1, &[1u8, 2, 3] as &[u8]).into_node_id_ref())
     );
 }

@@ -726,7 +726,7 @@ async fn read_limits() {
 
     // Too many operations
     let ops: Vec<_> = (0..(read_limit + 1))
-        .map(|r| read_value_id(AttributeId::Value, NodeId::new(2, r as i32)))
+        .map(|r| read_value_id(AttributeId::Value, NodeId::new(2, r as u32)))
         .collect();
     let r = session
         .read(&ops, TimestampsToReturn::Both, 0.0)
@@ -736,7 +736,7 @@ async fn read_limits() {
 
     // Exact number of operations, should not fail, though the reads will probably fail, mostly.
     let ops: Vec<_> = (0..read_limit)
-        .map(|r| read_value_id(AttributeId::Value, NodeId::new(2, r as i32)))
+        .map(|r| read_value_id(AttributeId::Value, NodeId::new(2, r as u32)))
         .collect();
     session
         .read(&ops, TimestampsToReturn::Both, 0.0)
@@ -1029,7 +1029,7 @@ async fn history_read_fail() {
             false,
             &(0..(history_read_limit + 1))
                 .map(|i| HistoryReadValueId {
-                    node_id: NodeId::new(2, i as i32),
+                    node_id: NodeId::new(2, i as u32),
                     index_range: Default::default(),
                     data_encoding: Default::default(),
                     continuation_point: Default::default(),

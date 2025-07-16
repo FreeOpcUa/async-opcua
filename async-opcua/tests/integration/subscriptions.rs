@@ -434,7 +434,7 @@ async fn subscription_limits() {
             (0..(limits + 1))
                 .map(|i| MonitoredItemCreateRequest {
                     item_to_monitor: ReadValueId {
-                        node_id: NodeId::new(2, i as i32),
+                        node_id: NodeId::new(2, i as u32),
                         attribute_id: AttributeId::Value as u32,
                         ..Default::default()
                     },

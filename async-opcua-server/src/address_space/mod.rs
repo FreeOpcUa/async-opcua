@@ -15,8 +15,8 @@ use tracing::{debug, error, info, warn};
 
 use crate::node_manager::{ParsedReadValueId, ParsedWriteValue, RequestContext};
 use opcua_types::{
-    BrowseDirection, DataValue, LocalizedText, NodeClass, NodeId, QualifiedName, ReferenceTypeId,
-    StatusCode, TimestampsToReturn,
+    node_id::IntoNodeIdRef, BrowseDirection, DataValue, LocalizedText, NodeClass, NodeId,
+    QualifiedName, ReferenceTypeId, StatusCode, TimestampsToReturn,
 };
 
 /// Represents an in-memory address space.
@@ -246,11 +246,11 @@ impl AddressSpace {
     }
 
     /// Delete a reference.
-    pub fn delete_reference(
+    pub fn delete_reference<'a>(
         &mut self,
-        source_node: &NodeId,
-        target_node: &NodeId,
-        reference_type: impl Into<NodeId>,
+        source_node: impl IntoNodeIdRef<'a>,
+        target_node: impl IntoNodeIdRef<'a>,
+        reference_type: impl IntoNodeIdRef<'a>,
     ) -> bool {
         self.references
             .delete_reference(source_node, target_node, reference_type)
@@ -268,11 +268,11 @@ impl AddressSpace {
 
     /// Check if the reference given by `source_node`, `target_node` and
     /// `reference_type` exists in the address space.
-    pub fn has_reference(
+    pub fn has_reference<'a>(
         &self,
-        source_node: &NodeId,
-        target_node: &NodeId,
-        reference_type: impl Into<NodeId>,
+        source_node: impl IntoNodeIdRef<'a>,
+        target_node: impl IntoNodeIdRef<'a>,
+        reference_type: impl IntoNodeIdRef<'a>,
     ) -> bool {
         self.references
             .has_reference(source_node, target_node, reference_type)
@@ -282,7 +282,7 @@ impl AddressSpace {
     /// that match `filter`.
     pub fn find_references<'a: 'b, 'b>(
         &'a self,
-        source_node: &'b NodeId,
+        source_node: impl IntoNodeIdRef<'b>,
         filter: Option<(impl Into<NodeId>, bool)>,
         type_tree: &'b dyn TypeTree,
         direction: BrowseDirection,
@@ -295,7 +295,7 @@ impl AddressSpace {
     /// browse name equal to `browse_name`.
     pub fn find_node_by_browse_name<'a: 'b, 'b>(
         &'a self,
-        source_node: &'b NodeId,
+        source_node: impl IntoNodeIdRef<'b>,
         filter: Option<(impl Into<NodeId>, bool)>,
         type_tree: &'b dyn TypeTree,
         direction: BrowseDirection,
@@ -317,7 +317,7 @@ impl AddressSpace {
     /// All traversed references must match `filter`.
     pub fn find_node_by_browse_path<'a: 'b, 'b>(
         &'a self,
-        source_node: &'b NodeId,
+        source_node: impl IntoNodeIdRef<'b>,
         filter: Option<(impl Into<NodeId>, bool)>,
         type_tree: &'b dyn TypeTree,
         direction: BrowseDirection,
@@ -350,29 +350,23 @@ impl AddressSpace {
     }
 
     /// Find node by something that can be turned into a node id and return a reference to it.
-    pub fn find<N>(&self, node_id: N) -> Option<&NodeType>
-    where
-        N: Into<NodeId>,
-    {
-        self.find_node(&node_id.into())
+    pub fn find<'b>(&self, node_id: impl IntoNodeIdRef<'b>) -> Option<&NodeType> {
+        self.find_node(node_id)
     }
 
     /// Find node by something that can be turned into a node id and return a mutable reference to it.
-    pub fn find_mut<N>(&mut self, node_id: N) -> Option<&mut NodeType>
-    where
-        N: Into<NodeId>,
-    {
-        self.find_node_mut(&node_id.into())
+    pub fn find_mut<'b>(&mut self, node_id: impl IntoNodeIdRef<'b>) -> Option<&mut NodeType> {
+        self.find_node_mut(node_id)
     }
 
     /// Finds a node by its node id and returns a reference to it.
-    pub fn find_node(&self, node_id: &NodeId) -> Option<&NodeType> {
-        self.node_map.get(node_id)
+    pub fn find_node<'b>(&self, node_id: impl IntoNodeIdRef<'b>) -> Option<&NodeType> {
+        self.node_map.get(&node_id.into_node_id_ref())
     }
 
     /// Finds a node by its node id and returns a mutable reference to it.
-    pub fn find_node_mut(&mut self, node_id: &NodeId) -> Option<&mut NodeType> {
-        self.node_map.get_mut(node_id)
+    pub fn find_node_mut<'b>(&mut self, node_id: impl IntoNodeIdRef<'b>) -> Option<&mut NodeType> {
+        self.node_map.get_mut(&node_id.into_node_id_ref())
     }
 
     /// Check if the read is allowed.

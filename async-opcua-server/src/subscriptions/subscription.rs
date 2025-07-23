@@ -220,9 +220,9 @@ impl Subscription {
     }
 
     /// Notify the given monitored item of a new data value.
-    pub fn notify_data_value(&mut self, id: &u32, value: DataValue) {
+    pub fn notify_data_value(&mut self, id: &u32, value: DataValue, now: &DateTime) {
         if let Some(item) = self.monitored_items.get_mut(id) {
-            if item.notify_data_value(value) {
+            if item.notify_data_value(value, now) {
                 self.notified_monitored_items.insert(*id);
             }
         }
@@ -619,6 +619,8 @@ impl Subscription {
         messages: &mut Vec<NotificationMessage>,
         sequence_numbers: &mut Handle,
     ) {
+        monitored_item.maybe_enqueue_skipped_value(&(*now).into());
+
         if monitored_item.is_sampling() && monitored_item.has_new_notifications() {
             triggers.extend(
                 monitored_item
@@ -896,6 +898,7 @@ mod tests {
                 321,
                 DateTime::from(start_dt + chrono::Duration::try_milliseconds(300).unwrap()),
             ),
+            &DateTime::now(),
         );
         let (time, time_inst) = offset(start_dt, start, 300);
         sub.tick(&time, time_inst, TickReason::TickTimerFired, true);
@@ -997,17 +1000,18 @@ mod tests {
         }
         sub.get_mut(&1).unwrap().set_triggering(&[1, 2, 3, 4], &[]);
         // Notify the two sampling items and the disabled item
-        let (time, time_inst) = offset(start_dt, start, 100);
-        sub.notify_data_value(&2, DataValue::new_at(1, time.into()));
-        sub.notify_data_value(&3, DataValue::new_at(1, time.into()));
-        sub.notify_data_value(&4, DataValue::new_at(1, time.into()));
+        let (otime, time_inst) = offset(start_dt, start, 100);
+        let time = otime.into();
+        sub.notify_data_value(&2, DataValue::new_at(1, time), &time);
+        sub.notify_data_value(&3, DataValue::new_at(1, time), &time);
+        sub.notify_data_value(&4, DataValue::new_at(1, time), &time);
 
         // Should not cause a notification
-        sub.tick(&time, time_inst, TickReason::TickTimerFired, true);
+        sub.tick(&otime, time_inst, TickReason::TickTimerFired, true);
         assert!(sub.take_notification().is_none());
 
         // Notify the first item
-        sub.notify_data_value(&1, DataValue::new_at(1, time.into()));
+        sub.notify_data_value(&1, DataValue::new_at(1, time.into()), &time);
         let (time, time_inst) = offset(start_dt, start, 200);
         sub.tick(&time, time_inst, TickReason::TickTimerFired, true);
         let notif = sub.take_notification().unwrap();

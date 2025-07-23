@@ -758,11 +758,12 @@ impl SessionSubscriptions {
     }
 
     pub(super) fn notify_data_changes(&mut self, values: Vec<(MonitoredItemHandle, DataValue)>) {
+        let now = DateTime::now();
         for (handle, value) in values {
             let Some(sub) = self.subscriptions.get_mut(&handle.subscription_id) else {
                 continue;
             };
-            sub.notify_data_value(&handle.monitored_item_id, value);
+            sub.notify_data_value(&handle.monitored_item_id, value, &now);
         }
     }
 

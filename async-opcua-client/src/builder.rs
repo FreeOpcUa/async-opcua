@@ -306,4 +306,10 @@ impl ClientBuilder {
         self.config.session_timeout = session_timeout;
         self
     }
+
+    /// Set the length of the nonce generated for CreateSession requests.
+    pub fn session_nonce_length(mut self, session_nonce_length: usize) -> Self {
+        self.config.session_nonce_length = session_nonce_length;
+        self
+    }
 }

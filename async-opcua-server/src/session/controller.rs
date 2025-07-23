@@ -714,16 +714,11 @@ impl SessionController {
             .min(request.requested_lifetime);
         self.channel.set_token_lifetime(revised_lifetime);
 
-        match self
-            .channel
-            .set_remote_nonce_from_byte_string(&request.client_nonce)
-        {
-            Ok(_) => self.channel.create_random_nonce(),
-            Err(err) => {
-                error!("Was unable to set their nonce, check logic");
-                return Ok(ServiceFault::new(&request.request_header, err).into());
-            }
-        }
+        self.channel
+            .validate_secure_channel_nonce_length(&request.client_nonce)?;
+        self.channel
+            .set_remote_nonce_from_byte_string(&request.client_nonce)?;
+        self.channel.create_random_nonce();
 
         let security_policy = self.channel.security_policy();
         if security_policy != SecurityPolicy::None

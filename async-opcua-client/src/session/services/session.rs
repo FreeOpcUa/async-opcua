@@ -4,7 +4,8 @@ use opcua_core::{
     comms::url::hostname_from_url, sync::RwLock, trace_read_lock, trace_write_lock, ResponseMessage,
 };
 use opcua_crypto::{
-    self, certificate_store::CertificateStore, legacy_encrypt_secret, PKey, SecurityPolicy, X509,
+    self, certificate_store::CertificateStore, legacy_encrypt_secret, random, PKey, SecurityPolicy,
+    X509,
 };
 use opcua_types::{
     ActivateSessionRequest, ActivateSessionResponse, AnonymousIdentityToken,
@@ -47,6 +48,7 @@ pub struct CreateSession<'a> {
     max_response_message_size: u32,
     certificate_store: &'a RwLock<CertificateStore>,
     endpoint: &'a EndpointDescription,
+    nonce_length: usize,
 
     header: RequestHeaderBuilder,
 }
@@ -72,6 +74,7 @@ impl<'a> CreateSession<'a> {
             certificate_store: session.channel.certificate_store(),
             session_timeout: session.session_timeout,
             max_response_message_size: 0,
+            nonce_length: session.session_nonce_length,
             header: RequestHeaderBuilder::new_from_session(session),
         }
     }
@@ -95,6 +98,7 @@ impl<'a> CreateSession<'a> {
             max_response_message_size: 0,
             certificate_store,
             endpoint,
+            nonce_length: 32,
             header: RequestHeaderBuilder::new(session_id, timeout, auth_token, request_handle),
         }
     }
@@ -151,6 +155,12 @@ impl<'a> CreateSession<'a> {
         self.max_response_message_size = max_response_message_size;
         self
     }
+
+    /// Set the length of the client nonce used to generate this request.
+    pub fn nonce_length(mut self, nonce_length: usize) -> Self {
+        self.nonce_length = nonce_length;
+        self
+    }
 }
 
 impl UARequest for CreateSession<'_> {
@@ -160,13 +170,15 @@ impl UARequest for CreateSession<'_> {
     where
         Self: 'a,
     {
+        let client_nonce = random::byte_string(self.nonce_length);
+
         let request = CreateSessionRequest {
             request_header: self.header.header,
             client_description: self.client_description,
             server_uri: self.server_uri,
             endpoint_url: self.endpoint_url,
             session_name: self.session_name,
-            client_nonce: channel.client_nonce(),
+            client_nonce,
             client_certificate: self.client_certificate,
             requested_session_timeout: self.session_timeout,
             max_response_message_size: self.max_response_message_size,
@@ -199,6 +211,12 @@ impl UARequest for CreateSession<'_> {
                     return Err(StatusCode::BadCertificateInvalid);
                 }
             }
+
+            // TODO: Validate the server signature. It should be the client certificate plus the
+            // client nonce, signed by the server certificate. The standard also mentions that the
+            // certificate used for signing should be the leaf certificate, not the whole chain,
+            // but it _also_ clearly describes the `ClientCertificate` field as a single certificate,
+            // so it's not entirely clear how to handle this.
 
             channel.update_from_created_session(
                 &response.server_nonce,

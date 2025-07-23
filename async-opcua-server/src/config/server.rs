@@ -236,6 +236,9 @@ pub struct ServerConfig {
     /// Enable server diagnostics.
     #[serde(default)]
     pub diagnostics: bool,
+    /// Length of the nonce generated for CreateSession responses.
+    #[serde(default = "defaults::session_nonce_length")]
+    pub session_nonce_length: usize,
 }
 
 mod defaults {
@@ -259,6 +262,10 @@ mod defaults {
 
     pub(super) fn max_session_timeout_ms() -> u64 {
         constants::MAX_SESSION_TIMEOUT
+    }
+
+    pub(super) fn session_nonce_length() -> usize {
+        32
     }
 }
 
@@ -389,6 +396,7 @@ impl Default for ServerConfig {
             max_secure_channel_token_lifetime_ms: defaults::max_secure_channel_token_lifetime_ms(),
             max_session_timeout_ms: defaults::max_session_timeout_ms(),
             diagnostics: false,
+            session_nonce_length: defaults::session_nonce_length(),
         }
     }
 }

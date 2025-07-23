@@ -69,11 +69,6 @@ impl AsyncSecureChannel {
         self.state.request_handle()
     }
 
-    pub(crate) fn client_nonce(&self) -> ByteString {
-        let secure_channel = trace_read_lock!(self.secure_channel);
-        secure_channel.local_nonce_as_byte_string()
-    }
-
     pub(crate) fn update_from_created_session(
         &self,
         nonce: &ByteString,

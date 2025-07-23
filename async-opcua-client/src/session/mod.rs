@@ -184,6 +184,7 @@ pub struct Session {
     pub(super) publish_limits_watch_tx: tokio::sync::watch::Sender<PublishLimits>,
     pub(super) monitored_item_handle: AtomicHandle,
     pub(super) trigger_publish_tx: tokio::sync::watch::Sender<Instant>,
+    pub(super) session_nonce_length: usize,
     decoding_options: DecodingOptions,
 }
 
@@ -226,6 +227,7 @@ impl Session {
             publish_limits_watch_rx,
             publish_limits_watch_tx,
             trigger_publish_tx,
+            session_nonce_length: config.session_nonce_length,
             decoding_options,
         });
 

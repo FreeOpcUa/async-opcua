@@ -182,6 +182,7 @@ impl SecureChannelState {
                     && (secure_channel.security_mode() == MessageSecurityMode::Sign
                         || secure_channel.security_mode() == MessageSecurityMode::SignAndEncrypt)
                 {
+                    secure_channel.validate_secure_channel_nonce_length(&response.server_nonce)?;
                     secure_channel.set_remote_nonce_from_byte_string(&response.server_nonce)?;
                     secure_channel.derive_keys();
                 }

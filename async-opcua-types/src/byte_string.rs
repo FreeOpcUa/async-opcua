@@ -292,6 +292,15 @@ impl ByteString {
             Err(OutOfRange)
         }
     }
+
+    /// Length of the byte string in bytes.
+    pub fn len(&self) -> usize {
+        if let Some(ref v) = self.value {
+            v.len()
+        } else {
+            0
+        }
+    }
 }
 
 #[test]

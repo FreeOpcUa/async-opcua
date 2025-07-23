@@ -88,6 +88,15 @@ impl SessionManager {
 
         let security_policy = channel.security_policy();
 
+        if !matches!(security_policy, SecurityPolicy::None)
+            && request.client_nonce.len() < self.info.config.session_nonce_length
+        {
+            error!("Create session was passed a client nonce that is too short, expected at least {} bytes, got {}", 
+                self.info.config.session_nonce_length, request.client_nonce.len()
+            );
+            return Err(StatusCode::BadNonceInvalid);
+        }
+
         let client_certificate = if security_policy != SecurityPolicy::None {
             let cert = opcua_crypto::X509::from_byte_string(&request.client_certificate)?;
             let store = trace_read_lock!(certificate_store);
@@ -128,7 +137,7 @@ impl SessionManager {
         };
 
         let authentication_token = NodeId::new(0, random::byte_string(32));
-        let server_nonce = security_policy.random_nonce();
+        let server_nonce = random::byte_string(self.info.config.session_nonce_length);
         let server_certificate = self.info.server_certificate_as_byte_string();
         let server_endpoints = Some(endpoints);
 

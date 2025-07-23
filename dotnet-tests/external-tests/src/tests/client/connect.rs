@@ -68,13 +68,11 @@ pub async fn run_connect_tests(runner: &Runner, ctx: &mut ClientTestState) {
             SecurityPolicy::Aes256Sha256RsaPss,
             MessageSecurityMode::SignAndEncrypt,
         ),
-        // The .NET SDK is hard to use with these, since its configuration around minimum
-        // required nonce length is really weird.
-        /*(SecurityPolicy::Basic128Rsa15, MessageSecurityMode::Sign),
+        (SecurityPolicy::Basic128Rsa15, MessageSecurityMode::Sign),
         (
             SecurityPolicy::Basic128Rsa15,
             MessageSecurityMode::SignAndEncrypt,
-        ), */
+        ),
         (SecurityPolicy::Basic256, MessageSecurityMode::Sign),
         (
             SecurityPolicy::Basic256,

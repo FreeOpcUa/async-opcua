@@ -367,26 +367,34 @@ impl SecureChannel {
         }
     }
 
+    /// For secure channel requests, validate that the nonce has the correct length.
+    pub fn validate_secure_channel_nonce_length(
+        &self,
+        nonce: &ByteString,
+    ) -> Result<(), StatusCode> {
+        if self.security_policy != SecurityPolicy::None
+            && nonce.len() != self.security_policy.secure_channel_nonce_length()
+        {
+            error!(
+                "Nonce is invalid length {}, expecting {}. {:?}",
+                nonce.len(),
+                self.security_policy.secure_channel_nonce_length(),
+                nonce
+            );
+            Err(StatusCode::BadNonceInvalid)
+        } else {
+            Ok(())
+        }
+    }
+
     /// Set their nonce which should be the same as the symmetric key
     pub fn set_remote_nonce_from_byte_string(
         &mut self,
         remote_nonce: &ByteString,
     ) -> Result<(), StatusCode> {
         if let Some(ref remote_nonce) = remote_nonce.value {
-            if self.security_policy != SecurityPolicy::None
-                && remote_nonce.len() != self.security_policy.secure_channel_nonce_length()
-            {
-                error!(
-                    "Remote nonce is invalid length {}, expecting {}. {:?}",
-                    remote_nonce.len(),
-                    self.security_policy.secure_channel_nonce_length(),
-                    remote_nonce
-                );
-                Err(StatusCode::BadNonceInvalid)
-            } else {
-                self.remote_nonce = remote_nonce.to_vec();
-                Ok(())
-            }
+            self.remote_nonce = remote_nonce.to_vec();
+            Ok(())
         } else if self.security_policy != SecurityPolicy::None {
             error!("Remote nonce is invalid {:?}", remote_nonce);
             Err(StatusCode::BadNonceInvalid)

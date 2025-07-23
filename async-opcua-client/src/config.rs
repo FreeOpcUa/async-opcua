@@ -250,6 +250,9 @@ pub struct ClientConfig {
     pub(crate) endpoints: BTreeMap<String, ClientEndpoint>,
     /// User tokens
     pub(crate) user_tokens: BTreeMap<String, ClientUserToken>,
+    /// Length of the nonce generated for CreateSession requests.
+    #[serde(default = "defaults::session_nonce_length")]
+    pub(crate) session_nonce_length: usize,
     /// Requested channel lifetime in milliseconds.
     #[serde(default = "defaults::channel_lifetime")]
     pub(crate) channel_lifetime: u32,
@@ -566,6 +569,10 @@ mod defaults {
     pub(super) fn session_timeout() -> u32 {
         60_000
     }
+
+    pub(super) fn session_nonce_length() -> usize {
+        32
+    }
 }
 
 impl ClientConfig {
@@ -605,6 +612,7 @@ impl ClientConfig {
             recreate_subscriptions: defaults::recreate_subscriptions(),
             session_name: "Rust OPC UA Client".into(),
             session_timeout: defaults::session_timeout(),
+            session_nonce_length: defaults::session_nonce_length(),
         }
     }
 }

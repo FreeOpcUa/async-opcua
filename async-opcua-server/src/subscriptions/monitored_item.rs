@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, VecDeque};
 
 use chrono::TimeDelta;
 use opcua_nodes::{Event, ParsedEventFilter, TypeTree};
-use tracing::error;
+use tracing::{error, warn};
 
 use super::MonitoredItemHandle;
 use crate::{info::ServerInfo, node_manager::ParsedReadValueId};
@@ -28,6 +28,25 @@ impl From<MonitoredItemNotification> for Notification {
 impl From<EventFieldList> for Notification {
     fn from(v: EventFieldList) -> Self {
         Notification::Event(v)
+    }
+}
+
+fn parse_sampling_interval(int: f64) -> SamplingInterval {
+    match int {
+        ..0.0 => SamplingInterval::Subscription,
+        0.0 => SamplingInterval::Zero,
+        _ => {
+            if !int.is_finite() {
+                warn!("Invalid sampling interval {}, using maximum", int);
+                return SamplingInterval::NonZero(TimeDelta::MAX);
+            }
+            let raw = int * 1000.0;
+            SamplingInterval::NonZero(if raw > i64::MAX as f64 {
+                TimeDelta::MAX
+            } else {
+                TimeDelta::microseconds(raw as i64)
+            })
+        }
     }
 }
 
@@ -98,7 +117,7 @@ pub struct CreateMonitoredItem {
 /// Takes the requested sampling interval value supplied by client and ensures it is within
 /// the range supported by the server
 fn sanitize_sampling_interval(info: &ServerInfo, requested_sampling_interval: f64) -> f64 {
-    if requested_sampling_interval < 0.0 {
+    if requested_sampling_interval < 0.0 || !requested_sampling_interval.is_finite() {
         // From spec "any negative number is interpreted as -1"
         // -1 means monitored item's sampling interval defaults to the subscription's publishing interval
         -1.0
@@ -274,7 +293,7 @@ pub struct MonitoredItem {
     // monitored item changes.
     triggered_items: BTreeSet<u32>,
     client_handle: u32,
-    sampling_interval: f64,
+    sampling_interval: SamplingInterval,
     filter: FilterType,
     discard_oldest: bool,
     queue_size: usize,
@@ -289,6 +308,13 @@ pub struct MonitoredItem {
     eu_range: Option<(f64, f64)>,
 }
 
+#[derive(Debug)]
+pub(super) enum SamplingInterval {
+    Subscription,
+    Zero,
+    NonZero(TimeDelta),
+}
+
 impl MonitoredItem {
     pub(super) fn new(request: &CreateMonitoredItem) -> Self {
         let mut v = Self {
@@ -297,7 +323,7 @@ impl MonitoredItem {
             monitoring_mode: request.monitoring_mode,
             triggered_items: BTreeSet::new(),
             client_handle: request.client_handle,
-            sampling_interval: request.sampling_interval,
+            sampling_interval: parse_sampling_interval(request.sampling_interval),
             filter: request.filter.clone(),
             discard_oldest: request.discard_oldest,
             timestamps_to_return: request.timestamps_to_return,
@@ -311,7 +337,7 @@ impl MonitoredItem {
         };
         let now = DateTime::now();
         if let Some(val) = request.initial_value.as_ref() {
-            v.notify_data_value(val.clone(), &now);
+            v.notify_data_value(val.clone(), &now, true);
         } else {
             v.notify_data_value(
                 DataValue {
@@ -323,6 +349,7 @@ impl MonitoredItem {
                     server_picoseconds: None,
                 },
                 &now,
+                true,
             );
         }
         v
@@ -347,8 +374,9 @@ impl MonitoredItem {
             Ok(f) => f,
             Err(e) => return (filter_res, e),
         };
-        self.sampling_interval =
+        let parsed_sampling_interval =
             sanitize_sampling_interval(info, request.requested_parameters.sampling_interval);
+        self.sampling_interval = parse_sampling_interval(parsed_sampling_interval);
         self.queue_size =
             sanitize_queue_size(info, request.requested_parameters.queue_size as usize);
         self.client_handle = request.requested_parameters.client_handle;
@@ -371,7 +399,12 @@ impl MonitoredItem {
         (filter_res, StatusCode::Good)
     }
 
-    fn filter_by_sampling_interval(&self, old: &DataValue, new: &DataValue) -> bool {
+    fn filter_by_sampling_interval(
+        &self,
+        old: &DataValue,
+        new: &DataValue,
+        from_subscription_tick: bool,
+    ) -> bool {
         let (Some(old), Some(new)) = (&old.source_timestamp, &new.source_timestamp) else {
             // Always include measurements without source timestamp, we don't know enough about these,
             // assume the server implementation did filtering elsewhere.
@@ -380,7 +413,22 @@ impl MonitoredItem {
 
         let elapsed = new.as_chrono().signed_duration_since(old.as_chrono());
 
-        elapsed >= TimeDelta::milliseconds(self.sampling_interval as i64)
+        match self.sampling_interval {
+            SamplingInterval::Subscription => {
+                // If the sampling interval is set to subscription, we use the subscription's
+                // sampling interval, so we should never allow notifications through unless
+                // it's due to a subscription tick.
+                // This means we always store the sampled value in `sample_skipped_data_value`,
+                // then we can use it later if we get a subscription tick.
+                from_subscription_tick
+            }
+            // If the sampling interval is set to zero, we always allow notifications through.
+            SamplingInterval::Zero => true,
+            SamplingInterval::NonZero(interval) => {
+                // If the sampling interval is set to non-zero, we use that.
+                elapsed >= interval
+            }
+        }
     }
 
     /// Enqueue a value skipped due to sampling interval,
@@ -407,34 +455,41 @@ impl MonitoredItem {
     ///
     /// Users that want to avoid this should just set the sampling interval to 0.
     pub(super) fn maybe_enqueue_skipped_value(&mut self, now: &DateTime) -> bool {
-        if let Some(value) = self.sample_skipped_data_value.take() {
-            if value.source_timestamp.is_some_and(|v| v <= *now) {
-                self.notify_data_value(value, now);
+        match self.sample_skipped_data_value.take() {
+            Some(value) if value.source_timestamp.is_some_and(|v| v <= *now) => {
+                self.notify_data_value(value, now, true);
                 true
-            } else {
+            }
+            Some(value) => {
                 // If there is no new sample, we can keep the last skipped value.
                 self.sample_skipped_data_value = Some(value);
                 false
             }
-        } else {
-            false
+            None => false,
         }
     }
 
-    pub(super) fn notify_data_value(&mut self, mut value: DataValue, now: &DateTime) -> bool {
+    pub(super) fn notify_data_value(
+        &mut self,
+        mut value: DataValue,
+        now: &DateTime,
+        from_subscription_tick: bool,
+    ) -> bool {
         if self.monitoring_mode == MonitoringMode::Disabled {
             return false;
         }
 
         let mut extra_enqueued = false;
         if let Some(skipped_value) = self.sample_skipped_data_value.take() {
-            // We use the skipped value if it is in the past, and if it is earlier than
-            // the value we are currently reporting.
+            // We may use the skipped value if it is in the past,
+            // and if it is earlier than the value we are currently reporting.
             if skipped_value
                 .source_timestamp
                 .is_some_and(|v| v <= *now && value.source_timestamp.is_none_or(|v2| v2 >= v))
             {
-                extra_enqueued = self.notify_data_value(skipped_value, now);
+                // We still pass it through regular filtering, so it's not guaranteed to be enqueued,
+                // for example if the sampling interval is `Subscription`.
+                extra_enqueued = self.notify_data_value(skipped_value, now, false);
             }
         }
 
@@ -454,11 +509,11 @@ impl MonitoredItem {
             match (&self.last_data_value, &self.filter) {
                 (Some(last_dv), FilterType::DataChangeFilter(filter)) => (
                     filter.is_changed(&value, last_dv),
-                    self.filter_by_sampling_interval(last_dv, &value),
+                    self.filter_by_sampling_interval(last_dv, &value, from_subscription_tick),
                 ),
                 (Some(last_dv), FilterType::None) => (
                     value.value != last_dv.value,
-                    self.filter_by_sampling_interval(last_dv, &value),
+                    self.filter_by_sampling_interval(last_dv, &value, from_subscription_tick),
                 ),
                 (None, _) => (true, true),
                 _ => (false, false),
@@ -478,7 +533,7 @@ impl MonitoredItem {
                     .and_then(|dv| dv.source_timestamp)
                     .unwrap_or(*now)
                     .as_chrono()
-                    + TimeDelta::milliseconds(self.sampling_interval as i64))
+                    + self.sampling_interval_as_time_delta())
                 .into(),
             );
             self.sample_skipped_data_value = Some(value);
@@ -642,7 +697,23 @@ impl MonitoredItem {
 
     /// Sampling interval.
     pub fn sampling_interval(&self) -> f64 {
-        self.sampling_interval
+        match &self.sampling_interval {
+            SamplingInterval::Subscription => -1.0,
+            SamplingInterval::Zero => 0.0,
+            SamplingInterval::NonZero(time_delta) => time_delta
+                .num_microseconds()
+                .map(|v| v as f64 / 1000.0)
+                .unwrap_or(time_delta.num_milliseconds() as f64),
+        }
+    }
+
+    /// Get the sampling interval as a `TimeDelta`.
+    pub fn sampling_interval_as_time_delta(&self) -> TimeDelta {
+        match &self.sampling_interval {
+            SamplingInterval::Subscription => TimeDelta::zero(),
+            SamplingInterval::Zero => TimeDelta::zero(),
+            SamplingInterval::NonZero(time_delta) => *time_delta,
+        }
     }
 
     /// Current maximum queue size.
@@ -680,7 +751,10 @@ impl MonitoredItem {
 pub(super) mod tests {
     use chrono::{Duration, TimeDelta, Utc};
 
-    use crate::{node_manager::ParsedReadValueId, subscriptions::monitored_item::Notification};
+    use crate::{
+        node_manager::ParsedReadValueId,
+        subscriptions::monitored_item::{Notification, SamplingInterval},
+    };
     use opcua_types::{
         AttributeId, DataChangeFilter, DataChangeTrigger, DataValue, DateTime, Deadband,
         DeadbandType, MonitoringMode, NodeId, ParsedDataChangeFilter, ReadValueId, StatusCode,
@@ -694,7 +768,7 @@ pub(super) mod tests {
         item_to_monitor: ReadValueId,
         monitoring_mode: MonitoringMode,
         filter: FilterType,
-        sampling_interval: f64,
+        sampling_interval: SamplingInterval,
         discard_oldest: bool,
         initial_value: Option<DataValue>,
     ) -> MonitoredItem {
@@ -719,7 +793,7 @@ pub(super) mod tests {
 
         let now = DateTime::now();
         if let Some(val) = initial_value {
-            v.notify_data_value(val, &now);
+            v.notify_data_value(val, &now, true);
         } else {
             let now = DateTime::now();
             v.notify_data_value(
@@ -732,6 +806,7 @@ pub(super) mod tests {
                     server_picoseconds: None,
                 },
                 &now,
+                true,
             );
         }
 
@@ -857,7 +932,7 @@ pub(super) mod tests {
                 // Abs compare
                 deadband: Deadband::Absolute(0.9),
             }),
-            100.0,
+            SamplingInterval::NonZero(TimeDelta::milliseconds(100)),
             true,
             Some(DataValue::new_at(1.0, start.into())),
         );
@@ -868,7 +943,8 @@ pub(super) mod tests {
                 2.0,
                 (start + Duration::try_milliseconds(50).unwrap()).into()
             ),
-            &start.into()
+            &start.into(),
+            false
         ));
         assert_eq!(1, item.notification_queue.len());
         assert!(item.sample_skipped_data_value.is_some());
@@ -878,7 +954,8 @@ pub(super) mod tests {
                 1.5,
                 (start + Duration::try_milliseconds(100).unwrap()).into()
             ),
-            &start.into()
+            &start.into(),
+            false
         ));
         // Sampling is disabled, don't notify anything.
         item.set_monitoring_mode(MonitoringMode::Disabled);
@@ -887,7 +964,8 @@ pub(super) mod tests {
                 3.0,
                 (start + Duration::try_milliseconds(250).unwrap()).into()
             ),
-            &start.into()
+            &start.into(),
+            false
         ));
         item.set_monitoring_mode(MonitoringMode::Reporting);
         // Ok
@@ -896,7 +974,8 @@ pub(super) mod tests {
                 2.0,
                 (start + Duration::try_milliseconds(100).unwrap()).into()
             ),
-            &start.into()
+            &start.into(),
+            false
         ));
         // Now in deadband
         assert!(!item.notify_data_value(
@@ -904,7 +983,8 @@ pub(super) mod tests {
                 2.5,
                 (start + Duration::try_milliseconds(200).unwrap()).into()
             ),
-            &start.into()
+            &start.into(),
+            false
         ));
         // And outside deadband
         assert!(item.notify_data_value(
@@ -912,7 +992,8 @@ pub(super) mod tests {
                 3.0,
                 (start + Duration::try_milliseconds(250).unwrap()).into()
             ),
-            &start.into()
+            &start.into(),
+            false
         ));
         assert_eq!(item.notification_queue.len(), 3);
     }
@@ -929,7 +1010,7 @@ pub(super) mod tests {
             },
             MonitoringMode::Reporting,
             FilterType::None,
-            100.0,
+            SamplingInterval::NonZero(TimeDelta::milliseconds(100)),
             true,
             Some(DataValue::new_at(0, start.into())),
         );
@@ -941,14 +1022,16 @@ pub(super) mod tests {
                     i as i32 + 1,
                     (start + Duration::try_milliseconds(100 * i + 100).unwrap()).into(),
                 ),
-                &now
+                &now,
+                false
             ));
         }
         assert_eq!(item.notification_queue.len(), 5);
 
         assert!(item.notify_data_value(
             DataValue::new_at(5, (start + Duration::try_milliseconds(600).unwrap()).into(),),
-            &now
+            &now,
+            false
         ));
 
         assert_eq!(item.notification_queue.len(), 5);
@@ -983,13 +1066,13 @@ pub(super) mod tests {
             },
             MonitoringMode::Reporting,
             FilterType::None,
-            100.0,
+            SamplingInterval::NonZero(TimeDelta::milliseconds(100)),
             true,
             Some(DataValue::new_at(0, start.into())),
         );
         let t = start + TimeDelta::milliseconds(50);
         // Skipped due to sampling interval
-        assert!(item.notify_data_value(DataValue::new_at(1, t.into()), &t.into()));
+        assert!(item.notify_data_value(DataValue::new_at(1, t.into()), &t.into(), false));
         assert_eq!(item.notification_queue.len(), 1);
         assert!(item.sample_skipped_data_value.is_some());
 
@@ -997,27 +1080,27 @@ pub(super) mod tests {
         // and send the new value, since its timestamp is not after the next sample.
         // This is to avoid cases where we indefinitely delay notifications.
         let t = start + TimeDelta::milliseconds(100);
-        assert!(item.notify_data_value(DataValue::new_at(2, t.into()), &start.into()));
+        assert!(item.notify_data_value(DataValue::new_at(2, t.into()), &start.into(), false));
         assert!(item.sample_skipped_data_value.is_none());
         assert_eq!(item.notification_queue.len(), 2);
         item.notification_queue.drain(..);
 
         // Again, skip a value due to sampling interval
         let t = start + TimeDelta::milliseconds(150);
-        assert!(item.notify_data_value(DataValue::new_at(3, t.into()), &t.into()));
+        assert!(item.notify_data_value(DataValue::new_at(3, t.into()), &t.into(), false));
         assert_eq!(item.notification_queue.len(), 0);
         assert!(item.sample_skipped_data_value.is_some());
 
         // This time, enqueue a new value far enough in the future that there is "room" for the skipped value.
         let t = start + TimeDelta::milliseconds(300);
-        assert!(item.notify_data_value(DataValue::new_at(4, t.into()), &t.into()));
+        assert!(item.notify_data_value(DataValue::new_at(4, t.into()), &t.into(), false));
         assert!(item.sample_skipped_data_value.is_none());
         assert_eq!(item.notification_queue.len(), 2);
 
         item.notification_queue.drain(..);
         // A skipped value should also be enqueued on tick.
         let t = start + TimeDelta::milliseconds(350);
-        assert!(item.notify_data_value(DataValue::new_at(5, t.into()), &t.into()));
+        assert!(item.notify_data_value(DataValue::new_at(5, t.into()), &t.into(), false));
         assert!(item.sample_skipped_data_value.is_some());
         assert_eq!(item.notification_queue.len(), 0);
 

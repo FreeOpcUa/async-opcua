@@ -222,7 +222,7 @@ impl Subscription {
     /// Notify the given monitored item of a new data value.
     pub fn notify_data_value(&mut self, id: &u32, value: DataValue, now: &DateTime) {
         if let Some(item) = self.monitored_items.get_mut(id) {
-            if item.notify_data_value(value, now) {
+            if item.notify_data_value(value, now, false) {
                 self.notified_monitored_items.insert(*id);
             }
         }
@@ -789,10 +789,12 @@ impl Subscription {
 mod tests {
     use std::time::{Duration, Instant};
 
-    use chrono::Utc;
+    use chrono::{TimeDelta, Utc};
 
     use crate::{
-        subscriptions::monitored_item::{tests::new_monitored_item, FilterType, Notification},
+        subscriptions::monitored_item::{
+            tests::new_monitored_item, FilterType, Notification, SamplingInterval,
+        },
         SubscriptionState,
     };
     use opcua_types::{
@@ -862,7 +864,7 @@ mod tests {
                 },
                 MonitoringMode::Reporting,
                 FilterType::None,
-                100.0,
+                SamplingInterval::NonZero(TimeDelta::milliseconds(100)),
                 false,
                 Some(DataValue::new_now(123)),
             ),
@@ -992,7 +994,7 @@ mod tests {
                         MonitoringMode::Sampling
                     },
                     FilterType::None,
-                    100.0,
+                    SamplingInterval::NonZero(TimeDelta::milliseconds(100)),
                     false,
                     Some(DataValue::new_at(0, start_dt.into())),
                 ),

@@ -350,7 +350,7 @@ impl SecureChannel {
         &mut self,
         remote_cert: &ByteString,
     ) -> Result<(), StatusCode> {
-        self.remote_cert = if remote_cert.is_null() {
+        self.remote_cert = if remote_cert.is_null() || remote_cert.is_empty() {
             None
         } else {
             Some(X509::from_byte_string(remote_cert)?)

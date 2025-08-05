@@ -32,6 +32,17 @@ pub enum DataEncoding {
     /// Some other data encoding.
     Other(QualifiedName),
 }
+#[derive(Debug, Clone, Default)]
+/// Parsed data encoding, only built-in encodings.
+pub enum BuiltInDataEncoding {
+    #[default]
+    /// Binary data decoding.
+    Binary,
+    /// XML data encoding.
+    XML,
+    /// JSON data encoding.
+    JSON,
+}
 
 impl DataEncoding {
     /// Parse data encoding from the browse name in a service call.
@@ -408,6 +419,13 @@ pub trait BinaryEncodable {
     fn byte_len(&self, ctx: &crate::Context<'_>) -> usize;
     /// Encodes the instance to the write stream.
     fn encode<S: Write + ?Sized>(&self, stream: &mut S, ctx: &Context<'_>) -> EncodingResult<()>;
+
+    /// Override the extension object encoding used for this type.
+    /// This only makes sense if the type can only ever be encoded using a single
+    /// built-in encoding.
+    fn override_encoding(&self) -> Option<BuiltInDataEncoding> {
+        None
+    }
 
     /// Convenience method for encoding a message straight into an array of bytes. It is preferable to reuse buffers than
     /// to call this so it should be reserved for tests and trivial code.

@@ -209,6 +209,7 @@ fn binary_loader_impl(
                 node_id: &opcua::types::NodeId,
                 stream: &mut dyn std::io::Read,
                 ctx: &opcua::types::Context<'_>,
+                _length: Option<usize>,
             ) -> Option<opcua::types::EncodingResult<Box<dyn opcua::types::DynEncodable>>> {
                 #index_check
 
@@ -317,6 +318,7 @@ fn xml_loader_impl(ids: &[&(EncodingIds, String)], namespace: &str) -> (TokenStr
                 node_id: &opcua::types::NodeId,
                 stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
                 ctx: &opcua::types::Context<'_>,
+                _name: &str,
             ) -> Option<opcua::types::EncodingResult<Box<dyn opcua::types::DynEncodable>>> {
                 #index_check
 

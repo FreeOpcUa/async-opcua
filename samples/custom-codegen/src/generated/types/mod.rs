@@ -77,6 +77,7 @@ impl opcua::types::TypeLoader for GeneratedTypeLoader {
         node_id: &opcua::types::NodeId,
         stream: &mut dyn std::io::Read,
         ctx: &opcua::types::Context<'_>,
+        _length: Option<usize>,
     ) -> Option<opcua::types::EncodingResult<Box<dyn opcua::types::DynEncodable>>> {
         let idx = ctx
             .namespaces()
@@ -97,6 +98,7 @@ impl opcua::types::TypeLoader for GeneratedTypeLoader {
         node_id: &opcua::types::NodeId,
         stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
         ctx: &opcua::types::Context<'_>,
+        _name: &str,
     ) -> Option<opcua::types::EncodingResult<Box<dyn opcua::types::DynEncodable>>> {
         let idx = ctx
             .namespaces()

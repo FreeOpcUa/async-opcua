@@ -6,6 +6,10 @@
 //! In order to work with these, each set of types implements [`TypeLoader`], and a list
 //! of type loaders are passed along during decoding.
 
+mod fallback;
+
+pub use fallback::{ByteStringBody, FallbackTypeLoader, JsonBody, XmlBody};
+
 use std::{borrow::Cow, io::Read, sync::Arc};
 
 use chrono::TimeDelta;
@@ -152,6 +156,7 @@ where
         node_id: &crate::NodeId,
         stream: &mut crate::xml::XmlStreamReader<&mut dyn std::io::Read>,
         ctx: &Context<'_>,
+        _name: &str,
     ) -> Option<crate::EncodingResult<Box<dyn crate::DynEncodable>>> {
         let idx = ctx.namespaces().get_index(Self::namespace())?;
         if idx != node_id.namespace {
@@ -189,6 +194,7 @@ where
         node_id: &NodeId,
         stream: &mut dyn Read,
         ctx: &Context<'_>,
+        _length: Option<usize>,
     ) -> Option<crate::EncodingResult<Box<dyn crate::DynEncodable>>> {
         let idx = ctx.namespaces().get_index(Self::namespace())?;
         if idx != node_id.namespace {
@@ -302,10 +308,10 @@ impl Default for TypeLoaderCollection {
 
 impl TypeLoaderCollection {
     /// Create a new type loader collection containing only the
-    /// generated type loader.
+    /// generated type loader and the fallback type loader.
     pub fn new() -> Self {
         Self {
-            loaders: vec![Arc::new(GeneratedTypeLoader)],
+            loaders: vec![Arc::new(GeneratedTypeLoader), Arc::new(FallbackTypeLoader)],
         }
     }
 
@@ -415,6 +421,7 @@ pub trait TypeLoader: Send + Sync {
         node_id: &crate::NodeId,
         stream: &mut crate::xml::XmlStreamReader<&mut dyn std::io::Read>,
         ctx: &Context<'_>,
+        name: &str,
     ) -> Option<crate::EncodingResult<Box<dyn crate::DynEncodable>>>;
 
     #[cfg(feature = "json")]
@@ -434,6 +441,7 @@ pub trait TypeLoader: Send + Sync {
         node_id: &NodeId,
         stream: &mut dyn Read,
         ctx: &Context<'_>,
+        length: Option<usize>,
     ) -> Option<crate::EncodingResult<Box<dyn crate::DynEncodable>>>;
 
     /// Get the priority of this type loader.
@@ -483,9 +491,10 @@ impl<'a> Context<'a> {
         &self,
         node_id: &NodeId,
         stream: &mut dyn Read,
+        length: Option<usize>,
     ) -> crate::EncodingResult<crate::ExtensionObject> {
         for loader in self.loaders {
-            if let Some(r) = loader.load_from_binary(node_id, stream, self) {
+            if let Some(r) = loader.load_from_binary(node_id, stream, self, length) {
                 return Ok(crate::ExtensionObject { body: Some(r?) });
             }
         }
@@ -501,9 +510,10 @@ impl<'a> Context<'a> {
         &self,
         node_id: &NodeId,
         stream: &mut crate::xml::XmlStreamReader<&mut dyn std::io::Read>,
+        name: &str,
     ) -> crate::EncodingResult<crate::ExtensionObject> {
         for loader in self.loaders {
-            if let Some(r) = loader.load_from_xml(node_id, stream, self) {
+            if let Some(r) = loader.load_from_xml(node_id, stream, self, name) {
                 return Ok(crate::ExtensionObject { body: Some(r?) });
             }
         }

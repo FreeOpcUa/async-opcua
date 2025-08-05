@@ -35,7 +35,7 @@ pub(super) fn generate_binary_encode_impl(strct: EncodingStruct) -> syn::Result<
             optional_index += 1;
         }
         encode_body.extend(quote! {
-            encoding_mask.encode(stream, ctx)?;
+            opcua::types::BinaryEncodable::encode(&encoding_mask, stream, ctx)?;
         });
     }
 
@@ -53,7 +53,7 @@ pub(super) fn generate_binary_encode_impl(strct: EncodingStruct) -> syn::Result<
             });
             encode_body.extend(quote! {
                 if let Some(item) = &self.#ident {
-                    item.encode(stream, ctx)?;
+                    opcua::types::BinaryEncodable::encode(item, stream, ctx)?;
                 }
             });
         } else {
@@ -61,7 +61,7 @@ pub(super) fn generate_binary_encode_impl(strct: EncodingStruct) -> syn::Result<
                 size += self.#ident.byte_len(ctx);
             });
             encode_body.extend(quote! {
-                self.#ident.encode(stream, ctx)?;
+                opcua::types::BinaryEncodable::encode(&self.#ident, stream, ctx)?;
             });
         }
     }
@@ -107,7 +107,7 @@ pub(super) fn generate_binary_decode_impl(strct: EncodingStruct) -> syn::Result<
 
     if any_optional {
         decode_impl.extend(quote! {
-            let encoding_mask = u32::decode(stream, ctx)?;
+            let encoding_mask = <u32 as opcua::types::BinaryDecodable>::decode(stream, ctx)?;
         });
     }
 
@@ -212,7 +212,7 @@ pub(super) fn generate_simple_enum_binary_encode_impl(en: SimpleEnum) -> syn::Re
                 stream: &mut S,
                 ctx: &opcua::types::Context<'_>,
             ) -> opcua::types::EncodingResult<()> {
-                (*self as #repr).encode(stream, ctx)
+                opcua::types::BinaryEncodable::encode(&(*self as #repr), stream, ctx)
             }
         }
     })
@@ -271,7 +271,7 @@ pub(super) fn generate_union_binary_encode_impl(en: AdvancedEnum) -> syn::Result
         if variant.is_null {
             encode_arms.extend(quote! {
                 Self::#name => {
-                    0u32.encode(stream, ctx)?;
+                    opcua::types::BinaryEncodable::encode(&0u32, stream, ctx)?;
                 }
             });
             byte_len_arms.extend(quote! {
@@ -287,8 +287,8 @@ pub(super) fn generate_union_binary_encode_impl(en: AdvancedEnum) -> syn::Result
 
         encode_arms.extend(quote! {
             Self::#name(inner) => {
-                #idx.encode(stream, ctx)?;
-                inner.encode(stream, ctx)?;
+                opcua::types::BinaryEncodable::encode(&#idx, stream, ctx)?;
+                opcua::types::BinaryEncodable::encode(inner, stream, ctx)?;
             },
         });
     }

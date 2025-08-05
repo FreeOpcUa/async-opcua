@@ -98,6 +98,11 @@ pub trait DynEncodable: Any + Send + Sync + std::fmt::Debug {
     /// Get the type name of the type, by calling `std::any::type_name` on `Self`.
     /// Very useful for debugging.
     fn type_name(&self) -> &'static str;
+
+    /// Override the extension object encoding used for this type.
+    /// This only makes sense if the type can only ever be encoded using a single
+    /// built-in encoding.
+    fn override_encoding(&self) -> Option<crate::encoding::BuiltInDataEncoding>;
 }
 
 macro_rules! blanket_dyn_encodable {
@@ -178,6 +183,10 @@ macro_rules! blanket_dyn_encodable {
             fn type_name(&self) -> &'static str {
                 std::any::type_name::<Self>()
             }
+
+            fn override_encoding(&self) -> Option<crate::encoding::BuiltInDataEncoding> {
+                BinaryEncodable::override_encoding(self)
+            }
         }
     };
 }
@@ -255,6 +264,20 @@ mod json {
 
             stream.name("UaTypeId")?;
             JsonEncodable::encode(id.as_ref(), stream, ctx)?;
+
+            if let Some(encoding) = body.override_encoding() {
+                match encoding {
+                    crate::BuiltInDataEncoding::Binary => {
+                        stream.name("UaEncoding")?;
+                        stream.number_value(1)?;
+                    }
+                    crate::BuiltInDataEncoding::XML => {
+                        stream.name("UaEncoding")?;
+                        stream.number_value(2)?;
+                    }
+                    crate::BuiltInDataEncoding::JSON => (),
+                }
+            }
 
             stream.name("UaBody")?;
             body.encode_json(stream, ctx)?;
@@ -335,16 +358,17 @@ mod json {
                     let Some(raw) = bytes.value else {
                         return Err(Error::decoding("Missing extension object body"));
                     };
+                    let len = raw.len();
                     let mut cursor = Cursor::new(raw);
-                    Ok(ctx.load_from_binary(&type_id, &mut cursor as &mut dyn Read)?)
+                    Ok(ctx.load_from_binary(&type_id, &mut cursor as &mut dyn Read, Some(len))?)
                 } else if encoding == 2 {
                     #[cfg(feature = "xml")]
                     {
                         let mut cursor = Cursor::new(string_body.as_bytes());
                         let mut inner_stream =
                             crate::xml::XmlStreamReader::new(&mut cursor as &mut dyn Read);
-                        if crate::xml::enter_first_tag(&mut inner_stream)? {
-                            Ok(ctx.load_from_xml(&type_id, &mut inner_stream)?)
+                        if let Some(name) = crate::xml::enter_first_tag(&mut inner_stream)? {
+                            Ok(ctx.load_from_xml(&type_id, &mut inner_stream, &name)?)
                         } else {
                             Ok(ExtensionObject::null())
                         }
@@ -369,7 +393,10 @@ mod xml {
     use opcua_xml::events::Event;
 
     use crate::{xml::*, ByteString, NodeId};
-    use std::io::{Read, Write};
+    use std::{
+        io::{Read, Write},
+        str::from_utf8,
+    };
 
     use super::ExtensionObject;
 
@@ -429,16 +456,23 @@ mod xml {
                                 return Err(Error::decoding("Missing type ID in extension object"));
                             };
 
-                            if top_level.name().0 == b"ByteString" {
+                            if top_level.local_name().as_ref() == b"ByteString" {
                                 // If it's a bytestring, decode it as a binary body.
                                 let val = ByteString::decode(reader, ctx)?;
                                 if let Some(raw) = val.value {
+                                    let len = raw.len();
                                     let mut cursor = std::io::Cursor::new(raw);
-                                    body = Some(ctx.load_from_binary(&type_id, &mut cursor)?);
+                                    body = Some(ctx.load_from_binary(
+                                        &type_id,
+                                        &mut cursor,
+                                        Some(len),
+                                    )?);
                                 }
                             } else {
+                                let local_name = top_level.local_name();
+                                let name = from_utf8(local_name.as_ref())?.to_owned();
                                 // Decode from XML.
-                                body = Some(ctx.load_from_xml(&type_id, reader)?);
+                                body = Some(ctx.load_from_xml(&type_id, reader, &name)?);
                             }
                             // Read to the end of the body.
                             reader.skip_value()?;
@@ -511,7 +545,11 @@ impl BinaryEncodable for ExtensionObject {
 
         match &self.body {
             Some(b) => {
-                write_u8(stream, 0x1)?;
+                if matches!(b.override_encoding(), Some(crate::BuiltInDataEncoding::XML)) {
+                    write_u8(stream, 0x2)?;
+                } else {
+                    write_u8(stream, 0x1)?;
+                }
                 write_i32(stream, b.byte_len_dyn(ctx) as i32)?;
                 b.encode_binary(&mut stream as &mut dyn Write, ctx)
             }
@@ -535,7 +573,7 @@ impl BinaryDecodable for ExtensionObject {
                 if size <= 0 {
                     None
                 } else {
-                    Some(ctx.load_from_binary(&node_id, &mut stream)?)
+                    Some(ctx.load_from_binary(&node_id, &mut stream, Some(size as usize))?)
                 }
             }
             0x2 => {
@@ -548,8 +586,8 @@ impl BinaryDecodable for ExtensionObject {
                     let mut cursor = std::io::Cursor::new(body.as_bytes());
                     let mut inner_stream =
                         crate::xml::XmlStreamReader::new(&mut cursor as &mut dyn Read);
-                    if crate::xml::enter_first_tag(&mut inner_stream)? {
-                        Some(ctx.load_from_xml(&node_id, &mut inner_stream)?)
+                    if let Some(name) = crate::xml::enter_first_tag(&mut inner_stream)? {
+                        Some(ctx.load_from_xml(&node_id, &mut inner_stream, &name)?)
                     } else {
                         None
                     }
@@ -557,12 +595,20 @@ impl BinaryDecodable for ExtensionObject {
 
                 #[cfg(not(feature = "xml"))]
                 {
-                    tracing::warn!("XML feature is not enabled, deserializing XML payloads in JSON extension objects is not supported");
                     let size = i32::decode(stream, ctx)?;
                     if size > 0 {
-                        crate::encoding::skip_bytes(stream, size as u64)?;
+                        let mut bytes = vec![0u8; size as usize];
+                        stream.read_exact(&mut bytes)?;
+                        Some(ExtensionObject::new(crate::type_loader::XmlBody::new(
+                            bytes,
+                            node_id,
+                            // This is only relevant if we are re-encoding the element as XML,
+                            // which we can't do anyway since the XML feature is disabled.
+                            "XmlElement".to_owned(),
+                        )))
+                    } else {
+                        None
                     }
-                    None
                 }
             }
             _ => {

@@ -1,5 +1,6 @@
 mod date_time;
 mod encoding;
+mod fallback;
 #[cfg(feature = "json")]
 mod json;
 mod node_id;

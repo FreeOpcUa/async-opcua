@@ -292,3 +292,14 @@ pub fn consume_raw_value(
     writer.finish_document()?;
     Ok(res)
 }
+
+/// Utility method to write a stream of raw JSON bytes to the stream.
+pub fn write_raw_value(
+    data: &[u8],
+    r: &mut JsonStreamWriter<&mut dyn std::io::Write>,
+) -> EncodingResult<()> {
+    let cursor = Cursor::new(data);
+    let mut reader = JsonStreamReader::new(cursor);
+    reader.transfer_to(r)?;
+    Ok(())
+}

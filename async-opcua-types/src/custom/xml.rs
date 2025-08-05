@@ -189,7 +189,11 @@ impl DynamicTypeLoader {
                         stream, ctx,
                     )?))
                 } else {
-                    Ok(Variant::from(ctx.load_from_xml(&field_ty.node_id, stream)?))
+                    Ok(Variant::from(ctx.load_from_xml(
+                        &field_ty.node_id,
+                        stream,
+                        &field_ty.name,
+                    )?))
                 }
             }
             VariantScalarTypeId::DataValue => Ok(Variant::from(

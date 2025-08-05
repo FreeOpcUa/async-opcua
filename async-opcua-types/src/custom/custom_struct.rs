@@ -452,9 +452,11 @@ impl DynamicTypeLoader {
                     )?))
                 } else {
                     // Else, load the extension object body directly.
-                    Ok(Variant::from(
-                        ctx.load_from_binary(&field_ty.node_id, stream)?,
-                    ))
+                    Ok(Variant::from(ctx.load_from_binary(
+                        &field_ty.node_id,
+                        stream,
+                        None,
+                    )?))
                 }
             }
             crate::VariantScalarTypeId::DataValue => Ok(Variant::from(
@@ -606,6 +608,7 @@ impl TypeLoader for DynamicTypeLoader {
         node_id: &NodeId,
         stream: &mut dyn std::io::Read,
         ctx: &Context<'_>,
+        _length: Option<usize>,
     ) -> Option<crate::EncodingResult<Box<dyn crate::DynEncodable>>> {
         let ty_node_id = if let Some(mapped) = self.type_tree.encoding_to_data_type().get(node_id) {
             mapped
@@ -631,6 +634,7 @@ impl TypeLoader for DynamicTypeLoader {
         node_id: &crate::NodeId,
         stream: &mut crate::xml::XmlStreamReader<&mut dyn std::io::Read>,
         ctx: &Context<'_>,
+        _name: &str,
     ) -> Option<crate::EncodingResult<Box<dyn crate::DynEncodable>>> {
         let ty_node_id = if let Some(mapped) = self.type_tree.encoding_to_data_type().get(node_id) {
             mapped

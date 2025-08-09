@@ -17,6 +17,11 @@ pub enum SubscriptionActivity {
     /// A publish request failed, either due to a timeout or an error.
     /// The publish request will typically be retried.
     PublishFailed(StatusCode),
+    /// Fatal failure, a publishing request has failed fatally in a way
+    /// that indicates it will not recover on its own.
+    /// This typically means the client has lost connection to the server.
+    /// When this is received by the session event loop it triggers a session restart.
+    FatalFailure(StatusCode),
 }
 
 /// An event loop for running periodic subscription tasks.
@@ -167,6 +172,7 @@ impl SubscriptionEventLoop {
                                         | StatusCode::BadSessionIdInvalid => {
                                             // If this happens we will probably eventually fail keep-alive, defer to that.
                                             session_error!(slf.session, "Publish response indicates session is dead");
+                                            break SubscriptionActivity::FatalFailure(e);
                                         }
                                         StatusCode::BadNoSubscription => {
                                             session_debug!(

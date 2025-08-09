@@ -194,6 +194,17 @@ impl SessionEventLoop {
                                     return Err(StatusCode::BadUnexpectedError);
                                 };
 
+                                if let SubscriptionActivity::FatalFailure(e) = &r {
+                                    if !state.currently_closing {
+                                        session_error!(slf.inner, "Fatal error from subscription loop ({e}), session will be closed.");
+                                        state.currently_closing = true;
+                                        let s = slf.inner.clone();
+                                        state.disconnect_fut = async move {
+                                            s.disconnect_inner(false, false).await
+                                        }.boxed();
+                                    }
+                                }
+
                                 Ok((
                                     SessionPollResult::Subscription(r),
                                     SessionEventLoopState::Connected(state),

@@ -169,7 +169,7 @@ pub(crate) async fn history_read(
         items
             .into_iter()
             .map(|node| {
-                if node.continuation_point.is_null() {
+                if node.continuation_point.is_null_or_empty() {
                     let mut node = HistoryNode::new(node, is_events, None);
                     if request.request.release_continuation_points {
                         node.set_status(StatusCode::Good);

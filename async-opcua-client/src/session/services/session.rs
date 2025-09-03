@@ -355,7 +355,7 @@ impl ActivateSession {
                 ),
             ));
         };
-        let security_policy = if policy.security_policy_uri.is_null() {
+        let security_policy = if policy.security_policy_uri.is_empty() {
             // Assume None
             SecurityPolicy::None
         } else {
@@ -487,7 +487,7 @@ impl ActivateSession {
                 };
 
                 let server_nonce = remote_nonce;
-                if server_nonce.is_empty() {
+                if server_nonce.is_null_or_empty() {
                     error!("Cannot sign server certificate because server nonce is empty");
                     return Err(StatusCode::BadUnexpectedError);
                 }

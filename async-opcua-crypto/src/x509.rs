@@ -610,7 +610,7 @@ impl X509 {
 
     /// Load a certificate from a der byte string.
     pub fn from_byte_string(data: &ByteString) -> Result<X509, Error> {
-        if data.is_null() {
+        if data.is_null_or_empty() {
             Err(Error::new(
                 StatusCode::BadCertificateInvalid,
                 "Cannot make certificate from null bytestring",

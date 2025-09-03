@@ -77,7 +77,7 @@ impl SessionManager {
             .new_endpoint_descriptions(request.endpoint_url.as_ref());
         // TODO request.endpoint_url should match hostname of server application certificate
         // Find matching end points for this url
-        if request.endpoint_url.is_null() {
+        if request.endpoint_url.is_empty() {
             error!("Create session was passed an null endpoint url");
             return Err(StatusCode::BadTcpEndpointUrlInvalid);
         }

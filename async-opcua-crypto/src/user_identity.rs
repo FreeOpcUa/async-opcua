@@ -251,7 +251,7 @@ pub(crate) fn legacy_secret_decrypt(
     server_key: &PrivateKey,
     padding: RsaPadding,
 ) -> Result<ByteString, Error> {
-    if secret.is_null() {
+    if secret.is_null_or_empty() {
         Err(Error::decoding("Missing server secret"))
     } else {
         // Decrypt the message

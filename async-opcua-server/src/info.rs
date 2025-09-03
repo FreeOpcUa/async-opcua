@@ -440,7 +440,7 @@ impl ServerInfo {
                 StatusCode::BadIdentityTokenRejected,
                 "Token doesn't possess the correct policy id",
             ))
-        } else if token.user_name.is_null() {
+        } else if token.user_name.is_empty() {
             Err(Error::new(
                 StatusCode::BadIdentityTokenRejected,
                 "User identify token supplied no username",
@@ -451,7 +451,7 @@ impl ServerInfo {
                 token.policy_id.as_ref(),
                 token.encryption_algorithm.as_ref()
             );
-            let token_password = if !token.encryption_algorithm.is_null() {
+            let token_password = if !token.encryption_algorithm.is_empty() {
                 if let Some(ref server_key) = server_key {
                     let decrypted = user_identity::legacy_decrypt_secret(
                         token,
@@ -575,7 +575,7 @@ impl ServerInfo {
                 token.policy_id.as_ref(),
                 token.encryption_algorithm.as_ref()
             );
-            let decrypted_token = if !token.encryption_algorithm.is_null() {
+            let decrypted_token = if !token.encryption_algorithm.is_empty() {
                 if let Some(ref server_key) = server_key {
                     user_identity::legacy_decrypt_secret(token, server_nonce.as_ref(), server_key)?
                 } else {

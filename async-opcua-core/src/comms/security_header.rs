@@ -55,7 +55,7 @@ impl SecurityHeader {
         if is_open_secure_channel {
             let security_header = AsymmetricSecurityHeader::decode(stream, decoding_options)?;
 
-            let security_policy = if security_header.security_policy_uri.is_null() {
+            let security_policy = if security_header.security_policy_uri.is_empty() {
                 SecurityPolicy::None
             } else {
                 SecurityPolicy::from_uri(security_header.security_policy_uri.as_ref())

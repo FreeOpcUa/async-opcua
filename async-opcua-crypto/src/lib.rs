@@ -97,11 +97,11 @@ pub fn create_signature_data(
         SecurityPolicy::Unknown => return Err(StatusCode::BadSecurityPolicyRejected),
         SecurityPolicy::None => (UAString::null(), ByteString::null()),
         security_policy => {
-            if contained_cert.is_null() {
+            if contained_cert.is_null_or_empty() {
                 error!("Null certificate passed to create_signature_data");
                 return Err(StatusCode::BadCertificateInvalid);
             }
-            if nonce.is_null() {
+            if nonce.is_null_or_empty() {
                 error!("Null nonce passed to create_signature_data");
                 return Err(StatusCode::BadNonceInvalid);
             }

@@ -75,7 +75,7 @@ async fn get_eu_range(
     {
         // If this somehow results in multiple targets we just use the first.
         if let Some(p) = r.targets.and_then(|p| p.into_iter().next()) {
-            if !p.target_id.namespace_uri.is_null() || p.target_id.server_index != 0 {
+            if !p.target_id.namespace_uri.is_empty() || p.target_id.server_index != 0 {
                 continue;
             }
             to_read.push((*id, p.target_id.node_id));

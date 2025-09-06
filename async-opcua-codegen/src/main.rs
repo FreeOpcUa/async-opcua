@@ -1,8 +1,14 @@
+use std::process::ExitCode;
+
 use env_logger::Env;
 use opcua_codegen::{run_codegen, CodeGenConfig, CodeGenError};
 
-fn main() -> Result<(), CodeGenError> {
-    run_cli()
+fn main() -> ExitCode {
+    if let Err(e) = run_cli() {
+        eprintln!("{e}");
+        return ExitCode::FAILURE;
+    }
+    ExitCode::SUCCESS
 }
 
 fn run_cli() -> Result<(), CodeGenError> {
@@ -16,7 +22,7 @@ fn run_cli() -> Result<(), CodeGenError> {
 async-opcua-codegen [config].yml
 "#
         );
-        return Ok(());
+        return Err(CodeGenError::other("Incorrect command line args"));
     }
 
     let config_path = args.nth(1).unwrap();

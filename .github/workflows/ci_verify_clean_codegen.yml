@@ -12,7 +12,9 @@ jobs:
         with:
           toolchain: stable
       - name: Run code gen
-        run: cargo run --bin async-opcua-codegen code_gen_config.yml --locked
+        run: cargo run --locked --bin async-opcua-codegen code_gen_config.yml 
+      - name: Run code gen for sample
+        run: cargo run --locked --bin async-opcua-codegen samples/custom-codegen/code_gen_config.yml
       - name: Format generated code
         run: cargo fmt --all
       - name: Verify generated code matches committed code

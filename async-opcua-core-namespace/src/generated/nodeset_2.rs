@@ -290,7 +290,7 @@ fn make_data_type_2699(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 15715u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -462,7 +462,7 @@ fn make_data_type_2702(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 15717u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -578,7 +578,7 @@ fn make_data_type_2703(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 15718u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -701,7 +701,7 @@ fn make_data_type_2706(
                         max_string_length: 0u32,
                         is_optional: false,
                     }]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 15719u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -854,7 +854,7 @@ fn make_data_type_2709(
                         max_string_length: 0u32,
                         is_optional: false,
                     }]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 15724u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -907,7 +907,7 @@ fn make_data_type_2710(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 15725u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -941,7 +941,7 @@ fn make_data_type_2711(
             Some(
                 opcua::types::StructureDefinition {
                     fields: Some(vec![]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 23855u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -975,7 +975,7 @@ fn make_data_type_2712(
             Some(
                 opcua::types::StructureDefinition {
                     fields: Some(vec![]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 23856u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -1017,7 +1017,7 @@ fn make_data_type_2713(
                         max_string_length: 0u32,
                         is_optional: false,
                     }]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 23857u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -1051,7 +1051,7 @@ fn make_data_type_2714(
             Some(
                 opcua::types::StructureDefinition {
                     fields: Some(vec![]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 23860u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -1093,7 +1093,7 @@ fn make_data_type_2715(
                         max_string_length: 0u32,
                         is_optional: false,
                     }]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 23861u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -1135,7 +1135,7 @@ fn make_data_type_2716(
                         max_string_length: 0u32,
                         is_optional: false,
                     }]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 17468u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -1206,7 +1206,7 @@ fn make_data_type_2717(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 23864u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -1259,7 +1259,7 @@ fn make_data_type_2718(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 21155u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -1339,7 +1339,7 @@ fn make_data_type_2719(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 23865u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -1410,7 +1410,7 @@ fn make_data_type_2720(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 23866u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -1490,7 +1490,7 @@ fn make_data_type_2721(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 18930u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -1543,7 +1543,7 @@ fn make_data_type_2722(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 15479u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -1683,7 +1683,7 @@ fn make_data_type_2725(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 15727u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -1772,7 +1772,7 @@ fn make_data_type_2726(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 15729u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -1852,7 +1852,7 @@ fn make_data_type_2727(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 15733u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -2144,7 +2144,7 @@ fn make_data_type_3089(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 25531u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -2206,7 +2206,7 @@ fn make_data_type_3090(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 25532u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -2494,7 +2494,7 @@ fn make_data_type_3832(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 23499u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -2690,7 +2690,7 @@ fn make_data_type_3864(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 24292u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -3665,7 +3665,7 @@ fn make_data_type_4027(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 25239u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -3754,7 +3754,7 @@ fn make_data_type_4028(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 19079u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -3825,7 +3825,7 @@ fn make_data_type_4029(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 19080u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -3878,7 +3878,7 @@ fn make_data_type_4030(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 19081u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -4087,7 +4087,7 @@ fn make_data_type_4140(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 32661u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -4149,7 +4149,7 @@ fn make_data_type_4141(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 32662u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -4844,7 +4844,7 @@ fn make_data_type_4156(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 128u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -4878,7 +4878,7 @@ fn make_data_type_4157(
             Some(
                 opcua::types::StructureDefinition {
                     fields: Some(vec![]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 121u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -5045,7 +5045,7 @@ fn make_data_type_4160(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 14844u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -5116,7 +5116,7 @@ fn make_data_type_4161(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 122u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -5158,7 +5158,7 @@ fn make_data_type_4162(
                         max_string_length: 0u32,
                         is_optional: false,
                     }]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 123u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -5238,7 +5238,7 @@ fn make_data_type_4163(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 298u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -5300,7 +5300,7 @@ fn make_data_type_4164(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 8251u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -5342,7 +5342,7 @@ fn make_data_type_4165(
                         max_string_length: 0u32,
                         is_optional: false,
                     }]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 14845u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -5395,7 +5395,7 @@ fn make_data_type_4166(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 12765u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -5656,7 +5656,7 @@ fn make_data_type_4175(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 8917u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -5869,7 +5869,7 @@ fn make_data_type_4180(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 310u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -5966,7 +5966,7 @@ fn make_data_type_4182(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 12207u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -6198,7 +6198,7 @@ fn make_data_type_4188(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 306u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -6305,7 +6305,7 @@ fn make_data_type_4189(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(0u16, 314u32),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }

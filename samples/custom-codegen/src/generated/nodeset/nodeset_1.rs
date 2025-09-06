@@ -1347,7 +1347,10 @@ fn make_data_type_36(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(
+                        ns_map.get_index(1u16).unwrap(),
+                        5004u32,
+                    ),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }
@@ -1474,7 +1477,10 @@ fn make_data_type_39(
                             is_optional: false,
                         },
                     ]),
-                    default_encoding_id: opcua::types::NodeId::null(),
+                    default_encoding_id: opcua::types::NodeId::new(
+                        ns_map.get_index(1u16).unwrap(),
+                        5007u32,
+                    ),
                     base_data_type: opcua::types::NodeId::null(),
                     structure_type: opcua::types::StructureType::Structure,
                 }

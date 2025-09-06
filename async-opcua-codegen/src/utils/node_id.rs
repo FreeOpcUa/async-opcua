@@ -120,23 +120,7 @@ impl RenderExpr for ParsedNodeId {
 
 impl RenderExpr for opcua_xml::schema::ua_node_set::NodeId {
     fn render(&self) -> Result<TokenStream, CodeGenError> {
-        let id = &self.0;
-        let ParsedNodeId { value, namespace } = ParsedNodeId::parse(id)?;
-
-        // Do as much parsing as possible here, to optimize performance and get the errors as early as possible.
-        let id_item = value.render()?;
-
-        let ns_item = if namespace == 0 {
-            quote! { 0u16 }
-        } else {
-            quote! {
-                ns_map.get_index(#namespace).unwrap()
-            }
-        };
-
-        Ok(quote! {
-            opcua::types::NodeId::new(#ns_item, #id_item)
-        })
+        ParsedNodeId::parse(&self.0)?.render()
     }
 }
 

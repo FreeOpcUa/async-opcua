@@ -8,7 +8,11 @@ use opcua_xml::schema::ua_node_set::{
 use proc_macro2::{Span, TokenStream};
 use syn::{parse_quote, parse_str, Expr, Ident, ItemFn};
 
-use crate::{input::TypeInfo, utils::{ParsedNodeId, RenderExpr}, CodeGenError};
+use crate::{
+    input::TypeInfo,
+    utils::{ParsedNodeId, RenderExpr},
+    CodeGenError,
+};
 
 use super::{value::render_value, XsdTypeWithPath};
 
@@ -25,7 +29,7 @@ pub struct NodeSetCodeGenerator<'a> {
     aliases: &'a HashMap<String, String>,
     node_counter: usize,
     types: HashMap<String, XsdTypeWithPath>,
-    type_info: &'a HashMap<ParsedNodeId, TypeInfo>
+    type_info: &'a HashMap<ParsedNodeId, TypeInfo>,
 }
 
 impl<'a> NodeSetCodeGenerator<'a> {
@@ -33,7 +37,7 @@ impl<'a> NodeSetCodeGenerator<'a> {
         preferred_locale: &str,
         aliases: &'a HashMap<String, String>,
         types: HashMap<String, XsdTypeWithPath>,
-        type_info: &'a HashMap<ParsedNodeId, TypeInfo>
+        type_info: &'a HashMap<ParsedNodeId, TypeInfo>,
     ) -> Result<Self, CodeGenError> {
         Ok(Self {
             preferred_locale: preferred_locale.to_owned(),
@@ -41,7 +45,7 @@ impl<'a> NodeSetCodeGenerator<'a> {
             aliases,
             node_counter: 0,
             types,
-            type_info
+            type_info,
         })
     }
 
@@ -72,18 +76,20 @@ impl<'a> NodeSetCodeGenerator<'a> {
     }
 
     fn render_default_encoding_id(&self, node_id: &NodeId) -> Result<TokenStream, CodeGenError> {
-        let binary_id = ParsedNodeId::parse(&node_id.0)
-            .ok()
-            .and_then(|parsed_id| self.type_info.get(&parsed_id))
-            .and_then(|type_info| type_info.encoding_ids.binary.as_ref())
-            .ok_or_else(|| CodeGenError::other(format!("No binary encoding id found for data type {}", node_id.0)))?;
-        NodeId(binary_id.to_string()).render()
+        match self
+            .type_info
+            .get(&ParsedNodeId::parse(&node_id.0)?)
+            .and_then(|info| info.encoding_ids.binary.as_ref())
+        {
+            Some(binary_id) => binary_id.render(),
+            None => Ok(quote! { opcua::types::NodeId::null() }),
+        }
     }
-    
+
     fn render_data_type_definition(
         &self,
         def: &DataTypeDefinition,
-        node_id: &NodeId
+        node_id: &NodeId,
     ) -> Result<TokenStream, CodeGenError> {
         let is_enum = def.fields.first().is_some_and(|f| f.value != -1);
         if is_enum {
@@ -133,7 +139,11 @@ impl<'a> NodeSetCodeGenerator<'a> {
         })
     }
 
-    fn render_structure_def(&self, def: &DataTypeDefinition, node_id: &NodeId) -> Result<TokenStream, CodeGenError> {
+    fn render_structure_def(
+        &self,
+        def: &DataTypeDefinition,
+        node_id: &NodeId,
+    ) -> Result<TokenStream, CodeGenError> {
         let mut fields = quote! {};
         let mut any_optional = false;
         for f in &def.fields {

@@ -99,6 +99,25 @@ impl ParsedNodeId {
     }
 }
 
+impl RenderExpr for ParsedNodeId {
+    fn render(&self) -> Result<TokenStream, CodeGenError> {
+        let id_item = self.value.render()?;
+        let namespace = self.namespace;
+
+        let ns_item = if self.namespace == 0 {
+            quote! { 0u16 }
+        } else {
+            quote! {
+                ns_map.get_index(#namespace).unwrap()
+            }
+        };
+
+        Ok(quote! {
+            opcua::types::NodeId::new(#ns_item, #id_item)
+        })
+    }
+}
+
 impl RenderExpr for opcua_xml::schema::ua_node_set::NodeId {
     fn render(&self) -> Result<TokenStream, CodeGenError> {
         let id = &self.0;

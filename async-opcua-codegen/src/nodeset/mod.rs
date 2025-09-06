@@ -152,7 +152,8 @@ pub fn generate_target(
     let types = make_type_dict(config, cache)?;
     let type_info = input.get_type_names()?;
 
-    let mut generator = NodeSetCodeGenerator::new(preferred_locale, &input.aliases, types, type_info)?;
+    let mut generator =
+        NodeSetCodeGenerator::new(preferred_locale, &input.aliases, types, type_info)?;
 
     let mut fns = Vec::with_capacity(input.xml.nodes.len());
     for node in &input.xml.nodes {

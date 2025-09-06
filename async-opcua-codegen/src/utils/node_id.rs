@@ -99,15 +99,12 @@ impl ParsedNodeId {
     }
 }
 
-impl RenderExpr for opcua_xml::schema::ua_node_set::NodeId {
+impl RenderExpr for ParsedNodeId {
     fn render(&self) -> Result<TokenStream, CodeGenError> {
-        let id = &self.0;
-        let ParsedNodeId { value, namespace } = ParsedNodeId::parse(id)?;
+        let id_item = self.value.render()?;
+        let namespace = self.namespace;
 
-        // Do as much parsing as possible here, to optimize performance and get the errors as early as possible.
-        let id_item = value.render()?;
-
-        let ns_item = if namespace == 0 {
+        let ns_item = if self.namespace == 0 {
             quote! { 0u16 }
         } else {
             quote! {
@@ -118,6 +115,12 @@ impl RenderExpr for opcua_xml::schema::ua_node_set::NodeId {
         Ok(quote! {
             opcua::types::NodeId::new(#ns_item, #id_item)
         })
+    }
+}
+
+impl RenderExpr for opcua_xml::schema::ua_node_set::NodeId {
+    fn render(&self) -> Result<TokenStream, CodeGenError> {
+        ParsedNodeId::parse(&self.0)?.render()
     }
 }
 

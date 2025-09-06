@@ -8,7 +8,11 @@ use opcua_xml::schema::ua_node_set::{
 use proc_macro2::{Span, TokenStream};
 use syn::{parse_quote, parse_str, Expr, Ident, ItemFn};
 
-use crate::{utils::RenderExpr, CodeGenError};
+use crate::{
+    input::TypeInfo,
+    utils::{ParsedNodeId, RenderExpr},
+    CodeGenError,
+};
 
 use super::{value::render_value, XsdTypeWithPath};
 
@@ -25,6 +29,7 @@ pub struct NodeSetCodeGenerator<'a> {
     aliases: &'a HashMap<String, String>,
     node_counter: usize,
     types: HashMap<String, XsdTypeWithPath>,
+    type_info: &'a HashMap<ParsedNodeId, TypeInfo>,
 }
 
 impl<'a> NodeSetCodeGenerator<'a> {
@@ -32,6 +37,7 @@ impl<'a> NodeSetCodeGenerator<'a> {
         preferred_locale: &str,
         aliases: &'a HashMap<String, String>,
         types: HashMap<String, XsdTypeWithPath>,
+        type_info: &'a HashMap<ParsedNodeId, TypeInfo>,
     ) -> Result<Self, CodeGenError> {
         Ok(Self {
             preferred_locale: preferred_locale.to_owned(),
@@ -39,6 +45,7 @@ impl<'a> NodeSetCodeGenerator<'a> {
             aliases,
             node_counter: 0,
             types,
+            type_info,
         })
     }
 
@@ -68,15 +75,27 @@ impl<'a> NodeSetCodeGenerator<'a> {
             .or_else(|| options.first())
     }
 
+    fn render_default_encoding_id(&self, node_id: &NodeId) -> Result<TokenStream, CodeGenError> {
+        match self
+            .type_info
+            .get(&ParsedNodeId::parse(&node_id.0)?)
+            .and_then(|info| info.encoding_ids.binary.as_ref())
+        {
+            Some(binary_id) => binary_id.render(),
+            None => Ok(quote! { opcua::types::NodeId::null() }),
+        }
+    }
+
     fn render_data_type_definition(
         &self,
         def: &DataTypeDefinition,
+        node_id: &NodeId,
     ) -> Result<TokenStream, CodeGenError> {
         let is_enum = def.fields.first().is_some_and(|f| f.value != -1);
         if is_enum {
             self.render_enum_def(def)
         } else {
-            self.render_structure_def(def)
+            self.render_structure_def(def, node_id)
         }
     }
 
@@ -120,7 +139,11 @@ impl<'a> NodeSetCodeGenerator<'a> {
         })
     }
 
-    fn render_structure_def(&self, def: &DataTypeDefinition) -> Result<TokenStream, CodeGenError> {
+    fn render_structure_def(
+        &self,
+        def: &DataTypeDefinition,
+        node_id: &NodeId,
+    ) -> Result<TokenStream, CodeGenError> {
         let mut fields = quote! {};
         let mut any_optional = false;
         for f in &def.fields {
@@ -172,7 +195,6 @@ impl<'a> NodeSetCodeGenerator<'a> {
                 },
             });
         }
-        // TODO: Try to get the default encoding ID by looking at the available nodes.
         let structure_type = Ident::new(
             if def.is_union {
                 "Union"
@@ -183,10 +205,11 @@ impl<'a> NodeSetCodeGenerator<'a> {
             },
             Span::call_site(),
         );
+        let default_encoding_id = self.render_default_encoding_id(node_id)?;
         Ok(quote! {
             opcua::types::StructureDefinition {
                 fields: Some(vec![#fields]),
-                default_encoding_id: opcua::types::NodeId::null(),
+                default_encoding_id: #default_encoding_id,
                 base_data_type: opcua::types::NodeId::null(),
                 structure_type: opcua::types::StructureType::#structure_type,
             }
@@ -335,12 +358,11 @@ impl<'a> NodeSetCodeGenerator<'a> {
         let is_abstract = node.base.is_abstract;
         let data_type_definition = match &node.definition {
             Some(e) => {
-                let rendered = self.render_data_type_definition(e)?;
+                let rendered = self.render_data_type_definition(e, &node.base.base.node_id)?;
                 quote! { Some(#rendered.into()) }
             }
             None => quote! { None },
         };
-
         Ok(parse_quote! {
             opcua::nodes::DataType::new_full(
                 #base,

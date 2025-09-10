@@ -37,9 +37,6 @@ impl SamplerItem {
         }
         self.sampling_interval = interval;
         self.enabled = enabled;
-        if self.last_sample > (Instant::now() + self.sampling_interval) {
-            self.last_sample = Instant::now() + self.sampling_interval;
-        }
     }
 }
 
@@ -188,7 +185,11 @@ impl SyncSampler {
                     if !sampler.enabled {
                         return None;
                     }
-                    if sampler.last_sample + sampler.sampling_interval > now {
+                    if sampler
+                        .last_sample
+                        .checked_add(sampler.sampling_interval)
+                        .is_none_or(|v| v > now)
+                    {
                         return None;
                     }
                     let value = (sampler.sampler)()?;

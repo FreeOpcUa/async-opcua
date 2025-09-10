@@ -526,16 +526,15 @@ impl MonitoredItem {
         // If we're outside the sampling interval, keep the value for now,
         // but shift it to the next sample.
         if !matches_sampling_interval {
-            value.source_timestamp = Some(
-                (self
-                    .last_data_value
-                    .as_ref()
-                    .and_then(|dv| dv.source_timestamp)
-                    .unwrap_or(*now)
-                    .as_chrono()
-                    + self.sampling_interval_as_time_delta())
-                .into(),
-            );
+            value.source_timestamp = self
+                .last_data_value
+                .as_ref()
+                .and_then(|dv| dv.source_timestamp)
+                .unwrap_or(*now)
+                .as_chrono()
+                .checked_add_signed(self.sampling_interval_as_time_delta())
+                .map(|v| v.into());
+
             self.sample_skipped_data_value = Some(value);
             // We need to return true here, so that the subscription knows it needs to tick this
             // monitored item later.

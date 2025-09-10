@@ -321,7 +321,6 @@ impl<R> SessionBuilder<'_, EndpointDescription, R> {
             config.performance.ignore_clock_skew,
             Arc::default(),
             TransportConfiguration {
-                max_pending_incoming: 5,
                 send_buffer_size: config.decoding_options.max_chunk_size,
                 recv_buffer_size: config.decoding_options.max_incoming_chunk_size,
                 max_message_size: config.decoding_options.max_message_size,

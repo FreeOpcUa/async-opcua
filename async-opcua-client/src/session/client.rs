@@ -228,7 +228,6 @@ impl Client {
             self.config.performance.ignore_clock_skew,
             Arc::default(),
             TransportConfiguration {
-                max_pending_incoming: 5,
                 send_buffer_size: self.config.decoding_options.max_chunk_size,
                 recv_buffer_size: self.config.decoding_options.max_incoming_chunk_size,
                 max_message_size: self.config.decoding_options.max_message_size,

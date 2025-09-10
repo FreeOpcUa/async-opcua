@@ -36,7 +36,7 @@ pub(super) struct TransportState {
     /// Secure channel
     pub(super) secure_channel: Arc<RwLock<SecureChannel>>,
     /// Max pending incoming messages
-    max_pending_incoming: usize,
+    max_chunk_count: usize,
     /// Last decoded sequence number
     sequence_numbers: SequenceNumberHandle,
     /// Max size of incoming chunks
@@ -71,7 +71,7 @@ impl TransportState {
     pub(super) fn new(
         secure_channel: Arc<RwLock<SecureChannel>>,
         outgoing_recv: tokio::sync::mpsc::Receiver<OutgoingMessage>,
-        max_pending_incoming: usize,
+        max_chunk_count: usize,
         receive_buffer_size: usize,
     ) -> Self {
         let legacy_sequence_numbers = secure_channel
@@ -83,7 +83,7 @@ impl TransportState {
             outgoing_recv,
             message_states: HashMap::new(),
             sequence_numbers: SequenceNumberHandle::new(legacy_sequence_numbers),
-            max_pending_incoming,
+            max_chunk_count,
             receive_buffer_size,
         }
     }
@@ -205,12 +205,12 @@ impl TransportState {
                     header: chunk_info,
                     data_with_header: chunk.data,
                 });
-                let chunks_len: usize = message_state.chunks.len();
-                if self.max_pending_incoming > 0 && chunks_len > self.max_pending_incoming {
+                if self.max_chunk_count > 0 && message_state.chunks.len() > self.max_chunk_count {
                     error!(
-                        "too many pending incoming messages {} > {}",
-                        chunks_len, self.max_pending_incoming
+                        "Message has more than {} chunks, exceeding negotiated limits",
+                        self.max_chunk_count
                     );
+                    // Removing the message state means that we ignore any further chunks.
                     let message_state = self.message_states.remove(&req_id).unwrap();
                     let _ = message_state
                         .callback

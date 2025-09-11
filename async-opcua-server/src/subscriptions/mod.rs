@@ -1,8 +1,9 @@
 mod monitored_item;
+mod notify;
 mod session_subscriptions;
 mod subscription;
 
-use std::{sync::Arc, time::Instant};
+use std::{hash::Hash, sync::Arc, time::Instant};
 
 use chrono::Utc;
 use hashbrown::{Equivalent, HashMap};
@@ -14,15 +15,21 @@ use subscription::TickReason;
 pub use subscription::{MonitoredItemHandle, Subscription, SubscriptionState};
 use tracing::error;
 
+pub use notify::{
+    SubscriptionDataNotifier, SubscriptionDataNotifierBatch, SubscriptionEventNotifier,
+    SubscriptionEventNotifierBatch,
+};
+
 use opcua_core::sync::{Mutex, RwLock};
 
 use opcua_types::{
+    node_id::{IdentifierRef, NodeIdRef},
     AttributeId, CreateSubscriptionRequest, CreateSubscriptionResponse, DataEncoding, DataValue,
     DateTimeUtc, MessageSecurityMode, ModifySubscriptionRequest, ModifySubscriptionResponse,
     MonitoredItemCreateResult, MonitoredItemModifyRequest, MonitoringMode, NodeId,
-    NotificationMessage, NumericRange, ObjectId, PublishRequest, RepublishRequest,
-    RepublishResponse, ResponseHeader, SetPublishingModeRequest, SetPublishingModeResponse,
-    StatusCode, TimestampsToReturn, TransferResult, TransferSubscriptionsRequest,
+    NotificationMessage, NumericRange, PublishRequest, RepublishRequest, RepublishResponse,
+    ResponseHeader, SetPublishingModeRequest, SetPublishingModeResponse, StatusCode,
+    TimestampsToReturn, TransferResult, TransferSubscriptionsRequest,
     TransferSubscriptionsResponse,
 };
 
@@ -40,22 +47,37 @@ struct MonitoredItemKey {
     attribute_id: AttributeId,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct MonitoredItemKeyRef<'a> {
-    id: &'a NodeId,
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MonitoredItemKeyRef<T: IdentifierRef> {
+    id: NodeIdRef<T>,
     attribute_id: AttributeId,
 }
 
-impl Equivalent<MonitoredItemKey> for MonitoredItemKeyRef<'_> {
-    fn equivalent(&self, key: &MonitoredItemKey) -> bool {
-        self.id == &key.id && self.attribute_id == key.attribute_id
+impl<T> Hash for MonitoredItemKeyRef<T>
+where
+    T: IdentifierRef,
+{
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+        self.attribute_id.hash(state);
     }
 }
 
-struct MonitoredItemEntry {
-    enabled: bool,
-    data_encoding: DataEncoding,
-    index_range: NumericRange,
+impl<T: IdentifierRef> Equivalent<MonitoredItemKey> for MonitoredItemKeyRef<T> {
+    fn equivalent(&self, key: &MonitoredItemKey) -> bool {
+        self.id == key.id && self.attribute_id == key.attribute_id
+    }
+}
+
+/// A basic description of the monitoring parameters for a monitored item, used
+/// for conditional sampling.
+pub struct MonitoredItemEntry {
+    /// Whether the monitored item is currently active.
+    pub enabled: bool,
+    /// The data encoding of the monitored item.
+    pub data_encoding: DataEncoding,
+    /// The index range of the monitored item.
+    pub index_range: NumericRange,
 }
 
 struct SubscriptionCacheInner {
@@ -291,6 +313,44 @@ impl SubscriptionCache {
         Ok(())
     }
 
+    /// Return a notifier for notifying the server of a batch of changes.
+    ///
+    /// Note: This contains a lock, and should _not_ be kept around for long periods of time,
+    /// or held over await points.
+    ///
+    /// The notifier submits notifications only once dropped.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let mut notifier = cache.data_notifier();
+    /// for (node_id, data_value) in my_changes {
+    ///     notifier.notify(node_id, AttributeId::Value, value);
+    /// }
+    /// ```
+    pub fn data_notifier<'a>(&'a self) -> SubscriptionDataNotifier<'a> {
+        SubscriptionDataNotifier::new(trace_read_lock!(self.inner))
+    }
+
+    /// Return a notifier for notifying the server of a batch of events.
+    ///
+    /// Note: This contains a lock, and should _not_ be kept around for long periods of time,
+    /// or held over await points.
+    ///
+    /// The notifier submits notifications only once dropped.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let mut notifier = cache.event_notifier();
+    /// for evt in my_evts {
+    ///     notifier.notify(emitter_id, evt);
+    /// }
+    /// ```
+    pub fn event_notifier<'a, 'b>(&'a self) -> SubscriptionEventNotifier<'a, 'b> {
+        SubscriptionEventNotifier::new(trace_read_lock!(self.inner))
+    }
+
     /// Notify any listening clients about a list of data changes.
     /// This can be called any time anything changes on the server, or only for values with
     /// an existing monitored item. Either way this method will deal with distributing the values
@@ -299,43 +359,9 @@ impl SubscriptionCache {
         &self,
         items: impl Iterator<Item = (DataValue, &'a NodeId, AttributeId)>,
     ) {
-        let lck = trace_read_lock!(self.inner);
-        let mut by_subscription: HashMap<u32, Vec<_>> = HashMap::new();
+        let mut notif = self.data_notifier();
         for (dv, node_id, attribute_id) in items {
-            // You can't subscribe to changes in EventNotifier, as subscribing to that value means
-            // subscribing to events. Intercept any updates here, for sanity.
-            if attribute_id == AttributeId::EventNotifier {
-                continue;
-            }
-
-            let key = MonitoredItemKeyRef {
-                id: node_id,
-                attribute_id,
-            };
-            let Some(items) = lck.monitored_items.get(&key) else {
-                continue;
-            };
-
-            for (handle, entry) in items {
-                if !entry.enabled {
-                    continue;
-                }
-                by_subscription
-                    .entry(handle.subscription_id)
-                    .or_default()
-                    .push((*handle, dv.clone()));
-            }
-        }
-
-        for (sub_id, items) in by_subscription {
-            let Some(session_id) = lck.subscription_to_session.get(&sub_id) else {
-                continue;
-            };
-            let Some(cache) = lck.session_subscriptions.get(session_id) else {
-                continue;
-            };
-            let mut cache_lck = cache.lock();
-            cache_lck.notify_data_changes(items);
+            notif.notify(node_id, attribute_id, dv);
         }
     }
 
@@ -348,104 +374,26 @@ impl SubscriptionCache {
         items: impl Iterator<Item = (&'a NodeId, AttributeId)>,
         sample: impl Fn(&NodeId, AttributeId, &NumericRange, &DataEncoding) -> Option<DataValue>,
     ) {
-        let lck = trace_read_lock!(self.inner);
-        let mut by_subscription: HashMap<u32, Vec<_>> = HashMap::new();
-        for (node_id, attribute_id) in items {
-            if attribute_id == AttributeId::EventNotifier {
-                continue;
-            }
-
-            let key = MonitoredItemKeyRef {
-                id: node_id,
-                attribute_id,
-            };
-            let Some(items) = lck.monitored_items.get(&key) else {
-                continue;
-            };
-
-            for (handle, entry) in items {
-                if !entry.enabled {
-                    continue;
+        let mut notif = self.data_notifier();
+        for (id, attribute_id) in items {
+            if let Some(mut batch) = notif.notify_for(id, attribute_id) {
+                for (handle, entry) in batch.entries() {
+                    if let Some(value) =
+                        sample(id, attribute_id, &entry.index_range, &entry.data_encoding)
+                    {
+                        batch.data_value_to_item(value, handle);
+                    }
                 }
-                let Some(dv) = sample(
-                    node_id,
-                    attribute_id,
-                    &entry.index_range,
-                    &entry.data_encoding,
-                ) else {
-                    continue;
-                };
-                by_subscription
-                    .entry(handle.subscription_id)
-                    .or_default()
-                    .push((*handle, dv));
             }
-        }
-
-        for (sub_id, items) in by_subscription {
-            let Some(session_id) = lck.subscription_to_session.get(&sub_id) else {
-                continue;
-            };
-            let Some(cache) = lck.session_subscriptions.get(session_id) else {
-                continue;
-            };
-            let mut cache_lck = cache.lock();
-            cache_lck.notify_data_changes(items);
         }
     }
 
     /// Notify listening clients to events. Without a custom node manager implementing
     /// event history, this is the only way to report events in the server.
     pub fn notify_events<'a>(&self, items: impl Iterator<Item = (&'a dyn Event, &'a NodeId)>) {
-        let lck = trace_read_lock!(self.inner);
-        let mut by_subscription = HashMap::<u32, Vec<_>>::new();
-        for (evt, notifier) in items {
-            let notifier_key = MonitoredItemKeyRef {
-                id: notifier,
-                attribute_id: AttributeId::EventNotifier,
-            };
-            if let Some(items) = lck.monitored_items.get(&notifier_key) {
-                for (handle, item) in items {
-                    if !item.enabled {
-                        continue;
-                    }
-                    by_subscription
-                        .entry(handle.subscription_id)
-                        .or_default()
-                        .push((*handle, evt));
-                }
-            }
-            // The server gets all notifications.
-            let server_id: NodeId = ObjectId::Server.into();
-            if notifier != &server_id {
-                let server_key = MonitoredItemKeyRef {
-                    id: &server_id,
-                    attribute_id: AttributeId::EventNotifier,
-                };
-                let Some(items) = lck.monitored_items.get(&server_key) else {
-                    continue;
-                };
-                for (handle, item) in items {
-                    if !item.enabled {
-                        continue;
-                    }
-                    by_subscription
-                        .entry(handle.subscription_id)
-                        .or_default()
-                        .push((*handle, evt));
-                }
-            }
-        }
-
-        for (sub_id, items) in by_subscription {
-            let Some(session_id) = lck.subscription_to_session.get(&sub_id) else {
-                continue;
-            };
-            let Some(cache) = lck.session_subscriptions.get(session_id) else {
-                continue;
-            };
-            let mut cache_lck = cache.lock();
-            cache_lck.notify_events(items);
+        let mut notif = self.event_notifier();
+        for (evt, id) in items {
+            notif.notify(id, evt);
         }
     }
 
@@ -541,7 +489,7 @@ impl SubscriptionCache {
             for (status, rf) in res {
                 if status.is_good() {
                     let key = MonitoredItemKeyRef {
-                        id: rf.node_id(),
+                        id: rf.node_id().into(),
                         attribute_id: rf.attribute(),
                     };
                     if let Some(it) = lck
@@ -598,7 +546,7 @@ impl SubscriptionCache {
             for (status, rf) in res {
                 if status.is_good() {
                     let key = MonitoredItemKeyRef {
-                        id: rf.node_id(),
+                        id: rf.node_id().into(),
                         attribute_id: rf.attribute(),
                     };
                     if let Some(it) = lck.monitored_items.get_mut(&key) {
@@ -638,7 +586,7 @@ impl SubscriptionCache {
             for rf in item_res {
                 if rf.attribute() == AttributeId::EventNotifier {
                     let key = MonitoredItemKeyRef {
-                        id: rf.node_id(),
+                        id: rf.node_id().into(),
                         attribute_id: rf.attribute(),
                     };
                     if let Some(it) = lck.monitored_items.get_mut(&key) {

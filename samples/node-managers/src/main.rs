@@ -16,7 +16,7 @@ use opcua::{
         ServerHandle, ANONYMOUS_USER_TOKEN_ID,
     },
     sync::RwLock,
-    types::{AttributeId, DataTypeId, DataValue, Identifier, MessageSecurityMode, NodeId},
+    types::{AttributeId, DataTypeId, DataValue, MessageSecurityMode, NodeId},
 };
 use sim::{
     gen::{CosValue, JustLinearTime, SineValue, SomeFunction},
@@ -154,34 +154,26 @@ async fn run_sim(
             let mut sim = sim.write();
             sim.tick(counter);
 
-            // This is inefficient, we may want a better way to deal with this in the future.
-            // If you cared about working around this, a decent solution would be to store the NodeId
-            // and iterate over references to that instead of creating the node ID fresh each tick.
-            let ids = sim
-                .iter_tag_meta()
-                .map(|t| NodeId::new(ns_index, t.tag.to_owned()))
-                .collect::<Vec<_>>();
+            let mut notifier = handle.subscriptions().data_notifier();
 
-            // Notify any active subscriptions of changes to the nodes.
-            // This uses `maybe_notify`, which can be more efficient.
-            handle.subscriptions().maybe_notify(
-                ids.iter().map(|n| (n, AttributeId::Value)),
-                |id, _, _, _| {
-                    let Identifier::String(s) = &id.identifier else {
-                        return None;
+            // Notify any listening clients of changes to the tags. Note that we only sample the value if
+            // anyone is actually listening.
+            for tag in sim.iter_tag_meta() {
+                if let Some(mut batch) =
+                    notifier.notify_for((ns_index, tag.tag), AttributeId::Value)
+                {
+                    let Some(value) = sim.get_tag_value(tag.tag) else {
+                        continue;
                     };
+                    batch.data_value(DataValue::new_at(value, sim.last_tick_timestamp()));
+                }
+            }
 
-                    sim.get_tag_value(s.as_ref())
-                        .map(|v| DataValue::new_at(v, sim.last_tick_timestamp()))
-                },
-            );
-            handle.subscriptions().notify_data_change(
-                [(
-                    DataValue::new_at(counter + 1, sim.last_tick_timestamp()),
-                    &tick_id,
-                    AttributeId::Value,
-                )]
-                .into_iter(),
+            // Also notify about changes to the "counter" value.
+            notifier.notify(
+                &tick_id,
+                AttributeId::Value,
+                DataValue::new_at(counter + 1, sim.last_tick_timestamp()),
             );
         }
         counter += 1;

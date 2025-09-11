@@ -122,6 +122,45 @@ where
     }
 }
 
+impl<T> PartialEq<NodeIdRef<T>> for &NodeId
+where
+    T: PartialEq<Identifier>,
+{
+    fn eq(&self, other: &NodeIdRef<T>) -> bool {
+        self.namespace == other.namespace && other.identifier == self.identifier
+    }
+}
+
+impl<T> PartialEq<&NodeId> for NodeIdRef<T>
+where
+    T: PartialEq<Identifier>,
+{
+    fn eq(&self, other: &&NodeId) -> bool {
+        self.namespace == other.namespace && self.identifier == other.identifier
+    }
+}
+
+macro_rules! partial_eq_enum {
+    ($enm:ty) => {
+        impl<T> PartialEq<$enm> for NodeIdRef<T>
+        where
+            T: PartialEq<Identifier>,
+        {
+            fn eq(&self, other: &$enm) -> bool {
+                self.namespace == 0 && self.identifier == Identifier::Numeric(*other as u32)
+            }
+        }
+    };
+}
+
+partial_eq_enum!(ObjectId);
+partial_eq_enum!(VariableId);
+partial_eq_enum!(MethodId);
+partial_eq_enum!(ObjectTypeId);
+partial_eq_enum!(ReferenceTypeId);
+partial_eq_enum!(VariableTypeId);
+partial_eq_enum!(DataTypeId);
+
 impl<T> std::hash::Hash for NodeIdRef<T>
 where
     T: IdentifierRef,
@@ -149,6 +188,15 @@ where
         Self {
             namespace: value.0,
             identifier: value.1,
+        }
+    }
+}
+
+impl<'a> From<&'a NodeId> for NodeIdRef<&'a Identifier> {
+    fn from(value: &'a NodeId) -> Self {
+        Self {
+            namespace: value.namespace,
+            identifier: &value.identifier,
         }
     }
 }

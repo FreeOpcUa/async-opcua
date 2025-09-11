@@ -41,6 +41,16 @@ pub use subscriptions::{
     SubscriptionCache, SubscriptionState,
 };
 
+/// Utilities for efficiently notifying subscriptions.
+///
+/// See [SubscriptionCache::data_notifier] and [SubscriptionCache::event_notifier].
+pub mod notify {
+    pub use super::subscriptions::{
+        MonitoredItemEntry, SubscriptionDataNotifier, SubscriptionDataNotifierBatch,
+        SubscriptionEventNotifier, SubscriptionEventNotifierBatch,
+    };
+}
+
 /// Contains constaints for default configuration values.
 /// These are for the most part possible to override through server configuration.
 pub mod constants {

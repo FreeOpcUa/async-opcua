@@ -39,7 +39,7 @@ pub struct AsyncSecureChannel {
     transport_config: TransportConfiguration,
     state: SecureChannelState,
     issue_channel_lock: tokio::sync::Mutex<()>,
-    connector: Arc<dyn Connector>,
+    connector: Box<dyn Connector>,
     channel_lifetime: u32,
 
     request_send: ArcSwapOption<RequestSend>,
@@ -134,7 +134,7 @@ impl AsyncSecureChannel {
         ignore_clock_skew: bool,
         auth_token: Arc<ArcSwap<NodeId>>,
         transport_config: TransportConfiguration,
-        connector: Arc<dyn Connector>,
+        connector: Box<dyn Connector>,
         channel_lifetime: u32,
         encoding_context: Arc<RwLock<ContextOwned>>,
     ) -> Self {

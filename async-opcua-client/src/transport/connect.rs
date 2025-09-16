@@ -36,23 +36,23 @@ pub trait Connector: Send + Sync {
 /// Implemented for `String`, `&str`, `&String`, and any type that implements the `Connector` trait.
 pub trait ConnectorBuilder: Send + Sync {
     /// Create a new connector for the specific endpoint URL.
-    fn build(self) -> Result<Arc<dyn Connector + Send + Sync>, Error>;
+    fn build(self) -> Result<Box<dyn Connector + Send + Sync>, Error>;
 }
 
 impl ConnectorBuilder for String {
-    fn build(self) -> Result<Arc<dyn Connector + Send + Sync>, Error> {
+    fn build(self) -> Result<Box<dyn Connector + Send + Sync>, Error> {
         ConnectorBuilder::build(self.as_str())
     }
 }
 
 impl ConnectorBuilder for &str {
-    fn build(self) -> Result<Arc<dyn Connector + Send + Sync>, Error> {
-        Ok(Arc::new(TcpConnector::new(self)?))
+    fn build(self) -> Result<Box<dyn Connector + Send + Sync>, Error> {
+        Ok(Box::new(TcpConnector::new(self)?))
     }
 }
 
 impl ConnectorBuilder for &String {
-    fn build(self) -> Result<Arc<dyn Connector + Send + Sync>, Error> {
+    fn build(self) -> Result<Box<dyn Connector + Send + Sync>, Error> {
         ConnectorBuilder::build(self.as_str())
     }
 }
@@ -61,13 +61,13 @@ impl<T> ConnectorBuilder for T
 where
     T: Connector + Send + Sync + 'static,
 {
-    fn build(self) -> Result<Arc<dyn Connector + Send + Sync>, Error> {
-        Ok(Arc::new(self))
+    fn build(self) -> Result<Box<dyn Connector + Send + Sync>, Error> {
+        Ok(Box::new(self))
     }
 }
 
-impl ConnectorBuilder for Arc<dyn Connector + Send + Sync> {
-    fn build(self) -> Result<Arc<dyn Connector + Send + Sync>, Error> {
+impl ConnectorBuilder for Box<dyn Connector + Send + Sync> {
+    fn build(self) -> Result<Box<dyn Connector + Send + Sync>, Error> {
         Ok(self)
     }
 }

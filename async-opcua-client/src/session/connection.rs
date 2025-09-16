@@ -1,14 +1,15 @@
 use std::{str::FromStr, sync::Arc};
 
-use crate::{
-    transport::{tcp::TransportConfiguration, Connector, ConnectorBuilder},
-    AsyncSecureChannel, ClientConfig, IdentityToken,
-};
 use opcua_core::{comms::url::is_opc_ua_binary_url, config::Config, sync::RwLock};
 use opcua_crypto::{CertificateStore, SecurityPolicy};
 use opcua_types::{
     ContextOwned, EndpointDescription, Error, MessageSecurityMode, NamespaceMap, NodeId,
     StatusCode, TypeLoader, UserTokenType,
+};
+
+use crate::{
+    transport::{tcp::TransportConfiguration, Connector, ConnectorBuilder},
+    AsyncSecureChannel, ClientConfig, IdentityToken,
 };
 
 use super::{Client, EndpointInfo, Session, SessionEventLoop};
@@ -150,9 +151,9 @@ impl<'a, T, R, C> SessionBuilder<'a, T, R, C> {
 
     /// Set the connection source to use. This is used to create the transport
     /// connector. Defaults to a direct TCP connection, implemented by `()`.
-    pub fn with_connector<C2>(self, connection_source: C2) -> SessionBuilder<'a, T, R, C2>
+    pub fn with_connector<CS>(self, connection_source: CS) -> SessionBuilder<'a, T, R, CS>
     where
-        C2: ConnectionSource,
+        CS: ConnectionSource,
     {
         SessionBuilder {
             inner: self.inner,
@@ -378,7 +379,7 @@ where
         identity_token: IdentityToken,
         endpoint: EndpointDescription,
         config: &ClientConfig,
-        connector: Arc<dyn Connector + Send + Sync + 'static>,
+        connector: Box<dyn Connector + Send + Sync + 'static>,
         ctx: ContextOwned,
     ) -> AsyncSecureChannel {
         AsyncSecureChannel::new(

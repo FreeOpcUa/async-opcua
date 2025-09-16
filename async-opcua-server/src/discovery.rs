@@ -28,8 +28,19 @@ async fn register_with_discovery_server(
     match client.find_servers(discovery_server_url, None, None).await {
         Ok(servers) => {
             debug!("Servers on the discovery endpoint - {:?}", servers);
+            let endpoint = match client.get_best_endpoint(discovery_server_url).await {
+                Ok(endpoint) => endpoint,
+                Err(err) => {
+                    error!(
+                        "Cannot find a valid endpoint on discovery url {}, error = {}",
+                        discovery_server_url, err
+                    );
+                    return;
+                }
+            };
+
             match client
-                .register_server(discovery_server_url, registered_server)
+                .register_server(endpoint.endpoint_url.as_ref(), &endpoint, registered_server)
                 .await
             {
                 Ok(_) => {}

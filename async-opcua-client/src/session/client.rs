@@ -2,7 +2,7 @@ use std::{str::FromStr, sync::Arc};
 
 use chrono::Duration;
 use tokio::{pin, select};
-use tracing::{debug, error};
+use tracing::error;
 
 use crate::{
     transport::{tcp::TransportConfiguration, Connector, ConnectorBuilder, TransportPollResult},
@@ -205,7 +205,7 @@ impl Client {
         &self,
         endpoint_info: EndpointInfo,
         channel_lifetime: u32,
-        connector: Arc<dyn Connector + Send + Sync>,
+        connector: Box<dyn Connector + Send + Sync>,
     ) -> AsyncSecureChannel {
         AsyncSecureChannel::new(
             self.certificate_store.clone(),
@@ -666,6 +666,43 @@ impl Client {
         }
     }
 
+    /// Get the best endpoint for the server, "best" here is the endpoint with the highest security level.
+    ///
+    /// # Arguments
+    ///
+    /// * `discovery_endpoint` - Endpoint to connect to.
+    pub async fn get_best_endpoint(
+        &self,
+        discovery_endpoint: impl ConnectorBuilder,
+    ) -> Result<EndpointDescription, Error> {
+        let discovery_endpoint = discovery_endpoint.build()?;
+        let endpoints = self
+            .get_server_endpoints_from_url(
+                discovery_endpoint.default_endpoint().endpoint_url.as_ref(),
+            )
+            .await?;
+        if endpoints.is_empty() {
+            return Err(Error::new(
+                StatusCode::BadUnexpectedError,
+                "No endpoints returned from server",
+            ));
+        }
+
+        let Some(endpoint) = endpoints
+            .into_iter()
+            .filter(|e| self.is_supported_endpoint(e))
+            .max_by(|a, b| a.security_level.cmp(&b.security_level))
+        else {
+            error!("Cannot find an endpoint that we can use");
+            return Err(Error::new(
+                StatusCode::BadUnexpectedError,
+                "No supported endpoints returned from server",
+            ));
+        };
+
+        Ok(endpoint)
+    }
+
     /// This function is used by servers that wish to register themselves with a discovery server.
     /// i.e. one server is the client to another server. The server sends a [`RegisterServerRequest`]
     /// to the discovery server to register itself. Servers are expected to re-register themselves periodically
@@ -675,6 +712,10 @@ impl Client {
     ///
     /// # Arguments
     ///
+    /// * `connector` - Connector to the discovery server. This is implemented for `String` and `&str`.
+    ///   A simple usage would be to just pass `server_endpoint.endpoint_url.as_ref()` here.
+    /// * `server_endpoint` - The endpoint to use for registration. If this requires security, you first need to get an appropriate.
+    ///   server endpoint using `get_best_endpoint` or `get_server_endpoints_from_url`.
     /// * `server` - The server to register
     ///
     /// # Returns
@@ -683,42 +724,19 @@ impl Client {
     /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn register_server(
-        &mut self,
-        discovery_endpoint: impl ConnectorBuilder,
+        &self,
+        connector: impl ConnectorBuilder,
+        server_endpoint: &EndpointDescription,
         server: RegisteredServer,
     ) -> Result<(), StatusCode> {
-        let discovery_endpoint = discovery_endpoint.build()?;
-        let endpoints = self
-            .get_server_endpoints_from_url(discovery_endpoint.clone())
-            .await?;
-        if endpoints.is_empty() {
-            return Err(StatusCode::BadUnexpectedError);
-        }
-
-        let Some(endpoint) = endpoints
-            .iter()
-            .filter(|e| self.is_supported_endpoint(e))
-            .max_by(|a, b| a.security_level.cmp(&b.security_level))
-        else {
-            error!("Cannot find an endpoint that we call register server on");
-            return Err(StatusCode::BadUnexpectedError);
-        };
-
-        debug!(
-            "Registering this server via discovery endpoint {:?}",
-            endpoint
-        );
-
         let endpoint_info = EndpointInfo {
-            endpoint: endpoint.clone(),
+            endpoint: server_endpoint.clone(),
             user_identity_token: IdentityToken::Anonymous,
             preferred_locales: Vec::new(),
         };
-        let channel = self.channel_from_endpoint_info(
-            endpoint_info,
-            self.config.channel_lifetime,
-            discovery_endpoint,
-        );
+        let connector = connector.build()?;
+        let channel =
+            self.channel_from_endpoint_info(endpoint_info, self.config.channel_lifetime, connector);
 
         let mut evt_loop = channel.connect().await?;
 

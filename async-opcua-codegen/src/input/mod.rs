@@ -1,3 +1,8 @@
+//! This module defines common methods for loading input formats,
+//! such as NodeSet2 XML files, Binary Schema Definition files, and XML Schema Definition files.
+//! It also defines a schema cache, which can be used to store loaded schemas,
+//! and cache certain computations that may be reused.
+
 use std::{collections::HashMap, path::Path};
 
 use pathdiff::diff_paths;
@@ -13,6 +18,7 @@ pub use binary_schema::BinarySchemaInput;
 pub use nodeset::{NodeSetInput, RawEncodingIds, TypeInfo};
 pub use xml_schema::XmlSchemaInput;
 
+/// Instance of a schema cache for a single type of schema, e.g. NodeSet2 files.
 struct SchemaCacheInst<T> {
     aliases: HashMap<String, usize>,
     items: Vec<T>,

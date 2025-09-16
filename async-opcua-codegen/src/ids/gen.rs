@@ -24,6 +24,9 @@ impl IdItem {
     }
 }
 
+/// Parse a node ID CSV file. The file can have either two or three columns,
+/// with values [name, id] or [name, id, type].
+/// If it has two columns, the type name must be provided externally as a fallback.
 pub fn parse(
     file: File,
     file_name: &str,
@@ -60,6 +63,7 @@ pub fn parse(
     Ok(types)
 }
 
+/// Render a node ID enum from an IdItem.
 pub fn render(item: IdItem) -> Result<Vec<Item>, CodeGenError> {
     let mut items = Vec::new();
     let mut vs = quote! {};

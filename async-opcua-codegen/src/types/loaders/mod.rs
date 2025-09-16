@@ -1,3 +1,8 @@
+//! Loaders for different type definition formats.
+//! Currently we support NodeSet2 XML files and legacy Binary Schema (BSD) files.
+//! The loaders convert the types into a common format that can then be used
+//! for code generation.
+
 mod binary_schema;
 mod nodeset;
 mod types;
@@ -5,12 +10,6 @@ mod types;
 pub use binary_schema::BsdTypeLoader;
 pub use nodeset::NodeSetTypeLoader;
 pub use types::{EnumReprType, EnumType, FieldType, StructureFieldType, StructuredType};
-
-#[derive(Debug)]
-pub struct LoadedTypes {
-    pub structures: Vec<StructuredType>,
-    pub enums: Vec<EnumType>,
-}
 
 #[derive(Debug)]
 pub enum LoadedType {

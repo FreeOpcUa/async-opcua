@@ -46,3 +46,29 @@ impl RenderExpr for opcua_xml::schema::ua_node_set::QualifiedName {
         })
     }
 }
+
+// There are multiple different QualifiedName types in OPC-UA NodeSet2 XML files.
+// This is the one described in the core namespace XSD schema.
+impl RenderExpr for opcua_xml::schema::opc_ua_types::QualifiedName {
+    fn render(&self) -> Result<TokenStream, CodeGenError> {
+        let namespace = self.namespace_index.unwrap_or_default();
+
+        let ns_item = if namespace == 0 {
+            quote! { 0u16 }
+        } else {
+            quote! {
+                ns_map.get_index(#namespace).unwrap()
+            }
+        };
+
+        let name_item = if let Some(name) = &self.name {
+            quote! { #name }
+        } else {
+            quote! { opcua::types::UAString::null() }
+        };
+
+        Ok(quote! {
+            opcua::types::QualifiedName::new(#ns_item, #name_item)
+        })
+    }
+}

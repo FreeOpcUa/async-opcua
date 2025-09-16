@@ -36,11 +36,18 @@ pub fn render_value(
     ValueBuilder { types }.render_value(value)
 }
 
+/// Helper for rendering a `Value` in the nodeset into some expression that can be converted
+/// to a `DataValue` in the generated code.
+///
+/// This is complex, because values may be structures containing other values, and we need to
+/// look at the XML schema to figure out how these are represented in the NodeSet2 XML.
 struct ValueBuilder<'a> {
     types: &'a HashMap<String, XsdTypeWithPath>,
 }
 
 impl<'a> ValueBuilder<'a> {
+    /// Render a single value as a `DataValue`. This will always produce a `DataValue`,
+    /// if the input value is `None` it will simply be `DataValue::null()`.
     pub fn render_value(&self, value: Option<&Value>) -> Result<TokenStream, CodeGenError> {
         if let Some(value) = value {
             let rendered = self.render_variant(&value.0)?;
@@ -55,6 +62,15 @@ impl<'a> ValueBuilder<'a> {
     }
 
     fn render_variant(&self, value: &Variant) -> Result<TokenStream, CodeGenError> {
+        // Most cases are handled here, we render each individual variant type.
+        // This includes `ListOf` types, which are represented as vectors in rust.
+        // This is called from both the top level render_value, and recursively from
+        // inside structures with `Any` or equivalent fields.
+
+        // To make this efficient and accurate, we parse values from the XML schema here,
+        // and produce rust code that as directly and infallibly as possible generates
+        // the correct value. It's better that we fail here than produce code that
+        // panics.
         let inner = match &value {
             Variant::Boolean(v) => v.to_token_stream(),
             Variant::ListOfBoolean(v) => from_vec!(v),
@@ -93,6 +109,8 @@ impl<'a> ValueBuilder<'a> {
                 }
             }
             Variant::Guid(v) => {
+                // You can create a Guid directly from `&[u8; 16]` infallibly, since all
+                // 16 byte combinations are valid.
                 let bytes = v.as_bytes();
                 quote::quote! {
                     opcua::types::Guid::from_bytes(&[#(#bytes),*])
@@ -112,6 +130,8 @@ impl<'a> ValueBuilder<'a> {
                 }
             }
             Variant::ByteString(v) => {
+                // ByteString in XML is base64 encoded, but often contains whitespace to make it look "pretty".
+                // We need to strip that out before decoding.
                 let cleaned = v.replace(['\n', ' ', '\t', '\r'], "");
                 quote::quote! {
                     opcua::types::ByteString::from_base64(#cleaned).unwrap()
@@ -124,25 +144,25 @@ impl<'a> ValueBuilder<'a> {
                 }
             }
             Variant::XmlElement(_) | Variant::ListOfXmlElement(_) => {
+                // We _could_ support this if it became necessary, but it would be a lot of work,
+                // and since this variant type is deprecated it isn't super useful.
                 warn!("XmlElement not yet supported in codegen");
                 return Ok(quote::quote! {
                     opcua::types::Variant::Empty
                 });
             }
             Variant::QualifiedName(v) => {
-                let index = v.namespace_index.unwrap_or_default();
-                let name = v.name.as_deref().unwrap_or("");
+                let rendered = v.render()?;
                 quote::quote! {
-                    opcua::types::QualifiedName::new(#index, #name)
+                    #rendered
                 }
             }
             Variant::ListOfQualifiedName(v) => {
                 let mut items = quote::quote! {};
                 for it in v {
-                    let index = it.namespace_index.unwrap_or_default();
-                    let name = it.name.as_deref().unwrap_or("");
+                    let rendered = it.render()?;
                     items.extend(quote::quote! {
-                        opcua::types::QualifiedName::new(#index, #name),
+                        #rendered,
                     });
                 }
                 quote::quote! {
@@ -353,6 +373,16 @@ impl<'a> ValueBuilder<'a> {
                 }
             }
             TypeRef::Struct(e) => {
+                // We expand the value into an actual struct instantiation, i.e.
+                // MyStruct { field1: val1, field2: val2, ... }
+                // Each field is rendered recursively, and may itself be a struct.
+                // Note that, at this point, we don't actually use the same info we used to generate
+                // these types to begin with, if they were created using codegen.
+                // Instead, we use the XML schema to handle it, which likely has problems.
+                // It means that opaque types are unlikely to work, for instance.
+
+                // We don't really have a choice, since the XML schema decides the _layout_ of the type
+                // in the NodeSet2 file.
                 let (ident, _) = safe_ident(e.name);
                 let mut fields = quote! {};
                 for (name, field) in &e.fields {

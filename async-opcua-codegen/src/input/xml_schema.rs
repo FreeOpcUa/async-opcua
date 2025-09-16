@@ -5,6 +5,7 @@ use crate::CodeGenError;
 pub struct XmlSchemaInput {
     pub xml: XmlSchema,
     pub namespace: String,
+    #[allow(unused)]
     pub path: String,
 }
 

@@ -23,6 +23,7 @@ pub struct NodeGenMethod {
     pub name: String,
 }
 
+/// Code generator that renders each node into a function that creates it.
 pub struct NodeSetCodeGenerator<'a> {
     preferred_locale: String,
     empty_text: LocalizedText,

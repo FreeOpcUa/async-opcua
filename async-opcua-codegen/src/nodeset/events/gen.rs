@@ -12,6 +12,8 @@ use crate::{
 
 use super::collector::{CollectedType, FieldKind, TypeKind};
 
+/// Code generator for event types. This will generate structs for each event type
+/// in the nodeset.
 pub struct EventGenerator<'a> {
     types: HashMap<&'a str, CollectedType<'a>>,
     namespaces: &'a [String],
@@ -55,6 +57,8 @@ impl<'a> EventGenerator<'a> {
         Ok(items)
     }
 
+    /// Check if a type is "simple", meaning it has no fields and its parent (if any) is also simple.
+    /// Simple types do not need to be rendered, as they can be represented by their parent type.
     fn is_simple(&self, ty: &'a str) -> bool {
         let typ = self.types.get(ty).unwrap();
         if matches!(typ.kind, TypeKind::EventType) {
@@ -102,6 +106,8 @@ impl<'a> EventGenerator<'a> {
     fn render_type(&self, ty: CollectedType<'a>, id: &'a str) -> Result<EventItem, CodeGenError> {
         match &ty.kind {
             TypeKind::EventType => self.render_event(&ty, id),
+            // We need to render object types and variable types as event fields, since events can contain
+            // nested structures.
             TypeKind::ObjectType => self.render_object_type(&ty),
             TypeKind::VariableType => self.render_variable_type(&ty),
             r => Err(CodeGenError::other(format!(

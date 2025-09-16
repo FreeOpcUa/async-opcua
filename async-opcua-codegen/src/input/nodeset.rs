@@ -48,6 +48,7 @@ pub struct NodeSetInput {
     pub uri: String,
     pub required_model_uris: Vec<String>,
     /// Map from numeric ID to documentation link.
+    #[expect(unused)]
     pub documentation: Option<HashMap<i64, String>>,
     pub referenced_xsd_schemas: HashSet<String>,
     pub path: String,

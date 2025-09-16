@@ -5,6 +5,12 @@ use crate::CodeGenError;
 
 use quote::quote;
 
+/// Trait for rendering an expression as a TokenStream.
+/// This is handy for passing typed values around and rendering them to
+/// token streams when generating code, which we do a lot.
+///
+/// Has blanket implementations for `Option<&T>` and `Vec<u32>`,
+/// add new implementations as needed.
 pub trait RenderExpr {
     fn render(&self) -> Result<TokenStream, CodeGenError>;
 }

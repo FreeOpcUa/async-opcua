@@ -13,6 +13,9 @@ use super::{
     EnumType, LoadedType, StructuredType,
 };
 
+/// Type loader for NodeSet2 files. This infers types from
+/// TypeDefinitions in DataType nodes, and gets encoding IDs from the
+/// structure of the nodeset.
 pub struct NodeSetTypeLoader<'a> {
     ignored: HashSet<String>,
     native_type_mappings: HashMap<String, String>,
@@ -48,6 +51,7 @@ impl<'a> NodeSetTypeLoader<'a> {
         }
     }
 
+    /// Using preferred locale, get the text from a list of localized texts.
     fn get_from_localized_text(&self, options: &[LocalizedText]) -> Option<String> {
         options
             .iter()
@@ -56,6 +60,7 @@ impl<'a> NodeSetTypeLoader<'a> {
             .map(|v| v.text.clone())
     }
 
+    /// Convert a TypeInfo struct into a FieldType.
     fn field_type_for_info(info: TypeInfo) -> FieldType {
         if info.is_abstract {
             FieldType::Abstract(info.name)
@@ -80,6 +85,8 @@ impl<'a> NodeSetTypeLoader<'a> {
             return Ok(None);
         };
 
+        // We use the SymbolicName of the node as the "data type name", but some don't define
+        // a symbolic name, so we need to fall back on BrowseName. This has been correct thus far.
         let name = definition
             .symbolic_name
             .names
@@ -91,6 +98,8 @@ impl<'a> NodeSetTypeLoader<'a> {
             return Ok(None);
         }
 
+        // Figure out which built-in type this descends from, which tells us what kind of rust type we
+        // need to generate.
         let id = ParsedNodeId::parse(self.input.resolve_alias(&node.base.base.node_id.0))?;
         let variant = Self::find_builtin_type_variant(&id, &id, self.input, cache)?;
 
@@ -120,6 +129,7 @@ impl<'a> NodeSetTypeLoader<'a> {
                     documentation: node.base.base.documentation.clone(),
                     typ: match variant {
                         BuiltInTypeVariant::Byte => EnumReprType::u8,
+                        // This is weird, we may want to look into why we're using signed types here.
                         BuiltInTypeVariant::UInt16 => EnumReprType::i16,
                         BuiltInTypeVariant::UInt32 => EnumReprType::i32,
                         BuiltInTypeVariant::UInt64 => EnumReprType::i64,
@@ -131,6 +141,7 @@ impl<'a> NodeSetTypeLoader<'a> {
                         BuiltInTypeVariant::UInt16 => 2,
                         BuiltInTypeVariant::UInt32 => 4,
                         BuiltInTypeVariant::UInt64 => 8,
+                        // Enums are integers.
                         BuiltInTypeVariant::Enumeration => 4,
                         _ => unreachable!(),
                     },
@@ -278,6 +289,13 @@ impl<'a> NodeSetTypeLoader<'a> {
         }
     }
 
+    /// Recursively traverse the parent hierarchy to find out what built-in type
+    /// this type descends from. We currently only support enumerations, option sets, and
+    /// structures. Enumerations descend from Enumeration, option sets from
+    /// one of the unsigned integer types, and structures from Structure.
+    ///
+    /// This is potentially quite complicated, because parent types will generally be
+    /// in other namespaces, so we need to step through schemas we depend on.
     fn find_builtin_type_variant(
         orig: &ParsedNodeId,
         id: &ParsedNodeId,

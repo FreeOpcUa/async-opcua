@@ -16,7 +16,7 @@ pub struct StructureField {
 
 #[derive(Debug, Clone)]
 pub enum FieldType {
-    Abstract(String),
+    Abstract(#[allow(unused)] String),
     ExtensionObject(Option<RawEncodingIds>),
     Normal(String),
 }

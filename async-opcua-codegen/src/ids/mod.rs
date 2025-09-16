@@ -1,3 +1,7 @@
+//! Codegen for generating enums for NodeIds defined in CSV files.
+//! This is currently quite simple, we may want to extend it in the future,
+//! and perhaps support generating node ID enums from NodeSet2 files as well.
+
 use std::fs::File;
 
 use crate::CodeGenError;

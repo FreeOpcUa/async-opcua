@@ -2,31 +2,30 @@ mod config;
 mod error;
 mod ids;
 mod input;
-pub mod nodeset;
+mod nodeset;
 mod types;
 mod utils;
 
-use std::{
-    collections::{HashMap, HashSet},
-    io::Write,
-    path::Path,
-};
+use std::{collections::HashSet, io::Write, path::Path};
 
 use config::{load_schemas, CodeGenSource};
 pub use error::CodeGenError;
-use ids::{generate_node_ids, NodeIdCodeGenTarget};
-use nodeset::{generate_events, generate_target, make_root_module, NodeSetCodeGenTarget};
+use ids::generate_node_ids;
+use nodeset::{generate_events, generate_target, make_root_module};
 use serde::{Deserialize, Serialize};
 use syn::{parse_str, File};
 use tracing::info;
-pub use types::{
-    base_ignored_types, base_native_type_mappings, basic_types_import_map, BsdTypeLoader,
-    CodeGenItemConfig, GeneratedItem, ItemDefinition, LoadedType, LoadedTypes,
-};
-use types::{generate_types, generate_types_nodeset, type_loader_impl, EncodingIds, ExternalType};
-pub use utils::{create_module_file, GeneratedOutput};
+use types::base_native_type_mappings;
+use types::{generate_types, generate_types_nodeset, type_loader_impl, EncodingIds};
+use utils::{create_module_file, GeneratedOutput};
 
-pub fn write_to_directory<T: GeneratedOutput>(
+pub use crate::ids::NodeIdCodeGenTarget;
+pub use crate::nodeset::{DependentNodeset, EventsTarget, NodeSetCodeGenTarget, NodeSetTypes};
+pub use crate::types::{ExternalIds, ExternalType, TypeCodeGenTarget};
+
+/// Write all generated items to the specified directory. Each generated item maps to one
+/// file. Returns the list of generated modules, which need to be added to the mod.rs file.
+fn write_to_directory<T: GeneratedOutput>(
     dir: &str,
     root_path: &str,
     header: &str,
@@ -68,6 +67,7 @@ pub fn write_to_directory<T: GeneratedOutput>(
     Ok(modules)
 }
 
+/// Write a `mod.rs` file to the specified directory, with the specified header and content.
 pub fn write_module_file(
     dir: &str,
     root_path: &str,
@@ -110,6 +110,11 @@ fn make_header(path: &str, extra: &[&str]) -> String {
     header
 }
 
+/// Main entrypoint for running code generation. This will write to output files as specified by
+/// the provided code gen config.
+/// `root_path` is the path the config is loaded from. Paths in the code gen config are
+/// relative to this, which means that we can generate the same output files independent of where
+/// the codegen binary is called from.
 pub fn run_codegen(config: &CodeGenConfig, root_path: &str) -> Result<(), CodeGenError> {
     let cache = load_schemas(root_path, &config.sources)?;
 
@@ -228,50 +233,34 @@ pub fn run_codegen(config: &CodeGenConfig, root_path: &str) -> Result<(), CodeGe
     Ok(())
 }
 
-#[derive(Serialize, Deserialize, Debug, Default)]
-pub struct TypeCodeGenTarget {
-    pub file: String,
-    pub output_dir: String,
-    #[serde(default)]
-    pub ignore: Vec<String>,
-    #[serde(default)]
-    pub types_import_map: HashMap<String, ExternalType>,
-    #[serde(default)]
-    pub default_excluded: HashSet<String>,
-    #[serde(default)]
-    pub enums_single_file: bool,
-    #[serde(default)]
-    pub structs_single_file: bool,
-    #[serde(default)]
-    pub extra_header: String,
-    #[serde(default = "defaults::id_path")]
-    pub id_path: String,
-    #[serde(default)]
-    pub node_ids_from_nodeset: bool,
-}
-
-mod defaults {
-    pub fn id_path() -> String {
-        "crate".to_owned()
-    }
-}
-
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum CodeGenTarget {
+    /// Code gen target for data types. This generates a struct with derives, and
+    /// some impls for each struct/enum in a bsd or nodeset2 file.
     Types(TypeCodeGenTarget),
+    /// Code gen target for node sets. This generates a function per node, and
+    /// larger functions to call the underlying functions, to produce a node set source.
     Nodes(NodeSetCodeGenTarget),
+    /// Code gen target for node IDs. This produces an enum for each node ID type from
+    /// a NodeId csv file.
     Ids(NodeIdCodeGenTarget),
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+/// Top level code-gen config.
 pub struct CodeGenConfig {
     #[serde(default)]
+    /// Extra header to add to each generated file.
     pub extra_header: String,
     #[serde(default)]
+    /// Preferred locale to use when loading localized text.
+    /// Defaults to nothing, which picks the first available. Most nodesets have only one locale.
     pub preferred_locale: String,
+    /// List of code gen targets.
     pub targets: Vec<CodeGenTarget>,
+    /// List of input files. This must include all inputs, even if they are only referenced by other inputs.
     pub sources: Vec<CodeGenSource>,
 }
 

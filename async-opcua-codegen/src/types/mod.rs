@@ -1,23 +1,80 @@
+//! Code generation for data types from BSD or NodeSet files.
+//!
+//! This generates rust structs, enums and bitsets from type definitions in
+//! the input files.
+
 mod base_constants;
 mod encoding_ids;
 mod gen;
 mod loaders;
 
+use std::collections::{HashMap, HashSet};
+
 pub use base_constants::*;
 pub use encoding_ids::EncodingIds;
-pub use gen::{CodeGenItemConfig, CodeGenerator, GeneratedItem, ItemDefinition};
+pub use gen::{CodeGenItemConfig, CodeGenerator, GeneratedItem};
 use loaders::NodeSetTypeLoader;
-pub use loaders::{BsdTypeLoader, LoadedType, LoadedTypes};
+pub use loaders::{BsdTypeLoader, LoadedType};
 use proc_macro2::TokenStream;
 use quote::quote;
+use serde::{Deserialize, Serialize};
 use syn::{parse_quote, parse_str, Item, Path};
 use tracing::info;
 
 use crate::{
     input::{BinarySchemaInput, NodeSetInput, SchemaCache},
-    CodeGenError, TypeCodeGenTarget, BASE_NAMESPACE,
+    CodeGenError, BASE_NAMESPACE,
 };
 
+#[derive(Serialize, Deserialize, Debug, Default)]
+/// Target for code generation of data types.
+pub struct TypeCodeGenTarget {
+    /// Reference to the input file, which needs to be added to the input list.
+    pub file: String,
+    /// Output directory.
+    pub output_dir: String,
+    #[serde(default)]
+    /// List of type names to ignore.
+    pub ignore: Vec<String>,
+    #[serde(default)]
+    /// Map of external types to import. This is used, for example, to
+    /// include the manually written `ignore` types.
+    pub types_import_map: HashMap<String, ExternalType>,
+    #[serde(default)]
+    /// List of type names to not generate `Default` implementations for.
+    /// This is useful for types that require a manual default implementation.
+    pub default_excluded: HashSet<String>,
+    #[serde(default)]
+    /// Put all the enums in a single file.
+    pub enums_single_file: bool,
+    #[serde(default)]
+    /// Put all the structs in a single file.
+    pub structs_single_file: bool,
+    #[serde(default)]
+    /// Extra header to add to each generated file.
+    pub extra_header: String,
+    #[serde(default = "defaults::id_path")]
+    /// Path to the crate where the `DataTypeIds` and `ObjectIds` enums are located.
+    /// Defaults to `crate`.
+    pub id_path: String,
+    #[serde(default)]
+    /// If true, instead of using `id_path` and ID enums, generate the node IDs from the nodeset file.
+    pub node_ids_from_nodeset: bool,
+}
+
+mod defaults {
+    pub fn id_path() -> String {
+        "crate".to_owned()
+    }
+}
+
+/// Generate types from the given BSD file input.
+///
+/// This returns a list of output _files_ according to config. Each file contains one or more
+/// generated struct or enum definition, and in some cases some impls, though mostly just
+/// derives.
+///
+/// This form of code generation is deprecated.
 pub fn generate_types(
     target: &TypeCodeGenTarget,
     input: &BinarySchemaInput,
@@ -41,12 +98,19 @@ pub fn generate_types(
         &input.xml,
     )?;
     let target_namespace = type_loader.target_namespace();
-    let types = type_loader.from_bsd().map_err(|e| e.in_file(&input.path))?;
+    let types = type_loader
+        .load_types()
+        .map_err(|e| e.in_file(&input.path))?;
     info!("Loaded {} types", types.len());
 
     generate_types_inner(target, target_namespace, types)
 }
 
+/// Generate types from the given NodeSet file input.
+///
+/// This returns a list of output _files_ according to config. Each file contains one or more
+/// generated struct or enum definition, and in some cases some impls, though mostly just
+/// derives.
 pub fn generate_types_nodeset(
     target: &TypeCodeGenTarget,
     input: &NodeSetInput,
@@ -103,6 +167,10 @@ fn generate_types_inner(
     Ok((generator.generate_types()?, target_namespace))
 }
 
+/// Generate a static type loader implementation for the given encoding IDs.
+///
+/// This generates a `TypeLoader` implementation that can load types from binary, XML, and JSON
+/// encodings, based on the provided encoding IDs and type names.
 pub fn type_loader_impl(ids: &[(EncodingIds, String)], namespace: &str) -> Vec<Item> {
     if ids.is_empty() {
         return Vec::new();

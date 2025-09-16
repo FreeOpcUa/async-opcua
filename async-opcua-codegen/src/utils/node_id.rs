@@ -11,6 +11,7 @@ use crate::CodeGenError;
 use super::RenderExpr;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
+/// Parsed node ID variant.
 pub enum NodeIdVariant {
     Numeric(u32),
     String(String),
@@ -33,6 +34,12 @@ impl Display for NodeIdVariant {
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
+/// Parsed node ID, with namespace and variant.
+/// Note that this is the namespace index in the XML file, which may
+/// overlap with namespaces in other files, and will not necessarily
+/// match the actual namespace index in the server.
+///
+/// The exception is namespace 0, which is always the standard OPC-UA namespace.
 pub struct ParsedNodeId {
     pub value: NodeIdVariant,
     pub namespace: u16,
@@ -51,6 +58,7 @@ static NODEID_REGEX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^(ns=(?P<ns>[0-9]+);)?(?P<t>[isgb]=.+)$").unwrap());
 
 impl ParsedNodeId {
+    /// Parse a node ID from a string, e.g. "ns=2;i=1234" or "s=MyStringId".
     pub fn parse(id: &str) -> Result<Self, CodeGenError> {
         let captures = NODEID_REGEX
             .captures(id)

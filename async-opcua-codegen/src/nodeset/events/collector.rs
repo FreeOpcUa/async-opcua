@@ -41,6 +41,8 @@ pub struct CollectedType<'a> {
     pub is_abstract: bool,
 }
 
+/// Utility type to load types from a nodeset, and follow references to other types,
+/// letting us build a type hierarchy.
 pub struct TypeCollector<'a> {
     nodes: HashMap<String, NodeToCollect<'a>>,
     references: References<'a>,

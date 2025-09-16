@@ -1,3 +1,6 @@
+//! Codegen for generating event types, which all implement the `Event` trait,
+//! making it possible to publish them in a server.
+
 use std::collections::HashMap;
 
 use collector::{NodeToCollect, TypeCollector};

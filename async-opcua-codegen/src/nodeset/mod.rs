@@ -1,3 +1,10 @@
+//! Code generation for nodesets.
+//!
+//! This generates rust code that can create nodes in an OPC UA server
+//! from NodeSet2 XML files. Each node becomes a function that takes some
+//! general server context and returns a node. These are chained together
+//! into a large static iterator that can be used as a node set source.
+
 mod events;
 mod gen;
 mod value;
@@ -18,37 +25,54 @@ use crate::{
     CodeGenError, GeneratedOutput,
 };
 
+/// An imported XSD file type, with the rust path to import it from.
 pub struct XsdTypeWithPath {
     pub ty: XsdFileType,
     pub path: Path,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
+/// A nodeset XML file to load types from.
 pub struct NodeSetTypes {
+    /// Reference to the schema in the inputs list.
     pub file: String,
+    /// Rust path to import these types from.
     pub root_path: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
+/// Configuration for generating nodes from a NodeSet2 XML file.
 pub struct NodeSetCodeGenTarget {
+    /// A reference to the input schema, which must be defined in the `inputs` list.
     pub file: String,
+    /// The root path to output generated code to.
     pub output_dir: String,
+    /// Maximum number of nodes per generated file.
+    /// Setting this too high or low can impact compile times.
     pub max_nodes_per_file: usize,
+    /// List of XML schema files to load types from.
     pub types: Vec<NodeSetTypes>,
+    /// The name of the generated module.
     pub name: String,
     #[serde(default)]
+    /// Extra header to add to each generated file.
     pub extra_header: String,
+    /// Optional generation of event types from the nodeset.
     pub events: Option<EventsTarget>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
+/// A nodeset that the events target depends on.
 pub struct DependentNodeset {
+    /// Reference to the schema in the inputs list.
     pub file: String,
+    /// Path to import these events from.
     pub import_path: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct EventsTarget {
+    /// A reference to the input schema, which must be defined in the `inputs` list.
     pub output_dir: String,
     #[serde(default)]
     pub extra_header: String,
@@ -56,7 +80,8 @@ pub struct EventsTarget {
     pub dependent_nodesets: Vec<DependentNodeset>,
 }
 
-pub fn make_type_dict(
+/// Create a map of type name to type definition from the given codegen target.
+fn make_type_dict(
     target: &NodeSetCodeGenTarget,
     cache: &SchemaCache,
 ) -> Result<HashMap<String, XsdTypeWithPath>, CodeGenError> {
@@ -95,6 +120,7 @@ pub fn make_type_dict(
     Ok(res)
 }
 
+/// A chunk of generated node creation functions, to be output as a single file.
 pub struct NodeSetChunk {
     pub root_fun: ItemFn,
     pub items: Vec<ItemFn>,
@@ -123,6 +149,8 @@ impl GeneratedOutput for NodeSetChunk {
     }
 }
 
+/// Create the root function that returns an iterator over all the node node creation functions
+/// in a chunk. The iterator is boxed, but it is in practice just a static array of function pointers.
 pub fn make_root_fun(chunk: &[NodeGenMethod]) -> ItemFn {
     let mut names = chunk.iter().map(|c| Ident::new(&c.name, Span::call_site()));
 
@@ -143,6 +171,7 @@ pub fn make_root_fun(chunk: &[NodeGenMethod]) -> ItemFn {
     }
 }
 
+/// Generate the target code for a nodeset codegen target.
 pub fn generate_target(
     config: &NodeSetCodeGenTarget,
     input: &NodeSetInput,
@@ -163,6 +192,7 @@ pub fn generate_target(
                 .map_err(|e| e.in_file(&config.file))?,
         );
     }
+    // We sort output functions by name to get a stable output.
     fns.sort_by(|a, b| a.name.cmp(&b.name));
     info!("Generated {} node creation methods", fns.len());
 
@@ -193,6 +223,8 @@ pub fn generate_target(
     Ok(outputs)
 }
 
+/// Create the top level root module that creates a flattened iterator
+/// incorporating all the chunk-level iterators from before.
 pub fn make_root_module(
     chunks: &[NodeSetChunk],
     config: &NodeSetCodeGenTarget,

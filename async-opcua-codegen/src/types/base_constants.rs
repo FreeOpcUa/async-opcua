@@ -51,7 +51,7 @@ pub struct ExternalIds {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ExternalType {
-    /// Relative path in the OPC-UA types library.
+    /// Absolute rust path to this type.
     pub path: String,
     /// Whether this type has a default implementation.
     pub has_default: Option<bool>,
@@ -75,6 +75,7 @@ impl ExternalType {
     }
 }
 
+/// Import map for types implemented in the async-opcua-types library.
 pub fn basic_types_import_map() -> HashMap<String, ExternalType> {
     [
         ("UAString", ExternalType::new("string", true)),
@@ -110,6 +111,7 @@ pub fn basic_types_import_map() -> HashMap<String, ExternalType> {
     .collect()
 }
 
+/// Mappings from OPC-UA types to native or built-in Rust types.
 pub fn base_native_type_mappings() -> HashMap<String, String> {
     [
         ("String", "UAString"),

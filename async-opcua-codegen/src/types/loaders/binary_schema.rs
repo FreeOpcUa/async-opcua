@@ -12,6 +12,10 @@ use super::{
     LoadedType,
 };
 
+/// Loader for legacy Binary Schema (BSD) files.
+///
+/// This loads structured types and enumerations from a BSD file into our
+/// common format.
 pub struct BsdTypeLoader<'a> {
     ignored: HashSet<String>,
     native_type_mappings: HashMap<String, String>,
@@ -190,7 +194,7 @@ impl<'a> BsdTypeLoader<'a> {
         self.xml.target_namespace.clone()
     }
 
-    pub fn from_bsd(self) -> Result<Vec<LoadedType>, CodeGenError> {
+    pub fn load_types(self) -> Result<Vec<LoadedType>, CodeGenError> {
         let mut types = Vec::new();
         for node in &self.xml.elements {
             match node {

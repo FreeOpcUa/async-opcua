@@ -5,7 +5,7 @@ using Opc.Ua.Server;
 
 namespace TestServer;
 
-public class TestServer : StandardServer
+public class TestServer : ReverseConnectServer
 {
     TestNodeManager custom = null!;
 

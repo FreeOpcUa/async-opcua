@@ -132,6 +132,15 @@ pub use session::{
 };
 pub use transport::AsyncSecureChannel;
 
+/// This module contains utilities for reverse connect. Allowing you to
+/// connect to a server by having the server initiate the connection to the client.
+pub mod reverse_connect {
+    pub use super::session::ReverseConnectionSource;
+    pub use super::transport::tcp::{
+        ReverseHelloVerifier, ReverseTcpConnector, TcpConnectorReceiver,
+    };
+}
+
 pub mod services {
     //! This module contains request builders for most OPC-UA services.
     //! Typically you can just use the methods on [`super::Session`], but if you need to specify

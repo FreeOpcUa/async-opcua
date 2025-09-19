@@ -12,7 +12,7 @@ use opcua_types::{
     write_u32, write_u8, DecodingOptions, EncodingResult, Error, SimpleBinaryDecodable,
     SimpleBinaryEncodable,
 };
-use tracing::{error, trace};
+use tracing::trace;
 
 use super::{
     message_chunk_info::ChunkInfo,
@@ -266,13 +266,15 @@ impl MessageChunk {
         message_type: MessageChunkType,
         secure_channel: &SecureChannel,
         max_chunk_size: usize,
-    ) -> Result<usize, MessageChunkTooSmall> {
+    ) -> Result<usize, Error> {
         if max_chunk_size < MIN_CHUNK_SIZE {
-            error!(
-                "chunk size {} is less than minimum allowed by the spec",
-                max_chunk_size
-            );
-            return Err(MessageChunkTooSmall);
+            return Err(Error::new(
+                StatusCode::BadTcpInternalError,
+                format!(
+                    "chunk size {} is less than minimum allowed by the spec",
+                    max_chunk_size
+                ),
+            ));
         }
         // First, get the size of the various message chunk headers.
         let security_header = secure_channel.make_security_header(message_type);
@@ -291,8 +293,11 @@ impl MessageChunk {
 
         // Get the encryption block size, and the minimum padding length.
         // The minimum padding depends on the key length.
-        let (plain_text_block_size, minimum_padding) =
-            secure_channel.get_padding_block_sizes(&security_header, signature_size, message_type);
+        let (plain_text_block_size, minimum_padding) = secure_channel.get_padding_block_sizes(
+            &security_header,
+            signature_size,
+            message_type,
+        )?;
 
         // Compute the max chunk size aligned to an encryption block.
         // When encrypting, the size must be a whole multiple of `plain_text_block_size`,

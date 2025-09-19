@@ -1,4 +1,5 @@
 mod connect;
+pub mod reverse_connect;
 pub mod services;
 
 use std::{future::Future, panic::AssertUnwindSafe, sync::Arc};
@@ -10,6 +11,7 @@ use opcua::{
     crypto::{hostname, SecurityPolicy},
     types::MessageSecurityMode,
 };
+pub use reverse_connect::test_reverse_connect;
 use tokio::select;
 
 use crate::{

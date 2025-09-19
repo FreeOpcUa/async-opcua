@@ -6,7 +6,9 @@ use client::{
     with_basic_session, with_session,
 };
 
-use crate::{client::ClientTestState, common::OutMessage, Runner};
+use crate::{
+    client::ClientTestState, common::OutMessage, tests::client::test_reverse_connect, Runner,
+};
 
 use opcua::client::IdentityToken;
 use opcua::crypto::SecurityPolicy;
@@ -53,6 +55,10 @@ pub async fn run_client_tests(runner: &Runner) {
     run_test!(runner, state, test_call);
     run_encrypted_test!(runner, state, test_big_request);
     run_test!(runner, state, test_subscriptions);
+
+    runner
+        .run_test("reverse_connect", test_reverse_connect(&mut state))
+        .await;
 
     state
         .server

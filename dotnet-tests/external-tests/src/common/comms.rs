@@ -95,10 +95,17 @@ impl UpdateValueMessage {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ReverseConnectMessage {
+    pub url: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "lowercase", tag = "type")]
 pub enum InMessage {
     Shutdown {},
     ChangeValue(UpdateValueMessage),
+    ReverseConnect(ReverseConnectMessage),
 }
 
 impl ProcessLoop {

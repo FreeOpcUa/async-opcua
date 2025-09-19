@@ -286,6 +286,12 @@ impl<'a>
     }
 }
 
+impl From<String> for EndpointDescription {
+    fn from(v: String) -> Self {
+        EndpointDescription::from(v.as_str())
+    }
+}
+
 const MESSAGE_SECURITY_MODE_NONE: &str = "None";
 const MESSAGE_SECURITY_MODE_SIGN: &str = "Sign";
 const MESSAGE_SECURITY_MODE_SIGN_AND_ENCRYPT: &str = "SignAndEncrypt";

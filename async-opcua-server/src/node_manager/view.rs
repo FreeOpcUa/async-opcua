@@ -629,13 +629,15 @@ impl<'a> BrowsePathItem<'a> {
     }
 
     pub(crate) fn new_root(path: &'a BrowsePath, input_index: usize) -> Self {
-        let mut status = StatusCode::Good;
         let elements = path.relative_path.elements.as_ref();
-        if elements.is_none() || elements.is_some_and(|e| e.is_empty()) {
-            status = StatusCode::BadNothingToDo;
-        } else if elements.unwrap().iter().any(|el| el.target_name.is_null()) {
-            status = StatusCode::BadBrowseNameInvalid;
-        }
+        let status = match elements {
+            Some(e) if e.is_empty() => StatusCode::BadNothingToDo,
+            None => StatusCode::BadNothingToDo,
+            Some(e) if e.iter().any(|el| el.target_name.is_null()) => {
+                StatusCode::BadBrowseNameInvalid
+            }
+            _ => StatusCode::Good,
+        };
 
         Self {
             node: path.starting_node.clone(),

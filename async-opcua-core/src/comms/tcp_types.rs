@@ -27,6 +27,8 @@ pub(crate) const HELLO_MESSAGE: &[u8] = b"HEL";
 pub(crate) const ACKNOWLEDGE_MESSAGE: &[u8] = b"ACK";
 /// Message header type for error messages.
 pub(crate) const ERROR_MESSAGE: &[u8] = b"ERR";
+/// Message header type for reverse hello messages.
+pub(crate) const REVERSE_HELLO_MESSAGE: &[u8] = b"RHE";
 
 /// ChunkIsFinal type for the final chunk in a message.
 pub(crate) const CHUNK_FINAL: u8 = b'F';
@@ -54,6 +56,8 @@ pub enum MessageType {
     Chunk,
     /// Fatal error, followed by shutting down the channel.
     Error,
+    /// ReverseHello message, sent by the server to the client.
+    ReverseHello,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -75,6 +79,7 @@ impl SimpleBinaryEncodable for MessageHeader {
             MessageType::Hello => stream.write_all(HELLO_MESSAGE),
             MessageType::Acknowledge => stream.write_all(ACKNOWLEDGE_MESSAGE),
             MessageType::Error => stream.write_all(ERROR_MESSAGE),
+            MessageType::ReverseHello => stream.write_all(REVERSE_HELLO_MESSAGE),
             MessageType::Chunk => {
                 panic!("Don't write chunks to stream with this call, use Chunk and Chunker");
             }
@@ -160,6 +165,7 @@ impl MessageHeader {
                 HELLO_MESSAGE => MessageType::Hello,
                 ACKNOWLEDGE_MESSAGE => MessageType::Acknowledge,
                 ERROR_MESSAGE => MessageType::Error,
+                REVERSE_HELLO_MESSAGE => MessageType::ReverseHello,
                 CHUNK_MESSAGE | OPEN_SECURE_CHANNEL_MESSAGE | CLOSE_SECURE_CHANNEL_MESSAGE => {
                     MessageType::Chunk
                 }
@@ -436,6 +442,58 @@ impl ErrorMessage {
         };
         error.message_header.message_size = error.byte_len() as u32;
         error
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+/// Implementation of the ReverseHello message in OPC UA
+pub struct ReverseHelloMessage {
+    message_header: MessageHeader,
+    /// The ApplicationUri of the server which sent the message.
+    pub server_uri: UAString,
+    /// The URL of the endpoint which the client uses when establishing the secure channel.
+    /// This shall be passed back to the server in the Hello message.
+    pub endpoint_url: UAString,
+}
+
+impl SimpleBinaryEncodable for ReverseHelloMessage {
+    fn byte_len(&self) -> usize {
+        self.message_header.byte_len() + self.server_uri.byte_len() + self.endpoint_url.byte_len()
+    }
+
+    fn encode<S: Write + ?Sized>(&self, stream: &mut S) -> EncodingResult<()> {
+        self.message_header.encode(stream)?;
+        self.server_uri.encode(stream)?;
+        self.endpoint_url.encode(stream)
+    }
+}
+
+impl SimpleBinaryDecodable for ReverseHelloMessage {
+    fn decode<S: Read + ?Sized>(
+        stream: &mut S,
+        decoding_options: &DecodingOptions,
+    ) -> EncodingResult<Self> {
+        let message_header = MessageHeader::decode(stream, decoding_options)?;
+        let server_uri = UAString::decode(stream, decoding_options)?;
+        let endpoint_url = UAString::decode(stream, decoding_options)?;
+        Ok(ReverseHelloMessage {
+            message_header,
+            server_uri,
+            endpoint_url,
+        })
+    }
+}
+
+impl ReverseHelloMessage {
+    /// Create a new ReverseHello message.
+    pub fn new(server_uri: &str, endpoint_url: &str) -> ReverseHelloMessage {
+        let mut msg = ReverseHelloMessage {
+            message_header: MessageHeader::new(MessageType::ReverseHello),
+            server_uri: UAString::from(server_uri),
+            endpoint_url: UAString::from(endpoint_url),
+        };
+        msg.message_header.message_size = msg.byte_len() as u32;
+        msg
     }
 }
 

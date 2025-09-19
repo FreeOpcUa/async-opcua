@@ -86,6 +86,21 @@ internal sealed class Program
                         return 1;
                     }
                 }
+                else if (message is ReverseConnectMessage rc)
+                {
+                    try
+                    {
+                        server.AddReverseConnection(new Uri(rc.Url ?? throw new ArgumentNullException("Url missing in ReverseConnectMessage")));
+                    }
+                    catch (Exception ex)
+                    {
+                        Comms.Send(new ErrorMessage
+                        {
+                            Message = $"Fatal error adding reverse connection: {ex}"
+                        });
+                        return 1;
+                    }
+                }
             }
         }
 

@@ -20,10 +20,19 @@ public class ChangeValueMessage : IInMessage
     public string? Value { get; set; }
 }
 
+public class ReverseConnectMessage : IInMessage
+{
+    public InMessageType Type { get; set; } = InMessageType.ReverseConnect;
+
+    public string? Url { get; set; }
+}
+
+
 public enum InMessageType
 {
     Shutdown,
     ChangeValue,
+    ReverseConnect
 }
 
 class InMessageConverter : TaggedUnionConverter<IInMessage, InMessageType>
@@ -36,6 +45,7 @@ class InMessageConverter : TaggedUnionConverter<IInMessage, InMessageType>
         {
             InMessageType.Shutdown => document.Deserialize<ShutdownMessage>(options),
             InMessageType.ChangeValue => document.Deserialize<ChangeValueMessage>(options),
+            InMessageType.ReverseConnect => document.Deserialize<ReverseConnectMessage>(options),
             _ => throw new JsonException("Unknown type variant")
         };
     }

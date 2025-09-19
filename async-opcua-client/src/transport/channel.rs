@@ -292,9 +292,9 @@ impl AsyncSecureChannel {
                 secure_channel.set_cert(cert);
                 secure_channel.set_security_policy(security_policy);
                 secure_channel.set_security_mode(self.endpoint_info.endpoint.security_mode);
-                let _ = secure_channel.set_remote_cert_from_byte_string(
+                secure_channel.set_remote_cert_from_byte_string(
                     &self.endpoint_info.endpoint.server_certificate,
-                );
+                )?;
                 debug!("Security policy = {:?}", security_policy);
                 debug!(
                     "Security mode = {:?}",

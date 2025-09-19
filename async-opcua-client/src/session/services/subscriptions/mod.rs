@@ -2,6 +2,7 @@ pub(crate) mod event_loop;
 pub use event_loop::SubscriptionActivity;
 
 mod callbacks;
+mod event_loop_state;
 mod service;
 pub(crate) mod state;
 
@@ -22,6 +23,8 @@ pub use service::{
     ModifyMonitoredItems, ModifySubscription, Publish, Republish, SetMonitoringMode,
     SetPublishingMode, SetTriggering, TransferSubscriptions,
 };
+
+pub use event_loop_state::{SubscriptionCache, SubscriptionEventLoopState};
 
 pub(crate) struct CreateMonitoredItem {
     pub id: u32,
@@ -349,7 +352,9 @@ impl<'a> MonitoredItemMap<'a> {
 }
 
 #[derive(Debug)]
-pub(crate) struct PublishLimits {
+/// Limits for publish requests, calculated based on the number of subscriptions
+/// and the expected publish interval and message roundtrip time.
+pub struct PublishLimits {
     message_roundtrip: Duration,
     publish_interval: Duration,
     subscriptions: usize,

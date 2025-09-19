@@ -60,13 +60,12 @@ pub use services::method::Call;
 pub use services::node_management::{AddNodes, AddReferences, DeleteNodes, DeleteReferences};
 pub use services::session::{ActivateSession, Cancel, CloseSession, CreateSession};
 use services::subscriptions::state::SubscriptionState;
-use services::subscriptions::PublishLimits;
 pub use services::subscriptions::{
     CreateMonitoredItems, CreateSubscription, DataChangeCallback, DeleteMonitoredItems,
     DeleteSubscriptions, EventCallback, ModifyMonitoredItems, ModifySubscription, MonitoredItem,
-    OnSubscriptionNotification, OnSubscriptionNotificationCore, Publish, Republish,
+    OnSubscriptionNotification, OnSubscriptionNotificationCore, Publish, PublishLimits, Republish,
     SetMonitoringMode, SetPublishingMode, SetTriggering, Subscription, SubscriptionActivity,
-    SubscriptionCallbacks, TransferSubscriptions,
+    SubscriptionCache, SubscriptionCallbacks, SubscriptionEventLoopState, TransferSubscriptions,
 };
 pub use services::view::{
     Browse, BrowseNext, RegisterNodes, TranslateBrowsePaths, UnregisterNodes,

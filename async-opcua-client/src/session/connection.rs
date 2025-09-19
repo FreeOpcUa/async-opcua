@@ -1,4 +1,4 @@
-use std::{str::FromStr, sync::Arc};
+use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
 use opcua_core::{comms::url::is_opc_ua_binary_url, config::Config, sync::RwLock};
 use opcua_crypto::{CertificateStore, SecurityPolicy};
@@ -6,9 +6,14 @@ use opcua_types::{
     ContextOwned, EndpointDescription, Error, MessageSecurityMode, NamespaceMap, NodeId,
     StatusCode, TypeLoader, UserTokenType,
 };
+use tokio::net::TcpListener;
 
 use crate::{
-    transport::{tcp::TransportConfiguration, Connector, ConnectorBuilder},
+    reverse_connect::TcpConnectorReceiver,
+    transport::{
+        tcp::TransportConfiguration, Connector, ConnectorBuilder, ReverseHelloVerifier,
+        ReverseTcpConnector,
+    },
     AsyncSecureChannel, ClientConfig, IdentityToken,
 };
 
@@ -52,6 +57,61 @@ impl ConnectionSource for DirectConnectionSource {
     type Builder = String;
     fn get_connector(&self, endpoint: &EndpointDescription) -> Result<Self::Builder, Error> {
         Ok(endpoint.endpoint_url.as_ref().to_string())
+    }
+}
+
+/// Connection source for a reverse connection.
+/// When using this, the server will initiate the connection to the client.
+pub struct ReverseConnectionSource {
+    listener: TcpConnectorReceiver,
+    verifier: Option<Arc<dyn ReverseHelloVerifier + Send + Sync>>,
+}
+
+impl ReverseConnectionSource {
+    /// Create a new reverse connection source with a TCP listener.
+    pub fn new_listener(listener: Arc<TcpListener>) -> Self {
+        Self {
+            listener: TcpConnectorReceiver::Listener(listener),
+            verifier: None,
+        }
+    }
+
+    /// Create a new reverse connection source listening on the given address.
+    pub fn new_address(address: SocketAddr) -> Self {
+        Self {
+            listener: TcpConnectorReceiver::Address(address),
+            verifier: None,
+        }
+    }
+
+    /// Set a custom verifier for the reverse connection source.
+    /// If not set, the default verifier will be used, which
+    /// simply compares the endpoint URL with the configured endpoint URL.
+    pub fn with_verifier(
+        mut self,
+        verifier: impl ReverseHelloVerifier + Send + Sync + 'static,
+    ) -> Self {
+        self.verifier = Some(Arc::new(verifier));
+        self
+    }
+}
+
+impl ConnectionSource for ReverseConnectionSource {
+    type Builder = ReverseTcpConnector;
+
+    fn get_connector(&self, endpoint: &EndpointDescription) -> Result<Self::Builder, Error> {
+        if let Some(verifier) = self.verifier.clone() {
+            Ok(ReverseTcpConnector::new(
+                self.listener.clone(),
+                verifier,
+                endpoint.clone(),
+            ))
+        } else {
+            Ok(ReverseTcpConnector::new_default(
+                endpoint.clone(),
+                self.listener.clone(),
+            ))
+        }
     }
 }
 

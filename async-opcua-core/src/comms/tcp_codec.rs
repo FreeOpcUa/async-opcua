@@ -26,7 +26,7 @@ use super::{
     message_chunk::MessageChunk,
     tcp_types::{
         AcknowledgeMessage, ErrorMessage, HelloMessage, MessageHeader, MessageType,
-        MESSAGE_HEADER_LEN,
+        ReverseHelloMessage, MESSAGE_HEADER_LEN,
     },
 };
 
@@ -42,6 +42,8 @@ pub enum Message {
     Error(ErrorMessage),
     /// Part of a general OPC-UA message.
     Chunk(MessageChunk),
+    /// Reverse Hello message, sent by the server to the client.
+    ReverseHello(ReverseHelloMessage),
 }
 
 /// Implements a tokio codec that as close as possible, allows incoming data to be transformed into
@@ -98,6 +100,7 @@ impl Encoder<Message> for TcpCodec {
             Message::Acknowledge(msg) => self.write(msg, buf),
             Message::Error(msg) => self.write(msg, buf),
             Message::Chunk(msg) => self.write(msg, buf),
+            Message::ReverseHello(msg) => self.write(msg, buf),
         }
     }
 }
@@ -142,6 +145,10 @@ impl TcpCodec {
                 decoding_options,
             )?)),
             MessageType::Chunk => Ok(Message::Chunk(MessageChunk::decode(
+                &mut buf,
+                decoding_options,
+            )?)),
+            MessageType::ReverseHello => Ok(Message::ReverseHello(ReverseHelloMessage::decode(
                 &mut buf,
                 decoding_options,
             )?)),

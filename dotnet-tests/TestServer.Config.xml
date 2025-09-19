@@ -148,5 +148,9 @@
       </SamplingRateGroup>
     </AvailableSamplingRates>
     <MaxRegistrationInterval>0</MaxRegistrationInterval>
+    <ReverseConnect>
+      <ConnectInterval>1000</ConnectInterval>
+      <ConnectTimeout>10000</ConnectTimeout>
+    </ReverseConnect>
   </ServerConfiguration>
 </ApplicationConfiguration>

@@ -132,14 +132,8 @@ impl<'a> ChunkingStream<'a> {
                 secure_channel,
                 max_chunk_size,
             )
-            .map_err(|_| {
-                Error::new(
-                    StatusCode::BadTcpInternalError,
-                    format!(
-                        "body_size_from_message_size error for max_chunk_size = {max_chunk_size}"
-                    ),
-                )
-                .with_context(
+            .map_err(|e| {
+                e.with_context(
                     Some(request_id),
                     if request_handle > 0 {
                         Some(request_handle)

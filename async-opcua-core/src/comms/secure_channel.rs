@@ -505,39 +505,49 @@ impl SecureChannel {
         security_header: &SecurityHeader,
         signature_size: usize,
         message_type: MessageChunkType,
-    ) -> (usize, usize) {
+    ) -> Result<(usize, usize), Error> {
         if self.security_policy == SecurityPolicy::None
             || self.security_mode != MessageSecurityMode::SignAndEncrypt
                 && !message_type.is_open_secure_channel()
         {
-            return (0, 0);
+            return Ok((0, 0));
         }
 
         match security_header {
             SecurityHeader::Asymmetric(security_header) => {
                 if security_header.sender_certificate.is_null() {
                     error!("Sender has not supplied a certificate so it is doubtful that this will work");
-                    (self.security_policy.plain_block_size(), signature_size)
+                    Ok((self.security_policy.plain_block_size(), signature_size))
                 } else {
                     // Padding requires we look at the remote certificate and security policy
                     let padding = self
                         .security_policy
                         .asymmetric_encryption_padding()
-                        .expect("Invalid algorithm");
-                    let x509 = self.remote_cert().unwrap();
-                    let pk = x509.public_key().unwrap();
-                    (
+                        .ok_or_else(|| {
+                            Error::new(
+                                StatusCode::BadSecurityChecksFailed,
+                                "Invalid algorithm for asymmetric encryption",
+                            )
+                        })?;
+                    let x509 = self.remote_cert().ok_or_else(|| {
+                        Error::new(
+                            StatusCode::BadCertificateInvalid,
+                            "Missing server certificate, this is required for asymmetric encryption"
+                        )
+                    })?;
+                    let pk = x509.public_key()?;
+                    Ok((
                         pk.plain_text_block_size(padding),
                         Self::minimum_padding(pk.size()),
-                    )
+                    ))
                 }
             }
             SecurityHeader::Symmetric(_) => {
                 // Plain text block size comes from policy
-                (
+                Ok((
                     self.security_policy.plain_block_size(),
                     Self::minimum_padding(signature_size),
-                )
+                ))
             }
         }
     }
@@ -545,18 +555,18 @@ impl SecureChannel {
     /// Calculate the padding size
     ///
     /// Padding adds bytes to the body to make it a multiple of the block size so it can be encrypted.
-    pub fn padding_size(
+    fn padding_size(
         &self,
         security_header: &SecurityHeader,
         body_size: usize,
         signature_size: usize,
         message_type: MessageChunkType,
-    ) -> (usize, usize) {
+    ) -> Result<(usize, usize), Error> {
         let (plain_text_block_size, minimum_padding) =
-            self.get_padding_block_sizes(security_header, signature_size, message_type);
+            self.get_padding_block_sizes(security_header, signature_size, message_type)?;
 
         if plain_text_block_size == 0 {
-            return (0, 0);
+            return Ok((0, 0));
         }
 
         // PaddingSize = PlainTextBlockSize – ((BytesToWrite + SignatureSize + 1) % PlainTextBlockSize);
@@ -567,7 +577,7 @@ impl SecureChannel {
             0
         };
         trace!("sequence_header(8) + body({}) + signature ({}) = plain text size = {} / with padding {} = {}, plain_text_block_size = {}", body_size, signature_size, encrypt_size, padding_size, encrypt_size + padding_size, plain_text_block_size);
-        (minimum_padding + padding_size, minimum_padding)
+        Ok((minimum_padding + padding_size, minimum_padding))
     }
 
     // Takes an unpadded message chunk and adds padding as well as space to the end to accomodate a signature.
@@ -592,7 +602,7 @@ impl SecureChannel {
             body_size,
             signature_size,
             chunk_info.message_header.message_type,
-        );
+        )?;
 
         let buffer = Vec::with_capacity(message_chunk.data.len() + padding_size + signature_size);
         let mut stream = Cursor::new(buffer);

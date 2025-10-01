@@ -26,7 +26,7 @@ use crate::{
     CodeGenError, BASE_NAMESPACE,
 };
 
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug)]
 /// Target for code generation of data types.
 pub struct TypeCodeGenTarget {
     /// Reference to the input file, which needs to be added to the input list.
@@ -60,6 +60,23 @@ pub struct TypeCodeGenTarget {
     #[serde(default)]
     /// If true, instead of using `id_path` and ID enums, generate the node IDs from the nodeset file.
     pub node_ids_from_nodeset: bool,
+}
+
+impl Default for TypeCodeGenTarget {
+    fn default() -> Self {
+        Self {
+            file: String::new(),
+            output_dir: String::new(),
+            ignore: Vec::new(),
+            types_import_map: HashMap::new(),
+            default_excluded: HashSet::new(),
+            enums_single_file: false,
+            structs_single_file: false,
+            extra_header: String::new(),
+            id_path: defaults::id_path(),
+            node_ids_from_nodeset: false,
+        }
+    }
 }
 
 mod defaults {

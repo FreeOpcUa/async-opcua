@@ -563,6 +563,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "codegen-tests"
+version = "0.1.0"
+dependencies = [
+ "async-opcua",
+ "async-opcua-codegen",
+]
+
+[[package]]
 name = "colorchoice"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"

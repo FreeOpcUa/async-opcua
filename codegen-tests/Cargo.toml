@@ -1,0 +1,18 @@
+[package]
+name = "codegen-tests"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+json = ["async-opcua/json"]
+xml = ["async-opcua/xml"]
+default = ["json", "xml"]
+
+[dependencies]
+async-opcua = { path = "../async-opcua" }
+
+[build-dependencies]
+async-opcua-codegen = { path = "../async-opcua-codegen" }
+
+[lints]
+workspace = true

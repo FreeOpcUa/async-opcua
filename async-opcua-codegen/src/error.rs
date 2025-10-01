@@ -27,7 +27,6 @@ pub enum CodeGenErrorKind {
     #[error("{0}: {1}")]
     Io(String, String),
 }
-
 #[derive(Error, Debug, Clone)]
 pub struct CodeGenError {
     #[source]

@@ -109,7 +109,7 @@ targets:
     # List of XML files to load types from.
     types:
         # This can be a path, filename, or primary namespace URI.
-      - source: schemas/MySchema.Types.xsd
+      - file: schemas/MySchema.Types.xsd
         # Rust path to import these types from.
         root_path: crate::types
     # Name of the generated module.

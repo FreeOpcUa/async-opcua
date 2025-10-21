@@ -644,8 +644,6 @@ impl SessionSubscriptions {
         {
             let is_last = idx == num_responses - 1;
 
-            let available_sequence_numbers = self.available_sequence_numbers(subscription_id);
-
             if self.retransmission_queue.len() >= self.max_publish_requests() * 2 {
                 self.retransmission_queue.pop_front();
             }
@@ -653,6 +651,11 @@ impl SessionSubscriptions {
                 message: notification.clone(),
                 subscription_id,
             });
+
+            // Take note of the available sequence numbers after we have added the NonAckedPublish
+            // to the list. This makes sure that the available sequence numbers list is not empty and contains
+            // the NonAckedPublish we just added.
+            let available_sequence_numbers = self.available_sequence_numbers(subscription_id);
 
             let _ = publish_request.response.send(
                 PublishResponse {

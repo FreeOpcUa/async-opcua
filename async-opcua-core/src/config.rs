@@ -59,6 +59,14 @@ pub trait Config: serde::Serialize {
         let mut f = File::open(path)?;
         let mut s = String::new();
         f.read_to_string(&mut s)?;
+
+        #[cfg(feature = "env_expansion")]
+        {
+            s = shellexpand::env(&s)
+                .map_err(|e| ConfigError::IO(std::io::Error::other(e)))?
+                .to_string();
+        }
+
         Ok(serde_yaml::from_str(&s)?)
     }
 

@@ -26,9 +26,16 @@ tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
+shellexpand = { version = "3.1", optional = true }
 
 async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.16.0" }
 async-opcua-types = { path = "../async-opcua-types", version = "0.16.0" }
 
+[dev-dependencies]
+tempfile = { version = "^3" }
+
 [lints]
 workspace = true
+
+[features]
+env_expansion = ["dep:shellexpand"]

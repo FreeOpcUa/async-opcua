@@ -156,6 +156,11 @@ pub mod services {
         SetPublishingMode, SetTriggering, TransferSubscriptions, TranslateBrowsePaths,
         UnregisterNodes, Write,
     };
+
+    /// Utilities for working with subscriptions.
+    pub mod subscriptions {
+        pub use crate::session::{PublishLimits, SubscriptionCache, SubscriptionEventLoopState};
+    }
 }
 
 pub use identity_token::{IdentityToken, IssuedTokenSource, IssuedTokenWrapper, Password};

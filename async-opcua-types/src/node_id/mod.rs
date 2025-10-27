@@ -299,7 +299,7 @@ impl NodeId {
     /// u32, Guid, ByteString or String
     pub fn new<T>(namespace: u16, value: T) -> NodeId
     where
-        T: 'static + Into<Identifier>,
+        T: Into<Identifier>,
     {
         NodeId {
             namespace,

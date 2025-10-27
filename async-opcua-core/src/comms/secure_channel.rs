@@ -561,7 +561,7 @@ impl SecureChannel {
 
         // PaddingSize = PlainTextBlockSize – ((BytesToWrite + SignatureSize + 1) % PlainTextBlockSize);
         let encrypt_size = 8 + body_size + signature_size + minimum_padding;
-        let padding_size = if encrypt_size % plain_text_block_size != 0 {
+        let padding_size = if !encrypt_size.is_multiple_of(plain_text_block_size) {
             plain_text_block_size - (encrypt_size % plain_text_block_size)
         } else {
             0

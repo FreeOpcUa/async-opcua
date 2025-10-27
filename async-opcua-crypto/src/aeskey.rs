@@ -70,7 +70,7 @@ impl AesKey {
                 StatusCode::BadUnexpectedError,
                 format!("IV is not an expected size, len = {}", iv.len()),
             ))
-        } else if src.len() % self.block_size() != 0 {
+        } else if !src.len().is_multiple_of(self.block_size()) {
             panic!("Block size {} is wrong, check stack", src.len());
         } else {
             Ok(())

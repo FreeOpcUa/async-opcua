@@ -98,7 +98,7 @@ pub trait KeySize {
     /// Get the cipher block size with given data size and padding.
     fn calculate_cipher_text_size(&self, data_size: usize, padding: RsaPadding) -> usize {
         let plain_text_block_size = self.plain_text_block_size(padding);
-        let block_count = if data_size % plain_text_block_size == 0 {
+        let block_count = if data_size.is_multiple_of(plain_text_block_size) {
             data_size / plain_text_block_size
         } else {
             (data_size / plain_text_block_size) + 1

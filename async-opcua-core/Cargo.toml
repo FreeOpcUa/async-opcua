@@ -21,12 +21,12 @@ chrono = { workspace = true }
 parking_lot = { workspace = true }
 serde = { workspace = true }
 serde_yaml = { workspace = true }
+shellexpand = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
-shellexpand = { version = "3.1", optional = true }
 
 async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.16.0" }
 async-opcua-types = { path = "../async-opcua-types", version = "0.16.0" }

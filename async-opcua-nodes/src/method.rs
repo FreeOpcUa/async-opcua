@@ -109,8 +109,8 @@ impl Default for Method {
     fn default() -> Self {
         Self {
             base: Base::new(NodeClass::Method, &NodeId::null(), "", ""),
-            executable: false,
-            user_executable: false,
+            executable: true,
+            user_executable: true,
         }
     }
 }

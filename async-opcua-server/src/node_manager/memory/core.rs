@@ -3,7 +3,6 @@ use std::{sync::Arc, time::Duration};
 use async_trait::async_trait;
 use chrono::Offset;
 use hashbrown::HashMap;
-use opcua_nodes::NodeType;
 
 use crate::{
     address_space::{read_node_value, AddressSpace, CoreNamespace},
@@ -76,9 +75,6 @@ impl InMemoryNodeManagerImpl for CoreNodeManagerImpl {
             Duration::from_millis(sampler_interval),
             context.subscriptions.clone(),
         );
-        // Some core methods should be generally executable
-        Self::set_method_executable(address_space, MethodId::Server_GetMonitoredItems);
-        Self::set_method_executable(address_space, MethodId::Server_ResendData);
     }
 
     fn namespaces(&self) -> Vec<NamespaceMetadata> {
@@ -537,14 +533,6 @@ impl CoreNodeManagerImpl {
                 ReferenceTypeId::Organizes,
             )
         }
-    }
-
-    fn set_method_executable(address_space: &mut AddressSpace, method: MethodId) {
-        let Some(NodeType::Method(m)) = address_space.find_mut(method) else {
-            return;
-        };
-        m.set_executable(true);
-        m.set_user_executable(true);
     }
 
     fn call_builtin_method(

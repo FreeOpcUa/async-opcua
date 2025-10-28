@@ -43,6 +43,16 @@ macro_rules! masked_or_default {
     };
 }
 
+macro_rules! masked_or_else {
+    ($attr:expr, $attrs:expr, $field:ident, $alt:expr) => {
+        if (1 << mask($attr)) & $attrs.specified_attributes != 0 {
+            $attrs.$field
+        } else {
+            $alt
+        }
+    };
+}
+
 macro_rules! masked_or_default_opt {
     ($attr:expr, $attrs:expr, $field:ident) => {
         if (1 << mask($attr)) & $attrs.specified_attributes != 0 {
@@ -126,8 +136,8 @@ pub fn new_node_from_attributes(
         })),
         AddNodeAttributes::Method(a) => NodeType::Method(Box::new(Method {
             base: base!(a, node_id, node_class, browse_name, NodeClass::Method),
-            executable: masked_or_default!(AttributeId::Executable, a, executable),
-            user_executable: masked_or_default!(AttributeId::UserExecutable, a, user_executable),
+            executable: masked_or_else!(AttributeId::Executable, a, executable, true),
+            user_executable: masked_or_else!(AttributeId::UserExecutable, a, user_executable, true),
         })),
         AddNodeAttributes::ObjectType(a) => NodeType::ObjectType(Box::new(ObjectType {
             base: base!(a, node_id, node_class, browse_name, NodeClass::ObjectType),

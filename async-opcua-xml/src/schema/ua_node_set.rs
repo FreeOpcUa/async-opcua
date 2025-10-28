@@ -794,8 +794,8 @@ impl<'input> XmlLoad<'input> for UAMethod {
         Ok(Self {
             base: UAInstance::load(node)?,
             arguments: children_with_name(node, "ArgumentDescription")?,
-            executable: value_from_attr_opt(node, "Executable")?.unwrap_or(false),
-            user_executable: value_from_attr_opt(node, "UserExecutable")?.unwrap_or(false),
+            executable: value_from_attr_opt(node, "Executable")?.unwrap_or(true),
+            user_executable: value_from_attr_opt(node, "UserExecutable")?.unwrap_or(true),
             method_declaration_id: value_from_attr_opt(node, "MethodDeclarationId")?,
         })
     }

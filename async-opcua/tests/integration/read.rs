@@ -263,7 +263,6 @@ async fn read_method() {
         tester.handle.type_tree(),
         MethodBuilder::new(&id, "TestMethod1", "TestMethod1")
             .description("Description")
-            .executable(true)
             .user_executable(false)
             .write_mask(WriteMask::DISPLAY_NAME)
             .build()

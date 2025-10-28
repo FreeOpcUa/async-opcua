@@ -28,8 +28,6 @@ pub fn add_methods(manager: Arc<SimpleNodeManager>, ns: u16) {
     let fn_node_id = NodeId::new(ns, "NoOp");
     MethodBuilder::new(&fn_node_id, "NoOp", "NoOp")
         .component_of(object_id.clone())
-        .executable(true)
-        .user_executable(true)
         .insert(&mut *address_space);
     manager.inner().add_method_callback(fn_node_id, |_| {
         debug!("NoOp method called");
@@ -40,8 +38,6 @@ pub fn add_methods(manager: Arc<SimpleNodeManager>, ns: u16) {
     let fn_node_id = NodeId::new(ns, "HelloWorld");
     MethodBuilder::new(&fn_node_id, "HelloWorld", "HelloWorld")
         .component_of(object_id.clone())
-        .executable(true)
-        .user_executable(true)
         .output_args(
             &mut *address_space,
             &NodeId::new(ns, "HelloWorldOutput"),
@@ -57,8 +53,6 @@ pub fn add_methods(manager: Arc<SimpleNodeManager>, ns: u16) {
     let fn_node_id = NodeId::new(ns, "HelloX");
     MethodBuilder::new(&fn_node_id, "HelloX", "HelloX")
         .component_of(object_id.clone())
-        .executable(true)
-        .user_executable(true)
         .input_args(
             &mut *address_space,
             &NodeId::new(ns, "HelloXInput"),
@@ -86,8 +80,6 @@ pub fn add_methods(manager: Arc<SimpleNodeManager>, ns: u16) {
     let fn_node_id = NodeId::new(ns, "Boop");
     MethodBuilder::new(&fn_node_id, "Boop", "Boop")
         .component_of(object_id.clone())
-        .executable(true)
-        .user_executable(true)
         .input_args(
             &mut *address_space,
             &NodeId::new(ns, "BoopInput"),

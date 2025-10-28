@@ -29,8 +29,6 @@ async fn call_trivial() {
     {
         let mut sp = nm.address_space().write();
         MethodBuilder::new(&id, "TestMethod1", "TestMethod1")
-            .executable(true)
-            .user_executable(true)
             .component_of(ObjectId::ObjectsFolder)
             .input_args(&mut *sp, &input_id, &[])
             .output_args(&mut *sp, &output_id, &[])
@@ -65,8 +63,6 @@ async fn call_args() {
     {
         let mut sp = nm.address_space().write();
         MethodBuilder::new(&id, "MethodAdd", "MethodAdd")
-            .executable(true)
-            .user_executable(true)
             .component_of(ObjectId::ObjectsFolder)
             .input_args(
                 &mut *sp,
@@ -140,7 +136,6 @@ async fn call_fail() {
     {
         let mut sp = nm.address_space().write();
         MethodBuilder::new(&id, "MethodAdd", "MethodAdd")
-            .executable(true)
             .user_executable(false)
             .component_of(ObjectId::ObjectsFolder)
             .input_args(

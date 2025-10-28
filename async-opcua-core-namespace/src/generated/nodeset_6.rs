@@ -135,8 +135,8 @@ fn make_method_2388(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -173,8 +173,8 @@ fn make_method_2390(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -211,8 +211,8 @@ fn make_method_2404(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -254,8 +254,8 @@ fn make_method_2407(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -297,8 +297,8 @@ fn make_method_2410(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -330,8 +330,8 @@ fn make_method_2411(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -363,8 +363,8 @@ fn make_method_2412(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -406,8 +406,8 @@ fn make_method_2415(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -444,8 +444,8 @@ fn make_method_2417(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -477,8 +477,8 @@ fn make_method_2437(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -515,8 +515,8 @@ fn make_method_2440(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -548,8 +548,8 @@ fn make_method_2442(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -586,8 +586,8 @@ fn make_method_2445(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -619,8 +619,8 @@ fn make_method_2447(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -657,8 +657,8 @@ fn make_method_2450(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -690,8 +690,8 @@ fn make_method_2453(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -728,8 +728,8 @@ fn make_method_2456(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -766,8 +766,8 @@ fn make_method_2459(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -799,8 +799,8 @@ fn make_method_2461(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -832,8 +832,8 @@ fn make_method_2470(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -870,8 +870,8 @@ fn make_method_2473(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -903,8 +903,8 @@ fn make_method_2475(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -941,8 +941,8 @@ fn make_method_2478(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -974,8 +974,8 @@ fn make_method_2480(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -1012,8 +1012,8 @@ fn make_method_2483(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -1045,8 +1045,8 @@ fn make_method_2486(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -1083,8 +1083,8 @@ fn make_method_2489(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -1121,8 +1121,8 @@ fn make_method_2492(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -1154,8 +1154,8 @@ fn make_method_2494(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -1187,8 +1187,8 @@ fn make_method_2503(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -1225,8 +1225,8 @@ fn make_method_2506(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -1258,8 +1258,8 @@ fn make_method_2508(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -1296,8 +1296,8 @@ fn make_method_2511(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -1329,8 +1329,8 @@ fn make_method_2513(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -1367,8 +1367,8 @@ fn make_method_2516(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -1400,8 +1400,8 @@ fn make_method_2519(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -1438,8 +1438,8 @@ fn make_method_2522(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -1476,8 +1476,8 @@ fn make_method_2525(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -1509,8 +1509,8 @@ fn make_method_2527(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -1542,8 +1542,8 @@ fn make_method_2538(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -1580,8 +1580,8 @@ fn make_method_2541(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![opcua::nodes::ImportedReference {
@@ -1606,8 +1606,8 @@ fn make_method_2542(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![opcua::nodes::ImportedReference {
@@ -1632,8 +1632,8 @@ fn make_method_2543(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -1670,8 +1670,8 @@ fn make_method_2546(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -1703,8 +1703,8 @@ fn make_method_2548(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![opcua::nodes::ImportedReference {
@@ -1729,8 +1729,8 @@ fn make_method_2560(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -1772,8 +1772,8 @@ fn make_method_2564(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -1810,8 +1810,8 @@ fn make_method_2573(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -1853,8 +1853,8 @@ fn make_method_2576(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -1891,8 +1891,8 @@ fn make_method_2578(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -1924,8 +1924,8 @@ fn make_method_2729(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -1967,8 +1967,8 @@ fn make_method_2732(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -2010,8 +2010,8 @@ fn make_method_2736(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -2053,8 +2053,8 @@ fn make_method_2739(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -2091,8 +2091,8 @@ fn make_method_2742(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -2134,8 +2134,8 @@ fn make_method_2745(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -2172,8 +2172,8 @@ fn make_method_2749(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -2215,8 +2215,8 @@ fn make_method_2752(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -2253,8 +2253,8 @@ fn make_method_2754(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -2296,8 +2296,8 @@ fn make_method_2757(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -2334,8 +2334,8 @@ fn make_method_2766(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -2377,8 +2377,8 @@ fn make_method_2769(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -2415,8 +2415,8 @@ fn make_method_2771(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -2458,8 +2458,8 @@ fn make_method_2774(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -2496,8 +2496,8 @@ fn make_method_2783(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -2529,8 +2529,8 @@ fn make_method_2784(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -2562,8 +2562,8 @@ fn make_method_2801(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -2605,8 +2605,8 @@ fn make_method_2804(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -2648,8 +2648,8 @@ fn make_method_2807(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -2681,8 +2681,8 @@ fn make_method_2810(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -2724,8 +2724,8 @@ fn make_method_2813(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -2762,8 +2762,8 @@ fn make_method_2815(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -2805,8 +2805,8 @@ fn make_method_2818(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -2843,8 +2843,8 @@ fn make_method_2829(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -2886,8 +2886,8 @@ fn make_method_2832(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -2929,8 +2929,8 @@ fn make_method_2835(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -2962,8 +2962,8 @@ fn make_method_2836(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -3005,8 +3005,8 @@ fn make_method_2839(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -3043,8 +3043,8 @@ fn make_method_2841(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -3086,8 +3086,8 @@ fn make_method_2844(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -3124,8 +3124,8 @@ fn make_method_2857(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -3162,8 +3162,8 @@ fn make_method_2859(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -3205,8 +3205,8 @@ fn make_method_2862(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -3243,8 +3243,8 @@ fn make_method_2871(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -3286,8 +3286,8 @@ fn make_method_2874(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -3324,8 +3324,8 @@ fn make_method_2876(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -3367,8 +3367,8 @@ fn make_method_2879(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -3405,8 +3405,8 @@ fn make_method_2881(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -3448,8 +3448,8 @@ fn make_method_2884(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -3486,8 +3486,8 @@ fn make_method_2886(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -3529,8 +3529,8 @@ fn make_method_2889(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -3572,8 +3572,8 @@ fn make_method_2904(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -3605,8 +3605,8 @@ fn make_method_2955(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -3643,8 +3643,8 @@ fn make_method_2958(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -3681,8 +3681,8 @@ fn make_method_2962(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -3719,8 +3719,8 @@ fn make_method_2965(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -3752,8 +3752,8 @@ fn make_method_2968(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -3790,8 +3790,8 @@ fn make_method_2971(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -3823,8 +3823,8 @@ fn make_method_2973(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![
@@ -3856,8 +3856,8 @@ fn make_method_2975(
                 Some(0u32),
                 Some(0u32),
             ),
-            false,
-            false,
+            true,
+            true,
         )
         .into(),
         references: vec![

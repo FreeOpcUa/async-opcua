@@ -52,6 +52,7 @@ pub trait Config: serde::Serialize {
     }
 
     /// Load the configuration object from the given path.
+    #[cfg(feature = "env_expansion")]
     fn load<A>(path: &Path) -> Result<A, ConfigError>
     where
         for<'de> A: Config + serde::Deserialize<'de>,
@@ -59,14 +60,20 @@ pub trait Config: serde::Serialize {
         let mut f = File::open(path)?;
         let mut s = String::new();
         f.read_to_string(&mut s)?;
+        let mut value: serde_yaml::Value = serde_yaml::from_str(&s)?;
+        expand_env_in_value(&mut value);
+        return Ok(serde_yaml::from_value(value)?);
+    }
 
-        #[cfg(feature = "env_expansion")]
-        {
-            s = shellexpand::env(&s)
-                .map_err(|e| ConfigError::IO(std::io::Error::other(e)))?
-                .to_string();
-        }
-
+    /// Load the configuration object from the given path.
+    #[cfg(not(feature = "env_expansion"))]
+    fn load<A>(path: &Path) -> Result<A, ConfigError>
+    where
+        for<'de> A: Config + serde::Deserialize<'de>,
+    {
+        let mut f = File::open(path)?;
+        let mut s = String::new();
+        f.read_to_string(&mut s)?;
         Ok(serde_yaml::from_str(&s)?)
     }
 
@@ -101,5 +108,38 @@ pub trait Config: serde::Serialize {
             discovery_profile_uri: UAString::null(),
             discovery_urls: self.discovery_urls(),
         }
+    }
+}
+
+#[cfg(feature = "env_expansion")]
+fn expand_env_in_value(value: &mut serde_yaml::Value) {
+    use serde_yaml::Value;
+    match value {
+        Value::String(s) => {
+            *value = match shellexpand::env(s) {
+                Ok(expanded) => match expanded.as_ref() {
+                    "null" | "~" => Value::Null,
+                    expanded_str => expanded_str
+                        .parse::<bool>()
+                        .map(Value::Bool)
+                        .or_else(|_| expanded_str.parse::<i64>().map(|i| Value::Number(i.into())))
+                        .or_else(|_| expanded_str.parse::<u64>().map(|u| Value::Number(u.into())))
+                        .or_else(|_| expanded_str.parse::<f64>().map(|f| Value::Number(f.into())))
+                        .unwrap_or_else(|_| Value::String(expanded.to_string())),
+                },
+                Err(_) => Value::Null,
+            }
+        }
+        Value::Sequence(seq) => {
+            for v in seq {
+                expand_env_in_value(v);
+            }
+        }
+        Value::Mapping(map) => {
+            for (_k, v) in map.iter_mut() {
+                expand_env_in_value(v);
+            }
+        }
+        _ => (),
     }
 }

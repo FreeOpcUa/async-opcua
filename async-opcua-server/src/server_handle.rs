@@ -10,7 +10,7 @@ use tracing::info;
 use opcua_core::sync::RwLock;
 use opcua_types::{AttributeId, DataValue, LocalizedText, ServerState, VariableId};
 
-use crate::ServerStatusWrapper;
+use crate::{reverse_connect::ReverseConnectHandle, ServerStatusWrapper};
 
 use super::{
     info::ServerInfo, node_manager::NodeManagers, session::manager::SessionManager,
@@ -29,6 +29,7 @@ pub struct ServerHandle {
     type_tree: Arc<RwLock<DefaultTypeTree>>,
     token: CancellationToken,
     status: Arc<ServerStatusWrapper>,
+    reverse_connect: ReverseConnectHandle,
 }
 
 impl ServerHandle {
@@ -42,6 +43,7 @@ impl ServerHandle {
         type_tree: Arc<RwLock<DefaultTypeTree>>,
         status: Arc<ServerStatusWrapper>,
         token: CancellationToken,
+        reverse_connect: ReverseConnectHandle,
     ) -> Self {
         Self {
             info,
@@ -52,6 +54,7 @@ impl ServerHandle {
             type_tree,
             status,
             token,
+            reverse_connect,
         }
     }
 
@@ -127,5 +130,23 @@ impl ServerHandle {
             tokio::time::sleep_until(deadline.into()).await;
             token.cancel();
         });
+    }
+
+    /// Add a reverse connect target to the server.
+    /// If a target with the same ID has already been added, this does nothing.
+    pub fn add_reverse_connect_target(
+        &self,
+        target: crate::reverse_connect::ReverseConnectTargetConfig,
+    ) {
+        self.reverse_connect.add_target(target);
+    }
+
+    /// Remove a reverse connect target from the server.
+    /// If the target does not exist, this does nothing.
+    ///
+    /// This will not disconnect any existing connections to the target,
+    /// only prevent new ones from being established.
+    pub fn remove_reverse_connect_target(&self, id: &str) {
+        self.reverse_connect.remove_target(id);
     }
 }

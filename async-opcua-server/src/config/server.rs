@@ -239,6 +239,10 @@ pub struct ServerConfig {
     /// Length of the nonce generated for CreateSession responses.
     #[serde(default = "defaults::session_nonce_length")]
     pub session_nonce_length: usize,
+    /// Delay in milliseconds before attempting to connect to a reverse connect target,
+    /// if the previous attempt failed.
+    #[serde(default = "defaults::reverse_connect_failure_delay_ms")]
+    pub reverse_connect_failure_delay_ms: u64,
 }
 
 mod defaults {
@@ -266,6 +270,10 @@ mod defaults {
 
     pub(super) fn session_nonce_length() -> usize {
         32
+    }
+
+    pub(super) fn reverse_connect_failure_delay_ms() -> u64 {
+        30_000
     }
 }
 
@@ -397,6 +405,7 @@ impl Default for ServerConfig {
             max_session_timeout_ms: defaults::max_session_timeout_ms(),
             diagnostics: false,
             session_nonce_length: defaults::session_nonce_length(),
+            reverse_connect_failure_delay_ms: defaults::reverse_connect_failure_delay_ms(),
         }
     }
 }

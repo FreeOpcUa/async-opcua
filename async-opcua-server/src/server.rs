@@ -19,7 +19,7 @@ use tokio::{
     task::{JoinError, JoinHandle},
 };
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use opcua_core::{config::Config, handle::AtomicHandle};
 use opcua_crypto::CertificateStore;
@@ -27,8 +27,12 @@ use opcua_crypto::CertificateStore;
 use crate::{
     diagnostics::ServerDiagnostics,
     node_manager::{DefaultTypeTreeGetter, ServerContext},
+    reverse_connect::{self, ReverseConnectionManager},
     session::controller::{ControllerCommand, SessionStarter},
-    transport::tcp::{TcpConnector, TransportConfig},
+    transport::{
+        tcp::{TcpConnector, TransportConfig},
+        ReverseTcpConnector,
+    },
     ServerStatusWrapper,
 };
 use opcua_types::{DateTime, LocalizedText, ServerState, UAString};
@@ -74,6 +78,9 @@ pub struct Server {
     session_notify: Arc<Notify>,
     /// Wrapper managing the `ServerStatus` server variable.
     status: Arc<ServerStatusWrapper>,
+    /// Manager for reverse connections. This does nothing unless users register
+    /// reverse connect targets.
+    reverse_connect_manager: ReverseConnectionManager,
 }
 
 impl Server {
@@ -203,6 +210,11 @@ impl Server {
             session_notify.clone(),
         )));
 
+        let (reverse_connect_manager, reverse_connect_handle) =
+            reverse_connect::ReverseConnectionManager::new(Duration::from_millis(
+                config.reverse_connect_failure_delay_ms,
+            ));
+
         let handle = ServerHandle::new(
             info.clone(),
             service_level,
@@ -212,6 +224,7 @@ impl Server {
             type_tree.clone(),
             status_wrapper.clone(),
             builder.token.clone(),
+            reverse_connect_handle,
         );
         Ok((
             Self {
@@ -226,6 +239,7 @@ impl Server {
                 token: builder.token,
                 session_notify,
                 status: status_wrapper.clone(),
+                reverse_connect_manager,
             },
             handle,
         ))
@@ -367,7 +381,7 @@ impl Server {
                             );
 
                             let (send, recv) = tokio::sync::mpsc::channel(5);
-                            let handle = tokio::spawn(conn.run(recv).map(move |_| connection_counter));
+                            let handle = tokio::spawn(conn.run(recv, |_| {}).map(move |_| connection_counter));
                             self.connections.push(handle);
                             self.connection_map.insert(connection_counter, ConnectionInfo {
                                 command_send: send
@@ -378,6 +392,46 @@ impl Server {
                             error!("Failed to accept client connection: {:?}", e);
                         }
                     }
+                }
+                rev_connect = self.reverse_connect_manager.wait_for_connection() => {
+                    debug!("Attempting reverse connection to {:?}", rev_connect.target.address);
+                    let conn = SessionStarter::new(
+                        ReverseTcpConnector::new(
+                            TransportConfig {
+                                    send_buffer_size: self.info.config.limits.send_buffer_size,
+                                    max_message_size: self.info.config.limits.max_message_size,
+                                    max_chunk_count: self.info.config.limits.max_chunk_count,
+                                    receive_buffer_size: self.info.config.limits.receive_buffer_size,
+                                    hello_timeout: Duration::from_secs(self.info.config.tcp_config.hello_timeout as u64),
+                                },
+                            self.info.decoding_options(),
+                            rev_connect.target.address,
+                            self.info.application_uri.to_string(),
+                            rev_connect.target.endpoint_url,
+                        ),
+                        self.info.clone(),
+                        self.session_manager.clone(),
+                        self.certificate_store.clone(),
+                        self.node_managers.clone(),
+                        self.subscriptions.clone()
+                    );
+
+                    // We need to make sure that the reverse connect handle is passed
+                    // to the connection task, so that we can signal the result of the connection attempt
+                    // back to the reverse connect manager.
+                    let (send, recv) = tokio::sync::mpsc::channel(5);
+                    let rev_handle = rev_connect.handle;
+                    let handle = tokio::spawn(async move {
+                        conn.run(recv, |status| {
+                            rev_handle.set_result(status);
+                        }).await;
+                        connection_counter
+                    });
+                    self.connections.push(handle);
+                    self.connection_map.insert(connection_counter, ConnectionInfo {
+                        command_send: send
+                    });
+                    connection_counter += 1;
                 }
                 _ = self.token.cancelled() => {
                     for conn in self.connection_map.values() {

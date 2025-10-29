@@ -116,7 +116,11 @@ impl<T: Connector> SessionStarter<T> {
         }
     }
 
-    pub(crate) async fn run(self, mut command: tokio::sync::mpsc::Receiver<ControllerCommand>) {
+    pub(crate) async fn run(
+        self,
+        mut command: tokio::sync::mpsc::Receiver<ControllerCommand>,
+        on_connect: impl FnOnce(StatusCode) + Send,
+    ) {
         let token = CancellationToken::new();
         let span = tracing::info_span!("Establish TCP channel");
         let fut = self
@@ -138,6 +142,7 @@ impl<T: Connector> SessionStarter<T> {
                 match r {
                     Ok(t) => t,
                     Err(e) => {
+                        on_connect(e);
                         span.in_scope(|| {
                             tracing::error!("Connection failed while waiting for channel to be established: {e}");
                         });

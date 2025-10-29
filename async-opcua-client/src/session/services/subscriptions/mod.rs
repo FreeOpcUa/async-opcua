@@ -344,6 +344,7 @@ impl<'a> MonitoredItemMap<'a> {
         }
     }
 
+    /// get monitored item by client handle
     pub fn get(&self, client_handle: u32) -> Option<&'a MonitoredItem> {
         self.client_handles
             .get(&client_handle)

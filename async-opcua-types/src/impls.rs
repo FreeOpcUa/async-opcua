@@ -353,30 +353,21 @@ impl ServiceCounterDataType {
     }
 }
 
+#[allow(clippy::derivable_impls, reason = "This is for generated code")]
 impl Default for PerformUpdateType {
     fn default() -> Self {
         Self::Insert
     }
 }
 
-impl Default for NumericRange {
-    fn default() -> Self {
-        Self::None
-    }
-}
-
-/* impl Default for ServerState {
-    fn default() -> Self {
-        Self::Shutdown
-    }
-} */
-
+#[allow(clippy::derivable_impls, reason = "This is for generated code")]
 impl Default for HistoryUpdateType {
     fn default() -> Self {
         Self::Insert
     }
 }
 
+#[allow(clippy::derivable_impls, reason = "This is for generated code")]
 impl Default for IdentityCriteriaType {
     fn default() -> Self {
         Self::Anonymous

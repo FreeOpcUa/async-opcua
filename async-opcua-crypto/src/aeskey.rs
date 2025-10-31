@@ -7,10 +7,9 @@
 use std::result::Result;
 
 use aes;
-use aes::cipher::{
-    block_padding::NoPadding, generic_array::GenericArray, BlockDecryptMut, BlockEncryptMut,
-    KeyIvInit,
-};
+#[expect(deprecated)]
+use aes::cipher::generic_array::GenericArray;
+use aes::cipher::{block_padding::NoPadding, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
 use cbc;
 
 use opcua_types::status_code::StatusCode;
@@ -27,7 +26,9 @@ const AES_BLOCK_SIZE: usize = 16;
 const AES128_KEY_SIZE: usize = 16;
 const AES256_KEY_SIZE: usize = 32;
 
+#[expect(deprecated)]
 type AesArray128 = GenericArray<u8, <aes::Aes128 as aes::cipher::BlockSizeUser>::BlockSize>;
+#[expect(deprecated)]
 type AesArray256 = GenericArray<u8, <aes::Aes256 as aes::cipher::KeySizeUser>::KeySize>;
 
 type EncryptResult = Result<usize, Error>;
@@ -80,7 +81,9 @@ impl AesKey {
     fn encrypt_aes128_cbc(&self, src: &[u8], iv: &[u8], dst: &mut [u8]) -> EncryptResult {
         self.validate_aes_args(src, iv, dst)?;
         Aes128CbcEnc::new(
+            #[expect(deprecated)]
             AesArray128::from_slice(&self.value),
+            #[expect(deprecated)]
             AesArray128::from_slice(iv),
         )
         .encrypt_padded_b2b_mut::<NoPadding>(src, dst)
@@ -91,7 +94,9 @@ impl AesKey {
     fn encrypt_aes256_cbc(&self, src: &[u8], iv: &[u8], dst: &mut [u8]) -> EncryptResult {
         self.validate_aes_args(src, iv, dst)?;
         Aes256CbcEnc::new(
+            #[expect(deprecated)]
             AesArray256::from_slice(&self.value),
+            #[expect(deprecated)]
             AesArray128::from_slice(iv),
         )
         .encrypt_padded_b2b_mut::<NoPadding>(src, dst)
@@ -102,7 +107,9 @@ impl AesKey {
     fn decrypt_aes128_cbc(&self, src: &[u8], iv: &[u8], dst: &mut [u8]) -> EncryptResult {
         self.validate_aes_args(src, iv, dst)?;
         Aes128CbcDec::new(
+            #[expect(deprecated)]
             AesArray128::from_slice(&self.value),
+            #[expect(deprecated)]
             AesArray128::from_slice(iv),
         )
         .decrypt_padded_b2b_mut::<NoPadding>(src, dst)
@@ -113,7 +120,9 @@ impl AesKey {
     fn decrypt_aes256_cbc(&self, src: &[u8], iv: &[u8], dst: &mut [u8]) -> EncryptResult {
         self.validate_aes_args(src, iv, dst)?;
         Aes256CbcDec::new(
+            #[expect(deprecated)]
             AesArray256::from_slice(&self.value),
+            #[expect(deprecated)]
             AesArray128::from_slice(iv),
         )
         .decrypt_padded_b2b_mut::<NoPadding>(src, dst)

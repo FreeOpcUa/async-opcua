@@ -21,6 +21,7 @@ chrono = { workspace = true }
 parking_lot = { workspace = true }
 serde = { workspace = true }
 serde_yaml = { workspace = true }
+shellexpand = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
@@ -30,5 +31,11 @@ url = { workspace = true }
 async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.16.0" }
 async-opcua-types = { path = "../async-opcua-types", version = "0.16.0" }
 
+[dev-dependencies]
+tempfile = { version = "^3" }
+
 [lints]
 workspace = true
+
+[features]
+env_expansion = ["dep:shellexpand"]

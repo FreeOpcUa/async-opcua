@@ -181,6 +181,18 @@ async fn main() {
 }
 ```
 
+##### Variable expansion in the config file
+
+**Note**: environment variable expansion is opt-in: you can enable it by passing `--features env_expansion` to `cargo build`.
+
+The `.conf` file supports basic environment variable expansion. Both `$VARIABLE` and `${VARIABLE}` syntax are supported and interpolated into the values provided by the environment variables. If no environment variable with that name is set, loading the config file errors.
+
+Default values for unset environment variables can be provided with `${UNSET_VARIABLE:-default_value}`. Set but empty environment variables will be used instead of the default. Nested expansion is not supported -- in case `UNSET_VARIABLE` is not set, `default_value` is taken as is and not tried to expand.
+
+Using `$$` twice is used to escape the expansion and render a single `$` in the parsed config.
+
+Other, more advanced shell-expansion features are not supported.
+
 #### TCP Configuration
 
 The default TCP config uses an address / port of `localhost` and `4855`. If you intend for your server to be remotely accessible then explicitly set the address to the assigned IP address or resolvable hostname for the network adapter your server will listen on.

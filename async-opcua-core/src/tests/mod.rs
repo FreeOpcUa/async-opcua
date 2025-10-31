@@ -1,5 +1,7 @@
 #![cfg_attr(coverage, allow(unused))]
 
+mod env_expansion;
+
 use std::cmp::PartialEq;
 use std::fmt::Debug;
 use std::io::Cursor;

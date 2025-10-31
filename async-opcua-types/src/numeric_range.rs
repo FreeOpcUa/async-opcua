@@ -52,9 +52,10 @@ impl std::error::Error for NumericRangeError {}
 ///
 /// All indexes start with `0`. The maximum value for any index is one less than the length of the
 /// dimension.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum NumericRange {
     /// None
+    #[default]
     None,
     /// A single index
     Index(u32),

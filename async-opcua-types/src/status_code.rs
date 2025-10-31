@@ -481,6 +481,7 @@ value_enum_impl!(
     None = 0b00,
 );
 
+#[allow(clippy::derivable_impls)]
 impl Default for StatusCodeLimit {
     fn default() -> Self {
         Self::None
@@ -498,6 +499,7 @@ value_enum_impl!(
     Bad = 0b10,
 );
 
+#[allow(clippy::derivable_impls)]
 impl Default for StatusCodeSeverity {
     fn default() -> Self {
         Self::Good

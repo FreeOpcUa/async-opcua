@@ -6,9 +6,10 @@ mod nodeset;
 mod types;
 mod utils;
 
+use std::path::PathBuf;
 use std::{collections::HashSet, io::Write, path::Path};
 
-use config::{load_schemas, CodeGenSource};
+use config::load_schemas;
 pub use error::CodeGenError;
 use ids::generate_node_ids;
 use nodeset::{generate_events, generate_target, make_root_module};
@@ -22,6 +23,17 @@ use utils::{create_module_file, GeneratedOutput};
 pub use crate::ids::NodeIdCodeGenTarget;
 pub use crate::nodeset::{DependentNodeset, EventsTarget, NodeSetCodeGenTarget, NodeSetTypes};
 pub use crate::types::{ExternalIds, ExternalType, TypeCodeGenTarget};
+pub use config::CodeGenSource;
+
+fn join_paths(root: &str, path: &str) -> PathBuf {
+    let root = Path::new(root);
+    let path = Path::new(path);
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        root.join(path)
+    }
+}
 
 /// Write all generated items to the specified directory. Each generated item maps to one
 /// file. Returns the list of generated modules, which need to be added to the mod.rs file.
@@ -33,21 +45,22 @@ fn write_to_directory<T: GeneratedOutput>(
 ) -> Result<Vec<String>, CodeGenError> {
     let mut modules = Vec::new();
     let mut modules_seen = HashSet::new();
-    let dir = format!("{root_path}/{dir}");
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir)
-        .map_err(|e| CodeGenError::io(&format!("Failed to create dir {dir}"), e))?;
+    let dir_path = join_paths(root_path, dir);
+    let _ = std::fs::remove_dir_all(&dir_path);
+
+    std::fs::create_dir_all(&dir_path)
+        .map_err(|e| CodeGenError::io(&format!("Failed to create dir {}", dir), e))?;
 
     items.sort_by_key(|a| a.name().to_lowercase());
 
     for gen in items {
         let module = gen.module().to_owned();
-        let path = Path::new(&format!("{dir}/{module}.rs")).to_owned();
+        let path = dir_path.join(format!("{module}.rs"));
         let is_new = !path.exists();
         let mut file = std::fs::File::options()
             .append(true)
             .create(true)
-            .open(format!("{dir}/{module}.rs"))
+            .open(dir_path.join(format!("{module}.rs")))
             .map_err(|e| CodeGenError::io(&format!("Failed to open file {dir}/{module}.rs"), e))?;
         if is_new {
             file.write_all(header.as_bytes()).map_err(|e| {
@@ -74,10 +87,11 @@ pub fn write_module_file(
     header: &str,
     file: File,
 ) -> Result<(), CodeGenError> {
+    let mod_path = join_paths(root_path, dir).join("mod.rs");
     let mut mod_file = std::fs::File::options()
         .append(true)
         .create(true)
-        .open(format!("{}/{}/{}", root_path, dir, "mod.rs"))
+        .open(mod_path)
         .map_err(|e| CodeGenError::io(&format!("Failed to open file {dir}/mod.rs"), e))?;
     mod_file
         .write_all(header.as_bytes())
@@ -140,7 +154,10 @@ pub fn run_codegen(config: &CodeGenConfig, root_path: &str) -> Result<(), CodeGe
                     .iter()
                     .filter_map(|v| v.encoding_ids.as_ref().map(|i| (i.clone(), v.name.clone())))
                     .collect();
-                let id_path: syn::Path = parse_str(&t.id_path)?;
+                let id_path: syn::Path = parse_str(&t.id_path).map_err(|e| {
+                    CodeGenError::from(e)
+                        .with_context(format!("Failed to parse id_path: {}", t.id_path))
+                })?;
                 for (name, typ) in t.types_import_map.iter() {
                     if typ.add_to_type_loader {
                         object_ids.push((
@@ -210,11 +227,12 @@ pub fn run_codegen(config: &CodeGenConfig, root_path: &str) -> Result<(), CodeGe
             CodeGenTarget::Ids(n) => {
                 info!("Running node ID code generation for {}", n.file_path);
                 let gen = generate_node_ids(n, root_path).map_err(|e| e.in_file(&n.file_path))?;
+                let out_path = join_paths(root_path, &n.output_file);
                 let mut file = std::fs::File::options()
                     .create(true)
                     .truncate(true)
                     .write(true)
-                    .open(format!("{}/{}", root_path, &n.output_file))
+                    .open(out_path)
                     .map_err(|e| {
                         CodeGenError::io(&format!("Failed to open file {}", n.output_file), e)
                     })?;

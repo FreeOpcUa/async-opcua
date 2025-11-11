@@ -3,10 +3,15 @@
 #![allow(clippy::disallowed_names)]
 #![allow(clippy::derivable_impls)]
 
-use crate::generated::SimpleEnum;
+use crate::generated::base::SimpleEnum;
 
 pub mod generated {
-    include!(concat!(env!("OPCUA_GENERATED_DIR"), "/mod.rs"));
+    pub mod base {
+        include!(concat!(env!("OPCUA_GENERATED_DIR"), "/base/mod.rs"));
+    }
+    pub mod ext {
+        include!(concat!(env!("OPCUA_GENERATED_DIR"), "/ext/mod.rs"));
+    }
 }
 
 impl Default for SimpleEnum {

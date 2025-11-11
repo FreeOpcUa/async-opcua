@@ -92,6 +92,11 @@ targets:
     # This is useful if the nodeset lacks node ID CSV files, or those files are incomplete.
     node_ids_from_nodeset: false
 
+    dependent_nodesets:
+      # This can be a path, filename, or primary namespace URI.
+      - file: Another.Namespace.Uri
+        import_path: crate::generated::another_namespace
+
   # This target generates code to generate nodes that are added to the server address space.
   # Each node in the NodeSet2 file creates a function, which is then called from
   # a large iterator that can be used as a a node set source.

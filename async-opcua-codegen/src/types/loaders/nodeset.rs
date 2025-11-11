@@ -5,7 +5,7 @@ use opcua_xml::schema::ua_node_set::{DataTypeField, LocalizedText, UADataType, U
 use crate::{
     input::{NodeSetInput, SchemaCache, TypeInfo},
     utils::{split_qualified_name, to_snake_case, NodeIdVariant, ParsedNodeId},
-    CodeGenError,
+    CodeGenError, BASE_NAMESPACE,
 };
 
 use super::{
@@ -67,7 +67,10 @@ impl<'a> NodeSetTypeLoader<'a> {
         } else if info.name == "Structure" || info.name == "OptionSet" {
             FieldType::ExtensionObject(Some(info.encoding_ids))
         } else {
-            FieldType::Normal(info.name)
+            FieldType::Normal {
+                name: info.name,
+                namespace: Some(info.namespace),
+            }
         }
     }
 
@@ -283,6 +286,7 @@ impl<'a> NodeSetTypeLoader<'a> {
                 is_abstract: false,
                 definition: None,
                 encoding_ids: Default::default(),
+                namespace: BASE_NAMESPACE.to_owned(),
             })
         } else {
             Ok(r)

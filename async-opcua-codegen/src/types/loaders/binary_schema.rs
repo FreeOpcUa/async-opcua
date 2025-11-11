@@ -51,7 +51,10 @@ impl<'a> BsdTypeLoader<'a> {
     fn get_field_type(field: &str) -> FieldType {
         match field {
             "ExtensionObject" | "OptionSet" => FieldType::ExtensionObject(None),
-            _ => FieldType::Normal(field.to_owned()),
+            _ => FieldType::Normal {
+                name: field.to_owned(),
+                namespace: None,
+            },
         }
     }
 
@@ -114,7 +117,10 @@ impl<'a> BsdTypeLoader<'a> {
                 Some("ua:ExtensionObject" | "ua:OptionSet") => {
                     Some(FieldType::ExtensionObject(None))
                 }
-                Some(base) => Some(FieldType::Normal(self.massage_type_name(base))),
+                Some(base) => Some(FieldType::Normal {
+                    name: self.massage_type_name(base),
+                    namespace: Some(self.target_namespace()),
+                }),
                 None => None,
             },
             is_union: false,

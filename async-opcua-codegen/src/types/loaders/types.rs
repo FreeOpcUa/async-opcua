@@ -18,14 +18,24 @@ pub struct StructureField {
 pub enum FieldType {
     Abstract(#[allow(unused)] String),
     ExtensionObject(Option<RawEncodingIds>),
-    Normal(String),
+    Normal {
+        name: String,
+        namespace: Option<String>,
+    },
 }
 
 impl FieldType {
     pub fn as_type_str(&self) -> &str {
         match self {
             FieldType::Abstract(_) | FieldType::ExtensionObject(_) => "ExtensionObject",
-            FieldType::Normal(s) => s,
+            FieldType::Normal { name, .. } => name,
+        }
+    }
+
+    pub fn namespace(&self) -> Option<&str> {
+        match self {
+            FieldType::Normal { namespace, .. } => namespace.as_deref(),
+            _ => None,
         }
     }
 }

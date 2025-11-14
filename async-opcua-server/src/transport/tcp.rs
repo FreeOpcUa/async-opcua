@@ -111,6 +111,21 @@ impl TcpConnector {
         }
     }
 
+    pub(super) fn new_split(
+        read: FramedRead<ReadHalf<TcpStream>, TcpCodec>,
+        write: WriteHalf<TcpStream>,
+        config: TransportConfig,
+        decoding_options: DecodingOptions,
+    ) -> Self {
+        TcpConnector {
+            read,
+            write,
+            deadline: Instant::now() + config.hello_timeout,
+            config,
+            decoding_options,
+        }
+    }
+
     async fn connect_inner(&mut self, info: Arc<ServerInfo>) -> Result<SendBuffer, ErrorMessage> {
         let hello = match self.read.next().await {
             Some(Ok(Message::Hello(hello))) => Ok(hello),

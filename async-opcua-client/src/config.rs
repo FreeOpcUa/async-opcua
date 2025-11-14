@@ -702,7 +702,7 @@ mod tests {
     }
 
     fn default_sample_config() -> ClientConfig {
-        sample_builder().config()
+        sample_builder().into_config()
     }
 
     #[test]

@@ -39,10 +39,18 @@ impl ClientBuilder {
         }
     }
 
+    /// Get a reference to the internal [`ClientConfig`].
+    pub fn config(&self) -> &ClientConfig {
+        &self.config
+    }
+
+    /// Get a mutable reference to the internal [`ClientConfig`].
+    pub fn config_mut(&mut self) -> &mut ClientConfig {
+        &mut self.config
+    }
+
     /// Yields a [`ClientConfig`] from the values set by the builder.
-    ///
-    /// [`ClientConfig`]: ../config/struct.ClientConfig.html
-    pub fn config(self) -> ClientConfig {
+    pub fn into_config(self) -> ClientConfig {
         self.config
     }
 

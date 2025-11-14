@@ -91,20 +91,7 @@ impl SchemaCache {
             match ext.to_string_lossy().as_ref() {
                 "xsd" => self.load_xml_schema(&path_str)?,
                 "bsd" => self.load_binary_schema(&path_str)?,
-                "xml" => {
-                    // Check if there is a file on the form <filename>.documentation.csv
-                    let docs_path = if path.with_extension("documentation.csv").exists() {
-                        Some(
-                            relative_path
-                                .with_extension("documentation.csv")
-                                .to_string_lossy()
-                                .into_owned(),
-                        )
-                    } else {
-                        None
-                    };
-                    self.load_nodeset(&path_str, docs_path.as_deref())?
-                }
+                "xml" => self.load_nodeset(&path_str)?,
                 _ => {}
             }
         }
@@ -147,12 +134,8 @@ impl SchemaCache {
         Ok(())
     }
 
-    pub fn load_nodeset(
-        &mut self,
-        file_path: &str,
-        docs_path: Option<&str>,
-    ) -> Result<(), CodeGenError> {
-        let nodeset = NodeSetInput::load(&self.root_path, file_path, docs_path)?;
+    pub fn load_nodeset(&mut self, file_path: &str) -> Result<(), CodeGenError> {
+        let nodeset = NodeSetInput::load(&self.root_path, file_path)?;
         let idx = self.nodesets.insert(nodeset.uri.clone(), nodeset);
         self.nodesets.add_file_aliases(file_path, idx);
         Ok(())

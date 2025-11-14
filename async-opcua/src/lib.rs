@@ -21,18 +21,26 @@ pub use opcua_core::sync;
 pub use opcua_macros::{Event, EventField};
 
 #[cfg(feature = "client")]
+#[doc(inline)]
 pub use opcua_client as client;
 #[cfg(feature = "server")]
+#[doc(inline)]
 pub use opcua_nodes as nodes;
 #[cfg(feature = "server")]
+#[doc(inline)]
 pub use opcua_server as server;
 
+#[doc(inline)]
 pub use opcua_core as core;
+#[doc(inline)]
 pub use opcua_crypto as crypto;
+#[doc(inline)]
 pub use opcua_types as types;
 
 #[cfg(feature = "xml")]
+#[doc(inline)]
 pub use opcua_xml as xml;
 
 #[cfg(feature = "generated-address-space")]
+#[doc(inline)]
 pub use opcua_core_namespace as core_namespace;

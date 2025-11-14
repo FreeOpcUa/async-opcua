@@ -13,10 +13,7 @@ pub enum ExplicitCodeGenSource {
     Binary { path: String },
     #[serde(rename = "node-set")]
     /// NodeSet2.xml files.
-    NodeSet {
-        path: String,
-        documentation: Option<String>,
-    },
+    NodeSet { path: String },
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -51,11 +48,8 @@ pub fn load_schemas(
                 ExplicitCodeGenSource::Binary { path } => {
                     cache.load_binary_schema(path)?;
                 }
-                ExplicitCodeGenSource::NodeSet {
-                    path,
-                    documentation,
-                } => {
-                    cache.load_nodeset(path, documentation.as_deref())?;
+                ExplicitCodeGenSource::NodeSet { path } => {
+                    cache.load_nodeset(path)?;
                 }
             },
         }

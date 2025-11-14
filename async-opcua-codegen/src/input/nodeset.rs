@@ -48,8 +48,6 @@ pub struct NodeSetInput {
     pub uri: String,
     pub required_model_uris: Vec<String>,
     /// Map from numeric ID to documentation link.
-    #[expect(unused)]
-    pub documentation: Option<HashMap<i64, String>>,
     pub referenced_xsd_schemas: HashSet<String>,
     pub path: String,
     pub namespaces: Vec<String>,
@@ -126,7 +124,7 @@ impl NodeSetInput {
         self.aliases.get(alias).map(|s| s.as_str()).unwrap_or(alias)
     }
 
-    pub fn parse(data: &str, path: &str, docs: Option<&str>) -> Result<Self, CodeGenError> {
+    pub fn parse(data: &str, path: &str) -> Result<Self, CodeGenError> {
         let nodeset = load_nodeset2_file(data)?;
 
         let Some(nodeset) = nodeset.node_set else {
@@ -162,24 +160,6 @@ impl NodeSetInput {
             nodeset.nodes.len(),
         );
 
-        let documentation = if let Some(docs) = docs {
-            let mut res = HashMap::new();
-            for line in docs.lines() {
-                let vals: Vec<_> = line.split(',').collect();
-                if vals.len() >= 3 {
-                    res.insert(vals[0].parse()?, vals[2].to_owned());
-                } else {
-                    return Err(CodeGenError::other(format!(
-                        "CSV file is on incorrect format. Expected at least three columns, got {}",
-                        vals.len()
-                    )));
-                }
-            }
-            Some(res)
-        } else {
-            None
-        };
-
         let xsd_uris = Self::find_referenced_xsd_schemas(&nodeset);
 
         let mut namespaces = Vec::new();
@@ -200,7 +180,6 @@ impl NodeSetInput {
             xml: nodeset,
             aliases: aliases.unwrap_or_default(),
             required_model_uris,
-            documentation,
             referenced_xsd_schemas: xsd_uris,
             path: path.to_owned(),
             parent_type_ids: OnceLock::new(),
@@ -210,20 +189,10 @@ impl NodeSetInput {
         })
     }
 
-    pub fn load(
-        root_path: &str,
-        file_path: &str,
-        docs_path: Option<&str>,
-    ) -> Result<Self, CodeGenError> {
+    pub fn load(root_path: &str, file_path: &str) -> Result<Self, CodeGenError> {
         let data = std::fs::read_to_string(format!("{root_path}/{file_path}"))
             .map_err(|e| CodeGenError::io(&format!("Failed to read file {file_path}"), e))?;
-        let docs = docs_path
-            .map(|p| {
-                std::fs::read_to_string(format!("{root_path}/{p}"))
-                    .map_err(|e| CodeGenError::io(&format!("Failed to read file {p}"), e))
-            })
-            .transpose()?;
-        Self::parse(&data, file_path, docs.as_deref()).map_err(|e| e.in_file(file_path))
+        Self::parse(&data, file_path).map_err(|e| e.in_file(file_path))
     }
 
     pub fn validate(&self, cache: &SchemaCache) -> Result<(), CodeGenError> {

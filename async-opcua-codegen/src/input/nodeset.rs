@@ -31,6 +31,7 @@ pub struct RawEncodingIds {
 #[derive(Debug, Clone)]
 pub struct TypeInfo {
     pub name: String,
+    pub namespace: String,
     pub is_abstract: bool,
     pub definition: Option<DataTypeDefinition>,
     pub encoding_ids: RawEncodingIds,
@@ -346,6 +347,7 @@ impl NodeSetInput {
                             is_abstract: data_type.base.is_abstract,
                             definition: data_type.definition.clone(),
                             encoding_ids,
+                            namespace: self.uri.clone(),
                         },
                     );
                 }

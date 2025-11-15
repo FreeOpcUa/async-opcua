@@ -23,7 +23,7 @@ use tracing::info;
 
 use crate::{
     input::{BinarySchemaInput, NodeSetInput, SchemaCache},
-    CodeGenError, BASE_NAMESPACE,
+    CodeGenError, DependentNodeset, BASE_NAMESPACE,
 };
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -60,6 +60,9 @@ pub struct TypeCodeGenTarget {
     #[serde(default)]
     /// If true, instead of using `id_path` and ID enums, generate the node IDs from the nodeset file.
     pub node_ids_from_nodeset: bool,
+    /// List of dependent nodesets to load types from. Only valid when using a NodeSet input.
+    #[serde(default)]
+    pub dependent_nodesets: Vec<DependentNodeset>,
 }
 
 impl Default for TypeCodeGenTarget {
@@ -75,6 +78,7 @@ impl Default for TypeCodeGenTarget {
             extra_header: String::new(),
             id_path: defaults::id_path(),
             node_ids_from_nodeset: false,
+            dependent_nodesets: Vec::new(),
         }
     }
 }
@@ -120,7 +124,7 @@ pub fn generate_types(
         .map_err(|e| e.in_file(&input.path))?;
     info!("Loaded {} types", types.len());
 
-    generate_types_inner(target, target_namespace, types)
+    generate_types_inner(target, target_namespace, types, HashMap::new())
 }
 
 /// Generate types from the given NodeSet file input.
@@ -149,13 +153,21 @@ pub fn generate_types_nodeset(
     let types = type_loader.load_types(cache)?;
     info!("Loaded {} types", types.len());
 
-    generate_types_inner(target, target_namespace, types)
+    let mut namespace_to_import_path = HashMap::new();
+    for dependent_nodeset in &target.dependent_nodesets {
+        let dep_input = cache.get_nodeset(&dependent_nodeset.file)?;
+        namespace_to_import_path
+            .insert(dep_input.uri.clone(), dependent_nodeset.import_path.clone());
+    }
+
+    generate_types_inner(target, target_namespace, types, namespace_to_import_path)
 }
 
 fn generate_types_inner(
     target: &TypeCodeGenTarget,
     target_namespace: String,
     types: Vec<LoadedType>,
+    namespace_to_import_path: HashMap<String, String>,
 ) -> Result<(Vec<GeneratedItem>, String), CodeGenError> {
     let mut types_import_map = basic_types_import_map();
     for (k, v) in &target.types_import_map {
@@ -179,6 +191,7 @@ fn generate_types_inner(
         },
         target_namespace.clone(),
         target.id_path.clone(),
+        namespace_to_import_path,
     );
 
     Ok((generator.generate_types()?, target_namespace))

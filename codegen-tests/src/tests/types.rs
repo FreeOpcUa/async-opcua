@@ -21,14 +21,17 @@ use opcua::types::xml::XmlEncodable;
 use opcua::xml::XmlStreamReader;
 use opcua::xml::XmlStreamWriter;
 
-use crate::generated::enums::*;
-use crate::generated::structs::*;
+use crate::generated::base::enums::*;
+use crate::generated::base::structs::*;
+use crate::generated::ext::structs::*;
 
 fn ctx() -> ContextOwned {
     let mut namespaces = NamespaceMap::new();
     namespaces.add_namespace("http://github.com/freeopcua/async-opcua/codegen-tests");
+    namespaces.add_namespace("http://github.com/freeopcua/async-opcua/codegen-tests/ext");
     let mut loaders = TypeLoaderCollection::new();
-    loaders.add_type_loader(crate::generated::GeneratedTypeLoader);
+    loaders.add_type_loader(crate::generated::base::GeneratedTypeLoader);
+    loaders.add_type_loader(crate::generated::ext::GeneratedTypeLoader);
     let ctx_owned = ContextOwned::new(namespaces, loaders, DecodingOptions::default());
     ctx_owned
 }
@@ -191,6 +194,31 @@ fn test_container_struct() {
                 description: "Second unit".into(),
             },
         ]),
+    };
+    encoding_roundtrip_extension_object(s);
+}
+
+#[test]
+fn test_external_struct() {
+    let s = ExtStruct {
+        simple: SimpleStruct {
+            foo: "hello".into(),
+            bar: 42,
+            baz: true,
+            simple_enum: SimpleEnum::Bar,
+            numbers: Some(vec![1.0, 2.0, 3.0]),
+        },
+        extended: ExtendedStruct {
+            foo: "hello".into(),
+            bar: 42,
+            baz: true,
+            simple_enum: SimpleEnum::Bar,
+            numbers: Some(vec![1.0, 2.0, 3.0]),
+            bar_2: -12345,
+            foo_2: "world".into(),
+        },
+        baz: true,
+        simple_enum: SimpleEnum::Foo,
     };
     encoding_roundtrip_extension_object(s);
 }

@@ -95,9 +95,11 @@ pub struct CodeGenerator {
     target_namespace: String,
     native_types: HashSet<String>,
     id_path: String,
+    namespace_to_import_path: HashMap<String, String>,
 }
 
 impl CodeGenerator {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         external_import_map: HashMap<String, ExternalType>,
         native_types: HashSet<String>,
@@ -106,6 +108,7 @@ impl CodeGenerator {
         config: CodeGenItemConfig,
         target_namespace: String,
         id_path: String,
+        namespace_to_import_path: HashMap<String, String>,
     ) -> Self {
         Self {
             import_map: external_import_map
@@ -119,7 +122,10 @@ impl CodeGenerator {
                                 Some("ExtensionObject" | "OptionSet") => {
                                     Some(FieldType::ExtensionObject(None))
                                 }
-                                Some(t) => Some(FieldType::Normal(t.to_owned())),
+                                Some(t) => Some(FieldType::Normal {
+                                    name: t.to_owned(),
+                                    namespace: None,
+                                }),
                                 None => None,
                             },
                             path: v.path,
@@ -137,6 +143,7 @@ impl CodeGenerator {
             target_namespace,
             native_types,
             id_path,
+            namespace_to_import_path,
         }
     }
 
@@ -159,7 +166,7 @@ impl CodeGenerator {
         }
 
         let Some(it) = self.import_map.get(name) else {
-            // Not in the import map means it's a builtin, we assume these have defaults for now.
+            // Not in the import map means it's a builtin or external reference, we assume these have defaults for now.
             return true;
         };
 
@@ -175,8 +182,8 @@ impl CodeGenerator {
             LoadedType::Struct(s) => {
                 for k in &s.fields {
                     let has_default = match &k.typ {
-                        StructureFieldType::Field(FieldType::Normal(f)) => {
-                            self.is_default_recursive(f)
+                        StructureFieldType::Field(FieldType::Normal { name, .. }) => {
+                            self.is_default_recursive(name)
                         }
                         StructureFieldType::Array(_) | StructureFieldType::Field(_) => true,
                     };
@@ -279,7 +286,7 @@ impl CodeGenerator {
     }
 
     /// Get the fully qualified path of a type, by looking it up in the import map.
-    fn get_type_path(&self, name: &str) -> String {
+    fn get_type_path(&self, name: &str, namespace: Option<&str>) -> String {
         // Type is known, use the external path.
         if let Some(ext) = self.import_map.get(name) {
             return format!("{}::{}", ext.path, name);
@@ -287,6 +294,12 @@ impl CodeGenerator {
         // Is it a native type?
         if self.native_types.contains(name) {
             return name.to_owned();
+        }
+
+        if let Some(namespace) = namespace {
+            if let Some(import_path) = self.namespace_to_import_path.get(namespace) {
+                return format!("{}::{}", import_path, name);
+            }
         }
         // Assume the type is a builtin.
         format!("opcua::types::{name}")
@@ -548,7 +561,7 @@ impl CodeGenerator {
     fn is_extension_object(&self, typ: Option<&FieldType>) -> bool {
         let name = match &typ {
             Some(FieldType::Abstract(_)) | Some(FieldType::ExtensionObject(_)) => return true,
-            Some(FieldType::Normal(s)) => s,
+            Some(FieldType::Normal { name, .. }) => name,
             None => return false,
         };
         let name = match name.split_once(":") {
@@ -596,18 +609,22 @@ impl CodeGenerator {
 
         for field in item.visible_fields() {
             let typ: Type = match &field.typ {
-                StructureFieldType::Field(f) => {
-                    syn::parse_str(&self.get_type_path(f.as_type_str())).map_err(|e| {
-                        CodeGenError::from(e)
-                            .with_context(format!("Generating path for {}", f.as_type_str()))
-                    })?
-                }
+                StructureFieldType::Field(f) => syn::parse_str(
+                    &self.get_type_path(f.as_type_str(), f.namespace()),
+                )
+                .map_err(|e| {
+                    CodeGenError::from(e)
+                        .with_context(format!("Generating path for {}", f.as_type_str()))
+                })?,
                 StructureFieldType::Array(f) => {
                     let path: Path =
-                        syn::parse_str(&self.get_type_path(f.as_type_str())).map_err(|e| {
-                            CodeGenError::from(e)
-                                .with_context(format!("Generating path for {}", f.as_type_str()))
-                        })?;
+                        syn::parse_str(&self.get_type_path(f.as_type_str(), f.namespace()))
+                            .map_err(|e| {
+                                CodeGenError::from(e).with_context(format!(
+                                    "Generating path for {}",
+                                    f.as_type_str()
+                                ))
+                            })?;
                     parse_quote! { Option<Vec<#path>> }
                 }
             };

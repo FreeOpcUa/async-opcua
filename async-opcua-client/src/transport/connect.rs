@@ -1,8 +1,9 @@
 use std::{future::Future, sync::Arc};
 
 use async_trait::async_trait;
-use opcua_core::{comms::secure_channel::SecureChannel, sync::RwLock};
 use opcua_types::{EndpointDescription, Error, StatusCode};
+
+use crate::transport::state::SecureChannelState;
 
 use super::{
     tcp::{TcpTransport, TransportConfiguration},
@@ -23,7 +24,7 @@ pub trait Connector: Send + Sync {
     /// calling `run` on the returned transport in order to actually send and receive messages.
     async fn connect(
         &self,
-        channel: Arc<RwLock<SecureChannel>>,
+        channel: Arc<SecureChannelState>,
         outgoing_recv: tokio::sync::mpsc::Receiver<OutgoingMessage>,
         config: TransportConfiguration,
     ) -> Result<TcpTransport, StatusCode>;

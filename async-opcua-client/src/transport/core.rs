@@ -5,16 +5,17 @@ use std::time::Instant;
 use futures::future::Either;
 use opcua_core::comms::sequence_number::SequenceNumberHandle;
 use opcua_core::{trace_read_lock, trace_write_lock, RequestMessage, ResponseMessage};
-use parking_lot::RwLock;
 use tracing::{debug, error, trace, warn};
 
 use opcua_core::comms::buffer::SendBuffer;
 use opcua_core::comms::message_chunk::MessageIsFinalType;
 use opcua_core::comms::{
     chunker::Chunker, message_chunk::MessageChunk, message_chunk_info::ChunkInfo,
-    secure_channel::SecureChannel, tcp_codec::Message,
+    tcp_codec::Message,
 };
 use opcua_types::{Error, StatusCode};
+
+use crate::transport::state::SecureChannelState;
 
 #[derive(Debug)]
 struct MessageChunkWithChunkInfo {
@@ -34,7 +35,7 @@ pub(super) struct TransportState {
     /// State of pending requests
     message_states: HashMap<u32, MessageState>,
     /// Secure channel
-    pub(super) secure_channel: Arc<RwLock<SecureChannel>>,
+    pub(super) channel_state: Arc<SecureChannelState>,
     /// Max pending incoming messages
     max_chunk_count: usize,
     /// Last decoded sequence number
@@ -69,17 +70,18 @@ pub struct OutgoingMessage {
 
 impl TransportState {
     pub(super) fn new(
-        secure_channel: Arc<RwLock<SecureChannel>>,
+        channel_state: Arc<SecureChannelState>,
         outgoing_recv: tokio::sync::mpsc::Receiver<OutgoingMessage>,
         max_chunk_count: usize,
         receive_buffer_size: usize,
     ) -> Self {
-        let legacy_sequence_numbers = secure_channel
+        let legacy_sequence_numbers = channel_state
+            .secure_channel()
             .read()
             .security_policy()
             .legacy_sequence_numbers();
         Self {
-            secure_channel,
+            channel_state,
             outgoing_recv,
             message_states: HashMap::new(),
             sequence_numbers: SequenceNumberHandle::new(legacy_sequence_numbers),
@@ -180,7 +182,9 @@ impl TransportState {
     }
 
     fn process_chunk(&mut self, chunk: MessageChunk) -> Result<(), StatusCode> {
-        let mut secure_channel = trace_write_lock!(self.secure_channel);
+        let mut secure_channel = trace_write_lock!(self.channel_state.secure_channel());
+        // TODO: This is mut only because it _might_ be an open secure channel chunk. We should refactor
+        // this to avoid the write lock in most cases.
         let chunk = secure_channel.verify_and_remove_security(&chunk.data)?;
 
         let chunk_info = chunk.chunk_info(&secure_channel)?;
@@ -239,6 +243,13 @@ impl TransportState {
                 let in_chunks = Self::merge_chunks(message_state.chunks)?;
                 let message = self.turn_received_chunks_into_message(&in_chunks)?;
 
+                // If the message is a response to opening a secure channel, we need to update encryption keys
+                // right now. If we wait, we risk new messages using the new encryption keys arriving before
+                // we've updated the secure channel.
+                if let ResponseMessage::OpenSecureChannel(msg) = &message {
+                    self.channel_state.end_issue_or_renew_secure_channel(msg)?;
+                }
+
                 let _ = message_state.callback.send(Ok(message));
             }
         }
@@ -250,7 +261,7 @@ impl TransportState {
         chunks: &[MessageChunk],
     ) -> Result<ResponseMessage, Error> {
         // Validate that all chunks have incrementing sequence numbers and valid chunk types
-        let secure_channel = trace_read_lock!(self.secure_channel);
+        let secure_channel = trace_read_lock!(self.channel_state.secure_channel());
         self.sequence_numbers.set(Chunker::validate_chunks(
             self.sequence_numbers.clone(),
             &secure_channel,

@@ -1,6 +1,8 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use crate::transport::state::SecureChannelState;
+
 use super::connect::{Connector, Transport};
 use super::core::{OutgoingMessage, TransportPollResult, TransportState};
 use async_trait::async_trait;
@@ -180,15 +182,20 @@ impl TcpConnector {
 impl Connector for TcpConnector {
     async fn connect(
         &self,
-        channel: Arc<RwLock<SecureChannel>>,
+        channel: Arc<SecureChannelState>,
         outgoing_recv: tokio::sync::mpsc::Receiver<OutgoingMessage>,
         config: TransportConfiguration,
     ) -> Result<TcpTransport, StatusCode> {
-        let (framed_read, writer, ack, policy) =
-            match Self::connect_inner(&channel, &config, &self.endpoint_url).await {
-                Ok(k) => k,
-                Err(status) => return Err(status),
-            };
+        let (framed_read, writer, ack, policy) = match Self::connect_inner(
+            channel.secure_channel(),
+            &config,
+            &self.endpoint_url,
+        )
+        .await
+        {
+            Ok(k) => k,
+            Err(status) => return Err(status),
+        };
         let mut buffer = SendBuffer::new(
             config.send_buffer_size,
             config.max_message_size,
@@ -405,20 +412,22 @@ impl ReverseTcpConnector {
 impl Connector for ReverseTcpConnector {
     async fn connect(
         &self,
-        channel: Arc<RwLock<SecureChannel>>,
+        channel: Arc<SecureChannelState>,
         outgoing_recv: tokio::sync::mpsc::Receiver<OutgoingMessage>,
         config: TransportConfiguration,
     ) -> Result<TcpTransport, StatusCode> {
         let (framed_read, writer, ack, policy, endpoint_url) = match &self.listener {
             TcpConnectorReceiver::Listener(listener) => {
-                self.connect_inner(listener, &channel, &config).await?
+                self.connect_inner(listener, channel.secure_channel(), &config)
+                    .await?
             }
             TcpConnectorReceiver::Address(addr) => {
                 let listener = TcpListener::bind(addr).await.map_err(|err| {
                     error!("Could not bind to address {}, {:?}", addr, err);
                     StatusCode::BadCommunicationError
                 })?;
-                self.connect_inner(&listener, &channel, &config).await?
+                self.connect_inner(&listener, channel.secure_channel(), &config)
+                    .await?
             }
         };
 
@@ -487,7 +496,7 @@ impl TcpTransport {
         // If there's nothing in the send buffer, but there are chunks available,
         // write them to the send buffer before proceeding.
         if self.send_buffer.should_encode_chunks() {
-            let secure_channel = trace_read_lock!(self.state.secure_channel);
+            let secure_channel = trace_read_lock!(self.state.channel_state.secure_channel());
             if let Err(e) = self.send_buffer.encode_next_chunk(&secure_channel) {
                 return TransportPollResult::Closed(e);
             }
@@ -525,7 +534,7 @@ impl TcpTransport {
                         self.should_close = true;
                         debug!("Writer is about to send a CloseSecureChannelRequest which means it should close in a moment");
                     }
-                    let secure_channel = trace_read_lock!(self.state.secure_channel);
+                    let secure_channel = trace_read_lock!(self.state.channel_state.secure_channel());
                     if let Err(e) = self.send_buffer.write(request_id, outgoing, &secure_channel) {
                         drop(secure_channel);
                         if let Some((request_id, request_handle)) = e.full_context() {

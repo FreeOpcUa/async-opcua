@@ -1,6 +1,9 @@
 use std::{str::FromStr, sync::Arc, time::Duration};
 
-use crate::{session::EndpointInfo, transport::core::TransportPollResult};
+use crate::{
+    session::{process_unexpected_response, EndpointInfo},
+    transport::core::TransportPollResult,
+};
 use arc_swap::{ArcSwap, ArcSwapOption};
 use opcua_core::{
     comms::secure_channel::{Role, SecureChannel},
@@ -37,7 +40,7 @@ pub struct AsyncSecureChannel {
     pub(crate) secure_channel: Arc<RwLock<SecureChannel>>,
     certificate_store: Arc<RwLock<CertificateStore>>,
     transport_config: TransportConfiguration,
-    state: SecureChannelState,
+    state: Arc<SecureChannelState>,
     issue_channel_lock: tokio::sync::Mutex<()>,
     connector: Box<dyn Connector>,
     channel_lifetime: u32,
@@ -147,7 +150,11 @@ impl AsyncSecureChannel {
         Self {
             transport_config,
             issue_channel_lock: tokio::sync::Mutex::new(()),
-            state: SecureChannelState::new(ignore_clock_skew, secure_channel.clone(), auth_token),
+            state: Arc::new(SecureChannelState::new(
+                ignore_clock_skew,
+                secure_channel.clone(),
+                auth_token,
+            )),
             endpoint_info,
             secure_channel,
             certificate_store,
@@ -196,7 +203,9 @@ impl AsyncSecureChannel {
 
                 let resp = request.send().await?;
 
-                self.state.end_issue_or_renew_secure_channel(resp)?;
+                if !matches!(resp, ResponseMessage::OpenSecureChannel(_)) {
+                    return Err(process_unexpected_response(resp));
+                }
             }
 
             drop(guard);
@@ -258,7 +267,9 @@ impl AsyncSecureChannel {
         };
 
         self.request_send.store(Some(Arc::new(send)));
-        self.state.end_issue_or_renew_secure_channel(resp)?;
+        if !matches!(resp, ResponseMessage::OpenSecureChannel(_)) {
+            return Err(process_unexpected_response(resp));
+        }
 
         Ok(SecureChannelEventLoop { transport })
     }
@@ -305,11 +316,7 @@ impl AsyncSecureChannel {
             let (send, recv) = tokio::sync::mpsc::channel(MAX_INFLIGHT_MESSAGES);
             let transport = self
                 .connector
-                .connect(
-                    self.secure_channel.clone(),
-                    recv,
-                    self.transport_config.clone(),
-                )
+                .connect(self.state.clone(), recv, self.transport_config.clone())
                 .await?;
 
             Ok((transport, send))

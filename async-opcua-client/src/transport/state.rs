@@ -6,7 +6,7 @@ use std::{
 use tokio::sync::mpsc::error::SendTimeoutError;
 use tracing::{debug, trace};
 
-use crate::{session::process_unexpected_response, transport::OutgoingMessage};
+use crate::transport::OutgoingMessage;
 use arc_swap::ArcSwap;
 use opcua_core::{
     comms::secure_channel::SecureChannel, handle::AtomicHandle, sync::RwLock, trace_write_lock,
@@ -15,12 +15,13 @@ use opcua_core::{
 use opcua_crypto::SecurityPolicy;
 use opcua_types::{
     DateTime, DiagnosticBits, IntegerId, MessageSecurityMode, NodeId, OpenSecureChannelRequest,
-    RequestHeader, SecurityTokenRequestType, StatusCode,
+    OpenSecureChannelResponse, RequestHeader, SecurityTokenRequestType, StatusCode,
 };
 
 pub(crate) type RequestSend = tokio::sync::mpsc::Sender<OutgoingMessage>;
 
-pub(super) struct SecureChannelState {
+/// The state of the secure channel used by the transport.
+pub struct SecureChannelState {
     /// Time offset between the client and the server.
     client_offset: ArcSwap<chrono::Duration>,
     /// Ignore clock skew between the client and the server.
@@ -152,45 +153,41 @@ impl SecureChannelState {
 
     pub(super) fn end_issue_or_renew_secure_channel(
         &self,
-        response: ResponseMessage,
+        response: &OpenSecureChannelResponse,
     ) -> Result<(), StatusCode> {
-        if let ResponseMessage::OpenSecureChannel(response) = response {
-            // Extract the security token from the response.
-            let mut security_token = response.security_token.clone();
+        // Extract the security token from the response.
+        let mut security_token = response.security_token.clone();
 
-            // When ignoring clock skew, we calculate the time offset between the client and the
-            // server and use that offset to compensate for the difference in time when setting
-            // the timestamps in the request headers and when decoding timestamps in messages
-            // received from the server.
-            if self.ignore_clock_skew && !response.response_header.timestamp.is_null() {
-                let offset = response.response_header.timestamp - DateTime::now();
-                // Make sure to apply the offset to the security token in the current response.
-                security_token.created_at = security_token.created_at - offset;
-                // Update the client offset by adding the new offset. When the secure channel is
-                // renewed its already using the client offset calculated when issuing the secure
-                // channel and only needs to be updated to accommodate any additional clock skew.
-                self.set_client_offset(offset);
-            }
-
-            debug!("Setting transport's security token");
-            {
-                let mut secure_channel = trace_write_lock!(self.secure_channel);
-                secure_channel.set_client_offset(**self.client_offset.load());
-                secure_channel.set_security_token(security_token);
-
-                if secure_channel.security_policy() != SecurityPolicy::None
-                    && (secure_channel.security_mode() == MessageSecurityMode::Sign
-                        || secure_channel.security_mode() == MessageSecurityMode::SignAndEncrypt)
-                {
-                    secure_channel.validate_secure_channel_nonce_length(&response.server_nonce)?;
-                    secure_channel.set_remote_nonce_from_byte_string(&response.server_nonce)?;
-                    secure_channel.derive_keys();
-                }
-            }
-            Ok(())
-        } else {
-            Err(process_unexpected_response(response))
+        // When ignoring clock skew, we calculate the time offset between the client and the
+        // server and use that offset to compensate for the difference in time when setting
+        // the timestamps in the request headers and when decoding timestamps in messages
+        // received from the server.
+        if self.ignore_clock_skew && !response.response_header.timestamp.is_null() {
+            let offset = response.response_header.timestamp - DateTime::now();
+            // Make sure to apply the offset to the security token in the current response.
+            security_token.created_at = security_token.created_at - offset;
+            // Update the client offset by adding the new offset. When the secure channel is
+            // renewed its already using the client offset calculated when issuing the secure
+            // channel and only needs to be updated to accommodate any additional clock skew.
+            self.set_client_offset(offset);
         }
+
+        debug!("Setting transport's security token");
+        {
+            let mut secure_channel = trace_write_lock!(self.secure_channel);
+            secure_channel.set_client_offset(**self.client_offset.load());
+            secure_channel.set_security_token(security_token);
+
+            if secure_channel.security_policy() != SecurityPolicy::None
+                && (secure_channel.security_mode() == MessageSecurityMode::Sign
+                    || secure_channel.security_mode() == MessageSecurityMode::SignAndEncrypt)
+            {
+                secure_channel.validate_secure_channel_nonce_length(&response.server_nonce)?;
+                secure_channel.set_remote_nonce_from_byte_string(&response.server_nonce)?;
+                secure_channel.derive_keys();
+            }
+        }
+        Ok(())
     }
 
     /// Construct a request header for the session. All requests after create session are expected
@@ -212,5 +209,9 @@ impl SecureChannelState {
 
     pub(super) fn set_auth_token(&self, token: NodeId) {
         self.authentication_token.store(Arc::new(token));
+    }
+
+    pub fn secure_channel(&self) -> &RwLock<SecureChannel> {
+        &self.secure_channel
     }
 }

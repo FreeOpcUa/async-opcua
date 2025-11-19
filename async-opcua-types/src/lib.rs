@@ -277,7 +277,9 @@ pub mod response_header;
 pub mod status_code;
 pub mod string;
 pub mod type_loader;
+pub mod value_rank;
 pub mod variant;
+
 #[cfg(feature = "xml")]
 pub mod xml;
 

@@ -15,9 +15,9 @@ use opcua::{
     },
     sync::RwLock,
     types::{
-        AccessLevelExType, DataTypeId, DataValue, IdType, Identifier, LocalizedText, NodeClass,
-        NodeId, QualifiedName, ReferenceDescription, ReferenceTypeId, StatusCode,
-        TimestampsToReturn, VariableTypeId, Variant, WriteMask,
+        value_rank::ValueRank, AccessLevelExType, DataTypeId, DataValue, IdType, Identifier,
+        LocalizedText, NodeClass, NodeId, QualifiedName, ReferenceDescription, ReferenceTypeId,
+        StatusCode, TimestampsToReturn, VariableTypeId, Variant, WriteMask,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -492,7 +492,7 @@ impl TagNodeManager {
                     opcua::types::AttributeId::DataType => {
                         NodeId::from(tag.value.data_type()).into()
                     }
-                    opcua::types::AttributeId::ValueRank => (-1i32).into(),
+                    opcua::types::AttributeId::ValueRank => ValueRank::SCALAR.into(),
                     opcua::types::AttributeId::AccessLevel => {
                         AccessLevel::CURRENT_READ.bits().into()
                     }
@@ -534,9 +534,7 @@ impl TagNodeManager {
                     opcua::types::AttributeId::UserWriteMask => WriteMask::empty().bits().into(),
                     opcua::types::AttributeId::Value => meta.clone().into(),
                     opcua::types::AttributeId::DataType => NodeId::from(DataTypeId::String).into(),
-                    // TODO: Write a proper type for ValueRank. I messed up twice remembering what the
-                    // value for "scalar" was. Maybe a nice enum?
-                    opcua::types::AttributeId::ValueRank => (-1i32).into(),
+                    opcua::types::AttributeId::ValueRank => ValueRank::SCALAR.into(),
                     opcua::types::AttributeId::AccessLevel => {
                         AccessLevel::CURRENT_READ.bits().into()
                     }

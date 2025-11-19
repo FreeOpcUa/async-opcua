@@ -28,6 +28,7 @@ futures = "^0.3"
 gethostname = "^0.5"
 hashbrown = "^0.15"
 log = "^0.4"
+num-bigint-dig = "^0.8.6"
 parking_lot = { version = "^0.12", features = ["send_guard"] }
 postcard = { version = "^1", features = ["use-std"] }
 proc-macro2 = "^1"

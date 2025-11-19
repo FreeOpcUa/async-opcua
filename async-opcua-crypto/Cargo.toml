@@ -21,6 +21,7 @@ name = "opcua_crypto"
 [dependencies]
 chrono = { workspace = true }
 gethostname = { workspace = true }
+num-bigint-dig = { workspace = true }
 serde = { workspace = true }
 tracing = { workspace = true }
 

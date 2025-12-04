@@ -8,12 +8,18 @@ use gen::{EventGenerator, EventItem};
 use opcua_xml::schema::ua_node_set::UANodeSet;
 use syn::Item;
 
-use crate::{base_native_type_mappings, CodeGenError, GeneratedOutput, BASE_NAMESPACE};
+use crate::{
+    base_native_type_mappings, nodeset::XsdTypeWithPath, CodeGenError, GeneratedOutput,
+    BASE_NAMESPACE,
+};
 
 mod collector;
 mod gen;
 
-pub fn generate_events(nodesets: &[(&UANodeSet, &str)]) -> Result<Vec<EventItem>, CodeGenError> {
+pub fn generate_events(
+    nodesets: &[(&UANodeSet, &str)],
+    types: &HashMap<String, XsdTypeWithPath>,
+) -> Result<Vec<EventItem>, CodeGenError> {
     let mut pairs = Vec::new();
     let mut namespaces = Vec::new();
     namespaces.push(BASE_NAMESPACE.to_owned());
@@ -51,6 +57,7 @@ pub fn generate_events(nodesets: &[(&UANodeSet, &str)]) -> Result<Vec<EventItem>
 
     let gen = EventGenerator::new(
         collected,
+        types,
         &namespaces,
         base_native_type_mappings(),
         nodesets.len() - 1,

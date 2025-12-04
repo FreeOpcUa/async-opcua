@@ -53,8 +53,8 @@ To run:
 cd opcua/async-opcua
 rustup default nightly
 cargo fuzz list
-cargo fuzz run fuzz_deserialize
-cargo fuzz run fuzz_comms
+cargo fuzz run --features nightly fuzz_deserialize
+cargo fuzz run --features nightly fuzz_comms
 ```
 
 Future candidates for fuzzing might include:

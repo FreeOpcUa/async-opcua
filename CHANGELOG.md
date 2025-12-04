@@ -1,5 +1,52 @@
 # Changelog
 
+## [0.17.0] - 2025-12-04
+
+A number of important fixes, some affecting the core protocol. Improvements to codegen, support for reverse connect, and a few other features.
+
+### Common
+
+#### Fixed
+ - Treat empty remote certificate as missing during channel establishment.
+ - Treat empty as null in a few more cases. Some misbehaving clients or servers send empty values instead of null values, but we can treat them the same in a few cases.
+
+#### Added
+ - Add fallback type loader, enabled by default. This captures `ExtensionObject` payloads without a matching type loader.
+ - Added `NodeIdRef` and use this in a few places that accept `NodeId`s. This lets you pass, for example, `(1, "hello")` as a node ID, instead of needing to construct an owned copy.
+ - Add support for OPC-UA reverse connect.
+ - Add support for environment variable expansion in config files.
+ - Added a `ValueRank` type, which is convenient in both client and server applications.
+
+### Client
+
+#### Fixed
+ - Fixed nonces created as part of CreateSession, which fixes support for SHA128 legacy encryption.
+ - Correctly use `max_chunk_count` from config in the connection.
+ - Fixed issue that caused a race condition during secure channel renewal.
+
+#### Changed
+ - Certain errors from the subscription event loop are now forwarded to the main event loop, meaning that subscriptions can act as a keep alive in some cases.
+
+### Server
+
+#### Fixed
+ - Fixed issue causing the available sequence numbers sent to the client to not include the sequence number of the publish itself.
+
+#### Added
+ - Add support for OPC-UA reverse connect.
+
+#### Changed
+ - Delay notifications that arrived too early, to emulate actually sampling the data. This avoids losing information if values are reported irregularly.
+
+### Codegen
+
+#### Added
+ - Correctly set `DefaultEncodingId` in nodeset code generation.
+ - Add support for dependent nodesets during types codegen.
+
+#### Removed
+ - Removed unused functionality to load `documentation.csv` files as part of nodeset codegen.
+
 ## [0.16.0] - 2025-06-11
 
 Various fixes and adjustments. Support for `IssuedToken` authentication and `OfType` event filters.

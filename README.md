@@ -62,10 +62,10 @@ minimal client and server programs respectively.
 
 ```bash
 # In one bash
-cd opcua/samples/simple-server
+cd samples/simple-server
 cargo run
 # In another bash
-cd opcua/samples/simple-client
+cd samples/simple-client
 cargo run
 ```
 
@@ -79,3 +79,5 @@ The full list of samples:
 6. [`mqtt-client`](samples/mqtt-client) - an OPC UA client that subscribes to some values and publishes them to an MQTT broker.
 7. [`event-client`](samples/event-client) - an OPC UA client that will connect to a server and subscribe to alarms / events.
 8. [`node-managers`](samples/node-managers) - an OPC UA server exposing a simple simulated namespace using two custom node managers.
+9. [`custom-codegen`](samples/custom-codegen) - an OPC UA server that runs codegen on a companion standard and exposes custom types and a custom namespace.
+10. [`custom-structures-client`](samples/custom-structures-client) - an OPC UA client that connects to a server with a few different approaches for supporting custom structures.

@@ -1,6 +1,6 @@
 [package]
 name = "async-opcua"
-version = "0.16.0"
+version = "0.17.0"
 description = "OPC UA client and server API"
 authors = ["Adam Lock <locka99@gmail.com>", "Einar Omang <einar@omang.com>"]
 homepage = "https://github.com/freeopcua/async-opcua"
@@ -47,15 +47,15 @@ xml = ["async-opcua-types/xml", "async-opcua-nodes/xml", "async-opcua-xml"]
 [dependencies]
 chrono = { workspace = true }
 
-async-opcua-client = { path = "../async-opcua-client", optional = true, version = "0.16.0" }
-async-opcua-core = { path = "../async-opcua-core", version = "0.16.0" }
-async-opcua-core-namespace = { path = "../async-opcua-core-namespace", optional = true, version = "0.16.0" }
-async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.16.0" }
-async-opcua-macros = { path = "../async-opcua-macros", version = "0.16.0" }
-async-opcua-nodes = { path = "../async-opcua-nodes", optional = true, version = "0.16.0" }
-async-opcua-server = { path = "../async-opcua-server", optional = true, default-features = false, version = "0.16.0" }
-async-opcua-types = { path = "../async-opcua-types", version = "0.16.0" }
-async-opcua-xml = { path = "../async-opcua-xml", optional = true, version = "0.16.0" }
+async-opcua-client = { path = "../async-opcua-client", optional = true, version = "0.17.0" }
+async-opcua-core = { path = "../async-opcua-core", version = "0.17.0" }
+async-opcua-core-namespace = { path = "../async-opcua-core-namespace", optional = true, version = "0.17.0" }
+async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.17.0" }
+async-opcua-macros = { path = "../async-opcua-macros", version = "0.17.0" }
+async-opcua-nodes = { path = "../async-opcua-nodes", optional = true, version = "0.17.0" }
+async-opcua-server = { path = "../async-opcua-server", optional = true, default-features = false, version = "0.17.0" }
+async-opcua-types = { path = "../async-opcua-types", version = "0.17.0" }
+async-opcua-xml = { path = "../async-opcua-xml", optional = true, version = "0.17.0" }
 
 [dev-dependencies]
 async-trait = { workspace = true }

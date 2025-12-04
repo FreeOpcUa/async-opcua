@@ -6,6 +6,7 @@ use quote::quote;
 use syn::{parse_quote, Ident, ItemStruct, Path};
 
 use crate::{
+    nodeset::XsdTypeWithPath,
     utils::{safe_ident, ParsedNodeId},
     CodeGenError,
 };
@@ -19,6 +20,7 @@ pub struct EventGenerator<'a> {
     namespaces: &'a [String],
     type_mappings: HashMap<String, String>,
     nodeset_index: usize,
+    data_types: &'a HashMap<String, XsdTypeWithPath>,
 }
 
 pub struct EventItem {
@@ -29,6 +31,7 @@ pub struct EventItem {
 impl<'a> EventGenerator<'a> {
     pub fn new(
         types: HashMap<&'a str, CollectedType<'a>>,
+        data_types: &'a HashMap<String, XsdTypeWithPath>,
         namespaces: &'a [String],
         type_mappings: HashMap<String, String>,
         nodeset_index: usize,
@@ -38,6 +41,7 @@ impl<'a> EventGenerator<'a> {
             namespaces,
             type_mappings,
             nodeset_index,
+            data_types,
         }
     }
 
@@ -117,6 +121,19 @@ impl<'a> EventGenerator<'a> {
         .map_err(|e| e.with_context(format!("rendering type {}", ty.name)))
     }
 
+    fn get_type_path(&self, type_id: &str) -> Result<Path, CodeGenError> {
+        let (ident, _) = safe_ident(type_id);
+        let Some(typ) = self.data_types.get(type_id) else {
+            return Ok(parse_quote! {
+                opcua::types::#ident
+            });
+        };
+        let path = &typ.path;
+        Ok(parse_quote! {
+            #path::#ident
+        })
+    }
+
     fn get_data_type(&self, data_type_id: &str) -> Result<TokenStream, CodeGenError> {
         let Some(data_type) = self.types.get(data_type_id) else {
             return Err(CodeGenError::other(format!(
@@ -128,9 +145,8 @@ impl<'a> EventGenerator<'a> {
                 opcua::types::ExtensionObject
             })
         } else if data_type_id == "i=24" {
-            let ident = Ident::new("Variant", Span::call_site());
             Ok(quote! {
-                types::#ident
+                opcua::types::Variant
             })
         } else if let Some(mapped) = self.type_mappings.get(data_type.name) {
             if mapped == "UAString" {
@@ -144,9 +160,9 @@ impl<'a> EventGenerator<'a> {
                 })
             }
         } else {
-            let ident = Ident::new(data_type.name, Span::call_site());
+            let path = self.get_type_path(data_type.name)?;
             Ok(quote! {
-                types::#ident
+                #path
             })
         }
     }

@@ -29,7 +29,7 @@ pub struct NodeSetCodeGenerator<'a> {
     empty_text: LocalizedText,
     aliases: &'a HashMap<String, String>,
     node_counter: usize,
-    types: HashMap<String, XsdTypeWithPath>,
+    types: &'a HashMap<String, XsdTypeWithPath>,
     type_info: &'a HashMap<ParsedNodeId, TypeInfo>,
 }
 
@@ -37,7 +37,7 @@ impl<'a> NodeSetCodeGenerator<'a> {
     pub fn new(
         preferred_locale: &str,
         aliases: &'a HashMap<String, String>,
-        types: HashMap<String, XsdTypeWithPath>,
+        types: &'a HashMap<String, XsdTypeWithPath>,
         type_info: &'a HashMap<ParsedNodeId, TypeInfo>,
     ) -> Result<Self, CodeGenError> {
         Ok(Self {
@@ -268,7 +268,7 @@ impl<'a> NodeSetCodeGenerator<'a> {
         let data_type = self.resolve_node_id(&node.data_type)?;
         let historizing = node.historizing;
         let value_rank = node.value_rank.0;
-        let value = render_value(node.value.as_ref(), &self.types)?;
+        let value = render_value(node.value.as_ref(), self.types)?;
         let access_level = node.access_level.0;
         let user_access_level = node.user_access_level.0;
         let array_dimensions = self
@@ -337,7 +337,7 @@ impl<'a> NodeSetCodeGenerator<'a> {
         let data_type = self.resolve_node_id(&node.data_type)?;
         let is_abstract = node.base.is_abstract;
         let value_rank = node.value_rank.0;
-        let value = render_value(node.value.as_ref(), &self.types)?;
+        let value = render_value(node.value.as_ref(), self.types)?;
         let array_dimensions = self
             .parse_array_dimensions(&node.array_dimensions)?
             .as_ref()

@@ -21,6 +21,7 @@ use types::{generate_types, generate_types_nodeset, type_loader_impl, EncodingId
 use utils::{create_module_file, GeneratedOutput};
 
 pub use crate::ids::NodeIdCodeGenTarget;
+use crate::nodeset::make_type_dict;
 pub use crate::nodeset::{DependentNodeset, EventsTarget, NodeSetCodeGenTarget, NodeSetTypes};
 pub use crate::types::{ExternalIds, ExternalType, TypeCodeGenTarget};
 pub use config::CodeGenSource;
@@ -182,7 +183,9 @@ pub fn run_codegen(config: &CodeGenConfig, root_path: &str) -> Result<(), CodeGe
                 let node_set = cache.get_nodeset(&n.file)?;
                 info!("Found {} nodes in node set", node_set.xml.nodes.len());
 
-                let chunks = generate_target(n, node_set, &config.preferred_locale, &cache)
+                let types = make_type_dict(n, &cache).map_err(|e| e.in_file(&node_set.path))?;
+
+                let chunks = generate_target(n, node_set, &config.preferred_locale, &types)
                     .map_err(|e| e.in_file(&node_set.path))?;
                 let module_file = make_root_module(&chunks, n, node_set)
                     .map_err(|e| e.in_file(&node_set.path))?;
@@ -205,7 +208,7 @@ pub fn run_codegen(config: &CodeGenConfig, root_path: &str) -> Result<(), CodeGe
 
                     sets.push((&node_set.xml, ""));
 
-                    let events = generate_events(&sets)?;
+                    let events = generate_events(&sets, &types)?;
                     let cnt = events.len();
                     let header = make_header(
                         &node_set.path,

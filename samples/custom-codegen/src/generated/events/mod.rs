@@ -5,10 +5,5 @@
 // OPCUA for Rust
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (C) 2017-2024 Einar Omang
-#[allow(unused)]
-mod types {
-    pub use crate::generated::types::*;
-    pub use ::opcua::types::*;
-}
 pub mod generated;
 pub use generated::*;

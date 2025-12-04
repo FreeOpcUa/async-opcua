@@ -81,7 +81,7 @@ pub struct EventsTarget {
 }
 
 /// Create a map of type name to type definition from the given codegen target.
-fn make_type_dict(
+pub fn make_type_dict(
     target: &NodeSetCodeGenTarget,
     cache: &SchemaCache,
 ) -> Result<HashMap<String, XsdTypeWithPath>, CodeGenError> {
@@ -176,9 +176,8 @@ pub fn generate_target(
     config: &NodeSetCodeGenTarget,
     input: &NodeSetInput,
     preferred_locale: &str,
-    cache: &SchemaCache,
+    types: &HashMap<String, XsdTypeWithPath>,
 ) -> Result<Vec<NodeSetChunk>, CodeGenError> {
-    let types = make_type_dict(config, cache)?;
     let type_info = input.get_type_names()?;
 
     let mut generator =

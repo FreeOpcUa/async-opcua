@@ -26,12 +26,6 @@ targets:
       dependent_nodesets:
         - file: Opc.Ua.NodeSet2.xml
           import_path: "opcua::core_namespace::events::"
-      extra_header: |
-        #[allow(unused)]
-        mod types {
-          pub use crate::generated::types::*;
-          pub use ::opcua::types::*;
-        }
   - type: ids
     file_path: schema/Opc.Ua.Pn.NodeIds.csv
     output_file: src/generated/node_ids.rs

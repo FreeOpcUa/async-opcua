@@ -84,18 +84,13 @@ The standard OPC UA address space is exposed through the `CoreNodeManager` imple
 
 ### Current limitations
 
-Currently the following are not supported
-
-* Multiple created sessions in a single transport.
-  * This should now technically be supported, but without any client that support it is not tested at all.
-
 ## Client
 
 The client API is asynchronous, but require you to "drive" the connection by polling an event loop. Convenience methods are provided for polling the event loop on a background thread.
 
 The client exposes functions that correspond to the current server supported profile, i.e. look above at the server services and there will be client-side functions that are analogous to those services.
 
-The client is only automatically tested against the server implementation, so primarily only services supported by the current server implementation are supported. The implementation aims to contain all services, tested against other servers where necessary.
+Primarily only services supported by the current server implementation are supported. The implementation aims to contain all services, tested against other servers where necessary.
 
 ## Configuration
 
@@ -128,6 +123,7 @@ The server and client support the following user identity tokens
 1. Anonymous - i.e. no identity
 2. UserName - encrypted and plaintext. User/pass identities are defined by configuration.
 3. X509 certificates
+4. IssuedToken - a framework necessary for supporting token based authentication such as OAuth
 
 ## Crypto
 

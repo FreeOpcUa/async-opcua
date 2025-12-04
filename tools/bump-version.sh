@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-cargo release version $(./release-package-args.sh) --execute $1
+cargo release version $(./tools/release-package-args.sh) --execute $1

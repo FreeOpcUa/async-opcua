@@ -1,6 +1,6 @@
 [package]
 name = "async-opcua-server"
-version = "0.16.0"
+version = "0.17.0"
 description = "OPC UA server API"
 authors = ["Adam Lock <locka99@gmail.com>", "Einar Omang <einar@omang.com>"]
 homepage = "https://github.com/freeopcua/async-opcua"
@@ -46,12 +46,12 @@ tokio-util = { workspace = true }
 tracing = { workspace = true }
 tracing-futures = { workspace = true }
 
-async-opcua-client = { path = "../async-opcua-client", optional = true, version = "0.16.0" }
-async-opcua-core = { path = "../async-opcua-core", version = "0.16.0" }
-async-opcua-core-namespace = { path = "../async-opcua-core-namespace", optional = true, version = "0.16.0" }
-async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.16.0" }
-async-opcua-nodes = { path = "../async-opcua-nodes", version = "0.16.0" }
-async-opcua-types = { path = "../async-opcua-types", version = "0.16.0" }
+async-opcua-client = { path = "../async-opcua-client", optional = true, version = "0.17.0" }
+async-opcua-core = { path = "../async-opcua-core", version = "0.17.0" }
+async-opcua-core-namespace = { path = "../async-opcua-core-namespace", optional = true, version = "0.17.0" }
+async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.17.0" }
+async-opcua-nodes = { path = "../async-opcua-nodes", version = "0.17.0" }
+async-opcua-types = { path = "../async-opcua-types", version = "0.17.0" }
 
 [dev-dependencies]
 async-opcua-server = { path = ".", features = [

@@ -684,20 +684,13 @@ impl SessionController {
 
         // Check the requested security mode
         debug!("Message security mode == {:?}", request.security_mode);
-        match request.security_mode {
-            MessageSecurityMode::None
-            | MessageSecurityMode::Sign
-            | MessageSecurityMode::SignAndEncrypt => {
-                // TODO validate NONCE
-            }
-            _ => {
-                error!("Security mode is invalid");
-                return Ok(ServiceFault::new(
-                    &request.request_header,
-                    StatusCode::BadSecurityModeRejected,
-                )
-                .into());
-            }
+        if matches!(request.security_mode, MessageSecurityMode::Invalid) {
+            error!("Security mode is invalid");
+            return Ok(ServiceFault::new(
+                &request.request_header,
+                StatusCode::BadSecurityModeRejected,
+            )
+            .into());
         }
 
         // Process the request

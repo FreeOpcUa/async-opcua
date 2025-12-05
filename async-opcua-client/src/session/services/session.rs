@@ -43,7 +43,7 @@ pub struct CreateSession<'a> {
     server_uri: UAString,
     endpoint_url: UAString,
     session_name: UAString,
-    client_certificate: ByteString,
+    client_certificate: Option<X509>,
     session_timeout: f64,
     max_response_message_size: u32,
     certificate_store: &'a RwLock<CertificateStore>,
@@ -65,11 +65,7 @@ impl<'a> CreateSession<'a> {
             server_uri: UAString::null(),
             client_description: session.application_description.clone(),
             session_name: session.session_name.clone(),
-            client_certificate: session
-                .channel
-                .read_own_certificate()
-                .map(|r| r.as_byte_string())
-                .unwrap_or_default(),
+            client_certificate: session.channel.read_own_certificate(),
             endpoint: &session.endpoint_info().endpoint,
             certificate_store: session.channel.certificate_store(),
             session_timeout: session.session_timeout,
@@ -93,7 +89,7 @@ impl<'a> CreateSession<'a> {
             server_uri: UAString::null(),
             client_description: ApplicationDescription::default(),
             session_name: UAString::null(),
-            client_certificate: ByteString::null(),
+            client_certificate: None,
             session_timeout: 0.0,
             max_response_message_size: 0,
             certificate_store,
@@ -128,19 +124,15 @@ impl<'a> CreateSession<'a> {
     }
 
     /// Set the client certificate.
-    pub fn client_certificate(mut self, client_certificate: ByteString) -> Self {
-        self.client_certificate = client_certificate;
+    pub fn client_certificate(mut self, client_certificate: X509) -> Self {
+        self.client_certificate = Some(client_certificate);
         self
     }
 
     /// Load the client certificate from the certificate store.
     pub fn client_cert_from_store(mut self, certificate_store: &RwLock<CertificateStore>) -> Self {
         let cert_store = trace_read_lock!(certificate_store);
-        self.client_certificate = cert_store
-            .read_own_cert()
-            .ok()
-            .map(|m| m.as_byte_string())
-            .unwrap_or_default();
+        self.client_certificate = cert_store.read_own_cert().ok();
         self
     }
 
@@ -178,8 +170,12 @@ impl UARequest for CreateSession<'_> {
             server_uri: self.server_uri,
             endpoint_url: self.endpoint_url,
             session_name: self.session_name,
-            client_nonce,
-            client_certificate: self.client_certificate,
+            client_nonce: client_nonce.clone(),
+            client_certificate: self
+                .client_certificate
+                .as_ref()
+                .map(|v| v.as_byte_string())
+                .unwrap_or_default(),
             requested_session_timeout: self.session_timeout,
             max_response_message_size: self.max_response_message_size,
         };
@@ -207,16 +203,20 @@ impl UARequest for CreateSession<'_> {
                         Some(&hostname),
                         Some(application_uri),
                     )?;
+
+                    opcua_crypto::verify_signature_data(
+                        &response.server_signature,
+                        security_policy,
+                        &server_certificate,
+                        self.client_certificate
+                            .as_ref()
+                            .ok_or(StatusCode::BadCertificateInvalid)?,
+                        client_nonce.as_ref(),
+                    )?;
                 } else {
                     return Err(StatusCode::BadCertificateInvalid);
                 }
             }
-
-            // TODO: Validate the server signature. It should be the client certificate plus the
-            // client nonce, signed by the server certificate. The standard also mentions that the
-            // certificate used for signing should be the leaf certificate, not the whole chain,
-            // but it _also_ clearly describes the `ClientCertificate` field as a single certificate,
-            // so it's not entirely clear how to handle this.
 
             channel.update_from_created_session(
                 &response.server_nonce,

@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use futures::future::Either;
 use opcua_core::comms::sequence_number::SequenceNumberHandle;
-use opcua_core::{trace_read_lock, trace_write_lock, RequestMessage, ResponseMessage};
+use opcua_core::{trace_read_lock, RequestMessage, ResponseMessage};
 use tracing::{debug, error, trace, warn};
 
 use opcua_core::comms::buffer::SendBuffer;
@@ -182,10 +182,8 @@ impl TransportState {
     }
 
     fn process_chunk(&mut self, chunk: MessageChunk) -> Result<(), StatusCode> {
-        let mut secure_channel = trace_write_lock!(self.channel_state.secure_channel());
-        // TODO: This is mut only because it _might_ be an open secure channel chunk. We should refactor
-        // this to avoid the write lock in most cases.
-        let chunk = secure_channel.verify_and_remove_security(&chunk.data)?;
+        let secure_channel = trace_read_lock!(self.channel_state.secure_channel());
+        let chunk = secure_channel.verify_and_remove_security(chunk.data)?;
 
         let chunk_info = chunk.chunk_info(&secure_channel)?;
         drop(secure_channel);

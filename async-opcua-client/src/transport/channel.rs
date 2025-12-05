@@ -280,7 +280,7 @@ impl AsyncSecureChannel {
         debug!("Connect");
         let security_policy =
             SecurityPolicy::from_str(self.endpoint_info.endpoint.security_policy_uri.as_ref())
-                .unwrap();
+                .map_err(|_| StatusCode::BadSecurityPolicyRejected)?;
 
         if security_policy == SecurityPolicy::Unknown {
             error!(

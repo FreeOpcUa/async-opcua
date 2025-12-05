@@ -144,7 +144,6 @@ pub fn verify_signature_data(
             &verification_key,
             &data,
             signature.signature.as_ref(),
-            None,
         )?;
         Ok(())
     } else {

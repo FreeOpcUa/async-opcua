@@ -581,7 +581,6 @@ impl SecurityPolicy {
         verification_key: &PublicKey,
         data: &[u8],
         signature: &[u8],
-        #[allow(unused)] their_private_key: Option<PrivateKey>,
     ) -> Result<(), Error> {
         // Asymmetric verify signature against supplied certificate
         let result = match self {
@@ -601,19 +600,6 @@ impl SecurityPolicy {
         if result {
             Ok(())
         } else {
-            // For debugging / unit testing purposes we might have a their_key to see the source of the error
-            #[cfg(debug_assertions)]
-            if let Some(their_key) = their_private_key {
-                use crate::pkey::KeySize;
-                use tracing::trace;
-                // Calculate the signature using their key, see what we were expecting versus theirs
-                let mut their_signature = vec![0u8; their_key.size()];
-                self.asymmetric_sign(&their_key, data, their_signature.as_mut_slice())?;
-                trace!(
-                    "Using their_key, signature should be {:?}",
-                    &their_signature
-                );
-            }
             Err(Error::new(
                 StatusCode::BadSecurityChecksFailed,
                 "Signature mismatch",

@@ -551,9 +551,6 @@ fn asymmetric_decrypt_and_verify_sample_chunk() {
     let their_cert_data = include_bytes!("test_data/their_cert.der");
     let their_cert = X509::from_der(&their_cert_data[..]).unwrap();
 
-    let their_key_data = include_bytes!("test_data/their_private.pem");
-    let their_key = PrivateKey::from_pem(&their_key_data[..]).unwrap();
-
     let our_cert_data = include_bytes!("test_data/our_cert.der");
     let our_cert = X509::from_der(&our_cert_data[..]).unwrap();
 
@@ -573,7 +570,7 @@ fn asymmetric_decrypt_and_verify_sample_chunk() {
     secure_channel.set_private_key(Some(our_key));
 
     let _ = secure_channel
-        .verify_and_remove_security_forensic(&message_data, Some(their_key))
+        .verify_and_remove_security(message_data)
         .unwrap();
 }
 

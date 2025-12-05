@@ -718,45 +718,170 @@ impl SecureChannel {
         Ok(size)
     }
 
-    /// Decrypts and verifies the body data if the mode / policy requires it
-    pub fn verify_and_remove_security(&mut self, src: &[u8]) -> Result<MessageChunk, Error> {
-        self.verify_and_remove_security_forensic(src, None)
-    }
-
-    /// Decrypts and verifies the body data if the mode / policy requires it
-    ///
-    /// Note, that normally we do not have "their" key but for testing purposes and forensics, we
-    /// might have the key
-    pub fn verify_and_remove_security_forensic(
-        &mut self,
+    fn decode_message_header(
+        &self,
         src: &[u8],
-        their_key: Option<PrivateKey>,
-    ) -> Result<MessageChunk, Error> {
-        // Get message & security header from data
+    ) -> Result<(MessageChunkHeader, SecurityHeader, usize), Error> {
         let decoding_options = self.decoding_options();
-        let (message_header, security_header, encrypted_data_offset) = {
-            let mut stream = Cursor::new(&src);
-            let message_header = MessageChunkHeader::decode(&mut stream, &decoding_options)?;
-            let security_header = SecurityHeader::decode_from_stream(
-                &mut stream,
-                message_header.message_type.is_open_secure_channel(),
-                &decoding_options,
-            )?;
-            let encrypted_data_offset = stream.position() as usize;
-            (message_header, security_header, encrypted_data_offset)
-        };
-
-        let message_size = message_header.message_size as usize;
-        if message_size != src.len() {
+        let mut stream = Cursor::new(&src);
+        let message_header = MessageChunkHeader::decode(&mut stream, &decoding_options)?;
+        let security_header = SecurityHeader::decode_from_stream(
+            &mut stream,
+            message_header.message_type.is_open_secure_channel(),
+            &decoding_options,
+        )?;
+        let encrypted_data_offset = stream.position() as usize;
+        if message_header.message_size as usize != src.len() {
             return Err(Error::new(
                 StatusCode::BadUnexpectedError,
                 format!(
                     "The message size {} is not the same as the supplied buffer {}",
-                    message_size,
+                    message_header.message_size,
                     src.len()
                 ),
             ));
         }
+
+        Ok((message_header, security_header, encrypted_data_offset))
+    }
+
+    fn decrypt_open_secure_channel(
+        &self,
+        src: Vec<u8>,
+        security_header: SecurityHeader,
+        encrypted_range: Range<usize>,
+    ) -> Result<(MessageChunk, SecurityPolicy), Error> {
+        // The OpenSecureChannel is the first thing we receive so we must examine
+        // the security policy and use it to determine if the packet must be decrypted.
+
+        trace!("Decrypting OpenSecureChannel");
+
+        // Asymmetric decrypt and verify
+
+        let security_header = match security_header {
+            SecurityHeader::Asymmetric(security_header) => security_header,
+            _ => {
+                return Err(Error::new(
+                    StatusCode::BadUnexpectedError,
+                    format!("Expected asymmetric security header, got {security_header:?}"),
+                ));
+            }
+        };
+
+        // The security policy dictates the encryption / signature algorithms used by the request
+        let security_policy_uri = security_header.security_policy_uri.as_ref();
+        let security_policy = SecurityPolicy::from_uri(security_policy_uri);
+        match security_policy {
+            SecurityPolicy::Unknown => {
+                return Err(Error::new(StatusCode::BadSecurityPolicyRejected, format!(
+                        "Security policy \"{security_policy_uri}\" provided by client is unknown so it is has been rejected"
+                    )));
+            }
+            SecurityPolicy::None => {
+                // Nothing to do
+                return Ok((MessageChunk { data: src }, security_policy));
+            }
+            _ => {}
+        }
+
+        // Asymmetric decrypt and verify
+
+        // The OpenSecureChannel Messages are always signed and encrypted if the SecurityMode
+        // is not None. Even if the SecurityMode is Sign and not SignAndEncrypt.
+
+        // An OpenSecureChannelRequest uses Asymmetric encryption - decrypt using the server's private
+        // key, verify signature with client's public key.
+
+        // This code doesn't *care* if the cert is trusted, merely that it was used to sign the message
+        if security_header.sender_certificate.is_null() {
+            return Err(Error::new(
+                StatusCode::BadCertificateInvalid,
+                "Sender certificate is null",
+            ));
+        }
+
+        let sender_certificate_len = security_header
+            .sender_certificate
+            .value
+            .as_ref()
+            .unwrap()
+            .len();
+        trace!(
+            "Sender certificate byte length = {}",
+            sender_certificate_len
+        );
+        let sender_certificate = X509::from_byte_string(&security_header.sender_certificate)?;
+
+        let verification_key = sender_certificate.public_key()?;
+        let receiver_thumbprint = security_header.receiver_certificate_thumbprint;
+        trace!("Receiver thumbprint = {:?}", receiver_thumbprint);
+
+        let mut decrypted_data = vec![0u8; encrypted_range.end];
+        let decrypted_size = self.asymmetric_decrypt_and_verify(
+            security_policy,
+            &verification_key,
+            receiver_thumbprint,
+            &src,
+            encrypted_range,
+            &mut decrypted_data,
+        )?;
+
+        let msg = Self::update_message_size_and_truncate(decrypted_data, decrypted_size)?;
+
+        Ok((MessageChunk { data: msg }, security_policy))
+    }
+
+    fn decrypt_chunk(
+        &self,
+        src: Vec<u8>,
+        security_header: SecurityHeader,
+        signed_range: Range<usize>,
+        encrypted_range: Range<usize>,
+    ) -> Result<MessageChunk, Error> {
+        // Symmetric decrypt and verify
+        trace!(
+            "Decrypting block with signature info {:?} and encrypt info {:?}",
+            signed_range,
+            encrypted_range
+        );
+
+        let SecurityHeader::Symmetric(security_header) = security_header else {
+            return Err(Error::new(
+                StatusCode::BadUnexpectedError,
+                format!("Expected symmetric security header, got {security_header:?}"),
+            ));
+        };
+
+        let mut decrypted_data = vec![0u8; encrypted_range.end];
+        let decrypted_size = self.symmetric_decrypt_and_verify(
+            &src,
+            signed_range,
+            encrypted_range,
+            security_header.token_id,
+            &mut decrypted_data,
+        )?;
+
+        // Value returned from symmetric_decrypt_and_verify is the end of the actual decrypted data.
+        Ok(MessageChunk {
+            data: Self::update_message_size_and_truncate(decrypted_data, decrypted_size)?,
+        })
+    }
+
+    fn is_secure_connection(&self) -> bool {
+        !matches!(self.security_policy, SecurityPolicy::None)
+            && matches!(
+                self.security_mode,
+                MessageSecurityMode::Sign | MessageSecurityMode::SignAndEncrypt
+            )
+    }
+
+    /// Decrypts and verifies the body data if the mode / policy requires it
+    pub fn verify_and_remove_security(&self, src: Vec<u8>) -> Result<MessageChunk, Error> {
+        // Get message & security header from data
+        let (message_header, security_header, encrypted_data_offset) =
+            self.decode_message_header(&src)?;
+        let message_size = message_header.message_size as usize;
+        let encrypted_range = encrypted_data_offset..message_size;
 
         // S - Message Header
         // S - Security Header
@@ -764,118 +889,54 @@ impl SecureChannel {
         // S - Body            - E
         // S - Padding         - E
         //     Signature       - E
-        let data = if message_header.message_type.is_open_secure_channel() {
+        if message_header.message_type.is_open_secure_channel() {
+            let (decrypted_chunk, _) =
+                self.decrypt_open_secure_channel(src, security_header, encrypted_range)?;
+            Ok(decrypted_chunk)
+        } else if self.is_secure_connection() {
+            let signature_size = self.security_policy.symmetric_signature_size();
+            let signed_range = 0..(message_size - signature_size);
+            self.decrypt_chunk(src, security_header, signed_range, encrypted_range)
+        } else {
+            Ok(MessageChunk { data: src })
+        }
+    }
+
+    /// Decrypts and verifies the body data if the mode / policy requires it.
+    ///
+    /// This is called on the server, and will also set the security policy of the channel
+    /// if the message is an OpenSecureChannel request.
+    pub fn verify_and_remove_security_server(
+        &mut self,
+        src: Vec<u8>,
+    ) -> Result<MessageChunk, Error> {
+        // Get message & security header from data
+        let (message_header, security_header, encrypted_data_offset) =
+            self.decode_message_header(&src)?;
+        let message_size = message_header.message_size as usize;
+        let encrypted_range = encrypted_data_offset..message_size;
+
+        // S - Message Header
+        // S - Security Header
+        // S - Sequence Header - E
+        // S - Body            - E
+        // S - Padding         - E
+        //     Signature       - E
+        if message_header.message_type.is_open_secure_channel() {
             // The OpenSecureChannel is the first thing we receive so we must examine
             // the security policy and use it to determine if the packet must be decrypted.
-            let encrypted_range = encrypted_data_offset..message_size;
 
-            trace!("Decrypting OpenSecureChannel");
-
-            let security_header = match security_header {
-                SecurityHeader::Asymmetric(security_header) => security_header,
-                _ => {
-                    panic!();
-                }
-            };
-
-            // The security policy dictates the encryption / signature algorithms used by the request
-            let security_policy_uri = security_header.security_policy_uri.as_ref();
-            let security_policy = SecurityPolicy::from_uri(security_policy_uri);
-            match security_policy {
-                SecurityPolicy::Unknown => {
-                    return Err(Error::new(StatusCode::BadSecurityPolicyRejected, format!(
-                        "Security policy \"{security_policy_uri}\" provided by client is unknown so it is has been rejected"
-                    )));
-                }
-                SecurityPolicy::None => {
-                    // Nothing to do
-                    return Ok(MessageChunk { data: src.to_vec() });
-                }
-                _ => {}
-            }
+            let (decrypted_chunk, security_policy) =
+                self.decrypt_open_secure_channel(src, security_header, encrypted_range)?;
             self.security_policy = security_policy;
-
-            // Asymmetric decrypt and verify
-
-            // The OpenSecureChannel Messages are always signed and encrypted if the SecurityMode
-            // is not None. Even if the SecurityMode is Sign and not SignAndEncrypt.
-
-            // An OpenSecureChannelRequest uses Asymmetric encryption - decrypt using the server's private
-            // key, verify signature with client's public key.
-
-            // This code doesn't *care* if the cert is trusted, merely that it was used to sign the message
-            if security_header.sender_certificate.is_null() {
-                return Err(Error::new(
-                    StatusCode::BadCertificateInvalid,
-                    "Sender certificate is null",
-                ));
-            }
-
-            let sender_certificate_len = security_header
-                .sender_certificate
-                .value
-                .as_ref()
-                .unwrap()
-                .len();
-            trace!(
-                "Sender certificate byte length = {}",
-                sender_certificate_len
-            );
-            let sender_certificate = X509::from_byte_string(&security_header.sender_certificate)?;
-
-            let verification_key = sender_certificate.public_key()?;
-            let receiver_thumbprint = security_header.receiver_certificate_thumbprint;
-            trace!("Receiver thumbprint = {:?}", receiver_thumbprint);
-
-            let mut decrypted_data = vec![0u8; message_size];
-            let decrypted_size = self.asymmetric_decrypt_and_verify(
-                security_policy,
-                &verification_key,
-                receiver_thumbprint,
-                src,
-                encrypted_range,
-                their_key,
-                &mut decrypted_data,
-            )?;
-
-            Self::update_message_size_and_truncate(decrypted_data, decrypted_size)?
-        } else if self.security_policy != SecurityPolicy::None
-            && (self.security_mode == MessageSecurityMode::Sign
-                || self.security_mode == MessageSecurityMode::SignAndEncrypt)
-        {
-            // Symmetric decrypt and verify
+            Ok(decrypted_chunk)
+        } else if self.is_secure_connection() {
             let signature_size = self.security_policy.symmetric_signature_size();
-            let encrypted_range = encrypted_data_offset..message_size;
             let signed_range = 0..(message_size - signature_size);
-            trace!(
-                "Decrypting block with signature info {:?} and encrypt info {:?}",
-                signed_range,
-                encrypted_range
-            );
-
-            let SecurityHeader::Symmetric(security_header) = security_header else {
-                return Err(Error::new(
-                    StatusCode::BadUnexpectedError,
-                    format!("Expected symmetric security header, got {security_header:?}"),
-                ));
-            };
-
-            let mut decrypted_data = vec![0u8; message_size];
-            let decrypted_size = self.symmetric_decrypt_and_verify(
-                src,
-                signed_range,
-                encrypted_range,
-                security_header.token_id,
-                &mut decrypted_data,
-            )?;
-
-            // Value returned from symmetric_decrypt_and_verify is the end of the actual decrypted data.
-            Self::update_message_size_and_truncate(decrypted_data, decrypted_size)?
+            self.decrypt_chunk(src, security_header, signed_range, encrypted_range)
         } else {
-            src.to_vec()
-        };
-
-        Ok(MessageChunk { data })
+            Ok(MessageChunk { data: src })
+        }
     }
 
     /// Use the security policy to asymmetric encrypt and sign the specified chunk of data.
@@ -1028,7 +1089,6 @@ impl SecureChannel {
         receiver_thumbprint: ByteString,
         src: &[u8],
         encrypted_range: Range<usize>,
-        their_key: Option<PrivateKey>,
         dst: &mut [u8],
     ) -> Result<usize, Error> {
         // Asymmetric encrypt requires the caller supply the security policy
@@ -1119,7 +1179,6 @@ impl SecureChannel {
                 verification_key,
                 &dst[signed_range_dst],
                 &dst[signature_range_dst.clone()],
-                their_key,
             )?;
 
             // Verify that the padding is correct

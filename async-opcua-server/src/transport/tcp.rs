@@ -389,7 +389,7 @@ impl TcpTransport {
                     self.pending_chunks.clear();
                     Ok(None)
                 } else {
-                    let chunk = channel.verify_and_remove_security(&chunk.data)?;
+                    let chunk = channel.verify_and_remove_security_server(chunk.data)?;
 
                     if self.send_buffer.max_chunk_count > 0
                         && self.pending_chunks.len() == self.send_buffer.max_chunk_count

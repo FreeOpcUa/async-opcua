@@ -15,8 +15,7 @@ fn test_symmetric_encrypt_decrypt(
     security_mode: MessageSecurityMode,
     security_policy: SecurityPolicy,
 ) {
-    let (secure_channel1, mut secure_channel2) =
-        make_secure_channels(security_mode, security_policy);
+    let (secure_channel1, secure_channel2) = make_secure_channels(security_mode, security_policy);
 
     let mut chunks = Chunker::encode(
         SequenceNumberHandle::new(true),
@@ -41,7 +40,7 @@ fn test_symmetric_encrypt_decrypt(
         // Decrypted message should identical to original with same length and
         // no signature or padding
         let chunk2 = secure_channel2
-            .verify_and_remove_security(&encrypted_data[..encrypted_size])
+            .verify_and_remove_security(encrypted_data[..encrypted_size].to_vec())
             .unwrap();
 
         assert_eq!(&chunk.data, &chunk2.data);
@@ -110,7 +109,7 @@ fn test_asymmetric_encrypt_decrypt(
 
         // Compare up to original length
         let chunk2 = secure_channel
-            .verify_and_remove_security(&encrypted_data[..encrypted_size])
+            .verify_and_remove_security(encrypted_data[..encrypted_size].to_vec())
             .unwrap();
         assert_eq!(chunk.data.len(), chunk2.data.len());
         assert_eq!(&chunk.data, &chunk2.data);

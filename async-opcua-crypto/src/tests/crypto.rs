@@ -4,18 +4,16 @@ use std::io::Write;
 use opcua_types::StatusCode;
 
 use crate::{
-    aeskey::AesKey,
+    aes::AesKey,
     certificate_store::*,
-    from_hex, hash,
-    pkey::{KeySize, PrivateKey, RsaPadding},
-    random,
+    from_hex, hash, random,
     tests::{
         make_certificate_store, make_test_cert_1024, make_test_cert_2048, APPLICATION_HOSTNAME,
         APPLICATION_URI,
     },
     user_identity::{legacy_secret_decrypt, legacy_secret_encrypt},
     x509::{X509Data, X509},
-    SecurityPolicy, SHA1_SIZE, SHA256_SIZE,
+    KeySize, PrivateKey, RsaPadding, SecurityPolicy, SHA1_SIZE, SHA256_SIZE,
 };
 
 #[test]

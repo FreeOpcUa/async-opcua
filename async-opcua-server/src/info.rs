@@ -17,7 +17,9 @@ use crate::node_manager::TypeTreeForUser;
 use opcua_core::comms::url::{hostname_from_url, url_matches_except_host};
 use opcua_core::handle::AtomicHandle;
 use opcua_core::sync::RwLock;
-use opcua_crypto::{user_identity, PrivateKey, SecurityPolicy, X509};
+use opcua_crypto::{
+    legacy_decrypt_secret, verify_x509_identity_token, PrivateKey, SecurityPolicy, X509,
+};
 use opcua_types::{
     profiles, status_code::StatusCode, ActivateSessionRequest, AnonymousIdentityToken,
     ApplicationDescription, ApplicationType, EndpointDescription, RegisteredServer,
@@ -453,11 +455,8 @@ impl ServerInfo {
             );
             let token_password = if !token.encryption_algorithm.is_empty() {
                 if let Some(ref server_key) = server_key {
-                    let decrypted = user_identity::legacy_decrypt_secret(
-                        token,
-                        server_nonce.as_ref(),
-                        server_key,
-                    )?;
+                    let decrypted =
+                        legacy_decrypt_secret(token, server_nonce.as_ref(), server_key)?;
                     String::from_utf8(decrypted.value.unwrap_or_default()).map_err(|e| {
                         Error::new(
                             StatusCode::BadIdentityTokenInvalid,
@@ -526,7 +525,7 @@ impl ServerInfo {
                         )),
                         security_policy => {
                             // Verify token
-                            user_identity::verify_x509_identity_token(
+                            verify_x509_identity_token(
                                 token,
                                 user_token_signature,
                                 security_policy,
@@ -577,7 +576,7 @@ impl ServerInfo {
             );
             let decrypted_token = if !token.encryption_algorithm.is_empty() {
                 if let Some(ref server_key) = server_key {
-                    user_identity::legacy_decrypt_secret(token, server_nonce.as_ref(), server_key)?
+                    legacy_decrypt_secret(token, server_nonce.as_ref(), server_key)?
                 } else {
                     error!("Identity token password is encrypted but no server private key was supplied");
                     return Err(Error::new(

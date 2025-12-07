@@ -34,7 +34,7 @@ type Sha256Output = digest::CtOutput<HmacSha256>;
 ///   A(0) = seed
 ///   A(n) = HMAC_SHA1(secret, A(n-1))
 /// + indicates that the results are appended to previous results.
-pub fn p_sha1(secret: &[u8], seed: &[u8], length: usize) -> Vec<u8> {
+pub(crate) fn p_sha1(secret: &[u8], seed: &[u8], length: usize) -> Vec<u8> {
     let mut result = Vec::with_capacity(length);
 
     let mut hmac = Vec::with_capacity(seed.len() * 2);
@@ -67,7 +67,7 @@ pub fn p_sha1(secret: &[u8], seed: &[u8], length: usize) -> Vec<u8> {
 }
 
 /// Pseudo random `P_SHA256` implementation for creating a pseudo random range of bytes from an input.
-pub fn p_sha256(secret: &[u8], seed: &[u8], length: usize) -> Vec<u8> {
+pub(crate) fn p_sha256(secret: &[u8], seed: &[u8], length: usize) -> Vec<u8> {
     let mut result = Vec::with_capacity(length);
 
     let mut hmac = Vec::with_capacity(seed.len() * 2);
@@ -99,28 +99,6 @@ pub fn p_sha256(secret: &[u8], seed: &[u8], length: usize) -> Vec<u8> {
     result
 }
 
-/*
-fn hmac_vec(digest: hash::MessageDigest, key: &[u8], data: &[u8]) -> Vec<u8> {
-    // Compute a signature
-    let pkey = pkey::PKey::hmac(key).unwrap();
-    let mut signer = sign::Signer::new(digest, &pkey).unwrap();
-    signer.update(data).unwrap();
-    signer.sign_to_vec().unwrap()
-}
-
-fn hmac(
-    digest: hash::MessageDigest,
-    key: &[u8],
-    data: &[u8],
-    signature: &mut [u8],
-) -> Result<(), StatusCode> {
-    let hmac = hmac_vec(digest, key, data);
-    trace!("hmac length = {}", hmac.len());
-    signature.copy_from_slice(&hmac);
-    Ok(())
-}
-*/
-
 fn sign_sha1(key: &[u8], data: &[u8]) -> Sha1Output {
     let mut mac = HmacSha1::new_from_slice(key).unwrap();
     mac.update(data);
@@ -134,7 +112,7 @@ fn sign_sha256(key: &[u8], data: &[u8]) -> Sha256Output {
 }
 
 /// Write the SHA1 HMAC signature of `data` using `key` into `signature`.
-pub fn hmac_sha1(key: &[u8], data: &[u8], signature: &mut [u8]) -> Result<(), StatusCode> {
+pub(crate) fn hmac_sha1(key: &[u8], data: &[u8], signature: &mut [u8]) -> Result<(), StatusCode> {
     if signature.len() == SHA1_SIZE {
         let result = sign_sha1(key, data);
         signature.copy_from_slice(&result.into_bytes());
@@ -149,7 +127,7 @@ pub fn hmac_sha1(key: &[u8], data: &[u8], signature: &mut [u8]) -> Result<(), St
 }
 
 /// Verify that the HMAC for the data block matches the supplied signature
-pub fn verify_hmac_sha1(key: &[u8], data: &[u8], signature: &[u8]) -> bool {
+pub(crate) fn verify_hmac_sha1(key: &[u8], data: &[u8], signature: &[u8]) -> bool {
     if signature.len() != SHA1_SIZE {
         false
     } else {
@@ -160,7 +138,7 @@ pub fn verify_hmac_sha1(key: &[u8], data: &[u8], signature: &[u8]) -> bool {
 }
 
 /// Write the SHA256 HMAC signature of `data` using `key` into `signature`.
-pub fn hmac_sha256(key: &[u8], data: &[u8], signature: &mut [u8]) -> Result<(), StatusCode> {
+pub(crate) fn hmac_sha256(key: &[u8], data: &[u8], signature: &mut [u8]) -> Result<(), StatusCode> {
     if signature.len() == SHA256_SIZE {
         let result = sign_sha256(key, data);
         signature.copy_from_slice(&result.into_bytes());
@@ -175,7 +153,7 @@ pub fn hmac_sha256(key: &[u8], data: &[u8], signature: &mut [u8]) -> Result<(), 
 }
 
 /// Verify that the HMAC for the data block matches the supplied signature
-pub fn verify_hmac_sha256(key: &[u8], data: &[u8], signature: &[u8]) -> bool {
+pub(crate) fn verify_hmac_sha256(key: &[u8], data: &[u8], signature: &[u8]) -> bool {
     if signature.len() != SHA256_SIZE {
         false
     } else {

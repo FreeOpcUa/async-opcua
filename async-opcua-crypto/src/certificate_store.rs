@@ -13,14 +13,12 @@ use tracing::{debug, error, info, trace, warn};
 
 use opcua_types::status_code::StatusCode;
 
+use crate::PrivateKey;
+
 use super::{
-    pkey::PrivateKey,
     security_policy::SecurityPolicy,
     x509::{X509Data, X509},
 };
-
-use rsa;
-use x509_cert;
 
 /// Default path to the applications own certificate
 const OWN_CERTIFICATE_PATH: &str = "own/cert.der";

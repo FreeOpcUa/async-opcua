@@ -4,8 +4,7 @@ use opcua_core::{
     comms::url::hostname_from_url, sync::RwLock, trace_read_lock, trace_write_lock, ResponseMessage,
 };
 use opcua_crypto::{
-    self, certificate_store::CertificateStore, legacy_encrypt_secret, random, PKey, SecurityPolicy,
-    X509,
+    self, legacy_encrypt_secret, random, CertificateStore, PKey, SecurityPolicy, X509,
 };
 use opcua_types::{
     ActivateSessionRequest, ActivateSessionResponse, AnonymousIdentityToken,

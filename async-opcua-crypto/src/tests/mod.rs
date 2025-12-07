@@ -3,8 +3,8 @@ use tempdir::TempDir;
 use crate::CertificateStore;
 
 use crate::{
-    pkey::PrivateKey,
     x509::{X509Data, X509},
+    PrivateKey,
 };
 
 const APPLICATION_URI: &str = "urn:testapplication";

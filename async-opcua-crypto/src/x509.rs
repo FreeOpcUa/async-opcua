@@ -16,7 +16,6 @@ use chrono::{DateTime, Utc};
 use tracing::{error, info, trace, warn};
 type ChronoUtc = DateTime<Utc>;
 
-use rsa;
 use rsa::pkcs1v15;
 use rsa::RsaPublicKey;
 use x509_cert::{
@@ -25,17 +24,14 @@ use x509_cert::{
     ext::pkix::name::GeneralName,
 };
 
-use const_oid;
 use x509::builder::Error as BuilderError;
 use x509::ext::pkix::name as xname;
 
 use opcua_types::{status_code::StatusCode, ApplicationDescription, ByteString, Error};
 
-use super::{
-    hostname,
-    pkey::{PrivateKey, PublicKey},
-    thumbprint::Thumbprint,
-};
+use crate::{KeySize, PrivateKey, PublicKey};
+
+use super::{hostname, thumbprint::Thumbprint};
 
 const DEFAULT_KEYSIZE: u32 = 2048;
 const DEFAULT_COUNTRY: &str = "IE";
@@ -650,8 +646,6 @@ impl X509 {
 
     /// Returns the key length in bits (if possible)
     pub fn key_length(&self) -> Result<usize, X509Error> {
-        use crate::pkey::KeySize;
-
         let r = self.public_key();
         match r {
             Err(_) => Err(X509Error),

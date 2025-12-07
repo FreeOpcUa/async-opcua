@@ -12,23 +12,31 @@ use opcua_types::{
     status_code::StatusCode, ByteString, EncodingResult, Error, SignatureData, UAString,
 };
 use tracing::{error, trace};
-pub use {
-    aeskey::*, certificate_store::*, hash::*, pkey::*, security_policy::*, thumbprint::*,
-    user_identity::*, x509::*,
+
+pub(crate) use crate::aes::RsaPadding;
+
+pub use crate::aes::{AesKey, KeySize, PKey, PrivateKey, PublicKey};
+pub use crate::x509::{X509Data, X509Error, X509};
+pub use certificate_store::CertificateStore;
+pub use security_policy::SecurityPolicy;
+pub use thumbprint::Thumbprint;
+pub use user_identity::{
+    legacy_decrypt_secret, legacy_encrypt_secret, verify_x509_identity_token,
+    LegacyEncryptedSecret, LegacySecret,
 };
 
 #[cfg(test)]
 mod tests;
 
-pub mod aeskey;
-pub mod certificate_store;
-pub mod hash;
-pub mod pkey;
+mod certificate_store;
+mod hash;
 pub mod random;
-pub mod security_policy;
-pub mod thumbprint;
-pub mod user_identity;
-pub mod x509;
+mod security_policy;
+mod thumbprint;
+mod user_identity;
+mod x509;
+
+mod aes;
 
 /// Size of a SHA1 hash value in bytes
 pub const SHA1_SIZE: usize = 20;

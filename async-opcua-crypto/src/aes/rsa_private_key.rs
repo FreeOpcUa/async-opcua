@@ -9,17 +9,13 @@ use std::{
     result::Result,
 };
 
-use rand;
 use rsa::pkcs1;
 use rsa::pkcs1v15;
 use rsa::pkcs8;
 use rsa::pss;
 use rsa::signature::{RandomizedSigner, SignatureEncoding, Verifier};
 use rsa::{Oaep, Pkcs1v15Encrypt, RsaPrivateKey, RsaPublicKey};
-use sha1;
-use sha2;
 
-use x509_cert;
 use x509_cert::spki::SubjectPublicKeyInfoOwned;
 
 use opcua_types::{status_code::StatusCode, Error};

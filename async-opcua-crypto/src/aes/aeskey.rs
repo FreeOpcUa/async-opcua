@@ -6,16 +6,14 @@
 
 use std::result::Result;
 
-use aes;
 #[expect(deprecated)]
 use aes::cipher::generic_array::GenericArray;
 use aes::cipher::{block_padding::NoPadding, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
-use cbc;
 
 use opcua_types::status_code::StatusCode;
 use opcua_types::Error;
 
-use super::SecurityPolicy;
+use crate::SecurityPolicy;
 
 type Aes128CbcEnc = cbc::Encryptor<aes::Aes128>;
 type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;

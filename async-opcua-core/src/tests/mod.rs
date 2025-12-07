@@ -6,11 +6,7 @@ use std::cmp::PartialEq;
 use std::fmt::Debug;
 use std::io::Cursor;
 
-use opcua_crypto::{
-    pkey::PrivateKey,
-    security_policy::SecurityPolicy,
-    x509::{X509Data, X509},
-};
+use opcua_crypto::{PrivateKey, SecurityPolicy, X509Data, X509};
 use opcua_types::{
     status_code::StatusCode, BinaryDecodable, BinaryEncodable, ByteString, ChannelSecurityToken,
     ContextOwned, DateTime, DiagnosticBits, DiagnosticInfo, ExtensionObject, GetEndpointsRequest,

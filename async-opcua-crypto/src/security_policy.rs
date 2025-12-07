@@ -11,15 +11,12 @@ use tracing::error;
 
 use opcua_types::{constants, status_code::StatusCode, ByteString, Error};
 
-use super::{
-    aeskey::AesKey,
-    hash,
-    pkey::{PrivateKey, PublicKey, RsaPadding},
-    random, SHA1_SIZE, SHA256_SIZE,
-};
+use crate::{aes::AesKey, PrivateKey, PublicKey, RsaPadding};
+
+use super::{hash, random, SHA1_SIZE, SHA256_SIZE};
 
 /// Trait for a security policy supported by the library.
-pub trait SecurityPolicyConstants {
+pub(crate) trait SecurityPolicyConstants {
     /// The name of the policy.
     const SECURITY_POLICY: &'static str;
     /// The URI of the policy, as defined in the OPC-UA standard.
@@ -55,7 +52,7 @@ pub trait SecurityPolicyConstants {
 ///   DerivedSignatureKeyLength – 256 bits
 ///   AsymmetricKeyLength - 2048-4096 bits
 ///   SecureChannelNonceLength - 32 bytes
-pub struct Aes128Sha256RsaOaep;
+pub(crate) struct Aes128Sha256RsaOaep;
 impl SecurityPolicyConstants for Aes128Sha256RsaOaep {
     const SECURITY_POLICY: &str = "Aes128-Sha256-RsaOaep";
     const SECURITY_POLICY_URI: &str =
@@ -82,7 +79,7 @@ impl SecurityPolicyConstants for Aes128Sha256RsaOaep {
 ///   DerivedSignatureKeyLength – 256 bits
 ///   AsymmetricKeyLength - 2048-4096 bits
 ///   SecureChannelNonceLength - 32 bytes
-pub struct Aes256Sha256RsaPss;
+pub(crate) struct Aes256Sha256RsaPss;
 impl SecurityPolicyConstants for Aes256Sha256RsaPss {
     const SECURITY_POLICY: &str = "Aes256-Sha256-RsaPss";
     const SECURITY_POLICY_URI: &str =
@@ -109,7 +106,7 @@ impl SecurityPolicyConstants for Aes256Sha256RsaPss {
 ///   DerivedSignatureKeyLength – 256 bits
 ///   AsymmetricKeyLength - 2048-4096 bits
 ///   SecureChannelNonceLength - 32 bytes
-pub struct Basic256Sha256;
+pub(crate) struct Basic256Sha256;
 impl SecurityPolicyConstants for Basic256Sha256 {
     const SECURITY_POLICY: &str = "Basic256Sha256";
     const SECURITY_POLICY_URI: &str = "http://opcfoundation.org/UA/SecurityPolicy#Basic256Sha256";
@@ -134,7 +131,7 @@ impl SecurityPolicyConstants for Basic256Sha256 {
 ///   DerivedSignatureKeyLength – 128 bits
 ///   AsymmetricKeyLength - 1024-2048 bits
 ///   SecureChannelNonceLength - 16 bytes
-pub struct Basic128Rsa15;
+pub(crate) struct Basic128Rsa15;
 impl SecurityPolicyConstants for Basic128Rsa15 {
     const SECURITY_POLICY: &str = "Basic128Rsa15";
     const SECURITY_POLICY_URI: &str = "http://opcfoundation.org/UA/SecurityPolicy#Basic128Rsa15";
@@ -159,7 +156,7 @@ impl SecurityPolicyConstants for Basic128Rsa15 {
 ///   DerivedSignatureKeyLength – 192 bits
 ///   AsymmetricKeyLength - 1024-2048 bits
 ///   SecureChannelNonceLength - 32 bytes
-pub struct Basic256;
+pub(crate) struct Basic256;
 impl SecurityPolicyConstants for Basic256 {
     const SECURITY_POLICY: &str = "Basic256";
     const SECURITY_POLICY_URI: &str = "http://opcfoundation.org/UA/SecurityPolicy#Basic256";

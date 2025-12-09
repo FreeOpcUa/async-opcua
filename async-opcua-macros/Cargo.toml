@@ -1,6 +1,6 @@
 [package]
 name = "async-opcua-macros"
-version = "0.17.0"
+version = "0.17.1"
 description = "OPC UA support proc macros"
 authors = ["Einar Omang <einar@omang.com>"]
 homepage = "https://github.com/freeopcua/async-opcua"

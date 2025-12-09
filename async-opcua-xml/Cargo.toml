@@ -1,6 +1,6 @@
 [package]
 name = "async-opcua-xml"
-version = "0.17.0"
+version = "0.17.1"
 edition = "2021"
 description = "OPC UA XML loading library"
 authors = ["Einar Omang <einar@omang.com>"]

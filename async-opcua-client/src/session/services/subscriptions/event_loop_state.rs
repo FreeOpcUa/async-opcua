@@ -154,7 +154,22 @@ impl<T: Future<Output = Result<bool, StatusCode>>, R: Fn() -> T, S: Subscription
                 self.no_active_subscription = false;
                 ActivityOrNext::Next(next_publish)
             }
-            _ = self.wait_for_next_tick(next_publish) => ActivityOrNext::Next(next_publish),
+            _ = self.wait_for_next_tick(next_publish) => {
+                if !self.no_active_subscription && self.futures.len()
+                    < self
+                        .publish_limits_rx
+                        .borrow()
+                        .max_publish_requests
+                {
+                    if !self.waiting_for_response {
+                        debug!("Sending publish due to internal tick");
+                        self.futures.push((self.publish_source)());
+                    } else {
+                        debug!("Skipping publish due BadTooManyPublishRequests");
+                    }
+                }
+                ActivityOrNext::Next(self.subscription_cache.next_publish_time(true))
+            }
             res = self.wait_for_next_publish() => {
                 match res {
                     Ok(more_notifications) => {

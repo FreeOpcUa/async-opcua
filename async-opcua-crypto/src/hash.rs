@@ -9,9 +9,8 @@ use std::result::Result;
 use hmac::{digest, Hmac, Mac};
 use sha1::Sha1;
 use sha2::Sha256;
-use tracing::error;
 
-use opcua_types::status_code::StatusCode;
+use opcua_types::{status_code::StatusCode, Error};
 
 use super::{SHA1_SIZE, SHA256_SIZE};
 
@@ -112,17 +111,19 @@ fn sign_sha256(key: &[u8], data: &[u8]) -> Sha256Output {
 }
 
 /// Write the SHA1 HMAC signature of `data` using `key` into `signature`.
-pub(crate) fn hmac_sha1(key: &[u8], data: &[u8], signature: &mut [u8]) -> Result<(), StatusCode> {
+pub(crate) fn hmac_sha1(key: &[u8], data: &[u8], signature: &mut [u8]) -> Result<(), Error> {
     if signature.len() == SHA1_SIZE {
         let result = sign_sha1(key, data);
         signature.copy_from_slice(&result.into_bytes());
         Ok(())
     } else {
-        error!(
-            "Signature buffer length must be exactly {} bytes to receive hmac_sha1 signature",
-            SHA1_SIZE
-        );
-        Err(StatusCode::BadInvalidArgument)
+        Err(Error::new(
+            StatusCode::BadInvalidArgument,
+            format!(
+                "Signature buffer length must be exactly {} bytes to receive hmac_sha1 signature",
+                SHA1_SIZE
+            ),
+        ))
     }
 }
 
@@ -138,17 +139,19 @@ pub(crate) fn verify_hmac_sha1(key: &[u8], data: &[u8], signature: &[u8]) -> boo
 }
 
 /// Write the SHA256 HMAC signature of `data` using `key` into `signature`.
-pub(crate) fn hmac_sha256(key: &[u8], data: &[u8], signature: &mut [u8]) -> Result<(), StatusCode> {
+pub(crate) fn hmac_sha256(key: &[u8], data: &[u8], signature: &mut [u8]) -> Result<(), Error> {
     if signature.len() == SHA256_SIZE {
         let result = sign_sha256(key, data);
         signature.copy_from_slice(&result.into_bytes());
         Ok(())
     } else {
-        error!(
-            "Signature buffer length must be exactly {} bytes to receive hmac_sha256 signature",
-            SHA256_SIZE
-        );
-        Err(StatusCode::BadInvalidArgument)
+        Err(Error::new(
+            StatusCode::BadInvalidArgument,
+            format!(
+                "Signature buffer length must be exactly {} bytes to receive hmac_sha256 signature",
+                SHA256_SIZE
+            ),
+        ))
     }
 }
 

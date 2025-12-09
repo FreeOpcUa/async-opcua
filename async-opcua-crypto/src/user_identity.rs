@@ -19,7 +19,9 @@ use opcua_types::{
 use opcua_types::{Error, IssuedIdentityToken, MessageSecurityMode};
 use tracing::{error, warn};
 
-use super::{KeySize, PrivateKey, RsaPadding, SecurityPolicy, X509};
+use crate::policy::aes::{AesAsymmetricEncryptionAlgorithm, OaepSha1, OaepSha256, Pkcs1v15};
+
+use super::{PrivateKey, SecurityPolicy, X509};
 
 /// Trait for a type with a secret encrypted with legacy secret encryption.
 pub trait LegacySecret {
@@ -70,19 +72,24 @@ pub fn legacy_decrypt_secret(
     } else {
         // Determine the padding from the algorithm.
         let encryption_algorithm = secret.encryption_algorithm().as_ref();
-        let padding = match encryption_algorithm {
-            super::algorithms::ENC_RSA_15 => RsaPadding::Pkcs1,
-            super::algorithms::ENC_RSA_OAEP => RsaPadding::OaepSha1,
-            super::algorithms::ENC_RSA_OAEP_SHA256 => RsaPadding::OaepSha256,
+        match encryption_algorithm {
+            super::algorithms::ENC_RSA_15 => {
+                legacy_secret_decrypt::<Pkcs1v15>(secret.raw_secret(), server_nonce, server_key)
+            }
+            super::algorithms::ENC_RSA_OAEP => {
+                legacy_secret_decrypt::<OaepSha1>(secret.raw_secret(), server_nonce, server_key)
+            }
+            super::algorithms::ENC_RSA_OAEP_SHA256 => {
+                legacy_secret_decrypt::<OaepSha256>(secret.raw_secret(), server_nonce, server_key)
+            }
             r => {
                 error!("decrypt_user_identity_token_password has rejected unsupported user identity encryption algorithm \"{}\"", encryption_algorithm);
-                return Err(Error::new(
+                Err(Error::new(
                     StatusCode::BadIdentityTokenInvalid,
                     format!("Identity token rejected, unsupported encryption algorithm {r}"),
-                ));
+                ))
             }
-        };
-        legacy_secret_decrypt(secret.raw_secret(), server_nonce, server_key, padding)
+        }
     }
 }
 
@@ -184,14 +191,7 @@ pub fn legacy_encrypt_secret(
                 secret_to_encrypt,
                 nonce,
                 cert.as_ref().unwrap(),
-                security_policy
-                    .asymmetric_encryption_padding()
-                    .ok_or_else(|| {
-                        Error::new(
-                            StatusCode::BadSecurityPolicyRejected,
-                            "Security policy does not support asymmetric encryption",
-                        )
-                    })?,
+                security_policy,
             )?;
 
             Ok(LegacyEncryptedSecret {
@@ -218,7 +218,7 @@ pub(crate) fn legacy_secret_encrypt(
     password: &[u8],
     server_nonce: &[u8],
     server_cert: &X509,
-    padding: RsaPadding,
+    policy: SecurityPolicy,
 ) -> Result<ByteString, Error> {
     // Message format is size, password, nonce
     let plaintext_size = 4 + password.len() + server_nonce.len();
@@ -232,11 +232,11 @@ pub(crate) fn legacy_secret_encrypt(
     // Encrypt the data with the public key from the server's certificate
     let public_key = server_cert.public_key()?;
 
-    let cipher_size = public_key.calculate_cipher_text_size(plaintext_size, padding);
+    let cipher_size = policy.calculate_cipher_text_size(plaintext_size, &public_key);
     let mut dst = vec![0u8; cipher_size];
-    let actual_size = public_key
-        .public_encrypt(&src.into_inner(), &mut dst, padding)
-        .map_err(Error::decoding)?;
+    let actual_size = policy
+        .asymmetric_encrypt(&public_key, &src.into_inner(), &mut dst)
+        .map_err(Error::encoding)?;
 
     assert_eq!(actual_size, cipher_size);
 
@@ -245,11 +245,10 @@ pub(crate) fn legacy_secret_encrypt(
 
 /// Decrypt the client's password using the server's nonce and private key. This function is prefixed
 /// "legacy" because 1.04 describes another way of encrypting passwords.
-pub(crate) fn legacy_secret_decrypt(
+pub(crate) fn legacy_secret_decrypt<T: AesAsymmetricEncryptionAlgorithm>(
     secret: &ByteString,
     server_nonce: &[u8],
     server_key: &PrivateKey,
-    padding: RsaPadding,
 ) -> Result<ByteString, Error> {
     if secret.is_null_or_empty() {
         Err(Error::decoding("Missing server secret"))
@@ -258,7 +257,7 @@ pub(crate) fn legacy_secret_decrypt(
         let src = secret.value.as_ref().unwrap();
         let mut dst = vec![0u8; src.len()];
         let mut actual_size = server_key
-            .private_decrypt(src, &mut dst, padding)
+            .private_decrypt::<T>(src, &mut dst)
             .map_err(Error::decoding)?;
 
         let mut dst = Cursor::new(dst);

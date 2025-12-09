@@ -17,7 +17,7 @@ use chrono::Duration;
 use tracing::{error, trace};
 
 use opcua_crypto::{
-    random, AesKey, CertificateStore, KeySize, PrivateKey, PublicKey, SecurityPolicy, X509,
+    random, AesDerivedKeys, CertificateStore, KeySize, PrivateKey, PublicKey, SecurityPolicy, X509,
 };
 use opcua_types::{
     status_code::StatusCode, write_bytes, write_u32, write_u8, ByteString, ChannelSecurityToken,
@@ -44,7 +44,7 @@ pub enum Role {
 
 #[derive(Debug)]
 struct RemoteKeys {
-    keys: (Vec<u8>, AesKey, Vec<u8>),
+    keys: AesDerivedKeys,
     expires_at: DateTime,
 }
 
@@ -85,7 +85,7 @@ pub struct SecureChannel {
     /// [Part 4, 5.5.2](https://reference.opcfoundation.org/Core/Part4/v105/docs/5.5.2)
     remote_keys: HashMap<u32, RemoteKeys>,
     /// Server (i.e. our end's set of keys) Symmetric Signing Key, Decrypt Key, IV
-    local_keys: Option<(Vec<u8>, AesKey, Vec<u8>)>,
+    local_keys: Option<AesDerivedKeys>,
     /// Decoding options
     encoding_context: Arc<RwLock<ContextOwned>>,
 }
@@ -484,22 +484,12 @@ impl SecureChannel {
         }
     }
 
-    // Extra padding required for keysize > 2048 bits (256 bytes)
-    fn minimum_padding(key_length: usize) -> usize {
-        if key_length <= 256 {
-            1
-        } else {
-            2
-        }
-    }
-
     /// Get the plain text block size and minimum padding for this channel.
     /// Only makes sense if security policy is not None, and security mode is
     /// SignAndEncrypt
     pub fn get_padding_block_sizes(
         &self,
         security_header: &SecurityHeader,
-        signature_size: usize,
         message_type: MessageChunkType,
     ) -> Result<(usize, usize), Error> {
         if self.security_policy == SecurityPolicy::None
@@ -513,18 +503,9 @@ impl SecureChannel {
             SecurityHeader::Asymmetric(security_header) => {
                 if security_header.sender_certificate.is_null() {
                     error!("Sender has not supplied a certificate so it is doubtful that this will work");
-                    Ok((self.security_policy.plain_block_size(), signature_size))
+                    Ok((self.security_policy.plain_block_size(), 1))
                 } else {
                     // Padding requires we look at the remote certificate and security policy
-                    let padding = self
-                        .security_policy
-                        .asymmetric_encryption_padding()
-                        .ok_or_else(|| {
-                            Error::new(
-                                StatusCode::BadSecurityChecksFailed,
-                                "Invalid algorithm for asymmetric encryption",
-                            )
-                        })?;
                     let x509 = self.remote_cert().ok_or_else(|| {
                         Error::new(
                             StatusCode::BadCertificateInvalid,
@@ -532,18 +513,14 @@ impl SecureChannel {
                         )
                     })?;
                     let pk = x509.public_key()?;
-                    Ok((
-                        pk.plain_text_block_size(padding),
-                        Self::minimum_padding(pk.size()),
-                    ))
+                    let padding = self.security_policy.asymmetric_padding_info(&pk);
+                    Ok((padding.block_size, padding.minimum_padding))
                 }
             }
             SecurityHeader::Symmetric(_) => {
                 // Plain text block size comes from policy
-                Ok((
-                    self.security_policy.plain_block_size(),
-                    Self::minimum_padding(signature_size),
-                ))
+                let padding = self.security_policy.symmetric_padding_info();
+                Ok((padding.block_size, padding.minimum_padding))
             }
         }
     }
@@ -559,7 +536,7 @@ impl SecureChannel {
         message_type: MessageChunkType,
     ) -> Result<(usize, usize), Error> {
         let (plain_text_block_size, minimum_padding) =
-            self.get_padding_block_sizes(security_header, signature_size, message_type)?;
+            self.get_padding_block_sizes(security_header, message_type)?;
 
         if plain_text_block_size == 0 {
             return Ok((0, 0));
@@ -959,12 +936,9 @@ impl SecureChannel {
         // Encryption will change the size of the chunk. Since we sign before encrypting, we need to
         // compute that size and change the message header to be that new size
         let cipher_text_size = {
-            let padding = security_policy
-                .asymmetric_encryption_padding()
-                .expect("Invalid algorithm");
             let plain_text_size = encrypted_range.end - encrypted_range.start;
             let cipher_text_size =
-                encryption_key.calculate_cipher_text_size(plain_text_size, padding);
+                security_policy.calculate_cipher_text_size(plain_text_size, &encryption_key);
             trace!(
                 "plain_text_size = {}, encrypted_text_size = {}",
                 plain_text_size,
@@ -1225,11 +1199,11 @@ impl SecureChannel {
         }
     }
 
-    fn local_keys(&self) -> &(Vec<u8>, AesKey, Vec<u8>) {
+    fn local_keys(&self) -> &AesDerivedKeys {
         self.local_keys.as_ref().unwrap()
     }
 
-    fn insert_remote_keys(&mut self, keys: (Vec<u8>, AesKey, Vec<u8>)) {
+    fn insert_remote_keys(&mut self, keys: AesDerivedKeys) {
         // First remove any expired keys.
         self.remote_keys
             .retain(|_, v| DateTime::now() < v.expires_at);
@@ -1248,26 +1222,8 @@ impl SecureChannel {
         );
     }
 
-    fn get_remote_keys(&self, token_id: u32) -> Option<&(Vec<u8>, AesKey, Vec<u8>)> {
+    fn get_remote_keys(&self, token_id: u32) -> Option<&AesDerivedKeys> {
         self.remote_keys.get(&token_id).map(|k| &k.keys)
-    }
-
-    fn encryption_keys(&self) -> (&AesKey, &[u8]) {
-        let keys = self.local_keys();
-        (&keys.1, &keys.2)
-    }
-
-    fn signing_key(&self) -> &[u8] {
-        &(self.local_keys()).0
-    }
-
-    fn decryption_keys(&self, token_id: u32) -> Option<(&AesKey, &[u8])> {
-        let keys = self.get_remote_keys(token_id)?;
-        Some((&keys.1, &keys.2))
-    }
-
-    fn verification_key(&self, token_id: u32) -> Option<&[u8]> {
-        Some(&(self.get_remote_keys(token_id))?.0)
     }
 
     /// Encode data using security. Destination buffer is expected to be same size as src and expected
@@ -1311,10 +1267,9 @@ impl SecureChannel {
                 self.symmetric_sign_in_place(src, signed_range)?;
 
                 // Encrypt the sequence header, payload, signature
-                let (key, iv) = self.encryption_keys();
+                let keys = self.local_keys();
                 let encrypted_size = self.security_policy.symmetric_encrypt(
-                    key,
-                    iv,
+                    keys,
                     &src[encrypted_range.clone()],
                     &mut dst[encrypted_range.start..],
                 )?;
@@ -1343,10 +1298,9 @@ impl SecureChannel {
         );
 
         // Sign the message header, security header, sequence header, body, padding
-        let signing_key = self.signing_key();
         let (l, r) = buf.split_at_mut(signed_range.end);
         self.security_policy
-            .symmetric_sign(signing_key, l, &mut r[0..signature_size])?;
+            .symmetric_sign(self.local_keys(), l, &mut r[0..signature_size])?;
 
         Ok(signed_range.end + signature_size)
     }
@@ -1385,7 +1339,7 @@ impl SecureChannel {
                     signed_range,
                     signature_range
                 );
-                let verification_key = self.verification_key(token_id).ok_or_else(|| {
+                let verification_key = self.get_remote_keys(token_id).ok_or_else(|| {
                     Error::new(
                         StatusCode::BadSecureChannelClosed,
                         "Missing verification key",
@@ -1414,7 +1368,7 @@ impl SecureChannel {
 
                 // Decrypt encrypted portion
                 let mut decrypted_tmp = vec![0u8; ciphertext_size + 16]; // tmp includes +16 for blocksize
-                let (key, iv) = self.decryption_keys(token_id).ok_or_else(|| {
+                let keys = self.get_remote_keys(token_id).ok_or_else(|| {
                     Error::new(
                         StatusCode::BadSecureChannelClosed,
                         "Missing decryption keys",
@@ -1426,8 +1380,7 @@ impl SecureChannel {
                     encrypted_range
                 );
                 let decrypted_size = self.security_policy.symmetric_decrypt(
-                    key,
-                    iv,
+                    keys,
                     &src[encrypted_range.clone()],
                     &mut decrypted_tmp[..],
                 )?;
@@ -1447,20 +1400,14 @@ impl SecureChannel {
                     signed_range,
                     signature_range
                 );
-                let verification_key = self.verification_key(token_id).ok_or_else(|| {
-                    Error::new(
-                        StatusCode::BadSecureChannelClosed,
-                        "Missing verification key",
-                    )
-                })?;
                 let signature_start = signature_range.start;
                 self.security_policy.symmetric_verify_signature(
-                    verification_key,
+                    keys,
                     &dst[signed_range],
                     &dst[signature_range],
                 )?;
 
-                let key_size = key.key_length();
+                let key_size = self.security_policy.encrypting_key_length();
 
                 // Verify that the padding is correct and get the padded range.
                 let padding_range = self.verify_padding(dst, key_size, signature_start)?;

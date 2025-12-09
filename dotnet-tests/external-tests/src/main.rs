@@ -12,6 +12,12 @@ mod tests;
 #[tokio::main]
 pub async fn main() {
     env_logger::init();
+    // Newer OpenSSL versions ban SHA1 signatures. We need them for our tests,
+    // and the .NET SDK uses OpenSSL, so enable it.
+    // Safety: set_var isn't thread safe, but we do not call this concurrently.
+    unsafe {
+        std::env::set_var("OPENSSL_ENABLE_SHA1_SIGNATURES", "1");
+    }
 
     let runner = Runner::new();
     run_client_tests(&runner).await

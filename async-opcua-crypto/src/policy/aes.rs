@@ -1,0 +1,761 @@
+use std::marker::PhantomData;
+
+use opcua_types::{Error, StatusCode};
+use rsa::{Oaep, Pkcs1v15Encrypt};
+
+use crate::{
+    aes::calculate_cipher_text_size,
+    hash,
+    policy::{minimum_padding, PaddingInfo, SecurityPolicyImpl},
+    AesKey, KeySize, PrivateKey, PublicKey, SHA1_SIZE, SHA256_SIZE,
+};
+
+pub(crate) struct AesPolicy<T> {
+    _phantom: PhantomData<T>,
+}
+
+#[derive(Debug)]
+/// Derived keys used for AES encryption
+pub struct AesDerivedKeys {
+    signing_key: Vec<u8>,
+    encryption_key: AesKey,
+    initialization_vector: Vec<u8>,
+}
+
+impl<T: AesSecurityPolicy> AesPolicy<T> {
+    fn prf(secret: &[u8], seed: &[u8], length: usize, offset: usize) -> Vec<u8> {
+        let r = T::AsymmetricSignature::prf(secret, seed, length + offset);
+        r[offset..(offset + length)].to_vec()
+    }
+}
+
+pub(crate) trait AesSymmetricSignatureAlgorithm {
+    #[allow(unused)]
+    const URI: &'static str;
+    const SIZE: usize;
+
+    /// Sign the data in `data` using the signing key `key`, writing the result to `signature`
+    fn sign(key: &[u8], data: &[u8], signature: &mut [u8]) -> Result<(), Error>;
+
+    /// Verify that the data in `data` was signed using the signing key `key`.
+    fn verify_signature(key: &[u8], data: &[u8], signature: &[u8]) -> bool;
+}
+
+/// HMAC-SHA1 signature algorithm
+pub(crate) struct DsigHmacSha1;
+impl AesSymmetricSignatureAlgorithm for DsigHmacSha1 {
+    const URI: &'static str = crate::algorithms::DSIG_HMAC_SHA1;
+    const SIZE: usize = SHA1_SIZE;
+
+    fn sign(key: &[u8], data: &[u8], signature: &mut [u8]) -> Result<(), Error> {
+        hash::hmac_sha1(key, data, signature)
+    }
+
+    fn verify_signature(key: &[u8], data: &[u8], signature: &[u8]) -> bool {
+        hash::verify_hmac_sha1(key, data, signature)
+    }
+}
+
+/// HMAC-SHA256 signature algorithm
+pub(crate) struct DsigHmacSha256;
+impl AesSymmetricSignatureAlgorithm for DsigHmacSha256 {
+    const URI: &'static str = crate::algorithms::DSIG_HMAC_SHA256;
+    const SIZE: usize = SHA256_SIZE;
+
+    fn sign(key: &[u8], data: &[u8], signature: &mut [u8]) -> Result<(), Error> {
+        hash::hmac_sha256(key, data, signature)
+    }
+
+    fn verify_signature(key: &[u8], data: &[u8], signature: &[u8]) -> bool {
+        hash::verify_hmac_sha256(key, data, signature)
+    }
+}
+
+pub(crate) trait AesAsymmetricSignatureAlgorithm {
+    const URI: &'static str;
+
+    /// Sign `data` using `key`, writing the result to `out`.
+    fn sign(key: &PrivateKey, data: &[u8], out: &mut [u8]) -> Result<usize, Error>;
+
+    /// Verify the `signature` made using the private key for the public key
+    /// given by `key` by signing `data`.
+    fn verify_signature(key: &PublicKey, data: &[u8], signature: &[u8]) -> Result<bool, Error>;
+
+    /// Produce a pseudo-random sequence of bytes using the PRF
+    /// algorithm given in OPC-UA 6.7.5
+    fn prf(secret: &[u8], seed: &[u8], length: usize) -> Vec<u8>;
+}
+
+/// RSA-SHA256 asymmetric signature algorithm
+pub(crate) struct DsigRsaSha256;
+impl AesAsymmetricSignatureAlgorithm for DsigRsaSha256 {
+    const URI: &'static str = crate::algorithms::DSIG_RSA_SHA256;
+
+    fn sign(key: &PrivateKey, data: &[u8], out: &mut [u8]) -> Result<usize, Error> {
+        key.sign_sha256(data, out)
+    }
+
+    fn verify_signature(key: &PublicKey, data: &[u8], signature: &[u8]) -> Result<bool, Error> {
+        key.verify_sha256(data, signature)
+    }
+
+    fn prf(secret: &[u8], seed: &[u8], length: usize) -> Vec<u8> {
+        hash::p_sha256(secret, seed, length)
+    }
+}
+
+/// RSA-PSS-SHA256 asymmetric signature algorithm
+pub(crate) struct DsigRsaPssSha256;
+impl AesAsymmetricSignatureAlgorithm for DsigRsaPssSha256 {
+    const URI: &'static str = crate::algorithms::DSIG_RSA_PSS_SHA2_256;
+
+    fn sign(key: &PrivateKey, data: &[u8], out: &mut [u8]) -> Result<usize, Error> {
+        key.sign_sha256_pss(data, out)
+    }
+
+    fn verify_signature(key: &PublicKey, data: &[u8], signature: &[u8]) -> Result<bool, Error> {
+        key.verify_sha256_pss(data, signature)
+    }
+
+    fn prf(secret: &[u8], seed: &[u8], length: usize) -> Vec<u8> {
+        hash::p_sha256(secret, seed, length)
+    }
+}
+
+/// RSA-SHA1 asymmetric signature algorithm
+pub(crate) struct DsigRsaSha1;
+impl AesAsymmetricSignatureAlgorithm for DsigRsaSha1 {
+    const URI: &'static str = crate::algorithms::DSIG_RSA_SHA1;
+
+    fn sign(key: &PrivateKey, data: &[u8], out: &mut [u8]) -> Result<usize, Error> {
+        key.sign_sha1(data, out)
+    }
+
+    fn verify_signature(key: &PublicKey, data: &[u8], signature: &[u8]) -> Result<bool, Error> {
+        key.verify_sha1(data, signature)
+    }
+
+    fn prf(secret: &[u8], seed: &[u8], length: usize) -> Vec<u8> {
+        hash::p_sha1(secret, seed, length)
+    }
+}
+
+pub(crate) trait AesSymmetricEncryptionAlgorithm {
+    #[allow(unused)]
+    const URI: &'static str;
+    const KEY_LENGTH: usize;
+    const BLOCK_SIZE: usize;
+
+    /// Encrypt the data in `src` using `key`, writing the result to `dst`.
+    fn encrypt(key: &AesKey, src: &[u8], iv: &[u8], dst: &mut [u8]) -> Result<usize, Error>;
+
+    /// Decrypt the data in `src` using `key`, writing the result to `dst`.
+    fn decrypt(key: &AesKey, src: &[u8], iv: &[u8], dst: &mut [u8]) -> Result<usize, Error>;
+}
+
+/// AES-128-CBC symmetric encryption algorithm
+pub(crate) struct Aes128Cbc;
+impl AesSymmetricEncryptionAlgorithm for Aes128Cbc {
+    const URI: &'static str = crate::algorithms::ENC_AES128_CBC;
+    const KEY_LENGTH: usize = 16;
+    const BLOCK_SIZE: usize = 16;
+
+    fn encrypt(key: &AesKey, src: &[u8], iv: &[u8], dst: &mut [u8]) -> Result<usize, Error> {
+        key.encrypt_aes128_cbc(src, iv, dst)
+    }
+
+    fn decrypt(key: &AesKey, src: &[u8], iv: &[u8], dst: &mut [u8]) -> Result<usize, Error> {
+        key.decrypt_aes128_cbc(src, iv, dst)
+    }
+}
+
+/// AES-256-CBC symmetric encryption algorithm
+pub(crate) struct Aes256Cbc;
+impl AesSymmetricEncryptionAlgorithm for Aes256Cbc {
+    const URI: &'static str = crate::algorithms::ENC_AES256_CBC;
+    const KEY_LENGTH: usize = 32;
+    const BLOCK_SIZE: usize = 16;
+
+    fn encrypt(key: &AesKey, src: &[u8], iv: &[u8], dst: &mut [u8]) -> Result<usize, Error> {
+        key.encrypt_aes256_cbc(src, iv, dst)
+    }
+
+    fn decrypt(key: &AesKey, src: &[u8], iv: &[u8], dst: &mut [u8]) -> Result<usize, Error> {
+        key.decrypt_aes256_cbc(src, iv, dst)
+    }
+}
+
+pub(crate) trait AesAsymmetricEncryptionAlgorithm {
+    const URI: &'static str;
+    type Padding: rsa::traits::PaddingScheme;
+
+    fn get_padding() -> Self::Padding;
+
+    fn get_plaintext_block_size(key_size: usize) -> usize;
+}
+
+/// PKCS1v15 asymmetric encryption algorithm
+pub(crate) struct Pkcs1v15;
+impl AesAsymmetricEncryptionAlgorithm for Pkcs1v15 {
+    const URI: &'static str = crate::algorithms::ENC_RSA_15;
+    type Padding = Pkcs1v15Encrypt;
+
+    fn get_padding() -> Self::Padding {
+        Pkcs1v15Encrypt
+    }
+
+    fn get_plaintext_block_size(key_size: usize) -> usize {
+        key_size - 11
+    }
+}
+
+/// OAEP-SHA1 asymmetric encryption algorithm
+pub(crate) struct OaepSha1;
+impl AesAsymmetricEncryptionAlgorithm for OaepSha1 {
+    const URI: &'static str = crate::algorithms::ENC_RSA_OAEP;
+    type Padding = Oaep;
+
+    fn get_padding() -> Self::Padding {
+        Oaep::new::<sha1::Sha1>()
+    }
+
+    fn get_plaintext_block_size(key_size: usize) -> usize {
+        key_size - 42
+    }
+}
+
+/// OAEP-SHA256 asymmetric encryption algorithm
+pub(crate) struct OaepSha256;
+impl AesAsymmetricEncryptionAlgorithm for OaepSha256 {
+    const URI: &'static str = crate::algorithms::ENC_RSA_OAEP_SHA256;
+    type Padding = Oaep;
+
+    fn get_padding() -> Self::Padding {
+        Oaep::new::<sha2::Sha256>()
+    }
+
+    fn get_plaintext_block_size(key_size: usize) -> usize {
+        key_size - 66
+    }
+}
+
+impl<T: AesSecurityPolicy> SecurityPolicyImpl for AesPolicy<T> {
+    type TPrivateKey = PrivateKey;
+    type TPublicKey = PublicKey;
+    type TDerivedKey = AesDerivedKeys;
+
+    fn uri() -> &'static str {
+        T::SECURITY_POLICY_URI
+    }
+
+    fn is_deprecated() -> bool {
+        T::DEPRECATED
+    }
+
+    fn as_str() -> &'static str {
+        T::SECURITY_POLICY
+    }
+
+    fn symmetric_signature_size() -> usize {
+        T::SymmetricSignature::SIZE
+    }
+
+    fn calculate_cipher_text_size(plain_text_size: usize, key: &Self::TPublicKey) -> usize {
+        calculate_cipher_text_size::<T::AsymmetricEncryption>(key.size(), plain_text_size)
+    }
+
+    fn encrypting_key_length() -> usize {
+        T::SymmetricEncryption::KEY_LENGTH
+    }
+
+    fn asymmetric_encryption_algorithm() -> Option<&'static str> {
+        Some(T::AsymmetricEncryption::URI)
+    }
+
+    fn asymmetric_signature_algorithm() -> &'static str {
+        T::AsymmetricSignature::URI
+    }
+
+    fn nonce_length() -> usize {
+        T::NONCE_LENGTH
+    }
+
+    fn plain_text_block_size() -> usize {
+        T::SymmetricEncryption::BLOCK_SIZE
+    }
+
+    fn uses_legacy_sequence_numbers() -> bool {
+        true
+    }
+
+    fn asymmetric_padding_info(remote_key: &Self::TPublicKey) -> PaddingInfo {
+        PaddingInfo {
+            block_size: T::AsymmetricEncryption::get_plaintext_block_size(remote_key.size()),
+            minimum_padding: minimum_padding(remote_key.size()),
+        }
+    }
+
+    fn symmetric_padding_info() -> PaddingInfo {
+        PaddingInfo {
+            block_size: Self::plain_text_block_size(),
+            minimum_padding: minimum_padding(T::SymmetricSignature::SIZE),
+        }
+    }
+
+    fn asymmetric_sign(
+        key: &Self::TPrivateKey,
+        data: &[u8],
+        out: &mut [u8],
+    ) -> Result<usize, Error> {
+        T::AsymmetricSignature::sign(key, data, out)
+    }
+
+    fn asymmetric_verify_signature(
+        key: &Self::TPublicKey,
+        data: &[u8],
+        signature: &[u8],
+    ) -> Result<(), Error> {
+        if T::AsymmetricSignature::verify_signature(key, data, signature)? {
+            Ok(())
+        } else {
+            Err(Error::new(
+                StatusCode::BadSecurityChecksFailed,
+                "Signature mismatch",
+            ))
+        }
+    }
+
+    fn asymmetric_encrypt(
+        key: &Self::TPublicKey,
+        data: &[u8],
+        out: &mut [u8],
+    ) -> Result<usize, Error> {
+        key.public_encrypt::<T::AsymmetricEncryption>(data, out)
+            .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e))
+    }
+
+    fn asymmetric_decrypt(
+        key: &Self::TPrivateKey,
+        src: &[u8],
+        dst: &mut [u8],
+    ) -> Result<usize, Error> {
+        key.private_decrypt::<T::AsymmetricEncryption>(src, dst)
+            .map_err(|e| Error::new(StatusCode::BadSecurityChecksFailed, e))
+    }
+
+    fn derive_secure_channel_keys(secret: &[u8], seed: &[u8]) -> Self::TDerivedKey {
+        let signing_key =
+            T::AsymmetricSignature::prf(secret, seed, T::DERIVED_SIGNATURE_KEY_LENGTH);
+        let encrypting_key = Self::prf(
+            secret,
+            seed,
+            T::SymmetricEncryption::KEY_LENGTH,
+            T::DERIVED_SIGNATURE_KEY_LENGTH,
+        );
+        let encrypting_key = AesKey::new(encrypting_key);
+        let iv = Self::prf(
+            secret,
+            seed,
+            T::SymmetricEncryption::BLOCK_SIZE,
+            T::DERIVED_SIGNATURE_KEY_LENGTH + T::SymmetricEncryption::KEY_LENGTH,
+        );
+
+        AesDerivedKeys {
+            signing_key,
+            encryption_key: encrypting_key,
+            initialization_vector: iv,
+        }
+    }
+
+    fn symmetric_decrypt(
+        keys: &Self::TDerivedKey,
+        src: &[u8],
+        dst: &mut [u8],
+    ) -> Result<usize, Error> {
+        T::SymmetricEncryption::decrypt(&keys.encryption_key, src, &keys.initialization_vector, dst)
+    }
+
+    fn symmetric_encrypt(
+        keys: &Self::TDerivedKey,
+        src: &[u8],
+        dst: &mut [u8],
+    ) -> Result<usize, Error> {
+        T::SymmetricEncryption::encrypt(&keys.encryption_key, src, &keys.initialization_vector, dst)
+    }
+
+    fn symmetric_sign(
+        keys: &Self::TDerivedKey,
+        data: &[u8],
+        signature: &mut [u8],
+    ) -> Result<(), Error> {
+        T::SymmetricSignature::sign(&keys.signing_key, data, signature)
+    }
+
+    fn symmetric_verify_signature(
+        keys: &Self::TDerivedKey,
+        data: &[u8],
+        signature: &[u8],
+    ) -> Result<(), Error> {
+        if T::SymmetricSignature::verify_signature(&keys.signing_key, data, signature) {
+            Ok(())
+        } else {
+            Err(Error::new(
+                StatusCode::BadSecurityChecksFailed,
+                format!("Signature invalid: {signature:?}"),
+            ))
+        }
+    }
+
+    fn is_valid_key_length(length: usize) -> bool {
+        let (min, max) = T::ASYMMETRIC_KEY_LENGTH;
+        length >= min && length <= max
+    }
+}
+
+/// Trait for a security policy supported by the library.
+pub(crate) trait AesSecurityPolicy {
+    /// The name of the policy.
+    const SECURITY_POLICY: &'static str;
+    /// The URI of the policy, as defined in the OPC-UA standard.
+    const SECURITY_POLICY_URI: &'static str;
+    /// Whether the security policy is considered deprecated.
+    const DEPRECATED: bool = false;
+    /// Length of the secure channel nonce.
+    const NONCE_LENGTH: usize;
+
+    /// The length of the derived signature key in bytes.
+    const DERIVED_SIGNATURE_KEY_LENGTH: usize;
+    /// The length of the asymmetric key in bits.
+    const ASYMMETRIC_KEY_LENGTH: (usize, usize);
+
+    type SymmetricSignature: AesSymmetricSignatureAlgorithm;
+    type AsymmetricSignature: AesAsymmetricSignatureAlgorithm;
+    type SymmetricEncryption: AesSymmetricEncryptionAlgorithm;
+    type AsymmetricEncryption: AesAsymmetricEncryptionAlgorithm;
+}
+
+// These are constants that govern the different encryption / signing modes for OPC UA. In some
+// cases these algorithm string constants will be passed over the wire and code needs to test the
+// string to see if the algorithm is supported.
+
+/// Aes128-Sha256-RsaOaep security policy
+///
+///   AsymmetricEncryptionAlgorithm_RSA-PKCS15-SHA2-256
+///   AsymmetricSignatureAlgorithm_RSA-OAEP-SHA1
+///   CertificateSignatureAlgorithm_RSA-PKCS15-SHA2-256
+///   KeyDerivationAlgorithm_P-SHA2-256
+///   SymmetricEncryptionAlgorithm_AES128-CBC
+///   SymmetricSignatureAlgorithm_HMAC-SHA2-256
+///
+/// # Limits
+///
+///   DerivedSignatureKeyLength – 256 bits
+///   AsymmetricKeyLength - 2048-4096 bits
+///   SecureChannelNonceLength - 32 bytes
+pub(crate) struct Aes128Sha256RsaOaep;
+impl AesSecurityPolicy for Aes128Sha256RsaOaep {
+    const SECURITY_POLICY: &str = "Aes128-Sha256-RsaOaep";
+    const SECURITY_POLICY_URI: &str =
+        "http://opcfoundation.org/UA/SecurityPolicy#Aes128_Sha256_RsaOaep";
+    const NONCE_LENGTH: usize = 32;
+
+    const DERIVED_SIGNATURE_KEY_LENGTH: usize = 32;
+    const ASYMMETRIC_KEY_LENGTH: (usize, usize) = (2048, 4096);
+
+    type AsymmetricSignature = DsigRsaSha256;
+    type SymmetricSignature = DsigHmacSha256;
+    type SymmetricEncryption = Aes128Cbc;
+    type AsymmetricEncryption = OaepSha1;
+}
+
+/// Aes256-Sha256-RsaPss security policy
+///
+///   AsymmetricEncryptionAlgorithm_RSA-OAEP-SHA2-256
+///   AsymmetricSignatureAlgorithm_RSA-PSS -SHA2-256
+///   CertificateSignatureAlgorithm_ RSA-PKCS15-SHA2-256
+///   KeyDerivationAlgorithm_P-SHA2-256
+///   SymmetricEncryptionAlgorithm_AES256-CBC
+///   SymmetricSignatureAlgorithm_HMAC-SHA2-256
+///
+/// # Limits
+///
+///   DerivedSignatureKeyLength – 256 bits
+///   AsymmetricKeyLength - 2048-4096 bits
+///   SecureChannelNonceLength - 32 bytes
+pub(crate) struct Aes256Sha256RsaPss;
+impl AesSecurityPolicy for Aes256Sha256RsaPss {
+    const SECURITY_POLICY: &str = "Aes256-Sha256-RsaPss";
+    const SECURITY_POLICY_URI: &str =
+        "http://opcfoundation.org/UA/SecurityPolicy#Aes256_Sha256_RsaPss";
+    const NONCE_LENGTH: usize = 32;
+
+    const DERIVED_SIGNATURE_KEY_LENGTH: usize = 32;
+    const ASYMMETRIC_KEY_LENGTH: (usize, usize) = (2048, 4096);
+
+    type AsymmetricSignature = DsigRsaPssSha256;
+    type SymmetricSignature = DsigHmacSha256;
+    type SymmetricEncryption = Aes256Cbc;
+    type AsymmetricEncryption = OaepSha256;
+}
+
+/// Basic256Sha256 security policy
+///
+///   AsymmetricEncryptionAlgorithm_RSA-OAEP-SHA1
+///   AsymmetricSignatureAlgorithm_RSA-PKCS15-SHA2-256
+///   CertificateSignatureAlgorithm_RSA-PKCS15-SHA2-256
+///   KeyDerivationAlgorithm_P-SHA2-256
+///   SymmetricEncryptionAlgorithm_AES256-CBC
+///   SymmetricSignatureAlgorithm_HMAC-SHA2-256
+///
+/// # Limits
+///
+///   DerivedSignatureKeyLength – 256 bits
+///   AsymmetricKeyLength - 2048-4096 bits
+///   SecureChannelNonceLength - 32 bytes
+pub(crate) struct Basic256Sha256;
+impl AesSecurityPolicy for Basic256Sha256 {
+    const SECURITY_POLICY: &str = "Basic256Sha256";
+    const SECURITY_POLICY_URI: &str = "http://opcfoundation.org/UA/SecurityPolicy#Basic256Sha256";
+    const NONCE_LENGTH: usize = 32;
+
+    const DERIVED_SIGNATURE_KEY_LENGTH: usize = 32;
+    const ASYMMETRIC_KEY_LENGTH: (usize, usize) = (2048, 4096);
+
+    type AsymmetricSignature = DsigRsaSha256;
+    type SymmetricSignature = DsigHmacSha256;
+    type SymmetricEncryption = Aes256Cbc;
+    type AsymmetricEncryption = OaepSha1;
+}
+
+/// Basic128Rsa15 security policy (deprecated in OPC UA 1.04)
+///
+/// * AsymmetricSignatureAlgorithm – [RsaSha1](http://www.w3.org/2000/09/xmldsig#rsa-sha1).
+/// * AsymmetricEncryptionAlgorithm – [Rsa15](http://www.w3.org/2001/04/xmlenc#rsa-1_5).
+/// * SymmetricSignatureAlgorithm – [HmacSha1](http://www.w3.org/2000/09/xmldsig#hmac-sha1).
+/// * SymmetricEncryptionAlgorithm – [Aes128](http://www.w3.org/2001/04/xmlenc#aes128-cbc).
+/// * KeyDerivationAlgorithm – [PSha1](http://docs.oasis-open.org/ws-sx/ws-secureconversation/200512/dk/p_sha1).
+///
+/// # Limits
+///
+///   DerivedSignatureKeyLength – 128 bits
+///   AsymmetricKeyLength - 1024-2048 bits
+///   SecureChannelNonceLength - 16 bytes
+pub(crate) struct Basic128Rsa15;
+impl AesSecurityPolicy for Basic128Rsa15 {
+    const SECURITY_POLICY: &str = "Basic128Rsa15";
+    const SECURITY_POLICY_URI: &str = "http://opcfoundation.org/UA/SecurityPolicy#Basic128Rsa15";
+    const DEPRECATED: bool = true;
+    const NONCE_LENGTH: usize = 16;
+
+    const DERIVED_SIGNATURE_KEY_LENGTH: usize = 16;
+    const ASYMMETRIC_KEY_LENGTH: (usize, usize) = (1024, 2048);
+
+    type AsymmetricSignature = DsigRsaSha1;
+    type SymmetricSignature = DsigHmacSha1;
+    type SymmetricEncryption = Aes128Cbc;
+    type AsymmetricEncryption = Pkcs1v15;
+}
+
+/// Basic256 security policy (deprecated in OPC UA 1.04)
+///
+/// * AsymmetricSignatureAlgorithm – [RsaSha1](http://www.w3.org/2000/09/xmldsig#rsa-sha1).
+/// * AsymmetricEncryptionAlgorithm – [RsaOaep](http://www.w3.org/2001/04/xmlenc#rsa-oaep).
+/// * SymmetricSignatureAlgorithm – [HmacSha1](http://www.w3.org/2000/09/xmldsig#hmac-sha1).
+/// * SymmetricEncryptionAlgorithm – [Aes256](http://www.w3.org/2001/04/xmlenc#aes256-cbc).
+/// * KeyDerivationAlgorithm – [PSha1](http://docs.oasis-open.org/ws-sx/ws-secureconversation/200512/dk/p_sha1).
+///
+/// # Limits
+///
+///   DerivedSignatureKeyLength – 192 bits
+///   AsymmetricKeyLength - 1024-2048 bits
+///   SecureChannelNonceLength - 32 bytes
+pub(crate) struct Basic256;
+impl AesSecurityPolicy for Basic256 {
+    const SECURITY_POLICY: &str = "Basic256";
+    const SECURITY_POLICY_URI: &str = "http://opcfoundation.org/UA/SecurityPolicy#Basic256";
+    const DEPRECATED: bool = true;
+    const NONCE_LENGTH: usize = 32;
+
+    const DERIVED_SIGNATURE_KEY_LENGTH: usize = 24;
+    const ASYMMETRIC_KEY_LENGTH: (usize, usize) = (1024, 2048);
+
+    type AsymmetricSignature = DsigRsaSha1;
+    type SymmetricSignature = DsigHmacSha1;
+    type SymmetricEncryption = Aes256Cbc;
+    type AsymmetricEncryption = OaepSha1;
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{random, AesDerivedKeys, AesKey, SecurityPolicy};
+
+    #[test]
+    fn aes_test() {
+        // Create a random 128-bit key
+        let mut raw_key = [0u8; 16];
+        random::bytes(&mut raw_key);
+
+        // Create a random iv.
+        let mut iv = [0u8; 16];
+        random::bytes(&mut iv);
+
+        let aes_key = AesKey::new(raw_key.to_vec());
+
+        let keys = AesDerivedKeys {
+            signing_key: [0u8; 16].to_vec(),
+            encryption_key: aes_key,
+            initialization_vector: iv.to_vec(),
+        };
+
+        let policy = SecurityPolicy::Basic128Rsa15;
+
+        let plaintext = b"01234567890123450123456789012345";
+        let buf_size = plaintext.len() + policy.plain_block_size();
+        let mut ciphertext = vec![0u8; buf_size];
+
+        let ciphertext = {
+            println!(
+                "Plaintext = {}, ciphertext = {}",
+                plaintext.len(),
+                ciphertext.len()
+            );
+            let r = policy.symmetric_encrypt(&keys, plaintext, &mut ciphertext);
+            println!("result = {r:?}");
+            assert!(r.is_ok());
+            &ciphertext[..r.unwrap()]
+        };
+
+        let buf_size = ciphertext.len() + policy.plain_block_size();
+        let mut plaintext2 = vec![0u8; buf_size];
+
+        let plaintext2 = {
+            let r = policy.symmetric_decrypt(&keys, ciphertext, &mut plaintext2);
+            println!("result = {r:?}");
+            assert!(r.is_ok());
+            &plaintext2[..r.unwrap()]
+        };
+
+        assert_eq!(&plaintext[..], plaintext2);
+    }
+
+    #[test]
+    fn derive_keys_from_nonce() {
+        // Create a pair of "random" nonces.
+        let nonce1 = vec![
+            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
+            0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
+            0x1c, 0x1d, 0x1e, 0x1f,
+        ];
+        let nonce2 = vec![
+            0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d,
+            0x2e, 0x2f, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x3b,
+            0x3c, 0x3d, 0x3e, 0x3f,
+        ];
+
+        // Create a security policy Basic128Rsa15 policy
+        //
+        // a) SigningKeyLength = 16
+        // b) EncryptingKeyLength = 16
+        // c) EncryptingBlockSize = 16
+        let security_policy = SecurityPolicy::Basic128Rsa15;
+        let keys = security_policy.make_secure_channel_keys(&nonce1, &nonce2);
+        assert_eq!(keys.signing_key.len(), 16);
+        assert_eq!(keys.encryption_key.value().len(), 16);
+        assert_eq!(keys.initialization_vector.len(), 16);
+
+        // Create a security policy Basic256 policy
+        //
+        // a) SigningKeyLength = 24
+        // b) EncryptingKeyLength = 32
+        // c) EncryptingBlockSize = 16
+        let security_policy = SecurityPolicy::Basic256;
+        let keys = security_policy.make_secure_channel_keys(&nonce1, &nonce2);
+        assert_eq!(keys.signing_key.len(), 24);
+        assert_eq!(keys.encryption_key.value().len(), 32);
+        assert_eq!(keys.initialization_vector.len(), 16);
+
+        // Create a security policy Basic256Sha256 policy
+        //
+        // a) SigningKeyLength = 32
+        // b) EncryptingKeyLength = 32
+        // c) EncryptingBlockSize = 16
+        let security_policy = SecurityPolicy::Basic256Sha256;
+        let keys = security_policy.make_secure_channel_keys(&nonce1, &nonce2);
+        assert_eq!(keys.signing_key.len(), 32);
+        assert_eq!(keys.encryption_key.value().len(), 32);
+        assert_eq!(keys.initialization_vector.len(), 16);
+
+        // Create a security policy Aes128Sha256RsaOaep policy
+        //
+        // a) SigningKeyLength = 32
+        // b) EncryptingKeyLength = 32
+        // c) EncryptingBlockSize = 16
+        let security_policy = SecurityPolicy::Aes128Sha256RsaOaep;
+        let keys = security_policy.make_secure_channel_keys(&nonce1, &nonce2);
+        assert_eq!(keys.signing_key.len(), 32);
+        assert_eq!(keys.encryption_key.value().len(), 16);
+        assert_eq!(keys.initialization_vector.len(), 16);
+    }
+
+    #[test]
+    fn derive_keys_from_nonce_basic128rsa15() {
+        let security_policy = SecurityPolicy::Basic128Rsa15;
+
+        // This test takes two nonces generated from a real client / server session
+        let local_nonce = vec![
+            0x88, 0x65, 0x13, 0xb6, 0xee, 0xad, 0x68, 0xa2, 0xcb, 0xa7, 0x29, 0x0f, 0x79, 0xb3,
+            0x84, 0xf3,
+        ];
+        let remote_nonce = vec![
+            0x17, 0x0c, 0xe8, 0x68, 0x3e, 0xe6, 0xb3, 0x80, 0xb3, 0xf4, 0x67, 0x5c, 0x1e, 0xa2,
+            0xcc, 0xb1,
+        ];
+
+        // Expected local keys
+        let local_signing_key: Vec<u8> = vec![
+            0x66, 0x58, 0xa5, 0xa7, 0x8c, 0x7d, 0xa8, 0x4e, 0x57, 0xd3, 0x9b, 0x4d, 0x6b, 0xdc,
+            0x93, 0xad,
+        ];
+        let local_encrypting_key: Vec<u8> = vec![
+            0x44, 0x8f, 0x0d, 0x7d, 0x2e, 0x08, 0x99, 0xdd, 0x5b, 0x56, 0x8d, 0xaf, 0x70, 0xc2,
+            0x26, 0xfc,
+        ];
+        let local_iv = vec![
+            0x6c, 0x83, 0x7c, 0xd1, 0xa8, 0x61, 0xb9, 0xd7, 0xae, 0xdf, 0x2d, 0xe4, 0x85, 0x26,
+            0x81, 0x89,
+        ];
+
+        // Expected remote keys
+        let remote_signing_key: Vec<u8> = vec![
+            0x27, 0x23, 0x92, 0xb7, 0x47, 0xad, 0x48, 0xf6, 0xae, 0x20, 0x30, 0x2f, 0x88, 0x4f,
+            0x96, 0x40,
+        ];
+        let remote_encrypting_key: Vec<u8> = vec![
+            0x85, 0x84, 0x1c, 0xcc, 0xcb, 0x3c, 0x39, 0xd4, 0x14, 0x11, 0xa4, 0xfe, 0x01, 0x5a,
+            0x0a, 0xcf,
+        ];
+        let remote_iv = vec![
+            0xab, 0xc6, 0x26, 0x78, 0xb9, 0xa4, 0xe6, 0x93, 0x21, 0x9e, 0xc1, 0x7e, 0xd5, 0x8b,
+            0x0e, 0xf2,
+        ];
+
+        // Make the keys using the two nonce values
+        let local_keys = security_policy.make_secure_channel_keys(&remote_nonce, &local_nonce);
+        let remote_keys = security_policy.make_secure_channel_keys(&local_nonce, &remote_nonce);
+
+        // Compare the keys we received against the expected
+        assert_eq!(local_keys.signing_key, local_signing_key);
+        assert_eq!(
+            local_keys.encryption_key.value().to_vec(),
+            local_encrypting_key
+        );
+        assert_eq!(local_keys.initialization_vector, local_iv);
+
+        assert_eq!(remote_keys.signing_key, remote_signing_key);
+        assert_eq!(
+            remote_keys.encryption_key.value().to_vec(),
+            remote_encrypting_key
+        );
+        assert_eq!(remote_keys.initialization_vector, remote_iv);
+    }
+}

@@ -14,22 +14,13 @@ use rsa::pkcs1v15;
 use rsa::pkcs8;
 use rsa::pss;
 use rsa::signature::{RandomizedSigner, SignatureEncoding, Verifier};
-use rsa::{Oaep, Pkcs1v15Encrypt, RsaPrivateKey, RsaPublicKey};
+use rsa::{RsaPrivateKey, RsaPublicKey};
 
 use x509_cert::spki::SubjectPublicKeyInfoOwned;
 
 use opcua_types::{status_code::StatusCode, Error};
 
-#[derive(Copy, Clone, Debug, PartialEq)]
-/// RSA padding variant.
-pub enum RsaPadding {
-    /// PKCS1
-    Pkcs1,
-    /// OAEP-SHA1
-    OaepSha1,
-    /// OAEP-SHA256
-    OaepSha256,
-}
+use crate::policy::aes::AesAsymmetricEncryptionAlgorithm;
 
 #[derive(Debug)]
 /// Error from working with a private key.
@@ -91,38 +82,25 @@ pub trait KeySize {
     /// Length in bytes.
     fn size(&self) -> usize;
 
-    /// Get the cipher block size with given data size and padding.
-    fn calculate_cipher_text_size(&self, data_size: usize, padding: RsaPadding) -> usize {
-        let plain_text_block_size = self.plain_text_block_size(padding);
-        let block_count = if data_size.is_multiple_of(plain_text_block_size) {
-            data_size / plain_text_block_size
-        } else {
-            (data_size / plain_text_block_size) + 1
-        };
-
-        block_count * self.cipher_text_block_size()
-    }
-
-    /// Get the plain text block size for the given padding type.
-    fn plain_text_block_size(&self, padding: RsaPadding) -> usize {
-        // the maximum plain text size block is given by
-        // for pkcs#1 v1.5 , keyLength - 11
-        // for oaep  keyLength -2 hsize -2
-        // where all sizes are in bytes
-        // sha256 size is 256bits => 32 bytes,
-        //sha1 size is 160bits => 20 bytes
-
-        match padding {
-            RsaPadding::Pkcs1 => self.size() - 11,
-            RsaPadding::OaepSha1 => self.size() - 42,
-            RsaPadding::OaepSha256 => self.size() - 66,
-        }
-    }
-
     /// Get the cipher text block size.
     fn cipher_text_block_size(&self) -> usize {
         self.size()
     }
+}
+
+/// Get the cipher block size with given data size and padding.
+pub(crate) fn calculate_cipher_text_size<T: AesAsymmetricEncryptionAlgorithm>(
+    key_size: usize,
+    data_size: usize,
+) -> usize {
+    let plain_text_block_size = T::get_plaintext_block_size(key_size);
+    let block_count = if data_size.is_multiple_of(plain_text_block_size) {
+        data_size / plain_text_block_size
+    } else {
+        (data_size / plain_text_block_size) + 1
+    };
+
+    block_count * key_size
 }
 
 impl KeySize for PrivateKey {
@@ -246,30 +224,12 @@ impl PrivateKey {
         }
     }
 
-    fn pkcs1_decrypt(&self, src: &[u8]) -> rsa::errors::Result<Vec<u8>> {
-        self.value.decrypt(Pkcs1v15Encrypt, src)
-    }
-
-    fn oaepsha1_decrypt(&self, src: &[u8]) -> rsa::errors::Result<Vec<u8>> {
-        let padding = Oaep::new::<sha1::Sha1>();
-        self.value.decrypt(padding, src)
-    }
-
-    fn oaepsha2_decrypt(&self, src: &[u8]) -> rsa::errors::Result<Vec<u8>> {
-        let padding = Oaep::new::<sha2::Sha256>();
-        self.value.decrypt(padding, src)
-    }
-
-    /// Decrypts data in src to dst using the specified padding and returning the size of the decrypted
-    /// data in bytes or an error.
-    pub fn private_decrypt(
+    pub(crate) fn private_decrypt<T: AesAsymmetricEncryptionAlgorithm>(
         &self,
         src: &[u8],
         dst: &mut [u8],
-        padding: RsaPadding,
     ) -> Result<usize, PKeyError> {
         let cipher_text_block_size = self.cipher_text_block_size();
-
         // Decrypt the data
         let mut src_idx = 0;
         let mut dst_idx = 0;
@@ -283,11 +243,8 @@ impl PrivateKey {
                 let src = &src[src_idx..src_end_index];
                 let dst = &mut dst[dst_idx..(dst_idx + cipher_text_block_size)];
 
-                let decrypted = match padding {
-                    RsaPadding::OaepSha256 => self.oaepsha2_decrypt(src)?,
-                    RsaPadding::Pkcs1 => self.pkcs1_decrypt(src)?,
-                    RsaPadding::OaepSha1 => self.oaepsha1_decrypt(src)?,
-                };
+                let padding = T::get_padding();
+                let decrypted = self.value.decrypt(padding, src)?;
 
                 let size = decrypted.len();
                 if size == dst.len() {
@@ -351,46 +308,17 @@ impl PublicKey {
         }
     }
 
-    fn pkcs1_encrypt(&self, src: &[u8]) -> rsa::errors::Result<Vec<u8>> {
-        let mut rng = rand::thread_rng();
-        self.value.encrypt(&mut rng, Pkcs1v15Encrypt, src)
-    }
-
-    fn oaepsha1_encrypt(&self, src: &[u8]) -> rsa::errors::Result<Vec<u8>> {
-        let mut rng = rand::thread_rng();
-        let padding = Oaep::new::<sha1::Sha1>();
-        self.value.encrypt(&mut rng, padding, src)
-    }
-
-    fn oaepsha2_encrypt(&self, src: &[u8]) -> rsa::errors::Result<Vec<u8>> {
-        let mut rng = rand::thread_rng();
-        let padding = Oaep::new::<sha2::Sha256>();
-        self.value.encrypt(&mut rng, padding, src)
-    }
-
-    fn encrypt_data_chunk(&self, src: &[u8], padding: RsaPadding) -> Result<Vec<u8>, PKeyError> {
-        let r = match padding {
-            RsaPadding::OaepSha256 => self.oaepsha2_encrypt(src),
-            RsaPadding::Pkcs1 => self.pkcs1_encrypt(src),
-            RsaPadding::OaepSha1 => self.oaepsha1_encrypt(src),
-        };
-
-        match r {
-            Err(_) => Err(PKeyError),
-            Ok(val) => Ok(val),
-        }
-    }
-
     /// Encrypts data from src to dst using the specified padding and returns the size of encrypted
     /// data in bytes or an error.
-    pub fn public_encrypt(
+    pub(crate) fn public_encrypt<T: AesAsymmetricEncryptionAlgorithm>(
         &self,
         src: &[u8],
         dst: &mut [u8],
-        padding: RsaPadding,
     ) -> Result<usize, PKeyError> {
         let cipher_text_block_size = self.cipher_text_block_size();
-        let plain_text_block_size = self.plain_text_block_size(padding);
+        let plain_text_block_size = T::get_plaintext_block_size(self.size());
+
+        let mut rng = rand::thread_rng();
 
         let mut src_idx = 0;
         let mut dst_idx = 0;
@@ -411,7 +339,8 @@ impl PublicKey {
             dst_idx += {
                 let src = &src[src_idx..src_end_index];
 
-                let encrypted = self.encrypt_data_chunk(src, padding)?;
+                let padding = T::get_padding();
+                let encrypted = self.value.encrypt(&mut rng, padding, src)?;
                 dst[dst_idx..(dst_idx + cipher_text_block_size)].copy_from_slice(&encrypted);
                 encrypted.len()
             };

@@ -293,11 +293,8 @@ impl MessageChunk {
 
         // Get the encryption block size, and the minimum padding length.
         // The minimum padding depends on the key length.
-        let (plain_text_block_size, minimum_padding) = secure_channel.get_padding_block_sizes(
-            &security_header,
-            signature_size,
-            message_type,
-        )?;
+        let (plain_text_block_size, minimum_padding) =
+            secure_channel.get_padding_block_sizes(&security_header, message_type)?;
 
         // Compute the max chunk size aligned to an encryption block.
         // When encrypting, the size must be a whole multiple of `plain_text_block_size`,

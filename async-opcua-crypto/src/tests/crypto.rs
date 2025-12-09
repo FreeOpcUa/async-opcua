@@ -4,58 +4,22 @@ use std::io::Write;
 use opcua_types::StatusCode;
 
 use crate::{
-    aes::AesKey,
+    aes::calculate_cipher_text_size,
     certificate_store::*,
-    from_hex, hash, random,
+    from_hex, hash,
+    policy::aes::{
+        Aes128Sha256RsaOaep, AesAsymmetricEncryptionAlgorithm, AesSecurityPolicy, OaepSha1,
+        OaepSha256, Pkcs1v15,
+    },
+    random,
     tests::{
         make_certificate_store, make_test_cert_1024, make_test_cert_2048, APPLICATION_HOSTNAME,
         APPLICATION_URI,
     },
     user_identity::{legacy_secret_decrypt, legacy_secret_encrypt},
     x509::{X509Data, X509},
-    KeySize, PrivateKey, RsaPadding, SecurityPolicy, SHA1_SIZE, SHA256_SIZE,
+    KeySize, PrivateKey, PublicKey, SecurityPolicy, SHA1_SIZE, SHA256_SIZE,
 };
-
-#[test]
-fn aes_test() {
-    // Create a random 128-bit key
-    let mut raw_key = [0u8; 16];
-    random::bytes(&mut raw_key);
-
-    // Create a random iv.
-    let mut iv = [0u8; 16];
-    random::bytes(&mut iv);
-
-    let aes_key = AesKey::new(SecurityPolicy::Basic128Rsa15, &raw_key);
-
-    let plaintext = b"01234567890123450123456789012345";
-    let buf_size = plaintext.len() + aes_key.block_size();
-    let mut ciphertext = vec![0u8; buf_size];
-
-    let ciphertext = {
-        println!(
-            "Plaintext = {}, ciphertext = {}",
-            plaintext.len(),
-            ciphertext.len()
-        );
-        let r = aes_key.encrypt(plaintext, &iv, &mut ciphertext);
-        println!("result = {r:?}");
-        assert!(r.is_ok());
-        &ciphertext[..r.unwrap()]
-    };
-
-    let buf_size = ciphertext.len() + aes_key.block_size();
-    let mut plaintext2 = vec![0u8; buf_size];
-
-    let plaintext2 = {
-        let r = aes_key.decrypt(ciphertext, &iv, &mut plaintext2);
-        println!("result = {r:?}");
-        assert!(r.is_ok());
-        &plaintext2[..r.unwrap()]
-    };
-
-    assert_eq!(&plaintext[..], plaintext2);
-}
 
 #[test]
 fn create_cert() {
@@ -241,35 +205,33 @@ fn asymmetric_encrypt_and_decrypt() {
 }
 
 #[test]
-fn calculate_cipher_text_size() {
+fn test_calculate_cipher_text_size() {
     let (_, pkey) = make_test_cert_2048();
+    let s = pkey.size();
 
     // Testing -11 bounds
-    let padding = RsaPadding::Pkcs1;
-    assert_eq!(pkey.calculate_cipher_text_size(1, padding), 256);
-    assert_eq!(pkey.calculate_cipher_text_size(245, padding), 256);
-    assert_eq!(pkey.calculate_cipher_text_size(246, padding), 512);
-    assert_eq!(pkey.calculate_cipher_text_size(255, padding), 512);
-    assert_eq!(pkey.calculate_cipher_text_size(256, padding), 512);
-    assert_eq!(pkey.calculate_cipher_text_size(512, padding), 768);
+    assert_eq!(calculate_cipher_text_size::<Pkcs1v15>(s, 1), 256);
+    assert_eq!(calculate_cipher_text_size::<Pkcs1v15>(s, 245), 256);
+    assert_eq!(calculate_cipher_text_size::<Pkcs1v15>(s, 246), 512);
+    assert_eq!(calculate_cipher_text_size::<Pkcs1v15>(s, 255), 512);
+    assert_eq!(calculate_cipher_text_size::<Pkcs1v15>(s, 256), 512);
+    assert_eq!(calculate_cipher_text_size::<Pkcs1v15>(s, 512), 768);
 
     // Testing -42 bounds
-    let padding = RsaPadding::OaepSha1;
-    assert_eq!(pkey.calculate_cipher_text_size(1, padding), 256);
-    assert_eq!(pkey.calculate_cipher_text_size(214, padding), 256);
-    assert_eq!(pkey.calculate_cipher_text_size(215, padding), 512);
-    assert_eq!(pkey.calculate_cipher_text_size(255, padding), 512);
-    assert_eq!(pkey.calculate_cipher_text_size(256, padding), 512);
-    assert_eq!(pkey.calculate_cipher_text_size(512, padding), 768);
+    assert_eq!(calculate_cipher_text_size::<OaepSha1>(s, 1), 256);
+    assert_eq!(calculate_cipher_text_size::<OaepSha1>(s, 214), 256);
+    assert_eq!(calculate_cipher_text_size::<OaepSha1>(s, 215), 512);
+    assert_eq!(calculate_cipher_text_size::<OaepSha1>(s, 255), 512);
+    assert_eq!(calculate_cipher_text_size::<OaepSha1>(s, 256), 512);
+    assert_eq!(calculate_cipher_text_size::<OaepSha1>(s, 512), 768);
 
     // Testing -66 bounds
-    let padding = RsaPadding::OaepSha256;
-    assert_eq!(pkey.calculate_cipher_text_size(1, padding), 256);
-    assert_eq!(pkey.calculate_cipher_text_size(190, padding), 256);
-    assert_eq!(pkey.calculate_cipher_text_size(191, padding), 512);
-    assert_eq!(pkey.calculate_cipher_text_size(255, padding), 512);
-    assert_eq!(pkey.calculate_cipher_text_size(256, padding), 512);
-    assert_eq!(pkey.calculate_cipher_text_size(512, padding), 768);
+    assert_eq!(calculate_cipher_text_size::<OaepSha256>(s, 1), 256);
+    assert_eq!(calculate_cipher_text_size::<OaepSha256>(s, 190), 256);
+    assert_eq!(calculate_cipher_text_size::<OaepSha256>(s, 191), 512);
+    assert_eq!(calculate_cipher_text_size::<OaepSha256>(s, 255), 512);
+    assert_eq!(calculate_cipher_text_size::<OaepSha256>(s, 256), 512);
+    assert_eq!(calculate_cipher_text_size::<OaepSha256>(s, 512), 768);
 }
 
 #[test]
@@ -277,20 +239,19 @@ fn calculate_cipher_text_size2() {
     let (cert, private_key) = make_test_cert_1024();
     let public_key = cert.public_key().unwrap();
 
-    // The cipher text size function should report exactly the same value as the value returned
-    // by encrypting bytes. This is especially important on boundary values.
-    for padding in &[
-        RsaPadding::Pkcs1,
-        RsaPadding::OaepSha1,
-        RsaPadding::OaepSha256,
-    ] {
+    fn inner_test<T: AesAsymmetricEncryptionAlgorithm>(
+        private_key: &PrivateKey,
+        public_key: &PublicKey,
+    ) {
+        // The cipher text size function should report exactly the same value as the value returned
+        // by encrypting bytes. This is especially important on boundary values.
         for src_len in 1..550 {
             let src = vec![127u8; src_len];
 
             // Encrypt the bytes to a dst buffer of the expected size with padding
-            let expected_size = private_key.calculate_cipher_text_size(src_len, *padding);
+            let expected_size = calculate_cipher_text_size::<T>(private_key.size(), src_len);
             let mut dst = vec![0u8; expected_size];
-            let actual_size = public_key.public_encrypt(&src, &mut dst, *padding).unwrap();
+            let actual_size = public_key.public_encrypt::<T>(&src, &mut dst).unwrap();
             if expected_size != actual_size {
                 println!(
                     "Expected size {expected_size} != actual size {actual_size} for src length {src_len}"
@@ -300,13 +261,15 @@ fn calculate_cipher_text_size2() {
 
             // Decrypt to be sure the data is same as input
             let mut src2 = vec![0u8; expected_size];
-            let src2_len = private_key
-                .private_decrypt(&dst, &mut src2, *padding)
-                .unwrap();
+            let src2_len = private_key.private_decrypt::<T>(&dst, &mut src2).unwrap();
             assert_eq!(src_len, src2_len);
             assert_eq!(&src[..], &src[..src2_len]);
         }
     }
+
+    inner_test::<Pkcs1v15>(&private_key, &public_key);
+    inner_test::<OaepSha1>(&private_key, &public_key);
+    inner_test::<OaepSha256>(&private_key, &public_key);
 }
 
 #[test]
@@ -438,125 +401,6 @@ fn generate_nonce() {
 }
 
 #[test]
-fn derive_keys_from_nonce() {
-    // Create a pair of "random" nonces.
-    let nonce1 = vec![
-        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
-        0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d,
-        0x1e, 0x1f,
-    ];
-    let nonce2 = vec![
-        0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e,
-        0x2f, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x3b, 0x3c, 0x3d,
-        0x3e, 0x3f,
-    ];
-
-    // Create a security policy Basic128Rsa15 policy
-    //
-    // a) SigningKeyLength = 16
-    // b) EncryptingKeyLength = 16
-    // c) EncryptingBlockSize = 16
-    let security_policy = SecurityPolicy::Basic128Rsa15;
-    let (signing_key, encryption_key, iv) =
-        security_policy.make_secure_channel_keys(&nonce1, &nonce2);
-    assert_eq!(signing_key.len(), 16);
-    assert_eq!(encryption_key.value().len(), 16);
-    assert_eq!(iv.len(), 16);
-
-    // Create a security policy Basic256 policy
-    //
-    // a) SigningKeyLength = 24
-    // b) EncryptingKeyLength = 32
-    // c) EncryptingBlockSize = 16
-    let security_policy = SecurityPolicy::Basic256;
-    let (signing_key, encryption_key, iv) =
-        security_policy.make_secure_channel_keys(&nonce1, &nonce2);
-    assert_eq!(signing_key.len(), 24);
-    assert_eq!(encryption_key.value().len(), 32);
-    assert_eq!(iv.len(), 16);
-
-    // Create a security policy Basic256Sha256 policy
-    //
-    // a) SigningKeyLength = 32
-    // b) EncryptingKeyLength = 32
-    // c) EncryptingBlockSize = 16
-    let security_policy = SecurityPolicy::Basic256Sha256;
-    let (signing_key, encryption_key, iv) =
-        security_policy.make_secure_channel_keys(&nonce1, &nonce2);
-    assert_eq!(signing_key.len(), 32);
-    assert_eq!(encryption_key.value().len(), 32);
-    assert_eq!(iv.len(), 16);
-
-    // Create a security policy Aes128Sha256RsaOaep policy
-    //
-    // a) SigningKeyLength = 32
-    // b) EncryptingKeyLength = 32
-    // c) EncryptingBlockSize = 16
-    let security_policy = SecurityPolicy::Aes128Sha256RsaOaep;
-    let (signing_key, encryption_key, iv) =
-        security_policy.make_secure_channel_keys(&nonce1, &nonce2);
-    assert_eq!(signing_key.len(), 32);
-    assert_eq!(encryption_key.value().len(), 16);
-    assert_eq!(iv.len(), 16);
-}
-
-#[test]
-fn derive_keys_from_nonce_basic128rsa15() {
-    let security_policy = SecurityPolicy::Basic128Rsa15;
-
-    // This test takes two nonces generated from a real client / server session
-    let local_nonce = vec![
-        0x88, 0x65, 0x13, 0xb6, 0xee, 0xad, 0x68, 0xa2, 0xcb, 0xa7, 0x29, 0x0f, 0x79, 0xb3, 0x84,
-        0xf3,
-    ];
-    let remote_nonce = vec![
-        0x17, 0x0c, 0xe8, 0x68, 0x3e, 0xe6, 0xb3, 0x80, 0xb3, 0xf4, 0x67, 0x5c, 0x1e, 0xa2, 0xcc,
-        0xb1,
-    ];
-
-    // Expected local keys
-    let local_signing_key: Vec<u8> = vec![
-        0x66, 0x58, 0xa5, 0xa7, 0x8c, 0x7d, 0xa8, 0x4e, 0x57, 0xd3, 0x9b, 0x4d, 0x6b, 0xdc, 0x93,
-        0xad,
-    ];
-    let local_encrypting_key: Vec<u8> = vec![
-        0x44, 0x8f, 0x0d, 0x7d, 0x2e, 0x08, 0x99, 0xdd, 0x5b, 0x56, 0x8d, 0xaf, 0x70, 0xc2, 0x26,
-        0xfc,
-    ];
-    let local_iv = vec![
-        0x6c, 0x83, 0x7c, 0xd1, 0xa8, 0x61, 0xb9, 0xd7, 0xae, 0xdf, 0x2d, 0xe4, 0x85, 0x26, 0x81,
-        0x89,
-    ];
-
-    // Expected remote keys
-    let remote_signing_key: Vec<u8> = vec![
-        0x27, 0x23, 0x92, 0xb7, 0x47, 0xad, 0x48, 0xf6, 0xae, 0x20, 0x30, 0x2f, 0x88, 0x4f, 0x96,
-        0x40,
-    ];
-    let remote_encrypting_key: Vec<u8> = vec![
-        0x85, 0x84, 0x1c, 0xcc, 0xcb, 0x3c, 0x39, 0xd4, 0x14, 0x11, 0xa4, 0xfe, 0x01, 0x5a, 0x0a,
-        0xcf,
-    ];
-    let remote_iv = vec![
-        0xab, 0xc6, 0x26, 0x78, 0xb9, 0xa4, 0xe6, 0x93, 0x21, 0x9e, 0xc1, 0x7e, 0xd5, 0x8b, 0x0e,
-        0xf2,
-    ];
-
-    // Make the keys using the two nonce values
-    let local_keys = security_policy.make_secure_channel_keys(&remote_nonce, &local_nonce);
-    let remote_keys = security_policy.make_secure_channel_keys(&local_nonce, &remote_nonce);
-
-    // Compare the keys we received against the expected
-    assert_eq!(local_keys.0, local_signing_key);
-    assert_eq!(local_keys.1.value().to_vec(), local_encrypting_key);
-    assert_eq!(local_keys.2, local_iv);
-
-    assert_eq!(remote_keys.0, remote_signing_key);
-    assert_eq!(remote_keys.1.value().to_vec(), remote_encrypting_key);
-    assert_eq!(remote_keys.2, remote_iv);
-}
-
-#[test]
 fn certificate_with_hostname_mismatch() {
     let (cert, _) = make_test_cert_2048();
     let wrong_host_name = format!("wrong_{APPLICATION_HOSTNAME}");
@@ -595,10 +439,17 @@ fn encrypt_decrypt_password() {
 
     let (cert, pkey) = make_test_cert_1024();
 
-    let padding = RsaPadding::OaepSha1;
-    let secret =
-        legacy_secret_encrypt(password.as_bytes(), nonce.as_ref(), &cert, padding).unwrap();
-    let password2 = legacy_secret_decrypt(&secret, nonce.as_ref(), &pkey, padding).unwrap();
+    let secret = legacy_secret_encrypt(
+        password.as_bytes(),
+        nonce.as_ref(),
+        &cert,
+        SecurityPolicy::Aes128Sha256RsaOaep,
+    )
+    .unwrap();
+    let password2 = legacy_secret_decrypt::<
+        <Aes128Sha256RsaOaep as AesSecurityPolicy>::AsymmetricEncryption,
+    >(&secret, nonce.as_ref(), &pkey)
+    .unwrap();
 
     assert_eq!(
         password,

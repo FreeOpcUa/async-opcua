@@ -13,11 +13,10 @@ use opcua_types::{
 };
 use tracing::{error, trace};
 
-pub(crate) use crate::aes::RsaPadding;
-
 pub use crate::aes::{AesKey, KeySize, PKey, PrivateKey, PublicKey};
 pub use crate::x509::{X509Data, X509Error, X509};
 pub use certificate_store::CertificateStore;
+pub use policy::{AesDerivedKeys, PaddingInfo};
 pub use security_policy::SecurityPolicy;
 pub use thumbprint::Thumbprint;
 pub use user_identity::{
@@ -36,6 +35,8 @@ mod thumbprint;
 mod user_identity;
 mod x509;
 
+mod policy;
+
 mod aes;
 
 /// Size of a SHA1 hash value in bytes
@@ -45,11 +46,13 @@ pub const SHA256_SIZE: usize = 32;
 
 /// These are algorithms that are used by various policies or external to this file
 pub(crate) mod algorithms {
-    // Symmetric encryption algorithm AES128-CBC
-    //pub const ENC_AES128_CBC: &str = "http://www.w3.org/2001/04/xmlenc#aes128-cbc";
+    /// Symmetric encryption algorithm AES128-CBC
+    #[allow(unused)]
+    pub(crate) const ENC_AES128_CBC: &str = "http://www.w3.org/2001/04/xmlenc#aes128-cbc";
 
-    // Symmetric encryption algorithm AES256-CBC
-    //pub const ENC_AES256_CBC: &str = "http://www.w3.org/2001/04/xmlenc#aes256-cbc";
+    /// Symmetric encryption algorithm AES256-CBC
+    #[allow(unused)]
+    pub(crate) const ENC_AES256_CBC: &str = "http://www.w3.org/2001/04/xmlenc#aes256-cbc";
 
     /// Asymmetric encryption algorithm RSA15
     pub(crate) const ENC_RSA_15: &str = "http://www.w3.org/2001/04/xmlenc#rsa-1_5";
@@ -65,9 +68,11 @@ pub(crate) mod algorithms {
     //pub const ENC_RSA_OAEP_MGF1P: &str = "http://www.w3.org/2001/04/xmlenc#rsa-oaep-mgf1p";
 
     /// SymmetricSignatureAlgorithm – HmacSha1 – (http://www.w3.org/2000/09/xmldsig#hmac-sha1).
+    #[allow(unused)]
     pub(crate) const DSIG_HMAC_SHA1: &str = "http://www.w3.org/2000/09/xmldsig#hmac-sha1";
 
     /// SymmetricSignatureAlgorithm – HmacSha256 – (http://www.w3.org/2000/09/xmldsig#hmac-sha256).
+    #[allow(unused)]
     pub(crate) const DSIG_HMAC_SHA256: &str = "http://www.w3.org/2000/09/xmldsig#hmac-sha256";
 
     /// Asymmetric digital signature algorithm using RSA-SHA1

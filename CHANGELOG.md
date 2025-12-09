@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.17.1] - 2025-12-09
+
+Fix to a critical issue in the client causing a busy-loop.
+
+### Client
+
+#### Fixed
+ - Fixed issue causing a busy loop in the subscription event loop in the client.
+
 ## [0.17.0] - 2025-12-04
 
 A number of important fixes, some affecting the core protocol. Improvements to codegen, support for reverse connect, and a few other features.

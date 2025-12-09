@@ -107,7 +107,7 @@ checksum = "69f7f8c3906b62b754cd5326047894316021dcfe5a194c8ea52bdd94934a3457"
 
 [[package]]
 name = "async-opcua"
-version = "0.17.0"
+version = "0.17.1"
 dependencies = [
  "async-opcua",
  "async-opcua-client",
@@ -150,7 +150,7 @@ dependencies = [
 
 [[package]]
 name = "async-opcua-client"
-version = "0.17.0"
+version = "0.17.1"
 dependencies = [
  "arc-swap",
  "async-opcua-core",
@@ -195,7 +195,7 @@ dependencies = [
 
 [[package]]
 name = "async-opcua-core"
-version = "0.17.0"
+version = "0.17.1"
 dependencies = [
  "async-opcua-crypto",
  "async-opcua-types",
@@ -215,7 +215,7 @@ dependencies = [
 
 [[package]]
 name = "async-opcua-core-namespace"
-version = "0.17.0"
+version = "0.17.1"
 dependencies = [
  "async-opcua-nodes",
  "async-opcua-types",
@@ -223,7 +223,7 @@ dependencies = [
 
 [[package]]
 name = "async-opcua-crypto"
-version = "0.17.0"
+version = "0.17.1"
 dependencies = [
  "aes",
  "async-opcua-types",
@@ -290,7 +290,7 @@ dependencies = [
 
 [[package]]
 name = "async-opcua-macros"
-version = "0.17.0"
+version = "0.17.1"
 dependencies = [
  "base64 0.22.1",
  "convert_case",
@@ -325,7 +325,7 @@ dependencies = [
 
 [[package]]
 name = "async-opcua-nodes"
-version = "0.17.0"
+version = "0.17.1"
 dependencies = [
  "async-opcua-macros",
  "async-opcua-nodes",
@@ -340,7 +340,7 @@ dependencies = [
 
 [[package]]
 name = "async-opcua-server"
-version = "0.17.0"
+version = "0.17.1"
 dependencies = [
  "arc-swap",
  "async-opcua-client",
@@ -389,7 +389,7 @@ dependencies = [
 
 [[package]]
 name = "async-opcua-types"
-version = "0.17.0"
+version = "0.17.1"
 dependencies = [
  "async-opcua-macros",
  "async-opcua-types",
@@ -410,7 +410,7 @@ dependencies = [
 
 [[package]]
 name = "async-opcua-xml"
-version = "0.17.0"
+version = "0.17.1"
 dependencies = [
  "chrono",
  "quick-xml",

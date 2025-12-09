@@ -51,7 +51,7 @@ pub struct SubscriptionEventLoopState<T, R, S> {
 #[derive(Debug)]
 enum ActivityOrNext {
     Activity(SubscriptionActivity),
-    Next(Option<Instant>),
+    Next,
 }
 
 impl<T: Future<Output = Result<bool, StatusCode>>, R: Fn() -> T, S: SubscriptionCache>
@@ -106,19 +106,17 @@ impl<T: Future<Output = Result<bool, StatusCode>>, R: Fn() -> T, S: Subscription
 
     /// Run an iteration of the event loop, returning each time a publish message is received.
     pub async fn iter_loop(&mut self) -> SubscriptionActivity {
-        let mut next = self.subscription_cache.next_publish_time(false);
         let mut recv = self.trigger_publish_recv.clone();
         loop {
-            match self.tick(next, &mut recv).await {
+            match self.tick(&mut recv).await {
                 ActivityOrNext::Activity(a) => return a,
-                ActivityOrNext::Next(n) => next = n,
+                ActivityOrNext::Next => (),
             }
         }
     }
 
     async fn tick(
         &mut self,
-        mut next_publish: Option<Instant>,
         recv: &mut Receiver<Instant>,
     ) -> ActivityOrNext {
         let last_external_trigger = self.last_external_trigger;
@@ -129,14 +127,13 @@ impl<T: Future<Output = Result<bool, StatusCode>>, R: Fn() -> T, S: Subscription
                         debug!("Sending publish due to external trigger");
                         // On an external trigger, we always publish.
                         self.futures.push((self.publish_source)());
-                        next_publish = self.subscription_cache.next_publish_time(true);
                         self.last_external_trigger = *v;
                     } else {
                         debug!("Skipping publish due BadTooManyPublishRequests");
                     }
                 }
                 self.no_active_subscription = false;
-                ActivityOrNext::Next(next_publish)
+                ActivityOrNext::Next
             }
             res = self.wait_for_next_publish() => {
                 match res {

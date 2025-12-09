@@ -48,6 +48,7 @@ pub struct SubscriptionEventLoopState<T, R, S> {
     session_id: u32,
 }
 
+#[derive(Debug)]
 enum ActivityOrNext {
     Activity(SubscriptionActivity),
     Next(Option<Instant>),
@@ -85,23 +86,6 @@ impl<T: Future<Output = Result<bool, StatusCode>>, R: Fn() -> T, S: Subscription
             publish_source,
             subscription_cache,
             session_id,
-        }
-    }
-
-    fn wait_for_next_tick(
-        &self,
-        next_publish: Option<Instant>,
-    ) -> impl Future<Output = ()> + 'static {
-        // Deliberately create a future that doesn't capture `self` at all.
-        let should_wait_for_response = self.waiting_for_response && !self.futures.is_empty();
-        async move {
-            if should_wait_for_response {
-                futures::future::pending().await
-            } else if let Some(next_publish) = next_publish {
-                tokio::time::sleep_until(next_publish.into()).await;
-            } else {
-                futures::future::pending().await
-            }
         }
     }
 
@@ -154,7 +138,6 @@ impl<T: Future<Output = Result<bool, StatusCode>>, R: Fn() -> T, S: Subscription
                 self.no_active_subscription = false;
                 ActivityOrNext::Next(next_publish)
             }
-            _ = self.wait_for_next_tick(next_publish) => ActivityOrNext::Next(next_publish),
             res = self.wait_for_next_publish() => {
                 match res {
                     Ok(more_notifications) => {

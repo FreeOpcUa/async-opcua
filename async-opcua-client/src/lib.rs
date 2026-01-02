@@ -125,7 +125,7 @@ pub use config::{ClientConfig, ClientEndpoint, ClientUserToken, ANONYMOUS_USER_T
 pub use retry::{ExponentialBackoff, SessionRetryPolicy};
 pub use session::{
     Client, ConnectionSource, DataChangeCallback, DefaultRetryPolicy, DirectConnectionSource,
-    EventCallback, HistoryReadAction, HistoryUpdateAction, MonitoredItem,
+    EventCallback, HistoryReadAction, HistoryUpdateAction, MonitoredItem, MonitoredItemMap,
     OnSubscriptionNotification, OnSubscriptionNotificationCore, RequestRetryPolicy, Session,
     SessionActivity, SessionBuilder, SessionConnectMode, SessionEventLoop, SessionPollResult,
     Subscription, SubscriptionActivity, SubscriptionCallbacks, UARequest,

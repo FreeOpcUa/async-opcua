@@ -63,9 +63,9 @@ use services::subscriptions::state::SubscriptionState;
 pub use services::subscriptions::{
     CreateMonitoredItems, CreateSubscription, DataChangeCallback, DeleteMonitoredItems,
     DeleteSubscriptions, EventCallback, ModifyMonitoredItems, ModifySubscription, MonitoredItem,
-    OnSubscriptionNotification, OnSubscriptionNotificationCore, Publish, PublishLimits, Republish,
-    SetMonitoringMode, SetPublishingMode, SetTriggering, Subscription, SubscriptionActivity,
-    SubscriptionCache, SubscriptionCallbacks, SubscriptionEventLoopState, TransferSubscriptions,
+    MonitoredItemMap, OnSubscriptionNotification, OnSubscriptionNotificationCore, Publish, PublishLimits,
+    Republish, SetMonitoringMode, SetPublishingMode, SetTriggering, Subscription,
+    SubscriptionActivity, SubscriptionCache, SubscriptionCallbacks, SubscriptionEventLoopState, TransferSubscriptions,
 };
 pub use services::view::{
     Browse, BrowseNext, RegisterNodes, TranslateBrowsePaths, UnregisterNodes,

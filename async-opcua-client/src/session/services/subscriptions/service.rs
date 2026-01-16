@@ -8,8 +8,8 @@ use crate::{
         process_service_result, process_unexpected_response,
         request_builder::{builder_base, builder_debug, builder_error, RequestHeaderBuilder},
         services::subscriptions::{
-            callbacks::OnSubscriptionNotificationCore, CreateMonitoredItem, ModifyMonitoredItem,
-            Subscription,
+            callbacks::OnSubscriptionNotificationCore, ModifyMonitoredItem,
+            PreInsertMonitoredItems, Subscription,
         },
         session_debug, session_error, session_warn,
     },
@@ -1776,7 +1776,7 @@ impl Session {
         &self,
         subscription_id: u32,
         timestamps_to_return: TimestampsToReturn,
-        items_to_create: Vec<MonitoredItemCreateRequest>,
+        mut items_to_create: Vec<MonitoredItemCreateRequest>,
     ) -> Result<Vec<CreatedMonitoredItem>, StatusCode> {
         {
             let state = trace_lock!(self.subscription_state);
@@ -1789,30 +1789,30 @@ impl Session {
                 return Err(StatusCode::BadSubscriptionIdInvalid);
             }
         }
+
+        for item in &mut items_to_create {
+            if item.requested_parameters.client_handle == 0 {
+                item.requested_parameters.client_handle = self.monitored_item_handle.next();
+            }
+        }
+
+        // Add the monitored items _before_ making the request, to avoid
+        // race conditions where publish responses arrive before the monitored items
+        // are added to the internal state.
+        let pre_insert = PreInsertMonitoredItems::new(
+            &self.subscription_state,
+            subscription_id,
+            &items_to_create,
+        );
+
         let result = CreateMonitoredItems::new(subscription_id, self)
             .items_to_create(items_to_create)
             .timestamps_to_return(timestamps_to_return)
             .send(&self.channel)
             .await?;
+
         // Set the items in our internal state
-        let items_to_create = result
-            .results
-            .iter()
-            .map(|item| CreateMonitoredItem {
-                id: item.result.monitored_item_id,
-                client_handle: item.requested_parameters.client_handle,
-                discard_oldest: item.requested_parameters.discard_oldest,
-                item_to_monitor: item.item_to_monitor.clone(),
-                monitoring_mode: item.monitoring_mode,
-                queue_size: item.result.revised_queue_size,
-                sampling_interval: item.result.revised_sampling_interval,
-                filter: item.requested_parameters.filter.clone(),
-            })
-            .collect::<Vec<CreateMonitoredItem>>();
-        {
-            let mut subscription_state = trace_lock!(self.subscription_state);
-            subscription_state.insert_monitored_items(subscription_id, items_to_create);
-        }
+        pre_insert.finish(&result.results);
 
         Ok(result.results)
     }

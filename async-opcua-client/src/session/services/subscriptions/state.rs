@@ -3,7 +3,10 @@ use std::{
     time::{Duration, Instant},
 };
 
+use opcua_core::handle::Handle;
 use opcua_types::{MonitoringMode, NotificationMessage, SubscriptionAcknowledgement};
+
+use crate::session::services::subscriptions::{MonitoredItemTempResult, TempMonitoredItem};
 
 use super::{CreateMonitoredItem, ModifyMonitoredItem, PublishLimits, Subscription};
 
@@ -15,6 +18,7 @@ pub struct SubscriptionState {
     min_publish_interval: Duration,
     publish_limits_watch_tx: tokio::sync::watch::Sender<PublishLimits>,
     subscriptions: HashMap<u32, Subscription>,
+    temp_id_handle: Handle,
 }
 
 impl SubscriptionState {
@@ -35,6 +39,7 @@ impl SubscriptionState {
             min_publish_interval,
             publish_limits_watch_tx,
             subscriptions: HashMap::new(),
+            temp_id_handle: Handle::new(0),
         }
     }
 
@@ -201,7 +206,10 @@ impl SubscriptionState {
     ) {
         if let Some(ref mut subscription) = self.subscriptions.get_mut(&subscription_id) {
             for id in montiored_item_ids {
-                if let Some(item) = subscription.monitored_items.get_mut(id) {
+                if let Some(item) = subscription
+                    .monitored_items
+                    .get_mut(&super::MonitoredItemId::Server(*id))
+                {
                     item.set_monitoring_mode(monitoring_mode);
                 }
             }
@@ -244,5 +252,33 @@ impl SubscriptionState {
         self.publish_limits_watch_tx.send_modify(|limits| {
             limits.update_subscriptions(self.subscriptions.len(), publish_interval);
         });
+    }
+
+    pub(super) fn clear_temporary_ids(
+        &mut self,
+        ids: &[MonitoredItemTempResult],
+        subscription_id: u32,
+    ) {
+        if let Some(subscription) = self.subscriptions.get_mut(&subscription_id) {
+            for id in ids {
+                subscription.clear_temporary_id(id.temp_id, !id.created);
+            }
+        }
+    }
+
+    pub(super) fn insert_temporary_monitored_items(
+        &mut self,
+        items: &[TempMonitoredItem],
+        subscription_id: u32,
+    ) {
+        if let Some(subscription) = self.subscriptions.get_mut(&subscription_id) {
+            for item in items {
+                subscription.insert_temporary_monitored_item(item);
+            }
+        }
+    }
+
+    pub(super) fn next_temp_id(&mut self) -> u32 {
+        self.temp_id_handle.next()
     }
 }

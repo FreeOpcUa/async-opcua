@@ -159,7 +159,9 @@ pub mod services {
 
     /// Utilities for working with subscriptions.
     pub mod subscriptions {
-        pub use crate::session::{PublishLimits, SubscriptionCache, SubscriptionEventLoopState};
+        pub use crate::session::{
+            PreInsertMonitoredItems, PublishLimits, SubscriptionCache, SubscriptionEventLoopState,
+        };
     }
 }
 

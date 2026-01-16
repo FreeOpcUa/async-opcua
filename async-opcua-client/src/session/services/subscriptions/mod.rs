@@ -10,13 +10,16 @@ pub use callbacks::{
     DataChangeCallback, EventCallback, OnSubscriptionNotification, OnSubscriptionNotificationCore,
     SubscriptionCallbacks,
 };
+use opcua_core::trace_lock;
 
 use std::{
     collections::{BTreeSet, HashMap},
     time::Duration,
 };
 
-use opcua_types::{ExtensionObject, MonitoringMode, NotificationMessage, ReadValueId};
+use opcua_types::{
+    ExtensionObject, MonitoredItemCreateRequest, MonitoringMode, NotificationMessage, ReadValueId,
+};
 
 pub use service::{
     CreateMonitoredItems, CreateSubscription, DeleteMonitoredItems, DeleteSubscriptions,
@@ -25,6 +28,10 @@ pub use service::{
 };
 
 pub use event_loop_state::{SubscriptionCache, SubscriptionEventLoopState};
+
+use crate::session::services::subscriptions::{
+    service::CreatedMonitoredItem, state::SubscriptionState,
+};
 
 pub(crate) struct CreateMonitoredItem {
     pub id: u32,
@@ -138,6 +145,12 @@ impl MonitoredItem {
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+enum MonitoredItemId {
+    Temporary(u32),
+    Server(u32),
+}
+
 /// Client-side representation of a subscription.
 pub struct Subscription {
     /// Subscription id, supplied by server
@@ -156,9 +169,9 @@ pub struct Subscription {
     priority: u8,
 
     /// A map of monitored items associated with the subscription (key = monitored_item_id)
-    monitored_items: HashMap<u32, MonitoredItem>,
+    monitored_items: HashMap<MonitoredItemId, MonitoredItem>,
     /// A map of client handle to monitored item id
-    client_handles: HashMap<u32, u32>,
+    client_handles: HashMap<u32, MonitoredItemId>,
 
     callback: Box<dyn OnSubscriptionNotificationCore>,
 }
@@ -191,8 +204,8 @@ impl Subscription {
     }
 
     /// Get the monitored items in this subscription.
-    pub fn monitored_items(&self) -> &HashMap<u32, MonitoredItem> {
-        &self.monitored_items
+    pub fn monitored_items(&self) -> impl Iterator<Item = &MonitoredItem> {
+        self.monitored_items.values()
     }
 
     /// Get the subscription ID.
@@ -242,8 +255,10 @@ impl Subscription {
             monitored_item_id,
             client_handle
         );
-        self.monitored_items.insert(monitored_item_id, item);
-        self.client_handles.insert(client_handle, monitored_item_id);
+        self.monitored_items
+            .insert(MonitoredItemId::Server(monitored_item_id), item);
+        self.client_handles
+            .insert(client_handle, MonitoredItemId::Server(monitored_item_id));
     }
 
     pub(crate) fn set_publishing_interval(&mut self, publishing_interval: Duration) {
@@ -290,7 +305,9 @@ impl Subscription {
 
     pub(crate) fn modify_monitored_items(&mut self, items_to_modify: &[ModifyMonitoredItem]) {
         items_to_modify.iter().for_each(|i| {
-            if let Some(ref mut monitored_item) = self.monitored_items.get_mut(&i.id) {
+            if let Some(ref mut monitored_item) =
+                self.monitored_items.get_mut(&MonitoredItemId::Server(i.id))
+            {
                 monitored_item.set_sampling_interval(i.sampling_interval);
                 monitored_item.set_queue_size(i.queue_size as usize);
             }
@@ -300,7 +317,8 @@ impl Subscription {
     pub(crate) fn delete_monitored_items(&mut self, items_to_delete: &[u32]) {
         items_to_delete.iter().for_each(|id| {
             // Remove the monitored item and the client handle / id entry
-            if let Some(monitored_item) = self.monitored_items.remove(id) {
+            if let Some(monitored_item) = self.monitored_items.remove(&MonitoredItemId::Server(*id))
+            {
                 let _ = self.client_handles.remove(&monitored_item.client_handle());
             }
         })
@@ -312,7 +330,10 @@ impl Subscription {
         links_to_add: &[u32],
         links_to_remove: &[u32],
     ) {
-        if let Some(ref mut monitored_item) = self.monitored_items.get_mut(&triggering_item_id) {
+        if let Some(ref mut monitored_item) = self
+            .monitored_items
+            .get_mut(&MonitoredItemId::Server(triggering_item_id))
+        {
             monitored_item.set_triggering(links_to_add, links_to_remove);
         }
     }
@@ -323,20 +344,47 @@ impl Subscription {
             MonitoredItemMap::new(&self.monitored_items, &self.client_handles),
         );
     }
+
+    fn clear_temporary_id(&mut self, temp_id: MonitoredItemId, remove_handle: bool) {
+        if let Some(monitored_item) = self.monitored_items.remove(&temp_id) {
+            if remove_handle {
+                let _ = self.client_handles.remove(&monitored_item.client_handle());
+            }
+        }
+    }
+
+    fn insert_temporary_monitored_item(&mut self, item: &TempMonitoredItem) {
+        let monitored_item = MonitoredItem {
+            id: 0,
+            client_handle: item.client_handle,
+            item_to_monitor: item.item_to_monitor.clone(),
+            queue_size: item.queue_size as usize,
+            monitoring_mode: item.monitoring_mode,
+            sampling_interval: item.sampling_interval,
+            triggered_items: BTreeSet::new(),
+            discard_oldest: item.discard_oldest,
+            filter: item.filter.clone(),
+        };
+
+        self.monitored_items
+            .insert(MonitoredItemId::Temporary(item.temp_id), monitored_item);
+        self.client_handles
+            .insert(item.client_handle, MonitoredItemId::Temporary(item.temp_id));
+    }
 }
 
 /// A map of monitored items associated with a subscription, allowing lookup by client handle.
 pub struct MonitoredItemMap<'a> {
     /// A map of monitored items associated with the subscription (key = monitored_item_id)
-    monitored_items: &'a HashMap<u32, MonitoredItem>,
+    monitored_items: &'a HashMap<MonitoredItemId, MonitoredItem>,
     /// A map of client handle to monitored item id
-    client_handles: &'a HashMap<u32, u32>,
+    client_handles: &'a HashMap<u32, MonitoredItemId>,
 }
 
 impl<'a> MonitoredItemMap<'a> {
     fn new(
-        monitored_items: &'a HashMap<u32, MonitoredItem>,
-        client_handles: &'a HashMap<u32, u32>,
+        monitored_items: &'a HashMap<MonitoredItemId, MonitoredItem>,
+        client_handles: &'a HashMap<u32, MonitoredItemId>,
     ) -> Self {
         Self {
             monitored_items,
@@ -397,5 +445,112 @@ impl PublishLimits {
             / self.publish_interval.as_millis() as f32)
             .ceil() as usize
             * (self.min_publish_requests);
+    }
+}
+
+struct TempMonitoredItem {
+    temp_id: u32,
+    client_handle: u32,
+    item_to_monitor: ReadValueId,
+    queue_size: u32,
+    monitoring_mode: MonitoringMode,
+    sampling_interval: f64,
+    filter: ExtensionObject,
+    discard_oldest: bool,
+}
+
+/// A helper struct to manage insertion of monitored items into a subscription.
+/// This ensures that monitored items exist in the subscription state in a
+/// temporary state until the server has confirmed their creation.
+///
+/// This avoids race conditions where a monitored item gets notifications
+/// before it is stored in the subscription state,
+/// but also lets us avoid locking the subscription state while waiting
+/// for the server response.
+///
+/// To use, simple construct it with `new`, then call `finish`
+/// if the monitored items were created successfully. If the struct is
+/// dropped without calling `finish`, the temporary monitored items
+/// will be removed from the subscription state along with their handles.
+pub struct PreInsertMonitoredItems<'a> {
+    temp_ids: Vec<MonitoredItemTempResult>,
+    subscription_id: u32,
+    lock: &'a opcua_core::sync::Mutex<SubscriptionState>,
+}
+
+struct MonitoredItemTempResult {
+    temp_id: MonitoredItemId,
+    created: bool,
+}
+
+impl<'a> PreInsertMonitoredItems<'a> {
+    /// Create a new PreInsertMonitoredItems helper.
+    /// This inserts temporary monitored items into the subscription state.
+    pub fn new(
+        lock: &'a opcua_core::sync::Mutex<SubscriptionState>,
+        subscription_id: u32,
+        items: &[MonitoredItemCreateRequest],
+    ) -> Self {
+        let mut lck = trace_lock!(lock);
+
+        let to_insert: Vec<_> = items
+            .iter()
+            .map(|item| TempMonitoredItem {
+                temp_id: lck.next_temp_id(),
+                client_handle: item.requested_parameters.client_handle,
+                item_to_monitor: item.item_to_monitor.clone(),
+                queue_size: item.requested_parameters.queue_size,
+                monitoring_mode: item.monitoring_mode,
+                sampling_interval: item.requested_parameters.sampling_interval,
+                filter: item.requested_parameters.filter.clone(),
+                discard_oldest: item.requested_parameters.discard_oldest,
+            })
+            .collect();
+
+        let ids = to_insert
+            .iter()
+            .map(|i| MonitoredItemTempResult {
+                temp_id: MonitoredItemId::Temporary(i.temp_id),
+                created: false,
+            })
+            .collect();
+
+        lck.insert_temporary_monitored_items(&to_insert, subscription_id);
+        Self {
+            subscription_id,
+            temp_ids: ids,
+            lock,
+        }
+    }
+
+    /// Finish the monitored item creation.
+    /// This inserts the created monitored items into the subscription state.
+    pub fn finish(mut self, results: &[CreatedMonitoredItem]) {
+        let mut lck = trace_lock!(self.lock);
+        let mut items_to_create = Vec::with_capacity(results.len());
+        for (temp_id, item) in self.temp_ids.iter_mut().zip(results.iter()) {
+            if item.result.status_code.is_good() {
+                temp_id.created = true;
+                items_to_create.push(CreateMonitoredItem {
+                    id: item.result.monitored_item_id,
+                    client_handle: item.requested_parameters.client_handle,
+                    discard_oldest: item.requested_parameters.discard_oldest,
+                    item_to_monitor: item.item_to_monitor.clone(),
+                    monitoring_mode: item.monitoring_mode,
+                    queue_size: item.result.revised_queue_size,
+                    sampling_interval: item.result.revised_sampling_interval,
+                    filter: item.requested_parameters.filter.clone(),
+                });
+            }
+        }
+
+        lck.insert_monitored_items(self.subscription_id, items_to_create);
+    }
+}
+
+impl Drop for PreInsertMonitoredItems<'_> {
+    fn drop(&mut self) {
+        let mut lck = trace_lock!(self.lock);
+        lck.clear_temporary_ids(&self.temp_ids, self.subscription_id);
     }
 }

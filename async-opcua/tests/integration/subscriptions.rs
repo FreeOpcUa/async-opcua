@@ -541,14 +541,9 @@ async fn transfer_subscriptions() {
     // Fetch the existing monitored item from the subscription.
     let old_item = {
         let state = session.subscription_state().lock();
-        state
-            .get(sub_id)
-            .unwrap()
-            .monitored_items()
-            .values()
-            .next()
-            .unwrap()
-            .clone()
+        let sub = state.get(sub_id).unwrap();
+        let mut items = sub.monitored_items();
+        items.next().unwrap().clone()
     };
 
     // Now, close the session without clearing subscriptions.

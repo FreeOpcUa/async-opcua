@@ -1,4 +1,4 @@
-use opcua_types::{constants, Error};
+use opcua_types::{constants, Error, StatusCode};
 
 pub(crate) mod aes;
 
@@ -212,7 +212,10 @@ impl SecurityPolicyImpl for NonePolicy {
         _data: &[u8],
         _out: &mut [u8],
     ) -> Result<usize, Error> {
-        panic!("Cannot sign using security policy None")
+        Err(Error::new(
+            StatusCode::BadInternalError,
+            "Cannot sign using security policy None",
+        ))
     }
 
     fn asymmetric_verify_signature(
@@ -220,7 +223,10 @@ impl SecurityPolicyImpl for NonePolicy {
         _data: &[u8],
         _signature: &[u8],
     ) -> Result<(), Error> {
-        panic!("Cannot verify signature using security policy None")
+        Err(Error::new(
+            StatusCode::BadInternalError,
+            "Cannot verify signature using security policy None",
+        ))
     }
 
     fn asymmetric_encrypt(
@@ -228,7 +234,10 @@ impl SecurityPolicyImpl for NonePolicy {
         _data: &[u8],
         _out: &mut [u8],
     ) -> Result<usize, Error> {
-        panic!("Cannot encrypt using security policy None")
+        Err(Error::new(
+            StatusCode::BadInternalError,
+            "Cannot encrypt using security policy None",
+        ))
     }
 
     fn asymmetric_decrypt(
@@ -236,7 +245,10 @@ impl SecurityPolicyImpl for NonePolicy {
         _src: &[u8],
         _dst: &mut [u8],
     ) -> Result<usize, Error> {
-        panic!("Cannot decrypt using security policy None")
+        Err(Error::new(
+            StatusCode::BadInternalError,
+            "Cannot decrypt using security policy None",
+        ))
     }
 
     fn derive_secure_channel_keys(_secret: &[u8], _seed: &[u8]) -> Self::TDerivedKey {
@@ -248,7 +260,10 @@ impl SecurityPolicyImpl for NonePolicy {
         _src: &[u8],
         _dst: &mut [u8],
     ) -> Result<usize, Error> {
-        panic!("Cannot decrypt using security policy None")
+        Err(Error::new(
+            StatusCode::BadInternalError,
+            "Cannot decrypt using security policy None",
+        ))
     }
 
     fn symmetric_encrypt(
@@ -256,7 +271,10 @@ impl SecurityPolicyImpl for NonePolicy {
         _src: &[u8],
         _dst: &mut [u8],
     ) -> Result<usize, Error> {
-        panic!("Cannot encrypt using security policy None")
+        Err(Error::new(
+            StatusCode::BadInternalError,
+            "Cannot encrypt using security policy None",
+        ))
     }
 
     fn symmetric_sign(
@@ -264,7 +282,10 @@ impl SecurityPolicyImpl for NonePolicy {
         _data: &[u8],
         _signature: &mut [u8],
     ) -> Result<(), Error> {
-        panic!("Cannot sign using security policy None")
+        Err(Error::new(
+            StatusCode::BadInternalError,
+            "Cannot sign using security policy None",
+        ))
     }
 
     fn symmetric_verify_signature(
@@ -272,7 +293,10 @@ impl SecurityPolicyImpl for NonePolicy {
         _data: &[u8],
         _signature: &[u8],
     ) -> Result<(), Error> {
-        panic!("Cannot verify signature using security policy None")
+        Err(Error::new(
+            StatusCode::BadInternalError,
+            "Cannot verify signature using security policy None",
+        ))
     }
 
     fn encrypting_key_length() -> usize {

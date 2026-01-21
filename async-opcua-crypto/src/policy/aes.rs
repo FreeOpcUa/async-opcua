@@ -151,6 +151,41 @@ pub(crate) trait AesSymmetricEncryptionAlgorithm {
 
     /// Decrypt the data in `src` using `key`, writing the result to `dst`.
     fn decrypt(key: &AesKey, src: &[u8], iv: &[u8], dst: &mut [u8]) -> Result<usize, Error>;
+
+    fn validate_args(src: &[u8], iv: &[u8], dst: &[u8]) -> Result<(), Error> {
+        if dst.len() < src.len() + Self::BLOCK_SIZE {
+            Err(Error::new(
+                StatusCode::BadUnexpectedError,
+                format!(
+                    "Destination buffer is too small ({}) expected {} + {}",
+                    src.len(),
+                    dst.len(),
+                    Self::BLOCK_SIZE
+                ),
+            ))
+        } else if iv.len() != Self::BLOCK_SIZE {
+            Err(Error::new(
+                StatusCode::BadUnexpectedError,
+                format!(
+                    "IV is not an expected size ({}), expected {}",
+                    iv.len(),
+                    Self::BLOCK_SIZE
+                ),
+            ))
+        } else if !src.len().is_multiple_of(Self::BLOCK_SIZE) {
+            Err(Error::new(
+                StatusCode::BadUnexpectedError,
+                format!(
+                    "Source length ({}) is not a multiple of block size ({}), got {}",
+                    src.len(),
+                    Self::BLOCK_SIZE,
+                    src.len()
+                ),
+            ))
+        } else {
+            Ok(())
+        }
+    }
 }
 
 /// AES-128-CBC symmetric encryption algorithm
@@ -372,6 +407,7 @@ impl<T: AesSecurityPolicy> SecurityPolicyImpl for AesPolicy<T> {
         src: &[u8],
         dst: &mut [u8],
     ) -> Result<usize, Error> {
+        T::SymmetricEncryption::validate_args(src, &keys.initialization_vector, dst)?;
         T::SymmetricEncryption::decrypt(&keys.encryption_key, src, &keys.initialization_vector, dst)
     }
 
@@ -380,6 +416,7 @@ impl<T: AesSecurityPolicy> SecurityPolicyImpl for AesPolicy<T> {
         src: &[u8],
         dst: &mut [u8],
     ) -> Result<usize, Error> {
+        T::SymmetricEncryption::validate_args(src, &keys.initialization_vector, dst)?;
         T::SymmetricEncryption::encrypt(&keys.encryption_key, src, &keys.initialization_vector, dst)
     }
 

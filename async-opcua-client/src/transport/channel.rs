@@ -6,11 +6,10 @@ use crate::{
 };
 use arc_swap::{ArcSwap, ArcSwapOption};
 use opcua_core::{
-    comms::secure_channel::{Role, SecureChannel},
-    sync::RwLock,
-    trace_read_lock, trace_write_lock, RequestMessage, ResponseMessage,
+    comms::secure_channel::SecureChannel, sync::RwLock, trace_read_lock, trace_write_lock,
+    RequestMessage, ResponseMessage,
 };
-use opcua_crypto::{CertificateStore, PrivateKey, SecurityPolicy, X509};
+use opcua_crypto::{CertificateStore, PrivateKey, SecureChannelRole, SecurityPolicy, X509};
 use opcua_types::{
     ByteString, CloseSecureChannelRequest, ContextOwned, IntegerId, NodeId, RequestHeader,
     SecurityTokenRequestType, StatusCode,
@@ -140,7 +139,7 @@ impl AsyncSecureChannel {
     ) -> Self {
         let secure_channel = Arc::new(RwLock::new(SecureChannel::new(
             certificate_store.clone(),
-            Role::Client,
+            SecureChannelRole::Client,
             encoding_context.clone(),
         )));
 

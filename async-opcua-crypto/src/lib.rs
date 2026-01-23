@@ -15,8 +15,9 @@ use tracing::{error, trace};
 
 pub use crate::aes::{AesKey, KeySize, PKey, PrivateKey, PublicKey};
 pub use crate::x509::{X509Data, X509Error, X509};
+pub use aes::diffie_hellman::DiffieHellmanExchange;
 pub use certificate_store::CertificateStore;
-pub use policy::{AesDerivedKeys, PaddingInfo};
+pub use policy::{AesDerivedKeys, PaddingInfo, SecureChannelRole};
 pub use security_policy::SecurityPolicy;
 pub use thumbprint::Thumbprint;
 pub use user_identity::{
@@ -43,6 +44,8 @@ mod aes;
 pub const SHA1_SIZE: usize = 20;
 /// Size of a SHA256 hash value bytes
 pub const SHA256_SIZE: usize = 32;
+/// Size of a SHA384 hash value bytes
+pub const SHA384_SIZE: usize = 48;
 
 /// These are algorithms that are used by various policies or external to this file
 pub(crate) mod algorithms {
@@ -74,6 +77,9 @@ pub(crate) mod algorithms {
     /// SymmetricSignatureAlgorithm – HmacSha256 – (http://www.w3.org/2000/09/xmldsig#hmac-sha256).
     #[allow(unused)]
     pub(crate) const DSIG_HMAC_SHA256: &str = "http://www.w3.org/2000/09/xmldsig#hmac-sha256";
+    /// SymmetricSignatureAlgorithm – HmacSha384 – (http://www.w3.org/2000/09/xmldsig#hmac-sha384).
+    #[allow(unused)]
+    pub(crate) const DSIG_HMAC_SHA384: &str = "http://www.w3.org/2000/09/xmldsig#hmac-sha384";
 
     /// Asymmetric digital signature algorithm using RSA-SHA1
     pub(crate) const DSIG_RSA_SHA1: &str = "http://www.w3.org/2000/09/xmldsig#rsa-sha1";
@@ -84,6 +90,13 @@ pub(crate) mod algorithms {
     /// Asymmetric digital signature algorithm using RSA-PSS_SHA2-256
     pub(crate) const DSIG_RSA_PSS_SHA2_256: &str =
         "http://opcfoundation.org/UA/security/rsa-pss-sha2-256";
+
+    /// Asymmetric digital signature algorithm using ECDSA-SHA256
+    pub(crate) const DSIG_ECDSA_SHA2_256: &str =
+        "http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256";
+    /// Asymmetric digital signature algorithm using ECDSA-SHA384
+    pub(crate) const DSIG_ECDSA_SHA2_384: &str =
+        "http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha384";
 
     // Key derivation algorithm P_SHA1
     //pub const KEY_P_SHA1: &str = "http://docs.oasis-open.org/ws-sx/ws-secureconversation/200512/dk/p_sha1";

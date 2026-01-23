@@ -10,9 +10,9 @@ use rand;
 
 /// Fills the slice with cryptographically strong pseudo-random bytes
 pub fn bytes(bytes: &mut [u8]) {
-    use rand::RngCore;
+    use rand::Rng;
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     rng.fill_bytes(bytes);
 }
 

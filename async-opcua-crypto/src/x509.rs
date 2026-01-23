@@ -20,7 +20,8 @@ use rsa::pkcs1v15;
 use rsa::RsaPublicKey;
 use x509_cert::{
     self as x509,
-    der::asn1::{Ia5String, OctetString},
+    builder::profile::cabf::tls::{CertificateType, Subscriber, Tls12Options},
+    der::asn1::{Ia5String, OctetString, Utf8StringRef},
     ext::pkix::name::GeneralName,
 };
 
@@ -411,9 +412,9 @@ impl X509 {
         use x509::der;
 
         let mut reader = der::PemReader::new(data)?;
-        let val = x509::certificate::Certificate::decode(&mut reader)?;
-        let valf = reader.finish(val)?;
-        Ok(X509 { value: valf })
+        let value = x509::certificate::Certificate::decode(&mut reader)?;
+        reader.finish()?;
+        Ok(X509 { value })
 
         //keep certificate chain for another story
         //let r = x509::certificate::Certificate::load_pem_chain(data);
@@ -494,7 +495,7 @@ impl X509 {
 
     fn create_from_pkey(pkey: &PrivateKey, x509_data: &X509Data) -> Result<Self, BuilderError> {
         use std::time::Duration;
-        use x509_cert::builder::{CertificateBuilder, Profile};
+        use x509_cert::builder::CertificateBuilder;
         use x509_cert::name::Name;
         use x509_cert::serial_number::SerialNumber;
         use x509_cert::time::Validity;
@@ -532,11 +533,6 @@ impl X509 {
             subject = Name::from_str(&issuer)?;
         }
 
-        // Issuer and subject shall be the same for self-signed cert
-        let profile = Profile::Manual {
-            issuer: Some(subject.clone()),
-        };
-
         // Generate a SKI, and set it as the AKI for the certificate according to Part 6, 6.2.2
         // Generation is as suggested in RFC3280, 4.2.1.2. A 160-bit SHA-1 hash of the public key bitstring.
         use sha1::Digest;
@@ -550,12 +546,19 @@ impl X509 {
         let ski = hasher.finalize();
 
         let mut builder = CertificateBuilder::new(
-            profile,
+            Subscriber {
+                issuer: subject.clone(),
+                certificate_type: CertificateType::domain_validated(subject.clone(), Vec::new())?,
+                client_auth: false,
+                enable_data_encipherment: true,
+                tls12_options: Tls12Options::default(),
+            },
             serial_number.clone(),
             validity,
-            subject.clone(),
             pub_key,
-            &signing_key,
+            // subject.clone(),
+            //pub_key,
+            //&signing_key,
         )?;
 
         builder.add_extension(&x509::ext::pkix::SubjectKeyIdentifier(
@@ -599,7 +602,7 @@ impl X509 {
         }
 
         use x509_cert::builder::Builder;
-        let built = builder.build()?;
+        let built = builder.build(&signing_key)?;
 
         Ok(X509 { value: built })
     }
@@ -632,8 +635,8 @@ impl X509 {
 
         let r = RsaPublicKey::try_from(
             self.value
-                .tbs_certificate
-                .subject_public_key_info
+                .tbs_certificate()
+                .subject_public_key_info()
                 .owned_to_ref(),
         );
         match r {
@@ -652,20 +655,20 @@ impl X509 {
     }
 
     fn get_subject_entry(&self, nid: const_oid::ObjectIdentifier) -> Result<String, X509Error> {
-        for dn in self.value.tbs_certificate.subject.0.iter() {
-            for tv in dn.0.iter() {
-                if tv.oid == nid {
-                    return Ok(tv.to_string());
-                }
-            }
+        match self
+            .value
+            .tbs_certificate()
+            .subject()
+            .by_oid::<Utf8StringRef>(nid)
+        {
+            Ok(Some(tv)) => return Ok(tv.to_string()),
+            _ => Err(X509Error),
         }
-
-        Err(X509Error)
     }
 
     /// Produces a subject name string such as "CN=foo/C=IE"
     pub fn subject_name(&self) -> String {
-        let r = self.value.tbs_certificate.subject.to_string();
+        let r = self.value.tbs_certificate().subject().to_string();
         r.replace(";", "/")
     }
 
@@ -710,7 +713,8 @@ impl X509 {
     fn get_alternate_names(&self) -> Option<x509::ext::pkix::name::GeneralNames> {
         use x509::ext::pkix::SubjectAltName;
 
-        let r: Result<Option<(bool, SubjectAltName)>, _> = self.value.tbs_certificate.get();
+        let r: Result<Option<(bool, SubjectAltName)>, _> =
+            self.value.tbs_certificate().get_extension();
         match r {
             Err(_) => None,
             Ok(option) => match option {
@@ -811,8 +815,8 @@ impl X509 {
     pub fn not_before(&self) -> Result<ChronoUtc, X509Error> {
         let dur = self
             .value
-            .tbs_certificate
-            .validity
+            .tbs_certificate()
+            .validity()
             .not_before
             .to_unix_duration();
         let r = ChronoUtc::from_timestamp_micros(dur.as_micros() as i64);
@@ -826,8 +830,8 @@ impl X509 {
     pub fn not_after(&self) -> Result<ChronoUtc, X509Error> {
         let dur = self
             .value
-            .tbs_certificate
-            .validity
+            .tbs_certificate()
+            .validity()
             .not_after
             .to_unix_duration();
         let r = ChronoUtc::from_timestamp_micros(dur.as_micros() as i64);

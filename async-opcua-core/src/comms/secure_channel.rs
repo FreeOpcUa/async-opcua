@@ -4,6 +4,7 @@
 
 //! The secure channel handles security on an OPC-UA connection.
 
+use core::panic;
 use std::{
     collections::HashMap,
     io::{Cursor, Write},
@@ -17,7 +18,8 @@ use chrono::Duration;
 use tracing::{error, trace};
 
 use opcua_crypto::{
-    random, AesDerivedKeys, CertificateStore, KeySize, PrivateKey, PublicKey, SecurityPolicy, X509,
+    AesDerivedKeys, CertificateStore, DiffieHellmanExchange, KeySize, PrivateKey, PublicKey,
+    SecureChannelRole, SecurityPolicy, X509,
 };
 use opcua_types::{
     status_code::StatusCode, write_bytes, write_u32, write_u8, ByteString, ChannelSecurityToken,
@@ -31,17 +33,6 @@ use super::{
     security_header::{AsymmetricSecurityHeader, SecurityHeader, SymmetricSecurityHeader},
 };
 
-#[derive(Debug, PartialEq)]
-/// Role of an application in OPC-UA communication.
-pub enum Role {
-    /// Role is unknown.
-    Unknown,
-    /// Role is client.
-    Client,
-    /// Role is server.
-    Server,
-}
-
 #[derive(Debug)]
 struct RemoteKeys {
     keys: AesDerivedKeys,
@@ -49,10 +40,9 @@ struct RemoteKeys {
 }
 
 /// Holds all of the security information related to this session
-#[derive(Debug)]
 pub struct SecureChannel {
     // The side of the secure channel that this role belongs to, client or server
-    role: Role,
+    role: SecureChannelRole,
     /// The security policy for the connection, None or Encryption/Signing settings
     security_policy: SecurityPolicy,
     /// The security mode for the connection, None, Sign, SignAndEncrypt
@@ -75,6 +65,12 @@ pub struct SecureChannel {
     remote_nonce: Vec<u8>,
     /// Our nonce generated while handling open secure channel
     local_nonce: Vec<u8>,
+    /// State for an ongoing diffie-hellman exchange, if any.
+    /// This is performed as part of the OpenSecureChannel process.
+    /// It is initiated by the client, and completed when both sides
+    /// have exchanged nonces.
+    diffie_hellman_state: Option<Box<dyn DiffieHellmanExchange>>,
+
     /// Client (i.e. other end's set of keys) Symmetric Signing Key, Encrypt Key, IV
     ///
     /// This is a map of channel token ids and their respective keys. We need to keep
@@ -95,7 +91,7 @@ impl SecureChannel {
     #[cfg(test)]
     pub fn new_no_certificate_store() -> SecureChannel {
         SecureChannel {
-            role: Role::Unknown,
+            role: SecureChannelRole::Client,
             security_policy: SecurityPolicy::None,
             security_mode: MessageSecurityMode::None,
             secure_channel_id: 0,
@@ -110,6 +106,7 @@ impl SecureChannel {
             local_keys: None,
             encoding_context: Default::default(),
             remote_keys: HashMap::new(),
+            diffie_hellman_state: None,
         }
     }
 
@@ -117,7 +114,7 @@ impl SecureChannel {
     /// and role.
     pub fn new(
         certificate_store: Arc<RwLock<CertificateStore>>,
-        role: Role,
+        role: SecureChannelRole,
         encoding_context: Arc<RwLock<ContextOwned>>,
     ) -> SecureChannel {
         let (cert, private_key) = {
@@ -154,12 +151,13 @@ impl SecureChannel {
             local_keys: None,
             encoding_context,
             remote_keys: HashMap::new(),
+            diffie_hellman_state: None,
         }
     }
 
     /// Return `true` if this channel is for a client.
     pub fn is_client_role(&self) -> bool {
-        self.role == Role::Client
+        self.role == SecureChannelRole::Client
     }
 
     /// Set the application certificate.
@@ -335,10 +333,22 @@ impl SecureChannel {
     }
 
     /// Creates a nonce for the connection. The nonce should be the same size as the symmetric key
-    pub fn create_random_nonce(&mut self) {
-        self.local_nonce
-            .resize(self.security_policy.secure_channel_nonce_length(), 0);
-        random::bytes(&mut self.local_nonce);
+    pub fn begin_diffie_hellman_exchange(&mut self) {
+        let exchange = self
+            .security_policy
+            .begin_diffie_hellman_exchange(self.role);
+        self.local_nonce = exchange.get_local_nonce();
+        self.diffie_hellman_state = Some(exchange);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn begin_diffie_hellman_exchange_with_local_nonce(&mut self, local_nonce: &[u8]) {
+        let mut exchange = self
+            .security_policy
+            .begin_diffie_hellman_exchange(self.role);
+        exchange.set_local_nonce(local_nonce);
+        self.local_nonce = exchange.get_local_nonce();
+        self.diffie_hellman_state = Some(exchange);
     }
 
     /// Sets the remote certificate
@@ -432,22 +442,27 @@ impl SecureChannel {
     /// The Client keys are used to secure Messages sent by the Client. The Server keys
     /// are used to secure Messages sent by the Server.
     ///
-    pub fn derive_keys(&mut self) {
-        self.insert_remote_keys(
-            self.security_policy
-                .make_secure_channel_keys(&self.local_nonce, &self.remote_nonce),
-        );
-        self.local_keys = Some(
-            self.security_policy
-                .make_secure_channel_keys(&self.remote_nonce, &self.local_nonce),
-        );
-        trace!("Remote nonce = {:?}", self.remote_nonce);
+    pub fn derive_keys(&mut self) -> Result<(), Error> {
+        let Some(exchange) = self.diffie_hellman_state.take() else {
+            return Err(Error::new(
+                StatusCode::BadInternalError,
+                "Diffie-Hellman exchange has not been started",
+            ));
+        };
+
+        let key_pair = exchange.derive_keypair(&self.remote_nonce)?;
+
+        self.insert_remote_keys(key_pair.remote);
+        self.local_keys = Some(key_pair.local);
+        /* trace!("Remote nonce = {:?}", self.remote_nonce);
         trace!("Local nonce = {:?}", self.local_nonce);
         trace!(
             "Derived remote keys = {:?}",
             self.get_remote_keys(self.token_id)
         );
-        trace!("Derived local keys = {:?}", self.local_keys);
+        trace!("Derived local keys = {:?}", self.local_keys); */
+
+        Ok(())
     }
 
     /// Get the deadline as an [`Instant`] for token renewal, used
@@ -1162,12 +1177,6 @@ impl SecureChannel {
     /// Get the local nonce.
     pub fn local_nonce(&self) -> &[u8] {
         &self.local_nonce
-    }
-
-    /// Set the local nonce.
-    pub fn set_local_nonce(&mut self, local_nonce: &[u8]) {
-        self.local_nonce.clear();
-        self.local_nonce.extend_from_slice(local_nonce);
     }
 
     /// Get the local nonce as a byte string.

@@ -176,11 +176,8 @@ impl CertificateStore {
 
         // Write the private key
         use rsa::pkcs8;
-        use x509_cert::der::pem::PemLabel;
         let doc = pkey.to_der().unwrap();
-        let pem = doc
-            .to_pem(rsa::pkcs8::PrivateKeyInfo::PEM_LABEL, pkcs8::LineEnding::CR)
-            .unwrap();
+        let pem = doc.to_pem("PRIVATE KEY", pkcs8::LineEnding::CR).unwrap();
         let _ = CertificateStore::write_to_file(pem.as_bytes(), pkey_path, overwrite)?;
         Ok((cert, pkey))
     }

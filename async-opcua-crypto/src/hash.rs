@@ -6,18 +6,22 @@
 
 use std::result::Result;
 
-use hmac::{digest, Hmac, Mac};
+use hmac::{digest, Hmac, KeyInit, Mac};
 use sha1::Sha1;
-use sha2::Sha256;
+use sha2::{Sha256, Sha384};
 
 use opcua_types::{status_code::StatusCode, Error};
 
+use crate::SHA384_SIZE;
+
 use super::{SHA1_SIZE, SHA256_SIZE};
 
-type HmacSha256 = Hmac<Sha256>;
 type HmacSha1 = Hmac<Sha1>;
+type HmacSha256 = Hmac<Sha256>;
+type HmacSha384 = Hmac<Sha384>;
 type Sha1Output = digest::CtOutput<HmacSha1>;
 type Sha256Output = digest::CtOutput<HmacSha256>;
+type Sha384Output = digest::CtOutput<HmacSha384>;
 
 /// Pseudo random `P_SHA` implementation for creating pseudo random range of bytes from an input
 ///
@@ -110,6 +114,12 @@ fn sign_sha256(key: &[u8], data: &[u8]) -> Sha256Output {
     mac.finalize()
 }
 
+fn sign_sha384(key: &[u8], data: &[u8]) -> Sha384Output {
+    let mut mac = HmacSha384::new_from_slice(key).unwrap();
+    mac.update(data);
+    mac.finalize()
+}
+
 /// Write the SHA1 HMAC signature of `data` using `key` into `signature`.
 pub(crate) fn hmac_sha1(key: &[u8], data: &[u8], signature: &mut [u8]) -> Result<(), Error> {
     if signature.len() == SHA1_SIZE {
@@ -161,6 +171,32 @@ pub(crate) fn verify_hmac_sha256(key: &[u8], data: &[u8], signature: &[u8]) -> b
         false
     } else {
         let mut mac = HmacSha256::new_from_slice(key).unwrap();
+        mac.update(data);
+        mac.verify_slice(signature).is_ok()
+    }
+}
+
+pub(crate) fn hmac_sha384(key: &[u8], data: &[u8], signature: &mut [u8]) -> Result<(), Error> {
+    if signature.len() == SHA384_SIZE {
+        let result = sign_sha384(key, data);
+        signature.copy_from_slice(&result.into_bytes());
+        Ok(())
+    } else {
+        Err(Error::new(
+            StatusCode::BadInvalidArgument,
+            format!(
+                "Signature buffer length must be exactly {} bytes to receive hmac_sha384 signature",
+                SHA384_SIZE
+            ),
+        ))
+    }
+}
+
+pub(crate) fn verify_hmac_sha384(key: &[u8], data: &[u8], signature: &[u8]) -> bool {
+    if signature.len() != SHA384_SIZE {
+        false
+    } else {
+        let mut mac = HmacSha384::new_from_slice(key).unwrap();
         mac.update(data);
         mac.verify_slice(signature).is_ok()
     }

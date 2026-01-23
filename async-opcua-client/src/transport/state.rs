@@ -121,12 +121,11 @@ impl SecureChannelState {
 
         let (security_mode, security_policy, client_nonce) = {
             let mut secure_channel = trace_write_lock!(self.secure_channel);
-            let client_nonce = secure_channel.security_policy().random_nonce();
-            secure_channel.set_local_nonce(client_nonce.as_ref());
+            secure_channel.begin_diffie_hellman_exchange();
             (
                 secure_channel.security_mode(),
                 secure_channel.security_policy(),
-                client_nonce,
+                secure_channel.local_nonce_as_byte_string(),
             )
         };
 
@@ -187,7 +186,7 @@ impl SecureChannelState {
             {
                 secure_channel.validate_secure_channel_nonce_length(&response.server_nonce)?;
                 secure_channel.set_remote_nonce_from_byte_string(&response.server_nonce)?;
-                secure_channel.derive_keys();
+                secure_channel.derive_keys()?;
             }
         }
         Ok(())

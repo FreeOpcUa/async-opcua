@@ -7,10 +7,10 @@ use std::sync::Arc;
 use opcua::server::address_space::VariableBuilder;
 use opcua::server::node_manager::memory::SimpleNodeManager;
 use opcua::server::SubscriptionCache;
-use rand::distributions::Alphanumeric;
-use rand::Rng;
+use rand::RngExt;
 
 use opcua::types::*;
+use rand::distr::Alphanumeric;
 
 pub fn add_scalar_variables(
     manager: Arc<SimpleNodeManager>,
@@ -154,26 +154,28 @@ pub fn scalar_default_value(id: DataTypeId) -> Variant {
 
 /// Generates a randomized value of the appropriate type in a Variant
 pub fn scalar_random_value(id: DataTypeId) -> Variant {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     match id {
-        DataTypeId::Boolean => rng.gen::<bool>().into(),
-        DataTypeId::Byte => rng.gen::<u8>().into(),
-        DataTypeId::SByte => rng.gen::<i8>().into(),
-        DataTypeId::Int16 => rng.gen::<i16>().into(),
-        DataTypeId::UInt16 => rng.gen::<u16>().into(),
-        DataTypeId::Int32 => rng.gen::<i32>().into(),
-        DataTypeId::UInt32 => rng.gen::<u32>().into(),
-        DataTypeId::Int64 => rng.gen::<i64>().into(),
-        DataTypeId::UInt64 => rng.gen::<u64>().into(),
-        DataTypeId::Float => rng.gen::<f32>().into(),
-        DataTypeId::Double => rng.gen::<f64>().into(),
+        DataTypeId::Boolean => rng.random::<bool>().into(),
+        DataTypeId::Byte => rng.random::<u8>().into(),
+        DataTypeId::SByte => rng.random::<i8>().into(),
+        DataTypeId::Int16 => rng.random::<i16>().into(),
+        DataTypeId::UInt16 => rng.random::<u16>().into(),
+        DataTypeId::Int32 => rng.random::<i32>().into(),
+        DataTypeId::UInt32 => rng.random::<u32>().into(),
+        DataTypeId::Int64 => rng.random::<i64>().into(),
+        DataTypeId::UInt64 => rng.random::<u64>().into(),
+        DataTypeId::Float => rng.random::<f32>().into(),
+        DataTypeId::Double => rng.random::<f64>().into(),
         DataTypeId::String => {
             let s = (0..10)
                 .map(|_| rng.sample(Alphanumeric))
                 .collect::<Vec<_>>();
             UAString::from(String::from_utf8(s).unwrap()).into()
         }
-        DataTypeId::DateTime => DateTime::from(rng.gen_range(0..DateTime::endtimes_ticks())).into(),
+        DataTypeId::DateTime => {
+            DateTime::from(rng.random_range(0..DateTime::endtimes_ticks())).into()
+        }
         DataTypeId::Guid => Guid::new().into(),
         _ => scalar_default_value(id),
     }
@@ -360,14 +362,14 @@ fn set_stress_timer(
         let mut interval = tokio::time::interval(std::time::Duration::from_millis(100));
         loop {
             interval.tick().await;
-            let mut rng = rand::thread_rng();
+            let mut rng = rand::rng();
             let now = DateTime::now();
             manager
                 .set_values(
                     &subscriptions,
                     node_ids
                         .iter()
-                        .map(|id| (id, None, DataValue::new_at(rng.gen::<i32>(), now))),
+                        .map(|id| (id, None, DataValue::new_at(rng.random::<i32>(), now))),
                 )
                 .unwrap();
         }

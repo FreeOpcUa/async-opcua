@@ -12,7 +12,7 @@ use rand;
 pub fn bytes(bytes: &mut [u8]) {
     use rand::RngCore;
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     rng.fill_bytes(bytes);
 }
 

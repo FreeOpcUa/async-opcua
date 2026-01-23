@@ -1,11 +1,15 @@
 use opcua_types::{constants, Error, StatusCode};
 
 pub(crate) mod aes;
+pub(crate) mod ecc;
 
 pub use aes::AesDerivedKeys;
 pub(crate) use aes::AesPolicy;
 
-use crate::{PrivateKey, PublicKey};
+use crate::{
+    aes::diffie_hellman::{DiffieHellmanExchange, NoneDiffieHellman},
+    PrivateKey, PublicKey,
+};
 
 /// Information about padding given by the policy.
 pub struct PaddingInfo {
@@ -13,6 +17,25 @@ pub struct PaddingInfo {
     pub block_size: usize,
     /// Minimum padding length.
     pub minimum_padding: usize,
+}
+
+/// The role in a secure channel connection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SecureChannelRole {
+    /// The application is acting as an OPC-UA client.
+    Client,
+    /// The application is acting as an OPC-UA server.
+    Server,
+}
+
+impl SecureChannelRole {
+    /// Get the opposite role.
+    pub fn opposite(&self) -> Self {
+        match self {
+            SecureChannelRole::Client => SecureChannelRole::Server,
+            SecureChannelRole::Server => SecureChannelRole::Client,
+        }
+    }
 }
 
 /// OPC-UA requires extra padding if the key size is > 2048 bits.
@@ -96,9 +119,7 @@ pub(crate) trait SecurityPolicyImpl {
         dst: &mut [u8],
     ) -> Result<usize, Error>;
 
-    // This will definitely need to change for ECC...
-    /// Produce the derived keys for this policy.
-    fn derive_secure_channel_keys(secret: &[u8], seed: &[u8]) -> Self::TDerivedKey;
+    fn begin_diffie_hellman_exchange(role: SecureChannelRole) -> Box<dyn DiffieHellmanExchange>;
 
     /// Sign the data in `data` using the signing key in `keys`, writing the result to
     /// `signature`.
@@ -178,6 +199,10 @@ impl SecurityPolicyImpl for NonePolicy {
         32
     }
 
+    fn begin_diffie_hellman_exchange(_role: SecureChannelRole) -> Box<dyn DiffieHellmanExchange> {
+        Box::new(NoneDiffieHellman::new())
+    }
+
     fn plain_text_block_size() -> usize {
         // Not really valid, but strictly speaking the block size for None
         // is 1, since there's no blocks at all.
@@ -249,10 +274,6 @@ impl SecurityPolicyImpl for NonePolicy {
             StatusCode::BadInternalError,
             "Cannot decrypt using security policy None",
         ))
-    }
-
-    fn derive_secure_channel_keys(_secret: &[u8], _seed: &[u8]) -> Self::TDerivedKey {
-        panic!("Cannot derive encryption keys for security policy None")
     }
 
     fn symmetric_decrypt(

@@ -215,7 +215,7 @@ fn max_message_size() {
         &response,
     )
     .unwrap_err();
-    assert_eq!(err.status(), StatusCode::BadResponseTooLarge);
+    assert_eq!(err.status(), StatusCode::BadRequestTooLarge);
 }
 
 /// Encode a large message and then ensure verification throws error for secure channel id mismatch

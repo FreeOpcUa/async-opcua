@@ -76,9 +76,9 @@ mod ecc {
             salt.copy_from_slice(remote_nonce);
 
             let raw = shared_secret
-            .extract::<<T::SymmetricEncryption as AesSymmetricEncryptionAlgorithm>::DigestMethod>(
-            Some(&salt),
-        );
+                .extract::<<T::SymmetricEncryption as AesSymmetricEncryptionAlgorithm>::DigestMethod>(
+                Some(&salt),
+            );
 
             let mut data = vec![0u8; required_length];
             raw.expand(&salt, &mut data)
@@ -106,8 +106,7 @@ mod ecc {
                 .public_key()
                 .to_public_key_der()
                 .unwrap()
-                .as_bytes()
-                .to_vec()
+                .into_vec()
         }
 
         fn set_local_nonce(&mut self, _local_nonce: &[u8]) {
@@ -148,18 +147,19 @@ mod rsa {
     use opcua_types::Error;
 
     use crate::{
-        policy::aes::{
-            AesAsymmetricSignatureAlgorithm, AesSecurityPolicy, AesSymmetricEncryptionAlgorithm,
+        policy::{
+            aes::AesSymmetricEncryptionAlgorithm,
+            rsa::{RsaAsymmetricSignatureAlgorithm, RsaSecurityPolicy},
         },
         random, AesDerivedKeys, AesKey,
     };
 
-    pub(crate) struct RsaDiffieHellman<T: AesSecurityPolicy> {
+    pub(crate) struct RsaDiffieHellman<T: RsaSecurityPolicy> {
         _marker: std::marker::PhantomData<fn() -> T>,
         local_nonce: Vec<u8>,
     }
 
-    impl<T: AesSecurityPolicy> RsaDiffieHellman<T> {
+    impl<T: RsaSecurityPolicy> RsaDiffieHellman<T> {
         pub(crate) fn new() -> Self {
             let mut nonce = vec![0u8; T::NONCE_LENGTH];
             random::bytes(&mut nonce);
@@ -189,7 +189,7 @@ mod rsa {
         }
     }
 
-    impl<T: AesSecurityPolicy + 'static> super::DiffieHellmanExchange for RsaDiffieHellman<T> {
+    impl<T: RsaSecurityPolicy + 'static> super::DiffieHellmanExchange for RsaDiffieHellman<T> {
         fn get_local_nonce(&self) -> Vec<u8> {
             self.local_nonce.clone()
         }
@@ -211,7 +211,7 @@ mod rsa {
     #[cfg(test)]
     mod tests {
         use crate::{
-            aes::diffie_hellman::RsaDiffieHellman, policy::aes::Basic128Rsa15, AesDerivedKeys,
+            aes::diffie_hellman::RsaDiffieHellman, policy::rsa::Basic128Rsa15, AesDerivedKeys,
             DiffieHellmanExchange, SecureChannelRole, SecurityPolicy,
         };
 

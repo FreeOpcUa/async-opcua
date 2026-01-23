@@ -17,7 +17,7 @@ use tracing::{error, info, trace, warn};
 type ChronoUtc = DateTime<Utc>;
 
 use rsa::pkcs1v15;
-use rsa::RsaPublicKey;
+use rsa::PublicKey as RsaPublicKey;
 use x509_cert::{
     self as x509,
     builder::profile::cabf::tls::{CertificateType, Subscriber, Tls12Options},
@@ -672,7 +672,7 @@ impl X509 {
             .subject()
             .by_oid::<Utf8StringRef>(nid)
         {
-            Ok(Some(tv)) => return Ok(tv.to_string()),
+            Ok(Some(tv)) => Ok(tv.to_string()),
             _ => Err(X509Error),
         }
     }

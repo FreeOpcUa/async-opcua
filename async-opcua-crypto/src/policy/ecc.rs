@@ -52,7 +52,6 @@ where
 {
     type TPrivateKey = elliptic_curve::SecretKey<T::TCurve>;
     type TPublicKey = elliptic_curve::PublicKey<T::TCurve>;
-    type TDerivedKey = AesDerivedKeys;
 
     fn uri() -> &'static str {
         T::SECURITY_POLICY_URI
@@ -166,7 +165,7 @@ where
     }
 
     fn symmetric_decrypt(
-        keys: &Self::TDerivedKey,
+        keys: &AesDerivedKeys,
         src: &[u8],
         dst: &mut [u8],
     ) -> Result<usize, Error> {
@@ -175,7 +174,7 @@ where
     }
 
     fn symmetric_encrypt(
-        keys: &Self::TDerivedKey,
+        keys: &AesDerivedKeys,
         src: &[u8],
         dst: &mut [u8],
     ) -> Result<usize, Error> {
@@ -184,7 +183,7 @@ where
     }
 
     fn symmetric_sign(
-        keys: &Self::TDerivedKey,
+        keys: &AesDerivedKeys,
         data: &[u8],
         signature: &mut [u8],
     ) -> Result<(), Error> {
@@ -192,7 +191,7 @@ where
     }
 
     fn symmetric_verify_signature(
-        keys: &Self::TDerivedKey,
+        keys: &AesDerivedKeys,
         data: &[u8],
         signature: &[u8],
     ) -> Result<(), Error> {
@@ -255,6 +254,26 @@ impl EccSecurityPolicy for EccBrainpoolP256r1 {
 mod tests {
     use crypto_common::Generate;
     use elliptic_curve::ecdh::EphemeralSecret;
+
+    // Temp, validate that EccPolicy<P> for each policy
+    // implements SecurityPolicyImpl. There are some extra
+    // bounds needed on the impl that we want to check.
+    // Once this is actually in use elsewhere this test can be removed.
+    #[allow(dead_code)]
+    mod test_trait_impl {
+        use crate::policy::{
+            ecc::{EccBrainpoolP256r1, EccNistP384, EccPolicy},
+            SecurityPolicyImpl,
+        };
+
+        type PolicyNistP384 = EccPolicy<EccNistP384>;
+        type PolicyBrainpoolP256r1 = EccPolicy<EccBrainpoolP256r1>;
+
+        fn _assert_impls() {
+            <PolicyNistP384 as SecurityPolicyImpl>::as_str();
+            <PolicyBrainpoolP256r1 as SecurityPolicyImpl>::as_str();
+        }
+    }
 
     #[test]
     fn test_how_does_diffie_hellman_work() {

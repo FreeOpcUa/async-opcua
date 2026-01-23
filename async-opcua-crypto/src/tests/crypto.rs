@@ -7,9 +7,9 @@ use crate::{
     aes::calculate_cipher_text_size,
     certificate_store::*,
     from_hex, hash,
-    policy::aes::{
-        Aes128Sha256RsaOaep, AesAsymmetricEncryptionAlgorithm, AesSecurityPolicy, OaepSha1,
-        OaepSha256, Pkcs1v15,
+    policy::rsa::{
+        Aes128Sha256RsaOaep, OaepSha1, OaepSha256, Pkcs1v15, RsaAsymmetricEncryptionAlgorithm,
+        RsaSecurityPolicy,
     },
     random,
     tests::{
@@ -239,7 +239,7 @@ fn calculate_cipher_text_size2() {
     let (cert, private_key) = make_test_cert_1024();
     let public_key = cert.public_key().unwrap();
 
-    fn inner_test<T: AesAsymmetricEncryptionAlgorithm>(
+    fn inner_test<T: RsaAsymmetricEncryptionAlgorithm>(
         private_key: &PrivateKey,
         public_key: &PublicKey,
     ) {
@@ -447,7 +447,7 @@ fn encrypt_decrypt_password() {
     )
     .unwrap();
     let password2 = legacy_secret_decrypt::<
-        <Aes128Sha256RsaOaep as AesSecurityPolicy>::AsymmetricEncryption,
+        <Aes128Sha256RsaOaep as RsaSecurityPolicy>::AsymmetricEncryption,
     >(&secret, nonce.as_ref(), &pkey)
     .unwrap();
 

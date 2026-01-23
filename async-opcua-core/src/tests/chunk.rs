@@ -219,7 +219,7 @@ fn max_message_size() {
         &response,
     )
     .unwrap_err();
-    assert_eq!(err.status(), StatusCode::BadResponseTooLarge);
+    assert_eq!(err.status(), StatusCode::BadRequestTooLarge);
 }
 
 fn validate_chunk_sequence_numbers(

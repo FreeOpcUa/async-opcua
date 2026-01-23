@@ -46,10 +46,25 @@ impl SequenceNumberHandle {
     }
 
     pub(crate) fn set_is_legacy(&mut self, is_legacy: bool) {
+        if is_legacy == self.is_legacy {
+            return;
+        }
+
+        let old_min_value = self.min_value();
         self.is_legacy = is_legacy;
         if self.current_value > self.max_value() {
             // If the current value is greater than the max value, wrap around to the min value
             self.current_value = self.min_value() + (self.current_value - self.max_value() - 1);
+        } else if self.current_value <= self.min_value() {
+            self.current_value = self.min_value();
+        // If we're at the min value, assume this is completely new, which is when this
+        // method should generally be called, so set to the new min value.
+        // This will typically happen when switching from legacy to non-legacy on the server.
+        // The very first message from the client will inform the server of a non-legacy securitypolicy,
+        // so the server needs to switch to non-legacy sequence numbers. Typically the channel will
+        // not have sent any messages yet, so the sequence number will be at the min value.
+        } else if self.current_value == old_min_value {
+            self.current_value = self.min_value();
         }
     }
 

@@ -258,9 +258,9 @@ mod tests {
 
     use super::SendBuffer;
 
-    use crate::comms::secure_channel::{Role, SecureChannel};
+    use crate::comms::secure_channel::SecureChannel;
     use crate::RequestMessage;
-    use opcua_crypto::CertificateStore;
+    use opcua_crypto::{CertificateStore, SecureChannelRole};
     use opcua_types::StatusCode;
     use opcua_types::{
         DateTime, NodeId, ReadRequest, ReadValueId, RequestHeader, TimestampsToReturn,
@@ -272,7 +272,7 @@ mod tests {
             Arc::new(RwLock::new(CertificateStore::new(std::path::Path::new(
                 "./pki",
             )))),
-            Role::Client,
+            SecureChannelRole::Client,
             Default::default(),
         );
 

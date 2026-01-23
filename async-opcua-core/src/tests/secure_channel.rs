@@ -5,7 +5,7 @@ use opcua_crypto::SecurityPolicy;
 use tracing::{error, trace};
 
 use crate::{
-    comms::{chunker::*, secure_channel::*, sequence_number::SequenceNumberHandle},
+    comms::{chunker::*, sequence_number::SequenceNumberHandle},
     tests::*,
     Message,
 };

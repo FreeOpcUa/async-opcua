@@ -9,7 +9,7 @@ use tracing::trace;
 
 use crate::{
     comms::{
-        chunker::*, message_chunk::*, secure_channel::*, sequence_number::SequenceNumberHandle,
+        chunker::*, message_chunk::*, sequence_number::SequenceNumberHandle,
         tcp_types::MIN_CHUNK_SIZE,
     },
     tests::*,
@@ -219,7 +219,7 @@ fn max_message_size() {
         &response,
     )
     .unwrap_err();
-    assert_eq!(err.status(), StatusCode::BadResponseTooLarge);
+    assert_eq!(err.status(), StatusCode::BadRequestTooLarge);
 }
 
 fn validate_chunk_sequence_numbers(

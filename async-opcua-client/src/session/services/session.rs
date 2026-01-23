@@ -14,7 +14,7 @@ use opcua_types::{
     SignedSoftwareCertificate, StatusCode, UAString, UserNameIdentityToken, UserTokenType,
     X509IdentityToken,
 };
-use rsa::RsaPrivateKey;
+use rsa::PrivateKey as RsaPrivateKey;
 use tracing::{debug_span, error, info_span, Instrument};
 
 use crate::{

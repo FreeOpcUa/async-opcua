@@ -1,4 +1,5 @@
 mod aeskey;
+pub(crate) mod diffie_hellman;
 mod rsa_private_key;
 
 pub use aeskey::AesKey;

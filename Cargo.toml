@@ -51,15 +51,19 @@ tracing-futures = "0.2.5"
 url = "^2"
 uuid = { version = "^1", features = ["v4"] }
 
-aes = "^0.8"
-cbc = "^0.1"
-const-oid = { version = "^0.9", features = ["db"] }
-hmac = "^0.12"
-rand = "^0.8"
-rsa = { version = "^0.9", features = ["sha2", "sha1", "pem"] }
-sha1 = { version = "^0.10", features = ["oid"] }
-sha2 = { version = "^0.10", features = ["oid"] }
-x509-cert = { version = "^0.2", features = ["builder", "hazmat"] }
+aes = "^0.9.1"
+cbc = "^0.2.1"
+const-oid = { version = "^0.10", features = ["db"] }
+hmac = "^0.13.0"
+rand = "^0.10.1"
+rsa = { version = "^0.10.0", features = ["pkcs1v15", "encoding"] }
+sha1 = { version = "^0.11.0", features = ["oid"] }
+sha2 = { version = "^0.11.0", features = ["oid"] }
+x509-cert = { version = "^0.3.0", features = ["builder", "hazmat"] }
+digest = "^0.11.1"
+crypto-common = "^0.2.1"
+
+spki = { version = "0.8.0" }
 
 # Compile the crypto dependencies in release even in debug, to make test
 # performance tolerable. This makes initial compile times slightly worse,
@@ -83,7 +87,7 @@ opt-level = 3
 
 # This is probably the most important for the tests at the moment,
 # as it is on the hot path of RSA private key generation (gen_prime)
-[profile.dev.package.num-bigint-dig]
+[profile.dev.package.crypto-bigint]
 opt-level = 3
 [profile.dev.package.rand_core]
 opt-level = 3

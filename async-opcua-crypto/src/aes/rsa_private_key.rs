@@ -14,13 +14,13 @@ use rsa::pkcs1v15;
 use rsa::pkcs8;
 use rsa::pss;
 use rsa::signature::{RandomizedSigner, SignatureEncoding, Verifier};
-use rsa::{RsaPrivateKey, RsaPublicKey};
+use rsa::{PrivateKey as RsaPrivateKey, PublicKey as RsaPublicKey};
 
 use x509_cert::spki::SubjectPublicKeyInfoOwned;
 
 use opcua_types::{status_code::StatusCode, Error};
 
-use crate::policy::aes::AesAsymmetricEncryptionAlgorithm;
+use crate::policy::rsa::RsaAsymmetricEncryptionAlgorithm;
 
 #[derive(Debug)]
 /// Error from working with a private key.
@@ -89,7 +89,7 @@ pub trait KeySize {
 }
 
 /// Get the cipher block size with given data size and padding.
-pub(crate) fn calculate_cipher_text_size<T: AesAsymmetricEncryptionAlgorithm>(
+pub(crate) fn calculate_cipher_text_size<T: RsaAsymmetricEncryptionAlgorithm>(
     key_size: usize,
     data_size: usize,
 ) -> usize {
@@ -114,7 +114,7 @@ impl KeySize for PrivateKey {
 impl PrivateKey {
     /// Generate a new private key with the given length in bits.
     pub fn new(bit_length: u32) -> Result<PrivateKey, rsa::Error> {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         let key = RsaPrivateKey::new(&mut rng, bit_length as usize)?;
         Ok(PKey { value: key })
@@ -184,7 +184,7 @@ impl PrivateKey {
 
     /// Signs the data using RSA-SHA1
     pub fn sign_sha1(&self, data: &[u8], signature: &mut [u8]) -> Result<usize, Error> {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let signing_key = pkcs1v15::SigningKey::<sha1::Sha1>::new(self.value.clone());
         match signing_key.try_sign_with_rng(&mut rng, data) {
             Err(e) => Err(Error::new(StatusCode::BadUnexpectedError, e)),
@@ -198,7 +198,7 @@ impl PrivateKey {
 
     /// Signs the data using RSA-SHA256
     pub fn sign_sha256(&self, data: &[u8], signature: &mut [u8]) -> Result<usize, Error> {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let signing_key = pkcs1v15::SigningKey::<sha2::Sha256>::new(self.value.clone());
         match signing_key.try_sign_with_rng(&mut rng, data) {
             Err(e) => Err(Error::new(StatusCode::BadUnexpectedError, e)),
@@ -212,8 +212,8 @@ impl PrivateKey {
 
     /// Signs the data using RSA-SHA256-PSS
     pub fn sign_sha256_pss(&self, data: &[u8], signature: &mut [u8]) -> Result<usize, Error> {
-        let mut rng = rand::thread_rng();
-        let signing_key = pss::BlindedSigningKey::<sha2::Sha256>::new(self.value.clone());
+        let mut rng = rand::rng();
+        let signing_key = pss::SigningKey::<sha2::Sha256>::new(self.value.clone());
         match signing_key.try_sign_with_rng(&mut rng, data) {
             Err(e) => Err(Error::new(StatusCode::BadUnexpectedError, e)),
             Ok(signed) => {
@@ -224,7 +224,7 @@ impl PrivateKey {
         }
     }
 
-    pub(crate) fn private_decrypt<T: AesAsymmetricEncryptionAlgorithm>(
+    pub(crate) fn private_decrypt<T: RsaAsymmetricEncryptionAlgorithm>(
         &self,
         src: &[u8],
         dst: &mut [u8],
@@ -310,7 +310,7 @@ impl PublicKey {
 
     /// Encrypts data from src to dst using the specified padding and returns the size of encrypted
     /// data in bytes or an error.
-    pub(crate) fn public_encrypt<T: AesAsymmetricEncryptionAlgorithm>(
+    pub(crate) fn public_encrypt<T: RsaAsymmetricEncryptionAlgorithm>(
         &self,
         src: &[u8],
         dst: &mut [u8],
@@ -318,7 +318,7 @@ impl PublicKey {
         let cipher_text_block_size = self.cipher_text_block_size();
         let plain_text_block_size = T::get_plaintext_block_size(self.size());
 
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         let mut src_idx = 0;
         let mut dst_idx = 0;

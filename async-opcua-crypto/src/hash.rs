@@ -6,7 +6,7 @@
 
 use std::result::Result;
 
-use hmac::{digest, Hmac, Mac};
+use hmac::{digest, Hmac, KeyInit, Mac};
 use sha1::Sha1;
 use sha2::Sha256;
 
@@ -14,8 +14,8 @@ use opcua_types::{status_code::StatusCode, Error};
 
 use super::{SHA1_SIZE, SHA256_SIZE};
 
-type HmacSha256 = Hmac<Sha256>;
 type HmacSha1 = Hmac<Sha1>;
+type HmacSha256 = Hmac<Sha256>;
 type Sha1Output = digest::CtOutput<HmacSha1>;
 type Sha256Output = digest::CtOutput<HmacSha256>;
 

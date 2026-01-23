@@ -1,11 +1,14 @@
 use opcua_types::{constants, Error, StatusCode};
 
 pub(crate) mod aes;
+pub(crate) mod rsa;
 
 pub use aes::AesDerivedKeys;
-pub(crate) use aes::AesPolicy;
 
-use crate::{PrivateKey, PublicKey};
+use crate::{
+    aes::diffie_hellman::{DiffieHellmanExchange, NoneDiffieHellman},
+    PrivateKey, PublicKey,
+};
 
 /// Information about padding given by the policy.
 pub struct PaddingInfo {
@@ -13,6 +16,25 @@ pub struct PaddingInfo {
     pub block_size: usize,
     /// Minimum padding length.
     pub minimum_padding: usize,
+}
+
+/// The role in a secure channel connection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SecureChannelRole {
+    /// The application is acting as an OPC-UA client.
+    Client,
+    /// The application is acting as an OPC-UA server.
+    Server,
+}
+
+impl SecureChannelRole {
+    /// Get the opposite role.
+    pub fn opposite(&self) -> Self {
+        match self {
+            SecureChannelRole::Client => SecureChannelRole::Server,
+            SecureChannelRole::Server => SecureChannelRole::Client,
+        }
+    }
 }
 
 /// OPC-UA requires extra padding if the key size is > 2048 bits.
@@ -29,8 +51,6 @@ pub(crate) trait SecurityPolicyImpl {
     type TPrivateKey;
     /// The type of public key used by this security policy.
     type TPublicKey;
-    /// The type of derived key used by this security policy.
-    type TDerivedKey;
 
     /// The OPC-UA security policy URI for this policy.
     fn uri() -> &'static str;
@@ -96,38 +116,30 @@ pub(crate) trait SecurityPolicyImpl {
         dst: &mut [u8],
     ) -> Result<usize, Error>;
 
-    // This will definitely need to change for ECC...
-    /// Produce the derived keys for this policy.
-    fn derive_secure_channel_keys(secret: &[u8], seed: &[u8]) -> Self::TDerivedKey;
+    fn begin_diffie_hellman_exchange(role: SecureChannelRole) -> Box<dyn DiffieHellmanExchange>;
 
     /// Sign the data in `data` using the signing key in `keys`, writing the result to
     /// `signature`.
     fn symmetric_sign(
-        keys: &Self::TDerivedKey,
+        keys: &AesDerivedKeys,
         data: &[u8],
         signature: &mut [u8],
     ) -> Result<(), Error>;
 
     /// Verify that the data in `data` was signed using `keys`.
     fn symmetric_verify_signature(
-        keys: &Self::TDerivedKey,
+        keys: &AesDerivedKeys,
         data: &[u8],
         signature: &[u8],
     ) -> Result<(), Error>;
 
     /// Encrypt the data in `src` using `keys`, writing the result to `dst`.
-    fn symmetric_encrypt(
-        keys: &Self::TDerivedKey,
-        src: &[u8],
-        dst: &mut [u8],
-    ) -> Result<usize, Error>;
+    fn symmetric_encrypt(keys: &AesDerivedKeys, src: &[u8], dst: &mut [u8])
+        -> Result<usize, Error>;
 
     /// Decrypt the data in `src` using `keys`, writing the result to `dst`.
-    fn symmetric_decrypt(
-        keys: &Self::TDerivedKey,
-        src: &[u8],
-        dst: &mut [u8],
-    ) -> Result<usize, Error>;
+    fn symmetric_decrypt(keys: &AesDerivedKeys, src: &[u8], dst: &mut [u8])
+        -> Result<usize, Error>;
 
     /// Get the length of the symmetric encryption key, in bytes.
     fn encrypting_key_length() -> usize;
@@ -144,7 +156,6 @@ impl SecurityPolicyImpl for NonePolicy {
     // secure channel state, which means we could use a zero-sized type here.
     type TPrivateKey = PrivateKey;
     type TPublicKey = PublicKey;
-    type TDerivedKey = AesDerivedKeys;
 
     fn uri() -> &'static str {
         constants::SECURITY_POLICY_NONE_URI
@@ -176,6 +187,10 @@ impl SecurityPolicyImpl for NonePolicy {
 
     fn nonce_length() -> usize {
         32
+    }
+
+    fn begin_diffie_hellman_exchange(_role: SecureChannelRole) -> Box<dyn DiffieHellmanExchange> {
+        Box::new(NoneDiffieHellman::new())
     }
 
     fn plain_text_block_size() -> usize {
@@ -251,12 +266,8 @@ impl SecurityPolicyImpl for NonePolicy {
         ))
     }
 
-    fn derive_secure_channel_keys(_secret: &[u8], _seed: &[u8]) -> Self::TDerivedKey {
-        panic!("Cannot derive encryption keys for security policy None")
-    }
-
     fn symmetric_decrypt(
-        _keys: &Self::TDerivedKey,
+        _keys: &AesDerivedKeys,
         _src: &[u8],
         _dst: &mut [u8],
     ) -> Result<usize, Error> {
@@ -267,7 +278,7 @@ impl SecurityPolicyImpl for NonePolicy {
     }
 
     fn symmetric_encrypt(
-        _keys: &Self::TDerivedKey,
+        _keys: &AesDerivedKeys,
         _src: &[u8],
         _dst: &mut [u8],
     ) -> Result<usize, Error> {
@@ -278,7 +289,7 @@ impl SecurityPolicyImpl for NonePolicy {
     }
 
     fn symmetric_sign(
-        _keys: &Self::TDerivedKey,
+        _keys: &AesDerivedKeys,
         _data: &[u8],
         _signature: &mut [u8],
     ) -> Result<(), Error> {
@@ -289,7 +300,7 @@ impl SecurityPolicyImpl for NonePolicy {
     }
 
     fn symmetric_verify_signature(
-        _keys: &Self::TDerivedKey,
+        _keys: &AesDerivedKeys,
         _data: &[u8],
         _signature: &[u8],
     ) -> Result<(), Error> {

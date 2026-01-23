@@ -16,7 +16,7 @@ use opcua_core::{
     handle::AtomicHandle,
     sync::RwLock,
 };
-use opcua_crypto::{CertificateStore, SecurityPolicy};
+use opcua_crypto::{CertificateStore, SecureChannelRole, SecurityPolicy};
 use opcua_types::{
     ChannelSecurityToken, DateTime, FindServersResponse, GetEndpointsResponse, MessageSecurityMode,
     OpenSecureChannelRequest, OpenSecureChannelResponse, ResponseHeader, SecurityTokenRequestType,
@@ -175,7 +175,7 @@ impl SessionController {
     ) -> Self {
         let channel = SecureChannel::new(
             certificate_store.clone(),
-            opcua_core::comms::secure_channel::Role::Server,
+            SecureChannelRole::Server,
             Arc::new(RwLock::new(info.initial_encoding_context())),
         );
 
@@ -716,14 +716,14 @@ impl SessionController {
             .validate_secure_channel_nonce_length(&request.client_nonce)?;
         self.channel
             .set_remote_nonce_from_byte_string(&request.client_nonce)?;
-        self.channel.create_random_nonce();
+        self.channel.begin_diffie_hellman_exchange();
 
         let security_policy = self.channel.security_policy();
         if security_policy != SecurityPolicy::None
             && (security_mode == MessageSecurityMode::Sign
                 || security_mode == MessageSecurityMode::SignAndEncrypt)
         {
-            self.channel.derive_keys();
+            self.channel.derive_keys()?;
         }
 
         let response = OpenSecureChannelResponse {

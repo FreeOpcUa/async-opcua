@@ -62,9 +62,9 @@ fn make_secure_channel(
     let mut secure_channel = SecureChannel::new_no_certificate_store();
     secure_channel.set_security_mode(security_mode);
     secure_channel.set_security_policy(security_policy);
-    secure_channel.set_local_nonce(&local_nonce);
+    secure_channel.begin_diffie_hellman_exchange_with_local_nonce(&local_nonce);
     secure_channel.set_remote_nonce(&remote_nonce);
-    secure_channel.derive_keys();
+    secure_channel.derive_keys().unwrap();
     secure_channel
 }
 

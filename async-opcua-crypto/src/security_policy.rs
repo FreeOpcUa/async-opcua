@@ -12,7 +12,7 @@ use tracing::error;
 use opcua_types::{constants, ByteString, Error};
 
 use crate::{
-    policy::{PaddingInfo, SecurityPolicyImpl},
+    policy::{PaddingInfo, SecureChannelRole, SecurityPolicyImpl},
     PrivateKey, PublicKey,
 };
 
@@ -218,43 +218,17 @@ impl SecurityPolicy {
         call_with_policy!(self, |T| { T::uses_legacy_sequence_numbers() })
     }
 
-    /// Part 6
-    /// 6.7.5
-    /// Deriving keys Once the SecureChannel is established the Messages are signed and encrypted with
-    /// keys derived from the Nonces exchanged in the OpenSecureChannel call. These keys are derived
-    /// by passing the Nonces to a pseudo-random function which produces a sequence of bytes from a
-    /// set of inputs. A pseudo-random function is represented by the following function declaration:
-    ///
-    /// ```c++
-    /// Byte[] PRF( Byte[] secret,  Byte[] seed,  i32 length,  i32 offset)
-    /// ```
-    ///
-    /// Where length is the number of bytes to return and offset is a number of bytes from the beginning of the sequence.
-    ///
-    /// The lengths of the keys that need to be generated depend on the SecurityPolicy used for the channel.
-    /// The following information is specified by the SecurityPolicy:
-    ///
-    /// a) SigningKeyLength (from the DerivedSignatureKeyLength);
-    /// b) EncryptingKeyLength (implied by the SymmetricEncryptionAlgorithm);
-    /// c) EncryptingBlockSize (implied by the SymmetricEncryptionAlgorithm).
-    ///
-    /// The parameters passed to the pseudo random function are specified in Table 33.
-    ///
-    /// Table 33 – Cryptography key generation parameters
-    ///
-    /// Key | Secret | Seed | Length | Offset
-    /// ClientSigningKey | ServerNonce | ClientNonce | SigningKeyLength | 0
-    /// ClientEncryptingKey | ServerNonce | ClientNonce | EncryptingKeyLength | SigningKeyLength
-    /// ClientInitializationVector | ServerNonce | ClientNonce | EncryptingBlockSize | SigningKeyLength + EncryptingKeyLength
-    /// ServerSigningKey | ClientNonce | ServerNonce | SigningKeyLength | 0
-    /// ServerEncryptingKey | ClientNonce | ServerNonce | EncryptingKeyLength | SigningKeyLength
-    /// ServerInitializationVector | ClientNonce | ServerNonce | EncryptingBlockSize | SigningKeyLength + EncryptingKeyLength
-    ///
-    /// The Client keys are used to secure Messages sent by the Client. The Server keys
-    /// are used to secure Messages sent by the Server.
-    ///
-    pub fn make_secure_channel_keys(&self, secret: &[u8], seed: &[u8]) -> AesDerivedKeys {
-        call_with_policy!(self, |T| { T::derive_secure_channel_keys(secret, seed) })
+    /// Begin a Diffie-Hellman key exchange.
+    /// The returned exchange object will provide a local nonce that should
+    /// be sent to the other party in the secure channel negotiation.
+    /// Once open request/response messages have been exchanged, call
+    /// `derive_keys` on the exchange object with the remote nonce
+    /// received from the other party to derive the shared AES keys.
+    pub fn begin_diffie_hellman_exchange(
+        &self,
+        role: SecureChannelRole,
+    ) -> Box<dyn crate::aes::diffie_hellman::DiffieHellmanExchange> {
+        call_with_policy!(self, |T| { T::begin_diffie_hellman_exchange(role) })
     }
 
     /// Produce a signature of the data using an asymmetric key. Stores the signature in the supplied

@@ -19,7 +19,7 @@ use opcua_types::{
 use opcua_types::{Error, IssuedIdentityToken, MessageSecurityMode};
 use tracing::{error, warn};
 
-use crate::policy::aes::{AesAsymmetricEncryptionAlgorithm, OaepSha1, OaepSha256, Pkcs1v15};
+use crate::policy::rsa::{OaepSha1, OaepSha256, Pkcs1v15, RsaAsymmetricEncryptionAlgorithm};
 
 use super::{PrivateKey, SecurityPolicy, X509};
 
@@ -245,7 +245,7 @@ pub(crate) fn legacy_secret_encrypt(
 
 /// Decrypt the client's password using the server's nonce and private key. This function is prefixed
 /// "legacy" because 1.04 describes another way of encrypting passwords.
-pub(crate) fn legacy_secret_decrypt<T: AesAsymmetricEncryptionAlgorithm>(
+pub(crate) fn legacy_secret_decrypt<T: RsaAsymmetricEncryptionAlgorithm>(
     secret: &ByteString,
     server_nonce: &[u8],
     server_key: &PrivateKey,

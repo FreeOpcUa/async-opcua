@@ -20,7 +20,7 @@ use x509_cert::spki::SubjectPublicKeyInfoOwned;
 
 use opcua_types::{status_code::StatusCode, Error};
 
-use crate::policy::aes::AesAsymmetricEncryptionAlgorithm;
+use crate::policy::rsa::RsaAsymmetricEncryptionAlgorithm;
 
 #[derive(Debug)]
 /// Error from working with a private key.
@@ -89,7 +89,7 @@ pub trait KeySize {
 }
 
 /// Get the cipher block size with given data size and padding.
-pub(crate) fn calculate_cipher_text_size<T: AesAsymmetricEncryptionAlgorithm>(
+pub(crate) fn calculate_cipher_text_size<T: RsaAsymmetricEncryptionAlgorithm>(
     key_size: usize,
     data_size: usize,
 ) -> usize {
@@ -224,7 +224,7 @@ impl PrivateKey {
         }
     }
 
-    pub(crate) fn private_decrypt<T: AesAsymmetricEncryptionAlgorithm>(
+    pub(crate) fn private_decrypt<T: RsaAsymmetricEncryptionAlgorithm>(
         &self,
         src: &[u8],
         dst: &mut [u8],
@@ -310,7 +310,7 @@ impl PublicKey {
 
     /// Encrypts data from src to dst using the specified padding and returns the size of encrypted
     /// data in bytes or an error.
-    pub(crate) fn public_encrypt<T: AesAsymmetricEncryptionAlgorithm>(
+    pub(crate) fn public_encrypt<T: RsaAsymmetricEncryptionAlgorithm>(
         &self,
         src: &[u8],
         dst: &mut [u8],

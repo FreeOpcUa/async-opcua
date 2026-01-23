@@ -18,7 +18,7 @@ use crate::{
 
 use super::random;
 
-use crate::policy::{aes::*, AesDerivedKeys, AesPolicy, NonePolicy};
+use crate::policy::{rsa::*, AesDerivedKeys, NonePolicy};
 
 macro_rules! call_with_policy {
     (_inner $r:expr, $($p:ident: $ty:ty,)+ |$x:ident| $t:tt) => {
@@ -37,11 +37,11 @@ macro_rules! call_with_policy {
     ($r:expr, |$x:ident| $t:tt) => {
         call_with_policy!(_inner $r,
             None: NonePolicy,
-            Aes128Sha256RsaOaep: AesPolicy<Aes128Sha256RsaOaep>,
-            Basic256Sha256: AesPolicy<Basic256Sha256>,
-            Aes256Sha256RsaPss: AesPolicy<Aes256Sha256RsaPss>,
-            Basic128Rsa15: AesPolicy<Basic128Rsa15>,
-            Basic256: AesPolicy<Basic256>,
+            Aes128Sha256RsaOaep: RsaPolicy<Aes128Sha256RsaOaep>,
+            Basic256Sha256: RsaPolicy<Basic256Sha256>,
+            Aes256Sha256RsaPss: RsaPolicy<Aes256Sha256RsaPss>,
+            Basic128Rsa15: RsaPolicy<Basic128Rsa15>,
+            Basic256: RsaPolicy<Basic256>,
             |$x| $t
         )
     };

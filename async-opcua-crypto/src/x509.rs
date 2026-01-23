@@ -661,7 +661,7 @@ impl X509 {
             .subject()
             .by_oid::<Utf8StringRef>(nid)
         {
-            Ok(Some(tv)) => return Ok(tv.to_string()),
+            Ok(Some(tv)) => Ok(tv.to_string()),
             _ => Err(X509Error),
         }
     }

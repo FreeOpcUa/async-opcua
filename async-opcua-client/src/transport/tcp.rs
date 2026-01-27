@@ -181,6 +181,7 @@ impl TcpConnector {
 
 impl Connector for TcpConnector {
     type Transport = TcpTransport;
+
     async fn connect(
         &self,
         channel: Arc<SecureChannelState>,
@@ -411,6 +412,7 @@ impl ReverseTcpConnector {
 
 impl Connector for ReverseTcpConnector {
     type Transport = TcpTransport;
+
     async fn connect(
         &self,
         channel: Arc<SecureChannelState>,

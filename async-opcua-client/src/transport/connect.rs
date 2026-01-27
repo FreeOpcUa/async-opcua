@@ -36,12 +36,14 @@ pub trait Connector: Send + Sync {
 pub trait ConnectorBuilder: Send + Sync {
     /// The connector type created by this builder.
     type ConnectorType: Connector + Send + Sync + 'static;
+
     /// Create a new connector for the specific endpoint URL.
     fn build(self) -> Result<Self::ConnectorType, Error>;
 }
 
 impl ConnectorBuilder for String {
     type ConnectorType = TcpConnector;
+
     fn build(self) -> Result<Self::ConnectorType, Error> {
         ConnectorBuilder::build(self.as_str())
     }
@@ -49,6 +51,7 @@ impl ConnectorBuilder for String {
 
 impl ConnectorBuilder for &str {
     type ConnectorType = TcpConnector;
+
     fn build(self) -> Result<Self::ConnectorType, Error> {
         TcpConnector::new(self)
     }
@@ -56,6 +59,7 @@ impl ConnectorBuilder for &str {
 
 impl ConnectorBuilder for &String {
     type ConnectorType = TcpConnector;
+
     fn build(self) -> Result<Self::ConnectorType, Error> {
         ConnectorBuilder::build(self.as_str())
     }

@@ -163,12 +163,8 @@ impl SimpleBinaryDecodable for AsymmetricSecurityHeader {
             ))
         } else {
             // validate receiver_certificate_thumbprint_length == 20
-            let thumbprint_len = if receiver_certificate_thumbprint.value.is_some() {
-                receiver_certificate_thumbprint
-                    .value
-                    .as_ref()
-                    .unwrap()
-                    .len()
+            let thumbprint_len = if let Some(value) = &receiver_certificate_thumbprint.value {
+                value.len()
             } else {
                 0
             };

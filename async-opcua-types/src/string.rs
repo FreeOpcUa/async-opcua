@@ -275,10 +275,10 @@ impl UAString {
 
     /// Returns the length of the string in bytes or -1 for null.
     pub fn len(&self) -> isize {
-        if self.value.is_none() {
-            -1
+        if let Some(v) = &self.value {
+            v.len() as isize
         } else {
-            self.value.as_ref().unwrap().len() as isize
+            -1
         }
     }
 

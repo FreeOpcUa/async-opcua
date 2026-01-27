@@ -5,7 +5,6 @@ use crate::transport::state::SecureChannelState;
 
 use super::connect::{Connector, Transport};
 use super::core::{OutgoingMessage, TransportPollResult, TransportState};
-use async_trait::async_trait;
 use futures::StreamExt;
 use opcua_core::comms::tcp_types::AcknowledgeMessage;
 use opcua_core::comms::url::is_opc_ua_binary_url;
@@ -35,6 +34,8 @@ enum TransportCloseState {
     Closed(StatusCode),
 }
 
+/// opc.tcp transport implementation.
+/// This serves as the transport layer for OPC-UA over TCP.
 pub struct TcpTransport {
     state: TransportState,
     read: FramedRead<ReadHalf<TcpStream>, TcpCodec>,
@@ -178,8 +179,8 @@ impl TcpConnector {
     }
 }
 
-#[async_trait]
 impl Connector for TcpConnector {
+    type Transport = TcpTransport;
     async fn connect(
         &self,
         channel: Arc<SecureChannelState>,
@@ -408,8 +409,8 @@ impl ReverseTcpConnector {
     }
 }
 
-#[async_trait]
 impl Connector for ReverseTcpConnector {
+    type Transport = TcpTransport;
     async fn connect(
         &self,
         channel: Arc<SecureChannelState>,
@@ -554,10 +555,6 @@ impl TcpTransport {
             }
         }
     }
-
-    pub fn connected_url(&self) -> &str {
-        &self.connected_url
-    }
 }
 
 impl Transport for TcpTransport {
@@ -592,5 +589,9 @@ impl Transport for TcpTransport {
             self.closed = TransportCloseState::Closed(r);
         }
         r
+    }
+
+    fn connected_url(&self) -> &str {
+        &self.connected_url
     }
 }

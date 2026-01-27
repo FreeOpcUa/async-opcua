@@ -20,7 +20,6 @@ use tracing::{debug, error};
 use super::{
     connect::{Connector, Transport},
     state::{Request, RequestSend, SecureChannelState},
-    tcp::TcpTransport,
 };
 
 use crate::{
@@ -42,7 +41,6 @@ pub struct AsyncSecureChannel {
     transport_config: TransportConfiguration,
     state: Arc<SecureChannelState>,
     issue_channel_lock: tokio::sync::Mutex<()>,
-    connector: Box<dyn Connector>,
     channel_lifetime: u32,
 
     request_send: ArcSwapOption<RequestSend>,
@@ -50,11 +48,11 @@ pub struct AsyncSecureChannel {
 }
 
 /// Event loop for a secure channel. This must be polled to make progress.
-pub struct SecureChannelEventLoop {
-    transport: TcpTransport,
+pub struct SecureChannelEventLoop<T> {
+    transport: T,
 }
 
-impl SecureChannelEventLoop {
+impl<T: Transport + Send + Sync + 'static> SecureChannelEventLoop<T> {
     /// Poll the channel, processing any pending incoming or outgoing messages and returning the
     /// action that was taken.
     pub async fn poll(&mut self) -> TransportPollResult {
@@ -137,7 +135,6 @@ impl AsyncSecureChannel {
         ignore_clock_skew: bool,
         auth_token: Arc<ArcSwap<NodeId>>,
         transport_config: TransportConfiguration,
-        connector: Box<dyn Connector>,
         channel_lifetime: u32,
         encoding_context: Arc<RwLock<ContextOwned>>,
     ) -> Self {
@@ -160,7 +157,6 @@ impl AsyncSecureChannel {
             certificate_store,
             session_retry_policy,
             request_send: Default::default(),
-            connector,
             channel_lifetime,
             encoding_context,
         }
@@ -216,11 +212,14 @@ impl AsyncSecureChannel {
 
     /// Attempt to establish a connection using this channel, returning an event loop
     /// for polling the connection.
-    pub async fn connect(&self) -> Result<SecureChannelEventLoop, StatusCode> {
+    pub async fn connect<T: Connector>(
+        &self,
+        connector: &T,
+    ) -> Result<SecureChannelEventLoop<T::Transport>, StatusCode> {
         self.request_send.store(None);
         let mut backoff = self.session_retry_policy.new_backoff();
         loop {
-            match self.connect_no_retry().await {
+            match self.connect_no_retry(connector).await {
                 Ok(event_loop) => {
                     break Ok(event_loop);
                 }
@@ -236,13 +235,16 @@ impl AsyncSecureChannel {
     }
 
     /// Connect to the server without attempting to retry if it fails.
-    pub async fn connect_no_retry(&self) -> Result<SecureChannelEventLoop, StatusCode> {
+    pub async fn connect_no_retry<T: Connector>(
+        &self,
+        connector: &T,
+    ) -> Result<SecureChannelEventLoop<T::Transport>, StatusCode> {
         {
             let mut secure_channel = trace_write_lock!(self.secure_channel);
             secure_channel.clear_security_token();
         }
 
-        let (mut transport, send) = self.create_transport().await?;
+        let (mut transport, send) = self.create_transport(connector).await?;
 
         let request = self.state.begin_issue_or_renew_secure_channel(
             SecurityTokenRequestType::Issue,
@@ -274,9 +276,10 @@ impl AsyncSecureChannel {
         Ok(SecureChannelEventLoop { transport })
     }
 
-    async fn create_transport(
+    async fn create_transport<T: Connector>(
         &self,
-    ) -> Result<(TcpTransport, tokio::sync::mpsc::Sender<OutgoingMessage>), StatusCode> {
+        connector: &T,
+    ) -> Result<(T::Transport, tokio::sync::mpsc::Sender<OutgoingMessage>), StatusCode> {
         debug!("Connect");
         let security_policy =
             SecurityPolicy::from_str(self.endpoint_info.endpoint.security_policy_uri.as_ref())
@@ -314,8 +317,7 @@ impl AsyncSecureChannel {
             }
 
             let (send, recv) = tokio::sync::mpsc::channel(MAX_INFLIGHT_MESSAGES);
-            let transport = self
-                .connector
+            let transport = connector
                 .connect(self.state.clone(), recv, self.transport_config.clone())
                 .await?;
 

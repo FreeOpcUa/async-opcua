@@ -15,6 +15,7 @@ use opcua::{
     server::{ServerBuilder, ServerHandle, ServerUserToken, ANONYMOUS_USER_TOKEN_ID},
     types::{MessageSecurityMode, StatusCode},
 };
+use opcua_client::TcpConnector;
 use opcua_core::config::Config;
 use opcua_crypto::CertificateStore;
 use opcua_types::{ApplicationDescription, Error};
@@ -387,7 +388,7 @@ impl Tester {
         security_policy: SecurityPolicy,
         security_mode: MessageSecurityMode,
         user_identity: IdentityToken,
-    ) -> Result<(Arc<Session>, SessionEventLoop), Error> {
+    ) -> Result<(Arc<Session>, SessionEventLoop<TcpConnector>), Error> {
         self.client
             .connect_to_matching_endpoint(
                 (
@@ -406,7 +407,7 @@ impl Tester {
         security_mode: MessageSecurityMode,
         user_identity: IdentityToken,
         path: &str,
-    ) -> Result<(Arc<Session>, SessionEventLoop), Error> {
+    ) -> Result<(Arc<Session>, SessionEventLoop<TcpConnector>), Error> {
         self.client
             .connect_to_matching_endpoint(
                 (
@@ -448,7 +449,9 @@ impl Tester {
     }
 
     #[allow(unused)]
-    pub async fn connect_default(&mut self) -> Result<(Arc<Session>, SessionEventLoop), Error> {
+    pub async fn connect_default(
+        &mut self,
+    ) -> Result<(Arc<Session>, SessionEventLoop<TcpConnector>), Error> {
         self.connect(
             SecurityPolicy::None,
             MessageSecurityMode::None,

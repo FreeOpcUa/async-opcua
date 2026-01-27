@@ -11,8 +11,7 @@ use tokio::net::TcpListener;
 use crate::{
     reverse_connect::TcpConnectorReceiver,
     transport::{
-        tcp::TransportConfiguration, Connector, ConnectorBuilder, ReverseHelloVerifier,
-        ReverseTcpConnector,
+        tcp::TransportConfiguration, ConnectorBuilder, ReverseHelloVerifier, ReverseTcpConnector,
     },
     AsyncSecureChannel, ClientConfig, IdentityToken,
 };
@@ -388,6 +387,9 @@ impl<'a, R, C> SessionBuilder<'a, (), R, C> {
     }
 }
 
+type ResultEventLoop<C> =
+    SessionEventLoop<<<C as ConnectionSource>::Builder as ConnectorBuilder>::ConnectorType>;
+
 impl<R, C> SessionBuilder<'_, EndpointDescription, R, C>
 where
     C: ConnectionSource,
@@ -397,7 +399,7 @@ where
     pub fn build(
         self,
         certificate_store: Arc<RwLock<CertificateStore>>,
-    ) -> Result<(Arc<Session>, SessionEventLoop), Error> {
+    ) -> Result<(Arc<Session>, ResultEventLoop<C>), Error> {
         let connector = self
             .connection_source
             .get_connector(&self.endpoint)?
@@ -409,7 +411,6 @@ where
                 self.inner.user_identity_token,
                 self.endpoint,
                 self.config,
-                connector,
                 ctx,
             ),
             self.config.session_name.clone().into(),
@@ -418,6 +419,7 @@ where
             self.config.decoding_options.as_comms_decoding_options(),
             self.config,
             self.inner.session_id,
+            connector,
         ))
     }
 
@@ -439,7 +441,6 @@ where
         identity_token: IdentityToken,
         endpoint: EndpointDescription,
         config: &ClientConfig,
-        connector: Box<dyn Connector + Send + Sync + 'static>,
         ctx: ContextOwned,
     ) -> AsyncSecureChannel {
         AsyncSecureChannel::new(
@@ -458,7 +459,6 @@ where
                 max_message_size: config.decoding_options.max_message_size,
                 max_chunk_count: config.decoding_options.max_chunk_count,
             },
-            connector,
             config.channel_lifetime,
             Arc::new(RwLock::new(ctx)),
         )
@@ -471,16 +471,11 @@ where
         certificate_store: Arc<RwLock<CertificateStore>>,
     ) -> Result<AsyncSecureChannel, Error> {
         let ctx = self.make_encoding_context();
-        let connector = self
-            .connection_source
-            .get_connector(&self.endpoint)?
-            .build()?;
         Ok(Self::build_channel_inner(
             certificate_store,
             self.inner.user_identity_token,
             self.endpoint,
             self.config,
-            connector,
             ctx,
         ))
     }

@@ -9,7 +9,7 @@ use tracing::warn;
 use crate::{
     retry::{ExponentialBackoff, SessionRetryPolicy},
     session::{session_error, session_warn},
-    transport::{SecureChannelEventLoop, TransportPollResult},
+    transport::{Connector, SecureChannelEventLoop, Transport, TransportPollResult},
 };
 use opcua_types::{
     AttributeId, QualifiedName, ReadValueId, StatusCode, TimestampsToReturn, VariableId,
@@ -45,8 +45,8 @@ pub enum SessionPollResult {
     FinishedDisconnect,
 }
 
-struct ConnectedState {
-    channel: SecureChannelEventLoop,
+struct ConnectedState<T: Transport + Send + Sync + 'static> {
+    channel: SecureChannelEventLoop<T>,
     keep_alive: BoxStream<'static, SessionActivity>,
     subscriptions: BoxStream<'static, SubscriptionActivity>,
     current_failed_keep_alive_count: u64,
@@ -57,29 +57,31 @@ struct ConnectedState {
 // The way this is passed around, the Connected state being larger is
 // not generally a problem, since it should be the most common state by far.
 #[allow(clippy::large_enum_variant)]
-enum SessionEventLoopState {
-    Connected(ConnectedState),
+enum SessionEventLoopState<T: Transport + Send + Sync + 'static> {
+    Connected(ConnectedState<T>),
     Connecting(SessionConnector, ExponentialBackoff, Instant),
     Disconnected,
 }
 
 /// The session event loop drives the client. It must be polled for anything to happen at all.
 #[must_use = "The session event loop must be started for the session to work"]
-pub struct SessionEventLoop {
+pub struct SessionEventLoop<T: Connector + Send + Sync + 'static> {
     inner: Arc<Session>,
     trigger_publish_recv: tokio::sync::watch::Receiver<Instant>,
     retry: SessionRetryPolicy,
     keep_alive_interval: Duration,
     max_failed_keep_alive_count: u64,
+    connector: T,
 }
 
-impl SessionEventLoop {
+impl<T: Connector + Send + Sync + 'static> SessionEventLoop<T> {
     pub(crate) fn new(
         inner: Arc<Session>,
         retry: SessionRetryPolicy,
         trigger_publish_recv: tokio::sync::watch::Receiver<Instant>,
         keep_alive_interval: Duration,
         max_failed_keep_alive_count: u64,
+        connector: T,
     ) -> Self {
         Self {
             inner,
@@ -87,6 +89,7 @@ impl SessionEventLoop {
             trigger_publish_recv,
             keep_alive_interval,
             max_failed_keep_alive_count,
+            connector,
         }
     }
 
@@ -237,7 +240,7 @@ impl SessionEventLoop {
                     SessionEventLoopState::Connecting(connector, mut backoff, next_try) => {
                         tokio::time::sleep_until(next_try.into()).await;
 
-                        match connector.try_connect().await {
+                        match connector.try_connect(&slf.connector).await {
                             Ok((channel, result)) => {
                                 let _ = slf.inner.state_watch_tx.send(SessionState::Connected);
                                 Ok((

@@ -10,4 +10,4 @@ pub use channel::{AsyncSecureChannel, SecureChannelEventLoop};
 pub use connect::{Connector, ConnectorBuilder, Transport};
 pub(crate) use core::OutgoingMessage;
 pub use core::TransportPollResult;
-pub use tcp::{ReverseHelloVerifier, ReverseTcpConnector, TcpConnector};
+pub use tcp::{ReverseHelloVerifier, ReverseTcpConnector, TcpConnector, TcpTransport};

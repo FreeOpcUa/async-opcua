@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tokio::{pin, select};
 use tracing::info;
 
-use crate::transport::{SecureChannelEventLoop, TransportPollResult};
+use crate::transport::{Connector, SecureChannelEventLoop, TransportPollResult};
 use opcua_types::{NodeId, StatusCode};
 
 use super::Session;
@@ -29,16 +29,18 @@ impl SessionConnector {
         Self { inner: session }
     }
 
-    pub(super) async fn try_connect(
+    pub(super) async fn try_connect<T: Connector>(
         &self,
-    ) -> Result<(SecureChannelEventLoop, SessionConnectMode), StatusCode> {
-        self.connect_and_activate().await
+        connector: &T,
+    ) -> Result<(SecureChannelEventLoop<T::Transport>, SessionConnectMode), StatusCode> {
+        self.connect_and_activate(connector).await
     }
 
-    async fn connect_and_activate(
+    async fn connect_and_activate<T: Connector>(
         &self,
-    ) -> Result<(SecureChannelEventLoop, SessionConnectMode), StatusCode> {
-        let mut event_loop = self.inner.channel.connect_no_retry().await?;
+        connector: &T,
+    ) -> Result<(SecureChannelEventLoop<T::Transport>, SessionConnectMode), StatusCode> {
+        let mut event_loop = self.inner.channel.connect_no_retry(connector).await?;
 
         let activate_fut = self.ensure_and_activate_session();
         pin!(activate_fut);

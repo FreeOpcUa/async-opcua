@@ -117,6 +117,7 @@ use opcua_types::{
 };
 
 use crate::browser::Browser;
+use crate::transport::Connector;
 use crate::{AsyncSecureChannel, ClientConfig, ExponentialBackoff, SessionRetryPolicy};
 
 use super::IdentityToken;
@@ -192,7 +193,7 @@ pub struct Session {
 
 impl Session {
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
+    pub(crate) fn new<T: Connector + Send + Sync + 'static>(
         channel: AsyncSecureChannel,
         session_name: UAString,
         application_description: ApplicationDescription,
@@ -200,7 +201,8 @@ impl Session {
         decoding_options: DecodingOptions,
         config: &ClientConfig,
         session_id: Option<NodeId>,
-    ) -> (Arc<Self>, SessionEventLoop) {
+        connector: T,
+    ) -> (Arc<Self>, SessionEventLoop<T>) {
         let (publish_limits_watch_tx, publish_limits_watch_rx) =
             tokio::sync::watch::channel(PublishLimits::new());
         let (state_watch_tx, state_watch_rx) =
@@ -241,6 +243,7 @@ impl Session {
                 trigger_publish_rx,
                 config.keep_alive_interval,
                 config.max_failed_keep_alive_count,
+                connector,
             ),
         )
     }

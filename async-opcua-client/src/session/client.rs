@@ -5,7 +5,9 @@ use tokio::{pin, select};
 use tracing::error;
 
 use crate::{
-    transport::{tcp::TransportConfiguration, Connector, ConnectorBuilder, TransportPollResult},
+    transport::{
+        tcp::TransportConfiguration, Connector, ConnectorBuilder, TcpConnector, TransportPollResult,
+    },
     AsyncSecureChannel, ClientConfig, ClientEndpoint, IdentityToken,
 };
 use opcua_core::{
@@ -98,7 +100,7 @@ impl Client {
     pub async fn connect_to_endpoint_id(
         &mut self,
         endpoint_id: impl Into<String>,
-    ) -> Result<(Arc<Session>, SessionEventLoop), Error> {
+    ) -> Result<(Arc<Session>, SessionEventLoop<TcpConnector>), Error> {
         self.session_builder()
             .with_endpoints(self.get_server_endpoints().await?)
             .connect_to_endpoint_id(endpoint_id)?
@@ -128,7 +130,7 @@ impl Client {
         &mut self,
         endpoint: impl Into<EndpointDescription>,
         user_identity_token: IdentityToken,
-    ) -> Result<(Arc<Session>, SessionEventLoop), Error> {
+    ) -> Result<(Arc<Session>, SessionEventLoop<TcpConnector>), Error> {
         let endpoint = endpoint.into();
 
         // Get the server endpoints
@@ -163,7 +165,7 @@ impl Client {
         &mut self,
         endpoint: impl Into<EndpointDescription>,
         identity_token: IdentityToken,
-    ) -> Result<(Arc<Session>, SessionEventLoop), Error> {
+    ) -> Result<(Arc<Session>, SessionEventLoop<TcpConnector>), Error> {
         self.session_builder()
             .connect_to_endpoint_directly(endpoint)?
             .user_identity_token(identity_token)
@@ -190,7 +192,7 @@ impl Client {
     ///
     pub async fn connect_to_default_endpoint(
         &mut self,
-    ) -> Result<(Arc<Session>, SessionEventLoop), Error> {
+    ) -> Result<(Arc<Session>, SessionEventLoop<TcpConnector>), Error> {
         self.session_builder()
             .with_endpoints(self.get_server_endpoints().await?)
             .connect_to_default_endpoint()?
@@ -205,7 +207,6 @@ impl Client {
         &self,
         endpoint_info: EndpointInfo,
         channel_lifetime: u32,
-        connector: Box<dyn Connector + Send + Sync>,
     ) -> AsyncSecureChannel {
         AsyncSecureChannel::new(
             self.certificate_store.clone(),
@@ -219,7 +220,6 @@ impl Client {
                 max_message_size: self.config.decoding_options.max_message_size,
                 max_chunk_count: self.config.decoding_options.max_chunk_count,
             },
-            connector,
             channel_lifetime,
             // We should only ever need the default decoding context for temporary connections.
             Arc::new(RwLock::new(ContextOwned::new_default(
@@ -361,11 +361,10 @@ impl Client {
             user_identity_token: IdentityToken::Anonymous,
             preferred_locales,
         };
-        let channel =
-            self.channel_from_endpoint_info(endpoint_info, self.config.channel_lifetime, server);
+        let channel = self.channel_from_endpoint_info(endpoint_info, self.config.channel_lifetime);
 
         let mut evt_loop = channel
-            .connect()
+            .connect(&server)
             .await
             .map_err(|e| Error::new(e, "Failed to connect to server"))?;
 
@@ -456,13 +455,9 @@ impl Client {
             user_identity_token: IdentityToken::Anonymous,
             preferred_locales: Vec::new(),
         };
-        let channel = self.channel_from_endpoint_info(
-            session_info,
-            self.config.channel_lifetime,
-            discovery_endpoint,
-        );
+        let channel = self.channel_from_endpoint_info(session_info, self.config.channel_lifetime);
 
-        let mut evt_loop = channel.connect().await?;
+        let mut evt_loop = channel.connect(&discovery_endpoint).await?;
 
         let send_fut = self.find_servers_inner(
             evt_loop.connected_url().to_owned(),
@@ -549,13 +544,9 @@ impl Client {
             user_identity_token: IdentityToken::Anonymous,
             preferred_locales: Vec::new(),
         };
-        let channel = self.channel_from_endpoint_info(
-            session_info,
-            self.config.channel_lifetime,
-            discovery_endpoint,
-        );
+        let channel = self.channel_from_endpoint_info(session_info, self.config.channel_lifetime);
 
-        let mut evt_loop = channel.connect().await?;
+        let mut evt_loop = channel.connect(&discovery_endpoint).await?;
 
         let send_fut = self.find_servers_on_network_inner(
             starting_record_id,
@@ -735,10 +726,9 @@ impl Client {
             preferred_locales: Vec::new(),
         };
         let connector = connector.build()?;
-        let channel =
-            self.channel_from_endpoint_info(endpoint_info, self.config.channel_lifetime, connector);
+        let channel = self.channel_from_endpoint_info(endpoint_info, self.config.channel_lifetime);
 
-        let mut evt_loop = channel.connect().await?;
+        let mut evt_loop = channel.connect(&connector).await?;
 
         let send_fut = self.register_server_inner(server, &channel);
         pin!(send_fut);

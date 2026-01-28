@@ -40,7 +40,10 @@ use super::{
 pub use {
     attributes::{ParsedReadValueId, ParsedWriteValue, ReadNode, WriteNode},
     build::NodeManagerBuilder,
-    context::{RequestContext, TypeTreeForUser, TypeTreeForUserStatic, TypeTreeReadContext},
+    context::{
+        RequestContext, RequestContextInner, TypeTreeForUser, TypeTreeForUserStatic,
+        TypeTreeReadContext,
+    },
     history::{HistoryNode, HistoryResult, HistoryUpdateDetails, HistoryUpdateNode},
     method::MethodCall,
     monitored_items::{MonitoredItemRef, MonitoredItemUpdateRef},

@@ -2,9 +2,9 @@ use std::{future::Future, sync::Arc};
 
 use opcua_types::{EndpointDescription, Error, StatusCode};
 
-use crate::transport::state::SecureChannelState;
+use crate::transport::{state::SecureChannelState, RequestRecv};
 
-use super::{tcp::TransportConfiguration, OutgoingMessage, TcpConnector, TransportPollResult};
+use super::{tcp::TransportConfiguration, TcpConnector, TransportPollResult};
 
 /// Trait implemented by simple wrapper types that create a connection to an OPC-UA server.
 ///
@@ -13,6 +13,9 @@ use super::{tcp::TransportConfiguration, OutgoingMessage, TcpConnector, Transpor
 ///  - This deals with connection establishment up to after exchange of HELLO/ACKNOWLEDGE
 ///    or equivalent.
 ///  - This should not do any retries, that's handled on a higher level.
+///
+/// Most implementations will want to use `StreamConnector` instead of doing the
+/// hello/acknowledge exchange manually. See `TcpConnector` for an example of this.
 pub trait Connector: Send + Sync {
     /// The transport type created by this connector.
     type Transport: Transport + Send + Sync + 'static;
@@ -23,7 +26,7 @@ pub trait Connector: Send + Sync {
     fn connect(
         &self,
         channel: Arc<SecureChannelState>,
-        outgoing_recv: tokio::sync::mpsc::Receiver<OutgoingMessage>,
+        outgoing_recv: RequestRecv,
         config: TransportConfiguration,
     ) -> impl Future<Output = Result<Self::Transport, StatusCode>> + Send + Sync;
 

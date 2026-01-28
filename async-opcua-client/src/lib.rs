@@ -130,7 +130,7 @@ pub use session::{
     SessionActivity, SessionBuilder, SessionConnectMode, SessionEventLoop, SessionPollResult,
     Subscription, SubscriptionActivity, SubscriptionCallbacks, UARequest,
 };
-pub use transport::{AsyncSecureChannel, TcpConnector, TcpTransport};
+pub use transport::AsyncSecureChannel;
 
 /// This module contains utilities for reverse connect. Allowing you to
 /// connect to a server by having the server initiate the connection to the client.

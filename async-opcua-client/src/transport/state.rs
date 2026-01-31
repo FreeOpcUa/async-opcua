@@ -18,7 +18,10 @@ use opcua_types::{
     OpenSecureChannelResponse, RequestHeader, SecurityTokenRequestType, StatusCode,
 };
 
-pub(crate) type RequestSend = tokio::sync::mpsc::Sender<OutgoingMessage>;
+/// Tokio channel for sending requests to the transport.
+pub type RequestSend = tokio::sync::mpsc::Sender<OutgoingMessage>;
+/// Tokio channel for receiving requests in the transport.
+pub type RequestRecv = tokio::sync::mpsc::Receiver<OutgoingMessage>;
 
 /// The state of the secure channel used by the transport.
 pub struct SecureChannelState {
@@ -211,6 +214,7 @@ impl SecureChannelState {
         self.authentication_token.store(Arc::new(token));
     }
 
+    /// Get a reference to the secure channel.
     pub fn secure_channel(&self) -> &RwLock<SecureChannel> {
         &self.secure_channel
     }

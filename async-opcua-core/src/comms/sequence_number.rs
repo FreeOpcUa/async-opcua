@@ -1,5 +1,8 @@
 //! Utility for managing sequence numbers
 
+use opcua_types::{Error, StatusCode};
+use tracing::trace;
+
 #[derive(Debug, Clone)]
 /// Utility for managing sequence numbers
 pub struct SequenceNumberHandle {
@@ -61,7 +64,7 @@ impl SequenceNumberHandle {
 
     /// Get the current sequence number, which
     /// is the next value that will be used.
-    pub(crate) fn current(&self) -> u32 {
+    pub fn current(&self) -> u32 {
         self.current_value
     }
 
@@ -80,6 +83,36 @@ impl SequenceNumberHandle {
             // Else just increment normally.
             self.current_value += value;
         }
+    }
+
+    /// Validate the incoming sequence number against the expected value, and increment the sequence number if valid.
+    pub fn validate_and_increment(&mut self, incoming_sequence_number: u32) -> Result<(), Error> {
+        let expected = self.current();
+        if incoming_sequence_number != expected {
+            // If the expected sequence number is 0, and we are in legacy mode, then allow
+            // any value less than 1024.
+            if incoming_sequence_number == self.min_value()
+                && self.is_legacy()
+                && incoming_sequence_number < 1024
+            {
+                self.set(incoming_sequence_number);
+            } else {
+                trace!(
+                    "Expected sequence number {}, got {}",
+                    expected,
+                    incoming_sequence_number
+                );
+                return Err(Error::new(
+                    StatusCode::BadSequenceNumberInvalid,
+                    format!(
+                        "Chunk sequence number of {incoming_sequence_number} is not the expected value of {expected}"
+                    ),
+                ));
+            }
+        }
+        self.increment(1);
+
+        Ok(())
     }
 }
 

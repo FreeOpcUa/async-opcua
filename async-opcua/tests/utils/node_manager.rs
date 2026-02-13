@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    sync::atomic::{AtomicU32, Ordering},
+    sync::atomic::{AtomicBool, AtomicU32, Ordering},
 };
 
 use async_trait::async_trait;
@@ -61,6 +61,7 @@ pub struct TestNodeManagerImpl {
 #[derive(Default)]
 pub struct IssueEmulation {
     pub fatal_read: AtomicU32,
+    pub slow_read: AtomicBool,
 }
 
 /// Information about calls made to the node manager impl, for verifying in tests.
@@ -159,6 +160,12 @@ impl InMemoryNodeManagerImpl for TestNodeManagerImpl {
         {
             panic!("Something went wrong! (Error emulation)");
         }
+
+        if self.issues.slow_read.load(Ordering::Relaxed) {
+            // Sleep for 200ms to simulate a slow read.
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+
         {
             let mut call_info = self.call_info.lock();
             for node in nodes.iter() {

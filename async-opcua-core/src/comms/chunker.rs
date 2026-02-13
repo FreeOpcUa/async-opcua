@@ -256,16 +256,15 @@ impl Write for ChunkingStream<'_> {
 pub struct Chunker;
 
 impl Chunker {
-    /// Ensure all of the supplied chunks have a valid secure channel id, and sequence numbers
-    /// greater than the input sequence number and the preceding chunk
+    /// Ensure all of the supplied chunks have a valid secure channel id, and the correct
+    /// request ID.
     ///
-    /// The function returns the next expected sequence number, or
+    /// The function returns
     /// `BadSequenceNumberInvalid` or `BadSecureChannelIdInvalid` for failure.
     pub fn validate_chunks(
-        mut sequence_numbers: SequenceNumberHandle,
         secure_channel: &SecureChannel,
         chunks: &[MessageChunk],
-    ) -> Result<u32, Error> {
+    ) -> Result<(), Error> {
         let first_sequence_number = {
             let chunk_info = chunks[0].chunk_info(secure_channel)?;
             chunk_info.sequence_header.sequence_number
@@ -294,34 +293,7 @@ impl Chunker {
                     ),
                 ));
             }
-
-            // Check the sequence id - should be larger than the last one decoded
             let sequence_number = chunk_info.sequence_header.sequence_number;
-            let expected_sequence_number = sequence_numbers.current();
-
-            if sequence_number != expected_sequence_number {
-                // If the expected sequence number is 0, and we are in legacy mode, then allow
-                // any value less than 1024.
-                if expected_sequence_number == sequence_numbers.min_value()
-                    && sequence_numbers.is_legacy()
-                    && sequence_number < 1024
-                {
-                    sequence_numbers.set(sequence_number);
-                } else {
-                    trace!(
-                        "Expected sequence number {}, got {}",
-                        expected_sequence_number,
-                        sequence_number
-                    );
-                    return Err(Error::new(
-                        StatusCode::BadSequenceNumberInvalid,
-                        format!(
-                            "Chunk sequence number of {sequence_number} is not the expected value of {expected_sequence_number}, idx {i}"
-                        ),
-                    ));
-                }
-            }
-            sequence_numbers.increment(1);
 
             // Check the request id against the first chunk's request id
             if i == 0 {
@@ -333,7 +305,7 @@ impl Chunker {
                 )));
             }
         }
-        Ok(sequence_numbers.current())
+        Ok(())
     }
 
     /// Encodes a message using the supplied sequence number and secure channel info and emits the corresponding chunks

@@ -399,6 +399,9 @@ impl TcpTransport {
                             self.send_buffer.max_chunk_count
                         )));
                     }
+                    let chunk_info = chunk.chunk_info(channel)?;
+                    self.sequence_numbers
+                        .validate_and_increment(chunk_info.sequence_header.sequence_number)?;
                     self.pending_chunks.push(chunk);
 
                     if header.is_final == MessageIsFinalType::Intermediate {
@@ -407,11 +410,7 @@ impl TcpTransport {
 
                     let chunk_info = self.pending_chunks[0].chunk_info(channel)?;
 
-                    self.sequence_numbers.set(Chunker::validate_chunks(
-                        self.sequence_numbers.clone(),
-                        channel,
-                        &self.pending_chunks,
-                    )?);
+                    Chunker::validate_chunks(channel, &self.pending_chunks)?;
 
                     let request = Chunker::decode(&self.pending_chunks, channel, None)
                         .map_err(|e| e.with_request_id(chunk_info.sequence_header.request_id))?;

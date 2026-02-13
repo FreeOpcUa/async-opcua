@@ -17,7 +17,7 @@ use opcua::{
         WriteMask,
     },
 };
-use opcua_client::{services::Read, DefaultRetryPolicy, ExponentialBackoff};
+use opcua_client::{services::Read, DefaultRetryPolicy, ExponentialBackoff, UARequest};
 
 #[tokio::test]
 async fn read() {
@@ -1194,4 +1194,61 @@ async fn test_diagnostics() {
     assert_eq!(diagnostics[1].value, Some(Variant::UInt32(1)));
     assert_eq!(diagnostics[2].value, Some(Variant::UInt32(1)));
     assert_eq!(diagnostics[3].value, Some(Variant::UInt32(0)));
+}
+
+#[tokio::test]
+async fn test_read_timeout() {
+    let (tester, nm, session) = setup().await;
+
+    let id = nm.inner().next_node_id();
+    nm.inner().add_node(
+        nm.address_space(),
+        tester.handle.type_tree(),
+        VariableBuilder::new(&id, "TestVar1", "TestVar1")
+            .value(1)
+            .description("Description")
+            .data_type(DataTypeId::Int32)
+            .access_level(AccessLevel::CURRENT_READ)
+            .user_access_level(AccessLevel::CURRENT_READ)
+            .build()
+            .into(),
+        &ObjectId::ObjectsFolder.into(),
+        &ReferenceTypeId::Organizes.into(),
+        Some(&VariableTypeId::BaseDataVariableType.into()),
+        Vec::new(),
+    );
+
+    // First, read normally.
+    let r = session
+        .read(
+            &read_value_ids(&[AttributeId::Value], &id),
+            TimestampsToReturn::Both,
+            0.0,
+        )
+        .await
+        .unwrap();
+    assert_eq!(r[0].value, Some(Variant::Int32(1)));
+
+    // Next, make read slow, and set a timeout on the client shorter than the time it takes to read, so that the request will timeout.
+    nm.inner().issues().slow_read.store(true, Ordering::Relaxed);
+    let r = Read::new(&session)
+        .node(read_value_id(AttributeId::Value, id.clone()))
+        .timeout(Duration::from_millis(100))
+        .send(session.channel())
+        .await
+        .unwrap_err();
+    assert!(matches!(r, StatusCode::BadTimeout));
+
+    // Now, wait for a bit, so that the client receives the late response from the server.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    // Send another request. It shouldn't fail.
+    session
+        .read(
+            &read_value_ids(&[AttributeId::Value], &id),
+            TimestampsToReturn::Both,
+            0.0,
+        )
+        .await
+        .unwrap();
 }

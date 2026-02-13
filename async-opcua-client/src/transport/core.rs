@@ -189,9 +189,18 @@ impl TransportState {
         drop(secure_channel);
         let req_id = chunk_info.sequence_header.request_id;
 
+        self.sequence_numbers
+            .validate_and_increment(chunk_info.sequence_header.sequence_number)?;
+
         // We do not care at all about incoming messages without a
         // corresponding request.
         let Some(message_state) = self.message_states.get_mut(&req_id) else {
+            trace!(
+                "Received chunk for unknown request id {}:{}. Ignoring.",
+                req_id,
+                chunk_info.sequence_header.sequence_number
+            );
+
             return Ok(());
         };
 
@@ -260,11 +269,7 @@ impl TransportState {
     ) -> Result<ResponseMessage, Error> {
         // Validate that all chunks have incrementing sequence numbers and valid chunk types
         let secure_channel = trace_read_lock!(self.channel_state.secure_channel());
-        self.sequence_numbers.set(Chunker::validate_chunks(
-            self.sequence_numbers.clone(),
-            &secure_channel,
-            chunks,
-        )?);
+        Chunker::validate_chunks(&secure_channel, chunks)?;
         // Now decode
         Chunker::decode(chunks, &secure_channel, None)
     }

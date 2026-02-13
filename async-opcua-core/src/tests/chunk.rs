@@ -218,6 +218,18 @@ fn max_message_size() {
     assert_eq!(err.status(), StatusCode::BadResponseTooLarge);
 }
 
+fn validate_chunk_sequence_numbers(
+    secure_channel: &SecureChannel,
+    chunks: &[MessageChunk],
+    sequence_numbers: &mut SequenceNumberHandle,
+) -> Result<(), StatusCode> {
+    for chunk in chunks {
+        let chunk_info = chunk.chunk_info(&secure_channel)?;
+        sequence_numbers.validate_and_increment(chunk_info.sequence_header.sequence_number)?;
+    }
+    Ok(())
+}
+
 /// Encode a large message and then ensure verification throws error for secure channel id mismatch
 #[test]
 fn validate_chunks_secure_channel_id() {
@@ -240,14 +252,16 @@ fn validate_chunks_secure_channel_id() {
     .unwrap();
     assert!(chunks.len() > 1);
 
+    validate_chunk_sequence_numbers(&secure_channel, &chunks, &mut sequence_number.clone())
+        .unwrap();
     // Expect this to work
-    let _ = Chunker::validate_chunks(sequence_number.clone(), &secure_channel, &chunks).unwrap();
+    let _ = Chunker::validate_chunks(&secure_channel, &chunks).unwrap();
 
     // Test secure channel id mismatch
     let old_secure_channel_id = secure_channel.secure_channel_id();
     secure_channel.set_secure_channel_id(old_secure_channel_id + 1);
     assert_eq!(
-        Chunker::validate_chunks(sequence_number.clone(), &secure_channel, &chunks)
+        Chunker::validate_chunks(&secure_channel, &chunks)
             .unwrap_err()
             .status(),
         StatusCode::BadSecureChannelIdInvalid
@@ -278,26 +292,28 @@ fn validate_chunks_sequence_number() {
 
     // Test sequence number cannot be < starting sequence number
     assert_eq!(
-        Chunker::validate_chunks(
-            SequenceNumberHandle::new_at(true, 5000),
+        validate_chunk_sequence_numbers(
             &secure_channel,
-            &chunks
+            &chunks,
+            &mut SequenceNumberHandle::new_at(true, 5000)
         )
-        .unwrap_err()
-        .status(),
+        .unwrap_err(),
         StatusCode::BadSequenceNumberInvalid
     );
 
     // Test sequence number is returned properly
-    let result = Chunker::validate_chunks(seq_handle.clone(), &secure_channel, &chunks).unwrap();
-    assert_eq!(seq_handle.current() + chunks.len() as u32, result);
+    let mut upd_seq_handle = seq_handle.clone();
+    validate_chunk_sequence_numbers(&secure_channel, &chunks, &mut upd_seq_handle).unwrap();
+    assert_eq!(
+        seq_handle.current() + chunks.len() as u32,
+        upd_seq_handle.current()
+    );
 
     // Hack one of the chunks to alter its seq id
     let old_sequence_nr = set_chunk_sequence_number(&mut chunks[0], &secure_channel, 1001);
     assert_eq!(
-        Chunker::validate_chunks(seq_handle.clone(), &secure_channel, &chunks)
-            .unwrap_err()
-            .status(),
+        validate_chunk_sequence_numbers(&secure_channel, &chunks, &mut seq_handle.clone())
+            .unwrap_err(),
         StatusCode::BadSequenceNumberInvalid
     );
 
@@ -305,9 +321,8 @@ fn validate_chunks_sequence_number() {
     set_chunk_sequence_number(&mut chunks[0], &secure_channel, old_sequence_nr);
     let _ = set_chunk_sequence_number(&mut chunks[5], &secure_channel, 1008);
     assert_eq!(
-        Chunker::validate_chunks(seq_handle.clone(), &secure_channel, &chunks)
-            .unwrap_err()
-            .status(),
+        validate_chunk_sequence_numbers(&secure_channel, &chunks, &mut seq_handle.clone())
+            .unwrap_err(),
         StatusCode::BadSequenceNumberInvalid
     );
 }
@@ -335,12 +350,12 @@ fn validate_chunks_request_id() {
     assert!(chunks.len() > 1);
 
     // Expect this to work
-    let _ = Chunker::validate_chunks(sequence_number.clone(), &secure_channel, &chunks).unwrap();
+    let _ = Chunker::validate_chunks(&secure_channel, &chunks).unwrap();
 
     // Hack the request id so first chunk request id says 101 while the rest say 100
     let _ = set_chunk_request_id(&mut chunks[0], &secure_channel, 101);
     assert_eq!(
-        Chunker::validate_chunks(sequence_number, &secure_channel, &chunks)
+        Chunker::validate_chunks(&secure_channel, &chunks)
             .unwrap_err()
             .status(),
         StatusCode::BadSequenceNumberInvalid

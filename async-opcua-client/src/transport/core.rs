@@ -16,6 +16,7 @@ use opcua_core::comms::{
 use opcua_types::{Error, StatusCode};
 
 use crate::transport::state::SecureChannelState;
+use crate::transport::RequestRecv;
 
 #[derive(Debug)]
 struct MessageChunkWithChunkInfo {
@@ -29,13 +30,14 @@ pub(crate) struct MessageState {
     deadline: Instant,
 }
 
-pub(super) struct TransportState {
+/// Internal state of a transport implementation.
+pub struct TransportState {
     /// Channel for outgoing requests. Will only be polled if the number of inflight requests is below the limit.
     outgoing_recv: tokio::sync::mpsc::Receiver<OutgoingMessage>,
     /// State of pending requests
     message_states: HashMap<u32, MessageState>,
     /// Secure channel
-    pub(super) channel_state: Arc<SecureChannelState>,
+    pub channel_state: Arc<SecureChannelState>,
     /// Max pending incoming messages
     max_chunk_count: usize,
     /// Last decoded sequence number
@@ -43,6 +45,13 @@ pub(super) struct TransportState {
     /// Max size of incoming chunks
     #[allow(unused)]
     receive_buffer_size: usize,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(super) enum TransportCloseState {
+    Open,
+    Closing(StatusCode),
+    Closed(StatusCode),
 }
 
 #[derive(Debug)]
@@ -62,16 +71,21 @@ pub enum TransportPollResult {
     Closed(StatusCode),
 }
 
+/// An outgoing message to be sent by the transport.
 pub struct OutgoingMessage {
+    /// The actual request message to send.
     pub request: RequestMessage,
+    /// A callback that should be called when a response is received.
     pub callback: Option<tokio::sync::oneshot::Sender<Result<ResponseMessage, StatusCode>>>,
+    /// Deadline for the request.
     pub deadline: Instant,
 }
 
 impl TransportState {
-    pub(super) fn new(
+    /// Create a new transport state.
+    pub fn new(
         channel_state: Arc<SecureChannelState>,
-        outgoing_recv: tokio::sync::mpsc::Receiver<OutgoingMessage>,
+        outgoing_recv: RequestRecv,
         max_chunk_count: usize,
         receive_buffer_size: usize,
     ) -> Self {
@@ -91,7 +105,7 @@ impl TransportState {
     }
 
     /// Wait for an outgoing message. Will also check for timed out messages.
-    pub(super) async fn wait_for_outgoing_message(
+    pub async fn wait_for_outgoing_message(
         &mut self,
         send_buffer: &mut SendBuffer,
     ) -> Option<(RequestMessage, u32)> {
@@ -124,7 +138,7 @@ impl TransportState {
     }
 
     /// Store incoming messages in the message state.
-    pub(super) fn handle_incoming_message(&mut self, message: Message) -> Result<(), StatusCode> {
+    pub fn handle_incoming_message(&mut self, message: Message) -> Result<(), StatusCode> {
         let status = match message {
             Message::Acknowledge(ack) => {
                 debug!("Reader got an unexpected ack {:?}", ack);
@@ -151,7 +165,9 @@ impl TransportState {
         }
     }
 
-    pub(super) fn message_send_failed(&mut self, request_id: u32, err: StatusCode) {
+    /// Call this if sending a message fails. This will notify the waiting request
+    /// that the message could not be sent.
+    pub fn message_send_failed(&mut self, request_id: u32, err: StatusCode) {
         if let Some(message_state) = self.message_states.remove(&request_id) {
             let _ = message_state.callback.send(Err(err));
         }
@@ -314,7 +330,7 @@ impl TransportState {
     /// Close the transport, aborting any pending requests.
     /// If `status` is good, the pending requests will be terminated with
     /// `BadConnectionClosed`.
-    pub(super) async fn close(&mut self, status: StatusCode) -> StatusCode {
+    pub async fn close(&mut self, status: StatusCode) -> StatusCode {
         // If the status is good, we still want to send a bad status code
         // to the pending requests. They didn't succeed, after all.
         let request_status = if status.is_good() {

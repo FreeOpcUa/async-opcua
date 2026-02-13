@@ -15,7 +15,7 @@ use opcua::{
     server::{ServerBuilder, ServerHandle, ServerUserToken, ANONYMOUS_USER_TOKEN_ID},
     types::{MessageSecurityMode, StatusCode},
 };
-use opcua_client::TcpConnector;
+use opcua_client::transport::TcpConnector;
 use opcua_core::config::Config;
 use opcua_crypto::CertificateStore;
 use opcua_types::{ApplicationDescription, Error};

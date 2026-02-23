@@ -89,12 +89,11 @@ impl SequenceNumberHandle {
     pub fn validate_and_increment(&mut self, incoming_sequence_number: u32) -> Result<(), Error> {
         let expected = self.current();
         if incoming_sequence_number != expected {
-            // If the expected sequence number is 0, and we are in legacy mode, then allow
+            // If the expected sequence number is the minimum value, and we are in legacy mode, then allow
             // any value less than 1024.
-            if incoming_sequence_number == self.min_value()
-                && self.is_legacy()
-                && incoming_sequence_number < 1024
-            {
+            // This is to handle the weird case in the OPC-UA standard stating that the
+            // first sequence number after we wrap around from the max can be any value less than 1024.
+            if self.is_legacy() && expected == self.min_value() && incoming_sequence_number < 1024 {
                 self.set(incoming_sequence_number);
             } else {
                 trace!(
@@ -161,6 +160,61 @@ mod tests {
         seq.increment(u32::MAX - 1);
         assert_eq!(seq.current(), u32::MAX - 1);
         seq.increment(3);
+        assert_eq!(seq.current(), 1);
+    }
+
+    #[test]
+    fn test_sequence_numbers_validate() {
+        let mut seq = SequenceNumberHandle::new(true);
+        assert_eq!(seq.current(), 1);
+        assert!(seq.validate_and_increment(1).is_ok());
+        assert_eq!(seq.current(), 2);
+        assert!(seq.validate_and_increment(2).is_ok());
+        assert_eq!(seq.current(), 3);
+        assert!(seq.validate_and_increment(5).is_err());
+        assert_eq!(seq.current(), 3);
+
+        // Reset to initial conditions.
+        seq.set(1);
+        assert!(seq.validate_and_increment(50).is_ok());
+        assert_eq!(seq.current(), 51);
+        assert!(seq.validate_and_increment(50).is_err());
+        assert_eq!(seq.current(), 51);
+        assert!(seq.validate_and_increment(51).is_ok());
+        assert_eq!(seq.current(), 52);
+
+        // Overflow
+        seq.set(u32::MAX - 1024);
+        assert!(seq.validate_and_increment(u32::MAX - 1024).is_ok());
+        assert_eq!(seq.current(), 1);
+        assert!(seq.validate_and_increment(20).is_ok());
+        assert_eq!(seq.current(), 21);
+    }
+
+    #[test]
+    fn test_sequence_numbers_validate_non_legacy() {
+        let mut seq = SequenceNumberHandle::new(false);
+        assert_eq!(seq.current(), 0);
+        assert!(seq.validate_and_increment(0).is_ok());
+        assert_eq!(seq.current(), 1);
+        assert!(seq.validate_and_increment(1).is_ok());
+        assert_eq!(seq.current(), 2);
+        assert!(seq.validate_and_increment(5).is_err());
+        assert_eq!(seq.current(), 2);
+
+        // Reset to initial conditions.
+        seq.set(0);
+        // Non-legacy mode does not allow setting arbitrary values less than 1024.
+        assert!(seq.validate_and_increment(50).is_err());
+        assert_eq!(seq.current(), 0);
+        assert!(seq.validate_and_increment(0).is_ok());
+        assert_eq!(seq.current(), 1);
+
+        // Overflow
+        seq.set(u32::MAX);
+        assert!(seq.validate_and_increment(u32::MAX).is_ok());
+        assert_eq!(seq.current(), 0);
+        assert!(seq.validate_and_increment(0).is_ok());
         assert_eq!(seq.current(), 1);
     }
 }

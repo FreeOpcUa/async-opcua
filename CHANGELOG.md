@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.18.0] - 2026-02-24
+
+Mostly bug fixes and refactoring, some of which is externally visible.
+
+### Client
+
+#### Fixed
+
+ - Fix race condition when creating monitored items causing the first message to sometimes be missed.
+ - Fix an error causing sequence numbers to get out of sync after a cancelled or timed out request.
+ - Correctly accept values between 1 and 1024 for the initial sequence number from the server.
+
+#### Changed
+
+ - Refactor the internal transport representation and expose a generic `StreamTransport` and `StreamConnector` which can be used to build custom transports over OPC-UA binary.
+ - The client event loop is now generic over the transport layer. Most usage should not be affected, but if you ever pass the event loop between functions you will need to change the signature.
+
+#### Added
+
+ - Expose `MonitoredItemMap` to make it possible to create custom subscription callbacks more easily.
+
+### Common
+
+#### Changed
+
+ - Refactor crypto internals in preparation of ECC support. Unless you use the OPC-UA crypto primitives directly, this should not affect you at all.
+
 ## [0.17.1] - 2025-12-09
 
 Fix to a critical issue in the client causing a busy-loop.

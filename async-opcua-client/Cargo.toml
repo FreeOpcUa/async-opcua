@@ -1,6 +1,6 @@
 [package]
 name = "async-opcua-client"
-version = "0.17.1"
+version = "0.18.0"
 description = "OPC UA client API"
 authors = ["Adam Lock <locka99@gmail.com>", "Einar Omang <einar@omang.com>"]
 homepage = "https://github.com/freeopcua/async-opcua"
@@ -31,7 +31,7 @@ tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 
-async-opcua-core = { path = "../async-opcua-core", version = "0.17.1" }
-async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.17.1" }
-async-opcua-nodes = { path = "../async-opcua-nodes", version = "0.17.1" }
-async-opcua-types = { path = "../async-opcua-types", version = "0.17.1" }
+async-opcua-core = { path = "../async-opcua-core", version = "0.18.0" }
+async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.18.0" }
+async-opcua-nodes = { path = "../async-opcua-nodes", version = "0.18.0" }
+async-opcua-types = { path = "../async-opcua-types", version = "0.18.0" }

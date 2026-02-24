@@ -327,14 +327,14 @@ impl CodeGenerator {
         for field in &item.values {
             let (name, _) = safe_ident(&field.name);
             let value = field.value;
-            let value_token = match item.typ {
+            let value_token: Lit = match item.typ {
                 EnumReprType::u8 => {
                     let value: u8 = value.try_into().map_err(|_| {
                         CodeGenError::other(format!(
                             "Unexpected error converting to u8, {value} is out of range"
                         ))
                     })?;
-                    Lit::Byte(LitByte::new(value, Span::call_site()))
+                    parse_quote! { #value }
                 }
                 EnumReprType::i16 => {
                     let value: i16 = value.try_into().map_err(|_| {

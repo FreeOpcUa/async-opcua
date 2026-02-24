@@ -6,7 +6,6 @@
 
 use std::result::Result;
 
-#[expect(deprecated)]
 use aes::cipher::generic_array::GenericArray;
 use aes::cipher::{block_padding::NoPadding, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
 
@@ -18,9 +17,7 @@ type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
 type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
 type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
 
-#[expect(deprecated)]
 type AesArray128 = GenericArray<u8, <aes::Aes128 as aes::cipher::BlockSizeUser>::BlockSize>;
-#[expect(deprecated)]
 type AesArray256 = GenericArray<u8, <aes::Aes256 as aes::cipher::KeySizeUser>::KeySize>;
 
 type EncryptResult = Result<usize, Error>;
@@ -48,9 +45,7 @@ impl AesKey {
         dst: &mut [u8],
     ) -> EncryptResult {
         Aes128CbcEnc::new(
-            #[expect(deprecated)]
             AesArray128::from_slice(&self.value),
-            #[expect(deprecated)]
             AesArray128::from_slice(iv),
         )
         .encrypt_padded_b2b_mut::<NoPadding>(src, dst)
@@ -65,9 +60,7 @@ impl AesKey {
         dst: &mut [u8],
     ) -> EncryptResult {
         Aes256CbcEnc::new(
-            #[expect(deprecated)]
             AesArray256::from_slice(&self.value),
-            #[expect(deprecated)]
             AesArray128::from_slice(iv),
         )
         .encrypt_padded_b2b_mut::<NoPadding>(src, dst)
@@ -82,9 +75,7 @@ impl AesKey {
         dst: &mut [u8],
     ) -> EncryptResult {
         Aes128CbcDec::new(
-            #[expect(deprecated)]
             AesArray128::from_slice(&self.value),
-            #[expect(deprecated)]
             AesArray128::from_slice(iv),
         )
         .decrypt_padded_b2b_mut::<NoPadding>(src, dst)
@@ -99,9 +90,7 @@ impl AesKey {
         dst: &mut [u8],
     ) -> EncryptResult {
         Aes256CbcDec::new(
-            #[expect(deprecated)]
             AesArray256::from_slice(&self.value),
-            #[expect(deprecated)]
             AesArray128::from_slice(iv),
         )
         .decrypt_padded_b2b_mut::<NoPadding>(src, dst)

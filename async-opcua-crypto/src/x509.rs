@@ -559,12 +559,10 @@ impl X509 {
         )?;
 
         builder.add_extension(&x509::ext::pkix::SubjectKeyIdentifier(
-            #[expect(deprecated)]
             OctetString::new(ski.as_slice()).unwrap(),
         ))?;
         builder.add_extension(&x509::ext::pkix::AuthorityKeyIdentifier {
             authority_cert_issuer: Some(vec![GeneralName::DirectoryName(subject)]),
-            #[expect(deprecated)]
             key_identifier: Some(OctetString::new(ski.as_slice()).unwrap()),
             authority_cert_serial_number: Some(serial_number),
         })?;

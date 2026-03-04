@@ -1,8 +1,6 @@
-use std::io::{Cursor, Read, Write};
 use std::str::FromStr;
 
 use opcua_macros::{XmlDecodable, XmlEncodable, XmlType};
-use opcua_xml::XmlStreamReader;
 
 use crate::xml::{XmlDecodable, XmlEncodable};
 use crate::{
@@ -29,16 +27,11 @@ fn context<'a>(mapper: &'a NodeSetNamespaceMapper<'a>, owned: &'a ContextOwned) 
 }
 
 fn from_xml_str_ctx<T: XmlDecodable>(data: &str, ctx: &Context<'_>) -> EncodingResult<T> {
-    let mut cursor = Cursor::new(data.as_bytes());
-    let mut reader = XmlStreamReader::new(&mut cursor as &mut dyn Read);
-    T::decode(&mut reader, ctx)
+    crate::xml::from_bytes(data.as_bytes(), ctx)
 }
 
 fn encode_xml_ctx<T: XmlEncodable>(data: &T, ctx: &Context<'_>) -> EncodingResult<String> {
-    let mut buf = Vec::new();
-    let mut writer = opcua_xml::XmlStreamWriter::new(&mut buf as &mut dyn Write);
-    data.encode(&mut writer, ctx)?;
-    Ok(String::from_utf8(buf).unwrap())
+    crate::xml::to_string(data, ctx)
 }
 
 fn xml_round_trip_ctx<T: XmlDecodable + XmlEncodable + PartialEq + std::fmt::Debug>(

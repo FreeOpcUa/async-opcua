@@ -30,33 +30,17 @@ use crate::{
 
 use crate::{ContextOwned, EncodingResult, ExtensionObject};
 
-fn ctx() -> ContextOwned {
-    ContextOwned::default()
-}
-
 fn from_value<T: JsonDecodable>(v: Value) -> EncodingResult<T> {
     let v = serde_json::to_string(&v).unwrap();
-    let ctx = ctx();
-    let stream = &mut v.as_bytes() as &mut dyn Read;
-    let mut reader = JsonStreamReader::new(stream);
-    T::decode(&mut reader, &ctx.context())
+    from_str(&v)
 }
 
 fn from_str<T: JsonDecodable>(v: &str) -> EncodingResult<T> {
-    let ctx = ctx();
-    let stream = &mut v.as_bytes() as &mut dyn Read;
-    let mut reader = JsonStreamReader::new(stream);
-    T::decode(&mut reader, &ctx.context())
+    crate::json::from_bytes(v.as_bytes(), &ContextOwned::default().context())
 }
 
 fn to_string<T: JsonEncodable>(v: &T) -> EncodingResult<String> {
-    let mut target = Vec::new();
-    let mut stream = Cursor::new(&mut target);
-    let mut writer = JsonStreamWriter::new(&mut stream as &mut dyn Write);
-    let ctx = ctx();
-    v.encode(&mut writer, &ctx.context())?;
-    writer.finish_document().unwrap();
-    Ok(String::from_utf8(target).unwrap())
+    crate::json::to_string(v, &ContextOwned::default().context())
 }
 
 fn to_value<T: JsonEncodable>(v: &T) -> EncodingResult<Value> {

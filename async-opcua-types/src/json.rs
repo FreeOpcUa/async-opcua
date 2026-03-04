@@ -303,3 +303,35 @@ pub fn write_raw_value(
     reader.transfer_to(r)?;
     Ok(())
 }
+
+/// Utility method to encode an OPC-UA encodable type to a JSON string as UTF-8.
+///
+/// `ctx` can be obtained by constructing a [ContextOwned](crate::ContextOwned),
+/// and calling [context](crate::ContextOwned::context) on it.
+pub fn to_bytes<T: JsonEncodable>(value: &T, ctx: &Context<'_>) -> EncodingResult<Vec<u8>> {
+    let mut res = Vec::new();
+    let mut stream = Cursor::new(&mut res);
+    let mut writer = JsonStreamWriter::new(&mut stream as &mut dyn Write);
+    value.encode(&mut writer, ctx)?;
+    writer.finish_document()?;
+    Ok(res)
+}
+
+/// Utility method to encode an OPC-UA encodable type to a JSON string.
+///
+/// `ctx` can be obtained by constructing a [ContextOwned](crate::ContextOwned),
+/// and calling [context](crate::ContextOwned::context) on it.
+pub fn to_string<T: JsonEncodable>(value: &T, ctx: &Context<'_>) -> EncodingResult<String> {
+    let bytes = to_bytes(value, ctx)?;
+    String::from_utf8(bytes).map_err(Error::decoding)
+}
+
+/// Utility method to decode an OPC-UA decodable type from a JSON string as UTF-8.
+///
+/// `ctx` can be obtained by constructing a [ContextOwned](crate::ContextOwned),
+/// and calling [context](crate::ContextOwned::context) on it.
+pub fn from_bytes<T: JsonDecodable>(data: &[u8], ctx: &Context<'_>) -> EncodingResult<T> {
+    let mut cursor = Cursor::new(data);
+    let mut reader = JsonStreamReader::new(&mut cursor as &mut dyn Read);
+    T::decode(&mut reader, ctx)
+}

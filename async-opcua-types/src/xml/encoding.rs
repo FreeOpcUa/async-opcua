@@ -1,5 +1,5 @@
 use std::{
-    io::{Read, Write},
+    io::{Cursor, Read, Write},
     str::{from_utf8, Utf8Error},
 };
 
@@ -225,4 +225,35 @@ impl XmlReadExt for XmlStreamReader<&mut dyn Read> {
         )?;
         Ok(res)
     }
+}
+
+/// Utility method to encode an OPC-UA encodable type to an XML string as UTF-8.
+///
+/// `ctx` can be obtained by constructing a [ContextOwned](crate::ContextOwned),
+/// and calling [context](crate::ContextOwned::context) on it.
+pub fn to_bytes<T: XmlEncodable>(value: &T, ctx: &Context<'_>) -> EncodingResult<Vec<u8>> {
+    let mut res = Vec::new();
+    let mut stream = Cursor::new(&mut res);
+    let mut writer = XmlStreamWriter::new(&mut stream as &mut dyn Write);
+    value.encode(&mut writer, ctx)?;
+    Ok(res)
+}
+
+/// Utility method to encode an OPC-UA encodable type to an XML string.
+///
+/// `ctx` can be obtained by constructing a [ContextOwned](crate::ContextOwned),
+/// and calling [context](crate::ContextOwned::context) on it.
+pub fn to_string<T: XmlEncodable>(value: &T, ctx: &Context<'_>) -> EncodingResult<String> {
+    let bytes = to_bytes(value, ctx)?;
+    String::from_utf8(bytes).map_err(Error::decoding)
+}
+
+/// Utility method to decode an OPC-UA decodable type from an XML string as UTF-8.
+///
+/// `ctx` can be obtained by constructing a [ContextOwned](crate::ContextOwned),
+/// and calling [context](crate::ContextOwned::context) on it.
+pub fn from_bytes<T: XmlDecodable>(data: &[u8], ctx: &Context<'_>) -> EncodingResult<T> {
+    let mut cursor = Cursor::new(data);
+    let mut reader = XmlStreamReader::new(&mut cursor as &mut dyn Read);
+    T::decode(&mut reader, ctx)
 }

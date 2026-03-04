@@ -6,7 +6,9 @@ mod builtins;
 mod encoding;
 
 pub use crate::{Context, EncodingResult, Error};
-pub use encoding::{XmlDecodable, XmlEncodable, XmlReadExt, XmlType, XmlWriteExt};
+pub use encoding::{
+    from_bytes, to_bytes, to_string, XmlDecodable, XmlEncodable, XmlReadExt, XmlType, XmlWriteExt,
+};
 pub use opcua_xml::{XmlStreamReader, XmlStreamWriter};
 
 use std::{

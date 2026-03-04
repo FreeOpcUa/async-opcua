@@ -15,12 +15,12 @@ use opcua_types::{
     X509IdentityToken,
 };
 use rsa::RsaPrivateKey;
-use tracing::error;
+use tracing::{debug_span, error, info_span, Instrument};
 
 use crate::{
     session::{
         process_service_result, process_unexpected_response,
-        request_builder::{builder_base, builder_error, RequestHeaderBuilder},
+        request_builder::{builder_base, builder_debug, builder_error, RequestHeaderBuilder},
     },
     AsyncSecureChannel, IdentityToken, Session, UARequest,
 };
@@ -161,27 +161,45 @@ impl UARequest for CreateSession<'_> {
     where
         Self: 'a,
     {
+        let span = info_span!(
+            "Sending CreateSession request",
+            endpoint = %self.endpoint_url,
+            server_uri = %self.server_uri,
+            requested_session_timeout = self.session_timeout,
+            max_response_message_size = self.max_response_message_size,
+            session_name = %self.session_name
+        );
         let client_nonce = random::byte_string(self.nonce_length);
 
-        let request = CreateSessionRequest {
-            request_header: self.header.header,
-            client_description: self.client_description,
-            server_uri: self.server_uri,
-            endpoint_url: self.endpoint_url,
-            session_name: self.session_name,
-            client_nonce: client_nonce.clone(),
-            client_certificate: self
-                .client_certificate
-                .as_ref()
-                .map(|v| v.as_byte_string())
-                .unwrap_or_default(),
-            requested_session_timeout: self.session_timeout,
-            max_response_message_size: self.max_response_message_size,
+        let request = {
+            let _h = span.enter();
+
+            CreateSessionRequest {
+                request_header: self.header.header,
+                client_description: self.client_description,
+                server_uri: self.server_uri,
+                endpoint_url: self.endpoint_url,
+                session_name: self.session_name,
+                client_nonce: client_nonce.clone(),
+                client_certificate: self
+                    .client_certificate
+                    .as_ref()
+                    .map(|v| v.as_byte_string())
+                    .unwrap_or_default(),
+                requested_session_timeout: self.session_timeout,
+                max_response_message_size: self.max_response_message_size,
+            }
         };
-        let response = channel.send(request, self.header.timeout).await?;
+
+        let response = channel
+            .send(request, self.header.timeout)
+            .instrument(span.clone())
+            .await?;
+
+        let _h = span.enter();
 
         if let ResponseMessage::CreateSession(response) = response {
-            tracing::debug!("create_session, success");
+            builder_debug!(self, "create_session, success");
             process_service_result(&response.response_header)?;
 
             let security_policy = channel.security_policy();
@@ -196,12 +214,16 @@ impl UARequest for CreateSession<'_> {
                     let application_uri = self.endpoint.server.application_uri.as_ref();
 
                     let certificate_store = trace_write_lock!(self.certificate_store);
-                    certificate_store.validate_or_reject_application_instance_cert(
-                        &server_certificate,
-                        security_policy,
-                        Some(&hostname),
-                        Some(application_uri),
-                    )?;
+                    certificate_store
+                        .validate_or_reject_application_instance_cert(
+                            &server_certificate,
+                            security_policy,
+                            Some(&hostname),
+                            Some(application_uri),
+                        )
+                        .inspect_err(|e| {
+                            error!("Rejected server certificate in create session response: {e}");
+                        })?;
 
                     opcua_crypto::verify_signature_data(
                         &response.server_signature,
@@ -211,17 +233,32 @@ impl UARequest for CreateSession<'_> {
                             .as_ref()
                             .ok_or(StatusCode::BadCertificateInvalid)?,
                         client_nonce.as_ref(),
-                    )?;
+                    )
+                    .inspect_err(|e| {
+                        error!("Failed to verify server signature in create session response: {e}");
+                    })?;
                 } else {
+                    error!("Failed to parse server certificate in create session response");
                     return Err(StatusCode::BadCertificateInvalid);
                 }
             }
 
-            channel.update_from_created_session(
-                &response.server_nonce,
-                &response.server_certificate,
-                &response.authentication_token,
-            )?;
+            tracing::debug!(
+                "Successfully created session, session_id = {}, max_request_message_size = {}, revised_session_timeout = {}",
+                response.session_id,
+                response.max_request_message_size,
+                response.revised_session_timeout
+            );
+
+            channel
+                .update_from_created_session(
+                    &response.server_nonce,
+                    &response.server_certificate,
+                    &response.authentication_token,
+                )
+                .inspect_err(|e| {
+                    error!("Failed to update channel from created session: {e}");
+                })?;
 
             Ok(*response)
         } else {
@@ -471,6 +508,7 @@ impl ActivateSession {
                 message_security_mode,
                 security_policy,
             )
+            .in_current_span()
             .await?;
         let client_signature = match security_policy {
             SecurityPolicy::None => SignatureData::null(),
@@ -528,10 +566,18 @@ impl UARequest for ActivateSession {
         Self: 'a,
     {
         let timeout = self.header.timeout;
-        let request = self.build_request(channel).await?;
+        let span = info_span!("Sending ActivateSession request",
+            endpoint = %self.endpoint.endpoint_url,
+            session_id = self.header.session_id,
+        );
+        let request = self.build_request(channel).instrument(span.clone()).await?;
 
-        let response = channel.send(request, timeout).await?;
+        let response = channel
+            .send(request, timeout)
+            .instrument(span.clone())
+            .await?;
 
+        let _h = span.enter();
         if let ResponseMessage::ActivateSession(response) = response {
             tracing::debug!("activate_session success");
             // trace!("ActivateSessionResponse = {:#?}", response);
@@ -599,12 +645,21 @@ impl UARequest for CloseSession {
             delete_subscriptions: self.delete_subscriptions,
             request_header: self.header.header,
         };
-        let response = channel.send(request, self.header.timeout).await?;
+        let span = debug_span!(
+            "Sending CloseSession request",
+            session_id = self.header.session_id,
+        );
+        let response = channel
+            .send(request, self.header.timeout)
+            .instrument(span.clone())
+            .await?;
+        let _h = span.enter();
         if let ResponseMessage::CloseSession(response) = response {
+            builder_debug!(self, "close_session success");
             process_service_result(&response.response_header)?;
             Ok(*response)
         } else {
-            error!("close_session failed {:?}", response);
+            builder_error!(self, "close_session failed {:?}", response);
             Err(process_unexpected_response(response))
         }
     }
@@ -656,8 +711,17 @@ impl UARequest for Cancel {
             request_header: self.header.header,
             request_handle: self.request_handle,
         };
+        let span = debug_span!(
+            "Sending Cancel request",
+            request_handle = self.request_handle,
+            session_id = self.header.session_id,
+        );
 
-        let response = channel.send(request, self.header.timeout).await?;
+        let response = channel
+            .send(request, self.header.timeout)
+            .instrument(span.clone())
+            .await?;
+        let _h = span.enter();
         if let ResponseMessage::Cancel(response) = response {
             process_service_result(&response.response_header)?;
             Ok(*response)

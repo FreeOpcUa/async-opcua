@@ -29,7 +29,7 @@ use opcua_types::{
     SetTriggeringResponse, StatusCode, SubscriptionAcknowledgement, TimestampsToReturn,
     TransferResult, TransferSubscriptionsRequest, TransferSubscriptionsResponse,
 };
-use tracing::enabled;
+use tracing::{debug_span, enabled, Instrument};
 
 use super::state::SubscriptionState;
 
@@ -156,9 +156,22 @@ impl UARequest for CreateSubscription {
             publishing_enabled: self.publishing_enabled,
             priority: self.priority,
         };
+        let span = debug_span!(
+            "Sending CreateSubscription request",
+            publishing_interval_ms = self.publishing_interval.as_millis(),
+            lifetime_count = self.lifetime_count,
+            keep_alive_count = self.keep_alive_count,
+            max_notifications_per_publish = self.max_notifications_per_publish,
+            publishing_enabled = self.publishing_enabled,
+            priority = self.priority
+        );
 
-        let response = channel.send(request, self.header.timeout).await?;
+        let response = channel
+            .send(request, self.header.timeout)
+            .instrument(span.clone())
+            .await?;
 
+        let _h = span.enter();
         if let ResponseMessage::CreateSubscription(response) = response {
             process_service_result(&response.response_header)?;
             builder_debug!(
@@ -281,26 +294,42 @@ impl UARequest for ModifySubscription {
     where
         Self: 'a,
     {
-        if self.subscription_id == 0 {
-            builder_error!(
-                self,
-                "modify_subscription, subscription id must be non-zero"
-            );
-            return Err(StatusCode::BadInvalidArgument);
-        }
+        let span = debug_span!(
+            "Sending ModifySubscription request",
+            subscription_id = self.subscription_id,
+            publishing_interval_ms = self.publishing_interval.as_millis(),
+            lifetime_count = self.lifetime_count,
+            keep_alive_count = self.keep_alive_count,
+            max_notifications_per_publish = self.max_notifications_per_publish,
+            priority = self.priority
+        );
+        let request = {
+            let _h = span.enter();
+            if self.subscription_id == 0 {
+                builder_error!(
+                    self,
+                    "modify_subscription, subscription id must be non-zero"
+                );
+                return Err(StatusCode::BadInvalidArgument);
+            }
 
-        let request = ModifySubscriptionRequest {
-            request_header: self.header.header,
-            subscription_id: self.subscription_id,
-            requested_publishing_interval: self.publishing_interval.as_millis() as f64,
-            requested_lifetime_count: self.lifetime_count,
-            requested_max_keep_alive_count: self.keep_alive_count,
-            max_notifications_per_publish: self.max_notifications_per_publish,
-            priority: self.priority,
+            ModifySubscriptionRequest {
+                request_header: self.header.header,
+                subscription_id: self.subscription_id,
+                requested_publishing_interval: self.publishing_interval.as_millis() as f64,
+                requested_lifetime_count: self.lifetime_count,
+                requested_max_keep_alive_count: self.keep_alive_count,
+                max_notifications_per_publish: self.max_notifications_per_publish,
+                priority: self.priority,
+            }
         };
 
-        let response = channel.send(request, self.header.timeout).await?;
+        let response = channel
+            .send(request, self.header.timeout)
+            .instrument(span.clone())
+            .await?;
 
+        let _h = span.enter();
         if let ResponseMessage::ModifySubscription(response) = response {
             process_service_result(&response.response_header)?;
             builder_debug!(
@@ -374,26 +403,33 @@ impl UARequest for SetPublishingMode {
     where
         Self: 'a,
     {
-        builder_debug!(
-            self,
-            "set_publishing_mode, for subscriptions {:?}, publishing enabled {}",
-            self.subscription_ids,
-            self.publishing_enabled
+        let span = debug_span!(
+            "Sending SetPublishingMode request",
+             subscription_ids = ?self.subscription_ids,
+             publishing_enabled = self.publishing_enabled
         );
-        if self.subscription_ids.is_empty() {
-            builder_error!(
-                self,
-                "set_publishing_mode, no subscription ids were provided"
-            );
-            return Err(StatusCode::BadNothingToDo);
-        }
+        let request = {
+            let _h = span.enter();
+            if self.subscription_ids.is_empty() {
+                builder_error!(
+                    self,
+                    "set_publishing_mode, no subscription ids were provided"
+                );
+                return Err(StatusCode::BadNothingToDo);
+            }
 
-        let request = SetPublishingModeRequest {
-            request_header: self.header.header,
-            publishing_enabled: self.publishing_enabled,
-            subscription_ids: Some(self.subscription_ids.clone()),
+            SetPublishingModeRequest {
+                request_header: self.header.header,
+                publishing_enabled: self.publishing_enabled,
+                subscription_ids: Some(self.subscription_ids.clone()),
+            }
         };
-        let response = channel.send(request, self.header.timeout).await?;
+
+        let response = channel
+            .send(request, self.header.timeout)
+            .instrument(span.clone())
+            .await?;
+        let _h = span.enter();
         if let ResponseMessage::SetPublishingMode(response) = response {
             process_service_result(&response.response_header)?;
             let num_results = response
@@ -478,23 +514,37 @@ impl UARequest for Publish {
     where
         Self: 'a,
     {
-        if enabled!(tracing::Level::DEBUG) {
-            let sequence_nrs: Vec<u32> = self.acks.iter().map(|ack| ack.sequence_number).collect();
-            builder_debug!(
-                self,
-                "publish, acknowledging subscription acknowledgements with sequence nrs {:?}",
-                sequence_nrs
-            );
-        }
-        let request = PublishRequest {
-            request_header: self.header.header,
-            subscription_acknowledgements: if self.acks.is_empty() {
-                None
-            } else {
-                Some(self.acks)
-            },
+        let span = debug_span!(
+            "Sending Publish request",
+            num_acks = self.acks.len(),
+            timeout_ms = self.header.timeout.as_millis()
+        );
+        let request = {
+            let _h = span.enter();
+            if enabled!(tracing::Level::DEBUG) {
+                let sequence_nrs: Vec<u32> =
+                    self.acks.iter().map(|ack| ack.sequence_number).collect();
+                builder_debug!(
+                    self,
+                    "publish, acknowledging subscription acknowledgements with sequence nrs {:?}",
+                    sequence_nrs
+                );
+            }
+            PublishRequest {
+                request_header: self.header.header,
+                subscription_acknowledgements: if self.acks.is_empty() {
+                    None
+                } else {
+                    Some(self.acks.clone())
+                },
+            }
         };
-        let response = channel.send(request, self.header.timeout).await?;
+
+        let response = channel
+            .send(request, self.header.timeout)
+            .instrument(span.clone())
+            .await?;
+        let _h = span.enter();
         if let ResponseMessage::Publish(response) = response {
             process_service_result(&response.response_header)?;
             builder_debug!(self, "publish success");
@@ -556,9 +606,18 @@ impl UARequest for Republish {
             subscription_id: self.subscription_id,
             retransmit_sequence_number: self.retransmit_sequence_number,
         };
+        let span = debug_span!(
+            "Sending Republish request",
+            subscription_id = self.subscription_id,
+            retransmit_sequence_number = self.retransmit_sequence_number
+        );
 
-        let response = channel.send(request, self.header.timeout).await?;
+        let response = channel
+            .send(request, self.header.timeout)
+            .instrument(span.clone())
+            .await?;
 
+        let _h = span.enter();
         if let ResponseMessage::Republish(response) = response {
             process_service_result(&response.response_header)?;
             builder_debug!(self, "republish success");
@@ -643,19 +702,31 @@ impl UARequest for TransferSubscriptions {
     where
         Self: 'a,
     {
-        if self.subscription_ids.is_empty() {
-            builder_error!(
-                self,
-                "transfer_subscriptions, no subscription ids were provided"
-            );
-            return Err(StatusCode::BadNothingToDo);
-        }
-        let request = TransferSubscriptionsRequest {
-            request_header: self.header.header,
-            subscription_ids: Some(self.subscription_ids),
-            send_initial_values: self.send_initial_values,
+        let span = debug_span!(
+            "Sending TransferSubscriptions request",
+            subscription_ids = ?self.subscription_ids,
+            send_initial_values = self.send_initial_values
+        );
+        let request = {
+            let _h = span.enter();
+            if self.subscription_ids.is_empty() {
+                builder_error!(
+                    self,
+                    "transfer_subscriptions, no subscription ids were provided"
+                );
+                return Err(StatusCode::BadNothingToDo);
+            }
+            TransferSubscriptionsRequest {
+                request_header: self.header.header,
+                subscription_ids: Some(self.subscription_ids),
+                send_initial_values: self.send_initial_values,
+            }
         };
-        let response = channel.send(request, self.header.timeout).await?;
+        let response = channel
+            .send(request, self.header.timeout)
+            .instrument(span.clone())
+            .await?;
+        let _h = span.enter();
         if let ResponseMessage::TransferSubscriptions(response) = response {
             process_service_result(&response.response_header)?;
             builder_debug!(self, "transfer_subscriptions success");
@@ -722,15 +793,26 @@ impl UARequest for DeleteSubscriptions {
     where
         Self: 'a,
     {
-        if self.subscription_ids.is_empty() {
-            builder_error!(self, "delete_subscriptions called with no subscription IDs");
-            return Err(StatusCode::BadNothingToDo);
-        }
-        let request = DeleteSubscriptionsRequest {
-            request_header: self.header.header,
-            subscription_ids: Some(self.subscription_ids.clone()),
+        let span = debug_span!(
+            "Sending DeleteSubscriptions request",
+            subscription_ids = ?self.subscription_ids
+        );
+        let request = {
+            let _h = span.enter();
+            if self.subscription_ids.is_empty() {
+                builder_error!(self, "delete_subscriptions called with no subscription IDs");
+                return Err(StatusCode::BadNothingToDo);
+            }
+            DeleteSubscriptionsRequest {
+                request_header: self.header.header,
+                subscription_ids: Some(self.subscription_ids.clone()),
+            }
         };
-        let response = channel.send(request, self.header.timeout).await?;
+        let response = channel
+            .send(request, self.header.timeout)
+            .instrument(span.clone())
+            .await?;
+        let _h = span.enter();
         if let ResponseMessage::DeleteSubscriptions(response) = response {
             process_service_result(&response.response_header)?;
 
@@ -864,40 +946,48 @@ impl UARequest for CreateMonitoredItems<'_> {
     where
         Self: 'a,
     {
-        builder_debug!(
-            self,
-            "create_monitored_items, for subscription {}, {} items",
-            self.subscription_id,
-            self.items_to_create.len()
+        let span = debug_span!(
+            "Sending CreateMonitoredItems request",
+            subscription_id = self.subscription_id,
+            num_items = self.items_to_create.len(),
+            timestamps_to_return = ?self.timestamps_to_return
         );
-        if self.subscription_id == 0 {
-            builder_error!(self, "create_monitored_items, subscription id 0 is invalid");
-            return Err(StatusCode::BadSubscriptionIdInvalid);
-        }
-
-        if self.items_to_create.is_empty() {
-            builder_error!(
-                self,
-                "create_monitored_items, called with no items to create"
-            );
-            return Err(StatusCode::BadNothingToDo);
-        }
-        for item in &mut self.items_to_create {
-            if item.requested_parameters.client_handle == 0 {
-                item.requested_parameters.client_handle = self.handle.next();
-            }
-        }
-
         let num_items = self.items_to_create.len();
-        let request = CreateMonitoredItemsRequest {
-            request_header: self.header.header,
-            subscription_id: self.subscription_id,
-            timestamps_to_return: self.timestamps_to_return,
-            items_to_create: Some(self.items_to_create.clone()),
+
+        let request = {
+            let _h = span.enter();
+            if self.subscription_id == 0 {
+                builder_error!(self, "create_monitored_items, subscription id 0 is invalid");
+                return Err(StatusCode::BadSubscriptionIdInvalid);
+            }
+
+            if self.items_to_create.is_empty() {
+                builder_error!(
+                    self,
+                    "create_monitored_items, called with no items to create"
+                );
+                return Err(StatusCode::BadNothingToDo);
+            }
+            for item in &mut self.items_to_create {
+                if item.requested_parameters.client_handle == 0 {
+                    item.requested_parameters.client_handle = self.handle.next();
+                }
+            }
+
+            CreateMonitoredItemsRequest {
+                request_header: self.header.header,
+                subscription_id: self.subscription_id,
+                timestamps_to_return: self.timestamps_to_return,
+                items_to_create: Some(self.items_to_create.clone()),
+            }
         };
 
-        let response = channel.send(request, self.header.timeout).await?;
+        let response = channel
+            .send(request, self.header.timeout)
+            .instrument(span.clone())
+            .await?;
 
+        let _h = span.enter();
         if let ResponseMessage::CreateMonitoredItems(response) = response {
             process_service_result(&response.response_header)?;
             if let Some(ref results) = response.results {
@@ -1011,31 +1101,38 @@ impl UARequest for ModifyMonitoredItems {
     where
         Self: 'a,
     {
-        builder_debug!(
-            self,
-            "modify_monitored_items, for subscription {}, {} items",
-            self.subscription_id,
-            self.items_to_modify.len()
+        let span = debug_span!(
+            "Sending ModifyMonitoredItems request",
+            subscription_id = self.subscription_id,
+            num_items = self.items_to_modify.len(),
+            timestamps_to_return = ?self.timestamps_to_return
         );
-        if self.subscription_id == 0 {
-            builder_error!(self, "modify_monitored_items, subscription id 0 is invalid");
-            return Err(StatusCode::BadInvalidArgument);
-        }
-        if self.items_to_modify.is_empty() {
-            builder_error!(
-                self,
-                "modify_monitored_items, called with no items to modify"
-            );
-            return Err(StatusCode::BadNothingToDo);
-        }
         let num_items = self.items_to_modify.len();
-        let request = ModifyMonitoredItemsRequest {
-            request_header: self.header.header,
-            subscription_id: self.subscription_id,
-            timestamps_to_return: self.timestamps_to_return,
-            items_to_modify: Some(self.items_to_modify),
+        let request = {
+            let _h = span.enter();
+            if self.subscription_id == 0 {
+                builder_error!(self, "modify_monitored_items, subscription id 0 is invalid");
+                return Err(StatusCode::BadInvalidArgument);
+            }
+            if self.items_to_modify.is_empty() {
+                builder_error!(
+                    self,
+                    "modify_monitored_items, called with no items to modify"
+                );
+                return Err(StatusCode::BadNothingToDo);
+            }
+            ModifyMonitoredItemsRequest {
+                request_header: self.header.header,
+                subscription_id: self.subscription_id,
+                timestamps_to_return: self.timestamps_to_return,
+                items_to_modify: Some(self.items_to_modify),
+            }
         };
-        let response = channel.send(request, self.header.timeout).await?;
+        let response = channel
+            .send(request, self.header.timeout)
+            .instrument(span.clone())
+            .await?;
+        let _h = span.enter();
         if let ResponseMessage::ModifyMonitoredItems(response) = response {
             process_service_result(&response.response_header)?;
             let Some(results) = &response.results else {
@@ -1124,29 +1221,34 @@ impl UARequest for SetMonitoringMode {
     where
         Self: 'a,
     {
-        builder_debug!(
-            self,
-            "set_monitoring_mode, for subscription {}, {} items",
-            self.subscription_id,
-            self.monitored_item_ids.len()
+        let span = debug_span!(
+            "Sending SetMonitoringMode request",
+            subscription_id = self.subscription_id,
+            monitoring_mode = ?self.monitoring_mode,
+            num_items = self.monitored_item_ids.len()
         );
-        if self.subscription_id == 0 {
-            builder_error!(self, "set_monitoring_mode, subscription id 0 is invalid");
-            return Err(StatusCode::BadInvalidArgument);
-        }
-        if self.monitored_item_ids.is_empty() {
-            builder_error!(self, "set_monitoring_mode, called with no items to modify");
-            return Err(StatusCode::BadNothingToDo);
-        }
-
         let num_items = self.monitored_item_ids.len();
-        let request = SetMonitoringModeRequest {
-            request_header: self.header.header,
-            subscription_id: self.subscription_id,
-            monitoring_mode: self.monitoring_mode,
-            monitored_item_ids: Some(self.monitored_item_ids),
+
+        let request = {
+            let _h = span.enter();
+            if self.subscription_id == 0 {
+                builder_error!(self, "set_monitoring_mode, subscription id 0 is invalid");
+                return Err(StatusCode::BadInvalidArgument);
+            }
+            if self.monitored_item_ids.is_empty() {
+                builder_error!(self, "set_monitoring_mode, called with no items to modify");
+                return Err(StatusCode::BadNothingToDo);
+            }
+
+            SetMonitoringModeRequest {
+                request_header: self.header.header,
+                subscription_id: self.subscription_id,
+                monitoring_mode: self.monitoring_mode,
+                monitored_item_ids: Some(self.monitored_item_ids),
+            }
         };
         let response = channel.send(request, self.header.timeout).await?;
+        let _h = span.enter();
         if let ResponseMessage::SetMonitoringMode(response) = response {
             let Some(results) = &response.results else {
                 builder_error!(self, "set_monitoring_mode, got empty response");
@@ -1249,39 +1351,46 @@ impl UARequest for SetTriggering {
     where
         Self: 'a,
     {
-        builder_debug!(
-            self,
-            "set_triggering, for subscription {}, {} links to add, {} links to remove",
-            self.subscription_id,
-            self.links_to_add.len(),
-            self.links_to_remove.len()
+        let span = debug_span!(
+            "Sending SetTriggering request",
+            subscription_id = self.subscription_id,
+            triggering_item_id = self.triggering_item_id,
+            num_links_to_add = self.links_to_add.len(),
+            num_links_to_remove = self.links_to_remove.len()
         );
-        if self.subscription_id == 0 {
-            builder_error!(self, "set_triggering, subscription id 0 is invalid");
-            return Err(StatusCode::BadInvalidArgument);
-        }
+        let request = {
+            let _h = span.enter();
+            if self.subscription_id == 0 {
+                builder_error!(self, "set_triggering, subscription id 0 is invalid");
+                return Err(StatusCode::BadInvalidArgument);
+            }
 
-        if self.links_to_add.is_empty() && self.links_to_remove.is_empty() {
-            builder_error!(self, "set_triggering, called with nothing to add or remove");
-            return Err(StatusCode::BadNothingToDo);
-        }
-        let request = SetTriggeringRequest {
-            request_header: self.header.header,
-            subscription_id: self.subscription_id,
-            triggering_item_id: self.triggering_item_id,
-            links_to_add: if self.links_to_add.is_empty() {
-                None
-            } else {
-                Some(self.links_to_add.clone())
-            },
-            links_to_remove: if self.links_to_remove.is_empty() {
-                None
-            } else {
-                Some(self.links_to_remove.clone())
-            },
+            if self.links_to_add.is_empty() && self.links_to_remove.is_empty() {
+                builder_error!(self, "set_triggering, called with nothing to add or remove");
+                return Err(StatusCode::BadNothingToDo);
+            }
+            SetTriggeringRequest {
+                request_header: self.header.header,
+                subscription_id: self.subscription_id,
+                triggering_item_id: self.triggering_item_id,
+                links_to_add: if self.links_to_add.is_empty() {
+                    None
+                } else {
+                    Some(self.links_to_add.clone())
+                },
+                links_to_remove: if self.links_to_remove.is_empty() {
+                    None
+                } else {
+                    Some(self.links_to_remove.clone())
+                },
+            }
         };
 
-        let response = channel.send(request, self.header.timeout).await?;
+        let response = channel
+            .send(request, self.header.timeout)
+            .instrument(span.clone())
+            .await?;
+        let _h = span.enter();
         if let ResponseMessage::SetTriggering(response) = response {
             let to_add_res = response.add_results.as_deref().unwrap_or(&[]);
             let to_remove_res = response.remove_results.as_deref().unwrap_or(&[]);
@@ -1370,30 +1479,37 @@ impl UARequest for DeleteMonitoredItems {
     where
         Self: 'a,
     {
-        builder_debug!(
-            self,
-            "delete_monitored_items, subscription {} for {} items",
-            self.subscription_id,
-            self.items_to_delete.len(),
+        let span = debug_span!(
+            "Sending DeleteMonitoredItems request",
+            subscription_id = self.subscription_id,
+            num_items_to_delete = self.items_to_delete.len()
         );
-        if self.subscription_id == 0 {
-            builder_error!(self, "delete_monitored_items, subscription id 0 is invalid");
-            return Err(StatusCode::BadInvalidArgument);
-        }
-        if self.items_to_delete.is_empty() {
-            builder_error!(
-                self,
-                "delete_monitored_items, called with no items to delete"
-            );
-            return Err(StatusCode::BadNothingToDo);
-        }
+        let request = {
+            let _h = span.enter();
+            if self.subscription_id == 0 {
+                builder_error!(self, "delete_monitored_items, subscription id 0 is invalid");
+                return Err(StatusCode::BadInvalidArgument);
+            }
+            if self.items_to_delete.is_empty() {
+                builder_error!(
+                    self,
+                    "delete_monitored_items, called with no items to delete"
+                );
+                return Err(StatusCode::BadNothingToDo);
+            }
 
-        let request = DeleteMonitoredItemsRequest {
-            request_header: self.header.header,
-            subscription_id: self.subscription_id,
-            monitored_item_ids: Some(self.items_to_delete.clone()),
+            DeleteMonitoredItemsRequest {
+                request_header: self.header.header,
+                subscription_id: self.subscription_id,
+                monitored_item_ids: Some(self.items_to_delete.clone()),
+            }
         };
-        let response = channel.send(request, self.header.timeout).await?;
+
+        let response = channel
+            .send(request, self.header.timeout)
+            .instrument(span.clone())
+            .await?;
+        let _h = span.enter();
         if let ResponseMessage::DeleteMonitoredItems(response) = response {
             process_service_result(&response.response_header)?;
             builder_debug!(self, "delete_monitored_items, success");

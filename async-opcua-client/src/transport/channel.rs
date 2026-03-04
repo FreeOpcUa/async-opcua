@@ -15,7 +15,8 @@ use opcua_types::{
     ByteString, CloseSecureChannelRequest, ContextOwned, IntegerId, NodeId, RequestHeader,
     SecurityTokenRequestType, StatusCode,
 };
-use tracing::{debug, error};
+use tokio::sync::mpsc::Sender;
+use tracing::{debug, debug_span, error, Instrument};
 
 use super::{
     connect::{Connector, Transport},
@@ -162,6 +163,34 @@ impl AsyncSecureChannel {
         }
     }
 
+    async fn renew_secure_channel(&self, send: Sender<OutgoingMessage>) -> Result<(), StatusCode> {
+        // Grab the lock, then check again whether we should renew the secure channel,
+        // this avoids renewing it multiple times if the client sends many requests in quick
+        // succession.
+        // Also, if the channel is currently being renewed, we need to wait for the new security token.
+        let _guard = self.issue_channel_lock.lock().await;
+        let should_renew_security_token = {
+            let secure_channel = trace_read_lock!(self.secure_channel);
+            secure_channel.should_renew_security_token()
+        };
+
+        if should_renew_security_token {
+            let request = self.state.begin_issue_or_renew_secure_channel(
+                SecurityTokenRequestType::Renew,
+                self.channel_lifetime,
+                Duration::from_secs(30),
+                send,
+            );
+
+            let resp = request.send().await?;
+
+            if !matches!(resp, ResponseMessage::OpenSecureChannel(_)) {
+                return Err(process_unexpected_response(resp));
+            }
+        }
+        Ok(())
+    }
+
     /// Send a message on the secure channel, and wait for a response.
     pub async fn send(
         &self,
@@ -179,35 +208,15 @@ impl AsyncSecureChannel {
         };
 
         if should_renew_security_token {
-            // Grab the lock, then check again whether we should renew the secure channel,
-            // this avoids renewing it multiple times if the client sends many requests in quick
-            // succession.
-            // Also, if the channel is currently being renewed, we need to wait for the new security token.
-            let guard = self.issue_channel_lock.lock().await;
-            let should_renew_security_token = {
-                let secure_channel = trace_read_lock!(self.secure_channel);
-                secure_channel.should_renew_security_token()
-            };
-
-            if should_renew_security_token {
-                let request = self.state.begin_issue_or_renew_secure_channel(
-                    SecurityTokenRequestType::Renew,
-                    self.channel_lifetime,
-                    Duration::from_secs(30),
-                    send.clone(),
-                );
-
-                let resp = request.send().await?;
-
-                if !matches!(resp, ResponseMessage::OpenSecureChannel(_)) {
-                    return Err(process_unexpected_response(resp));
-                }
-            }
-
-            drop(guard);
+            self.renew_secure_channel(send.clone())
+                .instrument(debug_span!("Renewing security token"))
+                .await?;
         }
 
-        Request::new(request, send, timeout).send().await
+        Request::new(request, send, timeout)
+            .send()
+            .in_current_span()
+            .await
     }
 
     /// Attempt to establish a connection using this channel, returning an event loop
@@ -253,7 +262,9 @@ impl AsyncSecureChannel {
             send.clone(),
         );
 
-        let request_fut = request.send();
+        let request_fut = request
+            .send()
+            .instrument(debug_span!("Create a secure channel"));
         tokio::pin!(request_fut);
 
         // Temporarily poll the transport task while we're waiting for a response.
@@ -336,7 +347,11 @@ impl AsyncSecureChannel {
 
         // Instruct the channel to not attempt to reopen.
         if let Some(request) = request {
-            if let Err(e) = request.send_no_response().await {
+            if let Err(e) = request
+                .send_no_response()
+                .instrument(debug_span!("Sending close channel message"))
+                .await
+            {
                 error!("Failed to send disconnect message, queue full: {e}");
             }
         }

@@ -146,7 +146,10 @@ pub(crate) fn process_unexpected_response(response: ResponseMessage) -> StatusCo
             service_fault.response_header.service_result
         }
         _ => {
-            error!("Received an unexpected response to the request");
+            error!(
+                "Received an unexpected response to the request: {}",
+                response.type_name()
+            );
             StatusCode::BadUnknownResponse
         }
     }

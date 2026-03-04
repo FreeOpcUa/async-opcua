@@ -28,6 +28,7 @@ pub(crate) struct MessageState {
     callback: tokio::sync::oneshot::Sender<Result<ResponseMessage, StatusCode>>,
     chunks: Vec<MessageChunkWithChunkInfo>,
     deadline: Instant,
+    span: tracing::Span,
 }
 
 /// Internal state of a transport implementation.
@@ -79,6 +80,8 @@ pub struct OutgoingMessage {
     pub callback: Option<tokio::sync::oneshot::Sender<Result<ResponseMessage, StatusCode>>>,
     /// Deadline for the request.
     pub deadline: Instant,
+    /// An optional tracing span to attach to the request.
+    pub span: tracing::Span,
 }
 
 impl TransportState {
@@ -118,21 +121,22 @@ impl TransportState {
             };
 
             tokio::select! {
-                    _ = timeout_fut => {
-                        continue;
+                _ = timeout_fut => {
+                    continue;
+                }
+                outgoing = self.outgoing_recv.recv() => {
+                    let outgoing = outgoing?;
+                    let request_id = send_buffer.next_request_id();
+                    if let Some(callback) = outgoing.callback {
+                        self.message_states.insert(request_id, MessageState {
+                            callback,
+                            chunks: Vec::new(),
+                            deadline: outgoing.deadline,
+                            span: outgoing.span,
+                        });
                     }
-                    outgoing = self.outgoing_recv.recv() => {
-                        let outgoing = outgoing?;
-                        let request_id = send_buffer.next_request_id();
-                        if let Some(callback) = outgoing.callback {
-                            self.message_states.insert(request_id, MessageState {
-                                callback,
-                                chunks: Vec::new(),
-                                deadline: outgoing.deadline,
-                            });
-                        }
-                        break Some((outgoing.request, request_id));
-                    }
+                    break Some((outgoing.request, request_id));
+                }
             }
         }
     }
@@ -169,6 +173,12 @@ impl TransportState {
     /// that the message could not be sent.
     pub fn message_send_failed(&mut self, request_id: u32, err: StatusCode) {
         if let Some(message_state) = self.message_states.remove(&request_id) {
+            message_state.span.in_scope(|| {
+                debug!(
+                    "Failed to send message, request_id = {}: {}",
+                    request_id, err
+                );
+            });
             let _ = message_state.callback.send(Err(err));
         }
     }
@@ -190,7 +200,9 @@ impl TransportState {
         }
         for id in timed_out {
             if let Some(state) = self.message_states.remove(&id) {
-                debug!("Message {} timed out", id);
+                state.span.in_scope(|| {
+                    debug!("Message timed out, request_id = {id}");
+                });
                 let _ = state.callback.send(Err(StatusCode::BadTimeout));
             }
         }
@@ -222,6 +234,7 @@ impl TransportState {
 
         match chunk_info.message_header.is_final {
             MessageIsFinalType::Intermediate => {
+                let _h = message_state.span.enter();
                 trace!(
                     "receive chunk intermediate {}:{}. Length {}",
                     chunk_info.sequence_header.request_id,
@@ -237,21 +250,28 @@ impl TransportState {
                         "Message has more than {} chunks, exceeding negotiated limits",
                         self.max_chunk_count
                     );
+                    drop(_h);
                     // Removing the message state means that we ignore any further chunks.
                     let message_state = self.message_states.remove(&req_id).unwrap();
-                    let _ = message_state
-                        .callback
-                        .send(Err(StatusCode::BadEncodingLimitsExceeded));
+                    message_state.span.in_scope(|| {
+                        error!("Message {} exceeded max chunk count", req_id);
+                        let _ = message_state
+                            .callback
+                            .send(Err(StatusCode::BadEncodingLimitsExceeded));
+                    });
                 }
             }
             MessageIsFinalType::FinalError => {
-                warn!("Discarding chunk marked in as final error");
                 let message_state = self.message_states.remove(&req_id).unwrap();
-                let _ = message_state
-                    .callback
-                    .send(Err(StatusCode::BadCommunicationError));
+                message_state.span.in_scope(|| {
+                    warn!("Message marked as final error, request_id = {req_id}");
+                    let _ = message_state
+                        .callback
+                        .send(Err(StatusCode::BadCommunicationError));
+                });
             }
             MessageIsFinalType::Final => {
+                let _h = message_state.span.enter();
                 trace!(
                     "receive chunk final {}:{}. Length {}",
                     chunk_info.sequence_header.request_id,
@@ -262,15 +282,25 @@ impl TransportState {
                     header: chunk_info,
                     data_with_header: chunk.data,
                 });
+                drop(_h);
                 let message_state = self.message_states.remove(&req_id).unwrap();
-                let in_chunks = Self::merge_chunks(message_state.chunks)?;
-                let message = self.turn_received_chunks_into_message(&in_chunks)?;
+                let _h = message_state.span.enter();
+                let in_chunks = Self::merge_chunks(message_state.chunks).inspect_err(|e| {
+                    error!("Failed to merge chunks for message, request_id = {req_id}: {e}");
+                })?;
+                let message = self
+                    .turn_received_chunks_into_message(&in_chunks)
+                    .inspect_err(|e| {
+                        error!("Failed to decode incoming message, request_id = {req_id}: {e}")
+                    })?;
 
                 // If the message is a response to opening a secure channel, we need to update encryption keys
                 // right now. If we wait, we risk new messages using the new encryption keys arriving before
                 // we've updated the secure channel.
                 if let ResponseMessage::OpenSecureChannel(msg) = &message {
-                    self.channel_state.end_issue_or_renew_secure_channel(msg)?;
+                    self.channel_state.end_issue_or_renew_secure_channel(msg).inspect_err(|e| {
+                        error!("Failed to process OpenSecureChannel response, request_id = {req_id}: {e}");
+                    })?;
                 }
 
                 let _ = message_state.callback.send(Ok(message));
@@ -340,6 +370,9 @@ impl TransportState {
         };
 
         for (_, pending) in self.message_states.drain() {
+            pending.span.in_scope(|| {
+                debug!("Transport is closing, failing pending request");
+            });
             let _ = pending.callback.send(Err(request_status));
         }
 

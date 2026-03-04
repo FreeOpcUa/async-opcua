@@ -3,7 +3,7 @@ use std::time::Duration;
 use crate::{
     session::{
         process_unexpected_response,
-        request_builder::{builder_base, builder_debug, builder_error, RequestHeaderBuilder},
+        request_builder::{builder_base, builder_error, RequestHeaderBuilder},
         session_error,
     },
     AsyncSecureChannel, Session, UARequest,
@@ -13,6 +13,7 @@ use opcua_types::{
     CallMethodRequest, CallMethodResult, CallRequest, CallResponse, IntegerId, MethodId, NodeId,
     ObjectId, StatusCode, TryFromVariant, Variant,
 };
+use tracing::{debug_span, Instrument};
 
 #[derive(Debug, Clone)]
 /// Calls a list of methods on the server by sending a [`CallRequest`] to the server.
@@ -68,18 +69,29 @@ impl UARequest for Call {
     where
         Self: 'a,
     {
-        if self.methods.is_empty() {
-            builder_error!(self, "call(), was not supplied with any methods to call");
-            return Err(StatusCode::BadNothingToDo);
-        }
-
-        builder_debug!(self, "call()");
+        let span = debug_span!(
+            "Sending Call request",
+            num_method_calls = self.methods.len()
+        );
         let cnt = self.methods.len();
-        let request = CallRequest {
-            request_header: self.header.header,
-            methods_to_call: Some(self.methods),
+        let request = {
+            let _h = span.enter();
+            if self.methods.is_empty() {
+                builder_error!(self, "call(), was not supplied with any methods to call");
+                return Err(StatusCode::BadNothingToDo);
+            }
+
+            CallRequest {
+                request_header: self.header.header,
+                methods_to_call: Some(self.methods),
+            }
         };
-        let response = channel.send(request, self.header.timeout).await?;
+
+        let response = channel
+            .send(request, self.header.timeout)
+            .instrument(span.clone())
+            .await?;
+        let _h = span.enter();
         if let ResponseMessage::Call(response) = response {
             if let Some(results) = &response.results {
                 if results.len() != cnt {

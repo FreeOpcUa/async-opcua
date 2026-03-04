@@ -4,7 +4,7 @@ use std::{
 };
 
 use tokio::sync::mpsc::error::SendTimeoutError;
-use tracing::{debug, trace};
+use tracing::{debug, trace, trace_span};
 
 use crate::transport::OutgoingMessage;
 use arc_swap::ArcSwap;
@@ -58,6 +58,7 @@ impl Request {
 
     pub(super) async fn send_no_response(self) -> Result<(), StatusCode> {
         let message = OutgoingMessage {
+            span: trace_span!("Sending request", request_type = %self.payload.type_name()),
             request: self.payload,
             callback: None,
             deadline: Instant::now() + self.timeout,
@@ -74,6 +75,7 @@ impl Request {
         let (cb_send, cb_recv) = tokio::sync::oneshot::channel();
 
         let message = OutgoingMessage {
+            span: trace_span!("Sending request", request_type = %self.payload.type_name()),
             request: self.payload,
             callback: Some(cb_send),
             deadline: Instant::now() + self.timeout,

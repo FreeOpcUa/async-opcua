@@ -3,7 +3,9 @@ use std::time::Duration;
 use crate::{
     session::{
         process_service_result, process_unexpected_response,
-        request_builder::{builder_base, builder_debug, builder_error, RequestHeaderBuilder},
+        request_builder::{
+            builder_base, builder_debug, builder_error, builder_trace, RequestHeaderBuilder,
+        },
         UARequest,
     },
     AsyncSecureChannel, Session,
@@ -17,6 +19,7 @@ use opcua_types::{
     ReadResponse, ReadValueId, StatusCode, TimestampsToReturn, UpdateDataDetails,
     UpdateEventDetails, UpdateStructureDataDetails, WriteRequest, WriteResponse, WriteValue,
 };
+use tracing::{debug_span, Instrument};
 
 /// Enumeration used with Session::history_read()
 #[derive(Debug, Clone)]
@@ -175,17 +178,32 @@ impl UARequest for Read {
     where
         Self: 'b,
     {
-        if self.nodes_to_read.is_empty() {
-            builder_error!(self, "read(), was not supplied with any nodes to read");
-            return Err(StatusCode::BadNothingToDo);
-        }
-        let request = ReadRequest {
-            request_header: self.header.header,
-            max_age: self.max_age,
-            timestamps_to_return: self.timestamps_to_return,
-            nodes_to_read: Some(self.nodes_to_read),
+        let span = debug_span!(
+            "Sending Read request",
+            nodes_to_read = self.nodes_to_read.len(),
+            timestamps_to_return = ?self.timestamps_to_return,
+            max_age = self.max_age
+        );
+        let request = {
+            let _h = span.enter();
+            if self.nodes_to_read.is_empty() {
+                builder_error!(self, "read(), was not supplied with any nodes to read");
+                return Err(StatusCode::BadNothingToDo);
+            }
+            ReadRequest {
+                request_header: self.header.header,
+                max_age: self.max_age,
+                timestamps_to_return: self.timestamps_to_return,
+                nodes_to_read: Some(self.nodes_to_read),
+            }
         };
-        let response = channel.send(request, self.header.timeout).await?;
+
+        let response = channel
+            .send(request, self.header.timeout)
+            .instrument(span.clone())
+            .await?;
+
+        let _h = span.enter();
         if let ResponseMessage::Read(response) = response {
             builder_debug!(self, "read(), success");
             process_service_result(&response.response_header)?;
@@ -282,25 +300,39 @@ impl UARequest for HistoryRead {
     where
         Self: 'b,
     {
-        let history_read_details = ExtensionObject::from(self.details);
-        builder_debug!(
-            self,
-            "history_read() requested to read nodes {:?}",
-            self.nodes_to_read
+        let span = debug_span!(
+            "Sending HistoryRead request",
+            details = ?self.details,
+            timestamps_to_return = ?self.timestamps_to_return,
+            release_continuation_points = self.release_continuation_points,
+            num_nodes_to_read = self.nodes_to_read.len()
         );
-        let request = HistoryReadRequest {
-            request_header: self.header.header,
-            history_read_details,
-            timestamps_to_return: self.timestamps_to_return,
-            release_continuation_points: self.release_continuation_points,
-            nodes_to_read: if self.nodes_to_read.is_empty() {
-                None
-            } else {
-                Some(self.nodes_to_read)
-            },
+        let request = {
+            let _h = span.enter();
+            let history_read_details = ExtensionObject::from(self.details);
+            builder_trace!(
+                self,
+                "history_read() requested to read nodes {:?}",
+                self.nodes_to_read
+            );
+            HistoryReadRequest {
+                request_header: self.header.header,
+                history_read_details,
+                timestamps_to_return: self.timestamps_to_return,
+                release_continuation_points: self.release_continuation_points,
+                nodes_to_read: if self.nodes_to_read.is_empty() {
+                    None
+                } else {
+                    Some(self.nodes_to_read)
+                },
+            }
         };
 
-        let response = channel.send(request, self.header.timeout).await?;
+        let response = channel
+            .send(request, self.header.timeout)
+            .instrument(span.clone())
+            .await?;
+        let _h = span.enter();
         if let ResponseMessage::HistoryRead(response) = response {
             builder_debug!(self, "history_read(), success");
             process_service_result(&response.response_header)?;
@@ -367,16 +399,26 @@ impl UARequest for Write {
     where
         Self: 'a,
     {
-        if self.nodes_to_write.is_empty() {
-            builder_error!(self, "write() was not supplied with any nodes to write");
-            return Err(StatusCode::BadNothingToDo);
-        }
-
-        let request = WriteRequest {
-            request_header: self.header.header,
-            nodes_to_write: Some(self.nodes_to_write.to_vec()),
+        let span = debug_span!(
+            "Sending Write request",
+            num_nodes_to_write = self.nodes_to_write.len()
+        );
+        let request = {
+            let _h = span.enter();
+            if self.nodes_to_write.is_empty() {
+                builder_error!(self, "write(), was not supplied with any nodes to write");
+                return Err(StatusCode::BadNothingToDo);
+            }
+            WriteRequest {
+                request_header: self.header.header,
+                nodes_to_write: Some(self.nodes_to_write),
+            }
         };
-        let response = channel.send(request, self.header.timeout).await?;
+        let response = channel
+            .send(request, self.header.timeout)
+            .instrument(span.clone())
+            .await?;
+        let _h = span.enter();
         if let ResponseMessage::Write(response) = response {
             builder_debug!(self, "write(), success");
             process_service_result(&response.response_header)?;
@@ -451,23 +493,35 @@ impl UARequest for HistoryUpdate {
     where
         Self: 'a,
     {
-        if self.details.is_empty() {
-            builder_error!(
-                self,
-                "history_update(), was not supplied with any detail to update"
-            );
-            return Err(StatusCode::BadNothingToDo);
-        }
-        let details = self
-            .details
-            .into_iter()
-            .map(ExtensionObject::from)
-            .collect();
-        let request = HistoryUpdateRequest {
-            request_header: self.header.header,
-            history_update_details: Some(details),
+        let span = debug_span!(
+            "Sending HistoryUpdate request",
+            num_details = self.details.len()
+        );
+        let request = {
+            let _h = span.enter();
+            if self.details.is_empty() {
+                builder_error!(
+                    self,
+                    "history_update(), was not supplied with any detail to update"
+                );
+                return Err(StatusCode::BadNothingToDo);
+            }
+            let details = self
+                .details
+                .into_iter()
+                .map(ExtensionObject::from)
+                .collect();
+            HistoryUpdateRequest {
+                request_header: self.header.header,
+                history_update_details: Some(details),
+            }
         };
-        let response = channel.send(request, self.header.timeout).await?;
+
+        let response = channel
+            .send(request, self.header.timeout)
+            .instrument(span.clone())
+            .await?;
+        let _h = span.enter();
         if let ResponseMessage::HistoryUpdate(response) = response {
             builder_error!(self, "history_update(), success");
             process_service_result(&response.response_header)?;

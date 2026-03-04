@@ -15,6 +15,7 @@ use opcua_types::{
     TranslateBrowsePathsToNodeIdsResponse, UnregisterNodesRequest, UnregisterNodesResponse,
     ViewDescription,
 };
+use tracing::{debug_span, Instrument};
 
 #[derive(Debug, Clone)]
 /// Discover the references to the specified nodes by sending a [`BrowseRequest`] to the server.
@@ -90,17 +91,28 @@ impl UARequest for Browse {
     where
         Self: 'a,
     {
-        if self.nodes_to_browse.is_empty() {
-            builder_error!(self, "browse was not supplied with any nodes to browse");
-            return Err(StatusCode::BadNothingToDo);
-        }
-        let request = BrowseRequest {
-            request_header: self.header.header,
-            view: self.view,
-            requested_max_references_per_node: self.max_references_per_node,
-            nodes_to_browse: Some(self.nodes_to_browse),
+        let span = debug_span!(
+            "Sending Browse request",
+            num_nodes_to_browse = self.nodes_to_browse.len()
+        );
+        let request = {
+            let _h = span.enter();
+            if self.nodes_to_browse.is_empty() {
+                builder_error!(self, "browse was not supplied with any nodes to browse");
+                return Err(StatusCode::BadNothingToDo);
+            }
+            BrowseRequest {
+                request_header: self.header.header,
+                view: self.view,
+                requested_max_references_per_node: self.max_references_per_node,
+                nodes_to_browse: Some(self.nodes_to_browse),
+            }
         };
-        let response = channel.send(request, self.header.timeout).await?;
+        let response = channel
+            .send(request, self.header.timeout)
+            .instrument(span.clone())
+            .await?;
+        let _h = span.enter();
         if let ResponseMessage::Browse(response) = response {
             builder_debug!(self, "browse, success");
             process_service_result(&response.response_header)?;
@@ -179,19 +191,31 @@ impl UARequest for BrowseNext {
     where
         Self: 'a,
     {
-        if self.continuation_points.is_empty() {
-            builder_error!(
-                self,
-                "browse_next was not supplied with any continuation points"
-            );
-            return Err(StatusCode::BadNothingToDo);
-        }
-        let request = BrowseNextRequest {
-            request_header: self.header.header,
-            continuation_points: Some(self.continuation_points),
-            release_continuation_points: self.release_continuation_points,
+        let span = debug_span!(
+            "Sending BrowseNext request",
+            num_continuation_points = self.continuation_points.len(),
+            release_continuation_points = self.release_continuation_points
+        );
+        let request = {
+            let _h = span.enter();
+            if self.continuation_points.is_empty() {
+                builder_error!(
+                    self,
+                    "browse_next was not supplied with any continuation points"
+                );
+                return Err(StatusCode::BadNothingToDo);
+            }
+            BrowseNextRequest {
+                request_header: self.header.header,
+                continuation_points: Some(self.continuation_points),
+                release_continuation_points: self.release_continuation_points,
+            }
         };
-        let response = channel.send(request, self.header.timeout).await?;
+        let response = channel
+            .send(request, self.header.timeout)
+            .instrument(span.clone())
+            .await?;
+        let _h = span.enter();
         if let ResponseMessage::BrowseNext(response) = response {
             builder_debug!(self, "browse_next, success");
             process_service_result(&response.response_header)?;
@@ -262,18 +286,29 @@ impl UARequest for TranslateBrowsePaths {
     where
         Self: 'a,
     {
-        if self.browse_paths.is_empty() {
-            builder_error!(
-                self,
-                "translate_browse_paths_to_node_ids was not supplied with any browse paths"
-            );
-            return Err(StatusCode::BadNothingToDo);
-        }
-        let request = TranslateBrowsePathsToNodeIdsRequest {
-            request_header: self.header.header,
-            browse_paths: Some(self.browse_paths),
+        let span = debug_span!(
+            "Sending TranslateBrowsePathsToNodeIds request",
+            num_browse_paths = self.browse_paths.len()
+        );
+        let request = {
+            let _h = span.enter();
+            if self.browse_paths.is_empty() {
+                builder_error!(
+                    self,
+                    "translate_browse_paths_to_node_ids was not supplied with any browse paths"
+                );
+                return Err(StatusCode::BadNothingToDo);
+            }
+            TranslateBrowsePathsToNodeIdsRequest {
+                request_header: self.header.header,
+                browse_paths: Some(self.browse_paths),
+            }
         };
-        let response = channel.send(request, self.header.timeout).await?;
+        let response = channel
+            .send(request, self.header.timeout)
+            .instrument(span.clone())
+            .await?;
+        let _h = span.enter();
         if let ResponseMessage::TranslateBrowsePathsToNodeIds(response) = response {
             builder_debug!(self, "translate_browse_paths_to_node_ids, success");
             process_service_result(&response.response_header)?;
@@ -343,15 +378,26 @@ impl UARequest for RegisterNodes {
     where
         Self: 'a,
     {
-        if self.nodes_to_register.is_empty() {
-            builder_error!(self, "register_nodes was not supplied with any node IDs");
-            return Err(StatusCode::BadNothingToDo);
-        }
-        let request = RegisterNodesRequest {
-            request_header: self.header.header,
-            nodes_to_register: Some(self.nodes_to_register),
+        let span = debug_span!(
+            "Sending RegisterNodes request",
+            num_nodes_to_register = self.nodes_to_register.len()
+        );
+        let request = {
+            let _h = span.enter();
+            if self.nodes_to_register.is_empty() {
+                builder_error!(self, "register_nodes was not supplied with any node IDs");
+                return Err(StatusCode::BadNothingToDo);
+            }
+            RegisterNodesRequest {
+                request_header: self.header.header,
+                nodes_to_register: Some(self.nodes_to_register),
+            }
         };
-        let response = channel.send(request, self.header.timeout).await?;
+        let response = channel
+            .send(request, self.header.timeout)
+            .instrument(span.clone())
+            .await?;
+        let _h = span.enter();
         if let ResponseMessage::RegisterNodes(response) = response {
             builder_debug!(self, "register_nodes, success");
             process_service_result(&response.response_header)?;
@@ -421,15 +467,26 @@ impl UARequest for UnregisterNodes {
     where
         Self: 'a,
     {
-        if self.nodes_to_unregister.is_empty() {
-            builder_error!(self, "unregister_nodes was not supplied with any node IDs");
-            return Err(StatusCode::BadNothingToDo);
-        }
-        let request = UnregisterNodesRequest {
-            request_header: self.header.header,
-            nodes_to_unregister: Some(self.nodes_to_unregister),
+        let span = debug_span!(
+            "Sending UnregisterNodes request",
+            num_nodes_to_unregister = self.nodes_to_unregister.len()
+        );
+        let request = {
+            let _h = span.enter();
+            if self.nodes_to_unregister.is_empty() {
+                builder_error!(self, "unregister_nodes was not supplied with any node IDs");
+                return Err(StatusCode::BadNothingToDo);
+            }
+            UnregisterNodesRequest {
+                request_header: self.header.header,
+                nodes_to_unregister: Some(self.nodes_to_unregister),
+            }
         };
-        let response = channel.send(request, self.header.timeout).await?;
+        let response = channel
+            .send(request, self.header.timeout)
+            .instrument(span.clone())
+            .await?;
+        let _h = span.enter();
         if let ResponseMessage::UnregisterNodes(response) = response {
             builder_debug!(self, "unregister_nodes, success");
             process_service_result(&response.response_header)?;

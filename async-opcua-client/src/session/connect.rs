@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use tokio::{pin, select};
-use tracing::info;
+use tracing::{info, info_span, Instrument};
 
 use crate::transport::{Connector, SecureChannelEventLoop, TransportPollResult};
 use opcua_types::{NodeId, StatusCode};
@@ -40,9 +40,18 @@ impl SessionConnector {
         &self,
         connector: &T,
     ) -> Result<(SecureChannelEventLoop<T::Transport>, SessionConnectMode), StatusCode> {
-        let mut event_loop = self.inner.channel.connect_no_retry(connector).await?;
+        let span = info_span!(
+            "Attempting to create and activate session to server",
+            endpoint_url = connector.default_endpoint().endpoint_url.as_ref()
+        );
+        let mut event_loop = self
+            .inner
+            .channel
+            .connect_no_retry(connector)
+            .instrument(span.clone())
+            .await?;
 
-        let activate_fut = self.ensure_and_activate_session();
+        let activate_fut = self.ensure_and_activate_session().instrument(span.clone());
         pin!(activate_fut);
 
         let res = loop {
@@ -59,7 +68,7 @@ impl SessionConnector {
         let id = match res {
             Ok(id) => id,
             Err(e) => {
-                self.inner.channel.close_channel().await;
+                self.inner.channel.close_channel().instrument(span).await;
 
                 loop {
                     if matches!(event_loop.poll().await, TransportPollResult::Closed(_)) {
@@ -78,18 +87,18 @@ impl SessionConnector {
         let should_create_session = self.inner.session_id.load().is_null();
 
         if should_create_session {
-            self.inner.create_session().await?;
+            self.inner.create_session().in_current_span().await?;
         }
 
-        let reconnect = match self.inner.activate_session().await {
+        let reconnect = match self.inner.activate_session().in_current_span().await {
             Err(status_code) if !should_create_session => {
                 info!(
                     "Session activation failed on reconnect, error = {}, creating a new session",
                     status_code
                 );
                 self.inner.reset();
-                let id = self.inner.create_session().await?;
-                self.inner.activate_session().await?;
+                let id = self.inner.create_session().in_current_span().await?;
+                self.inner.activate_session().in_current_span().await?;
                 SessionConnectMode::NewSession(id)
             }
             Err(e) => return Err(e),
@@ -104,7 +113,10 @@ impl SessionConnector {
         };
 
         if self.inner.recreate_subscriptions {
-            self.inner.transfer_subscriptions_from_old_session().await;
+            self.inner
+                .transfer_subscriptions_from_old_session()
+                .in_current_span()
+                .await;
         }
 
         Ok(reconnect)

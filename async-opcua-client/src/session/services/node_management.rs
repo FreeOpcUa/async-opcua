@@ -15,6 +15,7 @@ use opcua_types::{
     DeleteNodesResponse, DeleteReferencesItem, DeleteReferencesRequest, DeleteReferencesResponse,
     IntegerId, NodeId, StatusCode,
 };
+use tracing::{debug_span, Instrument};
 
 #[derive(Debug, Clone)]
 /// Add nodes by sending a [`AddNodesRequest`] to the server.
@@ -70,15 +71,27 @@ impl UARequest for AddNodes {
     where
         Self: 'a,
     {
-        if self.nodes_to_add.is_empty() {
-            builder_error!(self, "add_nodes, called with no nodes to add");
-            return Err(StatusCode::BadNothingToDo);
-        }
-        let request = AddNodesRequest {
-            request_header: self.header.header,
-            nodes_to_add: Some(self.nodes_to_add),
+        let span = debug_span!(
+            "Sending AddNodes request",
+            num_nodes_to_add = self.nodes_to_add.len()
+        );
+        let request = {
+            let _h = span.enter();
+            if self.nodes_to_add.is_empty() {
+                builder_error!(self, "add_nodes, called with no nodes to add");
+                return Err(StatusCode::BadNothingToDo);
+            }
+            AddNodesRequest {
+                request_header: self.header.header,
+                nodes_to_add: Some(self.nodes_to_add),
+            }
         };
-        let response = channel.send(request, self.header.timeout).await?;
+
+        let response = channel
+            .send(request, self.header.timeout)
+            .instrument(span.clone())
+            .await?;
+        let _h = span.enter();
         if let ResponseMessage::AddNodes(response) = response {
             builder_debug!(self, "add_nodes, success");
             process_service_result(&response.response_header)?;
@@ -144,15 +157,26 @@ impl UARequest for AddReferences {
     where
         Self: 'a,
     {
-        if self.references_to_add.is_empty() {
-            builder_error!(self, "add_references, called with no references to add");
-            return Err(StatusCode::BadNothingToDo);
-        }
-        let request = AddReferencesRequest {
-            request_header: self.header.header,
-            references_to_add: Some(self.references_to_add),
+        let span = debug_span!(
+            "Sending AddReferences request",
+            num_references_to_add = self.references_to_add.len()
+        );
+        let request = {
+            let _h = span.enter();
+            if self.references_to_add.is_empty() {
+                builder_error!(self, "add_references, called with no references to add");
+                return Err(StatusCode::BadNothingToDo);
+            }
+            AddReferencesRequest {
+                request_header: self.header.header,
+                references_to_add: Some(self.references_to_add),
+            }
         };
-        let response = channel.send(request, self.header.timeout).await?;
+        let response = channel
+            .send(request, self.header.timeout)
+            .instrument(span.clone())
+            .await?;
+        let _h = span.enter();
         if let ResponseMessage::AddReferences(response) = response {
             builder_debug!(self, "add_references, success");
             process_service_result(&response.response_header)?;
@@ -218,15 +242,27 @@ impl UARequest for DeleteNodes {
     where
         Self: 'a,
     {
-        if self.nodes_to_delete.is_empty() {
-            builder_error!(self, "delete_nodes, called with no nodes to delete");
-            return Err(StatusCode::BadNothingToDo);
-        }
-        let request = DeleteNodesRequest {
-            request_header: self.header.header,
-            nodes_to_delete: Some(self.nodes_to_delete),
+        let span = debug_span!(
+            "Sending DeleteNodes request",
+            num_nodes_to_delete = self.nodes_to_delete.len()
+        );
+        let request = {
+            let _h = span.enter();
+            if self.nodes_to_delete.is_empty() {
+                builder_error!(self, "delete_nodes, called with no nodes to delete");
+                return Err(StatusCode::BadNothingToDo);
+            }
+            DeleteNodesRequest {
+                request_header: self.header.header,
+                nodes_to_delete: Some(self.nodes_to_delete),
+            }
         };
-        let response = channel.send(request, self.header.timeout).await?;
+
+        let response = channel
+            .send(request, self.header.timeout)
+            .instrument(span.clone())
+            .await?;
+        let _h = span.enter();
         if let ResponseMessage::DeleteNodes(response) = response {
             builder_debug!(self, "delete_nodes, success");
             process_service_result(&response.response_header)?;
@@ -292,18 +328,29 @@ impl UARequest for DeleteReferences {
     where
         Self: 'a,
     {
-        if self.references_to_delete.is_empty() {
-            builder_error!(
-                self,
-                "delete_references, called with no references to delete"
-            );
-            return Err(StatusCode::BadNothingToDo);
-        }
-        let request = DeleteReferencesRequest {
-            request_header: self.header.header,
-            references_to_delete: Some(self.references_to_delete),
+        let span = debug_span!(
+            "Sending DeleteReferences request",
+            num_references_to_delete = self.references_to_delete.len()
+        );
+        let request = {
+            let _h = span.enter();
+            if self.references_to_delete.is_empty() {
+                builder_error!(
+                    self,
+                    "delete_references, called with no references to delete"
+                );
+                return Err(StatusCode::BadNothingToDo);
+            }
+            DeleteReferencesRequest {
+                request_header: self.header.header,
+                references_to_delete: Some(self.references_to_delete),
+            }
         };
-        let response = channel.send(request, self.header.timeout).await?;
+        let response = channel
+            .send(request, self.header.timeout)
+            .instrument(span.clone())
+            .await?;
+        let _h = span.enter();
         if let ResponseMessage::DeleteReferences(response) = response {
             builder_debug!(self, "delete_references, success");
             process_service_result(&response.response_header)?;

@@ -251,11 +251,16 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> StreamTransport<R, W> {
         incoming: Option<Result<Message, std::io::Error>>,
     ) -> TransportPollResult {
         let Some(incoming) = incoming else {
+            error!("Stream unexpectedly closed by peer");
             return TransportPollResult::Closed(StatusCode::BadCommunicationError);
         };
         match incoming {
             Ok(message) => {
                 if let Err(e) = self.state.handle_incoming_message(message) {
+                    error!(
+                        "Failed to handle incoming message, closing transport: {}",
+                        e
+                    );
                     TransportPollResult::Closed(e)
                 } else {
                     TransportPollResult::IncomingMessage
@@ -279,6 +284,7 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> StreamTransport<R, W> {
         if self.send_buffer.should_encode_chunks() {
             let secure_channel = trace_read_lock!(self.state.channel_state.secure_channel());
             if let Err(e) = self.send_buffer.encode_next_chunk(&secure_channel) {
+                error!("Failed to encode chunk, closing transport: {}", e);
                 return TransportPollResult::Closed(e);
             }
         }
@@ -290,7 +296,7 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> StreamTransport<R, W> {
             tokio::select! {
                 r = self.send_buffer.read_into_async(&mut self.write) => {
                     if let Err(e) = r {
-                        error!("write bytes task failed: {}", e);
+                        error!("Writing outgoing message to stream failed: {}", e);
                         return TransportPollResult::Closed(StatusCode::BadCommunicationError);
                     }
                     TransportPollResult::OutgoingMessageSent
@@ -323,6 +329,7 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> StreamTransport<R, W> {
                             self.state.message_send_failed(request_id, e.status());
                             TransportPollResult::RecoverableError(e.status())
                         } else {
+                            error!("Failed to write outgoing message to send buffer, closing transport: {}", e);
                             TransportPollResult::Closed(e.status())
                         }
                     } else {

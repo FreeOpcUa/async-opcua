@@ -165,13 +165,8 @@ impl SimpleBinaryDecodable for MessageChunk {
         decoding_options: &DecodingOptions,
     ) -> EncodingResult<Self> {
         // Read the header out first
-        let chunk_header =
-            MessageChunkHeader::decode(in_stream, decoding_options).map_err(|err| {
-                Error::new(
-                    StatusCode::BadCommunicationError,
-                    format!("Cannot decode chunk header {err:?}"),
-                )
-            })?;
+        let chunk_header = MessageChunkHeader::decode(in_stream, decoding_options)
+            .map_err(|err| Error::decoding(format!("Cannot decode chunk header {err:?}")))?;
 
         let message_size = chunk_header.message_size as usize;
         if decoding_options.max_message_size > 0 && message_size > decoding_options.max_message_size

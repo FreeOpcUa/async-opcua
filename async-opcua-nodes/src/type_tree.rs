@@ -270,10 +270,7 @@ impl DefaultTypeTree {
     pub fn get_all_children<'a>(&'a self, root: &'a NodeId) -> Vec<&'a NodeId> {
         let mut res = Vec::new();
         let mut roots = vec![root];
-        loop {
-            let Some(root) = roots.pop() else {
-                break;
-            };
+        while let Some(root) = roots.pop() {
             res.push(root);
             let Some(children) = self.subtypes_by_source.get(root) else {
                 continue;

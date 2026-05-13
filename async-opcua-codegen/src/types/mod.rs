@@ -113,7 +113,7 @@ pub fn generate_types(
             .ignore
             .iter()
             .cloned()
-            .chain(base_ignored_types().into_iter())
+            .chain(base_ignored_types())
             .collect(),
         base_native_type_mappings(),
         &input.xml,

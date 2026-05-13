@@ -588,7 +588,7 @@ impl SessionSubscriptions {
                 .values()
                 .map(|v| (v.id(), v.priority()))
                 .collect();
-            subscription_priority.sort_by(|s1, s2| s1.1.cmp(&s2.1));
+            subscription_priority.sort_by_key(|s1| s1.1);
             subscription_priority.into_iter().map(|s| s.0)
         };
 

@@ -1573,7 +1573,7 @@ impl Variant {
                     let v = self.range_of(range)?;
                     match v {
                         Variant::Array(a) => {
-                            res.extend(a.values.into_iter());
+                            res.extend(a.values);
                         }
                         r => res.push(r),
                     }

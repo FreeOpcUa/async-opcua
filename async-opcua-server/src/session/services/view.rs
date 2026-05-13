@@ -312,7 +312,7 @@ pub(crate) async fn browse_next(
         {
             let mut session = request.session.write();
             let type_tree = context.get_type_tree_for_user();
-            for mut node in nodes.into_iter().chain(batch_nodes.into_iter()) {
+            for mut node in nodes.into_iter().chain(batch_nodes) {
                 node.resolve_external_references(type_tree.get(), &node_map);
 
                 let (result, input_index) =

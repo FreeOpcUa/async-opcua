@@ -416,13 +416,9 @@ fn like_to_regex(v: &str) -> Result<Regex, ()> {
                     }
                     pattern.push(*c);
                 }
-                '%' => {
-                    if i == 0 || v[i - 1] != '\\' {
-                        // A % is a match on zero or more chans unless it is escaped
-                        pattern.push_str(".*");
-                    } else {
-                        pattern.push(*c);
-                    }
+                // A % is a match on zero or more chans unless it is escaped
+                '%' if i == 0 || v[i - 1] != '\\' => {
+                    pattern.push_str(".*");
                 }
                 '_' => {
                     if i == 0 || v[i - 1] != '\\' {

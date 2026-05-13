@@ -173,7 +173,7 @@ pub fn run_codegen(config: &CodeGenConfig, root_path: &str) -> Result<(), CodeGe
                 let mut module_file = create_module_file(modules);
                 module_file
                     .items
-                    .extend(type_loader_impl(&object_ids, &target_namespace).into_iter());
+                    .extend(type_loader_impl(&object_ids, &target_namespace));
 
                 write_module_file(&t.output_dir, root_path, &header, module_file)
                     .map_err(|e| e.in_file(&path))?;

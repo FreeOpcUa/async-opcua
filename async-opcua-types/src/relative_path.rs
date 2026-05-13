@@ -51,15 +51,13 @@ impl RelativePath {
                         // The next character is escaped and part of the token
                         escaped_char = true;
                     }
-                    '/' | '.' | '<' => {
-                        // We have reached the start of a token and need to process the previous one
-                        if !token.is_empty() {
-                            if elements.len() == Self::MAX_ELEMENTS {
-                                break;
-                            }
-                            elements.push(RelativePathElement::from_str(&token, node_resolver)?);
-                            token.clear();
+                    // We have reached the start of a token and need to process the previous one
+                    '/' | '.' | '<' if !token.is_empty() => {
+                        if elements.len() == Self::MAX_ELEMENTS {
+                            break;
                         }
+                        elements.push(RelativePathElement::from_str(&token, node_resolver)?);
+                        token.clear();
                     }
                     _ => {}
                 }

@@ -29,7 +29,7 @@ pub fn generate_node_ids(
     pairs.sort_by(|a, b| a.0.cmp(&b.0));
     let mut items = Vec::new();
     for (_, item) in pairs {
-        items.extend(render(item)?.into_iter());
+        items.extend(render(item)?);
     }
     Ok(syn::File {
         shebang: None,

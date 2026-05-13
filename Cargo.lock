@@ -362,6 +362,7 @@ dependencies = [
  "postcard",
  "regex",
  "serde",
+ "serde_yaml",
  "tokio",
  "tokio-util",
  "tracing",

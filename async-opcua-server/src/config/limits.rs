@@ -333,3 +333,71 @@ mod defaults {
         constants::MAX_SUBSCRIPTIONS_PER_CALL
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::path::Path;
+
+    /// Ensures that the `limits` section of `samples/server.conf` stays in
+    /// sync with the `Limits` struct fields.
+    #[test]
+    fn server_conf_limits_match_struct_field_names() {
+        let conf_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../samples/server.conf");
+        let content = fs::read_to_string(&conf_path).unwrap();
+        let full_config: serde_yaml::Value = serde_yaml::from_str(&content).unwrap();
+        let limits_value = full_config.get("limits").unwrap().clone();
+        let limits: Limits = serde_yaml::from_value(limits_value).unwrap();
+
+        assert_eq!(
+            limits,
+            Limits {
+                max_array_length: 100_000,
+                max_string_length: 65_535,
+                max_byte_string_length: 65_535,
+                max_message_size: 327_675,
+                max_chunk_count: 5,
+                send_buffer_size: 65_535,
+                receive_buffer_size: 65_535,
+                max_browse_continuation_points: 5_000,
+                max_history_continuation_points: 500,
+                max_query_continuation_points: 500,
+                max_sessions: 20,
+                subscriptions: SubscriptionLimits {
+                    max_subscriptions_per_session: 100,
+                    max_pending_publish_requests: 20,
+                    max_publish_requests_per_subscription: 4,
+                    min_sampling_interval_ms: 0.1,
+                    min_publishing_interval_ms: 0.1,
+                    max_keep_alive_count: 30_000,
+                    default_keep_alive_count: 10,
+                    max_monitored_items_per_sub: 0,
+                    max_monitored_item_queue_size: 10,
+                    max_lifetime_count: 90_000,
+                    max_notifications_per_publish: 0,
+                    max_queued_notifications: 20,
+                },
+                operational: OperationalLimits {
+                    max_nodes_per_translate_browse_paths_to_node_ids: 100,
+                    max_nodes_per_read: 10_000,
+                    max_nodes_per_write: 10_000,
+                    max_nodes_per_method_call: 100,
+                    max_nodes_per_browse: 1_000,
+                    max_nodes_per_register_nodes: 1_000,
+                    max_monitored_items_per_call: 1_000,
+                    max_nodes_per_history_read_data: 100,
+                    max_nodes_per_history_read_events: 100,
+                    max_nodes_per_history_update: 100,
+                    max_references_per_browse_node: 1_000,
+                    max_node_descs_per_query: 100,
+                    max_data_sets_query_return: 1_000,
+                    max_references_query_return: 100,
+                    max_nodes_per_node_management: 1_000,
+                    max_references_per_references_management: 1_000,
+                    max_subscriptions_per_call: 10,
+                },
+            }
+        );
+    }
+}

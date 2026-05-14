@@ -1,5 +1,18 @@
+#![warn(missing_docs)]
+
+//! Code generation library for async-opcua.
+//! The purpose of this library is to facilitate generating code used as part of
+//! the async-opcua library, as well as make it possible to generate code for companion
+//! standards.
+//!
+//! Note that this is in many ways more limited than the official .NET code generation
+//! libraries from OPC Foundation. Some of this is due to the fact that OPC-UA code generation
+//! is _very_ object oriented, and representing class hierarchies in rust is hard and may not be
+//! very useful.
+
 mod config;
 mod error;
+mod events;
 mod ids;
 mod input;
 mod nodeset;
@@ -12,7 +25,7 @@ use std::{collections::HashSet, io::Write, path::Path};
 use config::load_schemas;
 pub use error::CodeGenError;
 use ids::generate_node_ids;
-use nodeset::{generate_events, generate_target, make_root_module};
+use nodeset::{generate_target, make_root_module};
 use serde::{Deserialize, Serialize};
 use syn::{parse_str, File};
 use tracing::info;
@@ -20,11 +33,13 @@ use types::base_native_type_mappings;
 use types::{generate_types, generate_types_nodeset, type_loader_impl, EncodingIds};
 use utils::{create_module_file, GeneratedOutput};
 
+use crate::events::EventsCodeGenTarget;
 pub use crate::ids::NodeIdCodeGenTarget;
 use crate::nodeset::make_type_dict;
-pub use crate::nodeset::{DependentNodeset, EventsTarget, NodeSetCodeGenTarget, NodeSetTypes};
+pub use crate::nodeset::{DependentNodeset, NodeSetCodeGenTarget, NodeSetTypes};
 pub use crate::types::{ExternalIds, ExternalType, TypeCodeGenTarget};
 pub use config::CodeGenSource;
+use events::generate_events;
 
 fn join_paths(root: &str, path: &str) -> PathBuf {
     let root = Path::new(root);
@@ -183,7 +198,8 @@ pub fn run_codegen(config: &CodeGenConfig, root_path: &str) -> Result<(), CodeGe
                 let node_set = cache.get_nodeset(&n.file)?;
                 info!("Found {} nodes in node set", node_set.xml.nodes.len());
 
-                let types = make_type_dict(n, &cache).map_err(|e| e.in_file(&node_set.path))?;
+                let types =
+                    make_type_dict(&n.types, &cache).map_err(|e| e.in_file(&node_set.path))?;
 
                 let chunks = generate_target(n, node_set, &config.preferred_locale, &types)
                     .map_err(|e| e.in_file(&node_set.path))?;
@@ -196,36 +212,6 @@ pub fn run_codegen(config: &CodeGenConfig, root_path: &str) -> Result<(), CodeGe
 
                 write_to_directory(&n.output_dir, root_path, &header, chunks)?;
                 write_module_file(&n.output_dir, root_path, &header, module_file)?;
-
-                if let Some(events_target) = &n.events {
-                    info!("Generating events to {}", events_target.output_dir);
-                    let mut sets = Vec::with_capacity(events_target.dependent_nodesets.len() + 1);
-                    for nodeset_file in &events_target.dependent_nodesets {
-                        info!("Loading dependent node set {}", nodeset_file.file);
-                        let set = cache.get_nodeset(&nodeset_file.file)?;
-                        sets.push((&set.xml, nodeset_file.import_path.as_str()));
-                    }
-
-                    sets.push((&node_set.xml, ""));
-
-                    let events = generate_events(&sets, &types)?;
-                    let cnt = events.len();
-                    let header = make_header(
-                        &node_set.path,
-                        &[&config.extra_header, &events_target.extra_header],
-                    );
-                    let modules =
-                        write_to_directory(&events_target.output_dir, root_path, &header, events)
-                            .map_err(|e| e.in_file(&node_set.path))?;
-                    write_module_file(
-                        &events_target.output_dir,
-                        root_path,
-                        &header,
-                        create_module_file(modules),
-                    )
-                    .map_err(|e| e.in_file(&node_set.path))?;
-                    info!("Created {} event types", cnt);
-                }
             }
             CodeGenTarget::Ids(n) => {
                 info!("Running node ID code generation for {}", n.file_path);
@@ -248,6 +234,40 @@ pub fn run_codegen(config: &CodeGenConfig, root_path: &str) -> Result<(), CodeGe
                         CodeGenError::io(&format!("Failed to write to file {}", n.output_file), e)
                     })?;
             }
+            CodeGenTarget::Events(events_target) => {
+                info!("Generating events to {}", events_target.output_dir);
+
+                let node_set = cache.get_nodeset(&events_target.file)?;
+                let types = make_type_dict(&events_target.types, &cache)
+                    .map_err(|e| e.in_file(&node_set.path))?;
+
+                let mut sets = Vec::with_capacity(events_target.dependent_nodesets.len() + 1);
+                for nodeset_file in &events_target.dependent_nodesets {
+                    info!("Loading dependent node set {}", nodeset_file.file);
+                    let set = cache.get_nodeset(&nodeset_file.file)?;
+                    sets.push((&set.xml, nodeset_file.import_path.as_str()));
+                }
+
+                sets.push((&node_set.xml, ""));
+
+                let events = generate_events(&sets, &types)?;
+                let cnt = events.len();
+                let header = make_header(
+                    &node_set.path,
+                    &[&config.extra_header, &events_target.extra_header],
+                );
+                let modules =
+                    write_to_directory(&events_target.output_dir, root_path, &header, events)
+                        .map_err(|e| e.in_file(&node_set.path))?;
+                write_module_file(
+                    &events_target.output_dir,
+                    root_path,
+                    &header,
+                    create_module_file(modules),
+                )
+                .map_err(|e| e.in_file(&node_set.path))?;
+                info!("Created {} event types", cnt);
+            }
         }
     }
 
@@ -257,6 +277,7 @@ pub fn run_codegen(config: &CodeGenConfig, root_path: &str) -> Result<(), CodeGe
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
+/// A top level code generation target.
 pub enum CodeGenTarget {
     /// Code gen target for data types. This generates a struct with derives, and
     /// some impls for each struct/enum in a bsd or nodeset2 file.
@@ -267,6 +288,11 @@ pub enum CodeGenTarget {
     /// Code gen target for node IDs. This produces an enum for each node ID type from
     /// a NodeId csv file.
     Ids(NodeIdCodeGenTarget),
+    /// Code gen target for generating event types. This creates structs for
+    /// each event type in a nodeset, which all implement the `Event` trait. To do this,
+    /// it also generates types for some `ObjectType`s and `VariableType`s which are used
+    /// as event fields.
+    Events(EventsCodeGenTarget),
 }
 
 #[derive(Serialize, Deserialize, Debug)]

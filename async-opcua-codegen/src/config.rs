@@ -23,7 +23,9 @@ pub enum ExplicitCodeGenSource {
 /// Directories are loaded recursively, xsd files are loaded as XML schemas,
 /// xml files as NodeSets, and bsd files as binary schemas.
 pub enum CodeGenSource {
+    /// An implicit source, which we infer based on file extension.
     Implicit(String),
+    /// An explicit source, with a set type.
     Explicit(ExplicitCodeGenSource),
 }
 

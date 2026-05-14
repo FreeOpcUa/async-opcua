@@ -6,15 +6,34 @@ use std::collections::HashMap;
 use collector::{NodeToCollect, TypeCollector};
 use gen::{EventGenerator, EventItem};
 use opcua_xml::schema::ua_node_set::UANodeSet;
+use serde::{Deserialize, Serialize};
 use syn::Item;
 
 use crate::{
-    base_native_type_mappings, nodeset::XsdTypeWithPath, CodeGenError, GeneratedOutput,
-    BASE_NAMESPACE,
+    base_native_type_mappings, nodeset::XsdTypeWithPath, CodeGenError, DependentNodeset,
+    GeneratedOutput, NodeSetTypes, BASE_NAMESPACE,
 };
 
 mod collector;
 mod gen;
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+/// Target for generating events from a NodeSet2 XML file.
+pub struct EventsCodeGenTarget {
+    /// A reference to the input schema, which must be defined in the `inputs` list.
+    pub file: String,
+    /// The root directory to place the generated event types in.
+    pub output_dir: String,
+    #[serde(default)]
+    /// Extra header to add to the events target.
+    pub extra_header: String,
+    #[serde(default)]
+    /// List of dependent nodesets to load events and event fields from.
+    /// This usually needs to include the core namespace.
+    pub dependent_nodesets: Vec<DependentNodeset>,
+    /// List of XML schema files to load types from.
+    pub types: Vec<NodeSetTypes>,
+}
 
 pub fn generate_events(
     nodesets: &[(&UANodeSet, &str)],

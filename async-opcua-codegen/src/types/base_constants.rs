@@ -42,14 +42,23 @@ pub fn base_ignored_types() -> HashSet<String> {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+/// Rust expressions for each encoding type.
+/// If any field except `data_type` is left out,
+/// the type will simply not have a decoding implementation
+/// for that format.
 pub struct ExternalIds {
+    /// The binary encoding ID.
     pub binary: Option<String>,
+    /// The XML encoding ID.
     pub xml: Option<String>,
+    /// The JSON encoding ID.
     pub json: Option<String>,
-    pub id: Option<String>,
+    /// The data type ID.
+    pub data_type: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+/// An external type reference.
 pub struct ExternalType {
     /// Absolute rust path to this type.
     pub path: String,
@@ -60,10 +69,13 @@ pub struct ExternalType {
     /// Add to type loader impl
     #[serde(default)]
     pub add_to_type_loader: bool,
+    /// Rust expressions for each encoding type. Can be left out
+    /// to use CSV node ID enums.
     pub ids: Option<ExternalIds>,
 }
 
 impl ExternalType {
+    /// Create a new external type from a rust path.
     pub fn new(path: &str, has_default: bool) -> Self {
         Self {
             path: path.to_owned(),

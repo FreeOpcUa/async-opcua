@@ -5,13 +5,11 @@
 //! general server context and returns a node. These are chained together
 //! into a large static iterator that can be used as a node set source.
 
-mod events;
 mod gen;
 mod value;
 
 use std::collections::HashMap;
 
-pub use events::generate_events;
 pub use gen::{NodeGenMethod, NodeSetCodeGenerator};
 use opcua_xml::schema::xml_schema::{XsdFileItem, XsdFileType};
 use proc_macro2::Span;
@@ -57,8 +55,6 @@ pub struct NodeSetCodeGenTarget {
     #[serde(default)]
     /// Extra header to add to each generated file.
     pub extra_header: String,
-    /// Optional generation of event types from the nodeset.
-    pub events: Option<EventsTarget>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -70,23 +66,13 @@ pub struct DependentNodeset {
     pub import_path: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Default)]
-pub struct EventsTarget {
-    /// A reference to the input schema, which must be defined in the `inputs` list.
-    pub output_dir: String,
-    #[serde(default)]
-    pub extra_header: String,
-    #[serde(default)]
-    pub dependent_nodesets: Vec<DependentNodeset>,
-}
-
 /// Create a map of type name to type definition from the given codegen target.
-pub fn make_type_dict(
-    target: &NodeSetCodeGenTarget,
+pub(crate) fn make_type_dict(
+    types: &[NodeSetTypes],
     cache: &SchemaCache,
 ) -> Result<HashMap<String, XsdTypeWithPath>, CodeGenError> {
     let mut res = HashMap::new();
-    for file in &target.types {
+    for file in types {
         let xsd_file = cache.get_xml_schema(&file.file)?;
         let path: Path = parse_str(&file.root_path)?;
 

@@ -38,7 +38,7 @@ impl EncodingIds {
     ) -> Result<Self, CodeGenError> {
         if let Some(ids) = &ty.ids {
             let data_type = ids
-                .id
+                .data_type
                 .as_ref()
                 .ok_or_else(|| CodeGenError::other("Missing data type ID in external type"))?;
             let binary = ids.binary.as_ref().unwrap_or(data_type);

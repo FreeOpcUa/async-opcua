@@ -10,11 +10,19 @@ use gen::{parse, render};
 mod gen;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
+/// Code generation target for generating node ID enums from
+/// a node ID CSV.
 pub struct NodeIdCodeGenTarget {
+    /// Relative path to the node ID CSV.
     pub file_path: String,
+    /// File to write the generated code to.
     pub output_file: String,
+    /// Type name, used if the CSV file has only two columns.
+    /// If the CSV file has three columns, this is not needed.
     pub type_name: Option<String>,
     #[serde(default)]
+    /// Extra header to put after the global extra header in the
+    /// generated file.
     pub extra_header: String,
 }
 

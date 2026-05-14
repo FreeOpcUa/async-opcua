@@ -21,11 +21,17 @@ targets:
       - file: Opc.Ua.Types.xsd
         root_path: opcua::types
     name: ProfinetNamespace
-    events:
-      output_dir: src/generated/events
-      dependent_nodesets:
-        - file: Opc.Ua.NodeSet2.xml
-          import_path: "opcua::core_namespace::events::"
+  - type: events
+    file: Opc.Ua.Pn.NodeSet2.xml
+    output_dir: src/generated/events
+    types:
+      - file: Opc.Ua.Pn.Types.xsd
+        root_path: crate::generated::types
+      - file: Opc.Ua.Types.xsd
+        root_path: opcua::types
+    dependent_nodesets:
+      - file: Opc.Ua.NodeSet2.xml
+        import_path: "opcua::core_namespace::events::"
   - type: ids
     file_path: schema/Opc.Ua.Pn.NodeIds.csv
     output_file: src/generated/node_ids.rs

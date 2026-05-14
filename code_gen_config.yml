@@ -30,11 +30,15 @@ targets:
       - file: Opc.Ua.Types.xsd
         root_path: opcua::types
     name: CoreNamespace
-    events:
-      output_dir: async-opcua-core-namespace/src/events
-      extra_header: |
-        #[allow(unused)]
-        mod opcua { pub(super) use opcua_types as types; pub(super) use opcua_nodes as nodes; pub(super) use opcua_nodes::{Event, EventField}; }
+  - type: events
+    file: Opc.Ua.NodeSet2.xml
+    output_dir: async-opcua-core-namespace/src/events
+    types:
+      - file: Opc.Ua.Types.xsd
+        root_path: opcua::types
+    extra_header: |
+      #[allow(unused)]
+      mod opcua { pub(super) use opcua_types as types; pub(super) use opcua_nodes as nodes; pub(super) use opcua_nodes::{Event, EventField}; }
   - type: ids
     file_path: schemas/1.05/NodeIds.csv
     extra_header: |

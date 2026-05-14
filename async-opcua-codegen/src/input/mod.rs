@@ -3,7 +3,10 @@
 //! It also defines a schema cache, which can be used to store loaded schemas,
 //! and cache certain computations that may be reused.
 
-use std::{collections::HashMap, path::Path};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 use pathdiff::diff_paths;
 use tracing::warn;
@@ -44,8 +47,9 @@ impl<T> SchemaCacheInst<T> {
         self.items.get(*idx)
     }
 
-    pub fn add_file_aliases(&mut self, file_path: &str, index: usize) {
-        self.aliases.insert(file_path.to_owned(), index);
+    pub fn add_file_aliases(&mut self, file_path: &Path, index: usize) {
+        self.aliases
+            .insert(file_path.to_string_lossy().into_owned(), index);
         let path = Path::new(file_path);
         if let Some(file_name) = path.file_name() {
             self.aliases
@@ -58,15 +62,19 @@ impl<T> SchemaCacheInst<T> {
     }
 }
 
+/// Utility type for storing schemas.
+/// This handles loading, parsing, and reuse of schemas during a code
+/// generation run.
 pub struct SchemaCache {
-    root_path: String,
+    root_path: PathBuf,
     nodesets: SchemaCacheInst<NodeSetInput>,
     binary_schemas: SchemaCacheInst<BinarySchemaInput>,
     xml_schemas: SchemaCacheInst<XmlSchemaInput>,
 }
 
 impl SchemaCache {
-    pub fn new(root_path: &str) -> Self {
+    /// Create a new schema cache with the given root path.
+    pub fn new(root_path: &Path) -> Self {
         Self {
             root_path: root_path.to_owned(),
             nodesets: SchemaCacheInst::new(),
@@ -87,17 +95,19 @@ impl SchemaCache {
                     path.to_string_lossy()
                 ))
             })?;
-            let path_str = relative_path.to_string_lossy();
             match ext.to_string_lossy().as_ref() {
-                "xsd" => self.load_xml_schema(&path_str)?,
-                "bsd" => self.load_binary_schema(&path_str)?,
-                "xml" => self.load_nodeset(&path_str)?,
+                "xsd" => self.load_xml_schema(&relative_path)?,
+                "bsd" => self.load_binary_schema(&relative_path)?,
+                "xml" => self.load_nodeset(&relative_path)?,
                 _ => {}
             }
         }
         Ok(())
     }
 
+    /// Check if all dependencies are satisfied, meaning that
+    /// for each NodeSet2 xml file, their dependent nodesets and
+    /// XML schema files are present.
     pub fn validate(&self) -> Result<(), CodeGenError> {
         for nodeset in &self.nodesets.items {
             nodeset.validate(self)?;
@@ -106,7 +116,8 @@ impl SchemaCache {
         Ok(())
     }
 
-    pub fn auto_load_schemas(&mut self, path: &str) -> Result<(), CodeGenError> {
+    /// Automatically load schemas at the given path.
+    pub fn auto_load_schemas(&mut self, path: &Path) -> Result<(), CodeGenError> {
         let path_buf = Path::new(&self.root_path).join(path);
         let path: &Path = path_buf.as_ref();
         if path.is_dir() {
@@ -134,39 +145,47 @@ impl SchemaCache {
         Ok(())
     }
 
-    pub fn load_nodeset(&mut self, file_path: &str) -> Result<(), CodeGenError> {
+    /// Load a NodeSet2.xml file from the given path, and add it to the cache.
+    pub fn load_nodeset(&mut self, file_path: &Path) -> Result<(), CodeGenError> {
         let nodeset = NodeSetInput::load(&self.root_path, file_path)?;
-        let idx = self.nodesets.insert(nodeset.uri.clone(), nodeset);
+        let idx = self.nodesets.insert(nodeset.uri().to_owned(), nodeset);
         self.nodesets.add_file_aliases(file_path, idx);
         Ok(())
     }
 
-    pub fn load_binary_schema(&mut self, file_path: &str) -> Result<(), CodeGenError> {
+    /// Load a binary schema (.bsd) file from the given path, and add it to the cache.
+    pub fn load_binary_schema(&mut self, file_path: &Path) -> Result<(), CodeGenError> {
         let schema = BinarySchemaInput::load(&self.root_path, file_path)?;
-        let idx = self.binary_schemas.insert(schema.namespace.clone(), schema);
+        let idx = self
+            .binary_schemas
+            .insert(schema.namespace().to_owned(), schema);
         self.binary_schemas.add_file_aliases(file_path, idx);
         Ok(())
     }
-
-    pub fn load_xml_schema(&mut self, file_path: &str) -> Result<(), CodeGenError> {
+    /// Load an XML schema (.xsd) file from the given path, and add it to the cache.
+    pub fn load_xml_schema(&mut self, file_path: &Path) -> Result<(), CodeGenError> {
         let schema = XmlSchemaInput::load(&self.root_path, file_path)?;
-        let idx = self.xml_schemas.insert(schema.namespace.clone(), schema);
+        let idx = self
+            .xml_schemas
+            .insert(schema.namespace().to_owned(), schema);
         self.xml_schemas.add_file_aliases(file_path, idx);
         Ok(())
     }
-
+    /// Get a NodeSet2 file with a key, which may be path, filename, or namespace.
     pub fn get_nodeset(&self, key: &str) -> Result<&NodeSetInput, CodeGenError> {
         self.nodesets
             .get(key)
             .ok_or_else(|| CodeGenError::other(format!("Missing required nodeset with key {key}")))
     }
 
+    /// Get a Binary schema (.bsd) file with a key, which may be path, filename, or namespace.
     pub fn get_binary_schema(&self, key: &str) -> Result<&BinarySchemaInput, CodeGenError> {
         self.binary_schemas.get(key).ok_or_else(|| {
             CodeGenError::other(format!("Missing required binary schema with key {key}"))
         })
     }
 
+    /// Get an XML schema (.xsd) file with a key, which may be path, filename, or namespace.
     pub fn get_xml_schema(&self, key: &str) -> Result<&XmlSchemaInput, CodeGenError> {
         self.xml_schemas.get(key).ok_or_else(|| {
             CodeGenError::other(format!("Missing required xml schema with key {key}"))

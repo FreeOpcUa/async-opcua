@@ -8,7 +8,10 @@ mod encoding_ids;
 mod gen;
 mod loaders;
 
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+};
 
 pub use base_constants::*;
 pub use encoding_ids::EncodingIds;
@@ -32,7 +35,7 @@ pub struct TypeCodeGenTarget {
     /// Reference to the input file, which needs to be added to the input list.
     pub file: String,
     /// Output directory.
-    pub output_dir: String,
+    pub output_dir: PathBuf,
     #[serde(default)]
     /// List of type names to ignore.
     pub ignore: Vec<String>,
@@ -69,7 +72,7 @@ impl Default for TypeCodeGenTarget {
     fn default() -> Self {
         Self {
             file: String::new(),
-            output_dir: String::new(),
+            output_dir: PathBuf::new(),
             ignore: Vec::new(),
             types_import_map: HashMap::new(),
             default_excluded: HashSet::new(),
@@ -106,7 +109,7 @@ pub fn generate_types(
 
     info!(
         "Found {} raw elements in the type dictionary.",
-        input.xml.elements.len()
+        input.xml().elements.len()
     );
     let type_loader = BsdTypeLoader::new(
         target
@@ -116,12 +119,12 @@ pub fn generate_types(
             .chain(base_ignored_types())
             .collect(),
         base_native_type_mappings(),
-        &input.xml,
+        input.xml(),
     )?;
     let target_namespace = type_loader.target_namespace();
     let types = type_loader
         .load_types()
-        .map_err(|e| e.in_file(&input.path))?;
+        .map_err(|e| e.in_file(input.path().to_string_lossy()))?;
     info!("Loaded {} types", types.len());
 
     generate_types_inner(target, target_namespace, types, HashMap::new())
@@ -149,15 +152,17 @@ pub fn generate_types_nodeset(
         input,
         preferred_locale,
     );
-    let target_namespace = input.uri.clone();
+    let target_namespace = input.uri().to_owned();
     let types = type_loader.load_types(cache)?;
     info!("Loaded {} types", types.len());
 
     let mut namespace_to_import_path = HashMap::new();
     for dependent_nodeset in &target.dependent_nodesets {
         let dep_input = cache.get_nodeset(&dependent_nodeset.file)?;
-        namespace_to_import_path
-            .insert(dep_input.uri.clone(), dependent_nodeset.import_path.clone());
+        namespace_to_import_path.insert(
+            dep_input.uri().to_owned(),
+            dependent_nodeset.import_path.clone(),
+        );
     }
 
     generate_types_inner(target, target_namespace, types, namespace_to_import_path)

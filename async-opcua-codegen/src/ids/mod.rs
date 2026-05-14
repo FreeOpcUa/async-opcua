@@ -2,21 +2,24 @@
 //! This is currently quite simple, we may want to extend it in the future,
 //! and perhaps support generating node ID enums from NodeSet2 files as well.
 
-use std::fs::File;
+use std::{
+    fs::File,
+    path::{Path, PathBuf},
+};
 
 use crate::CodeGenError;
 use gen::{parse, render};
 
 mod gen;
 
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 /// Code generation target for generating node ID enums from
 /// a node ID CSV.
 pub struct NodeIdCodeGenTarget {
     /// Relative path to the node ID CSV.
-    pub file_path: String,
+    pub file_path: PathBuf,
     /// File to write the generated code to.
-    pub output_file: String,
+    pub output_file: PathBuf,
     /// Type name, used if the CSV file has only two columns.
     /// If the CSV file has three columns, this is not needed.
     pub type_name: Option<String>,
@@ -28,11 +31,15 @@ pub struct NodeIdCodeGenTarget {
 
 pub fn generate_node_ids(
     target: &NodeIdCodeGenTarget,
-    root_path: &str,
+    root_path: &Path,
 ) -> Result<syn::File, CodeGenError> {
-    let file = File::open(format!("{}/{}", root_path, target.file_path))
+    let file = File::open(root_path.join(&target.file_path))
         .map_err(|e| CodeGenError::io("Failed to open node ID file", e))?;
-    let data = parse(file, &target.file_path, target.type_name.as_deref())?;
+    let data = parse(
+        file,
+        &target.file_path.to_string_lossy(),
+        target.type_name.as_deref(),
+    )?;
     let mut pairs = data.into_iter().collect::<Vec<_>>();
     pairs.sort_by(|a, b| a.0.cmp(&b.0));
     let mut items = Vec::new();

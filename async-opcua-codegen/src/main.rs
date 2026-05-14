@@ -36,14 +36,7 @@ async-opcua-codegen [config].yml
     let config: CodeGenConfig =
         serde_yaml::from_str(&config_text).expect("Failed to parse config file");
 
-    let mut path_str = root_path
-        .to_str()
-        .expect("Config file path must be a valid UTF-8 string");
-    if path_str.is_empty() {
-        path_str = ".";
-    }
-
-    run_codegen(&config, path_str)?;
+    run_codegen(&config, root_path)?;
 
     Ok(())
 }

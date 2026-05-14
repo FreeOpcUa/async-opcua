@@ -8,7 +8,7 @@
 mod gen;
 mod value;
 
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 pub use gen::{NodeGenMethod, NodeSetCodeGenerator};
 use opcua_xml::schema::xml_schema::{XsdFileItem, XsdFileType};
@@ -44,7 +44,7 @@ pub struct NodeSetCodeGenTarget {
     /// A reference to the input schema, which must be defined in the `inputs` list.
     pub file: String,
     /// The root path to output generated code to.
-    pub output_dir: String,
+    pub output_dir: PathBuf,
     /// Maximum number of nodes per generated file.
     /// Setting this too high or low can impact compile times.
     pub max_nodes_per_file: usize,
@@ -76,7 +76,7 @@ pub(crate) fn make_type_dict(
         let xsd_file = cache.get_xml_schema(&file.file)?;
         let path: Path = parse_str(&file.root_path)?;
 
-        for it in &xsd_file.xml.items {
+        for it in &xsd_file.xml().items {
             let (ty, name) = match it {
                 XsdFileItem::SimpleType(i) => {
                     if let Some(name) = i.name.clone() {
@@ -164,13 +164,13 @@ pub fn generate_target(
     preferred_locale: &str,
     types: &HashMap<String, XsdTypeWithPath>,
 ) -> Result<Vec<NodeSetChunk>, CodeGenError> {
-    let type_info = input.get_type_names()?;
+    let type_info = input.get_type_info()?;
 
     let mut generator =
         NodeSetCodeGenerator::new(preferred_locale, &input.aliases, types, type_info)?;
 
-    let mut fns = Vec::with_capacity(input.xml.nodes.len());
-    for node in &input.xml.nodes {
+    let mut fns = Vec::with_capacity(input.xml().nodes.len());
+    for node in &input.xml().nodes {
         fns.push(
             generator
                 .generate_item(node)
@@ -232,14 +232,14 @@ pub fn make_root_module(
     });
 
     let mut namespace_adds = quote! {};
-    for (idx, ns) in input.namespaces.iter().enumerate() {
+    for (idx, ns) in input.namespaces().iter().enumerate() {
         let idx = idx as u16;
         namespace_adds.extend(quote! {
             map.add_namespace(#ns, #idx);
         });
     }
 
-    let own_ns = &input.uri;
+    let own_ns = input.uri();
     let namespace_out = quote! {
         #own_ns.to_owned(),
     };

@@ -1,6 +1,6 @@
 [package]
 name = "async-opcua-codegen"
-version = "0.14.0"
+version = "0.18.0"
 edition = "2021"
 description = "OPC UA code generation library"
 authors = ["Einar Omang <einar@omang.com>"]

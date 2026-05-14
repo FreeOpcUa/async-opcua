@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    path::{Path, PathBuf},
     sync::OnceLock,
 };
 
@@ -21,43 +22,56 @@ use crate::{
 use super::SchemaCache;
 
 #[derive(Debug, Clone, Default)]
+/// Parsed encoding IDs for a data type.
 pub struct RawEncodingIds {
+    /// The XML encoding ID, if present.
     pub xml: Option<ParsedNodeId>,
+    /// The binary encoding ID, if present.
     pub binary: Option<ParsedNodeId>,
+    /// The JSON encoding ID, if present.
     pub json: Option<ParsedNodeId>,
+    /// The data type ID, if present.
     pub data_type: Option<ParsedNodeId>,
 }
 
 #[derive(Debug, Clone)]
+/// Information about a data type loaded from a nodeset file.
 pub struct TypeInfo {
+    /// Name of the type.
     pub name: String,
+    /// Namespace the type belongs to.
     pub namespace: String,
+    /// Whether the type is abstract.
     pub is_abstract: bool,
+    /// Data type definition, if present.
     pub definition: Option<DataTypeDefinition>,
+    /// Raw encoding IDs for the type.
     pub encoding_ids: RawEncodingIds,
 }
 
 impl TypeInfo {
+    /// Whether this type has a binary encoding at all.
     pub fn has_encoding(&self) -> bool {
         self.encoding_ids.binary.is_some()
     }
 }
 
+/// A parsed and loaded NodeSet2 XML file.
 pub struct NodeSetInput {
-    pub xml: UANodeSet,
-    pub aliases: HashMap<String, String>,
-    pub uri: String,
-    pub required_model_uris: Vec<String>,
+    xml: UANodeSet,
+    pub(crate) aliases: HashMap<String, String>,
+    uri: String,
+    required_model_uris: Vec<String>,
     /// Map from numeric ID to documentation link.
-    pub referenced_xsd_schemas: HashSet<String>,
-    pub path: String,
-    pub namespaces: Vec<String>,
-    // Index of the model URI in the namespace array.
-    pub own_namespace_index: u16,
+    referenced_xsd_schemas: HashSet<String>,
+    path: PathBuf,
+    namespaces: Vec<String>,
+    /// Index of the model URI in the namespace array.
+    own_namespace_index: u16,
     // A little weird to store it as a result, but since it can fail it's actually the semantically
     // correct thing. It's a cached computation result.
-    pub parent_type_ids: OnceLock<Result<HashMap<ParsedNodeId, ParsedNodeId>, CodeGenError>>,
-    pub type_info: OnceLock<Result<HashMap<ParsedNodeId, TypeInfo>, CodeGenError>>,
+    parent_type_ids: OnceLock<Result<HashMap<ParsedNodeId, ParsedNodeId>, CodeGenError>>,
+    type_info: OnceLock<Result<HashMap<ParsedNodeId, TypeInfo>, CodeGenError>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -68,6 +82,37 @@ enum EncodingKind {
 }
 
 impl NodeSetInput {
+    /// The loaded XML file as an async-opcua-xml UANodeSet.
+    pub fn xml(&self) -> &UANodeSet {
+        &self.xml
+    }
+
+    /// The namespace URI of this nodeset.
+    pub fn uri(&self) -> &str {
+        &self.uri
+    }
+
+    /// The XSD schemas referenced by this nodeset.
+    pub fn referenced_xsd_schemas(&self) -> &HashSet<String> {
+        &self.referenced_xsd_schemas
+    }
+
+    /// Relative path to the file this was loaded from.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// The list of namespaces in this XSD file.
+    pub fn namespaces(&self) -> &[String] {
+        &self.namespaces
+    }
+
+    /// The index of this nodeset's namespace URI in its own
+    /// namespace array.
+    pub fn own_namespace_index(&self) -> u16 {
+        self.own_namespace_index
+    }
+
     fn find_referenced_xsd_schemas_rec(obj: &XmlElement, map: &mut HashSet<String>) {
         if let Some(attr) = obj.attributes.get("xmlns") {
             map.insert(attr.clone());
@@ -121,11 +166,13 @@ impl NodeSetInput {
         res
     }
 
+    /// Resolve a node ID string from this nodeset. If the value is in the aliases
+    /// array, return the resolved alias, otherwise just returns the value itself.
     pub fn resolve_alias<'a>(&'a self, alias: &'a str) -> &'a str {
         self.aliases.get(alias).map(|s| s.as_str()).unwrap_or(alias)
     }
 
-    pub fn parse(data: &str, path: &str) -> Result<Self, CodeGenError> {
+    pub(super) fn parse(data: &str, path: &Path) -> Result<Self, CodeGenError> {
         let nodeset = load_nodeset2_file(data)?;
 
         let Some(nodeset) = nodeset.node_set else {
@@ -190,13 +237,14 @@ impl NodeSetInput {
         })
     }
 
-    pub fn load(root_path: &str, file_path: &str) -> Result<Self, CodeGenError> {
-        let data = std::fs::read_to_string(format!("{root_path}/{file_path}"))
-            .map_err(|e| CodeGenError::io(&format!("Failed to read file {file_path}"), e))?;
-        Self::parse(&data, file_path).map_err(|e| e.in_file(file_path))
+    pub(super) fn load(root_path: &Path, file_path: &Path) -> Result<Self, CodeGenError> {
+        let data = std::fs::read_to_string(root_path.join(file_path)).map_err(|e| {
+            CodeGenError::io(&format!("Failed to read file {}", file_path.display()), e)
+        })?;
+        Self::parse(&data, file_path).map_err(|e| e.in_file(file_path.display().to_string()))
     }
 
-    pub fn validate(&self, cache: &SchemaCache) -> Result<(), CodeGenError> {
+    pub(super) fn validate(&self, cache: &SchemaCache) -> Result<(), CodeGenError> {
         for uri in &self.required_model_uris {
             cache.get_nodeset(uri)?;
         }
@@ -207,6 +255,9 @@ impl NodeSetInput {
         Ok(())
     }
 
+    /// Get a map from child node ID to parent node ID by traversing the type hierarchy.
+    /// The result is memoized, so this can be called multiple times without recomputing
+    /// the result.
     pub fn get_parent_type_ids(
         &self,
     ) -> Result<&HashMap<ParsedNodeId, ParsedNodeId>, CodeGenError> {
@@ -248,7 +299,10 @@ impl NodeSetInput {
             .map_err(|e| e.clone())
     }
 
-    pub fn get_type_names(&self) -> Result<&HashMap<ParsedNodeId, TypeInfo>, CodeGenError> {
+    /// Get a map from node ID to type info.
+    /// The result is memoized, so this can be called multiple times without recomputing
+    /// the result.
+    pub fn get_type_info(&self) -> Result<&HashMap<ParsedNodeId, TypeInfo>, CodeGenError> {
         self.type_info
             .get_or_init(|| {
                 let mut res = HashMap::new();

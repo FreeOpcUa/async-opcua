@@ -14,7 +14,7 @@ mod config;
 mod error;
 mod events;
 mod ids;
-mod input;
+pub mod input;
 mod nodeset;
 mod types;
 mod utils;
@@ -41,9 +41,7 @@ pub use crate::types::{ExternalIds, ExternalType, TypeCodeGenTarget};
 pub use config::CodeGenSource;
 use events::generate_events;
 
-fn join_paths(root: &str, path: &str) -> PathBuf {
-    let root = Path::new(root);
-    let path = Path::new(path);
+fn join_paths(root: &Path, path: &Path) -> PathBuf {
     if path.is_absolute() {
         path.to_path_buf()
     } else {
@@ -54,8 +52,8 @@ fn join_paths(root: &str, path: &str) -> PathBuf {
 /// Write all generated items to the specified directory. Each generated item maps to one
 /// file. Returns the list of generated modules, which need to be added to the mod.rs file.
 fn write_to_directory<T: GeneratedOutput>(
-    dir: &str,
-    root_path: &str,
+    dir: &Path,
+    root_path: &Path,
     header: &str,
     mut items: Vec<T>,
 ) -> Result<Vec<String>, CodeGenError> {
@@ -65,7 +63,7 @@ fn write_to_directory<T: GeneratedOutput>(
     let _ = std::fs::remove_dir_all(&dir_path);
 
     std::fs::create_dir_all(&dir_path)
-        .map_err(|e| CodeGenError::io(&format!("Failed to create dir {}", dir), e))?;
+        .map_err(|e| CodeGenError::io(&format!("Failed to create dir {}", dir.display()), e))?;
 
     items.sort_by_key(|a| a.name().to_lowercase());
 
@@ -76,11 +74,19 @@ fn write_to_directory<T: GeneratedOutput>(
         let mut file = std::fs::File::options()
             .append(true)
             .create(true)
-            .open(dir_path.join(format!("{module}.rs")))
-            .map_err(|e| CodeGenError::io(&format!("Failed to open file {dir}/{module}.rs"), e))?;
+            .open(path)
+            .map_err(|e| {
+                CodeGenError::io(
+                    &format!("Failed to open file {}/{module}.rs", dir.display()),
+                    e,
+                )
+            })?;
         if is_new {
             file.write_all(header.as_bytes()).map_err(|e| {
-                CodeGenError::io(&format!("Failed to write to file {dir}/{module}.rs"), e)
+                CodeGenError::io(
+                    &format!("Failed to write to file {}/{module}.rs", dir.display()),
+                    e,
+                )
             })?;
         }
         // Do it this way so that we keep a stable ordering.
@@ -89,7 +95,10 @@ fn write_to_directory<T: GeneratedOutput>(
         }
         file.write_all(prettyplease::unparse(&gen.to_file()).as_bytes())
             .map_err(|e| {
-                CodeGenError::io(&format!("Failed to write to file {dir}/{module}.rs"), e)
+                CodeGenError::io(
+                    &format!("Failed to write to file {}/{module}.rs", dir.display()),
+                    e,
+                )
             })?;
     }
 
@@ -98,8 +107,8 @@ fn write_to_directory<T: GeneratedOutput>(
 
 /// Write a `mod.rs` file to the specified directory, with the specified header and content.
 pub fn write_module_file(
-    dir: &str,
-    root_path: &str,
+    dir: &Path,
+    root_path: &Path,
     header: &str,
     file: File,
 ) -> Result<(), CodeGenError> {
@@ -108,13 +117,23 @@ pub fn write_module_file(
         .append(true)
         .create(true)
         .open(mod_path)
-        .map_err(|e| CodeGenError::io(&format!("Failed to open file {dir}/mod.rs"), e))?;
-    mod_file
-        .write_all(header.as_bytes())
-        .map_err(|e| CodeGenError::io(&format!("Failed to write to file {dir}/mod.rs"), e))?;
+        .map_err(|e| {
+            CodeGenError::io(&format!("Failed to open file {}/mod.rs", dir.display()), e)
+        })?;
+    mod_file.write_all(header.as_bytes()).map_err(|e| {
+        CodeGenError::io(
+            &format!("Failed to write to file {}/mod.rs", dir.display()),
+            e,
+        )
+    })?;
     mod_file
         .write_all(prettyplease::unparse(&file).as_bytes())
-        .map_err(|e| CodeGenError::io(&format!("Failed to write to file {dir}/mod.rs"), e))?;
+        .map_err(|e| {
+            CodeGenError::io(
+                &format!("Failed to write to file {}/mod.rs", dir.display()),
+                e,
+            )
+        })?;
 
     Ok(())
 }
@@ -145,7 +164,7 @@ fn make_header(path: &str, extra: &[&str]) -> String {
 /// `root_path` is the path the config is loaded from. Paths in the code gen config are
 /// relative to this, which means that we can generate the same output files independent of where
 /// the codegen binary is called from.
-pub fn run_codegen(config: &CodeGenConfig, root_path: &str) -> Result<(), CodeGenError> {
+pub fn run_codegen(config: &CodeGenConfig, root_path: &Path) -> Result<(), CodeGenError> {
     let cache = load_schemas(root_path, &config.sources)?;
 
     for target in &config.targets {
@@ -155,16 +174,23 @@ pub fn run_codegen(config: &CodeGenConfig, root_path: &str) -> Result<(), CodeGe
                 let (types, target_namespace, path) = if t.file.ends_with(".xml") {
                     let input = cache.get_nodeset(&t.file)?;
                     let r = generate_types_nodeset(t, input, &cache, &config.preferred_locale)
-                        .map_err(|e| e.in_file(&input.path))?;
-                    (r.0, r.1, input.path.clone())
+                        .map_err(|e| e.in_file(input.path().to_string_lossy()))?;
+                    (r.0, r.1, input.path().to_owned())
                 } else {
                     let input = cache.get_binary_schema(&t.file)?;
                     let r = generate_types(t, input).map_err(|e| e.in_file(&t.file))?;
-                    (r.0, r.1, input.path.clone())
+                    (r.0, r.1, input.path().to_owned())
                 };
-                info!("Writing {} types to {}", types.len(), t.output_dir);
+                info!(
+                    "Writing {} types to {}",
+                    types.len(),
+                    t.output_dir.display()
+                );
 
-                let header = make_header(&path, &[&config.extra_header, &t.extra_header]);
+                let header = make_header(
+                    &path.to_string_lossy(),
+                    &[&config.extra_header, &t.extra_header],
+                );
 
                 let mut object_ids: Vec<_> = types
                     .iter()
@@ -184,38 +210,49 @@ pub fn run_codegen(config: &CodeGenConfig, root_path: &str) -> Result<(), CodeGe
                 }
 
                 let modules = write_to_directory(&t.output_dir, root_path, &header, types)
-                    .map_err(|e| e.in_file(&path))?;
+                    .map_err(|e| e.in_file(path.to_string_lossy()))?;
                 let mut module_file = create_module_file(modules);
                 module_file
                     .items
                     .extend(type_loader_impl(&object_ids, &target_namespace));
 
                 write_module_file(&t.output_dir, root_path, &header, module_file)
-                    .map_err(|e| e.in_file(&path))?;
+                    .map_err(|e| e.in_file(path.to_string_lossy()))?;
             }
             CodeGenTarget::Nodes(n) => {
                 info!("Running node set code generation for {}", n.file);
                 let node_set = cache.get_nodeset(&n.file)?;
-                info!("Found {} nodes in node set", node_set.xml.nodes.len());
+                info!("Found {} nodes in node set", node_set.xml().nodes.len());
 
-                let types =
-                    make_type_dict(&n.types, &cache).map_err(|e| e.in_file(&node_set.path))?;
+                let types = make_type_dict(&n.types, &cache)
+                    .map_err(|e| e.in_file(node_set.path().to_string_lossy()))?;
 
                 let chunks = generate_target(n, node_set, &config.preferred_locale, &types)
-                    .map_err(|e| e.in_file(&node_set.path))?;
+                    .map_err(|e| e.in_file(node_set.path().to_string_lossy()))?;
                 let module_file = make_root_module(&chunks, n, node_set)
-                    .map_err(|e| e.in_file(&node_set.path))?;
+                    .map_err(|e| e.in_file(node_set.path().to_string_lossy()))?;
 
-                info!("Writing {} files to {}", chunks.len() + 1, n.output_dir);
+                info!(
+                    "Writing {} files to {}",
+                    chunks.len() + 1,
+                    n.output_dir.display()
+                );
 
-                let header = make_header(&node_set.path, &[&config.extra_header, &n.extra_header]);
+                let header = make_header(
+                    &node_set.path().to_string_lossy(),
+                    &[&config.extra_header, &n.extra_header],
+                );
 
                 write_to_directory(&n.output_dir, root_path, &header, chunks)?;
                 write_module_file(&n.output_dir, root_path, &header, module_file)?;
             }
             CodeGenTarget::Ids(n) => {
-                info!("Running node ID code generation for {}", n.file_path);
-                let gen = generate_node_ids(n, root_path).map_err(|e| e.in_file(&n.file_path))?;
+                info!(
+                    "Running node ID code generation for {}",
+                    n.file_path.display()
+                );
+                let gen = generate_node_ids(n, root_path)
+                    .map_err(|e| e.in_file(n.file_path.to_string_lossy()))?;
                 let out_path = join_paths(root_path, &n.output_file);
                 let mut file = std::fs::File::options()
                     .create(true)
@@ -223,49 +260,64 @@ pub fn run_codegen(config: &CodeGenConfig, root_path: &str) -> Result<(), CodeGe
                     .write(true)
                     .open(out_path)
                     .map_err(|e| {
-                        CodeGenError::io(&format!("Failed to open file {}", n.output_file), e)
+                        CodeGenError::io(
+                            &format!("Failed to open file {}", n.output_file.display()),
+                            e,
+                        )
                     })?;
-                let header = make_header(&n.file_path, &[&config.extra_header, &n.extra_header]);
+                let header = make_header(
+                    &n.file_path.to_string_lossy(),
+                    &[&config.extra_header, &n.extra_header],
+                );
                 file.write_all(header.as_bytes()).map_err(|e| {
-                    CodeGenError::io(&format!("Failed to write to file {}", n.output_file), e)
+                    CodeGenError::io(
+                        &format!("Failed to write to file {}", n.output_file.display()),
+                        e,
+                    )
                 })?;
                 file.write_all(prettyplease::unparse(&gen).as_bytes())
                     .map_err(|e| {
-                        CodeGenError::io(&format!("Failed to write to file {}", n.output_file), e)
+                        CodeGenError::io(
+                            &format!("Failed to write to file {}", n.output_file.display()),
+                            e,
+                        )
                     })?;
             }
             CodeGenTarget::Events(events_target) => {
-                info!("Generating events to {}", events_target.output_dir);
+                info!(
+                    "Generating events to {}",
+                    events_target.output_dir.display()
+                );
 
                 let node_set = cache.get_nodeset(&events_target.file)?;
                 let types = make_type_dict(&events_target.types, &cache)
-                    .map_err(|e| e.in_file(&node_set.path))?;
+                    .map_err(|e| e.in_file(node_set.path().to_string_lossy()))?;
 
                 let mut sets = Vec::with_capacity(events_target.dependent_nodesets.len() + 1);
                 for nodeset_file in &events_target.dependent_nodesets {
                     info!("Loading dependent node set {}", nodeset_file.file);
                     let set = cache.get_nodeset(&nodeset_file.file)?;
-                    sets.push((&set.xml, nodeset_file.import_path.as_str()));
+                    sets.push((set.xml(), nodeset_file.import_path.as_str()));
                 }
 
-                sets.push((&node_set.xml, ""));
+                sets.push((node_set.xml(), ""));
 
                 let events = generate_events(&sets, &types)?;
                 let cnt = events.len();
                 let header = make_header(
-                    &node_set.path,
+                    &node_set.path().to_string_lossy(),
                     &[&config.extra_header, &events_target.extra_header],
                 );
                 let modules =
                     write_to_directory(&events_target.output_dir, root_path, &header, events)
-                        .map_err(|e| e.in_file(&node_set.path))?;
+                        .map_err(|e| e.in_file(node_set.path().to_string_lossy()))?;
                 write_module_file(
                     &events_target.output_dir,
                     root_path,
                     &header,
                     create_module_file(modules),
                 )
-                .map_err(|e| e.in_file(&node_set.path))?;
+                .map_err(|e| e.in_file(node_set.path().to_string_lossy()))?;
                 info!("Created {} event types", cnt);
             }
         }
@@ -295,7 +347,7 @@ pub enum CodeGenTarget {
     Events(EventsCodeGenTarget),
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 /// Top level code-gen config.
 pub struct CodeGenConfig {
     #[serde(default)]

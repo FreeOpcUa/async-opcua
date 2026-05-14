@@ -1,7 +1,7 @@
 //! Codegen for generating event types, which all implement the `Event` trait,
 //! making it possible to publish them in a server.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 use collector::{NodeToCollect, TypeCollector};
 use gen::{EventGenerator, EventItem};
@@ -23,7 +23,7 @@ pub struct EventsCodeGenTarget {
     /// A reference to the input schema, which must be defined in the `inputs` list.
     pub file: String,
     /// The root directory to place the generated event types in.
-    pub output_dir: String,
+    pub output_dir: PathBuf,
     #[serde(default)]
     /// Extra header to add to the events target.
     pub extra_header: String,

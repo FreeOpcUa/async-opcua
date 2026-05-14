@@ -247,9 +247,9 @@ impl<'a> NodeSetTypeLoader<'a> {
         id: &ParsedNodeId,
         cache: &SchemaCache,
     ) -> Result<TypeInfo, CodeGenError> {
-        let r = if id.namespace == self.input.own_namespace_index {
+        let r = if id.namespace == self.input.own_namespace_index() {
             self.input
-                .get_type_names()?
+                .get_type_info()?
                 .get(id)
                 .cloned()
                 .ok_or_else(|| {
@@ -258,22 +258,23 @@ impl<'a> NodeSetTypeLoader<'a> {
         } else {
             let ns = self
                 .input
-                .namespaces
+                .namespaces()
                 .get(id.namespace as usize)
                 .ok_or_else(|| {
                     CodeGenError::other(format!(
                         "Namespace {} not found in schema {}",
-                        id.namespace, self.input.uri
+                        id.namespace,
+                        self.input.uri()
                     ))
                 })?;
 
             let schema = cache.get_nodeset(ns)?;
             let next_id = ParsedNodeId {
                 value: id.value.clone(),
-                namespace: schema.own_namespace_index,
+                namespace: schema.own_namespace_index(),
             };
             schema
-                .get_type_names()?
+                .get_type_info()?
                 .get(&next_id)
                 .cloned()
                 .ok_or_else(|| {
@@ -318,7 +319,7 @@ impl<'a> NodeSetTypeLoader<'a> {
             }
         }
 
-        if id.namespace == schema.own_namespace_index {
+        if id.namespace == schema.own_namespace_index() {
             let Some(parent) = schema.get_parent_type_ids()?.get(id) else {
                 return Err(CodeGenError::other(format!(
                     "Did not find parent of data type {orig}. Last known parent is {id}"
@@ -327,19 +328,20 @@ impl<'a> NodeSetTypeLoader<'a> {
             Self::find_builtin_type_variant(orig, parent, schema, cache)
         } else {
             let ns = schema
-                .namespaces
+                .namespaces()
                 .get(id.namespace as usize)
                 .ok_or_else(|| {
                     CodeGenError::other(format!(
                         "Namespace {} not found in schema {}",
-                        id.namespace, schema.uri
+                        id.namespace,
+                        schema.uri()
                     ))
                 })?;
 
             let schema = cache.get_nodeset(ns)?;
             let next_id = ParsedNodeId {
                 value: id.value.clone(),
-                namespace: schema.own_namespace_index,
+                namespace: schema.own_namespace_index(),
             };
             let Some(parent) = schema.get_parent_type_ids()?.get(&next_id) else {
                 return Err(CodeGenError::other(format!(
@@ -353,7 +355,7 @@ impl<'a> NodeSetTypeLoader<'a> {
 
     pub fn load_types(self, cache: &SchemaCache) -> Result<Vec<LoadedType>, CodeGenError> {
         let mut res = Vec::new();
-        for node in &self.input.xml.nodes {
+        for node in &self.input.xml().nodes {
             let UANode::DataType(d) = node else {
                 continue;
             };

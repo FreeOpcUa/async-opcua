@@ -795,6 +795,7 @@ impl X509 {
     /// (20 bytes) in length and is sent in some secure conversation headers.
     ///
     /// The thumbprint might be used by the server / client for look-up purposes.
+pub fn thumbprint(&self) -> Thumbprint {
     pub fn thumbprint(&self) -> Thumbprint {
         use sha1::Digest;
         use x509_cert::der::Encode;

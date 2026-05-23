@@ -131,13 +131,20 @@ pub struct SimpleNodeManagerImpl {
 impl InMemoryNodeManagerImpl for SimpleNodeManagerImpl {
     async fn init(&self, _address_space: &mut AddressSpace, context: ServerContext) {
         self.samplers.run(
-            Duration::from_millis(
-                context
+            Duration::from_micros(
+                // If this is set too low the server will just spin at 100% CPU. Cap it at
+                // 100 ms. In custom node manager implementations using the sync sampler
+                // users are free to set whatever minimum they want.
+                // In practice, if you need sampling rates much lower than 100ms you
+                // will likely want a different mechanism than the sync sampler.
+                (context
                     .info
                     .config
                     .limits
                     .subscriptions
-                    .min_sampling_interval_ms as u64,
+                    .min_sampling_interval_ms
+                    .max(100.0)
+                    * 1000.0) as u64,
             ),
             context.subscriptions.clone(),
         );

@@ -10,6 +10,7 @@
 //! It is for example used in the input and output argument Properties for Methods.
 //! Its elements are described in Table 28.
 
+use std::cmp::Ordering;
 use std::io::{Read, Write};
 
 use crate::{
@@ -107,10 +108,21 @@ impl BinaryDecodable for Argument {
         let data_type = NodeId::decode(stream, ctx)?;
         let value_rank = i32::decode(stream, ctx)?;
         // Decode array dimensions
-        let array_dimensions: Option<Vec<u32>> = BinaryDecodable::decode(stream, ctx)?;
-        if let Some(ref array_dimensions) = array_dimensions {
-            if value_rank > 0 && value_rank as usize != array_dimensions.len() {
-                return Err(Error::decoding(format!("The array dimensions {} of the Argument should match value rank {} and they don't", array_dimensions.len(), value_rank)));
+        let mut array_dimensions: Option<Vec<u32>> = BinaryDecodable::decode(stream, ctx)?;
+        if value_rank > 0 {
+            if let Some(array_dimensions) = array_dimensions.as_mut() {
+                let expected_rank = value_rank as usize;
+                match array_dimensions.len().cmp(&expected_rank) {
+                    Ordering::Less => {
+                        // If fewer dimensions are provided than rank, pad with 0 to reach rank length
+                        array_dimensions.resize(expected_rank, 0);
+                    }
+                    Ordering::Equal => {}
+                    Ordering::Greater => {
+                        // More dimensions than value_rank is internally inconsistent
+                        return Err(Error::decoding(format!("The array dimensions {} of the Argument should match value rank {} and they don't", array_dimensions.len(), value_rank)));
+                    }
+                }
             }
         }
         let description = LocalizedText::decode(stream, ctx)?;

@@ -499,6 +499,45 @@ fn argument() {
     });
 }
 
+#[test]
+fn argument_decode_pads_dimensions_when_shorter_than_rank() {
+    // sending value_rank=3, array_dimensions=[]
+    // should decode to value_rank=3, array_dimensions=[0, 0, 0]
+    let ctx_f = ContextOwned::default();
+    let ctx = ctx_f.context();
+    let mut stream = Cursor::new(Vec::new());
+    UAString::from("arg").encode(&mut stream, &ctx).unwrap();
+    NodeId::null().encode(&mut stream, &ctx).unwrap();
+    3i32.encode(&mut stream, &ctx).unwrap();
+    Some::<Vec<u32>>(vec![]).encode(&mut stream, &ctx).unwrap();
+    LocalizedText::new("foo", "bar")
+        .encode(&mut stream, &ctx)
+        .unwrap();
+    let mut stream = Cursor::new(stream.into_inner());
+    let decoded = Argument::decode(&mut stream, &ctx).unwrap();
+    assert_eq!(decoded.value_rank, 3);
+    assert_eq!(decoded.array_dimensions, Some(vec![0, 0, 0]));
+}
+#[test]
+fn argument_decode_errors_when_dimensions_exceed_rank() {
+    // sending value_rank=2, array_dimensions=[5, 6, 7]
+    // should fail to decode
+    let ctx_f = ContextOwned::default();
+    let ctx = ctx_f.context();
+    // Build binary payload manually so decode sees len > value_rank.
+    let mut stream = Cursor::new(Vec::new());
+    UAString::from("arg").encode(&mut stream, &ctx).unwrap();
+    NodeId::null().encode(&mut stream, &ctx).unwrap();
+    1i32.encode(&mut stream, &ctx).unwrap();
+    Some(vec![1u32, 2u32]).encode(&mut stream, &ctx).unwrap();
+    LocalizedText::new("foo", "bar")
+        .encode(&mut stream, &ctx)
+        .unwrap();
+    let mut stream = Cursor::new(stream.into_inner());
+    let err = Argument::decode(&mut stream, &ctx).unwrap_err();
+    assert_eq!(err.status(), StatusCode::BadDecodingError);
+}
+
 // test decoding of an null array  null != empty!
 #[test]
 fn null_array() {

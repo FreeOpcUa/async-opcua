@@ -49,6 +49,8 @@ where
 
                         if let Some(item) = item {
                             self.on_event(notif.event_fields, item);
+                        } else {
+                            tracing::warn!("Received event for unknown monitored item {}", notif.client_handle);
                         }
                     }
                 },

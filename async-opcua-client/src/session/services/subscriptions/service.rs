@@ -2194,6 +2194,17 @@ impl Session {
             .await
         {
             Ok(r) => {
+                if let (Some(sent), Some(results)) = (acks.as_ref(), r.results.as_ref()) {
+                    for (ack, status) in sent.iter().zip(results.iter()) {
+                        if !status.is_good() && *status != StatusCode::BadSequenceNumberUnknown {
+                            tracing::warn!(
+                                "Server rejected ack for subscription {} seq {}: {status}",
+                                ack.subscription_id,
+                                ack.sequence_number,
+                            );
+                        }
+                    }
+                }
                 let mut subscription_state = trace_lock!(self.subscription_state);
                 subscription_state.handle_notification(r.subscription_id, r.notification_message);
                 Ok(r.more_notifications)

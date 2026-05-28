@@ -1553,9 +1553,14 @@ impl Session {
             .send(&self.channel)
             .await?;
 
+        let revised_publishing_interval = if response.revised_publishing_interval.is_finite() {
+            response.revised_publishing_interval.max(0.0).floor() as u64
+        } else {
+            0
+        };
         let subscription = Subscription::new(
             response.subscription_id,
-            Duration::from_millis(response.revised_publishing_interval.max(0.0).floor() as u64),
+            Duration::from_millis(revised_publishing_interval),
             response.revised_lifetime_count,
             response.revised_max_keep_alive_count,
             max_notifications_per_publish,

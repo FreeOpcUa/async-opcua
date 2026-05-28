@@ -320,7 +320,7 @@ impl NodeSet2Import {
             refs.references.iter().find_map(|rf| {
                 // HasSubtype, IsForward=false
                 let type_id = self.make_node_id(&rf.reference_type, ctx).ok()?;
-                if type_id == NodeId::from(ReferenceTypeId::HasSubtype) && !rf.is_forward {
+                if type_id == ReferenceTypeId::HasSubtype && !rf.is_forward {
                     self.make_node_id(&rf.node_id, ctx).ok()
                 } else {
                     None
@@ -503,16 +503,15 @@ impl NodeSet2Import {
 
         for reference in references.iter() {
             // 1. Check for HasSubtype (Inward)
-            if reference.type_id == NodeId::from(ReferenceTypeId::HasSubtype) && !reference.is_forward {
+            if reference.type_id == ReferenceTypeId::HasSubtype && !reference.is_forward {
                 // You want the NodeId of the target (the supertype), not the type_id of the reference
-                base_data_type = reference.target_id.clone().into(); 
+                base_data_type = reference.target_id.clone(); 
             } 
             // 2. Check for HasEncoding (Forward)
-            else if reference.type_id == NodeId::from(ReferenceTypeId::HasEncoding) {
-                if binary_encoding_types.contains(&reference.target_id.to_string()) {
-                    default_encoding = reference.target_id.clone().into();
+            else if reference.type_id == ReferenceTypeId::HasEncoding
+                && binary_encoding_types.contains(&reference.target_id.to_string()) {
+                    default_encoding = reference.target_id.clone();
                 }
-            }
         }
 
 
@@ -595,18 +594,15 @@ impl NodeSetImport for NodeSet2Import {
         // so we can set the default_encoding_id correctly when loading DataType nodes in the second pass.
         let mut binary_encoding_types: HashSet<String> = HashSet::new();
         for raw_node in self.file.nodes.iter() {
-            match raw_node {
-                opcua_xml::schema::ua_node_set::UANode::Object(node) => {
-                    if let Some(references) = &node.base.base.references {
-                        references.references.iter().for_each(| reference | {
-                            if reference.reference_type.0 == "HasTypeDefinition" && reference.node_id.0 == "i=76" && raw_node.base().browse_name.0 == "Default Binary" {
-                                binary_encoding_types.insert(raw_node.base().node_id.0.clone());
-                            }
-                        });
-                    }
-                },
-                _ => { }
-            };
+            if let opcua_xml::schema::ua_node_set::UANode::Object(node) = raw_node {
+                if let Some(references) = &node.base.base.references {
+                    references.references.iter().for_each(| reference | {
+                        if reference.reference_type.0 == "HasTypeDefinition" && reference.node_id.0 == "i=76" && raw_node.base().browse_name.0 == "Default Binary" {
+                            binary_encoding_types.insert(raw_node.base().node_id.0.clone());
+                        }
+                    });
+                }
+            }
         }
 
         Box::new(self.file.nodes.iter().filter_map(move |raw_node| {

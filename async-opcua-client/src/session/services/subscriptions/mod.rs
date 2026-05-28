@@ -536,6 +536,11 @@ impl<'a> PreInsertMonitoredItems<'a> {
         for (temp_id, item) in self.temp_ids.iter_mut().zip(results.iter()) {
             if item.result.status_code.is_good() {
                 temp_id.created = true;
+                let filter = if item.result.filter_result.is_null() {
+                    item.requested_parameters.filter.clone()
+                } else {
+                    item.result.filter_result.clone()
+                };
                 items_to_create.push(CreateMonitoredItem {
                     id: item.result.monitored_item_id,
                     client_handle: item.requested_parameters.client_handle,
@@ -544,7 +549,7 @@ impl<'a> PreInsertMonitoredItems<'a> {
                     monitoring_mode: item.monitoring_mode,
                     queue_size: item.result.revised_queue_size,
                     sampling_interval: item.result.revised_sampling_interval,
-                    filter: item.requested_parameters.filter.clone(),
+                    filter,
                 });
             }
         }

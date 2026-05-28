@@ -6,7 +6,7 @@ use opcua_core::{
         buffer::SendBuffer,
         secure_channel::SecureChannel,
         tcp_codec::{Message, TcpCodec},
-        tcp_types::{AcknowledgeMessage, HelloMessage, ReverseHelloMessage},
+        tcp_types::{AcknowledgeMessage, HelloMessage, ReverseHelloMessage, MIN_CHUNK_SIZE},
     },
     sync::RwLock,
     trace_read_lock, RequestMessage,
@@ -128,12 +128,7 @@ where
         })?;
         match reader.next().await {
             Some(Ok(Message::Acknowledge(ack))) => {
-                if ack.send_buffer_size > hello.receive_buffer_size {
-                    tracing::warn!("Acknowledged send buffer size is greater than receive buffer size in hello message!")
-                }
-                if ack.receive_buffer_size > hello.send_buffer_size {
-                    tracing::warn!("Acknowledged receive buffer size is greater than send buffer size in hello message!")
-                }
+                validate_acknowledge(&hello, &ack)?;
                 tracing::trace!("Received acknowledgement: {:?}", ack);
                 Ok(ack)
             }
@@ -409,4 +404,61 @@ pub async fn wait_for_reverse_hello<R: AsyncRead + Unpin>(
             "Connection closed while waiting for ReverseHello",
         )),
     }
+}
+
+fn validate_acknowledge(hello: &HelloMessage, ack: &AcknowledgeMessage) -> Result<(), Error> {
+    if ack.protocol_version > hello.protocol_version {
+        return Err(Error::new(
+            StatusCode::BadProtocolVersionUnsupported,
+            format!(
+                "Server returned protocol_version {}, higher than client's {}",
+                ack.protocol_version, hello.protocol_version
+            ),
+        ));
+    }
+    let min = MIN_CHUNK_SIZE as u32;
+    if ack.send_buffer_size < min || ack.receive_buffer_size < min {
+        return Err(Error::new(
+            StatusCode::BadTcpInternalError,
+            format!(
+                "ACK buffer sizes (send={}, recv={}) below minimum chunk size {}",
+                ack.send_buffer_size, ack.receive_buffer_size, MIN_CHUNK_SIZE
+            ),
+        ));
+    }
+    if ack.send_buffer_size > hello.receive_buffer_size {
+        tracing::warn!(
+            "ACK send_buffer_size {} exceeds client receive_buffer_size {}; will use client value",
+            ack.send_buffer_size,
+            hello.receive_buffer_size
+        );
+    }
+    if ack.receive_buffer_size > hello.send_buffer_size {
+        tracing::warn!(
+            "ACK receive_buffer_size {} exceeds client send_buffer_size {}; will use client value",
+            ack.receive_buffer_size,
+            hello.send_buffer_size
+        );
+    }
+    if hello.max_chunk_count != 0
+        && ack.max_chunk_count != 0
+        && ack.max_chunk_count > hello.max_chunk_count
+    {
+        tracing::warn!(
+            "ACK max_chunk_count {} exceeds client value {}; will use client value",
+            ack.max_chunk_count,
+            hello.max_chunk_count
+        );
+    }
+    if hello.max_message_size != 0
+        && ack.max_message_size != 0
+        && ack.max_message_size > hello.max_message_size
+    {
+        tracing::warn!(
+            "ACK max_message_size {} exceeds client value {}; will use client value",
+            ack.max_message_size,
+            hello.max_message_size
+        );
+    }
+    Ok(())
 }

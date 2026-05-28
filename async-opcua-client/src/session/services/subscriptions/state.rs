@@ -201,11 +201,11 @@ impl SubscriptionState {
     pub(crate) fn set_monitoring_mode(
         &mut self,
         subscription_id: u32,
-        montiored_item_ids: &[u32],
+        monitored_item_ids: &[u32],
         monitoring_mode: MonitoringMode,
     ) {
         if let Some(ref mut subscription) = self.subscriptions.get_mut(&subscription_id) {
-            for id in montiored_item_ids {
+            for id in monitored_item_ids {
                 if let Some(item) = subscription
                     .monitored_items
                     .get_mut(&super::MonitoredItemId::Server(*id))

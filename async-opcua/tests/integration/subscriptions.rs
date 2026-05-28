@@ -889,6 +889,113 @@ async fn test_manual_republish() {
 }
 
 #[tokio::test]
+async fn test_keep_alive_sequence_not_retransmitted() {
+    let (tester, nm, session) = setup().await;
+
+    let id = nm.inner().next_node_id();
+    nm.inner().add_node(
+        nm.address_space(),
+        tester.handle.type_tree(),
+        VariableBuilder::new(&id, "TestVar1", "TestVar1")
+            .value(-1)
+            .data_type(DataTypeId::Int32)
+            .access_level(AccessLevel::CURRENT_READ)
+            .user_access_level(AccessLevel::CURRENT_READ)
+            .build()
+            .into(),
+        &ObjectId::ObjectsFolder.into(),
+        &ReferenceTypeId::Organizes.into(),
+        Some(&VariableTypeId::BaseDataVariableType.into()),
+        Vec::new(),
+    );
+
+    let res = CreateSubscription::new(&session)
+        .publishing_interval(Duration::from_millis(100))
+        .max_lifetime_count(100)
+        .max_keep_alive_count(1)
+        .max_notifications_per_publish(1000)
+        .priority(0)
+        .publishing_enabled(true)
+        .send(session.channel())
+        .await
+        .unwrap();
+    let sub_id = res.subscription_id;
+
+    let res = CreateMonitoredItems::new(sub_id, &session)
+        .item(MonitoredItemCreateRequest {
+            item_to_monitor: ReadValueId {
+                node_id: id.clone(),
+                attribute_id: AttributeId::Value as u32,
+                ..Default::default()
+            },
+            monitoring_mode: opcua::types::MonitoringMode::Reporting,
+            requested_parameters: MonitoringParameters {
+                sampling_interval: 0.0,
+                queue_size: 10,
+                discard_oldest: true,
+                ..Default::default()
+            },
+        })
+        .timestamps_to_return(TimestampsToReturn::Both)
+        .send(session.channel())
+        .await
+        .unwrap();
+
+    assert_eq!(res.results.len(), 1);
+    assert_eq!(res.results[0].result.status_code, StatusCode::Good);
+
+    let data_publish = Publish::new(&session)
+        .timeout(Duration::from_millis(500))
+        .send(session.channel())
+        .await
+        .unwrap();
+
+    assert_eq!(data_publish.subscription_id, sub_id);
+    let data_sequence_number = data_publish.notification_message.sequence_number;
+    assert!(data_publish
+        .notification_message
+        .notification_data
+        .is_some());
+    assert_eq!(
+        data_publish.available_sequence_numbers,
+        Some(vec![data_sequence_number])
+    );
+
+    let keep_alive_publish = Publish::new(&session)
+        .timeout(Duration::from_millis(1500))
+        .send(session.channel())
+        .await
+        .unwrap();
+
+    assert_eq!(keep_alive_publish.subscription_id, sub_id);
+    assert!(keep_alive_publish
+        .notification_message
+        .notification_data
+        .is_none());
+
+    let keep_alive_sequence_number = keep_alive_publish.notification_message.sequence_number;
+    assert_eq!(keep_alive_sequence_number, data_sequence_number + 1);
+    assert_eq!(
+        keep_alive_publish.available_sequence_numbers,
+        Some(vec![data_sequence_number])
+    );
+    assert!(!keep_alive_publish
+        .available_sequence_numbers
+        .as_ref()
+        .unwrap()
+        .contains(&keep_alive_sequence_number));
+
+    let republish_keep_alive = Republish::new(sub_id, keep_alive_sequence_number, &session)
+        .timeout(Duration::from_millis(500))
+        .send(session.channel())
+        .await;
+    assert_eq!(
+        republish_keep_alive.unwrap_err(),
+        StatusCode::BadMessageNotAvailable
+    );
+}
+
+#[tokio::test]
 async fn test_event_subscriptions() {
     let (tester, _nm, session) = setup().await;
 

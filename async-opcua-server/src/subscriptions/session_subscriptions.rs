@@ -532,6 +532,27 @@ impl SessionSubscriptions {
         }
     }
 
+    fn enqueue_retransmission_notification(
+        retransmission_queue: &mut VecDeque<NonAckedPublish>,
+        max_retransmission_queue_len: usize,
+        subscription_id: u32,
+        notification: &NotificationMessage,
+    ) {
+        // Keep-alive messages intentionally reuse the next sequence number, so they must not
+        // enter the retransmission queue.
+        if notification.notification_data.is_none() {
+            return;
+        }
+
+        if retransmission_queue.len() >= max_retransmission_queue_len {
+            retransmission_queue.pop_front();
+        }
+        retransmission_queue.push_back(NonAckedPublish {
+            message: notification.clone(),
+            subscription_id,
+        });
+    }
+
     pub(crate) fn enqueue_publish_request(
         &mut self,
         now: &DateTimeUtc,
@@ -643,20 +664,19 @@ impl SessionSubscriptions {
             responses.into_iter().enumerate()
         {
             let is_last = idx == num_responses - 1;
+            let max_retransmission_queue_len = self.max_publish_requests() * 2;
 
-            if self.retransmission_queue.len() >= self.max_publish_requests() * 2 {
-                self.retransmission_queue.pop_front();
-            }
-            self.retransmission_queue.push_back(NonAckedPublish {
-                message: notification.clone(),
+            Self::enqueue_retransmission_notification(
+                &mut self.retransmission_queue,
+                max_retransmission_queue_len,
                 subscription_id,
-            });
+                &notification,
+            );
 
             // Take note of the available sequence numbers after we have added the NonAckedPublish
             // to the list. This makes sure that the available sequence numbers list is not empty and contains
             // the NonAckedPublish we just added.
             let available_sequence_numbers = self.available_sequence_numbers(subscription_id);
-
             let _ = publish_request.response.send(
                 PublishResponse {
                     response_header: ResponseHeader::new_timestamped_service_result(
@@ -746,6 +766,7 @@ impl SessionSubscriptions {
         if self.retransmission_queue.is_empty() {
             return None;
         }
+
         // Find the notifications matching this subscription id in the retransmission queue
         let sequence_numbers: Vec<u32> = self
             .retransmission_queue
@@ -793,5 +814,44 @@ impl SessionSubscriptions {
     /// Get a reference to the session this subscription collection is owned by.
     pub fn session(&self) -> &Arc<RwLock<Session>> {
         &self.session
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::VecDeque;
+
+    use opcua_types::{DateTime, NotificationMessage, StatusCode};
+
+    use super::{NonAckedPublish, SessionSubscriptions};
+
+    #[test]
+    fn keep_alive_messages_are_not_queued_for_retransmission() {
+        let mut retransmission_queue = VecDeque::<NonAckedPublish>::new();
+
+        SessionSubscriptions::enqueue_retransmission_notification(
+            &mut retransmission_queue,
+            2,
+            1,
+            &NotificationMessage::keep_alive(7, DateTime::now()),
+        );
+
+        assert!(retransmission_queue.is_empty());
+    }
+
+    #[test]
+    fn status_change_messages_are_queued_for_retransmission() {
+        let mut retransmission_queue = VecDeque::<NonAckedPublish>::new();
+
+        SessionSubscriptions::enqueue_retransmission_notification(
+            &mut retransmission_queue,
+            2,
+            1,
+            &NotificationMessage::status_change(7, DateTime::now(), StatusCode::BadTimeout),
+        );
+
+        assert_eq!(retransmission_queue.len(), 1);
+        assert_eq!(retransmission_queue[0].subscription_id, 1);
+        assert_eq!(retransmission_queue[0].message.sequence_number, 7);
     }
 }

@@ -2364,9 +2364,17 @@ impl Session {
                 let triggered_items = item.triggered_items();
                 if !triggered_items.is_empty() {
                     let links_to_add = triggered_items.iter().copied().collect::<Vec<u32>>();
-                    let _ = self
+                    if let Err(e) = self
                         .set_triggering(subscription_id, item.id(), links_to_add.as_slice(), &[])
-                        .await;
+                        .await
+                    {
+                        session_warn!(
+                            self,
+                            "Failed to re-apply triggering links for monitored item {} on recreated subscription {}: {e}",
+                            item.id(),
+                            subscription_id,
+                        );
+                    }
                 }
             }
         }

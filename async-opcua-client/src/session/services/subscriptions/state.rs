@@ -238,7 +238,7 @@ impl SubscriptionState {
             .values()
             .map(|v| {
                 v.publishing_interval()
-                    .checked_mul(v.lifetime_count())
+                    .checked_mul(v.max_keep_alive_count())
                     .unwrap_or(Duration::MAX)
             })
             .min()

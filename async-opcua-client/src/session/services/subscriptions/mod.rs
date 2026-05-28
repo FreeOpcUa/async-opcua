@@ -48,6 +48,7 @@ pub(crate) struct ModifyMonitoredItem {
     pub id: u32,
     pub sampling_interval: f64,
     pub queue_size: u32,
+    pub filter: ExtensionObject,
 }
 
 #[derive(Debug, Clone)]
@@ -125,6 +126,10 @@ impl MonitoredItem {
 
     pub(crate) fn set_queue_size(&mut self, value: usize) {
         self.queue_size = value;
+    }
+
+    pub(crate) fn set_filter(&mut self, filter: ExtensionObject) {
+        self.filter = filter;
     }
 
     pub(crate) fn set_monitoring_mode(&mut self, monitoring_mode: MonitoringMode) {
@@ -310,6 +315,7 @@ impl Subscription {
             {
                 monitored_item.set_sampling_interval(i.sampling_interval);
                 monitored_item.set_queue_size(i.queue_size as usize);
+                monitored_item.set_filter(i.filter.clone());
             }
         });
     }

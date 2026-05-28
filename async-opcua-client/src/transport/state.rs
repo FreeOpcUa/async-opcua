@@ -4,7 +4,7 @@ use std::{
 };
 
 use tokio::sync::mpsc::error::SendTimeoutError;
-use tracing::{debug, trace, trace_span};
+use tracing::{debug, error, trace, trace_span};
 
 use crate::transport::OutgoingMessage;
 use arc_swap::ArcSwap;
@@ -180,6 +180,14 @@ impl SecureChannelState {
         debug!("Setting transport's security token");
         {
             let mut secure_channel = trace_write_lock!(self.secure_channel);
+            let existing_channel_id = secure_channel.secure_channel_id();
+            if existing_channel_id != 0 && existing_channel_id != security_token.channel_id {
+                error!(
+                    "OpenSecureChannel response changed channel_id from {} to {}",
+                    existing_channel_id, security_token.channel_id
+                );
+                return Err(StatusCode::BadSecureChannelIdInvalid);
+            }
             secure_channel.set_client_offset(**self.client_offset.load());
             secure_channel.set_security_token(security_token);
 

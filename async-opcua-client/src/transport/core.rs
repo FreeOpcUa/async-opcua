@@ -302,6 +302,11 @@ impl TransportState {
                 // right now. If we wait, we risk new messages using the new encryption keys arriving before
                 // we've updated the secure channel.
                 if let ResponseMessage::OpenSecureChannel(msg) = &message {
+                    let service_result = msg.response_header.service_result;
+                    if !service_result.is_good() {
+                        error!("OpenSecureChannel response failed, request_id = {req_id}: {service_result}");
+                        return Err(service_result);
+                    }
                     self.channel_state.end_issue_or_renew_secure_channel(msg).inspect_err(|e| {
                         error!("Failed to process OpenSecureChannel response, request_id = {req_id}: {e}");
                     })?;

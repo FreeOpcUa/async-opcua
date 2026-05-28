@@ -221,10 +221,16 @@ impl SubscriptionState {
         subscription_id: u32,
         notification: NotificationMessage,
     ) {
-        self.add_acknowledgement(subscription_id, notification.sequence_number);
+        let has_data = notification
+            .notification_data
+            .as_ref()
+            .is_some_and(|v| !v.is_empty());
+        if has_data {
+            self.add_acknowledgement(subscription_id, notification.sequence_number);
+        }
         if let Some(sub) = self.subscriptions.get_mut(&subscription_id) {
             sub.on_notification(notification);
-        } else {
+        } else if has_data {
             tracing::warn!(
                 "Received notification for unknown subscription {}",
                 subscription_id

@@ -19,15 +19,16 @@ use opcua_core::{handle::AtomicHandle, sync::Mutex, trace_lock, ResponseMessage}
 use opcua_types::{
     AttributeId, CreateMonitoredItemsRequest, CreateSubscriptionRequest,
     CreateSubscriptionResponse, DeleteMonitoredItemsRequest, DeleteMonitoredItemsResponse,
-    DeleteSubscriptionsRequest, DeleteSubscriptionsResponse, DiagnosticInfo, IntegerId,
-    ModifyMonitoredItemsRequest, ModifyMonitoredItemsResponse, ModifySubscriptionRequest,
-    ModifySubscriptionResponse, MonitoredItemCreateRequest, MonitoredItemCreateResult,
-    MonitoredItemModifyRequest, MonitoredItemModifyResult, MonitoringMode, MonitoringParameters,
-    NodeId, NotificationMessage, PublishRequest, PublishResponse, ReadValueId, RepublishRequest,
-    RepublishResponse, ResponseHeader, SetMonitoringModeRequest, SetMonitoringModeResponse,
-    SetPublishingModeRequest, SetPublishingModeResponse, SetTriggeringRequest,
-    SetTriggeringResponse, StatusCode, SubscriptionAcknowledgement, TimestampsToReturn,
-    TransferResult, TransferSubscriptionsRequest, TransferSubscriptionsResponse,
+    DeleteSubscriptionsRequest, DeleteSubscriptionsResponse, DiagnosticInfo, ExtensionObject,
+    IntegerId, ModifyMonitoredItemsRequest, ModifyMonitoredItemsResponse,
+    ModifySubscriptionRequest, ModifySubscriptionResponse, MonitoredItemCreateRequest,
+    MonitoredItemCreateResult, MonitoredItemModifyRequest, MonitoredItemModifyResult,
+    MonitoringMode, MonitoringParameters, NodeId, NotificationMessage, PublishRequest,
+    PublishResponse, ReadValueId, RepublishRequest, RepublishResponse, ResponseHeader,
+    SetMonitoringModeRequest, SetMonitoringModeResponse, SetPublishingModeRequest,
+    SetPublishingModeResponse, SetTriggeringRequest, SetTriggeringResponse, StatusCode,
+    SubscriptionAcknowledgement, TimestampsToReturn, TransferResult, TransferSubscriptionsRequest,
+    TransferSubscriptionsResponse,
 };
 use tracing::{debug_span, enabled, Instrument};
 
@@ -1971,10 +1972,10 @@ impl Session {
                 return Err(StatusCode::BadSubscriptionIdInvalid);
             }
         }
-        let ids = items_to_modify
+        let id_and_filter: Vec<(u32, ExtensionObject)> = items_to_modify
             .iter()
-            .map(|i| i.monitored_item_id)
-            .collect::<Vec<_>>();
+            .map(|i| (i.monitored_item_id, i.requested_parameters.filter.clone()))
+            .collect();
         let results = ModifyMonitoredItems::new(subscription_id, self)
             .timestamps_to_return(timestamps_to_return)
             .items_to_modify(items_to_modify.to_vec())
@@ -1983,13 +1984,21 @@ impl Session {
             .results
             .unwrap_or_default();
 
-        let items_to_modify = ids
+        let items_to_modify = id_and_filter
             .iter()
             .zip(results.iter())
-            .map(|(id, r)| ModifyMonitoredItem {
-                id: *id,
-                queue_size: r.revised_queue_size,
-                sampling_interval: r.revised_sampling_interval,
+            .map(|((id, requested_filter), r)| {
+                let filter = if r.filter_result.is_null() {
+                    requested_filter.clone()
+                } else {
+                    r.filter_result.clone()
+                };
+                ModifyMonitoredItem {
+                    id: *id,
+                    queue_size: r.revised_queue_size,
+                    sampling_interval: r.revised_sampling_interval,
+                    filter,
+                }
             })
             .collect::<Vec<ModifyMonitoredItem>>();
         {

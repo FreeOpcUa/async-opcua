@@ -591,7 +591,7 @@ impl ClientConfig {
 
     /// Create a new default client config.
     pub fn new(application_name: impl Into<String>, application_uri: impl Into<String>) -> Self {
-        let mut pki_dir = std::env::current_dir().unwrap();
+        let mut pki_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         pki_dir.push(Self::PKI_DIR);
 
         ClientConfig {

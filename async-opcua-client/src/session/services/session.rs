@@ -205,6 +205,10 @@ impl UARequest for CreateSession<'_> {
             let security_policy = channel.security_policy();
 
             if security_policy != SecurityPolicy::None {
+                if self.endpoint.server_certificate != response.server_certificate {
+                    error!("Server certificate in CreateSession response does not match channel certificate");
+                    return Err(StatusCode::BadCertificateInvalid);
+                }
                 if let Ok(server_certificate) =
                     opcua_crypto::X509::from_byte_string(&response.server_certificate)
                 {

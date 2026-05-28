@@ -1,15 +1,22 @@
 use std::{
-    path::Path, str::FromStr, sync::{Arc, OnceLock}
+    path::Path,
+    str::FromStr,
+    sync::{Arc, OnceLock},
 };
 
 use hashbrown::{HashMap, HashSet};
 use opcua_types::{
-    Context, DataTypeDefinition, DataTypeId, DataValue, DecodingOptions, EnumDefinition, EnumField, Error, LocalizedText, NodeClass, NodeId, QualifiedName, ReferenceTypeId, StructureDefinition, StructureField, StructureType, TypeLoader, TypeLoaderCollection, Variant
+    Context, DataTypeDefinition, DataTypeId, DataValue, DecodingOptions, EnumDefinition, EnumField,
+    Error, LocalizedText, NodeClass, NodeId, QualifiedName, ReferenceTypeId, StructureDefinition,
+    StructureField, StructureType, TypeLoader, TypeLoaderCollection, Variant,
 };
 use opcua_xml::{
-    XmlError, load_nodeset2_file, schema::ua_node_set::{
-        self, ArrayDimensions, ListOfReferences, UADataType, UAMethod, UANodeSet, UAObject, UAObjectType, UAReferenceType, UAVariable, UAVariableType, UAView
-    }
+    load_nodeset2_file,
+    schema::ua_node_set::{
+        self, ArrayDimensions, ListOfReferences, UADataType, UAMethod, UANodeSet, UAObject,
+        UAObjectType, UAReferenceType, UAVariable, UAVariableType, UAView,
+    },
+    XmlError,
 };
 use regex::Regex;
 use tracing::warn;
@@ -236,8 +243,9 @@ impl NodeSet2Import {
             }))
         } else {
             // Start with base fields (bottom-up)
-            let (fields, any_optional) = self.collect_structure_fields(ctx, def,&base_data_type, file_data_types)?;
-            
+            let (fields, any_optional) =
+                self.collect_structure_fields(ctx, def, &base_data_type, file_data_types)?;
+
             Ok(DataTypeDefinition::Structure(StructureDefinition {
                 default_encoding_id,
                 base_data_type,
@@ -261,12 +269,13 @@ impl NodeSet2Import {
         file_data_types: &HashMap<NodeId, &opcua_xml::schema::ua_node_set::UANode>,
     ) -> Result<(Vec<StructureField>, bool), Error> {
         // Determine path up until i=22 (Structure)
-        let mut path_elements: Vec<&opcua_xml::schema::ua_node_set::DataTypeDefinition> = Vec::new();
+        let mut path_elements: Vec<&opcua_xml::schema::ua_node_set::DataTypeDefinition> =
+            Vec::new();
         path_elements.push(def);
 
         // Move upwards
         let mut current_id = parent_id.clone();
-        
+
         while current_id != DataTypeId::Structure {
             // Find the base DataType node in the loaded file
             let parent_node = file_data_types.get(&current_id).and_then(|n| {
@@ -316,14 +325,18 @@ impl NodeSet2Import {
                     // This field is overridden by a child, skip it
                     continue;
                 }
-                
+
                 any_optional = any_optional || field.is_optional;
                 fields.push(StructureField {
                     name: field.name.clone().into(),
-                    description: self.select_localized_text(&field.descriptions).unwrap_or_default(),
+                    description: self
+                        .select_localized_text(&field.descriptions)
+                        .unwrap_or_default(),
                     data_type: self.make_node_id(&field.data_type, ctx).unwrap_or_default(),
                     value_rank: field.value_rank.0,
-                    array_dimensions: self.make_array_dimensions(&field.array_dimensions).unwrap_or_default(),
+                    array_dimensions: self
+                        .make_array_dimensions(&field.array_dimensions)
+                        .unwrap_or_default(),
                     max_string_length: field.max_string_length as u32,
                     is_optional: field.is_optional,
                 });
@@ -481,27 +494,33 @@ impl NodeSet2Import {
         })
     }
 
-    fn make_data_type(&self, ctx: &Context<'_>, node: &UADataType, binary_encoding_types: &HashSet<String>, file_data_types: &HashMap<NodeId, &opcua_xml::schema::ua_node_set::UANode>) -> Result<ImportedItem, Error> {
+    fn make_data_type(
+        &self,
+        ctx: &Context<'_>,
+        node: &UADataType,
+        binary_encoding_types: &HashSet<String>,
+        file_data_types: &HashMap<NodeId, &opcua_xml::schema::ua_node_set::UANode>,
+    ) -> Result<ImportedItem, Error> {
         let base = self.make_base(ctx, &node.base.base, NodeClass::DataType)?;
-       
+
         let mut base_data_type = NodeId::null();
         let mut default_encoding = NodeId::null();
-        
+
         let references = self.make_references(ctx, &base, &node.base.base.references)?;
 
         for reference in references.iter() {
             // 1. Check for HasSubtype (Inward)
             if reference.type_id == ReferenceTypeId::HasSubtype && !reference.is_forward {
                 // You want the NodeId of the target (the supertype), not the type_id of the reference
-                base_data_type = reference.target_id.clone(); 
-            } 
+                base_data_type = reference.target_id.clone();
+            }
             // 2. Check for HasEncoding (Forward)
             else if reference.type_id == ReferenceTypeId::HasEncoding
-                && binary_encoding_types.contains(&reference.target_id.to_string()) {
-                    default_encoding = reference.target_id.clone();
-                }
+                && binary_encoding_types.contains(&reference.target_id.to_string())
+            {
+                default_encoding = reference.target_id.clone();
+            }
         }
-
 
         Ok(ImportedItem {
             references,
@@ -511,7 +530,13 @@ impl NodeSet2Import {
                 node.definition
                     .as_ref()
                     .map(|v| {
-                        self.make_data_type_def(v, default_encoding, base_data_type, file_data_types, ctx)
+                        self.make_data_type_def(
+                            v,
+                            default_encoding,
+                            base_data_type,
+                            file_data_types,
+                            ctx,
+                        )
                     })
                     .transpose()?,
             )
@@ -578,28 +603,32 @@ impl NodeSetImport for NodeSet2Import {
         );
         ctx.set_aliases(&self.aliases);
 
-        // First pass to find all DataTypes that have a HasEncoding reference to a "Default Binary" encoding object, 
+        // First pass to find all DataTypes that have a HasEncoding reference to a "Default Binary" encoding object,
         // so we can set the default_encoding_id correctly when loading DataType nodes in the second pass.
         // Likewise, we would need to collect all defined data types upfront.
         let mut binary_encoding_types: HashSet<String> = HashSet::new();
-        let mut file_data_types: HashMap<NodeId, &opcua_xml::schema::ua_node_set::UANode> = HashMap::new();
+        let mut file_data_types: HashMap<NodeId, &opcua_xml::schema::ua_node_set::UANode> =
+            HashMap::new();
         for raw_node in self.file.nodes.iter() {
             match raw_node {
                 opcua_xml::schema::ua_node_set::UANode::Object(node) => {
                     if let Some(references) = &node.base.base.references {
-                        references.references.iter().for_each(| reference | {
-                            if reference.reference_type.0 == "HasTypeDefinition" && reference.node_id.0 == "i=76" && raw_node.base().browse_name.0 == "Default Binary" {
+                        references.references.iter().for_each(|reference| {
+                            if reference.reference_type.0 == "HasTypeDefinition"
+                                && reference.node_id.0 == "i=76"
+                                && raw_node.base().browse_name.0 == "Default Binary"
+                            {
                                 binary_encoding_types.insert(raw_node.base().node_id.0.clone());
                             }
                         });
                     }
-                },
+                }
                 opcua_xml::schema::ua_node_set::UANode::DataType(node) => {
                     if let Ok(node_id) = self.make_node_id(&node.base.base.node_id, &ctx) {
                         file_data_types.insert(node_id, raw_node);
                     }
-                },
-                _ => { }
+                }
+                _ => {}
             }
         }
 
@@ -643,8 +672,8 @@ impl NodeSetImport for NodeSet2Import {
 #[cfg(test)]
 mod tests {
     use opcua_types::{
-        DataTypeDefinition, DataTypeId, EUInformation, ExtensionObject, LocalizedText, NamespaceMap, 
-        NodeId, NodeSetNamespaceMapper, QualifiedName, StructureType, Variant,
+        DataTypeDefinition, DataTypeId, EUInformation, ExtensionObject, LocalizedText,
+        NamespaceMap, NodeId, NodeSetNamespaceMapper, QualifiedName, StructureType, Variant,
     };
 
     use crate::{NodeBase, NodeSetImport, NodeType};
@@ -699,13 +728,13 @@ mod tests {
   </UAVariable>
 </UANodeSet>"#;
 
-        /// Abstract base struct + derived struct inheritance:
-        ///   AbstractBaseStruct (ns=1;i=110, IsAbstract=true) → Structure (i=22)
-        ///   DerivedStruct (ns=1;i=111) → AbstractBaseStruct (ns=1;i=110)
-        ///
-        /// Expected: DerivedStruct's resolved fields are
-        ///   [BaseField, DerivedField1, DerivedField2].
-        const TEST_ABSTRACT_BASE_STRUCT_INHERITANCE: &str = r#"
+    /// Abstract base struct + derived struct inheritance:
+    ///   AbstractBaseStruct (ns=1;i=110, IsAbstract=true) → Structure (i=22)
+    ///   DerivedStruct (ns=1;i=111) → AbstractBaseStruct (ns=1;i=110)
+    ///
+    /// Expected: DerivedStruct's resolved fields are
+    ///   [BaseField, DerivedField1, DerivedField2].
+    const TEST_ABSTRACT_BASE_STRUCT_INHERITANCE: &str = r#"
 <UANodeSet xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                      xmlns:xsd="http://www.w3.org/2001/XMLSchema"
                      LastModified="2023-12-15T00:00:00Z"
@@ -739,7 +768,7 @@ mod tests {
     </UADataType>
 </UANodeSet>"#;
 
-/// Struct DataType with:
+    /// Struct DataType with:
     ///  - inward HasSubtype  → i=22  (OPC UA "Structure" base type)
     ///  - forward HasEncoding → ns=1;i=11 (a "Default Binary" encoding object)
     /// Expected: base_data_type = i=22, default_encoding_id = ns=1;i=11
@@ -1016,9 +1045,7 @@ mod tests {
         let dt = load_single_datatype(TEST_STRUCT_WITH_BASE_AND_BINARY_ENCODING);
 
         let definition = dt.data_type_definition();
-        let def = definition
-            .as_ref()
-            .expect("Expected a DataTypeDefinition");
+        let def = definition.as_ref().expect("Expected a DataTypeDefinition");
 
         let DataTypeDefinition::Structure(struct_def) = def else {
             panic!("Expected StructureDefinition, got {:?}", def);
@@ -1096,9 +1123,7 @@ mod tests {
         let dt = load_single_datatype(TEST_ENUM_DATATYPE);
 
         let definition = dt.data_type_definition();
-        let def = definition
-            .as_ref()
-            .expect("Expected a DataTypeDefinition");
+        let def = definition.as_ref().expect("Expected a DataTypeDefinition");
 
         let DataTypeDefinition::Enum(enum_def) = def else {
             panic!("Expected EnumDefinition, got {:?}", def);
@@ -1190,7 +1215,11 @@ mod tests {
         let nodes: Vec<_> = import.load(&map).collect();
 
         // Expect both the DataType node and the "Default Binary" Object node
-        assert_eq!(nodes.len(), 2, "Both the DataType and the encoding Object must be loaded");
+        assert_eq!(
+            nodes.len(),
+            2,
+            "Both the DataType and the encoding Object must be loaded"
+        );
 
         let has_encoding_obj = nodes.iter().any(|n| {
             if let NodeType::Object(o) = &n.node {
@@ -1340,5 +1369,3 @@ mod tests {
         assert_eq!(fields[2].name.as_ref(), "DerivedField2");
     }
 }
-
-

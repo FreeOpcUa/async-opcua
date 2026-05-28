@@ -442,6 +442,10 @@ impl PublishLimits {
 
     fn calculate_publish_limits(&mut self) {
         self.min_publish_requests = self.subscriptions * Self::REQUESTS_PER_SUBSCRIPTION;
+        if self.publish_interval.is_zero() {
+            self.max_publish_requests = self.min_publish_requests;
+            return;
+        }
         self.max_publish_requests = (self.message_roundtrip.as_millis() as f32
             / self.publish_interval.as_millis() as f32)
             .ceil() as usize

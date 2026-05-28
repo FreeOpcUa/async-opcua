@@ -236,7 +236,11 @@ impl SubscriptionState {
         self.keep_alive_timeout = self
             .subscriptions
             .values()
-            .map(|v| v.publishing_interval() * v.lifetime_count())
+            .map(|v| {
+                v.publishing_interval()
+                    .checked_mul(v.lifetime_count())
+                    .unwrap_or(Duration::MAX)
+            })
             .min()
     }
 

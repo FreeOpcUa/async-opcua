@@ -582,6 +582,7 @@ impl UARequest for ActivateSession {
             tracing::debug!("activate_session success");
             // trace!("ActivateSessionResponse = {:#?}", response);
             process_service_result(&response.response_header)?;
+            channel.update_from_activated_session(&response.server_nonce)?;
             Ok(*response)
         } else {
             tracing::error!("activate_session failed");

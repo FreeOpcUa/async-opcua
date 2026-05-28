@@ -91,6 +91,14 @@ impl AsyncSecureChannel {
         Ok(())
     }
 
+    pub(crate) fn update_from_activated_session(
+        &self,
+        server_nonce: &ByteString,
+    ) -> Result<(), StatusCode> {
+        let mut secure_channel = trace_write_lock!(self.secure_channel);
+        secure_channel.set_remote_nonce_from_byte_string(server_nonce)
+    }
+
     pub(crate) fn security_policy(&self) -> SecurityPolicy {
         let secure_channel = trace_read_lock!(self.secure_channel);
         secure_channel.security_policy()

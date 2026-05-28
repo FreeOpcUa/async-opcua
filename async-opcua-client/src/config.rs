@@ -141,7 +141,7 @@ impl ClientEndpoint {
 
     /// Returns the security policy for this endpoint.
     pub fn security_policy(&self) -> SecurityPolicy {
-        SecurityPolicy::from_str(&self.security_policy).unwrap()
+        SecurityPolicy::from_str(&self.security_policy).unwrap_or(SecurityPolicy::Unknown)
     }
 }
 
@@ -347,7 +347,8 @@ impl Config for ClientConfig {
             }
             // Check for invalid security policy and modes in endpoints
             self.endpoints.iter().for_each(|(id, e)| {
-                if SecurityPolicy::from_str(&e.security_policy).unwrap() != SecurityPolicy::Unknown
+                if SecurityPolicy::from_str(&e.security_policy).unwrap_or(SecurityPolicy::Unknown)
+                    != SecurityPolicy::Unknown
                 {
                     if MessageSecurityMode::Invalid
                         == MessageSecurityMode::from(e.security_mode.as_ref())

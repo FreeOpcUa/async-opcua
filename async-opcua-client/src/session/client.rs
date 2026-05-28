@@ -598,7 +598,7 @@ impl Client {
         security_mode: MessageSecurityMode,
     ) -> Option<EndpointDescription> {
         if security_policy == SecurityPolicy::Unknown {
-            panic!("Cannot match against unknown security policy");
+            return None;
         }
 
         let mut matching_endpoint = endpoints

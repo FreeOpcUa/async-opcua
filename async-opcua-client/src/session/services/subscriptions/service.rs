@@ -2263,7 +2263,8 @@ impl Session {
     /// either transfer them to this session, or construct them from scratch.
     pub(crate) async fn transfer_subscriptions_from_old_session(&self) {
         let subscription_ids = {
-            let subscription_state = trace_lock!(self.subscription_state);
+            let mut subscription_state = trace_lock!(self.subscription_state);
+            let _stale_acks = subscription_state.take_acknowledgements();
             subscription_state.subscription_ids()
         };
 

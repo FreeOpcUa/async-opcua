@@ -5,6 +5,7 @@ edition = "2021"
 description = "OPC UA tests using an external .NET server"
 authors = ["Einar Omang <einar@omang.com>"]
 license = "MPL-2.0"
+publish = false
 
 [dependencies]
 tokio = { workspace = true }

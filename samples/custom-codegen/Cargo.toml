@@ -2,6 +2,7 @@
 name = "custom-codegen"
 version = "0.1.0"
 edition = "2021"
+publish = false
 
 [features]
 json = ["serde_json", "serde", "serde_with", "async-opcua/json"]

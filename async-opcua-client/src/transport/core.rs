@@ -8,12 +8,12 @@ use opcua_core::{trace_read_lock, RequestMessage, ResponseMessage};
 use tracing::{debug, error, trace, warn};
 
 use opcua_core::comms::buffer::SendBuffer;
-use opcua_core::comms::message_chunk::MessageIsFinalType;
+use opcua_core::comms::message_chunk::{MessageFinalError, MessageIsFinalType};
 use opcua_core::comms::{
     chunker::Chunker, message_chunk::MessageChunk, message_chunk_info::ChunkInfo,
     tcp_codec::Message,
 };
-use opcua_types::{DecodingOptions, Error, SimpleBinaryDecodable, StatusCode, UAString};
+use opcua_types::{Error, StatusCode, UAString};
 
 use crate::transport::state::SecureChannelState;
 use crate::transport::RequestRecv;
@@ -276,14 +276,19 @@ impl TransportState {
                 }
             }
             MessageIsFinalType::FinalError => {
-                let (status, reason) = decode_abort_body(&chunk, &chunk_info, &decoding_options)
-                    .unwrap_or((StatusCode::BadCommunicationError, UAString::null()));
+                let err = match chunk.final_error_body(&chunk_info, &decoding_options) {
+                    Ok(err) => err,
+                    Err(_) => MessageFinalError {
+                        status: StatusCode::BadCommunicationError,
+                        reason: UAString::null(),
+                    },
+                };
                 let message_state = self.message_states.remove(&req_id).unwrap();
                 message_state.span.in_scope(|| {
                     warn!(
-                        "Message marked as final error, request_id = {req_id}, status = {status}, reason = {reason}"
+                        "Message marked as final error, request_id = {req_id}, status = {}, reason = {}", err.status, err.reason
                     );
-                    let _ = message_state.callback.send(Err(Error::new(status, format!("Message marked final error: {reason}")).with_request_id(req_id)));
+                    let _ = message_state.callback.send(Err(Error::new(err.status, format!("Message marked final error: {}", err.reason)).with_request_id(req_id)));
                 });
             }
             MessageIsFinalType::Final => {
@@ -415,18 +420,4 @@ impl TransportState {
 
         status
     }
-}
-
-fn decode_abort_body(
-    chunk: &MessageChunk,
-    chunk_info: &ChunkInfo,
-    decoding_options: &DecodingOptions,
-) -> Option<(StatusCode, UAString)> {
-    let start = chunk_info.body_offset;
-    let end = start.checked_add(chunk_info.body_length)?;
-    let body = chunk.data.get(start..end)?;
-    let mut cursor = std::io::Cursor::new(body);
-    let status = StatusCode::decode(&mut cursor, decoding_options).ok()?;
-    let reason = UAString::decode(&mut cursor, decoding_options).ok()?;
-    Some((status, reason))
 }

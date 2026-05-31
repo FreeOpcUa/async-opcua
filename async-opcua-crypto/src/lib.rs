@@ -105,18 +105,29 @@ pub fn create_signature_data(
     security_policy: SecurityPolicy,
     contained_cert: &ByteString,
     nonce: &ByteString,
-) -> Result<SignatureData, StatusCode> {
+) -> Result<SignatureData, Error> {
     let (algorithm, signature) = match security_policy {
-        SecurityPolicy::Unknown => return Err(StatusCode::BadSecurityPolicyRejected),
+        SecurityPolicy::Unknown => {
+            return Err(Error::new(
+                StatusCode::BadSecurityPolicyRejected,
+                "Cannot create signature for Unknown security policy",
+            ))
+        }
         SecurityPolicy::None => (UAString::null(), ByteString::null()),
         security_policy => {
             if contained_cert.is_null_or_empty() {
                 error!("Null certificate passed to create_signature_data");
-                return Err(StatusCode::BadCertificateInvalid);
+                return Err(Error::new(
+                    StatusCode::BadCertificateInvalid,
+                    "Cannot create signature, missing signing certificate",
+                ));
             }
             if nonce.is_null_or_empty() {
                 error!("Null nonce passed to create_signature_data");
-                return Err(StatusCode::BadNonceInvalid);
+                return Err(Error::new(
+                    StatusCode::BadNonceInvalid,
+                    "Cannot create signature, missing nonce",
+                ));
             }
 
             let data = concat_data_and_nonce(contained_cert.as_ref(), nonce.as_ref());

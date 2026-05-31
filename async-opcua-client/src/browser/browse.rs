@@ -199,8 +199,7 @@ async fn run_browse<R: RequestRetryPolicy>(
                         .nodes_to_browse(items.iter().map(|r| r.request.clone()).collect()),
                     policy,
                 )
-                .await
-                .map_err(|e| Error::new(e, "Browse failed"))?;
+                .await?;
 
             let res = r.results.unwrap_or_default();
             if res.len() != items.len() {
@@ -238,8 +237,7 @@ async fn run_browse<R: RequestRetryPolicy>(
                         .continuation_points(items.iter().map(|r| r.cp.clone()).collect()),
                     policy,
                 )
-                .await
-                .map_err(|e| Error::new(e, "BrowseNext failed"))?;
+                .await?;
 
             let res = r.results.unwrap_or_default();
             if res.len() != items.len() {

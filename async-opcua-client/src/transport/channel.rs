@@ -12,7 +12,7 @@ use opcua_core::{
 };
 use opcua_crypto::{CertificateStore, PrivateKey, SecurityPolicy, X509};
 use opcua_types::{
-    ByteString, CloseSecureChannelRequest, ContextOwned, IntegerId, NodeId, RequestHeader,
+    ByteString, CloseSecureChannelRequest, ContextOwned, Error, IntegerId, NodeId, RequestHeader,
     SecurityTokenRequestType, StatusCode,
 };
 use tokio::sync::mpsc::Sender;
@@ -83,7 +83,7 @@ impl AsyncSecureChannel {
         nonce: &ByteString,
         certificate: &ByteString,
         auth_token: &NodeId,
-    ) -> Result<(), StatusCode> {
+    ) -> Result<(), Error> {
         let mut secure_channel = trace_write_lock!(self.secure_channel);
         secure_channel.set_remote_nonce_from_byte_string(nonce)?;
         secure_channel.set_remote_cert_from_byte_string(certificate)?;
@@ -94,7 +94,7 @@ impl AsyncSecureChannel {
     pub(crate) fn update_from_activated_session(
         &self,
         server_nonce: &ByteString,
-    ) -> Result<(), StatusCode> {
+    ) -> Result<(), Error> {
         let mut secure_channel = trace_write_lock!(self.secure_channel);
         secure_channel.set_remote_nonce_from_byte_string(server_nonce)
     }
@@ -171,7 +171,7 @@ impl AsyncSecureChannel {
         }
     }
 
-    async fn renew_secure_channel(&self, send: Sender<OutgoingMessage>) -> Result<(), StatusCode> {
+    async fn renew_secure_channel(&self, send: Sender<OutgoingMessage>) -> Result<(), Error> {
         // Grab the lock, then check again whether we should renew the secure channel,
         // this avoids renewing it multiple times if the client sends many requests in quick
         // succession.
@@ -204,10 +204,13 @@ impl AsyncSecureChannel {
         &self,
         request: impl Into<RequestMessage>,
         timeout: Duration,
-    ) -> Result<ResponseMessage, StatusCode> {
+    ) -> Result<ResponseMessage, Error> {
         let sender = self.request_send.load().as_deref().cloned();
         let Some(send) = sender else {
-            return Err(StatusCode::BadNotConnected);
+            return Err(Error::new(
+                StatusCode::BadNotConnected,
+                "Unable to send request, transport is not connected",
+            ));
         };
 
         let should_renew_security_token = {
@@ -232,7 +235,7 @@ impl AsyncSecureChannel {
     pub async fn connect<T: Connector>(
         &self,
         connector: &T,
-    ) -> Result<SecureChannelEventLoop<T::Transport>, StatusCode> {
+    ) -> Result<SecureChannelEventLoop<T::Transport>, Error> {
         self.request_send.store(None);
         let mut backoff = self.session_retry_policy.new_backoff();
         loop {
@@ -255,7 +258,7 @@ impl AsyncSecureChannel {
     pub async fn connect_no_retry<T: Connector>(
         &self,
         connector: &T,
-    ) -> Result<SecureChannelEventLoop<T::Transport>, StatusCode> {
+    ) -> Result<SecureChannelEventLoop<T::Transport>, Error> {
         {
             let mut secure_channel = trace_write_lock!(self.secure_channel);
             secure_channel.clear_security_token();
@@ -281,7 +284,7 @@ impl AsyncSecureChannel {
                 r = &mut request_fut => break r?,
                 r = transport.poll() => {
                     if let TransportPollResult::Closed(e) = r {
-                        return Err(e);
+                        return Err(Error::new(e, "Transport closed unexpectedly"));
                     }
                 }
             }
@@ -298,18 +301,29 @@ impl AsyncSecureChannel {
     async fn create_transport<T: Connector>(
         &self,
         connector: &T,
-    ) -> Result<(T::Transport, tokio::sync::mpsc::Sender<OutgoingMessage>), StatusCode> {
+    ) -> Result<(T::Transport, tokio::sync::mpsc::Sender<OutgoingMessage>), Error> {
         debug!("Connect");
         let security_policy =
             SecurityPolicy::from_str(self.endpoint_info.endpoint.security_policy_uri.as_ref())
-                .map_err(|_| StatusCode::BadSecurityPolicyRejected)?;
+                .map_err(|_| {
+                    Error::new(
+                        StatusCode::BadSecurityPolicyRejected,
+                        "Unknown security policy",
+                    )
+                })?;
 
         if security_policy == SecurityPolicy::Unknown {
             error!(
                 "connect, security policy \"{}\" is unknown",
                 self.endpoint_info.endpoint.security_policy_uri.as_ref()
             );
-            Err(StatusCode::BadSecurityPolicyRejected)
+            Err(Error::new(
+                StatusCode::BadSecurityPolicyRejected,
+                format!(
+                    "security policy \"{}\" is unknown",
+                    self.endpoint_info.endpoint.security_policy_uri
+                ),
+            ))
         } else {
             let (cert, key) = {
                 let certificate_store = trace_write_lock!(self.certificate_store);

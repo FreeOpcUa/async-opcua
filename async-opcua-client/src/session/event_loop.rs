@@ -12,7 +12,7 @@ use crate::{
     transport::{Connector, SecureChannelEventLoop, Transport, TransportPollResult},
 };
 use opcua_types::{
-    AttributeId, QualifiedName, ReadValueId, StatusCode, TimestampsToReturn, VariableId,
+    AttributeId, Error, QualifiedName, ReadValueId, StatusCode, TimestampsToReturn, VariableId,
 };
 
 use super::{
@@ -51,7 +51,7 @@ struct ConnectedState<T: Transport + Send + Sync + 'static> {
     subscriptions: BoxStream<'static, SubscriptionActivity>,
     current_failed_keep_alive_count: u64,
     currently_closing: bool,
-    disconnect_fut: BoxFuture<'static, Result<(), StatusCode>>,
+    disconnect_fut: BoxFuture<'static, Result<(), Error>>,
 }
 
 // The way this is passed around, the Connected state being larger is
@@ -266,10 +266,10 @@ impl<T: Connector + Send + Sync + 'static> SessionEventLoop<T> {
                                 ))
                             }
                             Err(e) => {
-                                warn!("Failed to connect to server, status code: {e}");
+                                warn!("Failed to connect to server: {e}");
                                 match backoff.next() {
                                     Some(x) => Ok((
-                                        SessionPollResult::ReconnectFailed(e),
+                                        SessionPollResult::ReconnectFailed(e.status()),
                                         SessionEventLoopState::Connecting(
                                             connector,
                                             backoff,
@@ -371,7 +371,7 @@ impl SessionActivityLoop {
                                 slf,
                             ))
                         }
-                        Err(e) => return Some((SessionActivity::KeepAliveFailed(e), slf)),
+                        Err(e) => return Some((SessionActivity::KeepAliveFailed(e.status()), slf)),
                     };
 
                     match data_value.value.and_then(|v| v.try_cast_to().ok()) {

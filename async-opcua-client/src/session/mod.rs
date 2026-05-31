@@ -124,33 +124,45 @@ use super::IdentityToken;
 
 /// Process the service result, i.e. where the request "succeeded" but the response
 /// contains a failure status code.
-pub(crate) fn process_service_result(response_header: &ResponseHeader) -> Result<(), StatusCode> {
+pub(crate) fn process_service_result(response_header: &ResponseHeader) -> Result<(), Error> {
     if response_header.service_result.is_bad() {
         info!(
             "Received a bad service result {} from the request",
             response_header.service_result
         );
-        Err(response_header.service_result)
+        Err(Error::new(
+            response_header.service_result,
+            "Received a bad service result from the server",
+        ))
     } else {
         Ok(())
     }
 }
 
-pub(crate) fn process_unexpected_response(response: ResponseMessage) -> StatusCode {
+pub(crate) fn process_unexpected_response(response: ResponseMessage) -> Error {
     match response {
         ResponseMessage::ServiceFault(service_fault) => {
             error!(
                 "Received a service fault of {} for the request",
                 service_fault.response_header.service_result
             );
-            service_fault.response_header.service_result
+            Error::new(
+                service_fault.response_header.service_result,
+                "Request returned ServiceFault",
+            )
         }
         _ => {
             error!(
                 "Received an unexpected response to the request: {}",
                 response.type_name()
             );
-            StatusCode::BadUnknownResponse
+            Error::new(
+                StatusCode::BadUnknownResponse,
+                format!(
+                    "Received an unexpected response to the request: {}",
+                    response.type_name()
+                ),
+            )
         }
     }
 }
@@ -320,17 +332,17 @@ impl Session {
         &self,
         delete_subscriptions: bool,
         disable_reconnect: bool,
-    ) -> Result<(), StatusCode> {
+    ) -> Result<(), Error> {
         if disable_reconnect {
             self.should_reconnect.store(false, Ordering::Relaxed);
         }
         let mut res = Ok(());
         if let Err(e) = self.close_session(delete_subscriptions).await {
-            res = Err(e);
             session_warn!(
                 self,
                 "Failed to close session, channel will be closed anyway: {e}"
             );
+            res = Err(e);
         }
         self.channel.close_channel().await;
 
@@ -343,12 +355,12 @@ impl Session {
     /// This will set the `should_reconnect` flag to false on the session, indicating
     /// that it should not attempt to reconnect to the server. You may clear this flag
     /// yourself to
-    pub async fn disconnect(&self) -> Result<(), StatusCode> {
+    pub async fn disconnect(&self) -> Result<(), Error> {
         self.disconnect_inner(true, true).await
     }
 
     /// Disconnect the server without deleting subscriptions, then wait until disconnected.
-    pub async fn disconnect_without_delete_subscriptions(&self) -> Result<(), StatusCode> {
+    pub async fn disconnect_without_delete_subscriptions(&self) -> Result<(), Error> {
         self.disconnect_inner(false, true).await
     }
 
@@ -425,10 +437,7 @@ impl Session {
                 TimestampsToReturn::Neither,
                 0.0,
             )
-            .await
-            .map_err(|status_code| {
-                Error::new(status_code, "Reading Server namespace array failed")
-            })?;
+            .await?;
         if let Some(Variant::Array(array)) = &result[0].value {
             let map = NamespaceMap::new_from_variant_array(&array.values)
                 .map_err(|e| Error::new(StatusCode::Bad, e))?;

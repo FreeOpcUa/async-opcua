@@ -345,7 +345,7 @@ impl SecureChannel {
     pub fn set_remote_cert_from_byte_string(
         &mut self,
         remote_cert: &ByteString,
-    ) -> Result<(), StatusCode> {
+    ) -> Result<(), Error> {
         self.remote_cert = if remote_cert.is_null_or_empty() {
             None
         } else {
@@ -364,10 +364,7 @@ impl SecureChannel {
     }
 
     /// For secure channel requests, validate that the nonce has the correct length.
-    pub fn validate_secure_channel_nonce_length(
-        &self,
-        nonce: &ByteString,
-    ) -> Result<(), StatusCode> {
+    pub fn validate_secure_channel_nonce_length(&self, nonce: &ByteString) -> Result<(), Error> {
         if self.security_policy != SecurityPolicy::None
             && nonce.len() != self.security_policy.secure_channel_nonce_length()
         {
@@ -377,7 +374,15 @@ impl SecureChannel {
                 self.security_policy.secure_channel_nonce_length(),
                 nonce
             );
-            Err(StatusCode::BadNonceInvalid)
+            Err(Error::new(
+                StatusCode::BadNonceInvalid,
+                format!(
+                    "Nonce is invalid length {}, expecting {}. {:?}",
+                    nonce.len(),
+                    self.security_policy.secure_channel_nonce_length(),
+                    nonce
+                ),
+            ))
         } else {
             Ok(())
         }
@@ -387,13 +392,16 @@ impl SecureChannel {
     pub fn set_remote_nonce_from_byte_string(
         &mut self,
         remote_nonce: &ByteString,
-    ) -> Result<(), StatusCode> {
+    ) -> Result<(), Error> {
         if let Some(ref remote_nonce) = remote_nonce.value {
             self.remote_nonce = remote_nonce.to_vec();
             Ok(())
         } else if self.security_policy != SecurityPolicy::None {
             error!("Remote nonce is invalid {:?}", remote_nonce);
-            Err(StatusCode::BadNonceInvalid)
+            Err(Error::new(
+                StatusCode::BadNonceInvalid,
+                "Remote nonce is invalid",
+            ))
         } else {
             Ok(())
         }

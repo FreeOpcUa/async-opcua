@@ -363,25 +363,25 @@ async fn browse_limits() {
 
     // Browse zero
     let r = session.browse(&[], 1000, None).await.unwrap_err();
-    assert_eq!(r, StatusCode::BadNothingToDo);
+    assert_eq!(r.status(), StatusCode::BadNothingToDo);
 
     // Too many operations
     let ops: Vec<_> = (0..(browse_limit + 1))
         .map(|r| hierarchical_desc(NodeId::new(2, r as u32)))
         .collect();
     let r = session.browse(&ops, 1000, None).await.unwrap_err();
-    assert_eq!(r, StatusCode::BadTooManyOperations);
+    assert_eq!(r.status(), StatusCode::BadTooManyOperations);
 
     // Browse next zero
     let r = session.browse_next(false, &[]).await.unwrap_err();
-    assert_eq!(r, StatusCode::BadNothingToDo);
+    assert_eq!(r.status(), StatusCode::BadNothingToDo);
 
     // Too many operations
     let ops: Vec<_> = (0..(browse_limit + 1))
         .map(|_| ByteString::from(vec![1u8]))
         .collect();
     let r = session.browse_next(false, &ops).await.unwrap_err();
-    assert_eq!(r, StatusCode::BadTooManyOperations);
+    assert_eq!(r.status(), StatusCode::BadTooManyOperations);
 }
 
 #[tokio::test]
@@ -506,7 +506,7 @@ async fn translate_browse_paths_limits() {
         .translate_browse_paths_to_node_ids(&[])
         .await
         .unwrap_err();
-    assert_eq!(r, StatusCode::BadNothingToDo);
+    assert_eq!(r.status(), StatusCode::BadNothingToDo);
 
     // Translate too many
     let ops: Vec<_> = (0..(limit + 1))
@@ -519,7 +519,7 @@ async fn translate_browse_paths_limits() {
         .translate_browse_paths_to_node_ids(&ops)
         .await
         .unwrap_err();
-    assert_eq!(r, StatusCode::BadTooManyOperations);
+    assert_eq!(r.status(), StatusCode::BadTooManyOperations);
 }
 
 #[tokio::test]

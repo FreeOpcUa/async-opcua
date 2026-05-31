@@ -13,7 +13,7 @@ use opcua_types::{
     AddNodesItem, AddNodesRequest, AddNodesResponse, AddNodesResult, AddReferencesItem,
     AddReferencesRequest, AddReferencesResponse, DeleteNodesItem, DeleteNodesRequest,
     DeleteNodesResponse, DeleteReferencesItem, DeleteReferencesRequest, DeleteReferencesResponse,
-    IntegerId, NodeId, StatusCode,
+    Error, IntegerId, NodeId, StatusCode,
 };
 use tracing::{debug_span, Instrument};
 
@@ -67,7 +67,7 @@ impl AddNodes {
 impl UARequest for AddNodes {
     type Out = AddNodesResponse;
 
-    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'a,
     {
@@ -79,7 +79,10 @@ impl UARequest for AddNodes {
             let _h = span.enter();
             if self.nodes_to_add.is_empty() {
                 builder_error!(self, "add_nodes, called with no nodes to add");
-                return Err(StatusCode::BadNothingToDo);
+                return Err(Error::new(
+                    StatusCode::BadNothingToDo,
+                    "add_nodes called with no nodes to add",
+                ));
             }
             AddNodesRequest {
                 request_header: self.header.header,
@@ -153,7 +156,7 @@ impl AddReferences {
 impl UARequest for AddReferences {
     type Out = AddReferencesResponse;
 
-    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'a,
     {
@@ -165,7 +168,10 @@ impl UARequest for AddReferences {
             let _h = span.enter();
             if self.references_to_add.is_empty() {
                 builder_error!(self, "add_references, called with no references to add");
-                return Err(StatusCode::BadNothingToDo);
+                return Err(Error::new(
+                    StatusCode::BadNothingToDo,
+                    "add_references called with no references to add",
+                ));
             }
             AddReferencesRequest {
                 request_header: self.header.header,
@@ -238,7 +244,7 @@ impl DeleteNodes {
 impl UARequest for DeleteNodes {
     type Out = DeleteNodesResponse;
 
-    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'a,
     {
@@ -250,7 +256,10 @@ impl UARequest for DeleteNodes {
             let _h = span.enter();
             if self.nodes_to_delete.is_empty() {
                 builder_error!(self, "delete_nodes, called with no nodes to delete");
-                return Err(StatusCode::BadNothingToDo);
+                return Err(Error::new(
+                    StatusCode::BadNothingToDo,
+                    "delete_nodes called with no nodes to delete",
+                ));
             }
             DeleteNodesRequest {
                 request_header: self.header.header,
@@ -324,7 +333,7 @@ impl DeleteReferences {
 impl UARequest for DeleteReferences {
     type Out = DeleteReferencesResponse;
 
-    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'a,
     {
@@ -339,7 +348,10 @@ impl UARequest for DeleteReferences {
                     self,
                     "delete_references, called with no references to delete"
                 );
-                return Err(StatusCode::BadNothingToDo);
+                return Err(Error::new(
+                    StatusCode::BadNothingToDo,
+                    "delete_references called with no references to delete",
+                ));
             }
             DeleteReferencesRequest {
                 request_header: self.header.header,
@@ -374,12 +386,12 @@ impl Session {
     /// # Returns
     ///
     /// * `Ok(Vec<AddNodesResult>)` - A list of [`AddNodesResult`] corresponding to each add node operation.
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn add_nodes(
         &self,
         nodes_to_add: &[AddNodesItem],
-    ) -> Result<Vec<AddNodesResult>, StatusCode> {
+    ) -> Result<Vec<AddNodesResult>, Error> {
         Ok(AddNodes::new(self)
             .nodes_to_add(nodes_to_add.to_vec())
             .send(&self.channel)
@@ -399,12 +411,12 @@ impl Session {
     /// # Returns
     ///
     /// * `Ok(Vec<StatusCode>)` - A list of `StatusCode` corresponding to each add reference operation.
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn add_references(
         &self,
         references_to_add: &[AddReferencesItem],
-    ) -> Result<Vec<StatusCode>, StatusCode> {
+    ) -> Result<Vec<StatusCode>, Error> {
         Ok(AddReferences::new(self)
             .references_to_add(references_to_add.to_vec())
             .send(&self.channel)
@@ -424,12 +436,12 @@ impl Session {
     /// # Returns
     ///
     /// * `Ok(Vec<StatusCode>)` - A list of `StatusCode` corresponding to each delete node operation.
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn delete_nodes(
         &self,
         nodes_to_delete: &[DeleteNodesItem],
-    ) -> Result<Vec<StatusCode>, StatusCode> {
+    ) -> Result<Vec<StatusCode>, Error> {
         Ok(DeleteNodes::new(self)
             .nodes_to_delete(nodes_to_delete.to_vec())
             .send(&self.channel)
@@ -449,12 +461,12 @@ impl Session {
     /// # Returns
     ///
     /// * `Ok(Vec<StatusCode>)` - A list of `StatusCode` corresponding to each delete node operation.
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn delete_references(
         &self,
         references_to_delete: &[DeleteReferencesItem],
-    ) -> Result<Vec<StatusCode>, StatusCode> {
+    ) -> Result<Vec<StatusCode>, Error> {
         Ok(DeleteReferences::new(self)
             .references_to_delete(references_to_delete.to_vec())
             .send(&self.channel)

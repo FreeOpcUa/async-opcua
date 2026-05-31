@@ -147,7 +147,7 @@ async fn add_delete_node_limits() {
 
     // Add zero
     let e = session.add_nodes(&[]).await.unwrap_err();
-    assert_eq!(e, StatusCode::BadNothingToDo);
+    assert_eq!(e.status(), StatusCode::BadNothingToDo);
 
     // Add too many
     let e = session
@@ -176,7 +176,7 @@ async fn add_delete_node_limits() {
         )
         .await
         .unwrap_err();
-    assert_eq!(e, StatusCode::BadTooManyOperations);
+    assert_eq!(e.status(), StatusCode::BadTooManyOperations);
 }
 
 #[tokio::test]
@@ -192,7 +192,7 @@ async fn add_delete_reference_limits() {
 
     // Add zero
     let e = session.add_references(&[]).await.unwrap_err();
-    assert_eq!(e, StatusCode::BadNothingToDo);
+    assert_eq!(e.status(), StatusCode::BadNothingToDo);
 
     // Add too many
     let e = session
@@ -210,5 +210,5 @@ async fn add_delete_reference_limits() {
         )
         .await
         .unwrap_err();
-    assert_eq!(e, StatusCode::BadTooManyOperations);
+    assert_eq!(e.status(), StatusCode::BadTooManyOperations);
 }

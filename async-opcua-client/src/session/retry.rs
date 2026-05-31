@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use futures::FutureExt;
-use opcua_types::StatusCode;
+use opcua_types::{Error, StatusCode};
 
 use crate::retry::ExponentialBackoff;
 
@@ -136,7 +136,7 @@ impl Session {
         &self,
         request: T,
         mut policy: impl RequestRetryPolicy,
-    ) -> Result<T::Out, StatusCode> {
+    ) -> Result<T::Out, Error> {
         loop {
             let next_request = request.clone();
             // Removing `boxed` here causes any futures calling this to be non-send,
@@ -146,7 +146,7 @@ impl Session {
             match next_request.send(&self.channel).boxed().await {
                 Ok(r) => break Ok(r),
                 Err(e) => {
-                    if let Some(delay) = policy.get_next_delay(e) {
+                    if let Some(delay) = policy.get_next_delay(e.status()) {
                         session_debug!(self, "Request failed, retrying after {delay:?}");
                         tokio::time::sleep(delay).await;
                     } else {

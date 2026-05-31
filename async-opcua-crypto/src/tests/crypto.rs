@@ -408,7 +408,7 @@ fn certificate_with_hostname_mismatch() {
     // Create a certificate and ensure that when the hostname does not match, the verification fails
     // with the correct error
     let result = cert.is_hostname_valid(&wrong_host_name).unwrap_err();
-    assert_eq!(result, StatusCode::BadCertificateHostNameInvalid);
+    assert_eq!(result.status(), StatusCode::BadCertificateHostNameInvalid);
 
     // Create a certificate and ensure that when the hostname does  match, the verification succeeds
     cert.is_hostname_valid(APPLICATION_HOSTNAME).unwrap();
@@ -426,7 +426,7 @@ fn certificate_with_application_uri_mismatch() {
 
     // Compare the certificate to the wrong application uri in the description, expect error
     let result = cert.is_application_uri_valid("urn:WrongURI").unwrap_err();
-    assert_eq!(result, StatusCode::BadCertificateUriInvalid);
+    assert_eq!(result.status(), StatusCode::BadCertificateUriInvalid);
 
     // Compare the certificate to the correct application uri in the description, expect success
     cert.is_application_uri_valid(APPLICATION_URI).unwrap();

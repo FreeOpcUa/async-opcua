@@ -552,7 +552,7 @@ async fn write_limits() {
     // Write zero. This doesn't actually reach the server, since we intercept it in the client.
     // we still protect against it on the server, but we don't have a way to bypass that check here.
     let r = session.write(&[]).await.unwrap_err();
-    assert_eq!(r, StatusCode::BadNothingToDo);
+    assert_eq!(r.status(), StatusCode::BadNothingToDo);
 
     // Too many operations
     let ops: Vec<_> = (0..(write_limit + 1))
@@ -560,7 +560,7 @@ async fn write_limits() {
         .collect();
 
     let r = session.write(&ops).await.unwrap_err();
-    assert_eq!(r, StatusCode::BadTooManyOperations);
+    assert_eq!(r.status(), StatusCode::BadTooManyOperations);
 
     // Exact number of operations
     let ops: Vec<_> = (0..write_limit)
@@ -825,7 +825,7 @@ async fn history_update_fail() {
 
     // Write nothing
     let r = session.history_update(&[]).await.unwrap_err();
-    assert_eq!(r, StatusCode::BadNothingToDo);
+    assert_eq!(r.status(), StatusCode::BadNothingToDo);
 
     let history_update_limit = tester
         .handle
@@ -851,7 +851,7 @@ async fn history_update_fail() {
         .await
         .unwrap_err();
 
-    assert_eq!(r, StatusCode::BadTooManyOperations);
+    assert_eq!(r.status(), StatusCode::BadTooManyOperations);
 
     // Write without access
     let r = session

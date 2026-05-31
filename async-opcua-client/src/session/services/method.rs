@@ -10,8 +10,8 @@ use crate::{
 };
 use opcua_core::ResponseMessage;
 use opcua_types::{
-    CallMethodRequest, CallMethodResult, CallRequest, CallResponse, IntegerId, MethodId, NodeId,
-    ObjectId, StatusCode, TryFromVariant, Variant,
+    CallMethodRequest, CallMethodResult, CallRequest, CallResponse, Error, IntegerId, MethodId,
+    NodeId, ObjectId, StatusCode, TryFromVariant, Variant,
 };
 use tracing::{debug_span, Instrument};
 
@@ -65,7 +65,7 @@ impl Call {
 impl UARequest for Call {
     type Out = CallResponse;
 
-    async fn send<'a>(self, channel: &'a AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    async fn send<'a>(self, channel: &'a AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'a,
     {
@@ -78,7 +78,10 @@ impl UARequest for Call {
             let _h = span.enter();
             if self.methods.is_empty() {
                 builder_error!(self, "call(), was not supplied with any methods to call");
-                return Err(StatusCode::BadNothingToDo);
+                return Err(Error::new(
+                    StatusCode::BadNothingToDo,
+                    "call was not supplied with any methods to call",
+                ));
             }
 
             CallRequest {
@@ -100,7 +103,7 @@ impl UARequest for Call {
                         "call(), expecting {cnt} results from the call to the server, got {} results",
                         results.len()
                     );
-                    Err(StatusCode::BadUnexpectedError)
+                    Err(Error::new(StatusCode::BadUnexpectedError, format!("call(), expecting {cnt} results from the call to the server, got {} results", results.len())))
                 } else {
                     Ok(*response)
                 }
@@ -109,7 +112,10 @@ impl UARequest for Call {
                     self,
                     "call(), expecting a result from the call to the server, got nothing"
                 );
-                Err(StatusCode::BadUnexpectedError)
+                Err(Error::new(
+                    StatusCode::BadUnexpectedError,
+                    "call(), expecting a result from the call to the server, got nothing",
+                ))
             }
         } else {
             Err(process_unexpected_response(response))
@@ -129,12 +135,12 @@ impl Session {
     /// # Returns
     ///
     /// * `Ok(Vec<CallMethodResult>)` - A [`CallMethodResult`] for the Method call.
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn call(
         &self,
         methods: Vec<CallMethodRequest>,
-    ) -> Result<Vec<CallMethodResult>, StatusCode> {
+    ) -> Result<Vec<CallMethodResult>, Error> {
         Ok(Call::new(self)
             .methods_to_call(methods)
             .send(&self.channel)
@@ -156,12 +162,12 @@ impl Session {
     /// # Returns
     ///
     /// * `Ok(CallMethodResult)` - A [`CallMethodResult`] for the Method call.
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn call_one(
         &self,
         method: impl Into<CallMethodRequest>,
-    ) -> Result<CallMethodResult, StatusCode> {
+    ) -> Result<CallMethodResult, Error> {
         Ok(self
             .call(vec![method.into()])
             .await?
@@ -179,12 +185,12 @@ impl Session {
     /// # Returns
     ///
     /// * `Ok((Vec<u32>, Vec<u32>))` - Result for call, consisting a list of (monitored_item_id, client_handle)
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn call_get_monitored_items(
         &self,
         subscription_id: u32,
-    ) -> Result<(Vec<u32>, Vec<u32>), StatusCode> {
+    ) -> Result<(Vec<u32>, Vec<u32>), Error> {
         let args = Some(vec![Variant::from(subscription_id)]);
         let object_id: NodeId = ObjectId::Server.into();
         let method_id: NodeId = MethodId::Server_GetMonitoredItems.into();
@@ -192,10 +198,8 @@ impl Session {
         let response = self.call_one(request).await?;
         if let Some(mut result) = response.output_arguments {
             if result.len() == 2 {
-                let server_handles = <Vec<u32>>::try_from_variant(result.remove(0))
-                    .map_err(|_| StatusCode::BadUnexpectedError)?;
-                let client_handles = <Vec<u32>>::try_from_variant(result.remove(0))
-                    .map_err(|_| StatusCode::BadUnexpectedError)?;
+                let server_handles = <Vec<u32>>::try_from_variant(result.remove(0))?;
+                let client_handles = <Vec<u32>>::try_from_variant(result.remove(0))?;
                 Ok((server_handles, client_handles))
             } else {
                 session_error!(
@@ -203,11 +207,17 @@ impl Session {
                     "Expected a result with 2 args but got {}",
                     result.len()
                 );
-                Err(StatusCode::BadUnexpectedError)
+                Err(Error::new(
+                    StatusCode::BadUnexpectedError,
+                    format!("Expected a result with 2 args but got {}", result.len()),
+                ))
             }
         } else {
-            session_error!(self, "Expected output arguments but got null");
-            Err(StatusCode::BadUnexpectedError)
+            session_error!(self, "Expected 2 output arguments but got null");
+            Err(Error::new(
+                StatusCode::BadUnexpectedError,
+                "Expected 2 output arguments but got null",
+            ))
         }
     }
 }

@@ -676,18 +676,26 @@ impl X509 {
 
     /// Tests if the certificate is valid for the supplied time using the not before and not
     /// after values on the cert.
-    pub fn is_time_valid(&self, now: &DateTime<Utc>) -> Result<(), StatusCode> {
+    pub fn is_time_valid(&self, now: &DateTime<Utc>) -> Result<(), Error> {
         // Issuer time
         let not_before = self.not_before();
         if let Ok(not_before) = not_before {
             if now.lt(&not_before) {
                 error!("Certificate < before date)");
-                return Err(StatusCode::BadCertificateTimeInvalid);
+                return Err(Error::new(
+                    StatusCode::BadCertificateTimeInvalid,
+                    format!(
+                        "Certificate not yet valid (valid from {not_before}, current time {now})",
+                    ),
+                ));
             }
         } else {
             // No before time
             error!("Certificate has no before date");
-            return Err(StatusCode::BadCertificateInvalid);
+            return Err(Error::new(
+                StatusCode::BadCertificateInvalid,
+                "Certificate has no not_before date",
+            ));
         }
 
         // Expiration time
@@ -695,12 +703,18 @@ impl X509 {
         if let Ok(not_after) = not_after {
             if now.gt(&not_after) {
                 error!("Certificate has expired (> after date)");
-                return Err(StatusCode::BadCertificateTimeInvalid);
+                return Err(Error::new(
+                    StatusCode::BadCertificateTimeInvalid,
+                    format!("Certificate has expired (valid to {not_after}, current time {now})"),
+                ));
             }
         } else {
             // No after time
             error!("Certificate has no after date");
-            return Err(StatusCode::BadCertificateInvalid);
+            return Err(Error::new(
+                StatusCode::BadCertificateInvalid,
+                "Certificate has no not_after date",
+            ));
         }
 
         trace!("Certificate is valid for this time");
@@ -723,12 +737,15 @@ impl X509 {
     }
 
     /// Tests if the supplied hostname matches any of the dns alt subject name entries on the cert
-    pub fn is_hostname_valid(&self, hostname: &str) -> Result<(), StatusCode> {
+    pub fn is_hostname_valid(&self, hostname: &str) -> Result<(), Error> {
         trace!("is_hostname_valid against {} on cert", hostname);
         // Look through alt subject names for a matching entry
         if hostname.is_empty() {
             error!("Hostname is empty");
-            Err(StatusCode::BadCertificateHostNameInvalid)
+            Err(Error::new(
+                StatusCode::BadCertificateHostNameInvalid,
+                "Certificate hostname is empty",
+            ))
         } else if let Some(subject_alt_names) = self.get_alternate_names() {
             let found = subject_alt_names
                 .iter()
@@ -745,17 +762,20 @@ impl X509 {
                 Ok(())
             } else {
                 warn!("Did not find hostname {hostname} in alt names {subject_alt_names:?}");
-                Err(StatusCode::BadCertificateHostNameInvalid)
+                Err(Error::new(StatusCode::BadCertificateHostNameInvalid, format!("Certificate hostname ({hostname}) not found in alt names ({subject_alt_names:?})")))
             }
         } else {
             // No alt names
             error!("Cert has no subject alt names at all");
-            Err(StatusCode::BadCertificateHostNameInvalid)
+            Err(Error::new(
+                StatusCode::BadCertificateHostNameInvalid,
+                "Certificate has no subject alt names",
+            ))
         }
     }
 
     /// Tests if the supplied application uri matches the uri alt subject name entry on the cert
-    pub fn is_application_uri_valid(&self, application_uri: &str) -> Result<(), StatusCode> {
+    pub fn is_application_uri_valid(&self, application_uri: &str) -> Result<(), Error> {
         // Expecting the first subject alternative name to be a uri that matches with the supplied
         // application uri
         if let Some(alt_names) = self.get_alternate_names() {
@@ -769,23 +789,35 @@ impl X509 {
                                 "Application uri {} does not match first alt name {}",
                                 application_uri, val
                             );
-                            Err(StatusCode::BadCertificateUriInvalid)
+                            Err(Error::new(StatusCode::BadCertificateUriInvalid, format!("Application uri {application_uri} does not match first alt name {val}")))
                         }
                     }
 
                     _ => {
                         error!("Alternate name {:?} cannot be converted", alt_names[0]);
-                        Err(StatusCode::BadCertificateUriInvalid)
+                        Err(Error::new(
+                            StatusCode::BadCertificateUriInvalid,
+                            format!(
+                                "Failed to convert certificate alt name {:?} to string",
+                                alt_names[0]
+                            ),
+                        ))
                     }
                 }
             } else {
                 error!("Cert has zero subject alt names");
-                Err(StatusCode::BadCertificateUriInvalid)
+                Err(Error::new(
+                    StatusCode::BadCertificateUriInvalid,
+                    "Certificate has no subject alt names",
+                ))
             }
         } else {
             error!("Cert has no subject alt names at all");
             // No alt names
-            Err(StatusCode::BadCertificateUriInvalid)
+            Err(Error::new(
+                StatusCode::BadCertificateUriInvalid,
+                "Certificate has no subject alt names",
+            ))
         }
     }
 

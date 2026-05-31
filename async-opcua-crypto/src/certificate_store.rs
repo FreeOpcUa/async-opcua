@@ -9,6 +9,7 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
+use opcua_types::Error;
 use tracing::{debug, error, info, trace, warn};
 
 use opcua_types::status_code::StatusCode;
@@ -215,7 +216,7 @@ impl CertificateStore {
         security_policy: SecurityPolicy,
         hostname: Option<&str>,
         application_uri: Option<&str>,
-    ) -> Result<(), StatusCode> {
+    ) -> Result<(), Error> {
         self.validate_application_instance_cert(cert, security_policy, hostname, application_uri)
     }
 
@@ -277,7 +278,7 @@ impl CertificateStore {
         security_policy: SecurityPolicy,
         hostname: Option<&str>,
         application_uri: Option<&str>,
-    ) -> Result<(), StatusCode> {
+    ) -> Result<(), Error> {
         let cert_file_name = CertificateStore::cert_file_name(cert);
         debug!("Validating cert with name on disk {}", cert_file_name);
 
@@ -290,7 +291,13 @@ impl CertificateStore {
                     "Path for rejected certificates {} does not exist",
                     cert_path.display()
                 );
-                return Err(StatusCode::BadUnexpectedError);
+                return Err(Error::new(
+                    StatusCode::BadUnexpectedError,
+                    format!(
+                        "Path for rejected certificates {} does not exist",
+                        cert_path.display()
+                    ),
+                ));
             }
             cert_path.push(&cert_file_name);
             if cert_path.exists() {
@@ -298,7 +305,13 @@ impl CertificateStore {
                     "Certificate {} is untrusted because it resides in the rejected directory",
                     cert_file_name
                 );
-                return Err(StatusCode::BadSecurityChecksFailed);
+                return Err(Error::new(
+                    StatusCode::BadSecurityChecksFailed,
+                    format!(
+                        "Certificate {} is untrusted because it resides in the rejected directory",
+                        cert_file_name
+                    ),
+                ));
             }
         }
 
@@ -309,10 +322,16 @@ impl CertificateStore {
             let mut cert_path = self.trusted_certs_dir();
             if !cert_path.exists() {
                 error!(
-                    "Path for rejected certificates {} does not exist",
+                    "Path for trusted certificates {} does not exist",
                     cert_path.display()
                 );
-                return Err(StatusCode::BadUnexpectedError);
+                return Err(Error::new(
+                    StatusCode::BadUnexpectedError,
+                    format!(
+                        "Path for trusted certificates {} does not exist",
+                        cert_path.display()
+                    ),
+                ));
             }
             cert_path.push(&cert_file_name);
 
@@ -327,21 +346,27 @@ impl CertificateStore {
                 } else {
                     warn!("Certificate {} is unknown and untrusted so it will be stored in rejected directory", cert_file_name);
                     let _ = self.store_rejected_cert(cert);
-                    return Err(StatusCode::BadCertificateUntrusted);
+                    return Err(Error::new(
+                        StatusCode::BadCertificateUntrusted,
+                        format!("Certificate {} is unknown and untrusted", cert_file_name),
+                    ));
                 }
             }
 
             // Read the cert from the trusted folder to make sure it matches the one supplied
             if !CertificateStore::ensure_cert_and_file_are_the_same(cert, &cert_path) {
                 error!("Certificate in memory does not match the one on disk {} so cert will automatically be treated as untrusted", cert_path.display());
-                return Err(StatusCode::BadUnexpectedError);
+                return Err(Error::new(StatusCode::BadUnexpectedError, format!("Certificate in memory does not match the one on disk {} so cert will automatically be treated as untrusted", cert_path.display())));
             }
 
             // Check that the certificate is the right length for the security policy
             match cert.key_length() {
                 Err(_) => {
                     error!("Cannot read key length from certificate {}", cert_file_name);
-                    return Err(StatusCode::BadSecurityChecksFailed);
+                    return Err(Error::new(
+                        StatusCode::BadSecurityChecksFailed,
+                        format!("Cannot read key length from certificate {}", cert_file_name),
+                    ));
                 }
                 Ok(key_length) => {
                     if !security_policy.is_valid_keylength(key_length) {
@@ -349,7 +374,13 @@ impl CertificateStore {
                             "Certificate {} has an invalid key length {} for the policy {}",
                             cert_file_name, key_length, security_policy
                         );
-                        return Err(StatusCode::BadSecurityChecksFailed);
+                        return Err(Error::new(
+                            StatusCode::BadSecurityChecksFailed,
+                            format!(
+                                "Certificate {} has an invalid key length {} for the policy {}",
+                                cert_file_name, key_length, security_policy
+                            ),
+                        ));
                     }
                 }
             }

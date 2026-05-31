@@ -10,7 +10,7 @@ use crate::{
 use opcua_core::ResponseMessage;
 use opcua_types::{
     BrowseDescription, BrowseNextRequest, BrowseNextResponse, BrowsePath, BrowsePathResult,
-    BrowseRequest, BrowseResponse, BrowseResult, ByteString, IntegerId, NodeId,
+    BrowseRequest, BrowseResponse, BrowseResult, ByteString, Error, IntegerId, NodeId,
     RegisterNodesRequest, RegisterNodesResponse, StatusCode, TranslateBrowsePathsToNodeIdsRequest,
     TranslateBrowsePathsToNodeIdsResponse, UnregisterNodesRequest, UnregisterNodesResponse,
     ViewDescription,
@@ -87,7 +87,7 @@ impl Browse {
 impl UARequest for Browse {
     type Out = BrowseResponse;
 
-    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'a,
     {
@@ -99,7 +99,10 @@ impl UARequest for Browse {
             let _h = span.enter();
             if self.nodes_to_browse.is_empty() {
                 builder_error!(self, "browse was not supplied with any nodes to browse");
-                return Err(StatusCode::BadNothingToDo);
+                return Err(Error::new(
+                    StatusCode::BadNothingToDo,
+                    "browse was not supplied with any nodes to browse",
+                ));
             }
             BrowseRequest {
                 request_header: self.header.header,
@@ -187,7 +190,7 @@ impl BrowseNext {
 impl UARequest for BrowseNext {
     type Out = BrowseNextResponse;
 
-    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'a,
     {
@@ -203,7 +206,10 @@ impl UARequest for BrowseNext {
                     self,
                     "browse_next was not supplied with any continuation points"
                 );
-                return Err(StatusCode::BadNothingToDo);
+                return Err(Error::new(
+                    StatusCode::BadNothingToDo,
+                    "browse_next was not supplied with any continuation points",
+                ));
             }
             BrowseNextRequest {
                 request_header: self.header.header,
@@ -282,7 +288,7 @@ impl TranslateBrowsePaths {
 impl UARequest for TranslateBrowsePaths {
     type Out = TranslateBrowsePathsToNodeIdsResponse;
 
-    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'a,
     {
@@ -297,7 +303,10 @@ impl UARequest for TranslateBrowsePaths {
                     self,
                     "translate_browse_paths_to_node_ids was not supplied with any browse paths"
                 );
-                return Err(StatusCode::BadNothingToDo);
+                return Err(Error::new(
+                    StatusCode::BadNothingToDo,
+                    "translate_browse_paths_to_node_ids was not supplied with any browse paths",
+                ));
             }
             TranslateBrowsePathsToNodeIdsRequest {
                 request_header: self.header.header,
@@ -374,7 +383,7 @@ impl RegisterNodes {
 impl UARequest for RegisterNodes {
     type Out = RegisterNodesResponse;
 
-    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'a,
     {
@@ -386,7 +395,10 @@ impl UARequest for RegisterNodes {
             let _h = span.enter();
             if self.nodes_to_register.is_empty() {
                 builder_error!(self, "register_nodes was not supplied with any node IDs");
-                return Err(StatusCode::BadNothingToDo);
+                return Err(Error::new(
+                    StatusCode::BadNothingToDo,
+                    "register_nodes was not supplied with any node IDs",
+                ));
             }
             RegisterNodesRequest {
                 request_header: self.header.header,
@@ -463,7 +475,7 @@ impl UnregisterNodes {
 impl UARequest for UnregisterNodes {
     type Out = UnregisterNodesResponse;
 
-    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'a,
     {
@@ -475,7 +487,10 @@ impl UARequest for UnregisterNodes {
             let _h = span.enter();
             if self.nodes_to_unregister.is_empty() {
                 builder_error!(self, "unregister_nodes was not supplied with any node IDs");
-                return Err(StatusCode::BadNothingToDo);
+                return Err(Error::new(
+                    StatusCode::BadNothingToDo,
+                    "unregister_nodes was not supplied with any node IDs",
+                ));
             }
             UnregisterNodesRequest {
                 request_header: self.header.header,
@@ -511,14 +526,14 @@ impl Session {
     ///
     /// * `Ok(Vec<BrowseResult>)` - A list [`BrowseResult`] corresponding to each node to browse. A browse result
     ///   may contain a continuation point, for use with `browse_next()`.
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn browse(
         &self,
         nodes_to_browse: &[BrowseDescription],
         max_references_per_node: u32,
         view: Option<ViewDescription>,
-    ) -> Result<Vec<BrowseResult>, StatusCode> {
+    ) -> Result<Vec<BrowseResult>, Error> {
         Ok(Browse::new(self)
             .nodes_to_browse(nodes_to_browse.to_vec())
             .view(view.unwrap_or_default())
@@ -543,13 +558,13 @@ impl Session {
     ///
     /// * `Ok(Option<Vec<BrowseResult>)` - A list [`BrowseResult`] corresponding to each node to browse. A browse result
     ///   may contain a continuation point, for use with `browse_next()`.
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn browse_next(
         &self,
         release_continuation_points: bool,
         continuation_points: &[ByteString],
-    ) -> Result<Vec<BrowseResult>, StatusCode> {
+    ) -> Result<Vec<BrowseResult>, Error> {
         Ok(BrowseNext::new(self)
             .continuation_points(continuation_points.to_vec())
             .release_continuation_points(release_continuation_points)
@@ -575,12 +590,12 @@ impl Session {
     /// * `Ok(Vec<BrowsePathResult>>)` - List of [`BrowsePathResult`] for the list of browse
     ///   paths. The size and order of the list matches the size and order of the `browse_paths`
     ///   parameter.
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn translate_browse_paths_to_node_ids(
         &self,
         browse_paths: &[BrowsePath],
-    ) -> Result<Vec<BrowsePathResult>, StatusCode> {
+    ) -> Result<Vec<BrowsePathResult>, Error> {
         Ok(TranslateBrowsePaths::new(self)
             .browse_paths(browse_paths.to_vec())
             .send(&self.channel)
@@ -603,12 +618,9 @@ impl Session {
     ///
     /// * `Ok(Vec<NodeId>)` - A list of [`NodeId`] corresponding to size and order of the input. The
     ///   server may return an alias for the input `NodeId`
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
-    pub async fn register_nodes(
-        &self,
-        nodes_to_register: &[NodeId],
-    ) -> Result<Vec<NodeId>, StatusCode> {
+    pub async fn register_nodes(&self, nodes_to_register: &[NodeId]) -> Result<Vec<NodeId>, Error> {
         Ok(RegisterNodes::new(self)
             .nodes_to_register(nodes_to_register.to_vec())
             .send(&self.channel)
@@ -630,9 +642,9 @@ impl Session {
     /// # Returns
     ///
     /// * `Ok(())` - Request succeeded, server ignores invalid nodes
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
-    pub async fn unregister_nodes(&self, nodes_to_unregister: &[NodeId]) -> Result<(), StatusCode> {
+    pub async fn unregister_nodes(&self, nodes_to_unregister: &[NodeId]) -> Result<(), Error> {
         UnregisterNodes::new(self)
             .nodes_to_unregister(nodes_to_unregister.to_vec())
             .send(&self.channel)

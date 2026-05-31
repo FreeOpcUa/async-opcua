@@ -12,12 +12,13 @@ use crate::{
 };
 use opcua_core::ResponseMessage;
 use opcua_types::{
-    DataValue, DeleteAtTimeDetails, DeleteEventDetails, DeleteRawModifiedDetails, ExtensionObject,
-    HistoryReadRequest, HistoryReadResponse, HistoryReadResult, HistoryReadValueId,
-    HistoryUpdateRequest, HistoryUpdateResponse, HistoryUpdateResult, IntegerId, NodeId,
-    ReadAtTimeDetails, ReadEventDetails, ReadProcessedDetails, ReadRawModifiedDetails, ReadRequest,
-    ReadResponse, ReadValueId, StatusCode, TimestampsToReturn, UpdateDataDetails,
-    UpdateEventDetails, UpdateStructureDataDetails, WriteRequest, WriteResponse, WriteValue,
+    DataValue, DeleteAtTimeDetails, DeleteEventDetails, DeleteRawModifiedDetails, Error,
+    ExtensionObject, HistoryReadRequest, HistoryReadResponse, HistoryReadResult,
+    HistoryReadValueId, HistoryUpdateRequest, HistoryUpdateResponse, HistoryUpdateResult,
+    IntegerId, NodeId, ReadAtTimeDetails, ReadEventDetails, ReadProcessedDetails,
+    ReadRawModifiedDetails, ReadRequest, ReadResponse, ReadValueId, StatusCode, TimestampsToReturn,
+    UpdateDataDetails, UpdateEventDetails, UpdateStructureDataDetails, WriteRequest, WriteResponse,
+    WriteValue,
 };
 use tracing::{debug_span, Instrument};
 
@@ -174,7 +175,7 @@ builder_base!(Read);
 impl UARequest for Read {
     type Out = ReadResponse;
 
-    async fn send<'b>(self, channel: &'b AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    async fn send<'b>(self, channel: &'b AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'b,
     {
@@ -188,7 +189,10 @@ impl UARequest for Read {
             let _h = span.enter();
             if self.nodes_to_read.is_empty() {
                 builder_error!(self, "read(), was not supplied with any nodes to read");
-                return Err(StatusCode::BadNothingToDo);
+                return Err(Error::new(
+                    StatusCode::BadNothingToDo,
+                    "read was not supplied with any nodes to read",
+                ));
             }
             ReadRequest {
                 request_header: self.header.header,
@@ -296,7 +300,7 @@ impl HistoryRead {
 impl UARequest for HistoryRead {
     type Out = HistoryReadResponse;
 
-    async fn send<'b>(self, channel: &'b AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    async fn send<'b>(self, channel: &'b AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'b,
     {
@@ -395,7 +399,7 @@ impl Write {
 impl UARequest for Write {
     type Out = WriteResponse;
 
-    async fn send<'a>(self, channel: &'a AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    async fn send<'a>(self, channel: &'a AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'a,
     {
@@ -407,7 +411,10 @@ impl UARequest for Write {
             let _h = span.enter();
             if self.nodes_to_write.is_empty() {
                 builder_error!(self, "write(), was not supplied with any nodes to write");
-                return Err(StatusCode::BadNothingToDo);
+                return Err(Error::new(
+                    StatusCode::BadNothingToDo,
+                    "write was not supplied with any nodes to write",
+                ));
             }
             WriteRequest {
                 request_header: self.header.header,
@@ -489,7 +496,7 @@ impl HistoryUpdate {
 impl UARequest for HistoryUpdate {
     type Out = HistoryUpdateResponse;
 
-    async fn send<'a>(self, channel: &'a AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    async fn send<'a>(self, channel: &'a AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'a,
     {
@@ -504,7 +511,10 @@ impl UARequest for HistoryUpdate {
                     self,
                     "history_update(), was not supplied with any detail to update"
                 );
-                return Err(StatusCode::BadNothingToDo);
+                return Err(Error::new(
+                    StatusCode::BadNothingToDo,
+                    "history update was not supplied with any update details",
+                ));
             }
             let details = self
                 .details
@@ -550,14 +560,14 @@ impl Session {
     /// # Returns
     ///
     /// * `Ok(Vec<DataValue>)` - A list of [`DataValue`] corresponding to each read operation.
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn read(
         &self,
         nodes_to_read: &[ReadValueId],
         timestamps_to_return: TimestampsToReturn,
         max_age: f64,
-    ) -> Result<Vec<DataValue>, StatusCode> {
+    ) -> Result<Vec<DataValue>, Error> {
         Ok(Read::new(self)
             .nodes_to_read(nodes_to_read.to_vec())
             .timestamps_to_return(timestamps_to_return)
@@ -588,7 +598,7 @@ impl Session {
     /// # Returns
     ///
     /// * `Ok(Vec<HistoryReadResult>)` - A list of [`HistoryReadResult`] results corresponding to history read operation.
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn history_read(
         &self,
@@ -596,7 +606,7 @@ impl Session {
         timestamps_to_return: TimestampsToReturn,
         release_continuation_points: bool,
         nodes_to_read: &[HistoryReadValueId],
-    ) -> Result<Vec<HistoryReadResult>, StatusCode> {
+    ) -> Result<Vec<HistoryReadResult>, Error> {
         Ok(HistoryRead::new(history_read_details, self)
             .timestamps_to_return(timestamps_to_return)
             .release_continuation_points(release_continuation_points)
@@ -619,12 +629,9 @@ impl Session {
     /// # Returns
     ///
     /// * `Ok(Vec<StatusCode>)` - A list of [`StatusCode`] results corresponding to each write operation.
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
-    pub async fn write(
-        &self,
-        nodes_to_write: &[WriteValue],
-    ) -> Result<Vec<StatusCode>, StatusCode> {
+    pub async fn write(&self, nodes_to_write: &[WriteValue]) -> Result<Vec<StatusCode>, Error> {
         Ok(Write::new(self)
             .nodes_to_write(nodes_to_write.to_vec())
             .send(&self.channel)
@@ -652,12 +659,12 @@ impl Session {
     /// # Returns
     ///
     /// * `Ok(Vec<HistoryUpdateResult>)` - A list of [`HistoryUpdateResult`] results corresponding to history update operation.
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn history_update(
         &self,
         history_update_details: &[HistoryUpdateAction],
-    ) -> Result<Vec<HistoryUpdateResult>, StatusCode> {
+    ) -> Result<Vec<HistoryUpdateResult>, Error> {
         Ok(HistoryUpdate::new(self)
             .details(history_update_details.to_vec())
             .send(&self.channel)

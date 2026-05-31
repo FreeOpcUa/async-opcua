@@ -189,11 +189,10 @@ where
         channel: Arc<SecureChannelState>,
         outgoing_recv: tokio::sync::mpsc::Receiver<OutgoingMessage>,
         config: TransportConfiguration,
-    ) -> Result<StreamTransport<R, W>, StatusCode> {
+    ) -> Result<StreamTransport<R, W>, Error> {
         let (connection, ack, policy) = self
             .connect_inner(channel.secure_channel(), &config)
-            .await
-            .map_err(|e| e.status())?;
+            .await?;
         let mut buffer = SendBuffer::new(
             config.send_buffer_size,
             config.max_message_size,
@@ -256,7 +255,7 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> StreamTransport<R, W> {
                         "Failed to handle incoming message, closing transport: {}",
                         e
                     );
-                    TransportPollResult::Closed(e)
+                    TransportPollResult::Closed(e.status())
                 } else {
                     TransportPollResult::IncomingMessage
                 }
@@ -321,8 +320,9 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> StreamTransport<R, W> {
                         drop(secure_channel);
                         if let Some((request_id, request_handle)) = e.full_context() {
                             error!("Failed to send message with request handle {}: {}", request_handle, e);
-                            self.state.message_send_failed(request_id, e.status());
-                            TransportPollResult::RecoverableError(e.status())
+                            let status = e.status();
+                            self.state.message_send_failed(request_id, e);
+                            TransportPollResult::RecoverableError(status)
                         } else {
                             error!("Failed to write outgoing message to send buffer, closing transport: {}", e);
                             TransportPollResult::Closed(e.status())

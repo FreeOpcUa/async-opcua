@@ -699,7 +699,7 @@ async fn read_limits() {
         .read(&[], TimestampsToReturn::Both, 0.0)
         .await
         .unwrap_err();
-    assert_eq!(r, StatusCode::BadNothingToDo);
+    assert_eq!(r.status(), StatusCode::BadNothingToDo);
 
     // Invalid max age
     let r = session
@@ -710,7 +710,7 @@ async fn read_limits() {
         )
         .await
         .unwrap_err();
-    assert_eq!(r, StatusCode::BadMaxAgeInvalid);
+    assert_eq!(r.status(), StatusCode::BadMaxAgeInvalid);
 
     // Invalid timestamps to return
     let r = session
@@ -721,7 +721,7 @@ async fn read_limits() {
         )
         .await
         .unwrap_err();
-    assert_eq!(r, StatusCode::BadTimestampsToReturnInvalid);
+    assert_eq!(r.status(), StatusCode::BadTimestampsToReturnInvalid);
 
     // Too many operations
     let ops: Vec<_> = (0..(read_limit + 1))
@@ -731,7 +731,7 @@ async fn read_limits() {
         .read(&ops, TimestampsToReturn::Both, 0.0)
         .await
         .unwrap_err();
-    assert_eq!(r, StatusCode::BadTooManyOperations);
+    assert_eq!(r.status(), StatusCode::BadTooManyOperations);
 
     // Exact number of operations, should not fail, though the reads will probably fail, mostly.
     let ops: Vec<_> = (0..read_limit)
@@ -1010,7 +1010,7 @@ async fn history_read_fail() {
         .history_read(action.clone(), TimestampsToReturn::Both, false, &[])
         .await
         .unwrap_err();
-    assert_eq!(r, StatusCode::BadNothingToDo);
+    assert_eq!(r.status(), StatusCode::BadNothingToDo);
 
     let history_read_limit = tester
         .handle
@@ -1037,7 +1037,7 @@ async fn history_read_fail() {
         )
         .await
         .unwrap_err();
-    assert_eq!(r, StatusCode::BadTooManyOperations);
+    assert_eq!(r.status(), StatusCode::BadTooManyOperations);
 
     // Read without access
     let r = session
@@ -1114,7 +1114,7 @@ async fn read_retry() {
         )
         .await
         .unwrap_err();
-    assert_eq!(e, StatusCode::BadInternalError);
+    assert_eq!(e.status(), StatusCode::BadInternalError);
 
     // Use the retry method to send the remaining requests, two more will fail, then
     // the request will succeed.
@@ -1237,7 +1237,7 @@ async fn test_read_timeout() {
         .send(session.channel())
         .await
         .unwrap_err();
-    assert!(matches!(r, StatusCode::BadTimeout));
+    assert!(matches!(r.status(), StatusCode::BadTimeout));
 
     // Now, wait for a bit, so that the client receives the late response from the server.
     tokio::time::sleep(Duration::from_millis(300)).await;

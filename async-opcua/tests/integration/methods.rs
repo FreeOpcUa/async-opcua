@@ -239,7 +239,7 @@ async fn call_limits() {
 
     // Call none
     let e = session.call(Vec::new()).await.unwrap_err();
-    assert_eq!(e, StatusCode::BadNothingToDo);
+    assert_eq!(e.status(), StatusCode::BadNothingToDo);
 
     // Call too many
     let e = session
@@ -254,7 +254,7 @@ async fn call_limits() {
         )
         .await
         .unwrap_err();
-    assert_eq!(e, StatusCode::BadTooManyOperations);
+    assert_eq!(e.status(), StatusCode::BadTooManyOperations);
 }
 
 #[tokio::test]

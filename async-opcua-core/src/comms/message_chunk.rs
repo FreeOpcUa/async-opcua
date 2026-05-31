@@ -10,7 +10,7 @@ use std::io::{Cursor, Read, Write};
 use opcua_types::{
     process_decode_io_result, process_encode_io_result, read_u32, read_u8, status_code::StatusCode,
     write_u32, write_u8, DecodingOptions, EncodingResult, Error, SimpleBinaryDecodable,
-    SimpleBinaryEncodable,
+    SimpleBinaryEncodable, UAString,
 };
 use tracing::trace;
 
@@ -342,6 +342,29 @@ impl MessageChunk {
         ChunkInfo::new(self, secure_channel)
     }
 
+    /// Decode the body of this message as a `MessageFinalError`.
+    pub fn final_error_body(
+        &self,
+        chunk_info: &ChunkInfo,
+        decoding_options: &DecodingOptions,
+    ) -> Result<MessageFinalError, Error> {
+        let start = chunk_info.body_offset;
+        let end = start.checked_add(chunk_info.body_length).ok_or_else(|| {
+            Error::new(
+                StatusCode::BadCommunicationError,
+                "Invalid error body length",
+            )
+        })?;
+        let body = self.data.get(start..end).ok_or_else(|| {
+            Error::new(
+                StatusCode::BadCommunicationError,
+                "Invalid error body length",
+            )
+        })?;
+        let mut cursor = std::io::Cursor::new(body);
+        MessageFinalError::decode(&mut cursor, decoding_options)
+    }
+
     pub(crate) fn encrypted_data_offset(
         &self,
         decoding_options: &DecodingOptions,
@@ -356,5 +379,27 @@ impl MessageChunk {
             decoding_options,
         )?;
         Ok(stream.position() as usize)
+    }
+}
+
+#[derive(Debug)]
+/// Body of a message chunk with status FinalError.
+///
+/// See OPC-UA part 6, 6.7.3.
+pub struct MessageFinalError {
+    /// Numeric status code for the error.
+    pub status: StatusCode,
+    /// A more verbose description of the error.
+    pub reason: UAString,
+}
+
+impl SimpleBinaryDecodable for MessageFinalError {
+    fn decode<S: Read + ?Sized>(
+        stream: &mut S,
+        decoding_options: &DecodingOptions,
+    ) -> EncodingResult<Self> {
+        let status = StatusCode::decode(stream, decoding_options)?;
+        let reason = UAString::decode(stream, decoding_options)?;
+        Ok(Self { status, reason })
     }
 }

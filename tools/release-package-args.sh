@@ -1,2 +1,9 @@
 #!/usr/bin/env bash
-echo "--package async-opcua --package async-opcua-client --package async-opcua-core --package async-opcua-core-namespace --package async-opcua-crypto --package async-opcua-macros --package async-opcua-nodes --package async-opcua-server --package async-opcua-types --package async-opcua-xml --package async-opcua-codegen"
+
+# Get arguments for calls to `cargo release`, listing the packages we want to publish explicitly.
+
+packages=$(./tools/publish-targets.sh)
+
+while IFS= read -r line; do
+    echo -n "--package $line "
+done <<< "$packages"

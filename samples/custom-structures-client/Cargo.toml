@@ -3,6 +3,7 @@ name = "opcua-structure-client"
 version = "0.13.0"
 authors = ["Rust-OpcUa contributors"]
 edition = "2021"
+publish = false
 
 [dependencies]
 pico-args = "0.5"

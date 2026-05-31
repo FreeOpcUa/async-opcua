@@ -3,6 +3,7 @@ name = "async-opcua-node-manager-sample"
 version = "0.13.0"
 authors = ["Einar Omang <einar@omang.com>"]
 edition = "2021"
+publish = false
 
 [dependencies]
 async-trait = { workspace = true }

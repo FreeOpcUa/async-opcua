@@ -7,7 +7,7 @@ publish = false
 
 [dependencies]
 pico-args = "0.5"
-rumqttc = "0.23"
+rumqttc = "0.25"
 tokio = { workspace = true }
 env_logger = { workspace = true }
 

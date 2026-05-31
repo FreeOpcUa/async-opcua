@@ -13,6 +13,9 @@ pub enum XmlReadError {
     #[error("{0}")]
     /// Failed to parse XML.
     Xml(#[from] quick_xml::Error),
+    #[error("{0}")]
+    /// Failed to decode XML value.
+    Decode(#[from] quick_xml::encoding::EncodingError),
     #[error("Unexpected EOF")]
     /// Unexpected EOF.
     UnexpectedEof,
@@ -103,11 +106,11 @@ impl<T: Read> XmlStreamReader<T> {
                         continue;
                     }
                     if let Some(text) = text.as_mut() {
-                        text.push_str(&e.unescape()?);
+                        text.push_str(&e.decode()?);
                     } else if e.inplace_trim_start() {
                         continue;
                     } else {
-                        text = Some(e.unescape()?.into_owned());
+                        text = Some(e.decode()?.into_owned());
                     }
                 }
 
@@ -194,6 +197,11 @@ impl<T: Read> XmlStreamReader<T> {
                     } else {
                         return Err(XmlReadError::UnexpectedEof);
                     }
+                }
+                Event::GeneralRef(s) => {
+                    out.push(b'&');
+                    out.extend_from_slice(&s);
+                    out.push(b';');
                 }
             }
         }

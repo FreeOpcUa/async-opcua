@@ -403,7 +403,7 @@ async fn subscription_limits() {
         .create_subscription(Duration::from_secs(1), 100, 20, 1000, 0, true, notifs)
         .await
         .unwrap_err();
-    assert_eq!(StatusCode::BadTooManySubscriptions, e);
+    assert_eq!(StatusCode::BadTooManySubscriptions, e.status());
     for sub in subs.iter().skip(1) {
         session.delete_subscription(*sub).await.unwrap();
     }
@@ -424,7 +424,7 @@ async fn subscription_limits() {
         .create_monitored_items(sub, TimestampsToReturn::Both, vec![])
         .await
         .unwrap_err();
-    assert_eq!(StatusCode::BadNothingToDo, e);
+    assert_eq!(StatusCode::BadNothingToDo, e.status());
 
     // Create too many
     let e = session
@@ -449,7 +449,7 @@ async fn subscription_limits() {
         )
         .await
         .unwrap_err();
-    assert_eq!(e, StatusCode::BadTooManyOperations);
+    assert_eq!(e.status(), StatusCode::BadTooManyOperations);
 }
 
 #[tokio::test]
@@ -990,7 +990,7 @@ async fn test_keep_alive_sequence_not_retransmitted() {
         .send(session.channel())
         .await;
     assert_eq!(
-        republish_keep_alive.unwrap_err(),
+        republish_keep_alive.unwrap_err().status(),
         StatusCode::BadMessageNotAvailable
     );
 }

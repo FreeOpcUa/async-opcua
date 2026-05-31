@@ -25,7 +25,7 @@ struct MessageChunkWithChunkInfo {
 }
 
 pub(crate) struct MessageState {
-    callback: tokio::sync::oneshot::Sender<Result<ResponseMessage, StatusCode>>,
+    callback: tokio::sync::oneshot::Sender<Result<ResponseMessage, Error>>,
     chunks: Vec<MessageChunkWithChunkInfo>,
     deadline: Instant,
     span: tracing::Span,
@@ -77,7 +77,7 @@ pub struct OutgoingMessage {
     /// The actual request message to send.
     pub request: RequestMessage,
     /// A callback that should be called when a response is received.
-    pub callback: Option<tokio::sync::oneshot::Sender<Result<ResponseMessage, StatusCode>>>,
+    pub callback: Option<tokio::sync::oneshot::Sender<Result<ResponseMessage, Error>>>,
     /// Deadline for the request.
     pub deadline: Instant,
     /// An optional tracing span to attach to the request.
@@ -142,36 +142,42 @@ impl TransportState {
     }
 
     /// Store incoming messages in the message state.
-    pub fn handle_incoming_message(&mut self, message: Message) -> Result<(), StatusCode> {
-        let status = match message {
+    pub fn handle_incoming_message(&mut self, message: Message) -> Result<(), Error> {
+        match message {
             Message::Acknowledge(ack) => {
                 debug!("Reader got an unexpected ack {:?}", ack);
-                StatusCode::BadUnexpectedError
+                Err(Error::new(
+                    StatusCode::BadUnexpectedError,
+                    "Received an unexpected ACK from the server",
+                ))
             }
-            Message::Chunk(chunk) => self.process_chunk(chunk).err().unwrap_or(StatusCode::Good),
+            Message::Chunk(chunk) => {
+                self.process_chunk(chunk)?;
+                Ok(())
+            }
             Message::Error(error) => {
                 error!(
                     "Received error {} from server. Reason: {}",
                     error.error, error.reason
                 );
-                error.error
+                Err(Error::new(
+                    error.error,
+                    format!("Received error from server. Reason: {}", error.reason),
+                ))
             }
             m => {
                 error!("Expected a recognized message, got {:?}", m);
-                StatusCode::BadUnexpectedError
+                Err(Error::new(
+                    StatusCode::BadUnexpectedError,
+                    format!("Expected a chunk or error, got {:?}", m),
+                ))
             }
-        };
-
-        if status.is_good() {
-            Ok(())
-        } else {
-            Err(status)
         }
     }
 
     /// Call this if sending a message fails. This will notify the waiting request
     /// that the message could not be sent.
-    pub fn message_send_failed(&mut self, request_id: u32, err: StatusCode) {
+    pub fn message_send_failed(&mut self, request_id: u32, err: Error) {
         if let Some(message_state) = self.message_states.remove(&request_id) {
             message_state.span.in_scope(|| {
                 debug!(
@@ -203,13 +209,17 @@ impl TransportState {
                 state.span.in_scope(|| {
                     debug!("Message timed out, request_id = {id}");
                 });
-                let _ = state.callback.send(Err(StatusCode::BadTimeout));
+                let _ = state.callback.send(Err(Error::new(
+                    StatusCode::BadTimeout,
+                    "Message timed out",
+                )
+                .with_request_id(id)));
             }
         }
         next_timeout
     }
 
-    fn process_chunk(&mut self, chunk: MessageChunk) -> Result<(), StatusCode> {
+    fn process_chunk(&mut self, chunk: MessageChunk) -> Result<(), Error> {
         let (chunk, chunk_info, decoding_options) = {
             let secure_channel = trace_read_lock!(self.channel_state.secure_channel());
             let chunk = secure_channel.verify_and_remove_security(chunk.data)?;
@@ -257,9 +267,11 @@ impl TransportState {
                     let message_state = self.message_states.remove(&req_id).unwrap();
                     message_state.span.in_scope(|| {
                         error!("Message {} exceeded max chunk count", req_id);
-                        let _ = message_state
-                            .callback
-                            .send(Err(StatusCode::BadEncodingLimitsExceeded));
+                        let _ = message_state.callback.send(Err(Error::new(
+                            StatusCode::BadEncodingLimitsExceeded,
+                            "Message exceeded max chunk count",
+                        )
+                        .with_request_id(req_id)));
                     });
                 }
             }
@@ -271,7 +283,7 @@ impl TransportState {
                     warn!(
                         "Message marked as final error, request_id = {req_id}, status = {status}, reason = {reason}"
                     );
-                    let _ = message_state.callback.send(Err(status));
+                    let _ = message_state.callback.send(Err(Error::new(status, format!("Message marked final error: {reason}")).with_request_id(req_id)));
                 });
             }
             MessageIsFinalType::Final => {
@@ -305,7 +317,10 @@ impl TransportState {
                     let service_result = msg.response_header.service_result;
                     if !service_result.is_good() {
                         error!("OpenSecureChannel response failed, request_id = {req_id}: {service_result}");
-                        return Err(service_result);
+                        return Err(Error::new(
+                            service_result,
+                            "OpenSecureChannel received service fault from server",
+                        ));
                     }
                     self.channel_state.end_issue_or_renew_secure_channel(msg).inspect_err(|e| {
                         error!("Failed to process OpenSecureChannel response, request_id = {req_id}: {e}");
@@ -331,7 +346,7 @@ impl TransportState {
 
     fn merge_chunks(
         mut chunks: Vec<MessageChunkWithChunkInfo>,
-    ) -> Result<Vec<MessageChunk>, StatusCode> {
+    ) -> Result<Vec<MessageChunk>, Error> {
         if chunks.len() == 1 {
             return Ok(vec![MessageChunk {
                 data: chunks.pop().unwrap().data_with_header,
@@ -382,7 +397,9 @@ impl TransportState {
             pending.span.in_scope(|| {
                 debug!("Transport is closing, failing pending request");
             });
-            let _ = pending.callback.send(Err(request_status));
+            let _ = pending
+                .callback
+                .send(Err(Error::new(request_status, "Transport is closing")));
         }
 
         // Make sure we also send a bad status for any remaining messages in the queue
@@ -392,7 +409,7 @@ impl TransportState {
         // recv is no longer blocking.
         while let Some(msg) = self.outgoing_recv.recv().await {
             if let Some(cb) = msg.callback {
-                let _ = cb.send(Err(request_status));
+                let _ = cb.send(Err(Error::new(request_status, "Transport is closing")));
             }
         }
 

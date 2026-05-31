@@ -4,7 +4,7 @@ use tokio::{pin, select};
 use tracing::{info, info_span, Instrument};
 
 use crate::transport::{Connector, SecureChannelEventLoop, TransportPollResult};
-use opcua_types::{NodeId, StatusCode};
+use opcua_types::{Error, NodeId};
 
 use super::Session;
 
@@ -32,14 +32,14 @@ impl SessionConnector {
     pub(super) async fn try_connect<T: Connector>(
         &self,
         connector: &T,
-    ) -> Result<(SecureChannelEventLoop<T::Transport>, SessionConnectMode), StatusCode> {
+    ) -> Result<(SecureChannelEventLoop<T::Transport>, SessionConnectMode), Error> {
         self.connect_and_activate(connector).await
     }
 
     async fn connect_and_activate<T: Connector>(
         &self,
         connector: &T,
-    ) -> Result<(SecureChannelEventLoop<T::Transport>, SessionConnectMode), StatusCode> {
+    ) -> Result<(SecureChannelEventLoop<T::Transport>, SessionConnectMode), Error> {
         let span = info_span!(
             "Attempting to create and activate session to server",
             endpoint_url = connector.default_endpoint().endpoint_url.as_ref()
@@ -58,7 +58,7 @@ impl SessionConnector {
             select! {
                 r = event_loop.poll() => {
                     if let TransportPollResult::Closed(c) = r {
-                        return Err(c);
+                        return Err(Error::new(c, "Transport closed while activating session"));
                     }
                 },
                 r = &mut activate_fut => break r,
@@ -83,7 +83,7 @@ impl SessionConnector {
         Ok((event_loop, id))
     }
 
-    async fn ensure_and_activate_session(&self) -> Result<SessionConnectMode, StatusCode> {
+    async fn ensure_and_activate_session(&self) -> Result<SessionConnectMode, Error> {
         let should_create_session = self.inner.session_id.load().is_null();
 
         if should_create_session {

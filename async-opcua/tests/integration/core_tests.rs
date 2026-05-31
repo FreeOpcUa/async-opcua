@@ -388,7 +388,7 @@ async fn recoverable_error_test_server() {
         .read(&ids, TimestampsToReturn::Both, 0.0)
         .await
         .unwrap_err();
-    assert_eq!(res, StatusCode::BadDecodingError);
+    assert_eq!(res.status(), StatusCode::BadDecodingError);
 
     session
         .read(

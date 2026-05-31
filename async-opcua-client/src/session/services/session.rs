@@ -157,10 +157,12 @@ impl<'a> CreateSession<'a> {
 impl UARequest for CreateSession<'_> {
     type Out = CreateSessionResponse;
 
-    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'a,
     {
+        let security_policy = channel.security_policy();
+
         let span = info_span!(
             "Sending CreateSession request",
             endpoint = %self.endpoint_url,
@@ -202,49 +204,54 @@ impl UARequest for CreateSession<'_> {
             builder_debug!(self, "create_session, success");
             process_service_result(&response.response_header)?;
 
-            let security_policy = channel.security_policy();
-
             if security_policy != SecurityPolicy::None {
                 if self.endpoint.server_certificate != response.server_certificate {
                     error!("Server certificate in CreateSession response does not match channel certificate");
-                    return Err(StatusCode::BadCertificateInvalid);
+                    return Err(Error::new(StatusCode::BadCertificateInvalid, "Server certificate in CreateSession response does not match channel certificate"));
                 }
-                if let Ok(server_certificate) =
+                let server_certificate =
                     opcua_crypto::X509::from_byte_string(&response.server_certificate)
-                {
-                    // Validate server certificate against hostname and application_uri
-                    let hostname = hostname_from_url(self.endpoint.endpoint_url.as_ref())
-                        .map_err(|_| StatusCode::BadUnexpectedError)?;
-                    let application_uri = self.endpoint.server.application_uri.as_ref();
-
-                    let certificate_store = trace_write_lock!(self.certificate_store);
-                    certificate_store
-                        .validate_or_reject_application_instance_cert(
-                            &server_certificate,
-                            security_policy,
-                            Some(&hostname),
-                            Some(application_uri),
+                        .inspect_err(|e| error!("Failed to parse server certificate: {e}"))?;
+                // Validate server certificate against hostname and application_uri
+                let hostname =
+                    hostname_from_url(self.endpoint.endpoint_url.as_ref()).map_err(|e| {
+                        Error::new(
+                            StatusCode::BadUnexpectedError,
+                            format!(
+                                "Failed to extract hostname from endpoint URL ({}): {e}",
+                                self.endpoint.endpoint_url
+                            ),
                         )
-                        .inspect_err(|e| {
-                            error!("Rejected server certificate in create session response: {e}");
-                        })?;
+                    })?;
+                let application_uri = self.endpoint.server.application_uri.as_ref();
 
-                    opcua_crypto::verify_signature_data(
-                        &response.server_signature,
-                        security_policy,
+                let certificate_store = trace_write_lock!(self.certificate_store);
+                certificate_store
+                    .validate_or_reject_application_instance_cert(
                         &server_certificate,
-                        self.client_certificate
-                            .as_ref()
-                            .ok_or(StatusCode::BadCertificateInvalid)?,
-                        client_nonce.as_ref(),
+                        security_policy,
+                        Some(&hostname),
+                        Some(application_uri),
                     )
                     .inspect_err(|e| {
-                        error!("Failed to verify server signature in create session response: {e}");
+                        error!("Rejected server certificate in create session response: {e}");
                     })?;
-                } else {
-                    error!("Failed to parse server certificate in create session response");
-                    return Err(StatusCode::BadCertificateInvalid);
-                }
+
+                opcua_crypto::verify_signature_data(
+                    &response.server_signature,
+                    security_policy,
+                    &server_certificate,
+                    self.client_certificate.as_ref().ok_or_else(|| {
+                        Error::new(
+                            StatusCode::BadCertificateInvalid,
+                            "Missing client certificate in request",
+                        )
+                    })?,
+                    client_nonce.as_ref(),
+                )
+                .inspect_err(|e| {
+                    error!("Failed to verify server signature in create session response: {e}");
+                })?;
             }
 
             tracing::debug!(
@@ -453,8 +460,7 @@ impl ActivateSession {
                     security_policy,
                     &server_cert.as_byte_string(),
                     &ByteString::from(&nonce),
-                )
-                .map_err(|s| Error::new(s, "Failed to create token signature"))?;
+                )?;
 
                 // Create identity token
                 let identity_token = X509IdentityToken {
@@ -495,7 +501,7 @@ impl ActivateSession {
     async fn build_request(
         self,
         channel: &AsyncSecureChannel,
-    ) -> Result<ActivateSessionRequest, StatusCode> {
+    ) -> Result<ActivateSessionRequest, Error> {
         let (remote_cert, remote_nonce, security_policy, message_security_mode) = {
             let secure_channel = trace_read_lock!(channel.secure_channel);
             (
@@ -519,18 +525,27 @@ impl ActivateSession {
             _ => {
                 let Some(client_pkey) = self.private_key else {
                     error!("Cannot create client signature - no pkey!");
-                    return Err(StatusCode::BadUnexpectedError);
+                    return Err(Error::new(
+                        StatusCode::BadUnexpectedError,
+                        "Cannot sign request, no private key provided",
+                    ));
                 };
 
                 let Some(server_cert) = remote_cert else {
                     error!("Cannot sign server certificate because server cert is null");
-                    return Err(StatusCode::BadUnexpectedError);
+                    return Err(Error::new(
+                        StatusCode::BadUnexpectedError,
+                        "Cannot sign request, missing server certificate",
+                    ));
                 };
 
                 let server_nonce = remote_nonce;
                 if server_nonce.is_null_or_empty() {
                     error!("Cannot sign server certificate because server nonce is empty");
-                    return Err(StatusCode::BadUnexpectedError);
+                    return Err(Error::new(
+                        StatusCode::BadUnexpectedError,
+                        "Cannot sign request, empty remote nonce",
+                    ));
                 }
 
                 let server_cert = server_cert.as_byte_string();
@@ -565,7 +580,7 @@ impl ActivateSession {
 impl UARequest for ActivateSession {
     type Out = ActivateSessionResponse;
 
-    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'a,
     {
@@ -642,7 +657,7 @@ impl CloseSession {
 impl UARequest for CloseSession {
     type Out = CloseSessionResponse;
 
-    async fn send<'a>(self, channel: &'a AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    async fn send<'a>(self, channel: &'a AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'a,
     {
@@ -708,7 +723,7 @@ impl Cancel {
 impl UARequest for Cancel {
     type Out = CancelResponse;
 
-    async fn send<'a>(self, channel: &'a AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    async fn send<'a>(self, channel: &'a AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'a,
     {
@@ -746,9 +761,9 @@ impl Session {
     /// # Returns
     ///
     /// * `Ok(NodeId)` - Success, session id
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
-    pub(crate) async fn create_session(&self) -> Result<NodeId, StatusCode> {
+    pub(crate) async fn create_session(&self) -> Result<NodeId, Error> {
         let response = CreateSession::new(self).send(&self.channel).await?;
 
         let session_id = {
@@ -766,9 +781,9 @@ impl Session {
     /// # Returns
     ///
     /// * `Ok(())` - Success
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
-    pub(crate) async fn activate_session(&self) -> Result<(), StatusCode> {
+    pub(crate) async fn activate_session(&self) -> Result<(), Error> {
         ActivateSession::new(self).send(&self.channel).await?;
         Ok(())
     }
@@ -776,7 +791,7 @@ impl Session {
     /// Close the session by sending a [`CloseSessionRequest`] to the server.
     ///
     /// This is not accessible by users, they must instead call `disconnect` to properly close the session.
-    pub(crate) async fn close_session(&self, delete_subscriptions: bool) -> Result<(), StatusCode> {
+    pub(crate) async fn close_session(&self, delete_subscriptions: bool) -> Result<(), Error> {
         CloseSession::new(self)
             .delete_subscriptions(delete_subscriptions)
             .send(&self.channel)
@@ -795,9 +810,9 @@ impl Session {
     /// # Returns
     ///
     /// * `Ok(u32)` - Success, number of cancelled requests
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
-    pub async fn cancel(&self, request_handle: IntegerId) -> Result<u32, StatusCode> {
+    pub async fn cancel(&self, request_handle: IntegerId) -> Result<u32, Error> {
         Ok(Cancel::new(request_handle, self)
             .send(&self.channel)
             .await?

@@ -19,8 +19,8 @@ use opcua_core::{handle::AtomicHandle, sync::Mutex, trace_lock, ResponseMessage}
 use opcua_types::{
     AttributeId, CreateMonitoredItemsRequest, CreateSubscriptionRequest,
     CreateSubscriptionResponse, DeleteMonitoredItemsRequest, DeleteMonitoredItemsResponse,
-    DeleteSubscriptionsRequest, DeleteSubscriptionsResponse, DiagnosticInfo, ExtensionObject,
-    IntegerId, ModifyMonitoredItemsRequest, ModifyMonitoredItemsResponse,
+    DeleteSubscriptionsRequest, DeleteSubscriptionsResponse, DiagnosticInfo, Error,
+    ExtensionObject, IntegerId, ModifyMonitoredItemsRequest, ModifyMonitoredItemsResponse,
     ModifySubscriptionRequest, ModifySubscriptionResponse, MonitoredItemCreateRequest,
     MonitoredItemCreateResult, MonitoredItemModifyRequest, MonitoredItemModifyResult,
     MonitoringMode, MonitoringParameters, NodeId, NotificationMessage, PublishRequest,
@@ -144,7 +144,7 @@ impl CreateSubscription {
 impl UARequest for CreateSubscription {
     type Out = CreateSubscriptionResponse;
 
-    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'a,
     {
@@ -291,7 +291,7 @@ impl ModifySubscription {
 impl UARequest for ModifySubscription {
     type Out = ModifySubscriptionResponse;
 
-    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'a,
     {
@@ -311,7 +311,10 @@ impl UARequest for ModifySubscription {
                     self,
                     "modify_subscription, subscription id must be non-zero"
                 );
-                return Err(StatusCode::BadInvalidArgument);
+                return Err(Error::new(
+                    StatusCode::BadInvalidArgument,
+                    "modify_subscription, subscription id must be non-zero",
+                ));
             }
 
             ModifySubscriptionRequest {
@@ -400,7 +403,7 @@ impl SetPublishingMode {
 impl UARequest for SetPublishingMode {
     type Out = SetPublishingModeResponse;
 
-    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'a,
     {
@@ -416,7 +419,10 @@ impl UARequest for SetPublishingMode {
                     self,
                     "set_publishing_mode, no subscription ids were provided"
                 );
-                return Err(StatusCode::BadNothingToDo);
+                return Err(Error::new(
+                    StatusCode::BadNothingToDo,
+                    "set_publishing_mode, no subscription ids were provided",
+                ));
             }
 
             SetPublishingModeRequest {
@@ -446,7 +452,10 @@ impl UARequest for SetPublishingMode {
                     self.subscription_ids.len(),
                     num_results
                 );
-                return Err(StatusCode::BadUnexpectedError);
+                return Err(Error::new(StatusCode::BadUnexpectedError, format!("set_publishing_mode returned an incorrect number of results. Expected {}, got {}",
+                    self.subscription_ids.len(),
+                    num_results)
+                ));
             }
 
             builder_debug!(self, "set_publishing_mode success");
@@ -511,7 +520,7 @@ impl Publish {
 impl UARequest for Publish {
     type Out = PublishResponse;
 
-    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'a,
     {
@@ -598,7 +607,7 @@ impl Republish {
 
 impl UARequest for Republish {
     type Out = RepublishResponse;
-    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'a,
     {
@@ -699,7 +708,7 @@ impl TransferSubscriptions {
 impl UARequest for TransferSubscriptions {
     type Out = TransferSubscriptionsResponse;
 
-    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'a,
     {
@@ -715,7 +724,10 @@ impl UARequest for TransferSubscriptions {
                     self,
                     "transfer_subscriptions, no subscription ids were provided"
                 );
-                return Err(StatusCode::BadNothingToDo);
+                return Err(Error::new(
+                    StatusCode::BadNothingToDo,
+                    "transfer_subscriptions, no subscription ids were provided",
+                ));
             }
             TransferSubscriptionsRequest {
                 request_header: self.header.header,
@@ -790,7 +802,7 @@ impl DeleteSubscriptions {
 impl UARequest for DeleteSubscriptions {
     type Out = DeleteSubscriptionsResponse;
 
-    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'a,
     {
@@ -802,7 +814,10 @@ impl UARequest for DeleteSubscriptions {
             let _h = span.enter();
             if self.subscription_ids.is_empty() {
                 builder_error!(self, "delete_subscriptions called with no subscription IDs");
-                return Err(StatusCode::BadNothingToDo);
+                return Err(Error::new(
+                    StatusCode::BadNothingToDo,
+                    "delete_subscriptions called with no subscription IDs",
+                ));
             }
             DeleteSubscriptionsRequest {
                 request_header: self.header.header,
@@ -940,10 +955,7 @@ pub struct CreateMonitoredItemsResult {
 impl UARequest for CreateMonitoredItems<'_> {
     type Out = CreateMonitoredItemsResult;
 
-    async fn send<'a>(
-        mut self,
-        channel: &'a crate::AsyncSecureChannel,
-    ) -> Result<Self::Out, StatusCode>
+    async fn send<'a>(mut self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'a,
     {
@@ -959,7 +971,10 @@ impl UARequest for CreateMonitoredItems<'_> {
             let _h = span.enter();
             if self.subscription_id == 0 {
                 builder_error!(self, "create_monitored_items, subscription id 0 is invalid");
-                return Err(StatusCode::BadSubscriptionIdInvalid);
+                return Err(Error::new(
+                    StatusCode::BadSubscriptionIdInvalid,
+                    "create_monitored_items, subscription id 0 is invalid",
+                ));
             }
 
             if self.items_to_create.is_empty() {
@@ -967,7 +982,10 @@ impl UARequest for CreateMonitoredItems<'_> {
                     self,
                     "create_monitored_items, called with no items to create"
                 );
-                return Err(StatusCode::BadNothingToDo);
+                return Err(Error::new(
+                    StatusCode::BadNothingToDo,
+                    "create_monitored_items, called with no items to create",
+                ));
             }
             for item in &mut self.items_to_create {
                 if item.requested_parameters.client_handle == 0 {
@@ -999,7 +1017,10 @@ impl UARequest for CreateMonitoredItems<'_> {
                         results.len(),
                         num_items
                     );
-                    return Err(StatusCode::BadUnexpectedError);
+                    return Err(Error::new(StatusCode::BadUnexpectedError, format!("create_monitored_items, unexpected number of results. Got {}, expected {}",
+                        results.len(),
+                        num_items)
+                    ));
                 }
                 builder_debug!(self, "create_monitored_items, {} items created", num_items);
             } else {
@@ -1007,7 +1028,10 @@ impl UARequest for CreateMonitoredItems<'_> {
                     self,
                     "create_monitored_items, success but no monitored items were created"
                 );
-                return Err(StatusCode::BadUnexpectedError);
+                return Err(Error::new(
+                    StatusCode::BadUnexpectedError,
+                    "create_monitored_items, success but no monitored items were created",
+                ));
             }
 
             let created = response
@@ -1098,7 +1122,7 @@ impl ModifyMonitoredItems {
 impl UARequest for ModifyMonitoredItems {
     type Out = ModifyMonitoredItemsResponse;
 
-    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'a,
     {
@@ -1113,14 +1137,20 @@ impl UARequest for ModifyMonitoredItems {
             let _h = span.enter();
             if self.subscription_id == 0 {
                 builder_error!(self, "modify_monitored_items, subscription id 0 is invalid");
-                return Err(StatusCode::BadInvalidArgument);
+                return Err(Error::new(
+                    StatusCode::BadInvalidArgument,
+                    "modify_monitored_items, subscription id 0 is invalid",
+                ));
             }
             if self.items_to_modify.is_empty() {
                 builder_error!(
                     self,
                     "modify_monitored_items, called with no items to modify"
                 );
-                return Err(StatusCode::BadNothingToDo);
+                return Err(Error::new(
+                    StatusCode::BadNothingToDo,
+                    "modify_monitored_items, called with no items to modify",
+                ));
             }
             ModifyMonitoredItemsRequest {
                 request_header: self.header.header,
@@ -1138,7 +1168,10 @@ impl UARequest for ModifyMonitoredItems {
             process_service_result(&response.response_header)?;
             let Some(results) = &response.results else {
                 builder_error!(self, "modify_monitored_items, got empty response");
-                return Err(StatusCode::BadUnexpectedError);
+                return Err(Error::new(
+                    StatusCode::BadUnexpectedError,
+                    "modify_monitored_items, got empty response",
+                ));
             };
             if results.len() != num_items {
                 builder_error!(
@@ -1147,7 +1180,14 @@ impl UARequest for ModifyMonitoredItems {
                     num_items,
                     results.len()
                 );
-                return Err(StatusCode::BadUnexpectedError);
+                return Err(Error::new(
+                    StatusCode::BadUnexpectedError,
+                    format!(
+                        "modify_monitored_items, unexpected number of results. Expected {}, got {}",
+                        num_items,
+                        results.len()
+                    ),
+                ));
             }
 
             builder_debug!(self, "modify_monitored_items, success");
@@ -1218,7 +1258,7 @@ impl SetMonitoringMode {
 impl UARequest for SetMonitoringMode {
     type Out = SetMonitoringModeResponse;
 
-    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'a,
     {
@@ -1234,11 +1274,17 @@ impl UARequest for SetMonitoringMode {
             let _h = span.enter();
             if self.subscription_id == 0 {
                 builder_error!(self, "set_monitoring_mode, subscription id 0 is invalid");
-                return Err(StatusCode::BadInvalidArgument);
+                return Err(Error::new(
+                    StatusCode::BadInvalidArgument,
+                    "set_monitoring_mode, subscription id 0 is invalid",
+                ));
             }
             if self.monitored_item_ids.is_empty() {
                 builder_error!(self, "set_monitoring_mode, called with no items to modify");
-                return Err(StatusCode::BadNothingToDo);
+                return Err(Error::new(
+                    StatusCode::BadNothingToDo,
+                    "set_monitoring_mode, subscription id 0 is invalid",
+                ));
             }
 
             SetMonitoringModeRequest {
@@ -1253,7 +1299,10 @@ impl UARequest for SetMonitoringMode {
         if let ResponseMessage::SetMonitoringMode(response) = response {
             let Some(results) = &response.results else {
                 builder_error!(self, "set_monitoring_mode, got empty response");
-                return Err(StatusCode::BadUnexpectedError);
+                return Err(Error::new(
+                    StatusCode::BadUnexpectedError,
+                    "set_monitoring_mode, got empty response",
+                ));
             };
             if results.len() != num_items {
                 builder_error!(
@@ -1262,7 +1311,14 @@ impl UARequest for SetMonitoringMode {
                     num_items,
                     results.len()
                 );
-                return Err(StatusCode::BadUnexpectedError);
+                return Err(Error::new(
+                    StatusCode::BadUnexpectedError,
+                    format!(
+                        "set_monitoring_mode, unexpected number of results. Expected {}, got {}",
+                        num_items,
+                        results.len()
+                    ),
+                ));
             }
 
             Ok(*response)
@@ -1348,7 +1404,7 @@ impl SetTriggering {
 impl UARequest for SetTriggering {
     type Out = SetTriggeringResponse;
 
-    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'a,
     {
@@ -1363,12 +1419,18 @@ impl UARequest for SetTriggering {
             let _h = span.enter();
             if self.subscription_id == 0 {
                 builder_error!(self, "set_triggering, subscription id 0 is invalid");
-                return Err(StatusCode::BadInvalidArgument);
+                return Err(Error::new(
+                    StatusCode::BadInvalidArgument,
+                    "set_triggering, subscription id 0 is invalid",
+                ));
             }
 
             if self.links_to_add.is_empty() && self.links_to_remove.is_empty() {
                 builder_error!(self, "set_triggering, called with nothing to add or remove");
-                return Err(StatusCode::BadNothingToDo);
+                return Err(Error::new(
+                    StatusCode::BadNothingToDo,
+                    "set_triggering, subscription id 0 is invalid",
+                ));
             }
             SetTriggeringRequest {
                 request_header: self.header.header,
@@ -1402,7 +1464,14 @@ impl UARequest for SetTriggering {
                     to_add_res.len(),
                     self.links_to_add.len()
                 );
-                return Err(StatusCode::BadUnexpectedError);
+                return Err(Error::new(
+                    StatusCode::BadUnexpectedError,
+                    format!(
+                        "set_triggering, got unexpected number of add results: {}, expected {}",
+                        to_add_res.len(),
+                        self.links_to_add.len()
+                    ),
+                ));
             }
             if to_remove_res.len() != self.links_to_remove.len() {
                 builder_error!(
@@ -1411,7 +1480,14 @@ impl UARequest for SetTriggering {
                     to_remove_res.len(),
                     self.links_to_add.len()
                 );
-                return Err(StatusCode::BadUnexpectedError);
+                return Err(Error::new(
+                    StatusCode::BadUnexpectedError,
+                    format!(
+                        "set_triggering, got unexpected number of remove results: {}, expected {}",
+                        to_remove_res.len(),
+                        self.links_to_add.len()
+                    ),
+                ));
             }
 
             Ok(*response)
@@ -1476,7 +1552,7 @@ impl DeleteMonitoredItems {
 impl UARequest for DeleteMonitoredItems {
     type Out = DeleteMonitoredItemsResponse;
 
-    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, StatusCode>
+    async fn send<'a>(self, channel: &'a crate::AsyncSecureChannel) -> Result<Self::Out, Error>
     where
         Self: 'a,
     {
@@ -1489,14 +1565,20 @@ impl UARequest for DeleteMonitoredItems {
             let _h = span.enter();
             if self.subscription_id == 0 {
                 builder_error!(self, "delete_monitored_items, subscription id 0 is invalid");
-                return Err(StatusCode::BadInvalidArgument);
+                return Err(Error::new(
+                    StatusCode::BadInvalidArgument,
+                    "delete_monitored_items, subscription id 0 is invalid",
+                ));
             }
             if self.items_to_delete.is_empty() {
                 builder_error!(
                     self,
                     "delete_monitored_items, called with no items to delete"
                 );
-                return Err(StatusCode::BadNothingToDo);
+                return Err(Error::new(
+                    StatusCode::BadNothingToDo,
+                    "delete_monitored_items, called with no items to delete",
+                ));
             }
 
             DeleteMonitoredItemsRequest {
@@ -1543,7 +1625,7 @@ impl Session {
         publishing_enabled: bool,
         priority: u8,
         callback: Box<dyn OnSubscriptionNotificationCore>,
-    ) -> Result<u32, StatusCode> {
+    ) -> Result<u32, Error> {
         let response = CreateSubscription::new(self)
             .publishing_interval(publishing_interval)
             .max_lifetime_count(lifetime_count)
@@ -1618,7 +1700,7 @@ impl Session {
     /// # Returns
     ///
     /// * `Ok(u32)` - identifier for new subscription
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     #[allow(clippy::too_many_arguments)]
     pub async fn create_subscription(
@@ -1630,7 +1712,7 @@ impl Session {
         priority: u8,
         publishing_enabled: bool,
         callback: impl OnSubscriptionNotificationCore + 'static,
-    ) -> Result<u32, StatusCode> {
+    ) -> Result<u32, Error> {
         self.create_subscription_inner(
             publishing_interval,
             lifetime_count,
@@ -1684,7 +1766,7 @@ impl Session {
     /// # Returns
     ///
     /// * `Ok(())` - Success
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn modify_subscription(
         &self,
@@ -1694,10 +1776,13 @@ impl Session {
         max_keep_alive_count: u32,
         max_notifications_per_publish: u32,
         priority: u8,
-    ) -> Result<(), StatusCode> {
+    ) -> Result<(), Error> {
         if !self.subscription_exists(subscription_id) {
             session_error!(self, "modify_subscription, subscription id does not exist");
-            return Err(StatusCode::BadInvalidArgument);
+            return Err(Error::new(
+                StatusCode::BadInvalidArgument,
+                "modify_subscription, subscription id does not exist",
+            ));
         }
 
         let response = ModifySubscription::new(subscription_id, self)
@@ -1737,13 +1822,13 @@ impl Session {
     /// # Returns
     ///
     /// * `Ok(Vec<StatusCode>)` - Service return code for the action for each id, `Good` or `BadSubscriptionIdInvalid`
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn set_publishing_mode(
         &self,
         subscription_ids: &[u32],
         publishing_enabled: bool,
-    ) -> Result<Vec<StatusCode>, StatusCode> {
+    ) -> Result<Vec<StatusCode>, Error> {
         let results = SetPublishingMode::new(publishing_enabled, self)
             .subscription_ids(subscription_ids.to_vec())
             .send(&self.channel)
@@ -1789,13 +1874,13 @@ impl Session {
     /// # Returns
     ///
     /// * `Ok(Vec<TransferResult>)` - The [`TransferResult`] for each transfer subscription.
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn transfer_subscriptions(
         &self,
         subscription_ids: &[u32],
         send_initial_values: bool,
-    ) -> Result<Vec<TransferResult>, StatusCode> {
+    ) -> Result<Vec<TransferResult>, Error> {
         let r = TransferSubscriptions::new(self)
             .send_initial_values(send_initial_values)
             .subscription_ids(subscription_ids.to_vec())
@@ -1820,22 +1905,28 @@ impl Session {
     /// # Returns
     ///
     /// * `Ok(StatusCode)` - Service return code for the delete action, `Good` or `BadSubscriptionIdInvalid`
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
-    pub async fn delete_subscription(
-        &self,
-        subscription_id: u32,
-    ) -> Result<StatusCode, StatusCode> {
+    pub async fn delete_subscription(&self, subscription_id: u32) -> Result<StatusCode, Error> {
         if subscription_id == 0 {
             session_error!(self, "delete_subscription, subscription id 0 is invalid");
-            Err(StatusCode::BadInvalidArgument)
+            Err(Error::new(
+                StatusCode::BadInvalidArgument,
+                "delete_subscription, subscription id 0 is invalid",
+            ))
         } else if !self.subscription_exists(subscription_id) {
             session_error!(
                 self,
                 "delete_subscription, subscription id {} does not exist",
                 subscription_id
             );
-            Err(StatusCode::BadInvalidArgument)
+            Err(Error::new(
+                StatusCode::BadInvalidArgument,
+                format!(
+                    "delete_subscription, subscription id {} does not exist",
+                    subscription_id
+                ),
+            ))
         } else {
             let result = self.delete_subscriptions(&[subscription_id]).await?;
             Ok(result[0])
@@ -1855,12 +1946,12 @@ impl Session {
     ///
     /// * `Ok(Vec<StatusCode>)` - List of result for delete action on each id, `Good` or `BadSubscriptionIdInvalid`
     ///   The size and order of the list matches the size and order of the input.
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn delete_subscriptions(
         &self,
         subscription_ids: &[u32],
-    ) -> Result<Vec<StatusCode>, StatusCode> {
+    ) -> Result<Vec<StatusCode>, Error> {
         let result = DeleteSubscriptions::new(self)
             .subscription_ids(subscription_ids.to_vec())
             .send(&self.channel)
@@ -1892,14 +1983,14 @@ impl Session {
     ///
     /// * `Ok(Vec<MonitoredItemCreateResult>)` - A list of [`MonitoredItemCreateResult`] corresponding to the items to create.
     ///   The size and order of the list matches the size and order of the `items_to_create` request parameter.
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn create_monitored_items(
         &self,
         subscription_id: u32,
         timestamps_to_return: TimestampsToReturn,
         mut items_to_create: Vec<MonitoredItemCreateRequest>,
-    ) -> Result<Vec<CreatedMonitoredItem>, StatusCode> {
+    ) -> Result<Vec<CreatedMonitoredItem>, Error> {
         {
             let state = trace_lock!(self.subscription_state);
             if !state.subscription_exists(subscription_id) {
@@ -1908,7 +1999,13 @@ impl Session {
                     "create_monitored_items, subscription id {} does not exist",
                     subscription_id
                 );
-                return Err(StatusCode::BadSubscriptionIdInvalid);
+                return Err(Error::new(
+                    StatusCode::BadSubscriptionIdInvalid,
+                    format!(
+                        "create_monitored_items, subscription id {} does not exist",
+                        subscription_id
+                    ),
+                ));
             }
         }
 
@@ -1953,14 +2050,14 @@ impl Session {
     ///
     /// * `Ok(Vec<MonitoredItemModifyResult>)` - A list of [`MonitoredItemModifyResult`] corresponding to the MonitoredItems to modify.
     ///   The size and order of the list matches the size and order of the `items_to_modify` request parameter.
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn modify_monitored_items(
         &self,
         subscription_id: u32,
         timestamps_to_return: TimestampsToReturn,
         items_to_modify: &[MonitoredItemModifyRequest],
-    ) -> Result<Vec<MonitoredItemModifyResult>, StatusCode> {
+    ) -> Result<Vec<MonitoredItemModifyResult>, Error> {
         {
             let state = trace_lock!(self.subscription_state);
             if !state.subscription_exists(subscription_id) {
@@ -1969,7 +2066,13 @@ impl Session {
                     "modify_monitored_items, subscription id {} does not exist",
                     subscription_id
                 );
-                return Err(StatusCode::BadSubscriptionIdInvalid);
+                return Err(Error::new(
+                    StatusCode::BadSubscriptionIdInvalid,
+                    format!(
+                        "modify_monitored_items, subscription id {} does not exist",
+                        subscription_id
+                    ),
+                ));
             }
         }
         let id_and_filter: Vec<(u32, ExtensionObject)> = items_to_modify
@@ -2023,14 +2126,14 @@ impl Session {
     /// # Returns
     ///
     /// * `Ok(Vec<StatusCode>)` - Individual result for each monitored item.
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn set_monitoring_mode(
         &self,
         subscription_id: u32,
         monitoring_mode: MonitoringMode,
         monitored_item_ids: &[u32],
-    ) -> Result<Vec<StatusCode>, StatusCode> {
+    ) -> Result<Vec<StatusCode>, Error> {
         {
             let state = trace_lock!(self.subscription_state);
             if !state.subscription_exists(subscription_id) {
@@ -2039,7 +2142,13 @@ impl Session {
                     "set_monitoring_mode, subscription id {} does not exist",
                     subscription_id
                 );
-                return Err(StatusCode::BadSubscriptionIdInvalid);
+                return Err(Error::new(
+                    StatusCode::BadSubscriptionIdInvalid,
+                    format!(
+                        "set_monitoring_mode, subscription id {} does not exist",
+                        subscription_id
+                    ),
+                ));
             }
         }
         let results = SetMonitoringMode::new(subscription_id, monitoring_mode, self)
@@ -2079,7 +2188,7 @@ impl Session {
     /// # Returns
     ///
     /// * `Ok((Option<Vec<StatusCode>>, Option<Vec<StatusCode>>))` - Individual result for each item added / removed for the SetTriggering call.
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn set_triggering(
         &self,
@@ -2087,7 +2196,7 @@ impl Session {
         triggering_item_id: u32,
         links_to_add: &[u32],
         links_to_remove: &[u32],
-    ) -> Result<(Option<Vec<StatusCode>>, Option<Vec<StatusCode>>), StatusCode> {
+    ) -> Result<(Option<Vec<StatusCode>>, Option<Vec<StatusCode>>), Error> {
         {
             let state = trace_lock!(self.subscription_state);
             if !state.subscription_exists(subscription_id) {
@@ -2096,7 +2205,13 @@ impl Session {
                     "set_triggering, subscription id {} does not exist",
                     subscription_id
                 );
-                return Err(StatusCode::BadSubscriptionIdInvalid);
+                return Err(Error::new(
+                    StatusCode::BadSubscriptionIdInvalid,
+                    format!(
+                        "set_triggering, subscription id {} does not exist",
+                        subscription_id
+                    ),
+                ));
             }
         }
         let response = SetTriggering::new(subscription_id, triggering_item_id, self)
@@ -2147,13 +2262,13 @@ impl Session {
     ///
     /// * `Ok(Vec<StatusCode>)` - List of StatusCodes for the MonitoredItems to delete. The size and
     ///   order of the list matches the size and order of the `items_to_delete` request parameter.
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn delete_monitored_items(
         &self,
         subscription_id: u32,
         items_to_delete: &[u32],
-    ) -> Result<Vec<StatusCode>, StatusCode> {
+    ) -> Result<Vec<StatusCode>, Error> {
         {
             let state = trace_lock!(self.subscription_state);
             if !state.subscription_exists(subscription_id) {
@@ -2162,7 +2277,13 @@ impl Session {
                     "delete_monitored_items, subscription id {} does not exist",
                     subscription_id
                 );
-                return Err(StatusCode::BadSubscriptionIdInvalid);
+                return Err(Error::new(
+                    StatusCode::BadSubscriptionIdInvalid,
+                    format!(
+                        "delete_monitored_items, subscription id {} does not exist",
+                        subscription_id
+                    ),
+                ));
             }
         }
         let response = DeleteMonitoredItems::new(subscription_id, self)
@@ -2186,7 +2307,7 @@ impl Session {
 
     /// Send a publish request, returning `true` if the session should send a new request
     /// immediately.
-    pub(crate) async fn publish(&self) -> Result<bool, StatusCode> {
+    pub(crate) async fn publish(&self) -> Result<bool, Error> {
         let acks = {
             let mut subscription_state = trace_lock!(self.subscription_state);
             let acks = subscription_state.take_acknowledgements();
@@ -2240,13 +2361,13 @@ impl Session {
     /// # Returns
     ///
     /// * `Ok(NotificationMessage)` - Re-published notification message.
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn republish(
         &self,
         subscription_id: u32,
         sequence_number: u32,
-    ) -> Result<NotificationMessage, StatusCode> {
+    ) -> Result<NotificationMessage, Error> {
         let res = Republish::new(subscription_id, sequence_number, self)
             .send(&self.channel)
             .await?;

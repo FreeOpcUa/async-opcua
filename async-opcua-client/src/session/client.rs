@@ -295,7 +295,7 @@ impl Client {
         channel: &AsyncSecureChannel,
         locale_ids: Option<Vec<UAString>>,
         profile_uris: Option<Vec<UAString>>,
-    ) -> Result<Vec<EndpointDescription>, StatusCode> {
+    ) -> Result<Vec<EndpointDescription>, Error> {
         let request = GetEndpointsRequest {
             request_header: channel.make_request_header(self.config.request_timeout),
             endpoint_url: endpoint.endpoint_url.clone(),
@@ -363,10 +363,7 @@ impl Client {
         };
         let channel = self.channel_from_endpoint_info(endpoint_info, self.config.channel_lifetime);
 
-        let mut evt_loop = channel
-            .connect(&server)
-            .await
-            .map_err(|e| Error::new(e, "Failed to connect to server"))?;
+        let mut evt_loop = channel.connect(&server).await?;
 
         let send_fut = self.get_server_endpoints_inner(
             &endpoint,
@@ -391,7 +388,7 @@ impl Client {
                         return Err(Error::new(e, "Transport closed unexpectedly"));
                     }
                 },
-                res = &mut send_fut => break res.map_err(|e| Error::new(e, "Failed to get endpoints")),
+                res = &mut send_fut => break res,
             }
         };
 
@@ -412,7 +409,7 @@ impl Client {
         channel: &AsyncSecureChannel,
         locale_ids: Option<Vec<UAString>>,
         server_uris: Option<Vec<UAString>>,
-    ) -> Result<Vec<ApplicationDescription>, StatusCode> {
+    ) -> Result<Vec<ApplicationDescription>, Error> {
         let request = FindServersRequest {
             request_header: channel.make_request_header(self.config.request_timeout),
             endpoint_url: endpoint_url.into(),
@@ -441,13 +438,13 @@ impl Client {
     /// # Returns
     ///
     /// * `Ok(Vec<ApplicationDescription>)` - List of descriptions for servers known to the discovery server.
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     pub async fn find_servers(
         &self,
         discovery_endpoint: impl ConnectorBuilder,
         locale_ids: Option<Vec<UAString>>,
         server_uris: Option<Vec<UAString>>,
-    ) -> Result<Vec<ApplicationDescription>, StatusCode> {
+    ) -> Result<Vec<ApplicationDescription>, Error> {
         let discovery_endpoint = discovery_endpoint.build()?;
         let endpoint = discovery_endpoint.default_endpoint();
         let session_info = EndpointInfo {
@@ -471,7 +468,7 @@ impl Client {
             select! {
                 r = evt_loop.poll() => {
                     if let TransportPollResult::Closed(e) = r {
-                        return Err(e);
+                        return Err(Error::new(e, "Connection closed unexpectedly"));
                     }
                 },
                 res = &mut send_fut => break res
@@ -495,7 +492,7 @@ impl Client {
         max_records_to_return: u32,
         server_capability_filter: Option<Vec<UAString>>,
         channel: &AsyncSecureChannel,
-    ) -> Result<FindServersOnNetworkResponse, StatusCode> {
+    ) -> Result<FindServersOnNetworkResponse, Error> {
         let request = FindServersOnNetworkRequest {
             request_header: channel.make_request_header(self.config.request_timeout),
             starting_record_id,
@@ -536,7 +533,7 @@ impl Client {
         starting_record_id: u32,
         max_records_to_return: u32,
         server_capability_filter: Option<Vec<UAString>>,
-    ) -> Result<FindServersOnNetworkResponse, StatusCode> {
+    ) -> Result<FindServersOnNetworkResponse, Error> {
         let discovery_endpoint = discovery_endpoint.build()?;
         let endpoint = discovery_endpoint.default_endpoint();
         let session_info = EndpointInfo {
@@ -560,7 +557,7 @@ impl Client {
             select! {
                 r = evt_loop.poll() => {
                     if let TransportPollResult::Closed(e) = r {
-                        return Err(e);
+                        return Err(Error::new(e, "Connection closed unexpectedly"));
                     }
                 },
                 res = &mut send_fut => break res
@@ -643,7 +640,7 @@ impl Client {
         &self,
         server: RegisteredServer,
         channel: &AsyncSecureChannel,
-    ) -> Result<(), StatusCode> {
+    ) -> Result<(), Error> {
         let request = RegisterServerRequest {
             request_header: channel.make_request_header(self.config.request_timeout),
             server,
@@ -712,14 +709,14 @@ impl Client {
     /// # Returns
     ///
     /// * `Ok(())` - Success
-    /// * `Err(StatusCode)` - Request failed, [Status code](StatusCode) is the reason for failure.
+    /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub async fn register_server(
         &self,
         connector: impl ConnectorBuilder,
         server_endpoint: &EndpointDescription,
         server: RegisteredServer,
-    ) -> Result<(), StatusCode> {
+    ) -> Result<(), Error> {
         let endpoint_info = EndpointInfo {
             endpoint: server_endpoint.clone(),
             user_identity_token: IdentityToken::Anonymous,
@@ -737,7 +734,7 @@ impl Client {
             select! {
                 r = evt_loop.poll() => {
                     if let TransportPollResult::Closed(e) = r {
-                        return Err(e);
+                        return Err(Error::new(e, "Connection closed unexpectedly"));
                     }
                 },
                 res = &mut send_fut => break res

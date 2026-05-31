@@ -177,8 +177,7 @@ impl<T: FnMut(&NodeId) -> bool> DataTypeTreeBuilder<T> {
 
             let r = session
                 .read(chunk, TimestampsToReturn::Neither, 0.0)
-                .await
-                .map_err(|e| Error::new(e, "Failed to read type definitions"))?;
+                .await?;
 
             for (val, id) in r.into_iter().zip(chunk.iter()) {
                 let entry = type_data.entry(id.node_id.clone()).or_default();

@@ -4,6 +4,8 @@
 
 //! Provides functions for parsing Urls from strings.
 
+use std::fmt::Display;
+
 use tracing::error;
 use url::Url;
 
@@ -88,6 +90,17 @@ pub enum HostnameFromUrlError {
     Parse(url::ParseError),
     /// Host is not present in URL.
     MissingHost,
+}
+
+impl Display for HostnameFromUrlError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HostnameFromUrlError::Parse(parse_error) => {
+                write!(f, "Failed to parse URL: {parse_error}")
+            }
+            HostnameFromUrlError::MissingHost => write!(f, "URL missing host"),
+        }
+    }
 }
 
 impl From<url::ParseError> for HostnameFromUrlError {

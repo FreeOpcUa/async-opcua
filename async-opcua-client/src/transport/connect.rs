@@ -1,6 +1,6 @@
 use std::{future::Future, sync::Arc};
 
-use opcua_types::{EndpointDescription, Error, StatusCode};
+use opcua_types::{EndpointDescription, Error};
 
 use crate::transport::{state::SecureChannelState, RequestRecv};
 
@@ -28,7 +28,7 @@ pub trait Connector: Send + Sync {
         channel: Arc<SecureChannelState>,
         outgoing_recv: RequestRecv,
         config: TransportConfiguration,
-    ) -> impl Future<Output = Result<Self::Transport, StatusCode>> + Send + Sync;
+    ) -> impl Future<Output = Result<Self::Transport, Error>> + Send + Sync;
 
     /// Get the default endpoint for this connector.
     fn default_endpoint(&self) -> EndpointDescription;

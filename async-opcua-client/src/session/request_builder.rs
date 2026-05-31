@@ -1,6 +1,6 @@
 use std::{future::Future, time::Duration};
 
-use opcua_types::{DateTime, DiagnosticBits, IntegerId, NodeId, RequestHeader, StatusCode};
+use opcua_types::{DateTime, DiagnosticBits, Error, IntegerId, NodeId, RequestHeader};
 
 use crate::AsyncSecureChannel;
 
@@ -15,7 +15,7 @@ pub trait UARequest {
     fn send<'a>(
         self,
         channel: &'a AsyncSecureChannel,
-    ) -> impl Future<Output = Result<Self::Out, StatusCode>> + Send + 'a
+    ) -> impl Future<Output = Result<Self::Out, Error>> + Send + 'a
     where
         Self: 'a;
 }

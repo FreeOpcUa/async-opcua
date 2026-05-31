@@ -1,7 +1,7 @@
 use std::{future::Future, time::Instant};
 
 use futures::{stream::FuturesUnordered, StreamExt};
-use opcua_types::StatusCode;
+use opcua_types::{Error, StatusCode};
 use tokio::{select, sync::watch::Receiver};
 use tracing::debug;
 
@@ -53,7 +53,7 @@ enum ActivityOrNext {
     Next(Option<Instant>),
 }
 
-impl<T: Future<Output = Result<bool, StatusCode>>, R: Fn() -> T, S: SubscriptionCache>
+impl<T: Future<Output = Result<bool, Error>>, R: Fn() -> T, S: SubscriptionCache>
     SubscriptionEventLoopState<T, R, S>
 {
     /// Construct a new subscription cache.
@@ -105,14 +105,16 @@ impl<T: Future<Output = Result<bool, StatusCode>>, R: Fn() -> T, S: Subscription
         }
     }
 
-    async fn wait_for_next_publish(&mut self) -> Result<bool, StatusCode> {
+    async fn wait_for_next_publish(&mut self) -> Result<bool, Error> {
         if self.futures.is_empty() {
             futures::future::pending().await
         } else {
-            self.futures
-                .next()
-                .await
-                .unwrap_or(Err(StatusCode::BadInvalidState))
+            self.futures.next().await.unwrap_or_else(|| {
+                Err(Error::new(
+                    StatusCode::BadInvalidState,
+                    "Invalid state, polling for publish completion returned None",
+                ))
+            })
         }
     }
 
@@ -196,7 +198,7 @@ impl<T: Future<Output = Result<bool, StatusCode>>, R: Fn() -> T, S: Subscription
                         ActivityOrNext::Activity(SubscriptionActivity::Publish)
                     }
                     Err(e) => {
-                        match e {
+                        match e.status() {
                             StatusCode::BadTimeout => {
                                 session_debug!(self, "Publish request timed out");
                             }
@@ -211,7 +213,7 @@ impl<T: Future<Output = Result<bool, StatusCode>>, R: Fn() -> T, S: Subscription
                             | StatusCode::BadSessionIdInvalid => {
                                 // If this happens we will probably eventually fail keep-alive, defer to that.
                                 session_error!(self, "Publish response indicates session is dead");
-                                return ActivityOrNext::Activity(SubscriptionActivity::FatalFailure(e))
+                                return ActivityOrNext::Activity(SubscriptionActivity::FatalFailure(e.status()))
                             }
                             StatusCode::BadNoSubscription => {
                                 session_debug!(
@@ -222,7 +224,7 @@ impl<T: Future<Output = Result<bool, StatusCode>>, R: Fn() -> T, S: Subscription
                             },
                             _ => ()
                         }
-                        ActivityOrNext::Activity(SubscriptionActivity::PublishFailed(e))
+                        ActivityOrNext::Activity(SubscriptionActivity::PublishFailed(e.status()))
                     }
                 }
             },

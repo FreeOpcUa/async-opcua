@@ -14,8 +14,9 @@ use opcua_core::{
 };
 use opcua_crypto::SecurityPolicy;
 use opcua_types::{
-    DateTime, DiagnosticBits, IntegerId, MessageSecurityMode, NodeId, OpenSecureChannelRequest,
-    OpenSecureChannelResponse, RequestHeader, SecurityTokenRequestType, StatusCode,
+    DateTime, DiagnosticBits, Error, IntegerId, MessageSecurityMode, NodeId,
+    OpenSecureChannelRequest, OpenSecureChannelResponse, RequestHeader, SecurityTokenRequestType,
+    StatusCode,
 };
 
 /// Tokio channel for sending requests to the transport.
@@ -71,7 +72,7 @@ impl Request {
         }
     }
 
-    pub(super) async fn send(self) -> Result<ResponseMessage, StatusCode> {
+    pub(super) async fn send(self) -> Result<ResponseMessage, Error> {
         let (cb_send, cb_recv) = tokio::sync::oneshot::channel();
 
         let message = OutgoingMessage {
@@ -83,14 +84,25 @@ impl Request {
 
         match self.sender.send_timeout(message, self.timeout).await {
             Ok(()) => (),
-            Err(SendTimeoutError::Closed(_)) => return Err(StatusCode::BadConnectionClosed),
-            Err(SendTimeoutError::Timeout(_)) => return Err(StatusCode::BadTimeout),
+            Err(SendTimeoutError::Closed(_)) => {
+                return Err(Error::new(
+                    StatusCode::BadConnectionClosed,
+                    "Request failed due to the client suhtting down",
+                ))
+            }
+            Err(SendTimeoutError::Timeout(_)) => return Err(Error::new(
+                    StatusCode::BadTimeout,
+                    "Request failed to send within timeout, likely because the request queue is backed up",
+                )),
         }
 
         match cb_recv.await {
             Ok(r) => r,
             // Should not really happen, would mean something panicked.
-            Err(_) => Err(StatusCode::BadConnectionClosed),
+            Err(_) => Err(Error::new(
+                StatusCode::BadConnectionClosed,
+                "Fatal error, connection closed",
+            )),
         }
     }
 }
@@ -159,7 +171,7 @@ impl SecureChannelState {
     pub(super) fn end_issue_or_renew_secure_channel(
         &self,
         response: &OpenSecureChannelResponse,
-    ) -> Result<(), StatusCode> {
+    ) -> Result<(), Error> {
         // Extract the security token from the response.
         let mut security_token = response.security_token.clone();
 
@@ -186,7 +198,13 @@ impl SecureChannelState {
                     "OpenSecureChannel response changed channel_id from {} to {}",
                     existing_channel_id, security_token.channel_id
                 );
-                return Err(StatusCode::BadSecureChannelIdInvalid);
+                return Err(Error::new(
+                    StatusCode::BadSecureChannelIdInvalid,
+                    format!(
+                        "OpenSecureChannel response changed channel_id from {} to {}",
+                        existing_channel_id, security_token.channel_id
+                    ),
+                ));
             }
             secure_channel.set_client_offset(**self.client_offset.load());
             secure_channel.set_security_token(security_token);

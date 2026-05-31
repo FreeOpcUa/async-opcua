@@ -118,7 +118,7 @@ impl Connector for TcpConnector {
         channel: Arc<SecureChannelState>,
         outgoing_recv: tokio::sync::mpsc::Receiver<OutgoingMessage>,
         config: TransportConfiguration,
-    ) -> Result<TcpTransport, StatusCode> {
+    ) -> Result<TcpTransport, Error> {
         let inner = StreamConnector::new(Self::connect_tcp, self.endpoint_url.clone());
         inner.connect(channel, outgoing_recv, config).await
     }
@@ -281,7 +281,7 @@ impl Connector for ReverseTcpConnector {
         channel: Arc<SecureChannelState>,
         outgoing_recv: tokio::sync::mpsc::Receiver<OutgoingMessage>,
         config: TransportConfiguration,
-    ) -> Result<TcpTransport, StatusCode> {
+    ) -> Result<TcpTransport, Error> {
         match &self.listener {
             TcpConnectorReceiver::Listener(listener) => {
                 let verifier = self.verifier.as_ref();
@@ -301,7 +301,10 @@ impl Connector for ReverseTcpConnector {
             TcpConnectorReceiver::Address(addr) => {
                 let listener = TcpListener::bind(addr).await.map_err(|err| {
                     error!("Could not bind to address {}, {:?}", addr, err);
-                    StatusCode::BadCommunicationError
+                    Error::new(
+                        StatusCode::BadCommunicationError,
+                        format!("Could not bind to address {}, {:?}", addr, err),
+                    )
                 })?;
                 let verifier = self.verifier.as_ref();
                 let inner = StreamConnector::new(

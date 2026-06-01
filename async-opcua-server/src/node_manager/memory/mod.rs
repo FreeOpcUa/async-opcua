@@ -997,7 +997,7 @@ impl<TImpl: InMemoryNodeManagerImpl> NodeManager for InMemoryNodeManager<TImpl> 
         nodes: &mut [&mut HistoryNode],
         timestamps_to_return: TimestampsToReturn,
     ) -> Result<(), StatusCode> {
-        let mut nodes = self.validate_history_read_nodes(context, nodes, false);
+        let mut nodes = self.validate_history_read_nodes(context, nodes, true);
         self.inner
             .history_read_events(context, details, &mut nodes, timestamps_to_return)
             .await

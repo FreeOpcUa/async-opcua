@@ -260,6 +260,8 @@ impl SessionController {
                 }
             }
         }
+        trace_read_lock!(self.session_manager)
+            .cleanup_fota_for_secure_channel(self.channel.secure_channel_id());
     }
 
     fn response_metrics(&self, msg: &Response) {

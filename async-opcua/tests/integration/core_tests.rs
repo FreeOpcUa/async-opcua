@@ -404,6 +404,14 @@ async fn recoverable_error_test_server() {
 
 struct IssuedTokenAuthenticator;
 
+fn valid_issued_jwt() -> String {
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+
+    let header = URL_SAFE_NO_PAD.encode(r#"{"alg":"RS256","typ":"JWT"}"#);
+    let claims = URL_SAFE_NO_PAD.encode(r#"{"sub":"valid","exp":4102444800}"#);
+    format!("{header}.{claims}.signature")
+}
+
 #[async_trait]
 impl AuthManager for IssuedTokenAuthenticator {
     fn user_token_policies(&self, endpoint: &ServerEndpoint) -> Vec<UserTokenPolicy> {
@@ -428,7 +436,7 @@ impl AuthManager for IssuedTokenAuthenticator {
     ) -> Result<UserToken, Error> {
         let token_str =
             String::from_utf8(token.value.clone().unwrap_or_default()).map_err(Error::decoding)?;
-        if token_str == "valid" {
+        if token_str == valid_issued_jwt() {
             Ok(UserToken("valid".into()))
         } else {
             Err(Error::new(
@@ -458,7 +466,7 @@ async fn issued_token_test() {
             SecurityPolicy::Aes128Sha256RsaOaep,
             MessageSecurityMode::SignAndEncrypt,
             IdentityToken::IssuedToken(IssuedTokenWrapper::new_source(ByteString::from(
-                "valid".as_bytes(),
+                valid_issued_jwt().as_bytes(),
             ))),
             "issued_token",
         )

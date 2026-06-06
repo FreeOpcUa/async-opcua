@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UANodeSet xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" LastModified="2026-06-06T00:00:00Z" xmlns="http://opcfoundation.org/UA/2011/03/UANodeSet.xsd">
+    <NamespaceUris>
+        <Uri>http://opcfoundation.org/UA/DI/</Uri>
+    </NamespaceUris>
+    <Models>
+        <Model ModelUri="http://opcfoundation.org/UA/DI/" Version="1.0.0" PublicationDate="2026-06-06T00:00:00Z">
+            <RequiredModel ModelUri="http://opcfoundation.org/UA/" Version="1.5.4" PublicationDate="2025-01-08T00:00:00Z" />
+        </Model>
+    </Models>
+    <Aliases>
+        <Alias Alias="Boolean">i=1</Alias>
+        <Alias Alias="UInt32">i=7</Alias>
+        <Alias Alias="String">i=12</Alias>
+        <Alias Alias="Structure">i=22</Alias>
+        <Alias Alias="HasSubtype">i=45</Alias>
+        <Alias Alias="HasEncoding">i=38</Alias>
+        <Alias Alias="HasTypeDefinition">i=40</Alias>
+    </Aliases>
+
+    <UADataType NodeId="ns=1;i=5002" BrowseName="1:DeviceHealthOptionSet" SymbolicName="DeviceHealthOptionSet">
+        <DisplayName>DeviceHealthOptionSet</DisplayName>
+        <Documentation>Representative DI option set with sparse bit positions.</Documentation>
+        <References>
+            <Reference ReferenceType="HasSubtype" IsForward="false">UInt32</Reference>
+        </References>
+        <Definition Name="1:DeviceHealthOptionSet" SymbolicName="DeviceHealthOptionSet" BaseType="UInt32" IsOptionSet="true">
+            <Field Name="NORMAL" Value="0" />
+            <Field Name="MAINTENANCE_REQUIRED" Value="2" />
+            <Field Name="FAILURE" Value="5" />
+        </Definition>
+    </UADataType>
+
+    <UADataType NodeId="ns=1;i=5001" BrowseName="1:FunctionalGroupDataType" SymbolicName="FunctionalGroupDataType">
+        <DisplayName>FunctionalGroupDataType</DisplayName>
+        <Documentation>Representative DI structure used by companion NodeSets.</Documentation>
+        <References>
+            <Reference ReferenceType="HasSubtype" IsForward="false">Structure</Reference>
+            <Reference ReferenceType="HasEncoding">ns=1;i=15001</Reference>
+            <Reference ReferenceType="HasEncoding">ns=1;i=15101</Reference>
+            <Reference ReferenceType="HasEncoding">ns=1;i=15201</Reference>
+        </References>
+        <Definition Name="1:FunctionalGroupDataType" SymbolicName="FunctionalGroupDataType" BaseType="Structure">
+            <Field Name="Name" DataType="String" />
+            <Field Name="Enabled" DataType="Boolean" />
+        </Definition>
+    </UADataType>
+    <UAObject NodeId="ns=1;i=15001" BrowseName="Default Binary" SymbolicName="DefaultBinary">
+        <DisplayName>Default Binary</DisplayName>
+        <References>
+            <Reference ReferenceType="HasTypeDefinition">i=76</Reference>
+        </References>
+    </UAObject>
+    <UAObject NodeId="ns=1;i=15101" BrowseName="Default XML" SymbolicName="DefaultXml">
+        <DisplayName>Default XML</DisplayName>
+        <References>
+            <Reference ReferenceType="HasTypeDefinition">i=76</Reference>
+        </References>
+    </UAObject>
+    <UAObject NodeId="ns=1;i=15201" BrowseName="Default JSON" SymbolicName="DefaultJson">
+        <DisplayName>Default JSON</DisplayName>
+        <References>
+            <Reference ReferenceType="HasTypeDefinition">i=76</Reference>
+        </References>
+    </UAObject>
+</UANodeSet>

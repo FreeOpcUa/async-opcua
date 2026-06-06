@@ -12,7 +12,7 @@ use gen::{parse, render};
 
 mod gen;
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
 /// Code generation target for generating node ID enums from
 /// a node ID CSV.
 pub struct NodeIdCodeGenTarget {

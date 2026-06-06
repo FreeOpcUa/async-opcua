@@ -13,6 +13,8 @@ The OPC-UA standard is very large and complex, and implementations are often fla
 
 Read the [compatibility](./docs/compatibility.md) page for how the implementation conforms with the OPC UA spec.
 
+Read the [advanced features](./docs/advanced_features.md) page for Alarms, HDA, PubSub, Programs, aggregates, GDS, companion NodeSets, OAuth2 JWTs, and FOTA helpers.
+
 Read the [change log](./CHANGELOG.md) for changes per version as well as aspirational / upcoming work.
 
 ## This is a fork

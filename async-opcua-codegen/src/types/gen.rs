@@ -90,6 +90,7 @@ struct ImportType {
 pub struct CodeGenerator {
     import_map: HashMap<String, ImportType>,
     input: HashMap<String, LoadedType>,
+    input_order: Vec<String>,
     default_excluded: HashSet<String>,
     config: CodeGenItemConfig,
     target_namespace: String,
@@ -110,6 +111,10 @@ impl CodeGenerator {
         id_path: String,
         namespace_to_import_path: HashMap<String, String>,
     ) -> Self {
+        let input_order = input
+            .iter()
+            .map(|loaded_type| loaded_type.name().to_owned())
+            .collect();
         Self {
             import_map: external_import_map
                 .into_iter()
@@ -138,6 +143,7 @@ impl CodeGenerator {
                 .into_iter()
                 .map(|v| (v.name().to_owned(), v))
                 .collect(),
+            input_order,
             config,
             default_excluded,
             target_namespace,
@@ -214,7 +220,10 @@ impl CodeGenerator {
     pub fn generate_types(mut self) -> Result<Vec<GeneratedItem>, CodeGenError> {
         let mut generated = Vec::new();
 
-        for item in self.input.values() {
+        for name in &self.input_order {
+            let Some(item) = self.input.get(name) else {
+                continue;
+            };
             if self.import_map.contains_key(item.name()) {
                 continue;
             }
@@ -256,9 +265,12 @@ impl CodeGenerator {
             }
         }
 
-        let input = std::mem::take(&mut self.input);
+        let mut input = std::mem::take(&mut self.input);
 
-        for item in input.into_values() {
+        for name in &self.input_order {
+            let Some(item) = input.remove(name) else {
+                continue;
+            };
             if self
                 .import_map
                 .get(item.name())

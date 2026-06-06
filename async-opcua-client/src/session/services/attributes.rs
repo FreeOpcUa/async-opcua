@@ -12,13 +12,14 @@ use crate::{
 };
 use opcua_core::ResponseMessage;
 use opcua_types::{
-    DataValue, DeleteAtTimeDetails, DeleteEventDetails, DeleteRawModifiedDetails, Error,
-    ExtensionObject, HistoryReadRequest, HistoryReadResponse, HistoryReadResult,
-    HistoryReadValueId, HistoryUpdateRequest, HistoryUpdateResponse, HistoryUpdateResult,
-    IntegerId, NodeId, ReadAtTimeDetails, ReadEventDetails, ReadProcessedDetails,
-    ReadRawModifiedDetails, ReadRequest, ReadResponse, ReadValueId, StatusCode, TimestampsToReturn,
-    UpdateDataDetails, UpdateEventDetails, UpdateStructureDataDetails, WriteRequest, WriteResponse,
-    WriteValue,
+    match_extension_object_owned, ByteString, DataValue, DateTime, DeleteAtTimeDetails,
+    DeleteEventDetails, DeleteRawModifiedDetails, Error, ExtensionObject, HistoryData,
+    HistoryReadRequest, HistoryReadResponse, HistoryReadResult, HistoryReadValueId,
+    HistoryUpdateRequest, HistoryUpdateResponse, HistoryUpdateResult, IntegerId, NodeId,
+    NumericRange, PerformUpdateType, QualifiedName, ReadAtTimeDetails, ReadEventDetails,
+    ReadProcessedDetails, ReadRawModifiedDetails, ReadRequest, ReadResponse, ReadValueId,
+    StatusCode, TimestampsToReturn, UpdateDataDetails, UpdateEventDetails,
+    UpdateStructureDataDetails, WriteRequest, WriteResponse, WriteValue,
 };
 use tracing::{debug_span, Instrument};
 
@@ -671,5 +672,101 @@ impl Session {
             .await?
             .results
             .unwrap_or_default())
+    }
+
+    /// Helper method to perform a raw history read for a single node.
+    pub async fn history_read_raw(
+        &self,
+        node_id: NodeId,
+        start_time: DateTime,
+        end_time: DateTime,
+        num_values_per_node: u32,
+        return_bounds: bool,
+        continuation_point: Option<ByteString>,
+    ) -> Result<(Vec<DataValue>, Option<ByteString>), Error> {
+        let details = ReadRawModifiedDetails {
+            is_read_modified: false,
+            start_time,
+            end_time,
+            num_values_per_node,
+            return_bounds,
+        };
+
+        let action = HistoryReadAction::ReadRawModifiedDetails(details);
+        let value_id = HistoryReadValueId {
+            node_id,
+            index_range: NumericRange::None,
+            data_encoding: QualifiedName::null(),
+            continuation_point: continuation_point.unwrap_or_default(),
+        };
+
+        let results = self
+            .history_read(action, TimestampsToReturn::Both, false, &[value_id])
+            .await?;
+        if results.is_empty() {
+            return Err(Error::new(
+                StatusCode::BadUnexpectedError,
+                "No results returned from history read",
+            ));
+        }
+
+        let result = &results[0];
+        if result.status_code.is_bad() {
+            return Err(Error::new(result.status_code, "History read failed"));
+        }
+
+        if result.history_data.is_null() {
+            let cp = if result.continuation_point.is_null() {
+                None
+            } else {
+                Some(result.continuation_point.clone())
+            };
+            return Ok((Vec::new(), cp));
+        }
+
+        let history_data_obj = result.history_data.clone();
+        let history_data = match_extension_object_owned!(history_data_obj,
+            v: HistoryData => v,
+            _ => return Err(Error::new(StatusCode::BadDecodingError, "Failed to decode HistoryData")),
+        );
+
+        let values = history_data.data_values.unwrap_or_default();
+        let cp = if result.continuation_point.is_null() {
+            None
+        } else {
+            Some(result.continuation_point.clone())
+        };
+
+        Ok((values, cp))
+    }
+
+    /// Helper method to update/insert historical data values for a single node.
+    pub async fn history_update_data(
+        &self,
+        node_id: NodeId,
+        perform_insert_replace: PerformUpdateType,
+        values: Vec<DataValue>,
+    ) -> Result<Vec<StatusCode>, Error> {
+        let details = UpdateDataDetails {
+            node_id,
+            perform_insert_replace,
+            update_values: Some(values),
+        };
+
+        let action = HistoryUpdateAction::UpdateDataDetails(details);
+        let results = self.history_update(&[action]).await?;
+        if results.is_empty() {
+            return Err(Error::new(
+                StatusCode::BadUnexpectedError,
+                "No results returned from history update",
+            ));
+        }
+
+        let result = &results[0];
+        if result.status_code.is_bad() {
+            return Err(Error::new(result.status_code, "History update failed"));
+        }
+
+        Ok(result.operation_results.clone().unwrap_or_default())
     }
 }

@@ -35,6 +35,9 @@ type ReadCB = Arc<
         + 'static,
 >;
 type MethodCB = Arc<dyn Fn(&[Variant]) -> Result<Vec<Variant>, StatusCode> + Send + Sync + 'static>;
+type MethodWithContextCB = Arc<
+    dyn Fn(&RequestContext, &[Variant]) -> Result<Vec<Variant>, StatusCode> + Send + Sync + 'static,
+>;
 
 /// Builder for the [SimpleNodeManager].
 pub struct SimpleNodeManagerBuilder {
@@ -120,11 +123,13 @@ pub struct SimpleNodeManagerImpl {
     write_cbs: RwLock<HashMap<NodeId, WriteCB>>,
     read_cbs: RwLock<HashMap<NodeId, ReadCB>>,
     method_cbs: RwLock<HashMap<NodeId, MethodCB>>,
+    method_with_context_cbs: RwLock<HashMap<NodeId, MethodWithContextCB>>,
     namespaces: Vec<NamespaceMetadata>,
     #[allow(unused)]
     node_managers: NodeManagersRef,
     name: String,
     samplers: SyncSampler,
+    history_backend: RwLock<Option<Arc<dyn crate::history::HistoryStorageBackend>>>,
 }
 
 #[async_trait]
@@ -287,13 +292,22 @@ impl InMemoryNodeManagerImpl for SimpleNodeManagerImpl {
 
     async fn call(
         &self,
-        _context: &RequestContext,
+        context: &RequestContext,
         _address_space: &RwLock<AddressSpace>,
         methods_to_call: &mut [&mut &mut MethodCall],
     ) -> Result<(), StatusCode> {
         let cbs = trace_read_lock!(self.method_cbs);
+        let ctx_cbs = trace_read_lock!(self.method_with_context_cbs);
         for method in methods_to_call {
-            if let Some(cb) = cbs.get(method.method_id()) {
+            if let Some(cb) = ctx_cbs.get(method.method_id()) {
+                match cb(context, method.arguments()) {
+                    Ok(r) => {
+                        method.set_outputs(r);
+                        method.set_status(StatusCode::Good);
+                    }
+                    Err(e) => method.set_status(e),
+                }
+            } else if let Some(cb) = cbs.get(method.method_id()) {
                 match cb(method.arguments()) {
                     Ok(r) => {
                         method.set_outputs(r);
@@ -306,6 +320,138 @@ impl InMemoryNodeManagerImpl for SimpleNodeManagerImpl {
 
         Ok(())
     }
+
+    async fn history_read_raw_modified(
+        &self,
+        _context: &RequestContext,
+        details: &opcua_types::ReadRawModifiedDetails,
+        nodes: &mut [&mut &mut crate::node_manager::history::HistoryNode],
+        _timestamps_to_return: TimestampsToReturn,
+    ) -> Result<(), StatusCode> {
+        let backend = {
+            let guard = self.history_backend.read();
+            guard.clone()
+        };
+        if let Some(backend) = backend {
+            for hn in nodes {
+                let node_id = hn.node_id();
+                let input_cp = hn.continuation_point();
+                let backend_token = input_cp
+                    .and_then(|cp| cp.get::<crate::history::HistoryContinuationPoint>())
+                    .and_then(|hcp| hcp.backend_token.clone());
+
+                let res = backend
+                    .read_raw_modified(
+                        node_id,
+                        details.start_time,
+                        details.end_time,
+                        details.num_values_per_node,
+                        details.return_bounds,
+                        backend_token,
+                    )
+                    .await;
+
+                match res {
+                    Ok((values, next_token)) => {
+                        let next_cp = next_token.map(|tok| {
+                            crate::session::continuation_points::ContinuationPoint::new(Box::new(
+                                crate::history::HistoryContinuationPoint::new(
+                                    node_id.clone(),
+                                    details.start_time,
+                                    details.end_time,
+                                    details.num_values_per_node,
+                                    details.return_bounds,
+                                    Some(tok),
+                                ),
+                            ))
+                        });
+
+                        hn.set_next_continuation_point(next_cp);
+                        if details.is_read_modified {
+                            hn.set_result(opcua_types::HistoryModifiedData {
+                                data_values: Some(values),
+                                modification_infos: None,
+                            });
+                        } else {
+                            hn.set_result(opcua_types::HistoryData {
+                                data_values: Some(values),
+                            });
+                        }
+                        hn.set_status(StatusCode::Good);
+                    }
+                    Err(status) => {
+                        hn.set_status(status);
+                    }
+                }
+            }
+            Ok(())
+        } else {
+            Err(StatusCode::BadHistoryOperationUnsupported)
+        }
+    }
+
+    async fn history_read_processed(
+        &self,
+        context: &RequestContext,
+        details: &opcua_types::ReadProcessedDetails,
+        nodes: &mut [&mut &mut crate::node_manager::history::HistoryNode],
+        timestamps_to_return: TimestampsToReturn,
+    ) -> Result<(), StatusCode> {
+        let backend = {
+            let guard = self.history_backend.read();
+            guard.clone()
+        };
+        if let Some(backend) = backend {
+            crate::aggregates::read_processed_aggregates(
+                &backend,
+                context,
+                details,
+                nodes,
+                timestamps_to_return,
+            )
+            .await
+        } else {
+            Err(StatusCode::BadHistoryOperationUnsupported)
+        }
+    }
+
+    async fn history_update(
+        &self,
+        _context: &RequestContext,
+        nodes: &mut [&mut &mut crate::node_manager::history::HistoryUpdateNode],
+    ) -> Result<(), StatusCode> {
+        let backend = {
+            let guard = self.history_backend.read();
+            guard.clone()
+        };
+        if let Some(backend) = backend {
+            for hn in nodes {
+                match hn.details() {
+                    crate::node_manager::history::HistoryUpdateDetails::UpdateData(d) => {
+                        let node_id = &d.node_id;
+                        let mode = d.perform_insert_replace;
+                        let values = d.update_values.clone().unwrap_or_default();
+
+                        match backend.update_data(node_id, mode, values).await {
+                            Ok(results) => {
+                                hn.set_operation_results(Some(results));
+                                hn.set_status(StatusCode::Good);
+                            }
+                            Err(status) => {
+                                hn.set_status(status);
+                            }
+                        }
+                    }
+                    _ => {
+                        hn.set_status(StatusCode::BadHistoryOperationUnsupported);
+                    }
+                }
+            }
+            Ok(())
+        } else {
+            Err(StatusCode::BadHistoryOperationUnsupported)
+        }
+    }
 }
 
 impl SimpleNodeManagerImpl {
@@ -314,11 +460,18 @@ impl SimpleNodeManagerImpl {
             write_cbs: Default::default(),
             read_cbs: Default::default(),
             method_cbs: Default::default(),
+            method_with_context_cbs: Default::default(),
             namespaces,
             name: name.to_owned(),
             node_managers,
             samplers: SyncSampler::new(),
+            history_backend: RwLock::new(None),
         }
+    }
+
+    /// Sets the historical storage backend for this node manager.
+    pub fn set_history_backend(&self, backend: Arc<dyn crate::history::HistoryStorageBackend>) {
+        *self.history_backend.write() = Some(backend);
     }
 
     fn read_node_value(
@@ -435,6 +588,19 @@ impl SimpleNodeManagerImpl {
         cb: impl Fn(&[Variant]) -> Result<Vec<Variant>, StatusCode> + Send + Sync + 'static,
     ) {
         let mut cbs = trace_write_lock!(self.method_cbs);
+        cbs.insert(id, Arc::new(cb));
+    }
+
+    /// Add a callback for `Call` on the method given by `id` that has access to the RequestContext.
+    pub fn add_method_callback_with_context(
+        &self,
+        id: NodeId,
+        cb: impl Fn(&RequestContext, &[Variant]) -> Result<Vec<Variant>, StatusCode>
+            + Send
+            + Sync
+            + 'static,
+    ) {
+        let mut cbs = trace_write_lock!(self.method_with_context_cbs);
         cbs.insert(id, Arc::new(cb));
     }
 }

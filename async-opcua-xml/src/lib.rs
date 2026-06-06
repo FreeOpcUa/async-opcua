@@ -17,12 +17,17 @@ use roxmltree::Node;
 mod encoding;
 mod error;
 mod ext;
+pub mod parser;
 pub mod schema;
 
 pub use encoding::{XmlReadError, XmlStreamReader, XmlStreamWriter, XmlWriteError};
 pub use quick_xml::events;
 
 pub use error::{XmlError, XmlErrorInner};
+pub use parser::{
+    ExpandedNodeId, NodeLocation, NodeSetCollection, OpcUaXmlParser, ResolvedSchemaImport,
+    TypeDictionaryCollection, XmlSchemaCollection, OPC_UA_NAMESPACE_URI,
+};
 pub use schema::opc_binary_schema::load_bsd_file;
 pub use schema::ua_node_set::load_nodeset2_file;
 pub use schema::xml_schema::load_xsd_schema;

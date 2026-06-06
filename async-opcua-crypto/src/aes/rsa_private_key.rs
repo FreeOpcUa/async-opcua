@@ -163,6 +163,19 @@ impl PrivateKey {
         self.value.to_pkcs8_der()
     }
 
+    /// Serialize the private key to a PEM string.
+    pub fn to_pem(&self) -> Result<String, String> {
+        use rsa::pkcs8;
+        use x509_cert::der::pem::PemLabel;
+        let doc = self
+            .to_der()
+            .map_err(|e| format!("Failed to convert to DER: {e:?}"))?;
+        let pem = doc
+            .to_pem(rsa::pkcs8::PrivateKeyInfo::PEM_LABEL, pkcs8::LineEnding::CR)
+            .map_err(|e| format!("Failed to convert to PEM: {e:?}"))?;
+        Ok(pem.to_string())
+    }
+
     /// Get the public key info for this private key.
     pub fn public_key_to_info(&self) -> x509_cert::spki::Result<SubjectPublicKeyInfoOwned> {
         use rsa::pkcs8::EncodePublicKey;

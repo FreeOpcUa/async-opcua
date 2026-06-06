@@ -176,3 +176,14 @@ pub mod sync {
     /// Mutually exclusive lock. Use this if you need both read and write often.
     pub type Mutex<T> = parking_lot::Mutex<T>;
 }
+
+/// Shared compliance traits and enums.
+pub mod traits;
+pub use traits::*;
+
+/// Logging, masking, and tracing helpers.
+pub mod logging;
+
+/// Alarms & Conditions event types structures.
+pub mod events;
+pub use events::AlarmEvent;

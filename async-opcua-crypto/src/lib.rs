@@ -14,7 +14,7 @@ use opcua_types::{
 use tracing::{error, trace};
 
 pub use crate::aes::{AesKey, KeySize, PKey, PrivateKey, PublicKey};
-pub use crate::x509::{X509Data, X509Error, X509};
+pub use crate::x509::{AlternateNames, X509Data, X509Error, X509};
 pub use certificate_store::CertificateStore;
 pub use policy::{AesDerivedKeys, PaddingInfo};
 pub use security_policy::SecurityPolicy;
@@ -28,6 +28,7 @@ pub use user_identity::{
 mod tests;
 
 mod certificate_store;
+pub mod gds_reload;
 mod hash;
 pub mod random;
 mod security_policy;

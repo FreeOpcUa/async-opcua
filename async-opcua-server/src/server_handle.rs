@@ -22,6 +22,7 @@ use super::{
 #[derive(Clone)]
 pub struct ServerHandle {
     info: Arc<ServerInfo>,
+    certificate_store: Arc<RwLock<opcua_crypto::CertificateStore>>,
     service_level: Arc<AtomicU8>,
     subscriptions: Arc<SubscriptionCache>,
     node_managers: NodeManagers,
@@ -36,6 +37,7 @@ impl ServerHandle {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         info: Arc<ServerInfo>,
+        certificate_store: Arc<RwLock<opcua_crypto::CertificateStore>>,
         service_level: Arc<AtomicU8>,
         subscriptions: Arc<SubscriptionCache>,
         node_managers: NodeManagers,
@@ -47,6 +49,7 @@ impl ServerHandle {
     ) -> Self {
         Self {
             info,
+            certificate_store,
             service_level,
             subscriptions,
             node_managers,
@@ -61,6 +64,11 @@ impl ServerHandle {
     /// Get a reference to the ServerInfo, containing configuration and other shared server data.
     pub fn info(&self) -> &Arc<ServerInfo> {
         &self.info
+    }
+
+    /// Get a reference to the certificate store.
+    pub fn certificate_store(&self) -> &Arc<RwLock<opcua_crypto::CertificateStore>> {
+        &self.certificate_store
     }
 
     /// Get a reference to the subscription cache.
@@ -106,6 +114,20 @@ impl ServerHandle {
     /// Get the cancellation token.
     pub fn token(&self) -> &CancellationToken {
         &self.token
+    }
+
+    /// Reloads the application certificate and private key from disk dynamically.
+    pub fn reload_certificate(&self) -> Result<(), String> {
+        let store = self.certificate_store.read();
+        let (cert, pkey) = opcua_crypto::gds_reload::reload_store_from_disk(&*store)?;
+
+        let mut server_cert = self.info.server_certificate.write();
+        let mut server_pkey = self.info.server_pkey.write();
+
+        *server_cert = Some(cert);
+        *server_pkey = Some(pkey);
+
+        Ok(())
     }
 
     /// Signal the server to stop.

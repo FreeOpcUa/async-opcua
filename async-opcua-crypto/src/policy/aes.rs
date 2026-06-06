@@ -577,7 +577,9 @@ impl AesSecurityPolicy for Basic256Sha256 {
 ///   DerivedSignatureKeyLength – 128 bits
 ///   AsymmetricKeyLength - 1024-2048 bits
 ///   SecureChannelNonceLength - 16 bytes
+#[cfg(feature = "legacy-crypto")]
 pub(crate) struct Basic128Rsa15;
+#[cfg(feature = "legacy-crypto")]
 impl AesSecurityPolicy for Basic128Rsa15 {
     const SECURITY_POLICY: &str = "Basic128Rsa15";
     const SECURITY_POLICY_URI: &str = "http://opcfoundation.org/UA/SecurityPolicy#Basic128Rsa15";
@@ -606,7 +608,9 @@ impl AesSecurityPolicy for Basic128Rsa15 {
 ///   DerivedSignatureKeyLength – 192 bits
 ///   AsymmetricKeyLength - 1024-2048 bits
 ///   SecureChannelNonceLength - 32 bytes
+#[cfg(feature = "legacy-crypto")]
 pub(crate) struct Basic256;
+#[cfg(feature = "legacy-crypto")]
 impl AesSecurityPolicy for Basic256 {
     const SECURITY_POLICY: &str = "Basic256";
     const SECURITY_POLICY_URI: &str = "http://opcfoundation.org/UA/SecurityPolicy#Basic256";
@@ -644,7 +648,7 @@ mod tests {
             initialization_vector: iv.to_vec(),
         };
 
-        let policy = SecurityPolicy::Basic128Rsa15;
+        let policy = SecurityPolicy::Aes128Sha256RsaOaep;
 
         let plaintext = b"01234567890123450123456789012345";
         let buf_size = plaintext.len() + policy.plain_block_size();
@@ -689,27 +693,30 @@ mod tests {
             0x3c, 0x3d, 0x3e, 0x3f,
         ];
 
-        // Create a security policy Basic128Rsa15 policy
-        //
-        // a) SigningKeyLength = 16
-        // b) EncryptingKeyLength = 16
-        // c) EncryptingBlockSize = 16
-        let security_policy = SecurityPolicy::Basic128Rsa15;
-        let keys = security_policy.make_secure_channel_keys(&nonce1, &nonce2);
-        assert_eq!(keys.signing_key.len(), 16);
-        assert_eq!(keys.encryption_key.value().len(), 16);
-        assert_eq!(keys.initialization_vector.len(), 16);
+        #[cfg(feature = "legacy-crypto")]
+        {
+            // Create a security policy Basic128Rsa15 policy
+            //
+            // a) SigningKeyLength = 16
+            // b) EncryptingKeyLength = 16
+            // c) EncryptingBlockSize = 16
+            let security_policy = SecurityPolicy::Basic128Rsa15;
+            let keys = security_policy.make_secure_channel_keys(&nonce1, &nonce2);
+            assert_eq!(keys.signing_key.len(), 16);
+            assert_eq!(keys.encryption_key.value().len(), 16);
+            assert_eq!(keys.initialization_vector.len(), 16);
 
-        // Create a security policy Basic256 policy
-        //
-        // a) SigningKeyLength = 24
-        // b) EncryptingKeyLength = 32
-        // c) EncryptingBlockSize = 16
-        let security_policy = SecurityPolicy::Basic256;
-        let keys = security_policy.make_secure_channel_keys(&nonce1, &nonce2);
-        assert_eq!(keys.signing_key.len(), 24);
-        assert_eq!(keys.encryption_key.value().len(), 32);
-        assert_eq!(keys.initialization_vector.len(), 16);
+            // Create a security policy Basic256 policy
+            //
+            // a) SigningKeyLength = 24
+            // b) EncryptingKeyLength = 32
+            // c) EncryptingBlockSize = 16
+            let security_policy = SecurityPolicy::Basic256;
+            let keys = security_policy.make_secure_channel_keys(&nonce1, &nonce2);
+            assert_eq!(keys.signing_key.len(), 24);
+            assert_eq!(keys.encryption_key.value().len(), 32);
+            assert_eq!(keys.initialization_vector.len(), 16);
+        }
 
         // Create a security policy Basic256Sha256 policy
         //
@@ -735,6 +742,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "legacy-crypto")]
     fn derive_keys_from_nonce_basic128rsa15() {
         let security_policy = SecurityPolicy::Basic128Rsa15;
 

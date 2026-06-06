@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{input::SchemaCache, CodeGenError};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
 pub enum ExplicitCodeGenSource {
     #[serde(rename = "xml-schema")]
@@ -18,7 +18,7 @@ pub enum ExplicitCodeGenSource {
     NodeSet { path: PathBuf },
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(untagged)]
 /// Utility type for easily specifying code generation sources.
 /// If the source is a string, we infer which type of source it is based on the file extension.

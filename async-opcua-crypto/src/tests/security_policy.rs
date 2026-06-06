@@ -5,8 +5,11 @@ use crate::SecurityPolicy;
 #[test]
 fn is_deprecated() {
     // Deprecated
-    assert!(SecurityPolicy::Basic256.is_deprecated());
-    assert!(SecurityPolicy::Basic128Rsa15.is_deprecated());
+    #[cfg(feature = "legacy-crypto")]
+    {
+        assert!(SecurityPolicy::Basic256.is_deprecated());
+        assert!(SecurityPolicy::Basic128Rsa15.is_deprecated());
+    }
     // Not deprecated
     assert!(!SecurityPolicy::None.is_deprecated());
     assert!(!SecurityPolicy::Basic256Sha256.is_deprecated());
@@ -47,23 +50,38 @@ fn from_str() {
         SecurityPolicy::from_str("http://opcfoundation.org/UA/SecurityPolicy#None").unwrap(),
         SecurityPolicy::None
     );
-    assert_eq!(
-        SecurityPolicy::from_str("Basic128Rsa15").unwrap(),
-        SecurityPolicy::Basic128Rsa15
-    );
-    assert_eq!(
-        SecurityPolicy::from_str("http://opcfoundation.org/UA/SecurityPolicy#Basic128Rsa15")
-            .unwrap(),
-        SecurityPolicy::Basic128Rsa15
-    );
-    assert_eq!(
-        SecurityPolicy::from_str("Basic256").unwrap(),
-        SecurityPolicy::Basic256
-    );
-    assert_eq!(
-        SecurityPolicy::from_str("http://opcfoundation.org/UA/SecurityPolicy#Basic256").unwrap(),
-        SecurityPolicy::Basic256
-    );
+    #[cfg(feature = "legacy-crypto")]
+    {
+        assert_eq!(
+            SecurityPolicy::from_str("Basic128Rsa15").unwrap(),
+            SecurityPolicy::Basic128Rsa15
+        );
+        assert_eq!(
+            SecurityPolicy::from_str("http://opcfoundation.org/UA/SecurityPolicy#Basic128Rsa15")
+                .unwrap(),
+            SecurityPolicy::Basic128Rsa15
+        );
+        assert_eq!(
+            SecurityPolicy::from_str("Basic256").unwrap(),
+            SecurityPolicy::Basic256
+        );
+        assert_eq!(
+            SecurityPolicy::from_str("http://opcfoundation.org/UA/SecurityPolicy#Basic256")
+                .unwrap(),
+            SecurityPolicy::Basic256
+        );
+    }
+    #[cfg(not(feature = "legacy-crypto"))]
+    {
+        assert_eq!(
+            SecurityPolicy::from_str("Basic128Rsa15").unwrap(),
+            SecurityPolicy::Unknown
+        );
+        assert_eq!(
+            SecurityPolicy::from_str("Basic256").unwrap(),
+            SecurityPolicy::Unknown
+        );
+    }
     assert_eq!(
         SecurityPolicy::from_str("Basic256Sha256").unwrap(),
         SecurityPolicy::Basic256Sha256
@@ -101,14 +119,17 @@ fn to_uri() {
         SecurityPolicy::None.to_uri(),
         "http://opcfoundation.org/UA/SecurityPolicy#None"
     );
-    assert_eq!(
-        SecurityPolicy::Basic128Rsa15.to_uri(),
-        "http://opcfoundation.org/UA/SecurityPolicy#Basic128Rsa15"
-    );
-    assert_eq!(
-        SecurityPolicy::Basic256.to_uri(),
-        "http://opcfoundation.org/UA/SecurityPolicy#Basic256"
-    );
+    #[cfg(feature = "legacy-crypto")]
+    {
+        assert_eq!(
+            SecurityPolicy::Basic128Rsa15.to_uri(),
+            "http://opcfoundation.org/UA/SecurityPolicy#Basic128Rsa15"
+        );
+        assert_eq!(
+            SecurityPolicy::Basic256.to_uri(),
+            "http://opcfoundation.org/UA/SecurityPolicy#Basic256"
+        );
+    }
     assert_eq!(
         SecurityPolicy::Basic256Sha256.to_uri(),
         "http://opcfoundation.org/UA/SecurityPolicy#Basic256Sha256"
@@ -125,15 +146,18 @@ fn to_uri() {
 
 #[test]
 fn is_valid_keylength() {
-    assert!(SecurityPolicy::Basic128Rsa15.is_valid_keylength(1024));
-    assert!(SecurityPolicy::Basic128Rsa15.is_valid_keylength(2048));
-    assert!(!SecurityPolicy::Basic128Rsa15.is_valid_keylength(4096));
-    assert!(!SecurityPolicy::Basic128Rsa15.is_valid_keylength(512));
+    #[cfg(feature = "legacy-crypto")]
+    {
+        assert!(SecurityPolicy::Basic128Rsa15.is_valid_keylength(1024));
+        assert!(SecurityPolicy::Basic128Rsa15.is_valid_keylength(2048));
+        assert!(!SecurityPolicy::Basic128Rsa15.is_valid_keylength(4096));
+        assert!(!SecurityPolicy::Basic128Rsa15.is_valid_keylength(512));
 
-    assert!(SecurityPolicy::Basic256.is_valid_keylength(1024));
-    assert!(SecurityPolicy::Basic256.is_valid_keylength(2048));
-    assert!(!SecurityPolicy::Basic256.is_valid_keylength(4096));
-    assert!(!SecurityPolicy::Basic256.is_valid_keylength(512));
+        assert!(SecurityPolicy::Basic256.is_valid_keylength(1024));
+        assert!(SecurityPolicy::Basic256.is_valid_keylength(2048));
+        assert!(!SecurityPolicy::Basic256.is_valid_keylength(4096));
+        assert!(!SecurityPolicy::Basic256.is_valid_keylength(512));
+    }
 
     assert!(SecurityPolicy::Basic256Sha256.is_valid_keylength(2048));
     assert!(SecurityPolicy::Basic256Sha256.is_valid_keylength(4096));

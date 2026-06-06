@@ -29,7 +29,7 @@ pub struct XsdTypeWithPath {
     pub path: Path,
 }
 
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
 /// A nodeset XML file to load types from.
 pub struct NodeSetTypes {
     /// Reference to the schema in the inputs list.
@@ -38,7 +38,7 @@ pub struct NodeSetTypes {
     pub root_path: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
 /// Configuration for generating nodes from a NodeSet2 XML file.
 pub struct NodeSetCodeGenTarget {
     /// A reference to the input schema, which must be defined in the `inputs` list.
@@ -57,7 +57,7 @@ pub struct NodeSetCodeGenTarget {
     pub extra_header: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
 /// A nodeset that the events target depends on.
 pub struct DependentNodeset {
     /// Reference to the schema in the inputs list.

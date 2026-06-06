@@ -14,6 +14,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ahash"
+version = "0.8.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a15f179cd60c4584b8a8c596927aadc462e27f2ca70c04e0071964a73ba7a75"
+dependencies = [
+ "cfg-if",
+ "once_cell",
+ "version_check",
+ "zerocopy",
+]
+
+[[package]]
 name = "aho-corasick"
 version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -117,12 +129,15 @@ dependencies = [
  "async-opcua-core",
  "async-opcua-core-namespace",
  "async-opcua-crypto",
+ "async-opcua-history-sqlite",
  "async-opcua-macros",
  "async-opcua-nodes",
+ "async-opcua-pubsub",
  "async-opcua-server",
  "async-opcua-types",
  "async-opcua-xml",
  "async-trait",
+ "base64 0.22.1",
  "bytes",
  "chrono",
  "env_logger 0.10.2",
@@ -202,11 +217,13 @@ version = "0.18.0"
 dependencies = [
  "async-opcua-crypto",
  "async-opcua-types",
+ "async-trait",
  "bytes",
  "chrono",
  "parking_lot",
  "serde",
  "serde_yaml",
+ "sha2",
  "shellexpand",
  "tempfile",
  "thiserror 1.0.69",
@@ -292,6 +309,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-opcua-history-sqlite"
+version = "0.18.0"
+dependencies = [
+ "async-opcua-core",
+ "async-opcua-server",
+ "async-opcua-types",
+ "async-trait",
+ "parking_lot",
+ "rusqlite",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "async-opcua-macros"
 version = "0.18.0"
 dependencies = [
@@ -342,6 +374,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-opcua-pubsub"
+version = "0.18.0"
+dependencies = [
+ "async-opcua-core",
+ "async-opcua-server",
+ "async-opcua-types",
+ "rumqttc",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "async-opcua-server"
 version = "0.18.0"
 dependencies = [
@@ -353,7 +401,9 @@ dependencies = [
  "async-opcua-nodes",
  "async-opcua-server",
  "async-opcua-types",
+ "async-opcua-xml",
  "async-trait",
+ "base64 0.22.1",
  "bitflags",
  "chrono",
  "futures",
@@ -362,11 +412,13 @@ dependencies = [
  "postcard",
  "regex",
  "serde",
+ "serde_json",
  "serde_yaml",
  "tokio",
  "tokio-util",
  "tracing",
  "tracing-futures",
+ "uuid",
 ]
 
 [[package]]
@@ -575,6 +627,7 @@ version = "0.1.0"
 dependencies = [
  "async-opcua",
  "async-opcua-codegen",
+ "bitflags",
 ]
 
 [[package]]
@@ -879,6 +932,7 @@ name = "external-tests"
 version = "0.1.0"
 dependencies = [
  "async-opcua",
+ "async-opcua-pubsub",
  "env_logger 0.10.2",
  "futures",
  "log",
@@ -886,7 +940,20 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-util",
+ "uuid",
 ]
+
+[[package]]
+name = "fallible-iterator"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2acce4a10f12dc2fb14a218589d4f1f62ef011b2d0cc4b3cb1bba8e94da14649"
+
+[[package]]
+name = "fallible-streaming-iterator"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7360491ce676a36bf9bb3c56c1aa791658183a54d2744120f27285738d90465a"
 
 [[package]]
 name = "fastrand"
@@ -1105,6 +1172,15 @@ checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 
 [[package]]
 name = "hashbrown"
+version = "0.14.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e5274423e17b7c9fc20b6e7e208532f9b19825d82dfd615708b70edd83df41f1"
+dependencies = [
+ "ahash",
+]
+
+[[package]]
+name = "hashbrown"
 version = "0.15.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9229cfe53dfd69f0609a49f65461bd93001ea1ef889cd5529dd176593f5338a1"
@@ -1119,6 +1195,15 @@ name = "hashbrown"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100"
+
+[[package]]
+name = "hashlink"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ba4ff7128dee98c7dc9794b6a411377e1404dba1c97deb8d1a55297bd25d8af"
+dependencies = [
+ "hashbrown 0.14.5",
+]
 
 [[package]]
 name = "heapless"
@@ -1453,6 +1538,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "libsqlite3-sys"
+version = "0.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c10584274047cb335c23d3e61bcef8e323adae7c5c8c760540f73610177fc3f"
+dependencies = [
+ "cc",
+ "pkg-config",
+ "vcpkg",
+]
+
+[[package]]
 name = "linux-raw-sys"
 version = "0.4.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1745,6 +1841,12 @@ dependencies = [
  "der",
  "spki",
 ]
+
+[[package]]
+name = "pkg-config"
+version = "0.3.33"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 
 [[package]]
 name = "portable-atomic"
@@ -2085,6 +2187,20 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tokio-rustls",
+]
+
+[[package]]
+name = "rusqlite"
+version = "0.31.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b838eba278d213a8beaf485bd313fd580ca4505a00d5871caeb1457c55322cae"
+dependencies = [
+ "bitflags",
+ "fallible-iterator",
+ "fallible-streaming-iterator",
+ "hashlink",
+ "libsqlite3-sys",
+ "smallvec",
 ]
 
 [[package]]
@@ -2857,6 +2973,12 @@ dependencies = [
  "js-sys",
  "wasm-bindgen",
 ]
+
+[[package]]
+name = "vcpkg"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
 
 [[package]]
 name = "version_check"

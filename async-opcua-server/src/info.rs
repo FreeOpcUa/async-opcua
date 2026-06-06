@@ -11,7 +11,8 @@ use arc_swap::ArcSwap;
 use opcua_nodes::DefaultTypeTree;
 use tracing::{debug, error, warn};
 
-use crate::authenticator::{user_pass_security_policy_id, Password};
+use crate::auth::oauth2::validate_issued_jwt;
+use crate::authenticator::{issued_token_security_policy, user_pass_security_policy_id, Password};
 use crate::diagnostics::{ServerDiagnostics, ServerDiagnosticsSummary};
 use crate::node_manager::TypeTreeForUser;
 use opcua_core::comms::url::{hostname_from_url, url_matches_except_host};
@@ -54,9 +55,9 @@ pub struct ServerInfo {
     /// Server configuration
     pub config: Arc<ServerConfig>,
     /// Server public certificate read from config location or null if there is none
-    pub server_certificate: Option<X509>,
+    pub server_certificate: RwLock<Option<X509>>,
     /// Server private key
-    pub server_pkey: Option<PrivateKey>,
+    pub server_pkey: RwLock<Option<PrivateKey>>,
     /// Operational limits
     pub(crate) operational_limits: OperationalLimits,
     /// Current state
@@ -289,7 +290,8 @@ impl ServerInfo {
 
     /// Get the server certificate as a byte string.
     pub fn server_certificate_as_byte_string(&self) -> ByteString {
-        if let Some(ref server_certificate) = self.server_certificate {
+        let cert = self.server_certificate.read();
+        if let Some(ref server_certificate) = *cert {
             server_certificate.as_byte_string()
         } else {
             ByteString::null()
@@ -353,29 +355,32 @@ impl ServerInfo {
                     self.authenticate_anonymous_token(endpoint, &token).await
                 }
                 IdentityToken::UserName(token) => {
+                    let server_key_lock = self.server_pkey.read();
                     self.authenticate_username_identity_token(
                         endpoint,
                         &token,
-                        &self.server_pkey,
+                        &*server_key_lock,
                         server_nonce,
                     )
                     .await
                 }
                 IdentityToken::X509(token) => {
+                    let server_cert_lock = self.server_certificate.read();
                     self.authenticate_x509_identity_token(
                         endpoint,
                         &token,
                         &request.user_token_signature,
-                        &self.server_certificate,
+                        &*server_cert_lock,
                         server_nonce,
                     )
                     .await
                 }
                 IdentityToken::IssuedToken(token) => {
+                    let server_key_lock = self.server_pkey.read();
                     self.authenticate_issued_identity_token(
                         endpoint,
                         &token,
-                        &self.server_pkey,
+                        &*server_key_lock,
                         server_nonce,
                     )
                     .await
@@ -437,7 +442,7 @@ impl ServerInfo {
                 StatusCode::BadIdentityTokenRejected,
                 "Endpoint doesn't support username password tokens",
             ))
-        } else if token.policy_id != user_pass_security_policy_id(endpoint) {
+        } else if token.policy_id != issued_token_security_policy(endpoint) {
             Err(Error::new(
                 StatusCode::BadIdentityTokenRejected,
                 "Token doesn't possess the correct policy id",
@@ -588,8 +593,16 @@ impl ServerInfo {
                 token.token_data.clone()
             };
 
+            let issued_jwt = validate_issued_jwt(&decrypted_token)?;
+            debug!(
+                "accepted issued JWT token hash={}, subject={}",
+                issued_jwt.token_hash(),
+                issued_jwt.claims().sub.as_deref().unwrap_or("")
+            );
+            let token_data = issued_jwt.token_data();
+
             self.authenticator
-                .authenticate_issued_identity_token(endpoint, &decrypted_token)
+                .authenticate_issued_identity_token(endpoint, &token_data)
                 .await
         }
     }

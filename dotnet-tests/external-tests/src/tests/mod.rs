@@ -16,6 +16,14 @@ use opcua::types::MessageSecurityMode;
 
 mod client;
 
+#[path = "../hda_tests.rs"]
+mod hda_tests;
+use hda_tests::test_hda;
+
+#[path = "../pubsub_tests.rs"]
+mod pubsub_tests;
+use pubsub_tests::test_pubsub;
+
 macro_rules! run_test {
     ($runner:ident, $ctx:ident, $test:ident) => {
         $runner
@@ -55,6 +63,8 @@ pub async fn run_client_tests(runner: &Runner) {
     run_test!(runner, state, test_call);
     run_encrypted_test!(runner, state, test_big_request);
     run_test!(runner, state, test_subscriptions);
+    run_test!(runner, state, test_hda);
+    run_test!(runner, state, test_pubsub);
 
     runner
         .run_test("reverse_connect", test_reverse_connect(&mut state))

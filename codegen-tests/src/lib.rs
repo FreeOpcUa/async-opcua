@@ -12,6 +12,12 @@ pub mod generated {
     pub mod ext {
         include!(concat!(env!("OPCUA_GENERATED_DIR"), "/ext/mod.rs"));
     }
+    pub mod di {
+        include!(concat!(env!("OPCUA_GENERATED_DIR"), "/di/mod.rs"));
+    }
+    pub mod plcopen {
+        include!(concat!(env!("OPCUA_GENERATED_DIR"), "/plcopen/mod.rs"));
+    }
 }
 
 impl Default for SimpleEnum {

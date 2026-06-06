@@ -15,3 +15,5 @@ async-opcua/certs
 **/bin
 **/obj
 **/pki-ext-client
+local/
+

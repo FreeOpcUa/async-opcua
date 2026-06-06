@@ -5,7 +5,7 @@
 
 mod binary_schema;
 mod nodeset;
-mod types;
+pub(crate) mod types;
 
 pub use binary_schema::BsdTypeLoader;
 pub use nodeset::NodeSetTypeLoader;

@@ -17,7 +17,7 @@ use crate::{
 mod collector;
 mod gen;
 
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
 /// Target for generating events from a NodeSet2 XML file.
 pub struct EventsCodeGenTarget {
     /// A reference to the input schema, which must be defined in the `inputs` list.

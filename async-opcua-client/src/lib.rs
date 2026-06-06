@@ -111,6 +111,7 @@
 //! [`ClientBuilder`]: ./client_builder/struct.ClientBuilder.html
 //! [`Session`]: ./session/struct.Session.html
 
+pub mod alarms;
 pub mod browser;
 mod builder;
 mod config;
@@ -119,6 +120,11 @@ mod identity_token;
 mod retry;
 mod session;
 pub mod transport;
+pub use alarms::*;
+pub mod program_client;
+pub use program_client::*;
+pub mod gds;
+pub use gds::*;
 
 pub use builder::ClientBuilder;
 pub use config::{ClientConfig, ClientEndpoint, ClientUserToken, ANONYMOUS_USER_TOKEN_ID};

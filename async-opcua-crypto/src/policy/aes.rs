@@ -172,7 +172,7 @@ pub(crate) trait AesSymmetricEncryptionAlgorithm {
                     Self::BLOCK_SIZE
                 ),
             ))
-        } else if !src.len().is_multiple_of(Self::BLOCK_SIZE) {
+        } else if src.len() % Self::BLOCK_SIZE != 0 {
             Err(Error::new(
                 StatusCode::BadUnexpectedError,
                 format!(

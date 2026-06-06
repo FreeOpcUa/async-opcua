@@ -13,7 +13,7 @@ use parking_lot::RwLock;
 use tokio::sync::Notify;
 use tracing::{error, info};
 
-use crate::{identity_token::IdentityToken, info::ServerInfo};
+use crate::{fota::cleanup::cleanup_session, identity_token::IdentityToken, info::ServerInfo};
 use opcua_types::{
     ActivateSessionRequest, ActivateSessionResponse, CloseSessionRequest, CloseSessionResponse,
     CreateSessionRequest, CreateSessionResponse, Error, NodeId, ResponseHeader, SignatureData,
@@ -118,7 +118,8 @@ impl SessionManager {
             .min(request.requested_session_timeout.floor() as u64);
         let max_request_message_size = self.info.config.limits.max_message_size as u32;
 
-        let server_signature = if let Some(ref pkey) = self.info.server_pkey {
+        let server_pkey = self.info.server_pkey.read();
+        let server_signature = if let Some(ref pkey) = *server_pkey {
             opcua_crypto::create_signature_data(
                 pkey,
                 security_policy,
@@ -192,7 +193,8 @@ impl SessionManager {
         client_signature: &SignatureData,
     ) -> Result<(), Error> {
         if let Some(client_certificate) = session.client_certificate() {
-            if let Some(ref server_certificate) = info.server_certificate {
+            let server_cert = info.server_certificate.read();
+            if let Some(ref server_certificate) = *server_cert {
                 opcua_crypto::verify_signature_data(
                     client_signature,
                     security_policy,
@@ -228,6 +230,23 @@ impl SessionManager {
 
         let mut session = trace_write_lock!(session);
         session.close();
+        drop(session);
+        cleanup_session(id);
+    }
+
+    pub(crate) fn cleanup_fota_for_secure_channel(&self, secure_channel_id: u32) {
+        let session_ids = self
+            .sessions
+            .iter()
+            .filter_map(|(id, session)| {
+                let session = trace_read_lock!(session);
+                (session.secure_channel_id() == secure_channel_id).then(|| id.clone())
+            })
+            .collect::<Vec<_>>();
+
+        for session_id in session_ids {
+            cleanup_session(&session_id);
+        }
     }
 
     pub(crate) fn check_session_expiry(&self) -> (Instant, Vec<NodeId>) {
@@ -280,6 +299,7 @@ pub(crate) async fn close_session(
             let mut session_lck = trace_write_lock!(session);
             session_lck.close();
         }
+        cleanup_session(&session_id);
         mgr.info
             .diagnostics
             .set_current_session_count(mgr.sessions.len() as u32);

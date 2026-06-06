@@ -301,6 +301,11 @@ impl Session {
         self.user_token.as_ref()
     }
 
+    /// Get the user identity token of this session.
+    pub fn user_identity(&self) -> &IdentityToken {
+        &self.user_identity
+    }
+
     /// Get the message security mode used by this session.
     pub fn message_security_mode(&self) -> MessageSecurityMode {
         self.message_security_mode

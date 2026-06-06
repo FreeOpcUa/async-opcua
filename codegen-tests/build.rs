@@ -11,6 +11,8 @@ fn main() {
     let target_dir = format!("{}/opcua_generated", out_dir);
     println!("cargo:rerun-if-changed=schemas/Async.Opcua.Test.NodeSet2.xml");
     println!("cargo:rerun-if-changed=schemas/Async.Opcua.Test.Ext.NodeSet2.xml");
+    println!("cargo:rerun-if-changed=schemas/Opc.Ua.Di.NodeSet2.xml");
+    println!("cargo:rerun-if-changed=schemas/Opc.Ua.Plc.NodeSet2.xml");
     println!("cargo:rustc-env=OPCUA_GENERATED_DIR={}", target_dir);
     run_codegen(
         &CodeGenConfig {
@@ -34,6 +36,26 @@ fn main() {
                         file: "Async.Opcua.Test.NodeSet2.xml".to_owned(),
                         import_path: "crate::generated::base".to_owned(),
                     }],
+                    ..Default::default()
+                }),
+                CodeGenTarget::Types(TypeCodeGenTarget {
+                    file: "Opc.Ua.Plc.NodeSet2.xml".to_owned(),
+                    output_dir: Path::new(&target_dir).join("plcopen"),
+                    enums_single_file: true,
+                    structs_single_file: true,
+                    node_ids_from_nodeset: true,
+                    dependent_nodesets: vec![opcua_codegen::DependentNodeset {
+                        file: "Opc.Ua.Di.NodeSet2.xml".to_owned(),
+                        import_path: "crate::generated::di".to_owned(),
+                    }],
+                    ..Default::default()
+                }),
+                CodeGenTarget::Types(TypeCodeGenTarget {
+                    file: "Opc.Ua.Di.NodeSet2.xml".to_owned(),
+                    output_dir: Path::new(&target_dir).join("di"),
+                    enums_single_file: true,
+                    structs_single_file: true,
+                    node_ids_from_nodeset: true,
                     ..Default::default()
                 }),
             ],

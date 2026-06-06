@@ -153,8 +153,8 @@ impl Server {
             start_time: ArcSwap::new(Arc::new(opcua_types::DateTime::now())),
             servers,
             config: config.clone(),
-            server_certificate,
-            server_pkey,
+            server_certificate: RwLock::new(server_certificate),
+            server_pkey: RwLock::new(server_pkey),
             operational_limits: config.limits.operational.clone(),
             state: ArcSwap::new(Arc::new(ServerState::Shutdown)),
             send_buffer_size,
@@ -217,6 +217,7 @@ impl Server {
 
         let handle = ServerHandle::new(
             info.clone(),
+            certificate_store.clone(),
             service_level,
             subscriptions.clone(),
             node_managers.clone(),

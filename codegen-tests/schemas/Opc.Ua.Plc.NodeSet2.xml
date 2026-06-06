@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UANodeSet xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" LastModified="2026-06-06T00:00:00Z" xmlns="http://opcfoundation.org/UA/2011/03/UANodeSet.xsd">
+    <NamespaceUris>
+        <Uri>http://opcfoundation.org/UA/DI/</Uri>
+        <Uri>http://opcfoundation.org/UA/PLCopen/</Uri>
+    </NamespaceUris>
+    <Models>
+        <Model ModelUri="http://opcfoundation.org/UA/PLCopen/" Version="1.0.0" PublicationDate="2026-06-06T00:00:00Z">
+            <RequiredModel ModelUri="http://opcfoundation.org/UA/" Version="1.5.4" PublicationDate="2025-01-08T00:00:00Z" />
+            <RequiredModel ModelUri="http://opcfoundation.org/UA/DI/" Version="1.0.0" PublicationDate="2026-06-06T00:00:00Z" />
+        </Model>
+    </Models>
+    <Aliases>
+        <Alias Alias="UInt32">i=7</Alias>
+        <Alias Alias="String">i=12</Alias>
+        <Alias Alias="Structure">i=22</Alias>
+        <Alias Alias="HasSubtype">i=45</Alias>
+        <Alias Alias="HasEncoding">i=38</Alias>
+        <Alias Alias="HasTypeDefinition">i=40</Alias>
+    </Aliases>
+
+    <UADataType NodeId="ns=2;i=6002" BrowseName="2:PlcOpenControllerDataType" SymbolicName="PlcOpenControllerDataType">
+        <DisplayName>PlcOpenControllerDataType</DisplayName>
+        <Documentation>Representative PLCopen structure that depends on a later local type.</Documentation>
+        <References>
+            <Reference ReferenceType="HasSubtype" IsForward="false">Structure</Reference>
+            <Reference ReferenceType="HasEncoding">ns=2;i=16002</Reference>
+            <Reference ReferenceType="HasEncoding">ns=2;i=16102</Reference>
+            <Reference ReferenceType="HasEncoding">ns=2;i=16202</Reference>
+        </References>
+        <Definition Name="2:PlcOpenControllerDataType" SymbolicName="PlcOpenControllerDataType" BaseType="Structure">
+            <Field Name="VendorId" DataType="String" />
+            <Field Name="Axes" DataType="ns=2;i=6001" ValueRank="1" />
+        </Definition>
+    </UADataType>
+    <UAObject NodeId="ns=2;i=16002" BrowseName="Default Binary" SymbolicName="DefaultBinary">
+        <DisplayName>Default Binary</DisplayName>
+        <References>
+            <Reference ReferenceType="HasTypeDefinition">i=76</Reference>
+        </References>
+    </UAObject>
+    <UAObject NodeId="ns=2;i=16102" BrowseName="Default XML" SymbolicName="DefaultXml">
+        <DisplayName>Default XML</DisplayName>
+        <References>
+            <Reference ReferenceType="HasTypeDefinition">i=76</Reference>
+        </References>
+    </UAObject>
+    <UAObject NodeId="ns=2;i=16202" BrowseName="Default JSON" SymbolicName="DefaultJson">
+        <DisplayName>Default JSON</DisplayName>
+        <References>
+            <Reference ReferenceType="HasTypeDefinition">i=76</Reference>
+        </References>
+    </UAObject>
+
+    <UADataType NodeId="ns=2;i=6001" BrowseName="2:PlcAxisStatusDataType" SymbolicName="PlcAxisStatusDataType">
+        <DisplayName>PlcAxisStatusDataType</DisplayName>
+        <Documentation>Representative PLCopen structure that references DI types.</Documentation>
+        <References>
+            <Reference ReferenceType="HasSubtype" IsForward="false">Structure</Reference>
+            <Reference ReferenceType="HasEncoding">ns=2;i=16001</Reference>
+            <Reference ReferenceType="HasEncoding">ns=2;i=16101</Reference>
+            <Reference ReferenceType="HasEncoding">ns=2;i=16201</Reference>
+        </References>
+        <Definition Name="2:PlcAxisStatusDataType" SymbolicName="PlcAxisStatusDataType" BaseType="Structure">
+            <Field Name="FunctionalGroup" DataType="ns=1;i=5001" />
+            <Field Name="DeviceHealth" DataType="ns=1;i=5002" />
+            <Field Name="ProgramName" DataType="String" />
+            <Field Name="ErrorCode" DataType="UInt32" />
+        </Definition>
+    </UADataType>
+    <UAObject NodeId="ns=2;i=16001" BrowseName="Default Binary" SymbolicName="DefaultBinary">
+        <DisplayName>Default Binary</DisplayName>
+        <References>
+            <Reference ReferenceType="HasTypeDefinition">i=76</Reference>
+        </References>
+    </UAObject>
+    <UAObject NodeId="ns=2;i=16101" BrowseName="Default XML" SymbolicName="DefaultXml">
+        <DisplayName>Default XML</DisplayName>
+        <References>
+            <Reference ReferenceType="HasTypeDefinition">i=76</Reference>
+        </References>
+    </UAObject>
+    <UAObject NodeId="ns=2;i=16201" BrowseName="Default JSON" SymbolicName="DefaultJson">
+        <DisplayName>Default JSON</DisplayName>
+        <References>
+            <Reference ReferenceType="HasTypeDefinition">i=76</Reference>
+        </References>
+    </UAObject>
+</UANodeSet>

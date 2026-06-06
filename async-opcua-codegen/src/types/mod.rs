@@ -6,7 +6,7 @@
 mod base_constants;
 mod encoding_ids;
 mod gen;
-mod loaders;
+pub(crate) mod loaders;
 
 use std::{
     collections::{HashMap, HashSet},
@@ -29,7 +29,7 @@ use crate::{
     CodeGenError, DependentNodeset, BASE_NAMESPACE,
 };
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 /// Target for code generation of data types.
 pub struct TypeCodeGenTarget {
     /// Reference to the input file, which needs to be added to the input list.
@@ -187,7 +187,7 @@ fn generate_types_inner(
         .into_iter()
         .map(|v| v.to_owned())
         .collect(),
-        types,
+        crate::generator::sort_types_topologically(types, &target_namespace)?,
         target.default_excluded.clone(),
         CodeGenItemConfig {
             enums_single_file: target.enums_single_file,
@@ -206,18 +206,21 @@ fn generate_types_inner(
 ///
 /// This generates a `TypeLoader` implementation that can load types from binary, XML, and JSON
 /// encodings, based on the provided encoding IDs and type names.
-pub fn type_loader_impl(ids: &[(EncodingIds, String)], namespace: &str) -> Vec<Item> {
+pub fn type_loader_impl(
+    ids: &[(EncodingIds, String)],
+    namespace: &str,
+) -> Result<Vec<Item>, CodeGenError> {
     if ids.is_empty() {
-        return Vec::new();
+        return Ok(Vec::new());
     }
 
     let mut ids: Vec<_> = ids.iter().collect();
     ids.sort_by(|a, b| a.1.cmp(&b.1));
     let mut res = Vec::new();
 
-    let (bin_fields, bin_body) = binary_loader_impl(&ids, namespace);
-    let (xml_fields, xml_body) = xml_loader_impl(&ids, namespace);
-    let (json_fields, json_body) = json_loader_impl(&ids, namespace);
+    let (bin_fields, bin_body) = binary_loader_impl(&ids, namespace)?;
+    let (xml_fields, xml_body) = xml_loader_impl(&ids, namespace)?;
+    let (json_fields, json_body) = json_loader_impl(&ids, namespace)?;
 
     res.push(parse_quote! {
         static TYPES: std::sync::LazyLock<opcua::types::TypeLoaderInstance> = std::sync::LazyLock::new(|| {
@@ -268,18 +271,18 @@ pub fn type_loader_impl(ids: &[(EncodingIds, String)], namespace: &str) -> Vec<I
         }
     });
 
-    res
+    Ok(res)
 }
 
 fn binary_loader_impl(
     ids: &[&(EncodingIds, String)],
     namespace: &str,
-) -> (TokenStream, TokenStream) {
+) -> Result<(TokenStream, TokenStream), CodeGenError> {
     let mut fields = quote! {};
     for (ids, typ) in ids {
         let dt_expr = &ids.data_type;
         let enc_expr = &ids.binary;
-        let typ_path: Path = parse_str(typ).unwrap();
+        let typ_path = parse_type_loader_path(typ)?;
         fields.extend(quote! {
             inst.add_binary_type(
                 #dt_expr,
@@ -304,7 +307,7 @@ fn binary_loader_impl(
         }
     };
 
-    (
+    Ok((
         fields,
         quote! {
             fn load_from_binary(
@@ -325,15 +328,18 @@ fn binary_loader_impl(
                 TYPES.decode_binary(num_id, stream, ctx)
             }
         },
-    )
+    ))
 }
 
-fn json_loader_impl(ids: &[&(EncodingIds, String)], namespace: &str) -> (TokenStream, TokenStream) {
+fn json_loader_impl(
+    ids: &[&(EncodingIds, String)],
+    namespace: &str,
+) -> Result<(TokenStream, TokenStream), CodeGenError> {
     let mut fields = quote! {};
     for (ids, typ) in ids {
         let dt_expr = &ids.data_type;
         let enc_expr = &ids.json;
-        let typ_path: Path = parse_str(typ).unwrap();
+        let typ_path = parse_type_loader_path(typ)?;
         fields.extend(quote! {
             inst.add_json_type(
                 #dt_expr,
@@ -358,7 +364,7 @@ fn json_loader_impl(ids: &[&(EncodingIds, String)], namespace: &str) -> (TokenSt
         }
     };
 
-    (
+    Ok((
         fields,
         quote! {
             #[cfg(feature = "json")]
@@ -379,15 +385,18 @@ fn json_loader_impl(ids: &[&(EncodingIds, String)], namespace: &str) -> (TokenSt
                 TYPES.decode_json(num_id, stream, ctx)
             }
         },
-    )
+    ))
 }
 
-fn xml_loader_impl(ids: &[&(EncodingIds, String)], namespace: &str) -> (TokenStream, TokenStream) {
+fn xml_loader_impl(
+    ids: &[&(EncodingIds, String)],
+    namespace: &str,
+) -> Result<(TokenStream, TokenStream), CodeGenError> {
     let mut fields = quote! {};
     for (ids, typ) in ids {
         let dt_expr = &ids.data_type;
         let enc_expr = &ids.xml;
-        let typ_path: Path = parse_str(typ).unwrap();
+        let typ_path = parse_type_loader_path(typ)?;
         fields.extend(quote! {
             inst.add_xml_type(
                 #dt_expr,
@@ -412,7 +421,7 @@ fn xml_loader_impl(ids: &[&(EncodingIds, String)], namespace: &str) -> (TokenStr
         }
     };
 
-    (
+    Ok((
         fields,
         quote! {
             #[cfg(feature = "xml")]
@@ -434,5 +443,36 @@ fn xml_loader_impl(ids: &[&(EncodingIds, String)], namespace: &str) -> (TokenStr
                 TYPES.decode_xml(num_id, stream, ctx)
             }
         },
-    )
+    ))
+}
+
+fn parse_type_loader_path(typ: &str) -> Result<Path, CodeGenError> {
+    parse_str(typ)
+        .map_err(CodeGenError::from)
+        .map_err(|err| err.with_context(format!("parsing type loader path {typ}")))
+}
+
+#[cfg(test)]
+mod tests {
+    use syn::parse_quote;
+
+    use super::{type_loader_impl, EncodingIds};
+    use crate::BASE_NAMESPACE;
+
+    #[test]
+    fn type_loader_impl_reports_invalid_type_paths() {
+        let ids = EncodingIds {
+            data_type: parse_quote!(1),
+            xml: parse_quote!(2),
+            json: parse_quote!(3),
+            binary: parse_quote!(4),
+        };
+
+        let err = match type_loader_impl(&[(ids, "not a valid path".to_owned())], BASE_NAMESPACE) {
+            Ok(_) => panic!("invalid type loader path unexpectedly succeeded"),
+            Err(err) => err,
+        };
+
+        assert!(err.to_string().contains("type loader path"));
+    }
 }

@@ -599,9 +599,29 @@ impl<'input> XmlLoad<'input> for Option<XsdFileItem> {
     }
 }
 
+#[derive(Debug, Clone)]
+/// Import directive in an XML schema.
+pub struct XmlSchemaImport {
+    /// Namespace imported by this schema.
+    pub namespace: Option<String>,
+    /// Local or remote location of the imported schema.
+    pub schema_location: Option<String>,
+}
+
+impl<'input> XmlLoad<'input> for XmlSchemaImport {
+    fn load(node: &Node<'_, 'input>) -> Result<Self, XmlError> {
+        Ok(Self {
+            namespace: value_from_attr_opt(node, "namespace")?,
+            schema_location: value_from_attr_opt(node, "schemaLocation")?,
+        })
+    }
+}
+
 #[derive(Debug)]
 /// Type representing a full XmlSchema file.
 pub struct XmlSchema {
+    /// Imported schemas.
+    pub imports: Vec<XmlSchemaImport>,
     /// Top level items.
     pub items: Vec<XsdFileItem>,
     /// Target namespace.
@@ -613,6 +633,7 @@ pub struct XmlSchema {
 impl<'input> XmlLoad<'input> for XmlSchema {
     fn load(node: &Node<'_, 'input>) -> Result<Self, XmlError> {
         Ok(Self {
+            imports: children_with_name(node, "import")?,
             items: children_of_type(node)?,
             target_namespace: value_from_attr_opt(node, "targetNamespace")?,
             version: value_from_attr_opt(node, "version")?,

@@ -13,6 +13,7 @@
 mod config;
 mod error;
 mod events;
+pub mod generator;
 mod ids;
 pub mod input;
 mod nodeset;
@@ -51,11 +52,11 @@ fn join_paths(root: &Path, path: &Path) -> PathBuf {
 
 /// Write all generated items to the specified directory. Each generated item maps to one
 /// file. Returns the list of generated modules, which need to be added to the mod.rs file.
-fn write_to_directory<T: GeneratedOutput>(
+fn write_to_directory_in_order<T: GeneratedOutput>(
     dir: &Path,
     root_path: &Path,
     header: &str,
-    mut items: Vec<T>,
+    items: Vec<T>,
 ) -> Result<Vec<String>, CodeGenError> {
     let mut modules = Vec::new();
     let mut modules_seen = HashSet::new();
@@ -64,8 +65,6 @@ fn write_to_directory<T: GeneratedOutput>(
 
     std::fs::create_dir_all(&dir_path)
         .map_err(|e| CodeGenError::io(&format!("Failed to create dir {}", dir.display()), e))?;
-
-    items.sort_by_key(|a| a.name().to_lowercase());
 
     for gen in items {
         let module = gen.module().to_owned();
@@ -103,6 +102,18 @@ fn write_to_directory<T: GeneratedOutput>(
     }
 
     Ok(modules)
+}
+
+/// Write all generated items to the specified directory. Each generated item maps to one
+/// file. Returns the list of generated modules, which need to be added to the mod.rs file.
+fn write_to_directory<T: GeneratedOutput>(
+    dir: &Path,
+    root_path: &Path,
+    header: &str,
+    mut items: Vec<T>,
+) -> Result<Vec<String>, CodeGenError> {
+    items.sort_by_key(|a| a.name().to_lowercase());
+    write_to_directory_in_order(dir, root_path, header, items)
 }
 
 /// Write a `mod.rs` file to the specified directory, with the specified header and content.
@@ -167,7 +178,8 @@ fn make_header(path: &str, extra: &[&str]) -> String {
 pub fn run_codegen(config: &CodeGenConfig, root_path: &Path) -> Result<(), CodeGenError> {
     let cache = load_schemas(root_path, &config.sources)?;
 
-    for target in &config.targets {
+    let sorted_targets = generator::sort_targets_topologically(config.targets.clone())?;
+    for target in &sorted_targets {
         match target {
             CodeGenTarget::Types(t) => {
                 info!("Running data type code generation for {}", t.file);
@@ -209,12 +221,12 @@ pub fn run_codegen(config: &CodeGenConfig, root_path: &Path) -> Result<(), CodeG
                     }
                 }
 
-                let modules = write_to_directory(&t.output_dir, root_path, &header, types)
+                let modules = write_to_directory_in_order(&t.output_dir, root_path, &header, types)
                     .map_err(|e| e.in_file(path.to_string_lossy()))?;
                 let mut module_file = create_module_file(modules);
-                module_file
-                    .items
-                    .extend(type_loader_impl(&object_ids, &target_namespace));
+                let type_loader_items = type_loader_impl(&object_ids, &target_namespace)
+                    .map_err(|e| e.in_file(path.to_string_lossy()))?;
+                module_file.items.extend(type_loader_items);
 
                 write_module_file(&t.output_dir, root_path, &header, module_file)
                     .map_err(|e| e.in_file(path.to_string_lossy()))?;
@@ -326,7 +338,7 @@ pub fn run_codegen(config: &CodeGenConfig, root_path: &Path) -> Result<(), CodeG
     Ok(())
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 /// A top level code generation target.
@@ -347,7 +359,7 @@ pub enum CodeGenTarget {
     Events(EventsCodeGenTarget),
 }
 
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
 /// Top level code-gen config.
 pub struct CodeGenConfig {
     #[serde(default)]

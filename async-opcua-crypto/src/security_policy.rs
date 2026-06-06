@@ -35,15 +35,39 @@ macro_rules! call_with_policy {
     };
 
     ($r:expr, |$x:ident| $t:tt) => {
-        call_with_policy!(_inner $r,
-            None: NonePolicy,
-            Aes128Sha256RsaOaep: AesPolicy<Aes128Sha256RsaOaep>,
-            Basic256Sha256: AesPolicy<Basic256Sha256>,
-            Aes256Sha256RsaPss: AesPolicy<Aes256Sha256RsaPss>,
-            Basic128Rsa15: AesPolicy<Basic128Rsa15>,
-            Basic256: AesPolicy<Basic256>,
-            |$x| $t
-        )
+        match $r {
+            Self::None => {
+                type $x = NonePolicy;
+                $t
+            }
+            Self::Aes128Sha256RsaOaep => {
+                type $x = AesPolicy<Aes128Sha256RsaOaep>;
+                $t
+            }
+            Self::Basic256Sha256 => {
+                type $x = AesPolicy<Basic256Sha256>;
+                $t
+            }
+            Self::Aes256Sha256RsaPss => {
+                type $x = AesPolicy<Aes256Sha256RsaPss>;
+                $t
+            }
+            #[cfg(feature = "legacy-crypto")]
+            Self::Basic128Rsa15 => {
+                type $x = AesPolicy<Basic128Rsa15>;
+                $t
+            }
+            #[cfg(feature = "legacy-crypto")]
+            Self::Basic256 => {
+                type $x = AesPolicy<Basic256>;
+                $t
+            }
+            #[cfg(not(feature = "legacy-crypto"))]
+            Self::Basic128Rsa15 | Self::Basic256 => {
+                panic!("Legacy cryptographic security policies are disabled. Enable the 'legacy-crypto' feature flag to use them.");
+            }
+            Self::Unknown => panic!("Unknown security policy"),
+        }
     };
 }
 
@@ -81,17 +105,24 @@ impl FromStr for SecurityPolicy {
             constants::SECURITY_POLICY_NONE | constants::SECURITY_POLICY_NONE_URI => {
                 SecurityPolicy::None
             }
-            Basic128Rsa15::SECURITY_POLICY | Basic128Rsa15::SECURITY_POLICY_URI => {
+            #[cfg(feature = "legacy-crypto")]
+            crate::policy::aes::Basic128Rsa15::SECURITY_POLICY
+            | crate::policy::aes::Basic128Rsa15::SECURITY_POLICY_URI => {
                 SecurityPolicy::Basic128Rsa15
             }
-            Basic256::SECURITY_POLICY | Basic256::SECURITY_POLICY_URI => SecurityPolicy::Basic256,
-            Basic256Sha256::SECURITY_POLICY | Basic256Sha256::SECURITY_POLICY_URI => {
+            #[cfg(feature = "legacy-crypto")]
+            crate::policy::aes::Basic256::SECURITY_POLICY
+            | crate::policy::aes::Basic256::SECURITY_POLICY_URI => SecurityPolicy::Basic256,
+            crate::policy::aes::Basic256Sha256::SECURITY_POLICY
+            | crate::policy::aes::Basic256Sha256::SECURITY_POLICY_URI => {
                 SecurityPolicy::Basic256Sha256
             }
-            Aes128Sha256RsaOaep::SECURITY_POLICY | Aes128Sha256RsaOaep::SECURITY_POLICY_URI => {
+            crate::policy::aes::Aes128Sha256RsaOaep::SECURITY_POLICY
+            | crate::policy::aes::Aes128Sha256RsaOaep::SECURITY_POLICY_URI => {
                 SecurityPolicy::Aes128Sha256RsaOaep
             }
-            Aes256Sha256RsaPss::SECURITY_POLICY | Aes256Sha256RsaPss::SECURITY_POLICY_URI => {
+            crate::policy::aes::Aes256Sha256RsaPss::SECURITY_POLICY
+            | crate::policy::aes::Aes256Sha256RsaPss::SECURITY_POLICY_URI => {
                 SecurityPolicy::Aes256Sha256RsaPss
             }
             _ => {
@@ -118,15 +149,28 @@ impl SecurityPolicy {
 
     /// Returns true if the security policy is supported. It might be recognized but be unsupported by the implementation
     pub fn is_supported(&self) -> bool {
-        matches!(
-            self,
-            SecurityPolicy::None
-                | SecurityPolicy::Basic128Rsa15
-                | SecurityPolicy::Basic256
-                | SecurityPolicy::Basic256Sha256
-                | SecurityPolicy::Aes128Sha256RsaOaep
-                | SecurityPolicy::Aes256Sha256RsaPss
-        )
+        #[cfg(feature = "legacy-crypto")]
+        {
+            matches!(
+                self,
+                SecurityPolicy::None
+                    | SecurityPolicy::Basic128Rsa15
+                    | SecurityPolicy::Basic256
+                    | SecurityPolicy::Basic256Sha256
+                    | SecurityPolicy::Aes128Sha256RsaOaep
+                    | SecurityPolicy::Aes256Sha256RsaPss
+            )
+        }
+        #[cfg(not(feature = "legacy-crypto"))]
+        {
+            matches!(
+                self,
+                SecurityPolicy::None
+                    | SecurityPolicy::Basic256Sha256
+                    | SecurityPolicy::Aes128Sha256RsaOaep
+                    | SecurityPolicy::Aes256Sha256RsaPss
+            )
+        }
     }
 
     /// Returns true if the security policy has been deprecated by the OPC UA specification
@@ -198,11 +242,19 @@ impl SecurityPolicy {
     pub fn from_uri(uri: &str) -> SecurityPolicy {
         match uri {
             constants::SECURITY_POLICY_NONE_URI => SecurityPolicy::None,
-            Basic128Rsa15::SECURITY_POLICY_URI => SecurityPolicy::Basic128Rsa15,
-            Basic256::SECURITY_POLICY_URI => SecurityPolicy::Basic256,
-            Basic256Sha256::SECURITY_POLICY_URI => SecurityPolicy::Basic256Sha256,
-            Aes128Sha256RsaOaep::SECURITY_POLICY_URI => SecurityPolicy::Aes128Sha256RsaOaep,
-            Aes256Sha256RsaPss::SECURITY_POLICY_URI => SecurityPolicy::Aes256Sha256RsaPss,
+            #[cfg(feature = "legacy-crypto")]
+            crate::policy::aes::Basic128Rsa15::SECURITY_POLICY_URI => SecurityPolicy::Basic128Rsa15,
+            #[cfg(feature = "legacy-crypto")]
+            crate::policy::aes::Basic256::SECURITY_POLICY_URI => SecurityPolicy::Basic256,
+            crate::policy::aes::Basic256Sha256::SECURITY_POLICY_URI => {
+                SecurityPolicy::Basic256Sha256
+            }
+            crate::policy::aes::Aes128Sha256RsaOaep::SECURITY_POLICY_URI => {
+                SecurityPolicy::Aes128Sha256RsaOaep
+            }
+            crate::policy::aes::Aes256Sha256RsaPss::SECURITY_POLICY_URI => {
+                SecurityPolicy::Aes256Sha256RsaPss
+            }
             _ => {
                 error!(
                     "Specified security policy uri \"{}\" is not recognized",

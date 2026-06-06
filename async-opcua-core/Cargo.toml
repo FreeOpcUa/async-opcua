@@ -19,6 +19,8 @@ name = "opcua_core"
 [dependencies]
 bytes = { workspace = true }
 chrono = { workspace = true }
+async-trait = { workspace = true }
+sha2 = { workspace = true }
 parking_lot = { workspace = true }
 serde = { workspace = true }
 serde_yaml = { workspace = true }

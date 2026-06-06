@@ -23,15 +23,22 @@ use opcua::xml::XmlStreamWriter;
 
 use crate::generated::base::enums::*;
 use crate::generated::base::structs::*;
+use crate::generated::di::enums::*;
+use crate::generated::di::structs::*;
 use crate::generated::ext::structs::*;
+use crate::generated::plcopen::structs::*;
 
 fn ctx() -> ContextOwned {
     let mut namespaces = NamespaceMap::new();
     namespaces.add_namespace("http://github.com/freeopcua/async-opcua/codegen-tests");
     namespaces.add_namespace("http://github.com/freeopcua/async-opcua/codegen-tests/ext");
+    namespaces.add_namespace("http://opcfoundation.org/UA/DI/");
+    namespaces.add_namespace("http://opcfoundation.org/UA/PLCopen/");
     let mut loaders = TypeLoaderCollection::new();
     loaders.add_type_loader(crate::generated::base::GeneratedTypeLoader);
     loaders.add_type_loader(crate::generated::ext::GeneratedTypeLoader);
+    loaders.add_type_loader(crate::generated::di::GeneratedTypeLoader);
+    loaders.add_type_loader(crate::generated::plcopen::GeneratedTypeLoader);
     let ctx_owned = ContextOwned::new(namespaces, loaders, DecodingOptions::default());
     ctx_owned
 }
@@ -221,4 +228,38 @@ fn test_external_struct() {
         simple_enum: SimpleEnum::Foo,
     };
     encoding_roundtrip_extension_object(s);
+}
+
+#[test]
+fn test_di_companion_struct_and_option_set() {
+    let functional_group = FunctionalGroupDataType {
+        name: "Axis diagnostics".into(),
+        enabled: true,
+    };
+    encoding_roundtrip_extension_object(functional_group);
+
+    let health = DeviceHealthOptionSet::MAINTENANCE_REQUIRED | DeviceHealthOptionSet::FAILURE;
+    all_encoding_roundtrip(&health);
+    assert!(health.contains(DeviceHealthOptionSet::MAINTENANCE_REQUIRED));
+    assert!(health.contains(DeviceHealthOptionSet::FAILURE));
+}
+
+#[test]
+fn test_plcopen_companion_struct_references_di_types() {
+    let axis = PlcAxisStatusDataType {
+        functional_group: FunctionalGroupDataType {
+            name: "Axis diagnostics".into(),
+            enabled: true,
+        },
+        device_health: DeviceHealthOptionSet::MAINTENANCE_REQUIRED,
+        program_name: "MAIN".into(),
+        error_code: 42,
+    };
+    encoding_roundtrip_extension_object(axis.clone());
+
+    let controller = PlcOpenControllerDataType {
+        vendor_id: "async-opcua".into(),
+        axes: Some(vec![axis]),
+    };
+    encoding_roundtrip_extension_object(controller);
 }

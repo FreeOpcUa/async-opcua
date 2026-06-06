@@ -1,0 +1,237 @@
+use std::{sync::Arc, time::Duration};
+
+use crate::utils::{default_server, ChannelNotifications, Tester};
+use opcua::{
+    server::{
+        address_space::AddressSpace,
+        node_manager::memory::{simple_node_manager, SimpleNodeManager},
+    },
+    types::{
+        AttributeId, CallMethodRequest, LocalizedText, MonitoredItemCreateRequest, MonitoringMode,
+        MonitoringParameters, NodeId, ObjectId, ReadValueId, StatusCode, TimestampsToReturn,
+        Variant,
+    },
+};
+use opcua_client::alarms::client::{get_alarm_event_select_clauses, parse_alarm_event};
+use opcua_core::events::AlarmEvent;
+use opcua_server::namespace::register_alarm_condition;
+use opcua_types::{EventFilter, ExtensionObject};
+use tokio::time::timeout;
+
+pub async fn setup_alarms() -> (Tester, Arc<SimpleNodeManager>, Arc<opcua_client::Session>) {
+    let namespace = opcua::server::diagnostics::NamespaceMetadata {
+        namespace_uri: "urn:rustopcuatestserver".to_owned(),
+        namespace_index: 2,
+        ..Default::default()
+    };
+    let simple_mgr = simple_node_manager(namespace, "test");
+    let server = default_server().with_node_manager(simple_mgr);
+    let mut tester = Tester::new(server, false).await;
+    let nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<SimpleNodeManager>()
+        .expect("SimpleNodeManager not found");
+    let (session, lp) = tester.connect_default().await.unwrap();
+    lp.spawn();
+    timeout(Duration::from_secs(2), session.wait_for_connection())
+        .await
+        .unwrap();
+
+    (tester, nm, session)
+}
+
+#[tokio::test]
+async fn test_alarm_trigger_and_acknowledge() {
+    let (tester, nm, session) = setup_alarms().await;
+
+    // 1. Create a source node in the AddressSpace
+    let source_node_id = NodeId::new(2, "MyDevice");
+    {
+        let mut space = nm.address_space().write();
+        let source_node = opcua::server::address_space::ObjectBuilder::new(
+            &source_node_id,
+            "MyDevice",
+            "MyDevice",
+        )
+        .component_of(ObjectId::ObjectsFolder)
+        .event_notifier(opcua::server::address_space::EventNotifier::SUBSCRIBE_TO_EVENTS)
+        .build();
+        space.insert::<_, NodeId>(source_node, None);
+    }
+
+    // 2. Register the Alarm Condition state machine
+    let state_machine = register_alarm_condition(
+        nm.address_space(),
+        &nm,
+        "Device1",
+        "Temperature",
+        source_node_id.clone(),
+        "Temperature alarm",
+    );
+
+    // 3. Create client-side subscription for events
+    let (notifs, _, mut events) = ChannelNotifications::new();
+    let sub_id = session
+        .create_subscription(Duration::from_millis(100), 100, 20, 1000, 0, true, notifs)
+        .await
+        .unwrap();
+
+    let select_clauses = get_alarm_event_select_clauses();
+
+    session
+        .create_monitored_items(
+            sub_id,
+            TimestampsToReturn::Both,
+            vec![MonitoredItemCreateRequest {
+                item_to_monitor: ReadValueId {
+                    node_id: source_node_id.clone(),
+                    attribute_id: AttributeId::EventNotifier as u32,
+                    ..Default::default()
+                },
+                monitoring_mode: MonitoringMode::Reporting,
+                requested_parameters: MonitoringParameters {
+                    sampling_interval: 0.0,
+                    queue_size: 10,
+                    discard_oldest: true,
+                    filter: ExtensionObject::new(EventFilter {
+                        select_clauses: Some(select_clauses),
+                        where_clause: opcua_types::ContentFilter::default(),
+                    }),
+                    ..Default::default()
+                },
+            }],
+        )
+        .await
+        .unwrap();
+
+    // 4. Trigger Alarm state transition to Active
+    let event = {
+        let mut space = nm.address_space().write();
+        trigger_alarm_transition(
+            &mut space,
+            &state_machine,
+            true,
+            800,
+            LocalizedText::new("en", "High temperature!"),
+        )
+        .unwrap()
+        .expect("Expected transition to generate an event")
+    };
+
+    // 5. Dispatch Event
+    {
+        let wrapper = opcua::server::alarms::ServerAlarmEvent { event: &event };
+        tester
+            .handle
+            .subscriptions()
+            .notify_events(std::iter::once((
+                &wrapper as &dyn opcua::nodes::Event,
+                &event.source_node,
+            )));
+    }
+
+    // 6. Receive and assert Event on the client
+    let (_r1, v1) = timeout(Duration::from_secs(2), events.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    let fields = v1.unwrap();
+    println!("Received Event Fields: {:?}", fields);
+    let alarm_event = parse_alarm_event(&fields).expect("Failed to parse alarm event");
+
+    assert_eq!(alarm_event.active_state, true);
+    assert_eq!(alarm_event.acked_state, false);
+    assert_eq!(alarm_event.confirmed_state, false);
+    assert_eq!(alarm_event.severity, 800);
+    assert_eq!(alarm_event.message.text.as_ref(), "High temperature!");
+
+    // 7. Acknowledge the alarm via Method call
+    let base_s = format!("Alarm_{}_{}", "Device1", "Temperature");
+    let ack_method_id = NodeId::new(2, format!("{}_Acknowledge", base_s));
+
+    let response = session
+        .call_one(CallMethodRequest {
+            object_id: state_machine.condition_id.clone(),
+            method_id: ack_method_id,
+            input_arguments: Some(vec![
+                Variant::from(opcua::types::ByteString::from(alarm_event.event_id.clone())),
+                Variant::from(LocalizedText::new("en", "Acknowledged by integration test")),
+            ]),
+        })
+        .await
+        .unwrap();
+    assert_eq!(response.status_code, StatusCode::Good);
+
+    // Verify server address space update
+    {
+        let space = nm.address_space().read();
+        assert_eq!(state_machine.get_acked(&space), true);
+        assert_eq!(state_machine.get_active(&space), true);
+        assert_eq!(state_machine.get_confirmed(&space), false);
+    }
+
+    // 8. Receive and assert the Acknowledged Event notification
+    let (_r2, v2) = timeout(Duration::from_secs(2), events.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    let fields2 = v2.unwrap();
+    let ack_event = parse_alarm_event(&fields2).expect("Failed to parse acknowledgment event");
+
+    assert_eq!(ack_event.active_state, true);
+    assert_eq!(ack_event.acked_state, true);
+    assert_eq!(ack_event.confirmed_state, false);
+
+    // 9. Confirm the alarm via Method call
+    let confirm_method_id = NodeId::new(2, format!("{}_Confirm", base_s));
+
+    let response2 = session
+        .call_one(CallMethodRequest {
+            object_id: state_machine.condition_id.clone(),
+            method_id: confirm_method_id,
+            input_arguments: Some(vec![
+                Variant::from(opcua::types::ByteString::from(ack_event.event_id.clone())),
+                Variant::from(LocalizedText::new("en", "Confirmed by integration test")),
+            ]),
+        })
+        .await
+        .unwrap();
+    assert_eq!(response2.status_code, StatusCode::Good);
+
+    // Verify server address space update
+    {
+        let space = nm.address_space().read();
+        assert_eq!(state_machine.get_confirmed(&space), true);
+        assert_eq!(state_machine.get_acked(&space), true);
+    }
+
+    // 10. Receive and assert the Confirmed Event notification
+    let (_r3, v3) = timeout(Duration::from_secs(2), events.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    let fields3 = v3.unwrap();
+    let confirm_event = parse_alarm_event(&fields3).expect("Failed to parse confirmation event");
+
+    assert_eq!(confirm_event.active_state, true);
+    assert_eq!(confirm_event.acked_state, true);
+    assert_eq!(confirm_event.confirmed_state, true);
+}
+
+// Helper to access transition triggers in testing
+fn trigger_alarm_transition(
+    address_space: &mut AddressSpace,
+    state_machine: &opcua::server::alarms::ConditionStateMachine,
+    active: bool,
+    severity: u16,
+    message: LocalizedText,
+) -> Result<Option<AlarmEvent>, StatusCode> {
+    opcua::server::alarms::transitions::trigger_alarm_transition(
+        address_space,
+        state_machine,
+        active,
+        severity,
+        message,
+    )
+}

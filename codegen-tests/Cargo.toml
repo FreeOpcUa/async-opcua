@@ -11,6 +11,7 @@ default = ["json", "xml"]
 
 [dependencies]
 async-opcua = { path = "../async-opcua" }
+bitflags = { workspace = true }
 
 [build-dependencies]
 async-opcua-codegen = { path = "../async-opcua-codegen" }

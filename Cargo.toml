@@ -14,6 +14,13 @@ missing_docs = "warn"
 unreachable_pub = "warn"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage)'] }
 
+[workspace.lints.clippy]
+all = "warn"
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
+
+
 [workspace.dependencies]
 arc-swap = "^1"
 async-trait = "^0.1"

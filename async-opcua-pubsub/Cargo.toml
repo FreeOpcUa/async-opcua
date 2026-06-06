@@ -1,0 +1,26 @@
+[package]
+name = "async-opcua-pubsub"
+version = "0.18.0"
+description = "OPC UA PubSub (Part 14) implementation"
+authors = ["Adam Lock <locka99@gmail.com>", "Einar Omang <einar@omang.com>"]
+license = "MPL-2.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "opcua_pubsub"
+
+[dependencies]
+async-opcua-core = { path = "../async-opcua-core", version = "0.18.0" }
+async-opcua-types = { path = "../async-opcua-types", version = "0.18.0", features = ["json"] }
+async-opcua-server = { path = "../async-opcua-server", version = "0.18.0" }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+rumqttc = "0.23"
+uuid = { workspace = true, features = ["v4"] }
+
+[lints]
+workspace = true

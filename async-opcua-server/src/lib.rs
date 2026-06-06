@@ -11,15 +11,29 @@
 //! See docs for the main `opcua` crate for details on usage.
 
 pub mod address_space;
+/// Mathematical aggregates (Part 13) support.
+pub mod aggregates;
+pub mod alarms;
+/// Authentication helpers.
+pub mod auth;
 pub mod authenticator;
 mod builder;
 mod config;
 pub mod diagnostics;
 #[cfg(feature = "discovery-server-registration")]
 mod discovery;
+/// Firmware-over-the-air file transfer helpers.
+pub mod fota;
+/// Historical data access (HDA) support.
+pub mod history;
 mod identity_token;
 mod info;
+pub mod namespace;
 pub mod node_manager;
+/// Runtime NodeSet2 loader support.
+pub mod nodeset_loader;
+/// Program execution (Part 10) support.
+pub mod programs;
 mod reverse_connect;
 mod server;
 mod server_handle;

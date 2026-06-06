@@ -1,0 +1,24 @@
+[package]
+name = "async-opcua-demo-server"
+version = "0.13.0"
+authors = ["Adam Lock <locka99@gmail.com>"]
+edition = "2021"
+publish = false
+
+[dependencies]
+chrono = { workspace = true }
+log = { workspace = true }
+log4rs = "1.2"
+pico-args = "0.5"
+rand = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+
+[dependencies.async-opcua]
+path = "../../async-opcua"
+features = ["all"]
+
+[features]
+default = ["json", "xml"]
+json = ["async-opcua/json"]
+xml = ["async-opcua/xml"]

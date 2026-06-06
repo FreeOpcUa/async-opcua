@@ -1,0 +1,5 @@
+# Mark generated files as generated, for github
+Cargo.lock linguist-generated=true
+async-opcua-types/src/generated/** linguist-generated=true
+async-opcua-core-namespace/src/generated/** linguist-generated=true
+async-opcua-core-namespace/src/events/generated.rs linguist-generated=true

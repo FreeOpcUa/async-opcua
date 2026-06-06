@@ -1,0 +1,42 @@
+[package]
+name = "async-opcua-core"
+version = "0.18.0"
+description = "OPC UA core utils for client and server"
+authors = ["Adam Lock <locka99@gmail.com>", "Einar Omang <einar@omang.com>"]
+homepage = "https://github.com/freeopcua/async-opcua"
+repository = "https://github.com/freeopcua/async-opcua"
+license = "MPL-2.0"
+keywords = ["opcua", "opc", "ua"]
+categories = ["embedded", "network-programming"]
+readme = "README.md"
+documentation = "https://docs.rs/async-opcua-core/"
+edition = "2021"
+publish = true
+
+[lib]
+name = "opcua_core"
+
+[dependencies]
+bytes = { workspace = true }
+chrono = { workspace = true }
+parking_lot = { workspace = true }
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+shellexpand = { workspace = true, optional = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+
+async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.18.0" }
+async-opcua-types = { path = "../async-opcua-types", version = "0.18.0" }
+
+[dev-dependencies]
+tempfile = { version = "^3" }
+
+[lints]
+workspace = true
+
+[features]
+env_expansion = ["dep:shellexpand"]

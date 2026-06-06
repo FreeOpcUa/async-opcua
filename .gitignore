@@ -1,0 +1,17 @@
+.idea/
+.vscode/
+.cargo/
+target/
+pki/
+log/
+/curl-ca-bundle.crt
+/samples/server.test.conf
+**/pki-client
+**/pki-server
+3rd-party/open62541/build/
+async-opcua/pki*
+async-opcua/certs
+
+**/bin
+**/obj
+**/pki-ext-client

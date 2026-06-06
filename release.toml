@@ -1,0 +1,6 @@
+enable-all-features = true
+pre-release-commit-message = "Release {{version}}"
+tag-message = "Release {{version}}"
+tag-name = "{{version}}"
+consolidate-commits = true
+shared-version = true

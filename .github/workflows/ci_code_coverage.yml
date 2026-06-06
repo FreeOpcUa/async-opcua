@@ -1,0 +1,23 @@
+name: Determine code coverage
+'on':
+  workflow_call: null
+jobs:
+  cov:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Provision toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      # Crypto tests are excluded because the way rust does coverage makes them take 100x longer.
+      - name: Test with profiling data
+        run: cargo llvm-cov --workspace --exclude async-opcua-crypto --codecov --output-path codecov.json --locked
+
+      - name: Upload lcov to codecov.io
+        uses: codecov/codecov-action@v4
+        with:
+          files: codecov.json

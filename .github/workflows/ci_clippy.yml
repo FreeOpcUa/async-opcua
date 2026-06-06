@@ -1,0 +1,25 @@
+name: Run and verify clippy
+'on':
+  workflow_call: null
+jobs:
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Provision toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Run clippy
+        run: cargo clippy --locked -- -D warnings
+      
+      - name: No default features
+        run: cargo clippy --locked --no-default-features -- -D warnings
+
+      - name: Just xml
+        run: cargo clippy --locked --no-default-features --features xml -- -D warnings
+
+      - name: Just json
+        run: cargo clippy --locked --no-default-features --features json -- -D warnings

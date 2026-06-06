@@ -1,0 +1,46 @@
+refresh_rate: 30 seconds
+appenders:
+  stdout:
+    kind: console
+  opcua_log:
+    kind: file
+    path: "log/opcua.log"
+    encoder:
+      pattern: "{d} - {l} - {t} - {m}{n}"
+  hex_log:
+    kind: file
+    path: "log/hex.log"
+    encoder:
+      pattern: "{m}{n}"
+  audit:
+    kind: file
+    path: "log/audit.log"
+    encoder:
+      pattern: "{d} - {l} - {t} - {m}{n}"
+
+root:
+  level: warn
+  appenders:
+    - stdout
+loggers:
+  opcua::core:
+    level: debug
+    appenders:
+      - opcua_log
+  opcua::server:
+    level: debug
+    appenders:
+      - opcua_log
+  opcua::client:
+    level: debug
+    appenders:
+      - opcua_log
+  opcua::server::events::audit:
+    level: debug
+    appenders:
+      - audit
+      - opcua_log
+  hex:
+    level: info
+    appenders:
+      - hex_log

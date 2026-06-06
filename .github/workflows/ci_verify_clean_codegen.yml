@@ -1,0 +1,26 @@
+name: CI verify cleanly generated code
+'on':
+  workflow_call: null
+jobs:
+  types:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (GitHub)
+        uses: actions/checkout@v4
+      - name: Provision toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+      - name: Run code gen
+        run: cargo run --locked --bin async-opcua-codegen code_gen_config.yml 
+      - name: Run code gen for sample
+        run: cargo run --locked --bin async-opcua-codegen samples/custom-codegen/code_gen_config.yml
+      - name: Format generated code
+        run: cargo fmt --all
+      - name: Verify generated code matches committed code
+        run: |
+          if [[ -n $(git status --porcelain) ]]; then
+            echo "Workspace is not clean, it has not been formatted, or codegen is not up to date"
+            git status --porcelain
+            exit 1
+          fi

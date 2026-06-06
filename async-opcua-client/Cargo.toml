@@ -1,0 +1,38 @@
+[package]
+name = "async-opcua-client"
+version = "0.18.0"
+description = "OPC UA client API"
+authors = ["Adam Lock <locka99@gmail.com>", "Einar Omang <einar@omang.com>"]
+homepage = "https://github.com/freeopcua/async-opcua"
+repository = "https://github.com/freeopcua/async-opcua"
+license = "MPL-2.0"
+keywords = ["opcua", "opc", "ua"]
+categories = ["embedded", "network-programming"]
+readme = "README.md"
+documentation = "https://docs.rs/async-opcua-client/"
+edition = "2021"
+publish = true
+
+[lints]
+workspace = true
+
+[lib]
+name = "opcua_client"
+
+[dependencies]
+arc-swap = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+futures = { workspace = true }
+hashbrown = { workspace = true }
+parking_lot = { workspace = true }
+rsa = { workspace = true }
+serde = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+
+async-opcua-core = { path = "../async-opcua-core", version = "0.18.0" }
+async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.18.0" }
+async-opcua-nodes = { path = "../async-opcua-nodes", version = "0.18.0" }
+async-opcua-types = { path = "../async-opcua-types", version = "0.18.0" }

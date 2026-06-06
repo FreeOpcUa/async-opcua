@@ -1,0 +1,42 @@
+extra_header: |
+  // OPCUA for Rust
+  // SPDX-License-Identifier: MPL-2.0
+  // Copyright (C) 2017-2024 Einar Omang
+targets:
+  - type: types
+    file: Opc.Ua.Pn.NodeSet2.xml
+    output_dir: src/generated/types
+    enums_single_file: true
+    structs_single_file: true
+    extra_header: |
+      #![allow(non_camel_case_types)]
+      #![allow(clippy::upper_case_acronyms)]
+  - type: nodes
+    file: Opc.Ua.Pn.NodeSet2.xml
+    output_dir: src/generated/nodeset
+    max_nodes_per_file: 100
+    types:
+      - file: Opc.Ua.Pn.Types.xsd
+        root_path: crate::generated::types
+      - file: Opc.Ua.Types.xsd
+        root_path: opcua::types
+    name: ProfinetNamespace
+  - type: events
+    file: Opc.Ua.Pn.NodeSet2.xml
+    output_dir: src/generated/events
+    types:
+      - file: Opc.Ua.Pn.Types.xsd
+        root_path: crate::generated::types
+      - file: Opc.Ua.Types.xsd
+        root_path: opcua::types
+    dependent_nodesets:
+      - file: Opc.Ua.NodeSet2.xml
+        import_path: "opcua::core_namespace::events::"
+  - type: ids
+    file_path: schema/Opc.Ua.Pn.NodeIds.csv
+    output_file: src/generated/node_ids.rs
+
+sources:
+  - schema
+  - ../../schemas/1.05/Opc.Ua.Types.xsd
+  - ../../schemas/1.05/Opc.Ua.NodeSet2.xml

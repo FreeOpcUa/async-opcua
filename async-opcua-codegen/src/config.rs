@@ -1,0 +1,64 @@
+use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
+
+use crate::{input::SchemaCache, CodeGenError};
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(tag = "type")]
+pub enum ExplicitCodeGenSource {
+    #[serde(rename = "xml-schema")]
+    /// XML schema file (XSD)
+    Xml { path: PathBuf },
+    #[serde(rename = "binary-schema")]
+    /// Binary schema file (BSD). Note that this is deprecated.
+    Binary { path: PathBuf },
+    #[serde(rename = "node-set")]
+    /// NodeSet2.xml files.
+    NodeSet { path: PathBuf },
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(untagged)]
+/// Utility type for easily specifying code generation sources.
+/// If the source is a string, we infer which type of source it is based on the file extension.
+/// Directories are loaded recursively, xsd files are loaded as XML schemas,
+/// xml files as NodeSets, and bsd files as binary schemas.
+pub enum CodeGenSource {
+    /// An implicit source, which we infer based on file extension.
+    Implicit(PathBuf),
+    /// An explicit source, with a set type.
+    Explicit(ExplicitCodeGenSource),
+}
+
+/// Try to load all referenced schemas from the specified sources,
+/// returning the loaded schemas in a SchemaCache.
+///
+/// Finally, validate the schemas to ensure that all references are valid.
+pub fn load_schemas(
+    root_path: &Path,
+    sources: &[CodeGenSource],
+) -> Result<SchemaCache, CodeGenError> {
+    let mut cache = SchemaCache::new(root_path);
+    for source in sources {
+        match source {
+            CodeGenSource::Implicit(path) => {
+                cache.auto_load_schemas(path)?;
+            }
+            CodeGenSource::Explicit(explicit) => match explicit {
+                ExplicitCodeGenSource::Xml { path } => {
+                    cache.load_xml_schema(path)?;
+                }
+                ExplicitCodeGenSource::Binary { path } => {
+                    cache.load_binary_schema(path)?;
+                }
+                ExplicitCodeGenSource::NodeSet { path } => {
+                    cache.load_nodeset(path)?;
+                }
+            },
+        }
+    }
+    cache.validate()?;
+
+    Ok(cache)
+}

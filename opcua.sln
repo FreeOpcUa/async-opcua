@@ -1,0 +1,37 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.002.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "dotnet-tests", "dotnet-tests", "{5A1CD3FB-335F-46D9-8B5A-60365CFC44ED}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TestServer", "dotnet-tests\TestServer\TestServer.csproj", "{899388F4-0D20-43F8-A523-960BDD2B2649}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Common", "dotnet-tests\Common\Common.csproj", "{5B70AE64-4242-4767-91EA-0CC3DAF97147}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{899388F4-0D20-43F8-A523-960BDD2B2649}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{899388F4-0D20-43F8-A523-960BDD2B2649}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{899388F4-0D20-43F8-A523-960BDD2B2649}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{899388F4-0D20-43F8-A523-960BDD2B2649}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5B70AE64-4242-4767-91EA-0CC3DAF97147}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5B70AE64-4242-4767-91EA-0CC3DAF97147}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5B70AE64-4242-4767-91EA-0CC3DAF97147}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5B70AE64-4242-4767-91EA-0CC3DAF97147}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{899388F4-0D20-43F8-A523-960BDD2B2649} = {5A1CD3FB-335F-46D9-8B5A-60365CFC44ED}
+		{5B70AE64-4242-4767-91EA-0CC3DAF97147} = {5A1CD3FB-335F-46D9-8B5A-60365CFC44ED}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {F20C0547-E99A-4920-872A-385DBABEFE73}
+	EndGlobalSection
+EndGlobal

@@ -1,0 +1,23 @@
+[package]
+name = "custom-codegen"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[features]
+json = ["serde_json", "serde", "serde_with", "async-opcua/json"]
+xml = ["async-opcua/xml"]
+
+default = ["json", "xml"]
+
+[dependencies]
+log = { workspace = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+serde_with = { workspace = true, optional = true }
+tokio = { workspace = true }
+env_logger = { workspace = true }
+
+[dependencies.async-opcua]
+path = "../../async-opcua"
+features = ["client", "server"]

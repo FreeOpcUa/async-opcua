@@ -1,0 +1,89 @@
+[workspace]
+resolver = "2"
+members = [
+  "async-opcua",
+  "samples/*",
+  "async-opcua-*",
+  "tools/certificate-creator",
+  "dotnet-tests/external-tests",
+  "fuzz", "codegen-tests",
+]
+
+[workspace.lints.rust]
+missing_docs = "warn"
+unreachable_pub = "warn"
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage)'] }
+
+[workspace.dependencies]
+arc-swap = "^1"
+async-trait = "^0.1"
+base64 = "^0.22"
+bitflags = "^2"
+byteorder = "^1"
+bytes = "^1"
+chrono = { version = "^0.4", features = ["serde"] }
+convert_case = "^0.6"
+env_logger = "^0.10"
+futures = "^0.3"
+gethostname = "^0.5"
+hashbrown = "^0.15"
+log = "^0.4"
+num-bigint-dig = "^0.8.6"
+parking_lot = { version = "^0.12", features = ["send_guard"] }
+postcard = { version = "^1", features = ["use-std"] }
+proc-macro2 = "^1"
+quick-xml = "0.37.2"
+quote = "^1"
+regex = "^1"
+roxmltree = "^0.20"
+serde = { version = "^1", features = ["derive"] }
+serde_json = { version = "^1", features = ["arbitrary_precision"] }
+serde_with = "^3"
+serde_yaml = "^0.9"
+shellexpand = { version = "3.1" }
+struson = { version = "^0.6" }
+syn = { version = "^2", features = ["full"] }
+thiserror = "^1"
+tokio = { version = "^1", features = ["full"] }
+tokio-util = { version = "^0.7", features = ["codec"] }
+tracing = { version = "0.1.41", features = ["log"] }
+tracing-futures = "0.2.5"
+url = "^2"
+uuid = { version = "^1", features = ["v4"] }
+
+aes = "^0.8"
+cbc = "^0.1"
+const-oid = { version = "^0.9", features = ["db"] }
+hmac = "^0.12"
+rand = "^0.8"
+rsa = { version = "^0.9", features = ["sha2", "sha1", "pem"] }
+sha1 = { version = "^0.10", features = ["oid"] }
+sha2 = { version = "^0.10", features = ["oid"] }
+x509-cert = { version = "^0.2", features = ["builder", "hazmat"] }
+
+# Compile the crypto dependencies in release even in debug, to make test
+# performance tolerable. This makes initial compile times slightly worse,
+# but tests run way faster.
+[profile.dev.package.aes]
+opt-level = 3
+[profile.dev.package.cbc]
+opt-level = 3
+[profile.dev.package.hmac]
+opt-level = 3
+[profile.dev.package.rand]
+opt-level = 3
+[profile.dev.package.rsa]
+opt-level = 3
+[profile.dev.package.sha1]
+opt-level = 3
+[profile.dev.package.sha2]
+opt-level = 3
+[profile.dev.package.x509-cert]
+opt-level = 3
+
+# This is probably the most important for the tests at the moment,
+# as it is on the hot path of RSA private key generation (gen_prime)
+[profile.dev.package.num-bigint-dig]
+opt-level = 3
+[profile.dev.package.rand_core]
+opt-level = 3

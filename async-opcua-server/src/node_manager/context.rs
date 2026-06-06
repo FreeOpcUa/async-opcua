@@ -1,0 +1,192 @@
+use std::{ops::Deref, sync::Arc};
+
+use crate::{
+    authenticator::{AuthManager, UserToken},
+    info::ServerInfo,
+    session::instance::Session,
+    SubscriptionCache,
+};
+use opcua_core::{sync::RwLock, trace_read_lock};
+use opcua_nodes::TypeTree;
+use opcua_types::{BrowseDescriptionResultMask, NodeId};
+use parking_lot::lock_api::{RawRwLock, RwLockReadGuard};
+use tracing::debug_span;
+use tracing_futures::Instrument;
+
+use super::{
+    view::{ExternalReferenceRequest, NodeMetadata},
+    DefaultTypeTree, NodeManagers,
+};
+
+/// Trait for providing a static reference to the type tree for a specific user.
+/// This allows subscriptions to hold a reference to the type tree.
+pub trait TypeTreeForUserStatic: Send + Sync {
+    /// Get the type tree read context. This may lock.
+    fn get_type_tree<'a>(&'a self) -> Box<dyn TypeTreeReadContext + 'a>;
+}
+
+impl<T> TypeTreeForUserStatic for RwLock<T>
+where
+    T: TypeTree + Send + Sync + 'static,
+{
+    fn get_type_tree<'a>(&'a self) -> Box<dyn TypeTreeReadContext + 'a> {
+        Box::new(trace_read_lock!(self))
+    }
+}
+
+/// Trait for providing a dynamic type tree for a user.
+/// This is a bit complex, it doesn't return a type tree directly,
+/// instead it returns something that wraps a type tree, for example
+/// a `RwLockReadGuard<'_, RawRwLock, dyn TypeTree>`
+pub trait TypeTreeForUser: Send + Sync {
+    /// Get the type tree for the user associated with the given `ctx`.
+    /// This can be the server global type tree, or a custom type tree for each individual user.
+    ///
+    /// It is sync, so you should do any setup in your [`AuthManager`] implementation.
+    fn get_type_tree_for_user<'a>(
+        &'a self,
+        ctx: &'a RequestContext,
+    ) -> Box<dyn TypeTreeReadContext + 'a>;
+
+    /// Get a static reference to a type tree getter for the current user.
+    /// This is used to allow subscriptions to hold a reference
+    /// to the type tree for events.
+    fn get_type_tree_static(&self, ctx: &RequestContext) -> Arc<dyn TypeTreeForUserStatic>;
+}
+
+pub(crate) struct DefaultTypeTreeGetter;
+
+impl TypeTreeForUser for DefaultTypeTreeGetter {
+    fn get_type_tree_for_user<'a>(
+        &'a self,
+        ctx: &'a RequestContext,
+    ) -> Box<dyn TypeTreeReadContext + 'a> {
+        Box::new(trace_read_lock!(ctx.type_tree))
+    }
+
+    fn get_type_tree_static(&self, ctx: &RequestContext) -> Arc<dyn TypeTreeForUserStatic> {
+        ctx.type_tree.clone()
+    }
+}
+
+/// Type returned from [`TypeTreeForUser`], a trait for something that dereferences
+/// to a `dyn TypeTree`.
+pub trait TypeTreeReadContext {
+    /// Dereference to a dynamic [TypeTree].
+    fn get(&self) -> &dyn TypeTree;
+}
+
+impl<R: RawRwLock, T: TypeTree> TypeTreeReadContext for RwLockReadGuard<'_, R, T> {
+    fn get(&self) -> &dyn TypeTree {
+        &**self
+    }
+}
+
+#[derive(Clone)]
+/// Context object passed during requests, contains useful context the node
+/// managers can use to execute service calls.
+pub struct RequestContext {
+    /// Index of the current node manager.
+    pub current_node_manager_index: usize,
+    /// Inner request context object, shared between service calls.
+    pub(crate) inner: Arc<RequestContextInner>,
+}
+
+// This isn't ideal, but the breaking change from having every field on
+// RequestContext be private is too big for now.
+impl Deref for RequestContext {
+    type Target = RequestContextInner;
+
+    fn deref(&self) -> &RequestContextInner {
+        &self.inner
+    }
+}
+
+/// Inner request context object, shared between service calls.
+pub struct RequestContextInner {
+    /// The full session object for the session responsible for this service call.
+    pub session: Arc<RwLock<Session>>,
+    /// The session ID for the session responsible for this service call.
+    pub session_id: u32,
+    /// The global `AuthManager` object.
+    pub authenticator: Arc<dyn AuthManager>,
+    /// The current user token.
+    pub token: UserToken,
+    /// Global type tree object.
+    pub type_tree: Arc<RwLock<DefaultTypeTree>>,
+    /// Wrapper to get a type tree
+    pub type_tree_getter: Arc<dyn TypeTreeForUser>,
+    /// Subscription cache, containing all subscriptions on the server.
+    pub subscriptions: Arc<SubscriptionCache>,
+    /// Server info object, containing configuration and other shared server
+    /// state.
+    pub info: Arc<ServerInfo>,
+}
+
+impl RequestContext {
+    /// Get the type tree for the current user.
+    pub fn get_type_tree_for_user<'a>(&'a self) -> Box<dyn TypeTreeReadContext + 'a> {
+        self.type_tree_getter.get_type_tree_for_user(self)
+    }
+
+    /// Get the session object responsible for this service call.
+    pub fn session(&self) -> &RwLock<Session> {
+        &self.session
+    }
+
+    /// Get the session ID for the session responsible for this service call.
+    pub fn session_id(&self) -> u32 {
+        self.session_id
+    }
+
+    /// Get the global `AuthManager` object.
+    pub fn authenticator(&self) -> &dyn AuthManager {
+        self.authenticator.as_ref()
+    }
+
+    /// Get the current user token.
+    pub fn user_token(&self) -> &UserToken {
+        &self.token
+    }
+
+    /// Get the global type tree object. If your server needs per-user type trees,
+    /// use `get_type_tree_for_user` instead.
+    pub fn type_tree(&self) -> &RwLock<DefaultTypeTree> {
+        &self.type_tree
+    }
+
+    /// Get the subscription cache.
+    pub fn subscriptions(&self) -> &SubscriptionCache {
+        &self.subscriptions
+    }
+
+    /// Get the server info object.
+    pub fn info(&self) -> &ServerInfo {
+        &self.info
+    }
+}
+
+/// Resolve a list of references.
+pub(crate) async fn resolve_external_references(
+    context: &RequestContext,
+    node_managers: &NodeManagers,
+    references: &[(&NodeId, BrowseDescriptionResultMask)],
+) -> Vec<Option<NodeMetadata>> {
+    let mut res: Vec<_> = references
+        .iter()
+        .map(|(n, mask)| ExternalReferenceRequest::new(n, *mask))
+        .collect();
+
+    for nm in node_managers.iter() {
+        let mut items: Vec<_> = res
+            .iter_mut()
+            .filter(|r| nm.owns_node(r.node_id()))
+            .collect();
+
+        nm.resolve_external_references(context, &mut items)
+            .instrument(debug_span!("resolve external references", node_manager = %nm.name()))
+            .await;
+    }
+
+    res.into_iter().map(|r| r.into_inner()).collect()
+}

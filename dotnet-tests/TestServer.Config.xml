@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ApplicationConfiguration
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:ua="http://opcfoundation.org/UA/2008/02/Types.xsd"
+  xmlns="http://opcfoundation.org/UA/SDK/Configuration.xsd"
+>
+  <ApplicationName>Rust OPC-UA Test Server</ApplicationName>
+  <ApplicationUri>urn:localhost:RustOpcua:TestServer</ApplicationUri>
+  <ApplicationType>Server_0</ApplicationType>
+
+  <SecurityConfiguration>
+
+    <!-- Where the application instance certificate is stored (MachineDefault) -->
+    <ApplicationCertificate>
+      <StoreType>Directory</StoreType>
+      <StorePath>./servercertificates/pki/own</StorePath>
+      <SubjectName>CN=Rust-async-opcua-test-server</SubjectName>
+    </ApplicationCertificate>
+
+    <!-- Where the issuer certificate are stored (certificate authorities) -->
+    <TrustedIssuerCertificates>
+      <StoreType>Directory</StoreType>
+      <StorePath>./servercertificates/pki/issuer</StorePath>
+    </TrustedIssuerCertificates>
+
+    <!-- Where the trust list is stored -->
+    <TrustedPeerCertificates>
+      <StoreType>Directory</StoreType>
+      <StorePath>./servercertificates/pki/trusted</StorePath>
+    </TrustedPeerCertificates>
+
+    <!-- The directory used to store invalid certficates for later review by the administrator. -->
+    <RejectedCertificateStore>
+      <StoreType>Directory</StoreType>
+      <StorePath>./servercertificates/pki/rejected</StorePath>
+    </RejectedCertificateStore>
+
+    <AutoAcceptUntrustedCertificates>true</AutoAcceptUntrustedCertificates>
+  </SecurityConfiguration>
+
+  <TransportConfigurations></TransportConfigurations>
+
+  <TransportQuotas>
+    <OperationTimeout>600000</OperationTimeout>
+    <MaxStringLength>1048576</MaxStringLength>
+    <MaxByteStringLength>1048576</MaxByteStringLength>
+    <MaxArrayLength>65535</MaxArrayLength>
+    <MaxMessageSize>4194304</MaxMessageSize>
+    <MaxBufferSize>65535</MaxBufferSize>
+    <ChannelLifetime>300000</ChannelLifetime>
+    <SecurityTokenLifetime>3600000</SecurityTokenLifetime>
+  </TransportQuotas>
+  <ServerConfiguration>
+    <BaseAddresses>
+      <!--ua:String>https://localhost:62545</ua:String-->
+      <ua:String>opc.tcp://localhost:62546</ua:String>
+    </BaseAddresses>
+    <SecurityPolicies>
+      <ServerSecurityPolicy>
+        <SecurityMode>None_1</SecurityMode>
+        <SecurityPolicyUri>http://opcfoundation.org/UA/SecurityPolicy#None</SecurityPolicyUri>
+      </ServerSecurityPolicy>
+      <ServerSecurityPolicy>
+        <SecurityMode>Sign_2</SecurityMode>
+        <SecurityPolicyUri>http://opcfoundation.org/UA/SecurityPolicy#Basic256Sha256</SecurityPolicyUri>
+      </ServerSecurityPolicy>
+      <ServerSecurityPolicy>
+        <SecurityMode>SignAndEncrypt_3</SecurityMode>
+        <SecurityPolicyUri>http://opcfoundation.org/UA/SecurityPolicy#Basic256Sha256</SecurityPolicyUri>
+      </ServerSecurityPolicy>
+      <ServerSecurityPolicy>
+        <SecurityMode>Sign_2</SecurityMode>
+        <SecurityPolicyUri>http://opcfoundation.org/UA/SecurityPolicy#Aes128_Sha256_RsaOaep</SecurityPolicyUri>
+      </ServerSecurityPolicy>
+      <ServerSecurityPolicy>
+        <SecurityMode>SignAndEncrypt_3</SecurityMode>
+        <SecurityPolicyUri>http://opcfoundation.org/UA/SecurityPolicy#Aes128_Sha256_RsaOaep</SecurityPolicyUri>
+      </ServerSecurityPolicy>
+      <ServerSecurityPolicy>
+        <SecurityMode>Sign_2</SecurityMode>
+        <SecurityPolicyUri>http://opcfoundation.org/UA/SecurityPolicy#Aes256_Sha256_RsaPss</SecurityPolicyUri>
+      </ServerSecurityPolicy>
+      <ServerSecurityPolicy>
+        <SecurityMode>SignAndEncrypt_3</SecurityMode>
+        <SecurityPolicyUri>http://opcfoundation.org/UA/SecurityPolicy#Aes256_Sha256_RsaPss</SecurityPolicyUri>
+      </ServerSecurityPolicy>
+      <ServerSecurityPolicy>
+        <SecurityMode>Sign_2</SecurityMode>
+        <SecurityPolicyUri>http://opcfoundation.org/UA/SecurityPolicy#Basic128Rsa15</SecurityPolicyUri>
+      </ServerSecurityPolicy>
+      <ServerSecurityPolicy>
+        <SecurityMode>SignAndEncrypt_3</SecurityMode>
+        <SecurityPolicyUri>http://opcfoundation.org/UA/SecurityPolicy#Basic128Rsa15</SecurityPolicyUri>
+      </ServerSecurityPolicy>
+      <ServerSecurityPolicy>
+        <SecurityMode>Sign_2</SecurityMode>
+        <SecurityPolicyUri>http://opcfoundation.org/UA/SecurityPolicy#Basic256</SecurityPolicyUri>
+      </ServerSecurityPolicy>
+      <ServerSecurityPolicy>
+        <SecurityMode>SignAndEncrypt_3</SecurityMode>
+        <SecurityPolicyUri>http://opcfoundation.org/UA/SecurityPolicy#Basic256</SecurityPolicyUri>
+      </ServerSecurityPolicy>
+    </SecurityPolicies>
+    <UserTokenPolicies>
+      <ua:UserTokenPolicy>
+        <ua:TokenType>Anonymous_0</ua:TokenType>
+      </ua:UserTokenPolicy>
+      <ua:UserTokenPolicy>
+        <ua:TokenType>UserName_1</ua:TokenType>
+      </ua:UserTokenPolicy>
+    </UserTokenPolicies>
+    <DiagnosticsEnabled>false</DiagnosticsEnabled>
+    <MaxSessionCount>100</MaxSessionCount>
+    <MinSessionTimeout>10000</MinSessionTimeout>
+    <MaxSessionTimeout>3600000</MaxSessionTimeout>
+    <MaxBrowseContinuationPoints>1000</MaxBrowseContinuationPoints>
+    <MaxQueryContinuationPoints>10</MaxQueryContinuationPoints>
+    <MaxHistoryContinuationPoints>1000</MaxHistoryContinuationPoints>
+    <MaxRequestAge>600000</MaxRequestAge>
+    <MinPublishingInterval>100</MinPublishingInterval>
+    <MaxPublishingInterval>3600000</MaxPublishingInterval>
+    <PublishingResolution>50</PublishingResolution>
+    <MaxSubscriptionLifetime>3600000</MaxSubscriptionLifetime>
+    <MaxMessageQueueSize>10</MaxMessageQueueSize>
+    <MaxNotificationQueueSize>100</MaxNotificationQueueSize>
+    <MaxNotificationsPerPublish>1000</MaxNotificationsPerPublish>
+    <MinMetadataSamplingInterval>1000</MinMetadataSamplingInterval>
+    <AvailableSamplingRates>
+      <SamplingRateGroup>
+        <Start>5</Start>
+        <Increment>5</Increment>
+        <Count>20</Count>
+      </SamplingRateGroup>
+      <SamplingRateGroup>
+        <Start>100</Start>
+        <Increment>100</Increment>
+        <Count>4</Count>
+      </SamplingRateGroup>
+      <SamplingRateGroup>
+        <Start>500</Start>
+        <Increment>250</Increment>
+        <Count>2</Count>
+      </SamplingRateGroup>
+      <SamplingRateGroup>
+        <Start>1000</Start>
+        <Increment>500</Increment>
+        <Count>20</Count>
+      </SamplingRateGroup>
+    </AvailableSamplingRates>
+    <MaxRegistrationInterval>0</MaxRegistrationInterval>
+    <ReverseConnect>
+      <ConnectInterval>1000</ConnectInterval>
+      <ConnectTimeout>10000</ConnectTimeout>
+    </ReverseConnect>
+  </ServerConfiguration>
+</ApplicationConfiguration>

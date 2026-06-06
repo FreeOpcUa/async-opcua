@@ -1,0 +1,15 @@
+{
+  "version": "0.8.8",
+  "integration_state_schema": 1,
+  "installed_integrations": [
+    "gemini"
+  ],
+  "integration_settings": {
+    "gemini": {
+      "script": "sh",
+      "invoke_separator": "."
+    }
+  },
+  "integration": "gemini",
+  "default_integration": "gemini"
+}

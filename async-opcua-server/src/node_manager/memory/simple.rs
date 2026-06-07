@@ -415,6 +415,152 @@ impl InMemoryNodeManagerImpl for SimpleNodeManagerImpl {
         }
     }
 
+    async fn history_read_events(
+        &self,
+        _context: &RequestContext,
+        details: &opcua_types::ReadEventDetails,
+        nodes: &mut [&mut &mut crate::node_manager::history::HistoryNode],
+        _timestamps_to_return: TimestampsToReturn,
+    ) -> Result<(), StatusCode> {
+        let backend = {
+            let guard = self.history_backend.read();
+            guard.clone()
+        };
+        if let Some(backend) = backend {
+            for hn in nodes {
+                let node_id = hn.node_id();
+                let backend_token = hn
+                    .continuation_point()
+                    .and_then(|cp| cp.get::<crate::history::HistoryContinuationPoint>())
+                    .and_then(|hcp| hcp.backend_token.clone());
+
+                match backend
+                    .read_events(
+                        node_id,
+                        details.start_time,
+                        details.end_time,
+                        details.num_values_per_node,
+                        &details.filter,
+                        backend_token,
+                    )
+                    .await
+                {
+                    Ok((events, next_token)) => {
+                        let next_cp = next_token.map(|tok| {
+                            crate::session::continuation_points::ContinuationPoint::new(Box::new(
+                                crate::history::HistoryContinuationPoint::new(
+                                    node_id.clone(),
+                                    details.start_time,
+                                    details.end_time,
+                                    details.num_values_per_node,
+                                    false,
+                                    Some(tok),
+                                ),
+                            ))
+                        });
+
+                        hn.set_next_continuation_point(next_cp);
+                        hn.set_result(opcua_types::HistoryEvent {
+                            events: Some(events),
+                        });
+                        hn.set_status(StatusCode::Good);
+                    }
+                    Err(status) => hn.set_status(status),
+                }
+            }
+            Ok(())
+        } else {
+            Err(StatusCode::BadHistoryOperationUnsupported)
+        }
+    }
+
+    async fn history_read_annotations(
+        &self,
+        _context: &RequestContext,
+        details: &opcua_types::ReadAnnotationDataDetails,
+        nodes: &mut [&mut &mut crate::node_manager::history::HistoryNode],
+        _timestamps_to_return: TimestampsToReturn,
+    ) -> Result<(), StatusCode> {
+        let backend = {
+            let guard = self.history_backend.read();
+            guard.clone()
+        };
+        if let Some(backend) = backend {
+            for hn in nodes {
+                let node_id = hn.node_id();
+                let backend_token = hn
+                    .continuation_point()
+                    .and_then(|cp| cp.get::<crate::history::HistoryContinuationPoint>())
+                    .and_then(|hcp| hcp.backend_token.clone());
+                let req_times = details.req_times.as_deref().unwrap_or(&[]);
+
+                match backend
+                    .read_annotations(node_id, req_times, backend_token)
+                    .await
+                {
+                    Ok((data_values, next_token)) => {
+                        let start_time = req_times
+                            .first()
+                            .copied()
+                            .unwrap_or_else(opcua_types::DateTime::null);
+                        let end_time = req_times
+                            .last()
+                            .copied()
+                            .unwrap_or_else(opcua_types::DateTime::null);
+                        let next_cp = next_token.map(|tok| {
+                            crate::session::continuation_points::ContinuationPoint::new(Box::new(
+                                crate::history::HistoryContinuationPoint::new(
+                                    node_id.clone(),
+                                    start_time,
+                                    end_time,
+                                    req_times.len() as u32,
+                                    false,
+                                    Some(tok),
+                                ),
+                            ))
+                        });
+
+                        hn.set_next_continuation_point(next_cp);
+                        hn.set_result(opcua_types::HistoryData {
+                            data_values: Some(data_values),
+                        });
+                        hn.set_status(StatusCode::Good);
+                    }
+                    Err(status) => hn.set_status(status),
+                }
+            }
+            Ok(())
+        } else {
+            Err(StatusCode::BadHistoryOperationUnsupported)
+        }
+    }
+
+    async fn history_release_continuation_point(
+        &self,
+        _context: &RequestContext,
+        _node_id: &NodeId,
+        continuation_point: &crate::session::continuation_points::ContinuationPoint,
+    ) -> Result<(), StatusCode> {
+        let backend_token = continuation_point
+            .get::<crate::history::HistoryContinuationPoint>()
+            .and_then(|point| point.backend_token.clone());
+
+        let Some(backend_token) = backend_token else {
+            return Ok(());
+        };
+
+        let backend = {
+            let guard = self.history_backend.read();
+            guard.clone()
+        };
+
+        if let Some(backend) = backend {
+            backend.release_continuation_point(backend_token).await
+        } else {
+            Err(StatusCode::BadHistoryOperationUnsupported)
+        }
+    }
+
     async fn history_update(
         &self,
         _context: &RequestContext,

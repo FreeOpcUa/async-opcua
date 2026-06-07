@@ -348,6 +348,11 @@ impl Server {
             } else {
                 Either::Right(self.connections.next())
             };
+            let reverse_connect_fut = if self.connection_map.len() >= self.config.max_connections {
+                Either::Left(futures::future::pending())
+            } else {
+                Either::Right(self.reverse_connect_manager.wait_for_connection())
+            };
 
             tokio::select! {
                 conn_res = conn_fut => {
@@ -365,6 +370,14 @@ impl Server {
                 rs = listener.accept() => {
                     match rs {
                         Ok((socket, addr)) => {
+                            if self.connection_map.len() >= self.config.max_connections {
+                                warn!(
+                                    "Closing connection from {addr}: max_connections ({}) reached",
+                                    self.config.max_connections
+                                );
+                                drop(socket);
+                                continue;
+                            }
                             info!("Accept new connection from {addr} ({connection_counter})");
                             let conn = SessionStarter::new(
                                 TcpConnector::new(socket, TransportConfig {
@@ -394,7 +407,7 @@ impl Server {
                         }
                     }
                 }
-                rev_connect = self.reverse_connect_manager.wait_for_connection() => {
+                rev_connect = reverse_connect_fut => {
                     debug!("Attempting reverse connection to {:?}", rev_connect.target.address);
                     let conn = SessionStarter::new(
                         ReverseTcpConnector::new(

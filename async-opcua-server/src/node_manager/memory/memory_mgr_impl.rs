@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use std::sync::Arc;
 
 use crate::{
     address_space::AddressSpace,
@@ -8,14 +9,20 @@ use crate::{
         HistoryUpdateNode, MethodCall, MonitoredItemRef, MonitoredItemUpdateRef, ParsedReadValueId,
         RegisterNodeItem, RequestContext, ServerContext, WriteNode,
     },
+    session::continuation_points::ContinuationPoint,
     subscriptions::CreateMonitoredItem,
 };
 use opcua_core::sync::RwLock;
 use opcua_types::{
     DataValue, ExpandedNodeId, MonitoringMode, NodeId, ReadAnnotationDataDetails,
     ReadAtTimeDetails, ReadEventDetails, ReadProcessedDetails, ReadRawModifiedDetails, StatusCode,
-    TimestampsToReturn,
+    TimestampsToReturn, Variant,
 };
+
+/// Callback used by the default in-memory method `Call` implementation.
+pub type InMemoryMethodCallback = Arc<
+    dyn Fn(&RequestContext, &[Variant]) -> Result<Vec<Variant>, StatusCode> + Send + Sync + 'static,
+>;
 
 /// Trait for constructing an [InMemoryNodeManagerImpl].
 ///
@@ -251,6 +258,16 @@ pub trait InMemoryNodeManagerImpl: Send + Sync + 'static {
         Err(StatusCode::BadHistoryOperationUnsupported)
     }
 
+    /// Release a history continuation point after the service removes it from the session cache.
+    async fn history_release_continuation_point(
+        &self,
+        context: &RequestContext,
+        node_id: &NodeId,
+        continuation_point: &ContinuationPoint,
+    ) -> Result<(), StatusCode> {
+        Ok(())
+    }
+
     /// Perform the HistoryUpdate service. This should write result
     /// status codes to the `nodes` list as appropriate.
     ///
@@ -286,10 +303,30 @@ pub trait InMemoryNodeManagerImpl: Send + Sync + 'static {
     async fn call(
         &self,
         context: &RequestContext,
-        address_space: &RwLock<AddressSpace>,
+        _address_space: &RwLock<AddressSpace>,
         methods_to_call: &mut [&mut &mut MethodCall],
     ) -> Result<(), StatusCode> {
-        Err(StatusCode::BadServiceUnsupported)
+        for method in methods_to_call {
+            let Some(callback) = self.method_callback(method.method_id()) else {
+                method.set_status(StatusCode::BadNotImplemented);
+                continue;
+            };
+
+            match callback(context, method.arguments()) {
+                Ok(outputs) => {
+                    method.set_outputs(outputs);
+                    method.set_status(StatusCode::Good);
+                }
+                Err(status) => method.set_status(status),
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Return a callback for executing a method, if this implementation has one registered.
+    fn method_callback(&self, method_id: &NodeId) -> Option<InMemoryMethodCallback> {
+        None
     }
 
     /// Add a list of nodes.

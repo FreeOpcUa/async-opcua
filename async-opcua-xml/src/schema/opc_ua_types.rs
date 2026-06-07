@@ -180,7 +180,12 @@ impl<'input> XmlLoad<'input> for Variant {
             "ListOfStatusCode" => {
                 Variant::ListOfStatusCode(children_with_name(node, "StatusCode")?)
             }
-            r => return Err(XmlError::other(node, &format!("Unknown variant type: {r}"))),
+            r => {
+                let Some(xml_elem) = Option::<XmlElement>::load(node)? else {
+                    return Err(XmlError::other(node, &format!("Unknown variant type: {r}")));
+                };
+                Variant::XmlElement(vec![xml_elem])
+            }
         })
     }
 }

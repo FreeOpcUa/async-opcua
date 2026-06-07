@@ -14,8 +14,8 @@ use crate::{
     node_manager::{
         as_opaque_node_id, from_opaque_node_id, impl_translate_browse_paths_using_browse,
         AddReferenceResult, BrowseNode, BrowsePathItem, DynNodeManager, ExternalReferenceRequest,
-        NodeManager, NodeManagerBuilder, NodeManagersRef, NodeMetadata, ReadNode, RequestContext,
-        ServerContext, SyncSampler,
+        NodeManager, NodeManagerBuilder, NodeManagersRef, NodeMetadata, QueryRequest, ReadNode,
+        RequestContext, ServerContext, SyncSampler,
     },
 };
 use opcua_types::{
@@ -663,6 +663,14 @@ impl NodeManager for DiagnosticsNodeManager {
             }
         }
 
+        Ok(())
+    }
+
+    async fn query(
+        &self,
+        _context: &RequestContext,
+        _request: &mut QueryRequest,
+    ) -> Result<(), StatusCode> {
         Ok(())
     }
 

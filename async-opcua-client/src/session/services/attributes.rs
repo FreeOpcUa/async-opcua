@@ -16,9 +16,9 @@ use opcua_types::{
     DeleteEventDetails, DeleteRawModifiedDetails, Error, ExtensionObject, HistoryData,
     HistoryReadRequest, HistoryReadResponse, HistoryReadResult, HistoryReadValueId,
     HistoryUpdateRequest, HistoryUpdateResponse, HistoryUpdateResult, IntegerId, NodeId,
-    NumericRange, PerformUpdateType, QualifiedName, ReadAtTimeDetails, ReadEventDetails,
-    ReadProcessedDetails, ReadRawModifiedDetails, ReadRequest, ReadResponse, ReadValueId,
-    StatusCode, TimestampsToReturn, UpdateDataDetails, UpdateEventDetails,
+    NumericRange, PerformUpdateType, QualifiedName, ReadAnnotationDataDetails, ReadAtTimeDetails,
+    ReadEventDetails, ReadProcessedDetails, ReadRawModifiedDetails, ReadRequest, ReadResponse,
+    ReadValueId, StatusCode, TimestampsToReturn, UpdateDataDetails, UpdateEventDetails,
     UpdateStructureDataDetails, WriteRequest, WriteResponse, WriteValue,
 };
 use tracing::{debug_span, Instrument};
@@ -34,6 +34,8 @@ pub enum HistoryReadAction {
     ReadProcessedDetails(ReadProcessedDetails),
     /// Read data values at specific timestamps.
     ReadAtTimeDetails(ReadAtTimeDetails),
+    /// Read annotation data values.
+    ReadAnnotationDataDetails(ReadAnnotationDataDetails),
 }
 
 impl From<HistoryReadAction> for ExtensionObject {
@@ -43,6 +45,7 @@ impl From<HistoryReadAction> for ExtensionObject {
             HistoryReadAction::ReadRawModifiedDetails(v) => Self::from_message(v),
             HistoryReadAction::ReadProcessedDetails(v) => Self::from_message(v),
             HistoryReadAction::ReadAtTimeDetails(v) => Self::from_message(v),
+            HistoryReadAction::ReadAnnotationDataDetails(v) => Self::from_message(v),
         }
     }
 }
@@ -586,6 +589,7 @@ impl Session {
     /// * [`ReadRawModifiedDetails`]
     /// * [`ReadProcessedDetails`]
     /// * [`ReadAtTimeDetails`]
+    /// * [`ReadAnnotationDataDetails`]
     ///
     /// See OPC UA Part 4 - Services 5.10.3 for complete description of the service and error responses.
     ///

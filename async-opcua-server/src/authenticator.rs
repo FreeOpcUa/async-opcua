@@ -2,6 +2,10 @@
 
 use async_trait::async_trait;
 
+use argon2::{
+    password_hash::{PasswordHash, PasswordVerifier},
+    Argon2,
+};
 use opcua_crypto::{SecurityPolicy, Thumbprint};
 use opcua_types::{
     ByteString, Error, MessageSecurityMode, NodeId, StatusCode, UAString, UserTokenPolicy,
@@ -236,8 +240,9 @@ impl AuthManager for DefaultAuthenticator {
             if let Some(server_user_token) = self.users.get(user_token_id) {
                 if server_user_token.is_user_pass() && server_user_token.user == username {
                     // test for empty password
-                    let valid = if let Some(server_password) = server_user_token.pass.as_ref() {
-                        server_password.as_bytes() == token_password.as_bytes()
+                    let valid = if let Some(server_password_hash) = server_user_token.pass.as_ref()
+                    {
+                        verify_password_hash(server_password_hash, token_password)
                     } else {
                         token_password.is_empty()
                     };
@@ -349,6 +354,16 @@ impl AuthManager for DefaultAuthenticator {
     }
 }
 
+fn verify_password_hash(password_hash: &str, password: &str) -> bool {
+    PasswordHash::new(password_hash)
+        .ok()
+        .is_some_and(|parsed_hash| {
+            Argon2::default()
+                .verify_password(password.as_bytes(), &parsed_hash)
+                .is_ok()
+        })
+}
+
 /// Get the username and password policy ID for the given endpoint.
 pub fn user_pass_security_policy_id(endpoint: &ServerEndpoint) -> UAString {
     match endpoint.password_security_policy() {
@@ -386,4 +401,56 @@ pub fn user_pass_security_policy_uri(_endpoint: &ServerEndpoint) -> UAString {
     // TODO we could force the security policy uri for passwords to be something other than the default
     //  here to ensure they're secure even when the endpoint's security policy is None.
     UAString::null()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const USER_TOKEN_ID: &str = "operator-token";
+
+    fn password_endpoint() -> ServerEndpoint {
+        ServerEndpoint::new_none("/", &[USER_TOKEN_ID.to_string()])
+    }
+
+    fn password_authenticator() -> DefaultAuthenticator {
+        DefaultAuthenticator::new(BTreeMap::from([(
+            USER_TOKEN_ID.to_string(),
+            ServerUserToken::user_pass("brew-operator", "correct-password"),
+        )]))
+    }
+
+    #[tokio::test]
+    async fn authenticates_username_with_stored_password_hash() {
+        let authenticator = password_authenticator();
+        let endpoint = password_endpoint();
+
+        let token = authenticator
+            .authenticate_username_identity_token(
+                &endpoint,
+                "brew-operator",
+                &Password::new("correct-password".to_string()),
+            )
+            .await
+            .expect("hashed password should authenticate");
+
+        assert_eq!(token, UserToken(USER_TOKEN_ID.to_string()));
+    }
+
+    #[tokio::test]
+    async fn rejects_username_with_wrong_password_for_stored_hash() {
+        let authenticator = password_authenticator();
+        let endpoint = password_endpoint();
+
+        let err = authenticator
+            .authenticate_username_identity_token(
+                &endpoint,
+                "brew-operator",
+                &Password::new("wrong-password".to_string()),
+            )
+            .await
+            .expect_err("wrong password should not authenticate");
+
+        assert_eq!(err.status(), StatusCode::BadIdentityTokenRejected);
+    }
 }

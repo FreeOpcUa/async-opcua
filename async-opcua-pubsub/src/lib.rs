@@ -6,16 +6,29 @@ pub mod config;
 /// Codec modules for UADP and JSON payloads.
 pub mod codec;
 
-/// Transport drivers (MQTT, UDP) for PubSub.
+/// Transport drivers (AMQP, MQTT, UDP, WebSocket) for PubSub.
 pub mod transport;
+
+/// Main PubSub publishing engine coordinator.
+pub mod engine;
+
+/// PubSub security key management.
+pub mod security;
 
 pub use config::{
     DataSetWriterConfig, MessageEncoding, PubSubConnectionConfig, PublishedDataSetConfig,
     WriterGroupConfig,
 };
 
+pub use engine::{PubSubEngine, TransportKind};
+pub use security::{
+    SecurityGroup, SecurityKeySet, SharedSecurityGroup, TimeBasedKeyRotator, UadpSecurityCodec,
+};
+
+pub use transport::amqp::AmqpPublisher;
 pub use transport::mqtt::MqttPublisher;
 pub use transport::udp::UdpPublisher;
+pub use transport::websocket::WebSocketPublisher;
 
 pub use codec::json::{json_value_to_opcua, JsonDataSetMessage, JsonNetworkMessage};
 pub use codec::uadp::{PublisherId, UadpDataSetMessage, UadpNetworkMessage};

@@ -15,11 +15,13 @@ use crate::auth::oauth2::validate_issued_jwt;
 use crate::authenticator::{issued_token_security_policy, user_pass_security_policy_id, Password};
 use crate::diagnostics::{ServerDiagnostics, ServerDiagnosticsSummary};
 use crate::node_manager::TypeTreeForUser;
+use crate::session::negotiate::{decrypt_identity_token_secret, tarpit_authentication_failure};
 use opcua_core::comms::url::{hostname_from_url, url_matches_except_host};
 use opcua_core::handle::AtomicHandle;
 use opcua_core::sync::RwLock;
+use opcua_crypto::identity::{LocalOAuth2Validator, OAuth2IdentityValidator};
 use opcua_crypto::{
-    legacy_decrypt_secret, verify_x509_identity_token, PrivateKey, SecurityPolicy, X509,
+    verify_x509_identity_token, CertificateStore, PrivateKey, SecurityPolicy, X509,
 };
 use opcua_types::{
     profiles, status_code::StatusCode, ActivateSessionRequest, AnonymousIdentityToken,
@@ -101,6 +103,16 @@ impl ServerInfo {
         endpoint_url: &UAString,
         transport_profile_uris: &Option<Vec<UAString>>,
     ) -> Option<Vec<EndpointDescription>> {
+        self.endpoints_with_filters(endpoint_url, transport_profile_uris, &None)
+    }
+
+    /// Get the list of endpoints that match the provided filters.
+    pub fn endpoints_with_filters(
+        &self,
+        endpoint_url: &UAString,
+        transport_profile_uris: &Option<Vec<UAString>>,
+        locale_ids: &Option<Vec<UAString>>,
+    ) -> Option<Vec<EndpointDescription>> {
         // Filter endpoints based on profile_uris
         debug!(
             "Endpoints requested, transport profile uris {:?}",
@@ -123,14 +135,44 @@ impl ServerInfo {
             }
         }
 
-        if let Ok(hostname) = hostname_from_url(endpoint_url.as_ref()) {
-            if !hostname.eq_ignore_ascii_case(&self.config.tcp_config.host) {
-                debug!("Endpoint url \"{}\" hostname supplied by caller does not match server's hostname \"{}\"", endpoint_url, &self.config.tcp_config.host);
-            }
+        if !self.supports_locale_ids(locale_ids) {
+            debug!(
+                "Endpoint request locale ids {:?} are not supported by server locales {:?}",
+                locale_ids, self.config.locale_ids
+            );
+            return Some(vec![]);
+        }
+
+        if endpoint_url.is_empty() {
             let endpoints = self
                 .config
                 .endpoints
                 .values()
+                .filter(|e| self.endpoint_is_visible(e))
+                .map(|e| self.new_endpoint_description(e, true))
+                .collect();
+            return Some(endpoints);
+        }
+
+        if let Ok(hostname) = hostname_from_url(endpoint_url.as_ref()) {
+            if !hostname.eq_ignore_ascii_case(&self.config.tcp_config.host) {
+                debug!(
+                    "Endpoint url \"{}\" hostname supplied by caller does not match server's hostname \"{}\"",
+                    endpoint_url, &self.config.tcp_config.host
+                );
+            }
+            let base_endpoint_url = self.base_endpoint();
+            let endpoints = self
+                .config
+                .endpoints
+                .values()
+                .filter(|e| self.endpoint_is_visible(e))
+                .filter(|e| {
+                    url_matches_except_host(
+                        &e.endpoint_url(&base_endpoint_url),
+                        endpoint_url.as_ref(),
+                    )
+                })
                 .map(|e| self.new_endpoint_description(e, true))
                 .collect();
             Some(endpoints)
@@ -140,11 +182,58 @@ impl ServerInfo {
                 endpoint_url
             );
             if let Some(e) = self.config.default_endpoint() {
-                Some(vec![self.new_endpoint_description(e, true)])
+                if self.endpoint_is_visible(e) {
+                    Some(vec![self.new_endpoint_description(e, true)])
+                } else {
+                    Some(vec![])
+                }
             } else {
                 Some(vec![])
             }
         }
+    }
+
+    /// Return whether the local server matches `FindServers` discovery filters.
+    pub(crate) fn matches_find_servers_filters(
+        &self,
+        endpoint_url: &UAString,
+        locale_ids: &Option<Vec<UAString>>,
+    ) -> bool {
+        self.supports_locale_ids(locale_ids) && self.matches_discovery_endpoint_url(endpoint_url)
+    }
+
+    fn supports_locale_ids(&self, locale_ids: &Option<Vec<UAString>>) -> bool {
+        let Some(locale_ids) = locale_ids else {
+            return true;
+        };
+        if locale_ids.is_empty() {
+            return true;
+        }
+
+        locale_ids.iter().any(|requested| {
+            requested.is_empty()
+                || self
+                    .config
+                    .locale_ids
+                    .iter()
+                    .any(|supported| locale_id_matches(supported, requested.as_ref()))
+        })
+    }
+
+    fn matches_discovery_endpoint_url(&self, endpoint_url: &UAString) -> bool {
+        if endpoint_url.is_empty() {
+            return true;
+        }
+
+        let requested = endpoint_url.as_ref();
+        let base_endpoint_url = self.base_endpoint();
+        self.config
+            .endpoints
+            .values()
+            .filter(|endpoint| self.endpoint_is_visible(endpoint))
+            .map(|endpoint| endpoint.endpoint_url(&base_endpoint_url))
+            .chain(self.config.discovery_urls.iter().cloned())
+            .any(|advertised_url| url_matches_except_host(&advertised_url, requested))
     }
 
     /// Check if the endpoint given by `endpoint_url`, `security_policy`, and `security_mode`
@@ -165,6 +254,52 @@ impl ServerInfo {
             .is_some()
     }
 
+    /// Validate that the requested endpoint host is one the server advertises,
+    /// or one bound to the server application certificate.
+    pub(crate) fn validate_endpoint_hostname(&self, endpoint_url: &str) -> Result<(), StatusCode> {
+        let hostname =
+            hostname_from_url(endpoint_url).map_err(|_| StatusCode::BadTcpEndpointUrlInvalid)?;
+
+        if self.endpoint_hostname_matches_advertised_endpoint(endpoint_url, &hostname) {
+            return Ok(());
+        }
+
+        if self
+            .server_certificate
+            .read()
+            .as_ref()
+            .is_some_and(|cert| cert.is_hostname_valid(&hostname).is_ok())
+        {
+            return Ok(());
+        }
+
+        error!(
+            "Endpoint url \"{}\" hostname \"{}\" is not present in the server certificate or advertised endpoints",
+            endpoint_url, hostname
+        );
+        Err(StatusCode::BadCertificateHostNameInvalid)
+    }
+
+    fn endpoint_hostname_matches_advertised_endpoint(
+        &self,
+        endpoint_url: &str,
+        hostname: &str,
+    ) -> bool {
+        let base_endpoint_url = self.base_endpoint();
+
+        self.config
+            .endpoints
+            .values()
+            .filter(|endpoint| self.endpoint_is_visible(endpoint))
+            .map(|endpoint| endpoint.endpoint_url(&base_endpoint_url))
+            .chain(self.config.discovery_urls.iter().cloned())
+            .any(|advertised_url| {
+                url_matches_except_host(&advertised_url, endpoint_url)
+                    && hostname_from_url(&advertised_url)
+                        .is_ok_and(|advertised_host| advertised_host.eq_ignore_ascii_case(hostname))
+            })
+    }
+
     /// Make matching endpoint descriptions for the specified url.
     /// If none match then None will be passed, therefore if Some is returned it will be guaranteed
     /// to contain at least one result.
@@ -180,7 +315,8 @@ impl ServerInfo {
             .iter()
             .filter(|&(_, e)| {
                 // Test end point's security_policy_uri and matching url
-                url_matches_except_host(&e.endpoint_url(&base_endpoint_url), endpoint_url)
+                self.endpoint_is_visible(e)
+                    && url_matches_except_host(&e.endpoint_url(&base_endpoint_url), endpoint_url)
             })
             .map(|(_, e)| self.new_endpoint_description(e, false))
             .collect();
@@ -242,6 +378,10 @@ impl ServerInfo {
             transport_profile_uri: UAString::from(profiles::TRANSPORT_PROFILE_URI_BINARY),
             security_level: endpoint.security_level,
         }
+    }
+
+    fn endpoint_is_visible(&self, endpoint: &ServerEndpoint) -> bool {
+        self.config.allow_legacy_crypto || !endpoint.security_policy().is_deprecated()
     }
 
     /// Get the list of discovery URLs on the server.
@@ -334,9 +474,9 @@ impl ServerInfo {
         security_mode: MessageSecurityMode,
         user_identity_token: ExtensionObject,
         server_nonce: &ByteString,
-    ) -> Result<UserToken, Error> {
+    ) -> Result<(UserToken, Option<opcua_crypto::identity::ClaimProfile>), Error> {
         // Get security from endpoint url
-        if let Some(endpoint) = self.config.find_endpoint(
+        let result = if let Some(endpoint) = self.config.find_endpoint(
             endpoint_url,
             &self.base_endpoint(),
             security_policy,
@@ -351,18 +491,20 @@ impl ServerInfo {
                         "User identity token type unsupported",
                     ))
                 }
-                IdentityToken::Anonymous(token) => {
-                    self.authenticate_anonymous_token(endpoint, &token).await
-                }
+                IdentityToken::Anonymous(token) => self
+                    .authenticate_anonymous_token(endpoint, &token)
+                    .await
+                    .map(|token| (token, None)),
                 IdentityToken::UserName(token) => {
-                    let server_key_lock = self.server_pkey.read();
+                    let server_key = self.server_pkey.read().clone();
                     self.authenticate_username_identity_token(
                         endpoint,
                         &token,
-                        &*server_key_lock,
+                        &server_key,
                         server_nonce,
                     )
                     .await
+                    .map(|token| (token, None))
                 }
                 IdentityToken::X509(token) => {
                     let server_cert_lock = self.server_certificate.read();
@@ -374,13 +516,14 @@ impl ServerInfo {
                         server_nonce,
                     )
                     .await
+                    .map(|token| (token, None))
                 }
                 IdentityToken::IssuedToken(token) => {
-                    let server_key_lock = self.server_pkey.read();
+                    let server_key = self.server_pkey.read().clone();
                     self.authenticate_issued_identity_token(
                         endpoint,
                         &token,
-                        &*server_key_lock,
+                        &server_key,
                         server_nonce,
                     )
                     .await
@@ -394,10 +537,15 @@ impl ServerInfo {
                 )),
             }
         } else {
-            Err(Error::new(StatusCode::BadIdentityTokenRejected, format!(
-                "Cannot find endpoint that matches path \"{endpoint_url}\", security policy {security_policy:?}, and security mode {security_mode:?}"
-            )))
-        }
+            Err(Error::new(
+                StatusCode::BadIdentityTokenRejected,
+                format!(
+                    "Cannot find endpoint that matches path \"{endpoint_url}\", security policy {security_policy:?}, and security mode {security_mode:?}"
+                ),
+            ))
+        };
+
+        tarpit_authentication_failure(result).await
     }
 
     /// Returns the decoding options of the server
@@ -442,7 +590,7 @@ impl ServerInfo {
                 StatusCode::BadIdentityTokenRejected,
                 "Endpoint doesn't support username password tokens",
             ))
-        } else if token.policy_id != issued_token_security_policy(endpoint) {
+        } else if token.policy_id != user_pass_security_policy_id(endpoint) {
             Err(Error::new(
                 StatusCode::BadIdentityTokenRejected,
                 "Token doesn't possess the correct policy id",
@@ -461,7 +609,7 @@ impl ServerInfo {
             let token_password = if !token.encryption_algorithm.is_empty() {
                 if let Some(ref server_key) = server_key {
                     let decrypted =
-                        legacy_decrypt_secret(token, server_nonce.as_ref(), server_key)?;
+                        decrypt_identity_token_secret(token, server_nonce.as_ref(), server_key)?;
                     String::from_utf8(decrypted.value.unwrap_or_default()).map_err(|e| {
                         Error::new(
                             StatusCode::BadIdentityTokenInvalid,
@@ -469,7 +617,9 @@ impl ServerInfo {
                         )
                     })?
                 } else {
-                    error!("Identity token password is encrypted but no server private key was supplied");
+                    error!(
+                        "Identity token password is encrypted but no server private key was supplied"
+                    );
                     return Err(Error::new(
                         StatusCode::BadIdentityTokenInvalid,
                         "Failed to decrypt identity token password",
@@ -562,13 +712,13 @@ impl ServerInfo {
         token: &IssuedIdentityToken,
         server_key: &Option<PrivateKey>,
         server_nonce: &ByteString,
-    ) -> Result<UserToken, Error> {
+    ) -> Result<(UserToken, Option<opcua_crypto::identity::ClaimProfile>), Error> {
         if !self.authenticator.supports_issued_token(endpoint) {
             Err(Error::new(
                 StatusCode::BadIdentityTokenRejected,
                 "Endpoint doesn't support issued tokens",
             ))
-        } else if token.policy_id != user_pass_security_policy_id(endpoint) {
+        } else if token.policy_id != issued_token_security_policy(endpoint) {
             Err(Error::new(
                 StatusCode::BadIdentityTokenRejected,
                 "Token doesn't possess the correct policy id",
@@ -581,9 +731,11 @@ impl ServerInfo {
             );
             let decrypted_token = if !token.encryption_algorithm.is_empty() {
                 if let Some(ref server_key) = server_key {
-                    legacy_decrypt_secret(token, server_nonce.as_ref(), server_key)?
+                    decrypt_identity_token_secret(token, server_nonce.as_ref(), server_key)?
                 } else {
-                    error!("Identity token password is encrypted but no server private key was supplied");
+                    error!(
+                        "Identity token password is encrypted but no server private key was supplied"
+                    );
                     return Err(Error::new(
                         StatusCode::BadIdentityTokenInvalid,
                         "Failed to decrypt identity token issued token",
@@ -599,11 +751,27 @@ impl ServerInfo {
                 issued_jwt.token_hash(),
                 issued_jwt.claims().sub.as_deref().unwrap_or("")
             );
-            let token_data = issued_jwt.token_data();
 
-            self.authenticator
-                .authenticate_issued_identity_token(endpoint, &token_data)
-                .await
+            let issuer = self
+                .config
+                .oauth2_issuer
+                .clone()
+                .unwrap_or_else(|| "opcua-issuer".to_string());
+            let audience = self
+                .config
+                .oauth2_audience
+                .clone()
+                .unwrap_or_else(|| "opcua-server".to_string());
+            let certificate_store =
+                Arc::new(RwLock::new(CertificateStore::new(&self.config.pki_dir)));
+            let validator = LocalOAuth2Validator::new(certificate_store, issuer, audience);
+            let claims = validator
+                .validate_token(issued_jwt.raw())
+                .map_err(|status| {
+                    Error::new(status, "Issued identity token failed OAuth2 validation")
+                })?;
+
+            Ok((UserToken(claims.username.clone()), Some(claims)))
         }
     }
 
@@ -636,4 +804,255 @@ impl ServerInfo {
         let audit_log = trace_write_lock!(self.audit_log);
         audit_log.raise_and_log(event)
     } */
+}
+
+fn locale_id_matches(supported: &str, requested: &str) -> bool {
+    let supported = supported.trim().replace('_', "-").to_ascii_lowercase();
+    let requested = requested.trim().replace('_', "-").to_ascii_lowercase();
+
+    if supported.is_empty() || requested.is_empty() {
+        return requested.is_empty();
+    }
+    if supported == requested {
+        return true;
+    }
+
+    let supported_is_neutral = !supported.contains('-');
+    let requested_is_neutral = !requested.contains('-');
+
+    (supported_is_neutral && requested.starts_with(&format!("{supported}-")))
+        || (requested_is_neutral && supported.starts_with(&format!("{requested}-")))
+}
+
+#[cfg(test)]
+mod tests {
+    use opcua_crypto::{AlternateNames, SecurityPolicy, X509Data, X509};
+    use opcua_types::{MessageSecurityMode, UAString};
+
+    use crate::{ServerBuilder, ANONYMOUS_USER_TOKEN_ID};
+
+    fn server_builder_with_legacy_and_modern_endpoints(allow_legacy_crypto: bool) -> ServerBuilder {
+        let user_token_ids = [ANONYMOUS_USER_TOKEN_ID];
+
+        ServerBuilder::new()
+            .without_node_managers()
+            .application_name("Endpoint Filter Test")
+            .application_uri("urn:endpoint-filter-test")
+            .product_uri("urn:endpoint-filter-test")
+            .discovery_urls(vec!["opc.tcp://127.0.0.1:4840/".to_string()])
+            .allow_legacy_crypto(allow_legacy_crypto)
+            .add_endpoint(
+                "legacy",
+                (
+                    "/",
+                    SecurityPolicy::Basic256,
+                    MessageSecurityMode::Sign,
+                    &user_token_ids as &[&str],
+                ),
+            )
+            .add_endpoint(
+                "modern",
+                (
+                    "/",
+                    SecurityPolicy::Aes256Sha256RsaPss,
+                    MessageSecurityMode::Sign,
+                    &user_token_ids as &[&str],
+                ),
+            )
+    }
+
+    #[tokio::test]
+    async fn endpoints_hide_deprecated_security_policies_by_default() {
+        let (_server, handle) = server_builder_with_legacy_and_modern_endpoints(false)
+            .build()
+            .expect("server should build");
+
+        let endpoints = handle
+            .info()
+            .endpoints(&UAString::from("opc.tcp://127.0.0.1:4840/"), &None)
+            .expect("endpoints should be returned");
+
+        assert_eq!(endpoints.len(), 1);
+        assert_eq!(
+            endpoints[0].security_policy_uri.as_ref(),
+            SecurityPolicy::Aes256Sha256RsaPss.to_uri()
+        );
+    }
+
+    #[tokio::test]
+    async fn new_endpoint_descriptions_hide_deprecated_security_policies_by_default() {
+        let (_server, handle) = server_builder_with_legacy_and_modern_endpoints(false)
+            .build()
+            .expect("server should build");
+
+        let endpoints = handle
+            .info()
+            .new_endpoint_descriptions("opc.tcp://localhost:4840/")
+            .expect("matching endpoints should be returned");
+
+        assert_eq!(endpoints.len(), 1);
+        assert_eq!(
+            endpoints[0].security_policy_uri.as_ref(),
+            SecurityPolicy::Aes256Sha256RsaPss.to_uri()
+        );
+    }
+
+    #[tokio::test]
+    async fn endpoints_include_deprecated_security_policies_when_legacy_crypto_is_enabled() {
+        let (_server, handle) = server_builder_with_legacy_and_modern_endpoints(true)
+            .build()
+            .expect("server should build");
+
+        let endpoints = handle
+            .info()
+            .endpoints(&UAString::from("opc.tcp://127.0.0.1:4840/"), &None)
+            .expect("endpoints should be returned");
+
+        assert_eq!(endpoints.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn endpoints_filter_by_requested_endpoint_url() {
+        let user_token_ids = [ANONYMOUS_USER_TOKEN_ID];
+        let (_server, handle) = ServerBuilder::new()
+            .without_node_managers()
+            .application_name("Endpoint URL Filter Test")
+            .application_uri("urn:endpoint-url-filter-test")
+            .product_uri("urn:endpoint-url-filter-test")
+            .discovery_urls(vec!["opc.tcp://127.0.0.1:4840/".to_string()])
+            .allow_legacy_crypto(true)
+            .host("127.0.0.1")
+            .port(4840)
+            .add_endpoint(
+                "root",
+                (
+                    "/",
+                    SecurityPolicy::None,
+                    MessageSecurityMode::None,
+                    &user_token_ids as &[&str],
+                ),
+            )
+            .add_endpoint(
+                "diagnostics",
+                (
+                    "/diagnostics",
+                    SecurityPolicy::None,
+                    MessageSecurityMode::None,
+                    &user_token_ids as &[&str],
+                ),
+            )
+            .build()
+            .expect("server should build");
+
+        let endpoints = handle
+            .info()
+            .endpoints(
+                &UAString::from("opc.tcp://localhost:4840/diagnostics"),
+                &None,
+            )
+            .expect("endpoints should be returned");
+
+        assert_eq!(endpoints.len(), 1);
+        assert!(endpoints[0].endpoint_url.as_ref().ends_with("/diagnostics"));
+
+        let endpoints = handle
+            .info()
+            .endpoints(&UAString::from("opc.tcp://localhost:4840/missing"), &None)
+            .expect("endpoint filtering should return an empty list");
+        assert!(endpoints.is_empty());
+    }
+
+    #[tokio::test]
+    async fn find_servers_filters_match_endpoint_url_and_locale_ids() {
+        let user_token_ids = [ANONYMOUS_USER_TOKEN_ID];
+        let (_server, handle) = ServerBuilder::new()
+            .without_node_managers()
+            .application_name("FindServers Filter Test")
+            .application_uri("urn:find-servers-filter-test")
+            .product_uri("urn:find-servers-filter-test")
+            .discovery_urls(vec!["opc.tcp://127.0.0.1:4840/diagnostics".to_string()])
+            .locale_ids(vec!["de-DE".to_string()])
+            .host("127.0.0.1")
+            .port(4840)
+            .add_endpoint(
+                "diagnostics",
+                (
+                    "/diagnostics",
+                    SecurityPolicy::None,
+                    MessageSecurityMode::None,
+                    &user_token_ids as &[&str],
+                ),
+            )
+            .build()
+            .expect("server should build");
+
+        assert!(handle.info().matches_find_servers_filters(
+            &UAString::from("opc.tcp://localhost:4840/diagnostics"),
+            &Some(vec![UAString::from("de")])
+        ));
+        assert!(!handle.info().matches_find_servers_filters(
+            &UAString::from("opc.tcp://localhost:4840/missing"),
+            &Some(vec![UAString::from("de")])
+        ));
+        assert!(!handle.info().matches_find_servers_filters(
+            &UAString::from("opc.tcp://localhost:4840/diagnostics"),
+            &Some(vec![UAString::from("fr-FR")])
+        ));
+    }
+
+    #[tokio::test]
+    async fn endpoint_hostname_validation_requires_certificate_san_or_advertised_endpoint_host() {
+        let user_token_ids = [ANONYMOUS_USER_TOKEN_ID];
+        let (_server, handle) = ServerBuilder::new()
+            .without_node_managers()
+            .application_name("Endpoint Host Test")
+            .application_uri("urn:endpoint-filter-test")
+            .product_uri("urn:endpoint-filter-test")
+            .discovery_urls(vec!["opc.tcp://127.0.0.1:4840/".to_string()])
+            .add_endpoint(
+                "modern",
+                (
+                    "/",
+                    SecurityPolicy::Aes256Sha256RsaPss,
+                    MessageSecurityMode::Sign,
+                    &user_token_ids as &[&str],
+                ),
+            )
+            .host("127.0.0.1")
+            .port(4840)
+            .build()
+            .expect("server should build");
+
+        let err = handle
+            .info()
+            .validate_endpoint_hostname("opc.tcp://not-advertised.example:4840/")
+            .expect_err("unknown endpoint host should be rejected");
+        assert_eq!(err, opcua_types::StatusCode::BadCertificateHostNameInvalid);
+
+        let mut alt_host_names = AlternateNames::new();
+        alt_host_names.add_uri("urn:endpoint-filter-test");
+        alt_host_names.add_dns("public.example");
+        let cert = X509::cert_and_pkey(&X509Data {
+            key_size: 2048,
+            common_name: "Endpoint Filter Test".to_string(),
+            organization: "async-opcua tests".to_string(),
+            organizational_unit: "server".to_string(),
+            country: "US".to_string(),
+            state: "test".to_string(),
+            alt_host_names,
+            certificate_duration_days: 30,
+        })
+        .expect("test certificate should be generated")
+        .0;
+        *handle.info().server_certificate.write() = Some(cert);
+
+        handle
+            .info()
+            .validate_endpoint_hostname("opc.tcp://public.example:4840/")
+            .expect("certificate SAN host should be accepted");
+        handle
+            .info()
+            .validate_endpoint_hostname("opc.tcp://127.0.0.1:4840/")
+            .expect("advertised endpoint host should be accepted");
+    }
 }

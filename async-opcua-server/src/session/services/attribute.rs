@@ -188,31 +188,15 @@ pub(crate) async fn history_read(
     {
         return service_fault!(request, StatusCode::BadTooManyOperations);
     }
-    let mut nodes: Vec<_> = {
-        let mut session = trace_write_lock!(request.session);
-        items
-            .into_iter()
-            .map(|node| {
-                if node.continuation_point.is_null_or_empty() {
-                    let mut node = HistoryNode::new(node, is_events, None);
-                    if request.request.release_continuation_points {
-                        node.set_status(StatusCode::Good);
-                    }
-                    node
-                } else {
-                    let cp = session.remove_history_continuation_point(&node.continuation_point);
-                    let cp_missing = cp.is_none();
-                    let mut node = HistoryNode::new(node, is_events, cp);
-                    if cp_missing {
-                        node.set_status(StatusCode::BadContinuationPointInvalid);
-                    } else if request.request.release_continuation_points {
-                        node.set_status(StatusCode::Good);
-                    }
-                    node
-                }
-            })
-            .collect()
-    };
+    let mut nodes = crate::services::history_read::prepare_history_nodes(
+        &request.session,
+        &node_managers,
+        &context,
+        items,
+        is_events,
+        request.request.release_continuation_points,
+    )
+    .await;
 
     // If we are releasing continuation points we should not return any data.
     if request.request.release_continuation_points {

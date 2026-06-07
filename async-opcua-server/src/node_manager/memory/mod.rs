@@ -30,6 +30,7 @@ use crate::{
         ReferenceDirection,
     },
     diagnostics::NamespaceMetadata,
+    session::continuation_points::ContinuationPoint,
     subscriptions::CreateMonitoredItem,
     SubscriptionCache,
 };
@@ -47,8 +48,8 @@ use super::{
     view::{AddReferenceResult, ExternalReference, ExternalReferenceRequest, NodeMetadata},
     AddNodeItem, AddReferenceItem, BrowseNode, BrowsePathItem, DefaultTypeTree, DeleteNodeItem,
     DeleteReferenceItem, DynNodeManager, HistoryNode, HistoryUpdateDetails, HistoryUpdateNode,
-    MethodCall, MonitoredItemRef, MonitoredItemUpdateRef, NodeManager, ReadNode, RegisterNodeItem,
-    RequestContext, ServerContext, WriteNode,
+    MethodCall, MonitoredItemRef, MonitoredItemUpdateRef, NodeManager, QueryRequest, ReadNode,
+    RegisterNodeItem, RequestContext, ServerContext, WriteNode,
 };
 
 use crate::address_space::AddressSpace;
@@ -951,6 +952,31 @@ impl<TImpl: InMemoryNodeManagerImpl> NodeManager for InMemoryNodeManager<TImpl> 
         self.inner.delete_monitored_items(context, &items).await;
     }
 
+    async fn query(
+        &self,
+        context: &RequestContext,
+        request: &mut QueryRequest,
+    ) -> Result<(), StatusCode> {
+        let address_space = trace_read_lock!(self.address_space);
+        let type_tree = context.get_type_tree_for_user();
+
+        if request.continuation_point().is_some() {
+            crate::services::query::handlers::QueryNextHandler::new(
+                &address_space,
+                type_tree.get(),
+                context,
+            )
+            .execute(request)
+        } else {
+            crate::services::query::handlers::QueryFirstHandler::new(
+                &address_space,
+                type_tree.get(),
+                context,
+            )
+            .execute(request)
+        }
+    }
+
     async fn history_read_raw_modified(
         &self,
         context: &RequestContext,
@@ -1013,6 +1039,17 @@ impl<TImpl: InMemoryNodeManagerImpl> NodeManager for InMemoryNodeManager<TImpl> 
         let mut nodes = self.validate_history_read_nodes(context, nodes, false);
         self.inner
             .history_read_annotations(context, details, &mut nodes, timestamps_to_return)
+            .await
+    }
+
+    async fn history_release_continuation_point(
+        &self,
+        context: &RequestContext,
+        node_id: &NodeId,
+        continuation_point: &ContinuationPoint,
+    ) -> Result<(), StatusCode> {
+        self.inner
+            .history_release_continuation_point(context, node_id, continuation_point)
             .await
     }
 

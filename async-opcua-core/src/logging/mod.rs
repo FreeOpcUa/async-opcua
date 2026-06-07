@@ -3,6 +3,11 @@
 
 use sha2::{Digest, Sha256};
 
+/// Log message redaction helpers.
+pub mod redact;
+
+pub use redact::redact_log_message;
+
 /// Redacts sensitive information like passwords or private keys by replacing them with a placeholder.
 pub fn mask_sensitive(value: &str) -> String {
     if value.is_empty() {

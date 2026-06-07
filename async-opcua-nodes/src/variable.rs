@@ -4,11 +4,16 @@
 
 //! Contains the implementation of `Variable` and `VariableBuilder`.
 
-use std::convert::Into;
+use std::{convert::Into, mem};
 
+#[cfg(feature = "json")]
+use opcua_types::JsonBody;
+#[cfg(feature = "xml")]
+use opcua_types::XmlBody;
 use opcua_types::{
-    AttributeId, AttributesMask, DataEncoding, DataTypeId, DataValue, DateTime, NumericRange,
-    StatusCode, TimestampsToReturn, TryFromVariant, VariableAttributes, Variant,
+    AttributeId, AttributesMask, DataEncoding, DataTypeId, DataValue, DateTime, ExtensionObject,
+    NumericRange, StatusCode, TimestampsToReturn, TryFromVariant, VariableAttributes, Variant,
+    VariantScalarTypeId,
 };
 use tracing::error;
 
@@ -276,6 +281,132 @@ impl Node for Variable {
     }
 }
 
+fn encode_value_for_data_encoding(
+    value: Variant,
+    data_encoding: &DataEncoding,
+) -> Result<Variant, StatusCode> {
+    match data_encoding {
+        DataEncoding::Binary => Ok(value),
+        DataEncoding::XML => encode_value_as_xml(value),
+        DataEncoding::JSON => encode_value_as_json(value),
+        DataEncoding::Other(_) => Err(StatusCode::BadDataEncodingUnsupported),
+    }
+}
+
+fn encode_extension_object_values(
+    value: Variant,
+    encode_object: fn(ExtensionObject) -> Result<ExtensionObject, StatusCode>,
+) -> Result<Variant, StatusCode> {
+    match value {
+        Variant::ExtensionObject(object) => encode_object(object).map(Variant::ExtensionObject),
+        Variant::Array(mut array) if array.value_type == VariantScalarTypeId::ExtensionObject => {
+            for value in &mut array.values {
+                let Variant::ExtensionObject(object) = mem::take(value) else {
+                    return Err(StatusCode::BadDataEncodingUnsupported);
+                };
+                *value = Variant::ExtensionObject(encode_object(object)?);
+            }
+            Ok(Variant::Array(array))
+        }
+        _ => Err(StatusCode::BadDataEncodingUnsupported),
+    }
+}
+
+#[cfg(feature = "xml")]
+fn encode_value_as_xml(value: Variant) -> Result<Variant, StatusCode> {
+    encode_extension_object_values(value, encode_extension_object_as_xml)
+}
+
+#[cfg(not(feature = "xml"))]
+fn encode_value_as_xml(_value: Variant) -> Result<Variant, StatusCode> {
+    Err(StatusCode::BadDataEncodingUnsupported)
+}
+
+#[cfg(feature = "xml")]
+fn encode_extension_object_as_xml(object: ExtensionObject) -> Result<ExtensionObject, StatusCode> {
+    let Some(body) = object.body.as_ref() else {
+        return Ok(object);
+    };
+
+    if matches!(
+        body.override_encoding(),
+        Some(opcua_types::BuiltInDataEncoding::XML)
+    ) {
+        return Ok(object);
+    }
+    if body.override_encoding().is_some() {
+        return Err(StatusCode::BadDataEncodingUnsupported);
+    }
+
+    let ctx = opcua_types::ContextOwned::default();
+    let mut bytes = Vec::new();
+    {
+        let mut stream = std::io::Cursor::new(&mut bytes);
+        let mut writer =
+            opcua_types::xml::XmlStreamWriter::new(&mut stream as &mut dyn std::io::Write);
+        body.encode_xml(&mut writer, &ctx.context())
+            .map_err(|err| {
+                error!("Failed to encode structure value as XML: {err}");
+                StatusCode::BadDataEncodingUnsupported
+            })?;
+    }
+
+    Ok(ExtensionObject::new(XmlBody::new(
+        bytes,
+        body.xml_type_id().node_id,
+        body.xml_tag_name().to_owned(),
+    )))
+}
+
+#[cfg(feature = "json")]
+fn encode_value_as_json(value: Variant) -> Result<Variant, StatusCode> {
+    encode_extension_object_values(value, encode_extension_object_as_json)
+}
+
+#[cfg(not(feature = "json"))]
+fn encode_value_as_json(_value: Variant) -> Result<Variant, StatusCode> {
+    Err(StatusCode::BadDataEncodingUnsupported)
+}
+
+#[cfg(feature = "json")]
+fn encode_extension_object_as_json(object: ExtensionObject) -> Result<ExtensionObject, StatusCode> {
+    let Some(body) = object.body.as_ref() else {
+        return Ok(object);
+    };
+
+    if matches!(
+        body.override_encoding(),
+        Some(opcua_types::BuiltInDataEncoding::JSON)
+    ) {
+        return Ok(object);
+    }
+    if body.override_encoding().is_some() {
+        return Err(StatusCode::BadDataEncodingUnsupported);
+    }
+
+    let ctx = opcua_types::ContextOwned::default();
+    let mut bytes = Vec::new();
+    {
+        let mut stream = std::io::Cursor::new(&mut bytes);
+        let mut writer =
+            opcua_types::json::JsonStreamWriter::new(&mut stream as &mut dyn std::io::Write);
+        body.encode_json(&mut writer, &ctx.context())
+            .map_err(|err| {
+                error!("Failed to encode structure value as JSON: {err}");
+                StatusCode::BadDataEncodingUnsupported
+            })?;
+        opcua_types::json::JsonWriter::finish_document(writer).map_err(|err| {
+            error!("Failed to finish structure JSON value: {err}");
+            StatusCode::BadDataEncodingUnsupported
+        })?;
+    }
+
+    Ok(ExtensionObject::new(JsonBody::new(
+        bytes,
+        body.json_type_id().node_id,
+    )))
+}
+
 impl Variable {
     /// Creates a new variable. Note that data type, value rank and historizing are mandatory
     /// attributes of the Variable but not required by the constructor. The data type and value rank
@@ -458,7 +589,7 @@ impl Variable {
         &self,
         timestamps_to_return: TimestampsToReturn,
         index_range: &NumericRange,
-        _data_encoding: &DataEncoding,
+        data_encoding: &DataEncoding,
         _max_age: f64,
     ) -> DataValue {
         let data_value = &self.value;
@@ -474,10 +605,15 @@ impl Variable {
         // Get the value
         if let Some(ref value) = data_value.value {
             match value.range_of(index_range) {
-                Ok(value) => {
-                    result.value = Some(value);
-                    result.status = data_value.status;
-                }
+                Ok(value) => match encode_value_for_data_encoding(value, data_encoding) {
+                    Ok(value) => {
+                        result.value = Some(value);
+                        result.status = data_value.status;
+                    }
+                    Err(status) => {
+                        result.status = Some(status);
+                    }
+                },
                 Err(err) => {
                     result.status = Some(err);
                 }
@@ -697,5 +833,169 @@ impl Variable {
     /// Set the data type of this variable.
     pub fn set_data_type(&mut self, data_type: impl Into<NodeId>) {
         self.data_type = data_type.into();
+    }
+}
+
+#[cfg(all(test, feature = "xml", feature = "json"))]
+mod tests {
+    use opcua_macros::ua_encodable;
+    use opcua_types::{
+        ExpandedMessageInfo, ExtensionObject, JsonBody, KeyValuePair, VariantScalarTypeId, XmlBody,
+    };
+
+    use super::*;
+
+    mod opcua {
+        pub(super) use opcua_types as types;
+    }
+
+    #[ua_encodable]
+    #[derive(Debug, Clone, PartialEq)]
+    struct TestStructure {
+        field: KeyValuePair,
+    }
+
+    impl Default for TestStructure {
+        fn default() -> Self {
+            Self {
+                field: KeyValuePair {
+                    key: "answer".into(),
+                    value: 42u32.into(),
+                },
+            }
+        }
+    }
+
+    impl ExpandedMessageInfo for TestStructure {
+        fn full_type_id(&self) -> opcua_types::ExpandedNodeId {
+            NodeId::new(1, "TestStructure_Encoding_DefaultBinary").into()
+        }
+
+        fn full_json_type_id(&self) -> opcua_types::ExpandedNodeId {
+            NodeId::new(1, "TestStructure_Encoding_DefaultJson").into()
+        }
+
+        fn full_xml_type_id(&self) -> opcua_types::ExpandedNodeId {
+            NodeId::new(1, "TestStructure_Encoding_DefaultXml").into()
+        }
+
+        fn full_data_type_id(&self) -> opcua_types::ExpandedNodeId {
+            NodeId::new(1, "TestStructure").into()
+        }
+    }
+
+    fn structure_variable() -> Variable {
+        Variable::new_data_value(
+            &NodeId::new(1, "test-structure-variable"),
+            "TestStructureVariable",
+            "TestStructureVariable",
+            DataTypeId::Structure,
+            None,
+            None,
+            ExtensionObject::from_message(TestStructure::default()),
+        )
+    }
+
+    #[test]
+    fn value_encodes_structure_as_default_xml_when_requested() {
+        let value = structure_variable().value(
+            TimestampsToReturn::Neither,
+            &NumericRange::None,
+            &DataEncoding::XML,
+            0.0,
+        );
+
+        let Some(Variant::ExtensionObject(value)) = value.value else {
+            panic!("expected extension object value");
+        };
+        let xml_body = value
+            .inner_as::<XmlBody>()
+            .expect("expected raw XML extension object body");
+
+        assert_eq!(
+            xml_body.encoding_id(),
+            &NodeId::new(1, "TestStructure_Encoding_DefaultXml")
+        );
+        assert!(!xml_body.raw_body().is_empty());
+    }
+
+    #[test]
+    fn value_encodes_structure_as_default_json_when_requested() {
+        let value = structure_variable().value(
+            TimestampsToReturn::Neither,
+            &NumericRange::None,
+            &DataEncoding::JSON,
+            0.0,
+        );
+
+        let Some(Variant::ExtensionObject(value)) = value.value else {
+            panic!("expected extension object value");
+        };
+        let json_body = value
+            .inner_as::<JsonBody>()
+            .expect("expected raw JSON extension object body");
+
+        assert_eq!(
+            json_body.encoding_id(),
+            &NodeId::new(1, "TestStructure_Encoding_DefaultJson")
+        );
+        assert!(!json_body.raw_body().is_empty());
+    }
+
+    #[test]
+    fn value_rejects_non_structure_default_xml_encoding() {
+        let variable = Variable::new_data_value(
+            &NodeId::new(1, "test-uint32-variable"),
+            "UInt32Variable",
+            "UInt32Variable",
+            DataTypeId::UInt32,
+            None,
+            None,
+            42u32,
+        );
+
+        let value = variable.value(
+            TimestampsToReturn::Neither,
+            &NumericRange::None,
+            &DataEncoding::XML,
+            0.0,
+        );
+
+        assert_eq!(value.status, Some(StatusCode::BadDataEncodingUnsupported));
+        assert_eq!(value.value, None);
+    }
+
+    #[test]
+    fn value_encodes_structure_array_as_default_json_when_requested() {
+        let values = vec![
+            Variant::from(ExtensionObject::from_message(TestStructure::default())),
+            Variant::from(ExtensionObject::from_message(TestStructure::default())),
+        ];
+        let variable = Variable::new_data_value(
+            &NodeId::new(1, "test-structure-array-variable"),
+            "TestStructureArrayVariable",
+            "TestStructureArrayVariable",
+            DataTypeId::Structure,
+            None,
+            None,
+            Variant::from((VariantScalarTypeId::ExtensionObject, values)),
+        );
+
+        let value = variable.value(
+            TimestampsToReturn::Neither,
+            &NumericRange::None,
+            &DataEncoding::JSON,
+            0.0,
+        );
+
+        let Some(Variant::Array(array)) = value.value else {
+            panic!("expected extension object array value");
+        };
+        assert!(array.values.iter().all(|value| {
+            matches!(
+                value,
+                Variant::ExtensionObject(object) if object.inner_as::<JsonBody>().is_some()
+            )
+        }));
     }
 }

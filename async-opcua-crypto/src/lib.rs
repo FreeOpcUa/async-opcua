@@ -30,6 +30,7 @@ mod tests;
 mod certificate_store;
 pub mod gds_reload;
 mod hash;
+pub mod identity;
 pub mod random;
 mod security_policy;
 mod thumbprint;

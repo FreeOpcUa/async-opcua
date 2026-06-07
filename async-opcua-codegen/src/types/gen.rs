@@ -9,6 +9,7 @@ use syn::{
 use tracing::warn;
 
 use crate::{
+    derives::{self, StructFieldImpl},
     error::CodeGenError,
     utils::{safe_ident, RenderExpr},
     GeneratedOutput, BASE_NAMESPACE,
@@ -593,24 +594,41 @@ impl CodeGenerator {
         let mut fields = Punctuated::new();
 
         attrs.push(parse_quote! {
-            #[opcua::types::ua_encodable]
+            #[derive(opcua::types::UaNullable)]
+        });
+        attrs.push(parse_quote! {
+            #[cfg_attr(
+                feature = "json",
+                derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+            )]
+        });
+        attrs.push(parse_quote! {
+            #[cfg_attr(
+                feature = "xml",
+                derive(
+                    opcua::types::XmlEncodable,
+                    opcua::types::XmlDecodable,
+                    opcua::types::XmlType
+                )
+            )]
         });
         if let Some(doc) = &item.documentation {
             attrs.push(parse_quote! {
                 #[doc = #doc]
             });
         }
-        attrs.push(parse_quote! {
-            #[derive(Debug, Clone, PartialEq)]
-        });
-
         if self.has_default(&item.name) && !self.default_excluded.contains(&item.name) {
             attrs.push(parse_quote! {
-                #[derive(Default)]
+                #[derive(Debug, Clone, PartialEq, Default)]
+            });
+        } else {
+            attrs.push(parse_quote! {
+                #[derive(Debug, Clone, PartialEq)]
             });
         }
 
         let mut impls = Vec::new();
+        let mut impl_fields = Vec::new();
         let (struct_ident, renamed) = safe_ident(&item.name);
         if renamed {
             let name = &item.name;
@@ -653,6 +671,7 @@ impl CodeGenerator {
                     #[doc = #doc]
                 });
             }
+            impl_fields.push(StructFieldImpl::new(ident.clone(), typ.clone()));
             fields.push(parse_quote! {
                 #attrs
                 pub #ident: #typ
@@ -757,6 +776,7 @@ impl CodeGenerator {
                 encoding_ids = Some(EncodingIds::new(id_path, &item.name)?);
             }
         }
+        impls.extend(derives::struct_impls(&struct_ident, &impl_fields));
 
         let res = ItemStruct {
             attrs,

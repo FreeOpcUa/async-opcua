@@ -8,6 +8,7 @@ use tracing::error;
 use super::continuation_points::ContinuationPoint;
 use super::manager::next_session_id;
 use crate::authenticator::UserToken;
+use crate::history::HistoryContinuationPointCache;
 use crate::identity_token::IdentityToken;
 use crate::info::ServerInfo;
 use crate::node_manager::{BrowseContinuationPoint, QueryContinuationPoint};
@@ -15,6 +16,8 @@ use opcua_crypto::X509;
 use opcua_types::{
     ApplicationDescription, ByteString, MessageSecurityMode, NodeId, StatusCode, UAString,
 };
+
+const HISTORY_CONTINUATION_POINT_TTL: Duration = Duration::from_secs(300);
 
 /// An instance of an OPC-UA session.
 pub struct Session {
@@ -66,6 +69,10 @@ pub struct Session {
     query_continuation_points: HashMap<ByteString, QueryContinuationPoint>,
     /// User token.
     user_token: Option<UserToken>,
+    /// Claims extracted from an issued JWT identity token.
+    pub claims: Option<opcua_crypto::identity::ClaimProfile>,
+    /// Authorization profile mapped from JWT claims.
+    pub(crate) auth_profile: Option<super::identity::SessionAuthorizationProfile>,
     /// Whether the session has been closed.
     is_closed: bool,
 }
@@ -117,6 +124,8 @@ impl Session {
             history_continuation_points: Default::default(),
             query_continuation_points: Default::default(),
             user_token: None,
+            claims: None,
+            auth_profile: None,
             application_description,
             message_security_mode,
             is_closed: false,
@@ -179,7 +188,12 @@ impl Session {
         identity: IdentityToken,
         locale_ids: Option<Vec<UAString>>,
         user_token: UserToken,
+        claims: Option<opcua_crypto::identity::ClaimProfile>,
     ) {
+        self.auth_profile = claims
+            .as_ref()
+            .map(super::identity::SessionAuthorizationProfile::from_claims);
+        self.claims = claims;
         self.user_token = Some(user_token);
         self.secure_channel_id = secure_channel_id;
         self.session_nonce = server_nonce;
@@ -251,13 +265,17 @@ impl Session {
         id: &ByteString,
         cp: ContinuationPoint,
     ) -> Result<(), ()> {
-        if self.max_history_continuation_points <= self.history_continuation_points.len()
-            && self.max_history_continuation_points > 0
-        {
-            Err(())
-        } else {
-            self.history_continuation_points.insert(id.clone(), cp);
+        self.history_continuation_points.insert(id.clone(), cp);
+        HistoryContinuationPointCache::prune_and_evict(
+            &mut self.history_continuation_points,
+            self.max_history_continuation_points,
+            HISTORY_CONTINUATION_POINT_TTL,
+        );
+
+        if self.history_continuation_points.contains_key(id) {
             Ok(())
+        } else {
+            Err(())
         }
     }
 

@@ -12,8 +12,10 @@ use opcua_types::{
 use crate::{
     codec::json::{JsonDataSetMessage, JsonNetworkMessage},
     codec::uadp::{PublisherId, UadpDataSetMessage, UadpNetworkMessage},
+    transport::amqp::AmqpPublisher,
     transport::mqtt::MqttPublisher,
     transport::udp::UdpPublisher,
+    transport::websocket::WebSocketPublisher,
     MessageEncoding, PubSubConnectionConfig,
 };
 
@@ -23,6 +25,8 @@ pub struct PubSubBridge {
     connection_config: PubSubConnectionConfig,
     mqtt_publisher: Option<Arc<MqttPublisher>>,
     udp_publisher: Option<Arc<UdpPublisher>>,
+    amqp_publisher: Option<Arc<AmqpPublisher>>,
+    websocket_publisher: Option<Arc<WebSocketPublisher>>,
 }
 
 impl PubSubBridge {
@@ -38,6 +42,27 @@ impl PubSubBridge {
             connection_config,
             mqtt_publisher,
             udp_publisher,
+            amqp_publisher: None,
+            websocket_publisher: None,
+        }
+    }
+
+    /// Creates a new `PubSubBridge` with all supported transport publishers.
+    pub fn with_publishers(
+        address_space: Arc<RwLock<AddressSpace>>,
+        connection_config: PubSubConnectionConfig,
+        mqtt_publisher: Option<Arc<MqttPublisher>>,
+        udp_publisher: Option<Arc<UdpPublisher>>,
+        amqp_publisher: Option<Arc<AmqpPublisher>>,
+        websocket_publisher: Option<Arc<WebSocketPublisher>>,
+    ) -> Self {
+        Self {
+            address_space,
+            connection_config,
+            mqtt_publisher,
+            udp_publisher,
+            amqp_publisher,
+            websocket_publisher,
         }
     }
 
@@ -47,6 +72,8 @@ impl PubSubBridge {
         let config = self.connection_config.clone();
         let mqtt = self.mqtt_publisher.clone();
         let udp = self.udp_publisher.clone();
+        let amqp = self.amqp_publisher.clone();
+        let websocket = self.websocket_publisher.clone();
 
         tokio::spawn(async move {
             let mut last_values = std::collections::HashMap::new();
@@ -143,6 +170,23 @@ impl PubSubBridge {
                                     if let Some(ref m) = mqtt {
                                         m.publish_immediate(topic.clone(), payload.clone());
                                     }
+                                    if let Some(ref u) = udp {
+                                        let addr = config
+                                            .address
+                                            .strip_prefix("udp://")
+                                            .unwrap_or(&config.address);
+                                        u.publish_immediate(payload.clone(), addr).await;
+                                    }
+                                    if let Some(ref a) = amqp {
+                                        a.publish_immediate(topic.clone(), payload.clone());
+                                    }
+                                    if let Some(ref w) = websocket {
+                                        w.publish_immediate(
+                                            payload.clone(),
+                                            &config.address,
+                                            &writer_group.encoding,
+                                        );
+                                    }
                                 }
                             }
                             MessageEncoding::Uadp => {
@@ -156,6 +200,16 @@ impl PubSubBridge {
                                 let payload = msg.encode_to_vec(&ctx);
                                 if let Some(ref m) = mqtt {
                                     m.publish_immediate(topic.clone(), payload.clone());
+                                }
+                                if let Some(ref a) = amqp {
+                                    a.publish_immediate(topic.clone(), payload.clone());
+                                }
+                                if let Some(ref w) = websocket {
+                                    w.publish_immediate(
+                                        payload.clone(),
+                                        &config.address,
+                                        &writer_group.encoding,
+                                    );
                                 }
                                 if let Some(ref u) = udp {
                                     let addr = config
@@ -182,4 +236,35 @@ fn opcua_to_json_value<T: opcua_types::json::JsonEncodable>(
     let val =
         serde_json::from_str(&json_str).map_err(|e| opcua_types::Error::decoding(e.to_string()))?;
     Ok(val)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::transport::{amqp::AmqpPublisher, websocket::WebSocketPublisher};
+
+    #[test]
+    fn bridge_accepts_publishers_for_all_transport_mappings() {
+        let address_space = Arc::new(RwLock::new(AddressSpace::new()));
+        let config = PubSubConnectionConfig {
+            connection_id: "all-transports".to_string(),
+            name: "all-transports".to_string(),
+            address: "udp://127.0.0.1:4840".to_string(),
+            writer_groups: Vec::new(),
+        };
+
+        let bridge = PubSubBridge::with_publishers(
+            address_space.clone(),
+            config,
+            Some(Arc::new(MqttPublisher::new(address_space.clone()))),
+            Some(Arc::new(UdpPublisher::new(address_space.clone()))),
+            Some(Arc::new(AmqpPublisher::new(address_space.clone()))),
+            Some(Arc::new(WebSocketPublisher::new(address_space))),
+        );
+
+        assert!(bridge.mqtt_publisher.is_some());
+        assert!(bridge.udp_publisher.is_some());
+        assert!(bridge.amqp_publisher.is_some());
+        assert!(bridge.websocket_publisher.is_some());
+    }
 }

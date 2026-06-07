@@ -1,11 +1,14 @@
 use std::collections::{BTreeSet, VecDeque};
 
 use chrono::TimeDelta;
-use opcua_nodes::{Event, ParsedEventFilter, TypeTree};
+use opcua_nodes::{Event, TypeTree};
 use tracing::{error, warn};
 
 use super::MonitoredItemHandle;
-use crate::{info::ServerInfo, node_manager::ParsedReadValueId};
+use crate::{
+    info::ServerInfo, node_manager::ParsedReadValueId,
+    services::subscription::filter::ParsedEventFilter,
+};
 use opcua_types::{
     match_extension_object_owned, DataChangeFilter, DataValue, DateTime, EventFieldList,
     EventFilter, EventFilterResult, ExtensionObject, MonitoredItemCreateRequest,
@@ -77,7 +80,7 @@ impl FilterType {
                 (None, res.map(FilterType::DataChangeFilter))
             },
             v: EventFilter => {
-                let (res, filter_res) = ParsedEventFilter::new(v, type_tree);
+                let (res, filter_res) = ParsedEventFilter::parse(v, type_tree);
                 (Some(res), filter_res.map(FilterType::EventFilter))
             },
             _ => {

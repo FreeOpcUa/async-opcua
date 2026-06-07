@@ -8,6 +8,8 @@ use opcua_nodes::{Event, TypeTree};
 use opcua_types::{DataValue, DateTime, DateTimeUtc, NotificationMessage, StatusCode};
 use tracing::{debug, trace, warn};
 
+use crate::node_manager::MonitoredItemRef;
+
 use super::monitored_item::{MonitoredItem, Notification};
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -200,6 +202,22 @@ impl Subscription {
         self.monitored_items.values()
     }
 
+    pub(super) fn monitored_item_refs(&self) -> Vec<MonitoredItemRef> {
+        self.monitored_items
+            .values()
+            .map(|item| {
+                MonitoredItemRef::new(
+                    MonitoredItemHandle {
+                        subscription_id: self.id,
+                        monitored_item_id: item.id(),
+                    },
+                    item.item_to_monitor().node_id.clone(),
+                    item.item_to_monitor().attribute_id,
+                )
+            })
+            .collect()
+    }
+
     pub(super) fn drain(&mut self) -> impl Iterator<Item = (u32, MonitoredItem)> + '_ {
         self.monitored_items.drain()
     }
@@ -217,6 +235,24 @@ impl Subscription {
     pub(super) fn insert(&mut self, id: u32, item: MonitoredItem) {
         self.monitored_items.insert(id, item);
         self.notified_monitored_items.insert(id);
+    }
+
+    pub(super) fn update_monitored_item_value(
+        &mut self,
+        handle: MonitoredItemHandle,
+        value: DataValue,
+        now: &DateTime,
+    ) {
+        if handle.subscription_id != self.id {
+            return;
+        }
+
+        let id = handle.monitored_item_id;
+        if let Some(item) = self.monitored_items.get_mut(&id) {
+            if item.notify_data_value(value, now, false) {
+                self.notified_monitored_items.insert(id);
+            }
+        }
     }
 
     /// Notify the given monitored item of a new data value.
@@ -831,6 +867,58 @@ mod tests {
             time + chrono::Duration::try_milliseconds(ms as i64).unwrap(),
             time_inst + Duration::from_millis(ms),
         )
+    }
+
+    #[test]
+    fn monitored_item_refs_include_node_attribute_and_handles_for_revalidation() {
+        let mut sub =
+            Subscription::new(42, true, Duration::from_millis(100), 100, 20, 1, 100, 1000);
+
+        sub.insert(
+            11,
+            new_monitored_item(
+                11,
+                ReadValueId {
+                    node_id: NodeId::new(2, "Temperature"),
+                    attribute_id: AttributeId::Value as u32,
+                    ..Default::default()
+                },
+                MonitoringMode::Reporting,
+                FilterType::None,
+                SamplingInterval::Subscription,
+                true,
+                None,
+            ),
+        );
+        sub.insert(
+            12,
+            new_monitored_item(
+                12,
+                ReadValueId {
+                    node_id: NodeId::new(2, "Valve"),
+                    attribute_id: AttributeId::UserAccessLevel as u32,
+                    ..Default::default()
+                },
+                MonitoringMode::Reporting,
+                FilterType::None,
+                SamplingInterval::Subscription,
+                true,
+                None,
+            ),
+        );
+
+        let mut refs = sub.monitored_item_refs();
+        refs.sort_by_key(|item| item.handle().monitored_item_id);
+
+        assert_eq!(refs.len(), 2);
+        assert_eq!(refs[0].handle().subscription_id, 42);
+        assert_eq!(refs[0].handle().monitored_item_id, 11);
+        assert_eq!(refs[0].node_id(), &NodeId::new(2, "Temperature"));
+        assert_eq!(refs[0].attribute(), AttributeId::Value);
+        assert_eq!(refs[1].handle().subscription_id, 42);
+        assert_eq!(refs[1].handle().monitored_item_id, 12);
+        assert_eq!(refs[1].node_id(), &NodeId::new(2, "Valve"));
+        assert_eq!(refs[1].attribute(), AttributeId::UserAccessLevel);
     }
 
     #[test]

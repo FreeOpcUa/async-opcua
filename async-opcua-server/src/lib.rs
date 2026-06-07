@@ -16,6 +16,10 @@ pub mod aggregates;
 pub mod alarms;
 /// Authentication helpers.
 pub mod auth;
+/// Session authorization helpers.
+pub mod authorization {
+    pub use crate::session::identity::SessionAuthorizationProfile;
+}
 pub mod authenticator;
 mod builder;
 mod config;
@@ -24,6 +28,8 @@ pub mod diagnostics;
 mod discovery;
 /// Firmware-over-the-air file transfer helpers.
 pub mod fota;
+/// Global Discovery Server (GDS) support.
+pub mod gds;
 /// Historical data access (HDA) support.
 pub mod history;
 mod identity_token;
@@ -38,6 +44,12 @@ mod reverse_connect;
 mod server;
 mod server_handle;
 mod server_status;
+/// Shared service-level authorization helpers.
+pub mod services;
+/// Secure-channel negotiation helpers.
+pub mod security {
+    pub use crate::session::negotiate::validate_security_policy;
+}
 mod session;
 mod subscriptions;
 mod transport;
@@ -140,6 +152,8 @@ pub mod constants {
 
     /// Maximum number of sessions active on a server.
     pub const MAX_SESSIONS: usize = 20;
+    /// Maximum number of active TCP connections accepted by the server.
+    pub const MAX_CONNECTIONS: usize = 100;
     /// Maximum number of references per node during Browse or BrowseNext.
     pub const MAX_REFERENCES_PER_BROWSE_NODE: usize = 1000;
 

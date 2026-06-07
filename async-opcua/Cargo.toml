@@ -41,7 +41,7 @@ generated-address-space = [
 ]
 # Methods for XML parsing and loading of nodesets from XML.
 # The json feature adds serialize/deserialize to all OPC-UA types.
-json = ["async-opcua-types/json"]
+json = ["async-opcua-nodes/json", "async-opcua-types/json"]
 xml = ["async-opcua-types/xml", "async-opcua-nodes/xml", "async-opcua-xml"]
 
 

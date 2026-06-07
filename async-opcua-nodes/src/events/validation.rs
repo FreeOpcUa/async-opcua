@@ -122,6 +122,11 @@ impl ParsedContentFilter {
         }
     }
 
+    /// Returns the parsed filter elements in evaluation order.
+    pub fn elements(&self) -> &[ParsedContentFilterElement] {
+        &self.elements
+    }
+
     /// Create a new content filter from the raw [ContentFilter].
     ///
     /// If `allow_attribute_operands` is false, parsing will fail
@@ -152,6 +157,18 @@ pub struct ParsedContentFilterElement {
     pub(super) operands: Vec<ParsedOperand>,
 }
 
+impl ParsedContentFilterElement {
+    /// Returns the parsed filter operator.
+    pub fn operator(&self) -> FilterOperator {
+        self.operator
+    }
+
+    /// Returns the parsed operands for this element.
+    pub fn operands(&self) -> &[ParsedOperand] {
+        &self.operands
+    }
+}
+
 /// This validates the event filter as best it can to make sure it doesn't contain nonsense.
 fn validate(
     event_filter: EventFilter,
@@ -177,7 +194,7 @@ fn validate(
         event_filter.where_clause,
         type_tree,
         false,
-        &[FilterOperator::InView, FilterOperator::RelatedTo],
+        &[FilterOperator::RelatedTo],
     );
 
     (

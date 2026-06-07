@@ -83,7 +83,9 @@ impl ServerBuilder {
     /// Creates and yields a builder which is configured with the sample server configuration.
     /// Use this for testing and similar reasons. Do not rely upon this in production code because it could change.
     pub fn new_sample() -> Self {
-        warn!("Sample configuration is for testing purposes only. Use a proper configuration in your production environment");
+        warn!(
+            "Sample configuration is for testing purposes only. Use a proper configuration in your production environment"
+        );
 
         let user_token_ids = vec![
             ANONYMOUS_USER_TOKEN_ID,
@@ -96,17 +98,14 @@ impl ServerBuilder {
             .application_uri("urn:OPC UA Sample Server")
             .product_uri("urn:OPC UA Sample Server Testkit")
             .create_sample_keypair(true)
+            .allow_legacy_crypto(true)
             .certificate_path("own/cert.der")
             .private_key_path("private/private.pem")
             .pki_dir("./pki")
             .discovery_server_url(constants::DEFAULT_DISCOVERY_SERVER_URL)
             .add_user_token(
                 "sample_password_user",
-                ServerUserToken {
-                    user: "sample1".to_string(),
-                    pass: Some("sample1pwd".to_string()),
-                    ..Default::default()
-                },
+                ServerUserToken::user_pass("sample1", "sample1pwd"),
             )
             .add_user_token(
                 "sample_x509_user",
@@ -343,6 +342,24 @@ impl ServerBuilder {
         self
     }
 
+    /// Allow deprecated security policies such as Basic128Rsa15 and Basic256.
+    pub fn allow_legacy_crypto(mut self, allow: bool) -> Self {
+        self.config.allow_legacy_crypto = allow;
+        self
+    }
+
+    /// Expected OAuth2 issuer for issued JWT identity tokens.
+    pub fn oauth2_issuer(mut self, issuer: impl Into<String>) -> Self {
+        self.config.oauth2_issuer = Some(issuer.into());
+        self
+    }
+
+    /// Expected OAuth2 audience for issued JWT identity tokens.
+    pub fn oauth2_audience(mut self, audience: impl Into<String>) -> Self {
+        self.config.oauth2_audience = Some(audience.into());
+        self
+    }
+
     /// PKI folder, either absolute or relative to executable.
     pub fn pki_dir(mut self, pki_dir: impl Into<PathBuf>) -> Self {
         self.config.pki_dir = pki_dir.into();
@@ -361,6 +378,12 @@ impl ServerBuilder {
     /// is closed.
     pub fn hello_timeout(mut self, timeout: u32) -> Self {
         self.config.tcp_config.hello_timeout = timeout;
+        self
+    }
+
+    /// Maximum number of active TCP connections accepted by the server.
+    pub fn max_connections(mut self, max_connections: usize) -> Self {
+        self.config.max_connections = max_connections;
         self
     }
 

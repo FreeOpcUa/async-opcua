@@ -1,6 +1,7 @@
 use std::io::Cursor;
 use std::io::Read;
 use std::io::Write;
+use std::path::Path;
 
 use opcua::types::BinaryDecodable;
 use opcua::types::BinaryEncodable;
@@ -262,4 +263,17 @@ fn test_plcopen_companion_struct_references_di_types() {
         axes: Some(vec![axis]),
     };
     encoding_roundtrip_extension_object(controller);
+}
+
+#[test]
+fn generated_companion_structs_use_static_binary_impls() {
+    let source_path = Path::new(env!("OPCUA_GENERATED_DIR"))
+        .join("di")
+        .join("structs.rs");
+    let source = std::fs::read_to_string(source_path).unwrap();
+
+    assert!(source.contains("impl opcua::types::BinaryEncodable for FunctionalGroupDataType"));
+    assert!(source.contains("impl opcua::types::BinaryDecodable for FunctionalGroupDataType"));
+    assert!(source.contains("unsafe impl Send for FunctionalGroupDataType"));
+    assert!(source.contains("unsafe impl Sync for FunctionalGroupDataType"));
 }

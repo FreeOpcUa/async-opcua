@@ -153,9 +153,20 @@ impl QueryRequest {
         &self.data_sets
     }
 
+    pub(crate) fn add_data_set(&mut self, data_set: QueryDataSet) {
+        if self.remaining_data_sets() > 0 {
+            self.data_sets.push(data_set);
+        }
+    }
+
     /// Continuation point, if present.
     pub fn continuation_point(&self) -> Option<&ContinuationPoint> {
         self.continuation_point.as_ref()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn next_continuation_point(&self) -> Option<&ContinuationPoint> {
+        self.next_continuation_point.as_ref()
     }
 
     /// Maximum number of references to return.

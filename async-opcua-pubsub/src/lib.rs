@@ -12,12 +12,18 @@ pub mod transport;
 /// Main PubSub publishing engine coordinator.
 pub mod engine;
 
+/// PubSub security key management.
+pub mod security;
+
 pub use config::{
     DataSetWriterConfig, MessageEncoding, PubSubConnectionConfig, PublishedDataSetConfig,
     WriterGroupConfig,
 };
 
 pub use engine::{PubSubEngine, TransportKind};
+pub use security::{
+    SecurityGroup, SecurityKeySet, SharedSecurityGroup, TimeBasedKeyRotator, UadpSecurityCodec,
+};
 
 pub use transport::amqp::AmqpPublisher;
 pub use transport::mqtt::MqttPublisher;

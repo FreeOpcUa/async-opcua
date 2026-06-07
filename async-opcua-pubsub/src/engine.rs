@@ -1,14 +1,17 @@
 //! PubSub publishing coordinator.
 
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use opcua_core::sync::RwLock;
+use opcua_crypto::SecurityPolicy;
 use opcua_server::address_space::AddressSpace;
-use opcua_types::StatusCode;
+use opcua_types::{Context, MessageSecurityMode, StatusCode};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
+    codec::uadp::UadpNetworkMessage,
+    security::{SecurityGroup, SharedSecurityGroup, UadpSecurityCodec},
     transport::{
         amqp::AmqpPublisher, mqtt::MqttPublisher, udp::UdpPublisher, websocket::WebSocketPublisher,
     },
@@ -57,6 +60,7 @@ impl TransportKind {
 pub struct PubSubEngine {
     address_space: Arc<RwLock<AddressSpace>>,
     connections: Vec<PubSubConnectionConfig>,
+    security_groups: HashMap<String, SharedSecurityGroup>,
     cancel_token: Option<CancellationToken>,
     publisher_handles: Vec<JoinHandle<()>>,
 }
@@ -67,6 +71,7 @@ impl PubSubEngine {
         Self {
             address_space,
             connections: Vec::new(),
+            security_groups: HashMap::new(),
             cancel_token: None,
             publisher_handles: Vec::new(),
         }
@@ -80,6 +85,7 @@ impl PubSubEngine {
         Self {
             address_space,
             connections,
+            security_groups: HashMap::new(),
             cancel_token: None,
             publisher_handles: Vec::new(),
         }
@@ -102,6 +108,88 @@ impl PubSubEngine {
     /// Returns the configured PubSub connections.
     pub fn connection_configs(&self) -> &[PubSubConnectionConfig] {
         &self.connections
+    }
+
+    /// Registers a PubSub security group for publisher message signing.
+    pub fn register_security_group(
+        &mut self,
+        security_group: SecurityGroup,
+    ) -> SharedSecurityGroup {
+        let group_id = security_group.group_id().to_string();
+        let shared_group = Arc::new(RwLock::new(security_group));
+        self.security_groups.insert(group_id, shared_group.clone());
+        shared_group
+    }
+
+    /// Registers shared PubSub security group state for publisher message signing.
+    pub fn register_shared_security_group(&mut self, security_group: SharedSecurityGroup) {
+        let group_id = security_group.read().group_id().to_string();
+        self.security_groups.insert(group_id, security_group);
+    }
+
+    /// Removes a registered PubSub security group.
+    pub fn remove_security_group(&mut self, group_id: &str) -> Option<SharedSecurityGroup> {
+        self.security_groups.remove(group_id)
+    }
+
+    /// Returns a registered PubSub security group.
+    pub fn security_group(&self, group_id: &str) -> Option<SharedSecurityGroup> {
+        self.security_groups.get(group_id).cloned()
+    }
+
+    /// Encodes a publisher UADP NetworkMessage using the current key for a security group.
+    pub fn encode_publisher_uadp_message(
+        &self,
+        security_group_id: &str,
+        security_mode: MessageSecurityMode,
+        security_policy: SecurityPolicy,
+        message: &UadpNetworkMessage,
+        ctx: &Context<'_>,
+    ) -> Result<Vec<u8>, StatusCode> {
+        let security_group = self
+            .security_groups
+            .get(security_group_id)
+            .ok_or(StatusCode::BadSecurityChecksFailed)?;
+        let key_set = security_group.read().current_key_set().clone();
+        UadpSecurityCodec::new(security_mode, security_policy, key_set)
+            .encode_network_message(message, ctx)
+            .map_err(|error| error.status())
+    }
+
+    /// Signs a publisher UADP NetworkMessage using the current key for a security group.
+    pub fn sign_publisher_uadp_message(
+        &self,
+        security_group_id: &str,
+        security_policy: SecurityPolicy,
+        message: &UadpNetworkMessage,
+        ctx: &Context<'_>,
+    ) -> Result<Vec<u8>, StatusCode> {
+        self.encode_publisher_uadp_message(
+            security_group_id,
+            MessageSecurityMode::Sign,
+            security_policy,
+            message,
+            ctx,
+        )
+    }
+
+    /// Decodes and verifies a subscriber UADP NetworkMessage using a security group's current key.
+    pub fn decode_subscriber_uadp_message(
+        &self,
+        security_group_id: &str,
+        security_mode: MessageSecurityMode,
+        security_policy: SecurityPolicy,
+        payload: &[u8],
+        ctx: &Context<'_>,
+    ) -> Result<UadpNetworkMessage, StatusCode> {
+        let security_group = self
+            .security_groups
+            .get(security_group_id)
+            .ok_or(StatusCode::BadSecurityChecksFailed)?;
+        let key_set = security_group.read().current_key_set().clone();
+        UadpSecurityCodec::new(security_mode, security_policy, key_set)
+            .decode_network_message(payload, ctx)
+            .map_err(|error| error.status())
     }
 
     /// Returns true when the engine has started publisher loops.

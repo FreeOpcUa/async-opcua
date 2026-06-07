@@ -64,6 +64,8 @@ pub mod constants {
 
 pub mod comms;
 pub mod config;
+/// Common advanced-compliance status code aliases.
+pub mod error;
 pub mod handle;
 
 pub mod messages;

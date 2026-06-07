@@ -15,7 +15,7 @@ use opcua_client::{ClientBuilder, HistoryReadAction, IdentityToken, Session};
 use opcua_crypto::SecurityPolicy;
 use opcua_history_sqlite::SqliteHistoryBackend;
 use opcua_server::{
-    address_space::{AccessLevel, VariableBuilder},
+    address_space::{AccessLevel, EventNotifier, ObjectBuilder, VariableBuilder},
     aggregates::engine::{aggregate_average, aggregate_maximum, aggregate_minimum},
     diagnostics::NamespaceMetadata,
     history::HistoryStorageBackend,
@@ -23,9 +23,10 @@ use opcua_server::{
     ServerBuilder, ServerHandle, ANONYMOUS_USER_TOKEN_ID,
 };
 use opcua_types::{
-    AggregateConfiguration, ByteString, DataTypeId, DataValue, DateTime, HistoryData,
-    HistoryReadValueId, MessageSecurityMode, NodeId, NumericRange, PerformUpdateType,
-    QualifiedName, ReadProcessedDetails, StatusCode, TimestampsToReturn, Variant,
+    AggregateConfiguration, ByteString, DataTypeId, DataValue, DateTime, EventFilter, HistoryData,
+    HistoryEvent, HistoryReadValueId, MessageSecurityMode, NodeId, NumericRange, PerformUpdateType,
+    QualifiedName, ReadAnnotationDataDetails, ReadEventDetails, ReadProcessedDetails, StatusCode,
+    TimestampsToReturn, Variant,
 };
 use tokio::net::TcpListener;
 
@@ -162,6 +163,14 @@ fn add_historical_variable(node_manager: &SimpleNodeManager, node_id: &NodeId) {
         )
         .build();
     space.insert(variable, None::<&[(_, &NodeId, _)]>);
+}
+
+fn add_historical_event_object(node_manager: &SimpleNodeManager, node_id: &NodeId) {
+    let mut space = node_manager.address_space().write();
+    let object = ObjectBuilder::new(node_id, "HistoricalEventSource", "HistoricalEventSource")
+        .event_notifier(EventNotifier::HISTORY_READ)
+        .build();
+    space.insert(object, None::<&[(_, &NodeId, _)]>);
 }
 
 fn data_value(value: f64, timestamp: DateTime) -> DataValue {
@@ -391,4 +400,66 @@ async fn test_history_read_aggregates() {
         maximums.iter().map(double_value).collect::<Vec<_>>(),
         vec![20.0, 15.0]
     );
+}
+
+#[tokio::test]
+async fn test_history_read_events_empty_result() {
+    let server = setup_history_server("events").await;
+    let node_id = NodeId::new(server.namespace_index, "HistoricalEventSource");
+    add_historical_event_object(&server.node_manager, &node_id);
+
+    let results = server
+        .session
+        .history_read(
+            HistoryReadAction::ReadEventDetails(ReadEventDetails {
+                num_values_per_node: 10,
+                start_time: DateTime::from((2026, 6, 6, 3, 0, 0)),
+                end_time: DateTime::from((2026, 6, 6, 4, 0, 0)),
+                filter: EventFilter::default(),
+            }),
+            TimestampsToReturn::Both,
+            false,
+            &[history_read_value_id(node_id, None)],
+        )
+        .await
+        .expect("event history read");
+
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].status_code, StatusCode::Good);
+    let history_event = results[0]
+        .history_data
+        .clone()
+        .into_inner_as::<HistoryEvent>()
+        .expect("HistoryEvent");
+    assert!(history_event.events.unwrap_or_default().is_empty());
+}
+
+#[tokio::test]
+async fn test_history_read_annotations_empty_result() {
+    let server = setup_history_server("annotations").await;
+    let node_id = NodeId::new(server.namespace_index, "AnnotatedValue");
+    add_historical_variable(&server.node_manager, &node_id);
+    let req_time = DateTime::from((2026, 6, 6, 5, 0, 0));
+
+    let results = server
+        .session
+        .history_read(
+            HistoryReadAction::ReadAnnotationDataDetails(ReadAnnotationDataDetails {
+                req_times: Some(vec![req_time]),
+            }),
+            TimestampsToReturn::Both,
+            false,
+            &[history_read_value_id(node_id, None)],
+        )
+        .await
+        .expect("annotation history read");
+
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].status_code, StatusCode::Good);
+    let history_data = results[0]
+        .history_data
+        .clone()
+        .into_inner_as::<HistoryData>()
+        .expect("HistoryData");
+    assert!(history_data.data_values.unwrap_or_default().is_empty());
 }

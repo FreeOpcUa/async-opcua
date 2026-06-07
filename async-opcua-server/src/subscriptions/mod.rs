@@ -124,6 +124,90 @@ impl SubscriptionCache {
         inner.session_subscriptions.get(&session_id).cloned()
     }
 
+    pub(crate) fn update_session_user(&self, session_id: u32, context: &RequestContext) {
+        let Some(cache) = ({
+            let lck = trace_read_lock!(self.inner);
+            lck.session_subscriptions.get(&session_id).cloned()
+        }) else {
+            return;
+        };
+
+        let key = Self::get_key(&context.session);
+        let type_tree_for_user = context.info.type_tree_getter.get_type_tree_static(context);
+        cache.lock().update_owner(key, type_tree_for_user);
+    }
+
+    pub(crate) fn get_session_monitored_items(&self, session_id: u32) -> Vec<MonitoredItemRef> {
+        let Some(cache) = ({
+            let lck = trace_read_lock!(self.inner);
+            lck.session_subscriptions.get(&session_id).cloned()
+        }) else {
+            return Vec::new();
+        };
+
+        let cache_lck = cache.lock();
+        cache_lck.monitored_item_refs()
+    }
+
+    pub(crate) fn apply_revalidated_values(
+        &self,
+        session_id: u32,
+        values: Vec<(MonitoredItemRef, DataValue)>,
+    ) {
+        if values.is_empty() {
+            return;
+        }
+
+        let Some(cache) = ({
+            let lck = trace_read_lock!(self.inner);
+            lck.session_subscriptions.get(&session_id).cloned()
+        }) else {
+            return;
+        };
+
+        cache.lock().apply_revalidated_values(values);
+    }
+
+    pub(crate) fn delete_monitored_item_refs(
+        &self,
+        session_id: u32,
+        items: &[MonitoredItemRef],
+    ) -> Result<Vec<(StatusCode, MonitoredItemRef)>, StatusCode> {
+        let mut ids_by_subscription: HashMap<u32, Vec<u32>> = HashMap::new();
+        for item in items {
+            let handle = item.handle();
+            ids_by_subscription
+                .entry(handle.subscription_id)
+                .or_default()
+                .push(handle.monitored_item_id);
+        }
+
+        let mut lck = trace_write_lock!(self.inner);
+        let Some(cache) = lck.session_subscriptions.get(&session_id).cloned() else {
+            return Err(StatusCode::BadNoSubscription);
+        };
+
+        let mut cache_lck = cache.lock();
+        let mut results = Vec::with_capacity(items.len());
+        for (subscription_id, item_ids) in ids_by_subscription {
+            let deleted = cache_lck.delete_monitored_items(subscription_id, &item_ids)?;
+            for (status, rf) in &deleted {
+                if status.is_good() {
+                    let key = MonitoredItemKeyRef {
+                        id: rf.node_id().into(),
+                        attribute_id: rf.attribute(),
+                    };
+                    if let Some(it) = lck.monitored_items.get_mut(&key) {
+                        it.remove(&rf.handle());
+                    }
+                }
+            }
+            results.extend(deleted);
+        }
+
+        Ok(results)
+    }
+
     /// This is the periodic subscription tick where we check for
     /// triggered subscriptions.
     ///

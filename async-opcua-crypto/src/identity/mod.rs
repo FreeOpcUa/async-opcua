@@ -3,8 +3,10 @@
 use opcua_types::status_code::StatusCode;
 
 pub mod jwt_validator;
+pub mod rsa_oaep;
 
 pub use jwt_validator::LocalOAuth2Validator;
+pub use rsa_oaep::decrypt_rsa_oaep_secret;
 
 /// Claims extracted from a validated OAuth2 identity token.
 #[derive(Debug, Clone)]

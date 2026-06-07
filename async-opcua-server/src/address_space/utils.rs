@@ -1,8 +1,8 @@
 use crate::node_manager::{ParsedReadValueId, ParsedWriteValue, RequestContext, ServerContext};
 use opcua_nodes::TypeTree;
 use opcua_types::{
-    AttributeId, DataEncoding, DataTypeId, DataValue, DateTime, NumericRange, StatusCode,
-    TimestampsToReturn, Variant, WriteMask,
+    AttributeId, DataEncoding, DataTypeId, DataValue, DateTime, NodeId, NumericRange, StatusCode,
+    TimestampsToReturn, Variant, VariantScalarTypeId, VariantTypeId, WriteMask,
 };
 use tracing::debug;
 
@@ -120,9 +120,17 @@ pub fn validate_value_to_write(
     value: &Variant,
     type_tree: &dyn TypeTree,
 ) -> Result<(), StatusCode> {
-    let value_rank = variable.value_rank();
     let node_data_type = variable.data_type();
 
+    validate_value_data_type_to_write(&node_data_type, variable.value_rank(), value, type_tree)
+}
+
+fn validate_value_data_type_to_write(
+    node_data_type: &NodeId,
+    value_rank: i32,
+    value: &Variant,
+    type_tree: &dyn TypeTree,
+) -> Result<(), StatusCode> {
     if matches!(value, Variant::Empty) {
         return Ok(());
     }
@@ -143,7 +151,10 @@ pub fn validate_value_to_write(
             // a byte string to a byte array should succeed
             match value {
                 Variant::ByteString(_) => {
-                    if node_data_type == DataTypeId::Byte {
+                    if node_data_type
+                        .as_data_type_id()
+                        .is_ok_and(|data_type| data_type == DataTypeId::Byte)
+                    {
                         match value_rank {
                             -2 | -3 | 1 => Ok(()),
                             _ => Err(StatusCode::BadTypeMismatch),
@@ -160,6 +171,71 @@ pub fn validate_value_to_write(
     } else {
         Err(StatusCode::BadTypeMismatch)
     }
+}
+
+fn validate_attribute_value_to_write(
+    attribute_id: AttributeId,
+    value: &Variant,
+) -> Result<(), StatusCode> {
+    let valid = match attribute_id {
+        AttributeId::Value => true,
+        AttributeId::NodeId | AttributeId::DataType => {
+            is_scalar_attribute_value(value, VariantScalarTypeId::NodeId)
+        }
+        AttributeId::NodeClass | AttributeId::ValueRank => {
+            is_scalar_attribute_value(value, VariantScalarTypeId::Int32)
+        }
+        AttributeId::BrowseName => {
+            is_scalar_attribute_value(value, VariantScalarTypeId::QualifiedName)
+        }
+        AttributeId::DisplayName | AttributeId::Description | AttributeId::InverseName => {
+            is_scalar_attribute_value(value, VariantScalarTypeId::LocalizedText)
+        }
+        AttributeId::WriteMask | AttributeId::UserWriteMask | AttributeId::AccessLevelEx => {
+            is_scalar_attribute_value(value, VariantScalarTypeId::UInt32)
+        }
+        AttributeId::IsAbstract
+        | AttributeId::Symmetric
+        | AttributeId::ContainsNoLoops
+        | AttributeId::Historizing
+        | AttributeId::Executable
+        | AttributeId::UserExecutable => {
+            is_scalar_attribute_value(value, VariantScalarTypeId::Boolean)
+        }
+        AttributeId::EventNotifier | AttributeId::AccessLevel | AttributeId::UserAccessLevel => {
+            is_scalar_attribute_value(value, VariantScalarTypeId::Byte)
+        }
+        AttributeId::ArrayDimensions => {
+            is_array_attribute_value(value, VariantScalarTypeId::UInt32)
+        }
+        AttributeId::MinimumSamplingInterval => {
+            is_scalar_attribute_value(value, VariantScalarTypeId::Double)
+        }
+        AttributeId::DataTypeDefinition => {
+            value.is_empty()
+                || is_scalar_attribute_value(value, VariantScalarTypeId::ExtensionObject)
+        }
+        AttributeId::RolePermissions | AttributeId::UserRolePermissions => {
+            is_array_attribute_value(value, VariantScalarTypeId::ExtensionObject)
+        }
+        AttributeId::AccessRestrictions => {
+            is_scalar_attribute_value(value, VariantScalarTypeId::UInt16)
+        }
+    };
+
+    if valid {
+        Ok(())
+    } else {
+        Err(StatusCode::BadTypeMismatch)
+    }
+}
+
+fn is_scalar_attribute_value(value: &Variant, expected: VariantScalarTypeId) -> bool {
+    value.type_id() == VariantTypeId::Scalar(expected)
+}
+
+fn is_array_attribute_value(value: &Variant, expected: VariantScalarTypeId) -> bool {
+    matches!(value.type_id(), VariantTypeId::Array(actual, _) if actual == expected)
 }
 
 /// Validate that the user given by `context` can write to the attribute given
@@ -180,9 +256,19 @@ pub fn validate_node_write(
         return Err(StatusCode::BadTypeMismatch);
     };
 
-    // TODO: We should do type validation for every attribute, not just value.
-    if let (NodeType::Variable(var), AttributeId::Value) = (node, node_to_write.attribute_id) {
-        validate_value_to_write(var, value, type_tree)?;
+    validate_attribute_value_to_write(node_to_write.attribute_id, value)?;
+
+    if node_to_write.attribute_id == AttributeId::Value {
+        match node {
+            NodeType::Variable(var) => validate_value_to_write(var, value, type_tree)?,
+            NodeType::VariableType(var_type) => validate_value_data_type_to_write(
+                var_type.data_type(),
+                var_type.value_rank(),
+                value,
+                type_tree,
+            )?,
+            _ => {}
+        }
     }
 
     Ok(())
@@ -190,9 +276,11 @@ pub fn validate_node_write(
 
 /// Return `true` if we support the given data encoding.
 ///
-/// We currently only support `Binary`.
 pub fn is_supported_data_encoding(data_encoding: &DataEncoding) -> bool {
-    matches!(data_encoding, DataEncoding::Binary)
+    matches!(
+        data_encoding,
+        DataEncoding::Binary | DataEncoding::XML | DataEncoding::JSON
+    )
 }
 
 /// Invoke `Read` for the given `node_to_read` on `node`.
@@ -292,10 +380,12 @@ pub fn write_node_value(
             );
         }
     }
-    node.as_mut_node().set_attribute(
-        node_to_write.attribute_id,
-        node_to_write.value.value.clone().unwrap_or_default(),
-    )
+
+    let value = node_to_write.value.value.clone().unwrap_or_default();
+    validate_attribute_value_to_write(node_to_write.attribute_id, &value)?;
+
+    node.as_mut_node()
+        .set_attribute(node_to_write.attribute_id, value)
 }
 
 /// Add the given list of namespaces to the type tree in `context` and

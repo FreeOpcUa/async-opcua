@@ -3,8 +3,13 @@
 use opcua_history_sqlite::{
     migration::run_migrations,
     query::{fetch_bounds, fetch_interval},
+    SqliteHistoryBackend,
 };
-use opcua_types::{BinaryEncodable, ContextOwned, DataValue, DateTime, StatusCode, Variant};
+use opcua_server::{aggregates::engine::aggregate_average, history::HistoryStorageBackend};
+use opcua_types::{
+    BinaryEncodable, ContextOwned, DataValue, DateTime, EventFilter, HistoryEventFieldList, NodeId,
+    PerformUpdateType, StatusCode, Variant,
+};
 use rusqlite::{params, Connection};
 
 fn insert_value(conn: &Connection, node_id: &str, ticks: i64, value: f64) {
@@ -27,6 +32,13 @@ fn insert_value(conn: &Connection, node_id: &str, ticks: i64, value: f64) {
 
 fn source_ticks(value: &DataValue) -> i64 {
     value.source_timestamp.expect("source timestamp").ticks()
+}
+
+fn double_value(value: &DataValue) -> f64 {
+    match value.value.as_ref().expect("value") {
+        Variant::Double(value) => *value,
+        other => panic!("expected Double, got {other:?}"),
+    }
 }
 
 #[test]
@@ -94,4 +106,77 @@ fn fetch_bounds_finds_adjacent_values() {
 
     assert_eq!(source_ticks(&previous), 200);
     assert_eq!(source_ticks(&next), 300);
+}
+
+#[tokio::test]
+async fn sqlite_backend_read_processed_computes_aggregates() {
+    let backend = SqliteHistoryBackend::new_in_memory().expect("history backend");
+    let node_id = NodeId::new(2, "AggregateValue");
+    let start_time = DateTime::from((2026, 6, 6, 2, 0, 0));
+    let values = vec![
+        DataValue::new_at(Variant::from(10.0), start_time),
+        DataValue::new_at(
+            Variant::from(20.0),
+            DateTime::from(start_time.ticks() + 5_000_000),
+        ),
+    ];
+    let statuses = backend
+        .update_data(&node_id, PerformUpdateType::Insert, values)
+        .await
+        .expect("insert data");
+    assert_eq!(
+        statuses,
+        vec![StatusCode::GoodEntryInserted, StatusCode::GoodEntryInserted]
+    );
+
+    let (processed, continuation_point) = backend
+        .read_processed(
+            &node_id,
+            start_time,
+            DateTime::from(start_time.ticks() + 10_000_000),
+            10_000.0,
+            &aggregate_average(),
+            None,
+        )
+        .await
+        .expect("read processed");
+
+    assert!(continuation_point.is_none());
+    assert_eq!(processed.len(), 1);
+    assert_eq!(double_value(&processed[0]), 15.0);
+}
+
+#[tokio::test]
+async fn sqlite_backend_read_events_returns_empty_history_events() {
+    let backend = SqliteHistoryBackend::new_in_memory().expect("history backend");
+    let node_id = NodeId::new(2, "EventSource");
+
+    let (events, continuation_point) = backend
+        .read_events(
+            &node_id,
+            DateTime::from((2026, 6, 6, 0, 0, 0)),
+            DateTime::from((2026, 6, 6, 1, 0, 0)),
+            10,
+            &EventFilter::default(),
+            None,
+        )
+        .await
+        .expect("read events");
+
+    assert!(continuation_point.is_none());
+    assert_eq!(events, Vec::<HistoryEventFieldList>::new());
+}
+
+#[tokio::test]
+async fn sqlite_backend_read_annotations_returns_empty_history_data() {
+    let backend = SqliteHistoryBackend::new_in_memory().expect("history backend");
+    let node_id = NodeId::new(2, "AnnotatedValue");
+
+    let (annotations, continuation_point) = backend
+        .read_annotations(&node_id, &[DateTime::from((2026, 6, 6, 0, 0, 0))], None)
+        .await
+        .expect("read annotations");
+
+    assert!(continuation_point.is_none());
+    assert!(annotations.is_empty());
 }

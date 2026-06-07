@@ -104,6 +104,35 @@ impl SessionSubscriptions {
         self.subscriptions.keys().copied().collect()
     }
 
+    pub(super) fn update_owner(
+        &mut self,
+        user_token: PersistentSessionKey,
+        type_tree_for_user: Arc<dyn TypeTreeForUserStatic>,
+    ) {
+        self.user_token = user_token;
+        self.type_tree_for_user = type_tree_for_user;
+        for subscription in self.subscriptions.values_mut() {
+            subscription.set_resend_data();
+        }
+    }
+
+    pub(super) fn monitored_item_refs(&self) -> Vec<MonitoredItemRef> {
+        self.subscriptions
+            .values()
+            .flat_map(Subscription::monitored_item_refs)
+            .collect()
+    }
+
+    pub(super) fn apply_revalidated_values(&mut self, values: Vec<(MonitoredItemRef, DataValue)>) {
+        let now = DateTime::now();
+        for (item, value) in values {
+            let handle = item.handle();
+            if let Some(subscription) = self.subscriptions.get_mut(&handle.subscription_id) {
+                subscription.update_monitored_item_value(handle, value, &now);
+            }
+        }
+    }
+
     pub(super) fn remove(
         &mut self,
         subscription_id: u32,

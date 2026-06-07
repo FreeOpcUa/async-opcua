@@ -48,7 +48,8 @@ pub fn sort_types_topologically(
 
     let mut queue: BTreeSet<String> = in_degree
         .iter()
-        .filter_map(|(name, degree)| (*degree == 0).then(|| name.clone()))
+        .filter(|(_, degree)| **degree == 0)
+        .map(|(name, _)| name.clone())
         .collect();
 
     let mut ordered_names = Vec::with_capacity(type_map.len());
@@ -190,7 +191,8 @@ pub fn sort_targets_topologically(
         let remaining = in_degree
             .iter()
             .enumerate()
-            .filter_map(|(idx, degree)| (*degree > 0).then(|| target_label(&targets[idx])))
+            .filter(|(_, degree)| **degree > 0)
+            .map(|(idx, _)| target_label(&targets[idx]))
             .collect::<Vec<_>>()
             .join(", ");
         return Err(CodeGenError::other(format!(

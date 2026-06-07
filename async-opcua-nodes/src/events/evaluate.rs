@@ -214,8 +214,10 @@ impl ParsedContentFilter {
                 type_tree,
             )
             .into(),
-            // TODO: Support RelatedTo. InView is not really possible until we build
-            // proper view support.
+            FilterOperator::InView => {
+                Self::in_view(self.evaluate_operand(item, type_tree, &op.operands[0])).into()
+            }
+            // TODO: Support RelatedTo.
             _ => Variant::Empty,
         }
     }
@@ -358,6 +360,14 @@ impl ParsedContentFilter {
 
         let item_type = item.get_type();
         type_tree.is_subtype_of(&item_type, &type_id)
+    }
+
+    fn in_view(lhs: Variant) -> bool {
+        match lhs {
+            Variant::NodeId(node_id) => node_id.is_null(),
+            Variant::ExpandedNodeId(expanded_node_id) => expanded_node_id.node_id.is_null(),
+            _ => false,
+        }
     }
 }
 
@@ -579,7 +589,7 @@ mod tests {
             },
             type_tree,
             false,
-            &[FilterOperator::InView, FilterOperator::RelatedTo],
+            &[FilterOperator::RelatedTo],
         );
         f.unwrap()
     }
@@ -1045,6 +1055,20 @@ mod tests {
             vec![filter_elem(
                 &[Operand::literal(ObjectTypeId::BaseEventType)],
                 FilterOperator::OfType,
+            )],
+            &type_tree,
+        );
+        let evt = event(2);
+        assert!(f.evaluate(&evt as &dyn Event, &type_tree));
+    }
+
+    #[test]
+    fn test_in_view_default_view() {
+        let type_tree = type_tree();
+        let f = filter(
+            vec![filter_elem(
+                &[Operand::literal(NodeId::null())],
+                FilterOperator::InView,
             )],
             &type_tree,
         );

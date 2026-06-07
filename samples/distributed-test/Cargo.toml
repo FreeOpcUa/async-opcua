@@ -1,0 +1,25 @@
+[package]
+name = "distributed-test"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-opcua-core = { path = "../../async-opcua-core" }
+async-opcua-server = { path = "../../async-opcua-server" }
+async-opcua-pubsub = { path = "../../async-opcua-pubsub" }
+async-opcua-types = { path = "../../async-opcua-types" }
+tokio = { workspace = true, features = ["full", "rt-multi-thread"] }
+tokio-util = { workspace = true }
+async-opcua = { path = "../../async-opcua" }
+
+[[bin]]
+name = "plc-publisher"
+path = "src/publisher.rs"
+
+[[bin]]
+name = "plc-subscriber"
+path = "src/subscriber.rs"
+
+[[bin]]
+name = "plc-server"
+path = "src/server.rs"

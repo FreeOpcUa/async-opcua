@@ -9,6 +9,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use argon2::{
+    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, SaltString},
+    Argon2,
+};
 use serde::{Deserialize, Serialize};
 use tracing::{trace, warn};
 
@@ -41,7 +45,7 @@ pub struct TcpConfig {
 pub struct ServerUserToken {
     /// User name
     pub user: String,
-    /// Password
+    /// Argon2id password hash in PHC string format.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pass: Option<String>,
     /// X509 file path (as a string)
@@ -61,9 +65,10 @@ impl ServerUserToken {
     where
         T: Into<String>,
     {
+        let pass = pass.into();
         ServerUserToken {
             user: user.into(),
-            pass: Some(pass.into()),
+            pass: Some(hash_password(&pass).expect("argon2id password hashing should succeed")),
             x509: None,
             thumbprint: None,
             read_diagnostics: false,
@@ -119,6 +124,15 @@ impl ServerUserToken {
                 "User token {id} fails to provide a password or certificate info."
             ));
         }
+        if self
+            .pass
+            .as_deref()
+            .is_some_and(|password_hash| !is_argon2id_password_hash(password_hash))
+        {
+            errors.push(format!(
+                "User token {id} password must be an Argon2id password hash."
+            ));
+        }
         if errors.is_empty() {
             Ok(())
         } else {
@@ -140,6 +154,46 @@ impl ServerUserToken {
     pub fn read_diagnostics(mut self, read: bool) -> Self {
         self.read_diagnostics = read;
         self
+    }
+}
+
+fn hash_password(password: &str) -> Result<String, argon2::password_hash::Error> {
+    let salt = SaltString::generate(&mut OsRng);
+    Argon2::default()
+        .hash_password(password.as_bytes(), &salt)
+        .map(|hash| hash.to_string())
+}
+
+fn is_argon2id_password_hash(password_hash: &str) -> bool {
+    password_hash.starts_with("$argon2id$") && PasswordHash::new(password_hash).is_ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn user_pass_stores_password_hash_not_plaintext() {
+        let token = ServerUserToken::user_pass("brew-operator", "correct-password");
+        let stored_password = token.pass.as_deref().expect("password hash should be set");
+
+        assert_ne!(stored_password, "correct-password");
+        assert!(stored_password.starts_with("$argon2id$"));
+    }
+
+    #[test]
+    fn plaintext_password_configuration_is_invalid() {
+        let token = ServerUserToken {
+            user: "brew-operator".to_string(),
+            pass: Some("correct-password".to_string()),
+            ..Default::default()
+        };
+
+        let errors = token
+            .validate("operator-token")
+            .expect_err("plaintext password should be rejected");
+
+        assert!(errors.iter().any(|error| error.contains("password hash")));
     }
 }
 
@@ -192,6 +246,9 @@ pub struct ServerConfig {
     pub discovery_server_url: Option<String>,
     /// tcp configuration information
     pub tcp_config: TcpConfig,
+    /// Maximum number of active TCP connections before new incoming sockets are closed.
+    #[serde(default = "defaults::max_connections")]
+    pub max_connections: usize,
     /// Server OPA UA limits
     #[serde(default)]
     pub limits: Limits,
@@ -284,6 +341,10 @@ mod defaults {
     pub(super) fn reverse_connect_failure_delay_ms() -> u64 {
         30_000
     }
+
+    pub(super) fn max_connections() -> usize {
+        constants::MAX_CONNECTIONS
+    }
 }
 
 impl Config for ServerConfig {
@@ -334,6 +395,9 @@ impl Config for ServerConfig {
             errors.push(
                 "Server configuration is invalid. Max byte string length is invalid".to_owned(),
             );
+        }
+        if self.max_connections == 0 {
+            errors.push("Server configuration is invalid. Max connections is invalid".to_owned());
         }
         if self.discovery_urls.is_empty() {
             errors.push("Server configuration is invalid. Discovery urls not set".to_owned());
@@ -401,6 +465,7 @@ impl Default for ServerConfig {
                 port: constants::DEFAULT_RUST_OPC_UA_SERVER_PORT,
                 hello_timeout: constants::DEFAULT_HELLO_TIMEOUT_SECONDS,
             },
+            max_connections: defaults::max_connections(),
             limits: Limits::default(),
             user_tokens: BTreeMap::new(),
             locale_ids: vec!["en".to_string()],

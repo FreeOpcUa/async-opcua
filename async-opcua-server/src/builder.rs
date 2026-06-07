@@ -83,7 +83,9 @@ impl ServerBuilder {
     /// Creates and yields a builder which is configured with the sample server configuration.
     /// Use this for testing and similar reasons. Do not rely upon this in production code because it could change.
     pub fn new_sample() -> Self {
-        warn!("Sample configuration is for testing purposes only. Use a proper configuration in your production environment");
+        warn!(
+            "Sample configuration is for testing purposes only. Use a proper configuration in your production environment"
+        );
 
         let user_token_ids = vec![
             ANONYMOUS_USER_TOKEN_ID,
@@ -103,11 +105,7 @@ impl ServerBuilder {
             .discovery_server_url(constants::DEFAULT_DISCOVERY_SERVER_URL)
             .add_user_token(
                 "sample_password_user",
-                ServerUserToken {
-                    user: "sample1".to_string(),
-                    pass: Some("sample1pwd".to_string()),
-                    ..Default::default()
-                },
+                ServerUserToken::user_pass("sample1", "sample1pwd"),
             )
             .add_user_token(
                 "sample_x509_user",
@@ -380,6 +378,12 @@ impl ServerBuilder {
     /// is closed.
     pub fn hello_timeout(mut self, timeout: u32) -> Self {
         self.config.tcp_config.hello_timeout = timeout;
+        self
+    }
+
+    /// Maximum number of active TCP connections accepted by the server.
+    pub fn max_connections(mut self, max_connections: usize) -> Self {
+        self.config.max_connections = max_connections;
         self
     }
 

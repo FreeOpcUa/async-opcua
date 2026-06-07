@@ -2,12 +2,13 @@
 
 use std::{
     fs,
+    future::Future,
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
     },
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use async_trait::async_trait;
@@ -17,15 +18,21 @@ use opcua_crypto::{
     AlternateNames, CertificateStore, KeySize, PrivateKey, SecurityPolicy, X509Data, X509,
 };
 use opcua_server::{
-    authenticator::{issued_token_security_policy, AuthManager},
+    authenticator::{issued_token_security_policy, user_pass_security_policy_id, AuthManager},
     authorization::SessionAuthorizationProfile,
     security::validate_security_policy,
-    ServerBuilder, ServerConfig, ServerEndpoint, ServerHandle, ANONYMOUS_USER_TOKEN_ID,
+    services::security::{
+        GetSecurityKeysRequest, GetSecurityKeysResponse, SecurityGroupKeys, SecurityKeyService,
+        CURRENT_SECURITY_TOKEN_ID,
+    },
+    ServerBuilder, ServerConfig, ServerEndpoint, ServerHandle, ServerUserToken,
+    ANONYMOUS_USER_TOKEN_ID,
 };
 use opcua_types::{
     issued_token_types, ActivateSessionRequest, ApplicationDescription, ApplicationType,
     ByteString, EndpointDescription, Error, ExtensionObject, IssuedIdentityToken, LocalizedText,
-    MessageSecurityMode, SignatureData, StatusCode, UAString, UserTokenPolicy, UserTokenType,
+    MessageSecurityMode, SignatureData, StatusCode, UAString, UserNameIdentityToken,
+    UserTokenPolicy, UserTokenType,
 };
 use serde_json::{json, Value};
 use tokio::net::TcpListener;
@@ -33,8 +40,173 @@ use tokio::net::TcpListener;
 const OAUTH2_PATH: &str = "/oauth2";
 const OAUTH2_ISSUER: &str = "https://issuer.example";
 const OAUTH2_AUDIENCE: &str = "opcua-server";
+const PUBSUB_SECURITY_POLICY_URI: &str =
+    "http://opcfoundation.org/UA/SecurityPolicy#Aes256_Sha256_RsaPss";
+const AUTH_FAILURE_TARPIT_MIN: Duration = Duration::from_millis(100);
+const AUTH_FAILURE_TARPIT_TIMEOUT: Duration = Duration::from_secs(1);
 
 static NEXT_TEST_ID: AtomicUsize = AtomicUsize::new(0);
+
+async fn assert_tarpitted_auth_failure<T>(
+    auth: impl Future<Output = Result<T, Error>>,
+    failure: &str,
+) -> Error {
+    let started = Instant::now();
+    tokio::pin!(auth);
+
+    tokio::select! {
+        result = &mut auth => {
+            let status = result.err().map(|err| err.status());
+            panic!("{failure} returned before tarpitting; status={status:?}");
+        }
+        probe = tokio::time::timeout(Duration::from_millis(10), tokio::task::yield_now()) => {
+            assert!(probe.is_ok(), "auth tarpit must not block the current-thread runtime");
+        }
+    }
+
+    let result = tokio::time::timeout(AUTH_FAILURE_TARPIT_TIMEOUT, &mut auth)
+        .await
+        .expect("auth failure tarpit should complete");
+    let err = match result {
+        Ok(_) => panic!("{failure} should be rejected"),
+        Err(err) => err,
+    };
+
+    assert_eq!(err.status(), StatusCode::BadUserAccessDenied);
+    assert!(
+        started.elapsed() >= AUTH_FAILURE_TARPIT_MIN,
+        "{failure} returned before the minimum tarpit delay"
+    );
+    err
+}
+
+#[test]
+fn get_security_keys_contract_matches_part14_signature() {
+    let request = GetSecurityKeysRequest::new("group-1", CURRENT_SECURITY_TOKEN_ID, 2);
+
+    assert_eq!(request.security_group_id.as_ref(), "group-1");
+    assert_eq!(request.starting_token_id, CURRENT_SECURITY_TOKEN_ID);
+    assert_eq!(request.requested_key_count, 2);
+
+    let response = GetSecurityKeysResponse::new(
+        "http://opcfoundation.org/UA/SecurityPolicy#Aes256_Sha256_RsaPss",
+        7,
+        vec![
+            ByteString::from(b"current-key"),
+            ByteString::from(b"next-key"),
+        ],
+        500.0,
+        1_000.0,
+    );
+
+    assert_eq!(
+        response.security_policy_uri.as_ref(),
+        "http://opcfoundation.org/UA/SecurityPolicy#Aes256_Sha256_RsaPss"
+    );
+    assert_eq!(response.first_token_id, 7);
+    assert_eq!(response.keys.len(), 2);
+    assert_eq!(response.time_to_next_key, 500.0);
+    assert_eq!(response.key_lifetime, 1_000.0);
+}
+
+#[test]
+fn get_security_keys_handler_returns_current_and_future_keys() {
+    let service = SecurityKeyService::new();
+    service
+        .register_security_group("group-1", security_group_keys(7))
+        .unwrap();
+
+    let response = service
+        .get_security_keys(GetSecurityKeysRequest::new(
+            "group-1",
+            CURRENT_SECURITY_TOKEN_ID,
+            2,
+        ))
+        .unwrap();
+
+    assert_eq!(
+        response.security_policy_uri.as_ref(),
+        PUBSUB_SECURITY_POLICY_URI
+    );
+    assert_eq!(response.first_token_id, 7);
+    assert_eq!(response.keys, key_bytes(&["current-key", "next-key"]));
+    assert!(response.time_to_next_key <= 60_000.0);
+    assert!(response.time_to_next_key > 59_000.0);
+    assert_eq!(response.key_lifetime, 60_000.0);
+}
+
+#[test]
+fn get_security_keys_handler_can_start_at_future_token() {
+    let service = SecurityKeyService::new();
+    service
+        .register_security_group("group-1", security_group_keys(7))
+        .unwrap();
+
+    let response = service
+        .get_security_keys(GetSecurityKeysRequest::new("group-1", 8, 2))
+        .unwrap();
+
+    assert_eq!(response.first_token_id, 8);
+    assert_eq!(response.keys, key_bytes(&["next-key"]));
+}
+
+#[test]
+fn get_security_keys_handler_rejects_unknown_group() {
+    let service = SecurityKeyService::new();
+
+    let error = service
+        .get_security_keys(GetSecurityKeysRequest::new(
+            "missing",
+            CURRENT_SECURITY_TOKEN_ID,
+            1,
+        ))
+        .unwrap_err();
+
+    assert_eq!(error, StatusCode::BadNotFound);
+}
+
+#[test]
+fn get_security_keys_handler_rejects_invalid_requests() {
+    let service = SecurityKeyService::new();
+    service
+        .register_security_group("group-1", security_group_keys(7))
+        .unwrap();
+
+    let empty_group = service
+        .get_security_keys(GetSecurityKeysRequest::new(
+            "",
+            CURRENT_SECURITY_TOKEN_ID,
+            1,
+        ))
+        .unwrap_err();
+    let zero_count = service
+        .get_security_keys(GetSecurityKeysRequest::new(
+            "group-1",
+            CURRENT_SECURITY_TOKEN_ID,
+            0,
+        ))
+        .unwrap_err();
+
+    assert_eq!(empty_group, StatusCode::BadInvalidArgument);
+    assert_eq!(zero_count, StatusCode::BadInvalidArgument);
+}
+
+fn security_group_keys(first_token_id: u32) -> SecurityGroupKeys {
+    SecurityGroupKeys::with_current_key_started_at(
+        PUBSUB_SECURITY_POLICY_URI,
+        first_token_id,
+        key_bytes(&["current-key", "next-key"]),
+        Duration::from_secs(60),
+        Instant::now(),
+    )
+    .unwrap()
+}
+
+fn key_bytes(keys: &[&str]) -> Vec<ByteString> {
+    keys.iter()
+        .map(|key| ByteString::from(key.as_bytes()))
+        .collect()
+}
 
 struct TempPath {
     path: PathBuf,
@@ -262,6 +434,7 @@ impl OAuth2Fixture {
             .product_uri("urn:oauth2-security-test-server")
             .host("127.0.0.1")
             .pki_dir(pki.path())
+            .create_sample_keypair(true)
             .discovery_urls(vec!["opc.tcp://127.0.0.1:4855/oauth2".to_string()])
             .oauth2_issuer(OAUTH2_ISSUER)
             .oauth2_audience(OAUTH2_AUDIENCE)
@@ -298,6 +471,39 @@ impl OAuth2Fixture {
             .map(|(user_token, _claims)| user_token)
     }
 
+    async fn authenticate_encrypted_token(
+        &self,
+        encrypted_token: ByteString,
+        encryption_algorithm: UAString,
+    ) -> Result<opcua_server::authenticator::UserToken, Error> {
+        let request = activate_session_request_with_issued_token(IssuedIdentityToken {
+            policy_id: self.policy_id.clone(),
+            token_data: encrypted_token,
+            encryption_algorithm,
+        });
+        self.handle
+            .info()
+            .authenticate_endpoint(
+                &request,
+                &self.endpoint_url,
+                SecurityPolicy::None,
+                MessageSecurityMode::None,
+                request.user_identity_token.clone(),
+                &ByteString::null(),
+            )
+            .await
+            .map(|(user_token, _claims)| user_token)
+    }
+
+    fn server_private_key(&self) -> PrivateKey {
+        self.handle
+            .info()
+            .server_pkey
+            .read()
+            .clone()
+            .expect("test server should have a private key")
+    }
+
     async fn authenticate_with_claims(
         &self,
         token: &str,
@@ -326,6 +532,66 @@ impl OAuth2Fixture {
                     claims.expect("OAuth2 authentication should return claims"),
                 )
             })
+    }
+}
+
+struct PasswordFixture {
+    endpoint_url: String,
+    handle: ServerHandle,
+    policy_id: UAString,
+    _pki: TempPath,
+}
+
+impl PasswordFixture {
+    fn new() -> Self {
+        const PASSWORD_PATH: &str = "/password";
+        const PASSWORD_USER_TOKEN_ID: &str = "password-user";
+
+        let pki = TempPath::new("password-pki");
+        let endpoint = ServerEndpoint::new_none(PASSWORD_PATH, &[PASSWORD_USER_TOKEN_ID.into()]);
+        let policy_id = user_pass_security_policy_id(&endpoint);
+        let (_server, handle) = ServerBuilder::new()
+            .without_node_managers()
+            .application_name("Password Security Test Server")
+            .application_uri("urn:password-security-test-server")
+            .product_uri("urn:password-security-test-server")
+            .host("127.0.0.1")
+            .pki_dir(pki.path())
+            .discovery_urls(vec!["opc.tcp://127.0.0.1:4856/password".to_string()])
+            .add_user_token(
+                PASSWORD_USER_TOKEN_ID,
+                ServerUserToken::user_pass("brew-operator", "correct-password"),
+            )
+            .add_endpoint("password", endpoint)
+            .build()
+            .expect("password security test server should build");
+
+        Self {
+            endpoint_url: format!("{}{}", handle.info().base_endpoint(), PASSWORD_PATH),
+            handle,
+            policy_id,
+            _pki: pki,
+        }
+    }
+
+    async fn authenticate(&self, username: &str, password: &str) -> Result<(), Error> {
+        let request = activate_session_request_with_username_token(
+            self.policy_id.clone(),
+            username,
+            password,
+        );
+        self.handle
+            .info()
+            .authenticate_endpoint(
+                &request,
+                &self.endpoint_url,
+                SecurityPolicy::None,
+                MessageSecurityMode::None,
+                request.user_identity_token.clone(),
+                &ByteString::null(),
+            )
+            .await
+            .map(|_| ())
     }
 }
 
@@ -364,14 +630,40 @@ fn oauth2_cert_and_key(common_name: &str) -> (X509, PrivateKey) {
 }
 
 fn activate_session_request(token: &str, policy_id: UAString) -> ActivateSessionRequest {
+    activate_session_request_with_issued_token(IssuedIdentityToken {
+        policy_id,
+        token_data: ByteString::from(token.as_bytes()),
+        encryption_algorithm: UAString::null(),
+    })
+}
+
+fn activate_session_request_with_issued_token(
+    token: IssuedIdentityToken,
+) -> ActivateSessionRequest {
     ActivateSessionRequest {
         request_header: Default::default(),
         client_signature: SignatureData::null(),
         client_software_certificates: None,
         locale_ids: None,
-        user_identity_token: ExtensionObject::from_message(IssuedIdentityToken {
+        user_identity_token: ExtensionObject::from_message(token),
+        user_token_signature: SignatureData::null(),
+    }
+}
+
+fn activate_session_request_with_username_token(
+    policy_id: UAString,
+    username: &str,
+    password: &str,
+) -> ActivateSessionRequest {
+    ActivateSessionRequest {
+        request_header: Default::default(),
+        client_signature: SignatureData::null(),
+        client_software_certificates: None,
+        locale_ids: None,
+        user_identity_token: ExtensionObject::from_message(UserNameIdentityToken {
             policy_id,
-            token_data: ByteString::from(token.as_bytes()),
+            user_name: UAString::from(username),
+            password: ByteString::from(password.as_bytes()),
             encryption_algorithm: UAString::null(),
         }),
         user_token_signature: SignatureData::null(),
@@ -390,6 +682,20 @@ fn signed_jwt(payload: Value, private_key: &PrivateKey) -> String {
     let encoded_signature = URL_SAFE_NO_PAD.encode(&signature[..signature_len]);
 
     format!("{signing_input}.{encoded_signature}")
+}
+
+fn rsa_oaep_encrypt(
+    policy: SecurityPolicy,
+    private_key: &PrivateKey,
+    plaintext: &[u8],
+) -> ByteString {
+    let public_key = private_key.to_public_key();
+    let mut ciphertext = vec![0u8; policy.calculate_cipher_text_size(plaintext.len(), &public_key)];
+    let ciphertext_len = policy
+        .asymmetric_encrypt(&public_key, plaintext, &mut ciphertext)
+        .expect("RSA-OAEP test encryption should succeed");
+    ciphertext.truncate(ciphertext_len);
+    ByteString::from(ciphertext)
 }
 
 fn future_expiration() -> i64 {
@@ -506,6 +812,81 @@ async fn oauth2_invalid_jwts_are_rejected() {
             .await
             .expect_err("invalid OAuth2 JWT should be rejected");
 
-        assert_eq!(err.status(), StatusCode::BadIdentityTokenRejected);
+        assert_eq!(err.status(), StatusCode::BadUserAccessDenied);
     }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn invalid_oauth2_jwt_validation_failure_is_tarpitted() {
+    let fixture = OAuth2Fixture::new();
+    let token = signed_jwt(
+        json!({
+            "iss": OAUTH2_ISSUER,
+            "aud": OAUTH2_AUDIENCE,
+            "exp": past_expiration(),
+            "sub": "brew-operator"
+        }),
+        &fixture.private_key,
+    );
+
+    assert_tarpitted_auth_failure(fixture.authenticate(&token), "invalid OAuth2 JWT").await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn username_password_auth_failure_is_tarpitted() {
+    let fixture = PasswordFixture::new();
+
+    assert_tarpitted_auth_failure(
+        fixture.authenticate("brew-operator", "wrong-password"),
+        "invalid username password",
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn oauth2_rsa_oaep_encrypted_secret_authenticates() {
+    let fixture = OAuth2Fixture::new();
+    let token = format!(
+        "Bearer {}",
+        signed_jwt(
+            json!({
+                "iss": OAUTH2_ISSUER,
+                "aud": OAUTH2_AUDIENCE,
+                "exp": future_expiration(),
+                "sub": "brew-operator"
+            }),
+            &fixture.private_key,
+        )
+    );
+    let policy = SecurityPolicy::Aes128Sha256RsaOaep;
+    let encrypted_token = rsa_oaep_encrypt(policy, &fixture.server_private_key(), token.as_bytes());
+    let encryption_algorithm = UAString::from(
+        policy
+            .asymmetric_encryption_algorithm()
+            .expect("Aes128Sha256RsaOaep should define RSA-OAEP encryption"),
+    );
+
+    let user_token = fixture
+        .authenticate_encrypted_token(encrypted_token, encryption_algorithm)
+        .await
+        .expect("valid encrypted OAuth2 token should authenticate");
+
+    assert_eq!(user_token.0, "brew-operator");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn encrypted_secret_decryption_failure_is_tarpitted() {
+    let fixture = OAuth2Fixture::new();
+    let invalid_ciphertext = ByteString::from(vec![0xa5; 256]);
+    let encryption_algorithm = UAString::from(
+        SecurityPolicy::Aes128Sha256RsaOaep
+            .asymmetric_encryption_algorithm()
+            .expect("Aes128Sha256RsaOaep should define RSA-OAEP encryption"),
+    );
+
+    assert_tarpitted_auth_failure(
+        fixture.authenticate_encrypted_token(invalid_ciphertext, encryption_algorithm),
+        "decryption failure",
+    )
+    .await;
 }

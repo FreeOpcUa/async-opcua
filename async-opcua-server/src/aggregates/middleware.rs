@@ -1,11 +1,10 @@
 //! Aggregate history read middleware (Part 13).
 //! Intercepts processed history read requests and computes aggregates from raw backend data.
 
-use crate::aggregates::engine::{calculate_aggregate, get_value_timestamp, partition_intervals};
 use crate::history::HistoryStorageBackend;
 use crate::node_manager::HistoryNode;
 use crate::node_manager::RequestContext;
-use opcua_types::{DataValue, HistoryData, ReadProcessedDetails, StatusCode, TimestampsToReturn};
+use opcua_types::{HistoryData, ReadProcessedDetails, StatusCode, TimestampsToReturn};
 use std::sync::Arc;
 
 /// Processes historical data and computes aggregates for each requested history node.
@@ -32,80 +31,25 @@ pub async fn read_processed_aggregates(
             return Err(StatusCode::BadAggregateNotSupported);
         };
 
-        // Read all raw values from the backend for the range
-        let mut raw_values = Vec::new();
-        let mut next_token = None;
-        let mut read_failed = false;
-        loop {
-            let res = backend
-                .read_raw_modified(
-                    node_id,
-                    details.start_time,
-                    details.end_time,
-                    100000, // Read a large number of values to ensure we get all data in this window
-                    false,
-                    next_token,
-                )
-                .await;
-
-            match res {
-                Ok((values, token)) => {
-                    raw_values.extend(values);
-                    if token.is_none() {
-                        break;
-                    }
-                    next_token = token;
-                }
-                Err(status) => {
-                    hn.set_status(status);
-                    read_failed = true;
-                    break;
-                }
+        match backend
+            .read_processed(
+                node_id,
+                details.start_time,
+                details.end_time,
+                details.processing_interval,
+                &aggregate_type,
+                None,
+            )
+            .await
+        {
+            Ok((processed_values, _continuation_point)) => {
+                hn.set_result(HistoryData {
+                    data_values: Some(processed_values),
+                });
+                hn.set_status(StatusCode::Good);
             }
+            Err(status) => hn.set_status(status),
         }
-
-        if read_failed {
-            continue;
-        }
-
-        // Sort raw values chronologically by timestamp
-        raw_values.sort_by_key(|v| get_value_timestamp(v));
-
-        // Generate intervals
-        let intervals = partition_intervals(
-            details.start_time,
-            details.end_time,
-            details.processing_interval,
-        );
-
-        let mut processed_values = Vec::new();
-
-        for (int_start, int_end) in intervals {
-            let (min_t, max_t) = if int_start <= int_end {
-                (int_start, int_end)
-            } else {
-                (int_end, int_start)
-            };
-
-            // Filter raw values inside this interval
-            let values_in_interval: Vec<&DataValue> = raw_values
-                .iter()
-                .filter(|v| {
-                    let t = get_value_timestamp(v);
-                    t >= min_t && t < max_t
-                })
-                .collect();
-
-            // Calculate aggregate
-            let result_dv =
-                calculate_aggregate(&values_in_interval, &aggregate_type, int_start, int_end);
-            processed_values.push(result_dv);
-        }
-
-        hn.set_result(HistoryData {
-            data_values: Some(processed_values),
-        });
-        hn.set_status(StatusCode::Good);
     }
 
     Ok(())

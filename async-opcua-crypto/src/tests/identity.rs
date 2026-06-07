@@ -11,9 +11,11 @@ use serde_json::json;
 
 use crate::{
     certificate_store::CertificateStore,
-    identity::{ClaimProfile, LocalOAuth2Validator, OAuth2IdentityValidator},
+    identity::{
+        decrypt_rsa_oaep_secret, ClaimProfile, LocalOAuth2Validator, OAuth2IdentityValidator,
+    },
     tests::{make_certificate_store, make_test_cert_2048},
-    PrivateKey,
+    KeySize, PrivateKey, SecurityPolicy,
 };
 use opcua_types::status_code::StatusCode;
 
@@ -129,4 +131,52 @@ fn local_oauth2_validator_rejects_invalid_audience() {
         validator.validate_token(&token),
         Err(StatusCode::BadIdentityTokenRejected)
     ));
+}
+
+fn rsa_encrypt(policy: SecurityPolicy, private_key: &PrivateKey, plaintext: &[u8]) -> Vec<u8> {
+    let public_key = private_key.to_public_key();
+    let mut ciphertext = vec![0u8; policy.calculate_cipher_text_size(plaintext.len(), &public_key)];
+    let ciphertext_len = policy
+        .asymmetric_encrypt(&public_key, plaintext, &mut ciphertext)
+        .unwrap();
+    ciphertext.truncate(ciphertext_len);
+    ciphertext
+}
+
+#[test]
+fn rsa_oaep_secret_decrypts_supported_algorithms() {
+    let private_key = PrivateKey::new(2048).unwrap();
+    let secret = b"operator-password";
+
+    for (policy, algorithm) in [
+        (
+            SecurityPolicy::Aes128Sha256RsaOaep,
+            crate::algorithms::ENC_RSA_OAEP,
+        ),
+        (
+            SecurityPolicy::Aes256Sha256RsaPss,
+            crate::algorithms::ENC_RSA_OAEP_SHA256,
+        ),
+    ] {
+        let ciphertext = rsa_encrypt(policy, &private_key, secret);
+
+        let plaintext = decrypt_rsa_oaep_secret(algorithm, &ciphertext, &private_key).unwrap();
+
+        assert_eq!(plaintext, secret);
+    }
+}
+
+#[test]
+fn rsa_oaep_secret_rejects_partial_ciphertext_block() {
+    let private_key = PrivateKey::new(2048).unwrap();
+    let short_ciphertext = vec![0u8; private_key.cipher_text_block_size() - 1];
+
+    let err = decrypt_rsa_oaep_secret(
+        crate::algorithms::ENC_RSA_OAEP,
+        &short_ciphertext,
+        &private_key,
+    )
+    .unwrap_err();
+
+    assert_eq!(err.status(), StatusCode::BadIdentityTokenInvalid);
 }

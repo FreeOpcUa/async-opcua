@@ -86,6 +86,9 @@ impl SessionManager {
             return Err(StatusCode::BadTcpEndpointUrlInvalid);
         };
 
+        self.info
+            .validate_endpoint_hostname(request.endpoint_url.as_ref())?;
+
         let security_policy = channel.security_policy();
 
         if !matches!(security_policy, SecurityPolicy::None)
@@ -376,7 +379,7 @@ pub(crate) async fn activate_session(
         )
         .await?;
 
-    let (server_nonce, session_id) = {
+    let (server_nonce, session_id, user_changed) = {
         let mut session = trace_write_lock!(session_lck);
 
         if !session.is_activated() && session.secure_channel_id() != secure_channel_id {
@@ -387,11 +390,9 @@ pub(crate) async fn activate_session(
             //  token
         }
 
-        // TODO: If the user identity changed here, we need to re-check permissions for any created monitored items.
-        // It may be possible to just create a "fake" UserAccessLevel for each monitored item and pass it to the auth manager.
-        // The standard also mentions that a server may need to
-        // "Tear down connections to an underlying system and re-establish them using the new credentials". We need some way to
-        // handle this eventuality, perhaps a dedicated node-manager endpoint that can be called here.
+        let user_changed = session
+            .user_token()
+            .is_some_and(|previous| previous != &user_token);
         session.activate(
             secure_channel_id,
             server_nonce,
@@ -403,12 +404,20 @@ pub(crate) async fn activate_session(
         (
             session.session_nonce().clone(),
             session.session_id_numeric(),
+            user_changed,
         )
     };
 
-    let namespaces = handler.get_namespaces_for_user(session_lck.clone(), session_id, user_token);
+    let namespaces =
+        handler.get_namespaces_for_user(session_lck.clone(), session_id, user_token.clone());
     {
         channel.set_namespaces(namespaces);
+    }
+
+    if user_changed {
+        handler
+            .revalidate_monitored_items_for_user(session_lck, session_id, user_token)
+            .await;
     }
 
     // TODO: Audit

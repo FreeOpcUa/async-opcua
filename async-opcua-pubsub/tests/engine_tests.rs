@@ -1,13 +1,19 @@
 //! PubSub engine coordinator tests.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use opcua_core::sync::RwLock;
+use opcua_crypto::SecurityPolicy;
 use opcua_pubsub::{
-    engine::PubSubEngine, PubSubConnectionConfig, TransportKind, WriterGroupConfig,
+    engine::PubSubEngine, PubSubConnectionConfig, PublisherId, SecurityGroup, TransportKind,
+    UadpDataSetMessage, UadpNetworkMessage, UadpSecurityCodec, WriterGroupConfig,
 };
 use opcua_server::address_space::AddressSpace;
-use opcua_types::StatusCode;
+use opcua_types::{
+    BinaryDecodable, BinaryEncodable, ContextOwned, DateTime, MessageSecurityMode, StatusCode,
+    Variant,
+};
 
 fn empty_connection(connection_id: &str, address: &str) -> PubSubConnectionConfig {
     PubSubConnectionConfig {
@@ -76,4 +82,89 @@ fn start_rejects_unknown_transport_without_marking_engine_running() {
     assert_eq!(engine.start().unwrap_err(), StatusCode::BadInvalidArgument);
     assert!(!engine.is_running());
     assert_eq!(engine.active_handle_count(), 0);
+}
+
+#[test]
+fn encodes_publisher_uadp_with_registered_security_group() {
+    let ctx_owned = ContextOwned::default();
+    let ctx = ctx_owned.context();
+    let mut engine = PubSubEngine::new(address_space());
+    let security_group = SecurityGroup::new("group-1", Duration::from_secs(3600)).unwrap();
+    let key_set = security_group.current_key_set().clone();
+    engine.register_security_group(security_group);
+
+    let message = UadpNetworkMessage {
+        publisher_id: PublisherId::String("publisher-1".to_string()),
+        writer_group_id: 1,
+        dataset_messages: vec![UadpDataSetMessage {
+            dataset_writer_id: 10,
+            sequence_number: 1,
+            timestamp: Some(DateTime::now()),
+            status: Some(StatusCode::Good),
+            fields: vec![Variant::from(42.0f64)],
+        }],
+    };
+
+    let secured = engine
+        .sign_publisher_uadp_message(
+            "group-1",
+            SecurityPolicy::Aes256Sha256RsaPss,
+            &message,
+            &ctx,
+        )
+        .unwrap();
+
+    assert_ne!(secured, message.encode_to_vec(&ctx));
+    assert!(UadpNetworkMessage::decode(&mut &secured[..], &ctx).is_err());
+
+    let decoded = UadpSecurityCodec::new(
+        MessageSecurityMode::Sign,
+        SecurityPolicy::Aes256Sha256RsaPss,
+        key_set,
+    )
+    .decode_network_message(&secured, &ctx)
+    .unwrap();
+    assert_eq!(decoded, message);
+}
+
+#[test]
+fn decodes_subscriber_uadp_with_registered_security_group() {
+    let ctx_owned = ContextOwned::default();
+    let ctx = ctx_owned.context();
+    let mut engine = PubSubEngine::new(address_space());
+    let security_group = SecurityGroup::new("group-1", Duration::from_secs(3600)).unwrap();
+    let key_set = security_group.current_key_set().clone();
+    engine.register_security_group(security_group);
+
+    let message = UadpNetworkMessage {
+        publisher_id: PublisherId::String("publisher-1".to_string()),
+        writer_group_id: 1,
+        dataset_messages: vec![UadpDataSetMessage {
+            dataset_writer_id: 10,
+            sequence_number: 1,
+            timestamp: Some(DateTime::now()),
+            status: Some(StatusCode::Good),
+            fields: vec![Variant::from(42.0f64)],
+        }],
+    };
+
+    let secured = UadpSecurityCodec::new(
+        MessageSecurityMode::SignAndEncrypt,
+        SecurityPolicy::Aes256Sha256RsaPss,
+        key_set,
+    )
+    .encode_network_message(&message, &ctx)
+    .unwrap();
+
+    let decoded = engine
+        .decode_subscriber_uadp_message(
+            "group-1",
+            MessageSecurityMode::SignAndEncrypt,
+            SecurityPolicy::Aes256Sha256RsaPss,
+            &secured,
+            &ctx,
+        )
+        .unwrap();
+
+    assert_eq!(decoded, message);
 }

@@ -267,6 +267,13 @@ async fn find_servers() {
     assert_eq!(s.application_name.text.as_ref(), "integration_server");
     assert_eq!(s.application_uri.as_ref(), "urn:integration_server");
     assert_eq!(s.product_uri.as_ref(), "urn:integration_server Testkit");
+
+    let servers = tester
+        .client
+        .find_servers(tester.endpoint(), Some(vec!["fr-FR".into()]), None)
+        .await
+        .unwrap();
+    assert!(servers.is_empty());
 }
 
 #[tokio::test]
@@ -279,6 +286,13 @@ async fn discovery_test() {
         .await
         .unwrap();
     assert_eq!(endpoints.len(), 11);
+
+    let endpoints = tester
+        .client
+        .get_endpoints(tester.endpoint(), &["fr-FR"], &[])
+        .await
+        .unwrap();
+    assert!(endpoints.is_empty());
 
     // Get with wrong profile URIs
     let endpoints = tester

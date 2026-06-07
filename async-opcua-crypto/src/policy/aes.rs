@@ -22,6 +22,21 @@ pub struct AesDerivedKeys {
     initialization_vector: Vec<u8>,
 }
 
+impl AesDerivedKeys {
+    /// Creates AES derived keys from already-distributed symmetric key material.
+    pub fn from_parts(
+        signing_key: Vec<u8>,
+        encryption_key: AesKey,
+        initialization_vector: Vec<u8>,
+    ) -> Self {
+        Self {
+            signing_key,
+            encryption_key,
+            initialization_vector,
+        }
+    }
+}
+
 impl<T: AesSecurityPolicy> AesPolicy<T> {
     fn prf(secret: &[u8], seed: &[u8], length: usize, offset: usize) -> Vec<u8> {
         let r = T::AsymmetricSignature::prf(secret, seed, length + offset);

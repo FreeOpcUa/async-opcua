@@ -4,18 +4,22 @@ use chrono::Utc;
 use opcua_core::{Message, RequestMessage, ResponseMessage};
 use parking_lot::RwLock;
 use tokio::task::JoinHandle;
-use tracing::{debug, warn};
+use tracing::{debug, debug_span, warn};
+use tracing_futures::Instrument;
 
 use crate::{
     authenticator::UserToken,
     info::ServerInfo,
-    node_manager::{get_namespaces_for_user, NodeManagers, RequestContext, RequestContextInner},
+    node_manager::{
+        get_namespaces_for_user, MonitoredItemRef, NodeManagers, ReadNode, RequestContext,
+        RequestContextInner,
+    },
     session::services,
     subscriptions::{PendingPublish, SubscriptionCache},
 };
 use opcua_types::{
-    NamespaceMap, PublishRequest, ResponseHeader, ServiceFault, SetTriggeringRequest,
-    SetTriggeringResponse, StatusCode,
+    AttributeId, NamespaceMap, PublishRequest, ReadValueId, ResponseHeader, ServiceFault,
+    SetTriggeringRequest, SetTriggeringResponse, StatusCode, TimestampsToReturn,
 };
 
 use super::{controller::Response, instance::Session};
@@ -391,6 +395,143 @@ impl MessageHandler {
         .await
         {
             warn!("Cleaning up session subscriptions failed: {e}");
+        }
+    }
+
+    pub(super) async fn revalidate_monitored_items_for_user(
+        &mut self,
+        session: Arc<RwLock<Session>>,
+        session_id: u32,
+        token: UserToken,
+    ) {
+        let context = RequestContext {
+            current_node_manager_index: 0,
+            inner: Arc::new(RequestContextInner {
+                session,
+                session_id,
+                authenticator: self.info.authenticator.clone(),
+                token,
+                type_tree: self.info.type_tree.clone(),
+                subscriptions: self.subscriptions.clone(),
+                info: self.info.clone(),
+                type_tree_getter: self.info.type_tree_getter.clone(),
+            }),
+        };
+
+        self.subscriptions.update_session_user(session_id, &context);
+
+        struct RevalidationItem {
+            item: MonitoredItemRef,
+            read: ReadNode,
+        }
+
+        let mut items = self
+            .subscriptions
+            .get_session_monitored_items(session_id)
+            .into_iter()
+            .map(|item| {
+                let read = ReadNode::new(
+                    ReadValueId {
+                        node_id: item.node_id().clone(),
+                        attribute_id: item.attribute() as u32,
+                        ..Default::default()
+                    },
+                    Default::default(),
+                );
+                RevalidationItem { item, read }
+            })
+            .collect::<Vec<_>>();
+
+        if items.is_empty() {
+            return;
+        }
+
+        for (idx, node_manager) in self.node_managers.iter().enumerate() {
+            let mut owned = items
+                .iter_mut()
+                .filter(|item| {
+                    item.read.status() == StatusCode::BadNodeIdUnknown
+                        && node_manager.owns_node(item.item.node_id())
+                })
+                .map(|item| &mut item.read)
+                .collect::<Vec<_>>();
+
+            if owned.is_empty() {
+                continue;
+            }
+
+            let mut read_context = context.clone();
+            read_context.current_node_manager_index = idx;
+            if let Err(e) = node_manager
+                .read(&read_context, 0.0, TimestampsToReturn::Neither, &mut owned)
+                .instrument(debug_span!(
+                    "RevalidateMonitoredItems",
+                    node_manager = %node_manager.name()
+                ))
+                .await
+            {
+                for item in owned {
+                    item.set_error(e);
+                }
+            }
+        }
+
+        let mut denied = Vec::new();
+        let mut refreshed_values = Vec::new();
+        for item in items {
+            let status = item.read.status();
+            if matches!(
+                status,
+                StatusCode::BadUserAccessDenied | StatusCode::BadNotReadable
+            ) {
+                denied.push(item.item);
+            } else if status.is_good() && item.item.attribute() != AttributeId::EventNotifier {
+                refreshed_values.push((item.item, item.read.result));
+            }
+        }
+
+        self.subscriptions
+            .apply_revalidated_values(session_id, refreshed_values);
+
+        if denied.is_empty() {
+            return;
+        }
+
+        let deleted = match self
+            .subscriptions
+            .delete_monitored_item_refs(session_id, &denied)
+        {
+            Ok(deleted) => deleted,
+            Err(e) => {
+                warn!("Revalidating monitored items failed to delete inaccessible items: {e}");
+                return;
+            }
+        };
+
+        let deleted = deleted
+            .into_iter()
+            .filter_map(|(status, item)| status.is_good().then_some(item))
+            .collect::<Vec<_>>();
+
+        for (idx, node_manager) in self.node_managers.iter().enumerate() {
+            let owned = deleted
+                .iter()
+                .filter(|item| node_manager.owns_node(item.node_id()))
+                .collect::<Vec<_>>();
+
+            if owned.is_empty() {
+                continue;
+            }
+
+            let mut delete_context = context.clone();
+            delete_context.current_node_manager_index = idx;
+            node_manager
+                .delete_monitored_items(&delete_context, &owned)
+                .instrument(debug_span!(
+                    "DeleteRevalidatedMonitoredItems",
+                    node_manager = %node_manager.name()
+                ))
+                .await;
         }
     }
 

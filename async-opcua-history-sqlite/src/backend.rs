@@ -2,9 +2,13 @@
 
 use crate::{migration::run_migrations, query};
 use async_trait::async_trait;
-use opcua_server::history::HistoryStorageBackend;
+use opcua_server::{
+    aggregates::engine::{calculate_aggregate, get_value_timestamp, partition_intervals},
+    history::HistoryStorageBackend,
+};
 use opcua_types::{
-    BinaryEncodable, ContextOwned, DataValue, DateTime, NodeId, PerformUpdateType, StatusCode,
+    BinaryEncodable, ContextOwned, DataValue, DateTime, EventFilter, HistoryEventFieldList, NodeId,
+    PerformUpdateType, StatusCode,
 };
 use parking_lot::Mutex;
 use rusqlite::{params, Connection, Error as SqliteError, OptionalExtension};
@@ -147,6 +151,93 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
         } else {
             Ok((values, None))
         }
+    }
+
+    async fn read_processed(
+        &self,
+        node_id: &NodeId,
+        start_time: DateTime,
+        end_time: DateTime,
+        processing_interval: f64,
+        aggregate_type: &NodeId,
+        continuation_point: Option<Vec<u8>>,
+    ) -> Result<(Vec<DataValue>, Option<Vec<u8>>), StatusCode> {
+        if continuation_point.is_some() {
+            return Err(StatusCode::BadContinuationPointInvalid);
+        }
+
+        let mut raw_values = Vec::new();
+        let mut next_token = None;
+        loop {
+            let (values, token) = self
+                .read_raw_modified(node_id, start_time, end_time, 100_000, false, next_token)
+                .await?;
+            raw_values.extend(values);
+
+            let Some(token) = token else {
+                break;
+            };
+            next_token = Some(token);
+        }
+
+        raw_values.sort_by_key(get_value_timestamp);
+
+        let processed_values = partition_intervals(start_time, end_time, processing_interval)
+            .into_iter()
+            .map(|(interval_start, interval_end)| {
+                let (min_t, max_t) = if interval_start <= interval_end {
+                    (interval_start, interval_end)
+                } else {
+                    (interval_end, interval_start)
+                };
+
+                let values_in_interval: Vec<&DataValue> = raw_values
+                    .iter()
+                    .filter(|value| {
+                        let timestamp = get_value_timestamp(value);
+                        timestamp >= min_t && timestamp < max_t
+                    })
+                    .collect();
+
+                calculate_aggregate(
+                    &values_in_interval,
+                    aggregate_type,
+                    interval_start,
+                    interval_end,
+                )
+            })
+            .collect();
+
+        Ok((processed_values, None))
+    }
+
+    async fn read_events(
+        &self,
+        _node_id: &NodeId,
+        _start_time: DateTime,
+        _end_time: DateTime,
+        _num_values_per_node: u32,
+        _filter: &EventFilter,
+        continuation_point: Option<Vec<u8>>,
+    ) -> Result<(Vec<HistoryEventFieldList>, Option<Vec<u8>>), StatusCode> {
+        if continuation_point.is_some() {
+            return Err(StatusCode::BadContinuationPointInvalid);
+        }
+
+        Ok((Vec::new(), None))
+    }
+
+    async fn read_annotations(
+        &self,
+        _node_id: &NodeId,
+        _req_times: &[DateTime],
+        continuation_point: Option<Vec<u8>>,
+    ) -> Result<(Vec<DataValue>, Option<Vec<u8>>), StatusCode> {
+        if continuation_point.is_some() {
+            return Err(StatusCode::BadContinuationPointInvalid);
+        }
+
+        Ok((Vec::new(), None))
     }
 
     async fn update_data(

@@ -5,6 +5,13 @@
 **Status**: Draft  
 **Input**: User description: "continue using the plan in local/ to implement the full OPC-UA spec"
 
+## Clarifications
+
+### Session 2026-06-07
+- Q: For the Graph Query Service (`QueryFirst`), should we support complex relationship joining (following references), or only basic node type and property filtering? → A: Complex joining (follow references to filter by related nodes)
+- Q: How should PubSub security keys be actively rotated (triggered) during live message transmission? → A: Time-based rotation (keys expire and rotate after a fixed time duration)
+- Q: How should the server handle repeated failed session activations with invalid `EncryptedSecret`s (authentication failures)? → A: Return a delayed BadUserAccessDenied response (tarpitting) to slow down brute force
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Secure PubSub Message Exchange (Priority: P1)
@@ -67,9 +74,9 @@ A client application needs to search the server's complex object graph using the
 
 ### Edge Cases
 
-- **Key Rotation in PubSub**: When PubSub security keys expire mid-transmission, publishers and subscribers must transition to the new key without losing messages.
+- **Key Rotation in PubSub**: PubSub security keys are rotated based on fixed time durations. When they expire mid-transmission, publishers and subscribers must seamlessly transition to the new key without losing messages.
 - **Malformed Event Filters**: If a client sends an EventFilter with invalid SelectClauses or unsupported operators in the WhereClause, the server must reject it with a status code of BadFilterNotSupported.
-- **Decryption Failures**: If user credentials decrypt to malformed data or fail validation, the server must immediately terminate the session with BadUserAccessDenied.
+- **Decryption Failures**: If user credentials decrypt to malformed data or fail validation, the server must return a delayed `BadUserAccessDenied` response (tarpitting) to slow down potential brute-force attacks.
 - **Large Query Results**: If a query returns millions of nodes, the server must enforce paging limits and use query continuation points to prevent memory exhaustion.
 
 ## Requirements *(mandatory)*
@@ -80,7 +87,7 @@ A client application needs to search the server's complex object graph using the
 - **FR-002**: System MUST support UADP datagram signing and encryption using standard algorithms (AES-128-CBC, AES-256-CBC, HMAC-SHA256).
 - **FR-003**: System MUST support client-specified EventFilters in subscriptions, including SelectClauses and WhereClauses with standard logical operators (AND, OR, NOT, GREATER_THAN, EQUALS).
 - **FR-004**: System MUST support standard `EncryptedSecret` decryption (using RSA-OAEP) for user identity tokens.
-- **FR-005**: System MUST support the `QueryFirst` and `QueryNext` services to allow clients to query nodes using filters and criteria.
+- **FR-005**: System MUST support the `QueryFirst` and `QueryNext` services to allow clients to query nodes using filters and criteria, including complex relationship joining (following references to filter by related nodes).
 - **FR-006**: System MUST enforce authorization checks on all query results and event fields, filtering out nodes the user is not permitted to see.
 
 ### Key Entities *(include if feature involves data)*

@@ -45,5 +45,5 @@ x509-cert = { workspace = true }
 tempdir = "0.3"
 
 [features]
-default = ["legacy-crypto"]
+default = []
 legacy-crypto = []

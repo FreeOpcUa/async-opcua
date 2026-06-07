@@ -59,7 +59,7 @@ pub(crate) async fn query_first(
             request.request.filter,
             type_tree.get(),
             false,
-            &[FilterOperator::RelatedTo, FilterOperator::InView],
+            &[FilterOperator::InView],
         )
     };
 

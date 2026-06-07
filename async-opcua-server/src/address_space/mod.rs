@@ -364,6 +364,11 @@ impl AddressSpace {
         self.node_map.get(&node_id.into_node_id_ref())
     }
 
+    /// Returns an iterator over all nodes in this address space.
+    pub fn nodes(&self) -> impl Iterator<Item = &NodeType> {
+        self.node_map.values()
+    }
+
     /// Finds a node by its node id and returns a mutable reference to it.
     pub fn find_node_mut<'b>(&mut self, node_id: impl IntoNodeIdRef<'b>) -> Option<&mut NodeType> {
         self.node_map.get_mut(&node_id.into_node_id_ref())
@@ -508,14 +513,15 @@ mod tests {
         CoreNamespace, EventNotifier, MethodBuilder, NodeBase, NodeType, Object, ObjectBuilder,
         ObjectTypeBuilder, Variable, VariableBuilder,
     };
+    use crate::node_manager::ParsedWriteValue;
     use opcua_nodes::{DefaultTypeTree, NamespaceMap, TypeTree};
     use opcua_types::{
-        argument::Argument, Array, BrowseDirection, DataTypeId, LocalizedText, NodeClass, NodeId,
-        NumericRange, ObjectId, ObjectTypeId, QualifiedName, ReferenceTypeId, TimestampsToReturn,
-        UAString, Variant, VariantScalarTypeId,
+        argument::Argument, Array, AttributeId, BrowseDirection, DataTypeId, DataValue,
+        LocalizedText, NodeClass, NodeId, NumericRange, ObjectId, ObjectTypeId, QualifiedName,
+        ReferenceTypeId, StatusCode, TimestampsToReturn, UAString, Variant, VariantScalarTypeId,
     };
 
-    use super::AddressSpace;
+    use super::{write_node_value, AddressSpace};
 
     fn make_sample_address_space() -> AddressSpace {
         let mut address_space = AddressSpace::new();
@@ -918,6 +924,23 @@ mod tests {
         assert_eq!(value_rank, 2);
         let array_dimensions = v.array_dimensions().unwrap();
         assert_eq!(array_dimensions, vec![10u32, 10u32]);
+    }
+
+    #[test]
+    fn write_node_value_rejects_scalar_array_dimensions_attribute() {
+        let node_id = NodeId::new(1, "array-dimensions");
+        let mut node = NodeType::Variable(Box::new(Variable::new(&node_id, "x", "x", 1i32)));
+        let node_to_write = ParsedWriteValue {
+            node_id,
+            attribute_id: AttributeId::ArrayDimensions,
+            index_range: NumericRange::None,
+            value: DataValue::value_only(Variant::UInt32(1)),
+        };
+
+        assert_eq!(
+            write_node_value(&mut node, &node_to_write),
+            Err(StatusCode::BadTypeMismatch)
+        );
     }
 
     #[test]

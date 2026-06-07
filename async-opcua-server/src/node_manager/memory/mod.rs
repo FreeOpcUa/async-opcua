@@ -30,6 +30,7 @@ use crate::{
         ReferenceDirection,
     },
     diagnostics::NamespaceMetadata,
+    session::continuation_points::ContinuationPoint,
     subscriptions::CreateMonitoredItem,
     SubscriptionCache,
 };
@@ -1013,6 +1014,17 @@ impl<TImpl: InMemoryNodeManagerImpl> NodeManager for InMemoryNodeManager<TImpl> 
         let mut nodes = self.validate_history_read_nodes(context, nodes, false);
         self.inner
             .history_read_annotations(context, details, &mut nodes, timestamps_to_return)
+            .await
+    }
+
+    async fn history_release_continuation_point(
+        &self,
+        context: &RequestContext,
+        node_id: &NodeId,
+        continuation_point: &ContinuationPoint,
+    ) -> Result<(), StatusCode> {
+        self.inner
+            .history_release_continuation_point(context, node_id, continuation_point)
             .await
     }
 

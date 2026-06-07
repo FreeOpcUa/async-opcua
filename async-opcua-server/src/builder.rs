@@ -96,6 +96,7 @@ impl ServerBuilder {
             .application_uri("urn:OPC UA Sample Server")
             .product_uri("urn:OPC UA Sample Server Testkit")
             .create_sample_keypair(true)
+            .allow_legacy_crypto(true)
             .certificate_path("own/cert.der")
             .private_key_path("private/private.pem")
             .pki_dir("./pki")
@@ -340,6 +341,24 @@ impl ServerBuilder {
     /// Validate the valid from/to fields of a certificate.
     pub fn check_cert_time(mut self, check_cert_time: bool) -> Self {
         self.config.certificate_validation.check_time = check_cert_time;
+        self
+    }
+
+    /// Allow deprecated security policies such as Basic128Rsa15 and Basic256.
+    pub fn allow_legacy_crypto(mut self, allow: bool) -> Self {
+        self.config.allow_legacy_crypto = allow;
+        self
+    }
+
+    /// Expected OAuth2 issuer for issued JWT identity tokens.
+    pub fn oauth2_issuer(mut self, issuer: impl Into<String>) -> Self {
+        self.config.oauth2_issuer = Some(issuer.into());
+        self
+    }
+
+    /// Expected OAuth2 audience for issued JWT identity tokens.
+    pub fn oauth2_audience(mut self, audience: impl Into<String>) -> Self {
+        self.config.oauth2_audience = Some(audience.into());
         self
     }
 

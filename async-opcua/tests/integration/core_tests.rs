@@ -1,4 +1,6 @@
 use std::{
+    fs,
+    path::PathBuf,
     sync::{atomic::Ordering, Arc},
     time::Duration,
 };
@@ -11,7 +13,7 @@ use opcua::{
     client::IdentityToken,
     core::comms::tcp_codec::{Message, TcpCodec},
     core::config::Config,
-    crypto::SecurityPolicy,
+    crypto::{CertificateStore, KeySize, PrivateKey, SecurityPolicy},
     types::{
         ApplicationType, DecodingOptions, MessageSecurityMode, NodeId, ReadValueId, StatusCode,
         TimestampsToReturn, VariableId, Variant,
@@ -412,6 +414,52 @@ fn valid_issued_jwt() -> String {
     format!("{header}.{claims}.signature")
 }
 
+fn sign_issued_jwt(claims: &str, private_key: &PrivateKey) -> String {
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+
+    let header = URL_SAFE_NO_PAD.encode(r#"{"alg":"RS256","typ":"JWT"}"#);
+    let claims = URL_SAFE_NO_PAD.encode(claims);
+    let signing_input = format!("{header}.{claims}");
+    let mut signature = vec![0u8; private_key.size()];
+    let signature_len = private_key
+        .sign_sha256(signing_input.as_bytes(), &mut signature)
+        .unwrap();
+    let signature = URL_SAFE_NO_PAD.encode(&signature[..signature_len]);
+
+    format!("{signing_input}.{signature}")
+}
+
+fn trusted_issued_jwt(test_id: u16) -> String {
+    use opcua::core::sync::RwLock;
+    use opcua::crypto::identity::{LocalOAuth2Validator, OAuth2IdentityValidator};
+
+    let cert_path = PathBuf::from(format!("pki-server/{test_id}/own/cert.der"));
+    let private_key_path = PathBuf::from(format!("pki-server/{test_id}/private/private.pem"));
+    let cert = CertificateStore::read_cert(&cert_path).unwrap();
+    let private_key = CertificateStore::read_pkey(&private_key_path).unwrap();
+    let mut trusted_cert_path = PathBuf::from(format!("pki-server/{test_id}/trusted"));
+    fs::create_dir_all(&trusted_cert_path).unwrap();
+    trusted_cert_path.push(CertificateStore::cert_file_name(&cert));
+    fs::copy(cert_path, trusted_cert_path).unwrap();
+
+    let token = sign_issued_jwt(
+        r#"{"sub":"valid","iss":"opcua-issuer","aud":"opcua-server","exp":4102444800,"roles":["operator"],"permissions":["read","write"]}"#,
+        &private_key,
+    );
+    let validator = LocalOAuth2Validator::new(
+        Arc::new(RwLock::new(CertificateStore::new(&PathBuf::from(format!(
+            "pki-server/{test_id}"
+        ))))),
+        "opcua-issuer".to_string(),
+        "opcua-server".to_string(),
+    );
+    validator
+        .validate_token(&token)
+        .expect("test issued JWT should validate against server PKI");
+
+    token
+}
+
 #[async_trait]
 impl AuthManager for IssuedTokenAuthenticator {
     fn user_token_policies(&self, endpoint: &ServerEndpoint) -> Vec<UserTokenPolicy> {
@@ -461,12 +509,13 @@ async fn issued_token_test() {
         )
         .with_authenticator(Arc::new(IssuedTokenAuthenticator));
     let mut tester = Tester::new(server, false).await;
+    let issued_jwt = trusted_issued_jwt(tester.test_id);
     let (session, lp) = tester
         .connect_path(
             SecurityPolicy::Aes128Sha256RsaOaep,
             MessageSecurityMode::SignAndEncrypt,
             IdentityToken::IssuedToken(IssuedTokenWrapper::new_source(ByteString::from(
-                valid_issued_jwt().as_bytes(),
+                issued_jwt.as_bytes(),
             ))),
             "issued_token",
         )

@@ -11,6 +11,7 @@
 //! very useful.
 
 mod config;
+mod derives;
 mod error;
 mod events;
 pub mod generator;

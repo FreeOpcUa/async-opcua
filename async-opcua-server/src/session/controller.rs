@@ -38,6 +38,7 @@ use super::{
     instance::Session,
     manager::{activate_session, close_session, SessionManager},
     message_handler::MessageHandler,
+    negotiate::validate_security_policy,
 };
 
 pub(crate) struct Response {
@@ -635,6 +636,14 @@ impl SessionController {
             }
         };
 
+        let security_policy = self.channel.security_policy();
+        if let Err(status) =
+            validate_security_policy(security_policy, self.info.config.allow_legacy_crypto)
+        {
+            error!("Security policy {security_policy} is deprecated and has been rejected");
+            return Ok(ServiceFault::new(&request.request_header, status).into());
+        }
+
         // Must compare protocol version to the one from HELLO
         if request.client_protocol_version != client_protocol_version {
             error!(
@@ -720,7 +729,6 @@ impl SessionController {
             .set_remote_nonce_from_byte_string(&request.client_nonce)?;
         self.channel.create_random_nonce();
 
-        let security_policy = self.channel.security_policy();
         if security_policy != SecurityPolicy::None
             && (security_mode == MessageSecurityMode::Sign
                 || security_mode == MessageSecurityMode::SignAndEncrypt)

@@ -18,8 +18,10 @@ use crate::node_manager::TypeTreeForUser;
 use opcua_core::comms::url::{hostname_from_url, url_matches_except_host};
 use opcua_core::handle::AtomicHandle;
 use opcua_core::sync::RwLock;
+use opcua_crypto::identity::{LocalOAuth2Validator, OAuth2IdentityValidator};
 use opcua_crypto::{
-    legacy_decrypt_secret, verify_x509_identity_token, PrivateKey, SecurityPolicy, X509,
+    legacy_decrypt_secret, verify_x509_identity_token, CertificateStore, PrivateKey,
+    SecurityPolicy, X509,
 };
 use opcua_types::{
     profiles, status_code::StatusCode, ActivateSessionRequest, AnonymousIdentityToken,
@@ -131,6 +133,7 @@ impl ServerInfo {
                 .config
                 .endpoints
                 .values()
+                .filter(|e| self.endpoint_is_visible(e))
                 .map(|e| self.new_endpoint_description(e, true))
                 .collect();
             Some(endpoints)
@@ -140,7 +143,11 @@ impl ServerInfo {
                 endpoint_url
             );
             if let Some(e) = self.config.default_endpoint() {
-                Some(vec![self.new_endpoint_description(e, true)])
+                if self.endpoint_is_visible(e) {
+                    Some(vec![self.new_endpoint_description(e, true)])
+                } else {
+                    Some(vec![])
+                }
             } else {
                 Some(vec![])
             }
@@ -180,7 +187,8 @@ impl ServerInfo {
             .iter()
             .filter(|&(_, e)| {
                 // Test end point's security_policy_uri and matching url
-                url_matches_except_host(&e.endpoint_url(&base_endpoint_url), endpoint_url)
+                self.endpoint_is_visible(e)
+                    && url_matches_except_host(&e.endpoint_url(&base_endpoint_url), endpoint_url)
             })
             .map(|(_, e)| self.new_endpoint_description(e, false))
             .collect();
@@ -242,6 +250,10 @@ impl ServerInfo {
             transport_profile_uri: UAString::from(profiles::TRANSPORT_PROFILE_URI_BINARY),
             security_level: endpoint.security_level,
         }
+    }
+
+    fn endpoint_is_visible(&self, endpoint: &ServerEndpoint) -> bool {
+        self.config.allow_legacy_crypto || !endpoint.security_policy().is_deprecated()
     }
 
     /// Get the list of discovery URLs on the server.
@@ -334,7 +346,7 @@ impl ServerInfo {
         security_mode: MessageSecurityMode,
         user_identity_token: ExtensionObject,
         server_nonce: &ByteString,
-    ) -> Result<UserToken, Error> {
+    ) -> Result<(UserToken, Option<opcua_crypto::identity::ClaimProfile>), Error> {
         // Get security from endpoint url
         if let Some(endpoint) = self.config.find_endpoint(
             endpoint_url,
@@ -351,9 +363,10 @@ impl ServerInfo {
                         "User identity token type unsupported",
                     ))
                 }
-                IdentityToken::Anonymous(token) => {
-                    self.authenticate_anonymous_token(endpoint, &token).await
-                }
+                IdentityToken::Anonymous(token) => self
+                    .authenticate_anonymous_token(endpoint, &token)
+                    .await
+                    .map(|token| (token, None)),
                 IdentityToken::UserName(token) => {
                     let server_key_lock = self.server_pkey.read();
                     self.authenticate_username_identity_token(
@@ -363,6 +376,7 @@ impl ServerInfo {
                         server_nonce,
                     )
                     .await
+                    .map(|token| (token, None))
                 }
                 IdentityToken::X509(token) => {
                     let server_cert_lock = self.server_certificate.read();
@@ -374,6 +388,7 @@ impl ServerInfo {
                         server_nonce,
                     )
                     .await
+                    .map(|token| (token, None))
                 }
                 IdentityToken::IssuedToken(token) => {
                     let server_key_lock = self.server_pkey.read();
@@ -442,7 +457,7 @@ impl ServerInfo {
                 StatusCode::BadIdentityTokenRejected,
                 "Endpoint doesn't support username password tokens",
             ))
-        } else if token.policy_id != issued_token_security_policy(endpoint) {
+        } else if token.policy_id != user_pass_security_policy_id(endpoint) {
             Err(Error::new(
                 StatusCode::BadIdentityTokenRejected,
                 "Token doesn't possess the correct policy id",
@@ -562,13 +577,13 @@ impl ServerInfo {
         token: &IssuedIdentityToken,
         server_key: &Option<PrivateKey>,
         server_nonce: &ByteString,
-    ) -> Result<UserToken, Error> {
+    ) -> Result<(UserToken, Option<opcua_crypto::identity::ClaimProfile>), Error> {
         if !self.authenticator.supports_issued_token(endpoint) {
             Err(Error::new(
                 StatusCode::BadIdentityTokenRejected,
                 "Endpoint doesn't support issued tokens",
             ))
-        } else if token.policy_id != user_pass_security_policy_id(endpoint) {
+        } else if token.policy_id != issued_token_security_policy(endpoint) {
             Err(Error::new(
                 StatusCode::BadIdentityTokenRejected,
                 "Token doesn't possess the correct policy id",
@@ -599,11 +614,27 @@ impl ServerInfo {
                 issued_jwt.token_hash(),
                 issued_jwt.claims().sub.as_deref().unwrap_or("")
             );
-            let token_data = issued_jwt.token_data();
 
-            self.authenticator
-                .authenticate_issued_identity_token(endpoint, &token_data)
-                .await
+            let issuer = self
+                .config
+                .oauth2_issuer
+                .clone()
+                .unwrap_or_else(|| "opcua-issuer".to_string());
+            let audience = self
+                .config
+                .oauth2_audience
+                .clone()
+                .unwrap_or_else(|| "opcua-server".to_string());
+            let certificate_store =
+                Arc::new(RwLock::new(CertificateStore::new(&self.config.pki_dir)));
+            let validator = LocalOAuth2Validator::new(certificate_store, issuer, audience);
+            let claims = validator
+                .validate_token(issued_jwt.raw())
+                .map_err(|status| {
+                    Error::new(status, "Issued identity token failed OAuth2 validation")
+                })?;
+
+            Ok((UserToken(claims.username.clone()), Some(claims)))
         }
     }
 
@@ -636,4 +667,92 @@ impl ServerInfo {
         let audit_log = trace_write_lock!(self.audit_log);
         audit_log.raise_and_log(event)
     } */
+}
+
+#[cfg(test)]
+mod tests {
+    use opcua_crypto::SecurityPolicy;
+    use opcua_types::{MessageSecurityMode, UAString};
+
+    use crate::{ServerBuilder, ANONYMOUS_USER_TOKEN_ID};
+
+    fn server_builder_with_legacy_and_modern_endpoints(allow_legacy_crypto: bool) -> ServerBuilder {
+        let user_token_ids = [ANONYMOUS_USER_TOKEN_ID];
+
+        ServerBuilder::new()
+            .without_node_managers()
+            .application_name("Endpoint Filter Test")
+            .application_uri("urn:endpoint-filter-test")
+            .product_uri("urn:endpoint-filter-test")
+            .discovery_urls(vec!["opc.tcp://127.0.0.1:4840/".to_string()])
+            .allow_legacy_crypto(allow_legacy_crypto)
+            .add_endpoint(
+                "legacy",
+                (
+                    "/",
+                    SecurityPolicy::Basic256,
+                    MessageSecurityMode::Sign,
+                    &user_token_ids as &[&str],
+                ),
+            )
+            .add_endpoint(
+                "modern",
+                (
+                    "/",
+                    SecurityPolicy::Aes256Sha256RsaPss,
+                    MessageSecurityMode::Sign,
+                    &user_token_ids as &[&str],
+                ),
+            )
+    }
+
+    #[tokio::test]
+    async fn endpoints_hide_deprecated_security_policies_by_default() {
+        let (_server, handle) = server_builder_with_legacy_and_modern_endpoints(false)
+            .build()
+            .expect("server should build");
+
+        let endpoints = handle
+            .info()
+            .endpoints(&UAString::from("opc.tcp://127.0.0.1:4840/"), &None)
+            .expect("endpoints should be returned");
+
+        assert_eq!(endpoints.len(), 1);
+        assert_eq!(
+            endpoints[0].security_policy_uri.as_ref(),
+            SecurityPolicy::Aes256Sha256RsaPss.to_uri()
+        );
+    }
+
+    #[tokio::test]
+    async fn new_endpoint_descriptions_hide_deprecated_security_policies_by_default() {
+        let (_server, handle) = server_builder_with_legacy_and_modern_endpoints(false)
+            .build()
+            .expect("server should build");
+
+        let endpoints = handle
+            .info()
+            .new_endpoint_descriptions("opc.tcp://localhost:4840/")
+            .expect("matching endpoints should be returned");
+
+        assert_eq!(endpoints.len(), 1);
+        assert_eq!(
+            endpoints[0].security_policy_uri.as_ref(),
+            SecurityPolicy::Aes256Sha256RsaPss.to_uri()
+        );
+    }
+
+    #[tokio::test]
+    async fn endpoints_include_deprecated_security_policies_when_legacy_crypto_is_enabled() {
+        let (_server, handle) = server_builder_with_legacy_and_modern_endpoints(true)
+            .build()
+            .expect("server should build");
+
+        let endpoints = handle
+            .info()
+            .endpoints(&UAString::from("opc.tcp://127.0.0.1:4840/"), &None)
+            .expect("endpoints should be returned");
+
+        assert_eq!(endpoints.len(), 2);
+    }
 }

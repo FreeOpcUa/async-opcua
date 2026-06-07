@@ -365,7 +365,7 @@ pub(crate) async fn activate_session(
         (endpoint_url, session_nonce, session_lck, mgr.info.clone())
     };
 
-    let user_token = info
+    let (user_token, claims) = info
         .authenticate_endpoint(
             request,
             &endpoint_url,
@@ -398,6 +398,7 @@ pub(crate) async fn activate_session(
             IdentityToken::new(request.user_identity_token.clone()),
             request.locale_ids.clone(),
             user_token.clone(),
+            claims,
         );
         (
             session.session_nonce().clone(),

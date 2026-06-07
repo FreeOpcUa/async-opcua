@@ -14,11 +14,14 @@ name = "opcua_pubsub"
 async-opcua-core = { path = "../async-opcua-core", version = "0.18.0" }
 async-opcua-types = { path = "../async-opcua-types", version = "0.18.0", features = ["json"] }
 async-opcua-server = { path = "../async-opcua-server", version = "0.18.0" }
+futures = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
+tokio-tungstenite = "0.21.0"
 tracing = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+lapin = "2.3.1"
 rumqttc = "0.23"
 uuid = { workspace = true, features = ["v4"] }
 

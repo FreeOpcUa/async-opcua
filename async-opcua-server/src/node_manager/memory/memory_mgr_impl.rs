@@ -8,6 +8,7 @@ use crate::{
         HistoryUpdateNode, MethodCall, MonitoredItemRef, MonitoredItemUpdateRef, ParsedReadValueId,
         RegisterNodeItem, RequestContext, ServerContext, WriteNode,
     },
+    session::continuation_points::ContinuationPoint,
     subscriptions::CreateMonitoredItem,
 };
 use opcua_core::sync::RwLock;
@@ -249,6 +250,16 @@ pub trait InMemoryNodeManagerImpl: Send + Sync + 'static {
         timestamps_to_return: TimestampsToReturn,
     ) -> Result<(), StatusCode> {
         Err(StatusCode::BadHistoryOperationUnsupported)
+    }
+
+    /// Release a history continuation point after the service removes it from the session cache.
+    async fn history_release_continuation_point(
+        &self,
+        context: &RequestContext,
+        node_id: &NodeId,
+        continuation_point: &ContinuationPoint,
+    ) -> Result<(), StatusCode> {
+        Ok(())
     }
 
     /// Perform the HistoryUpdate service. This should write result

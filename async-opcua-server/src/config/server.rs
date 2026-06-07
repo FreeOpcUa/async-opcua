@@ -243,6 +243,15 @@ pub struct ServerConfig {
     /// if the previous attempt failed.
     #[serde(default = "defaults::reverse_connect_failure_delay_ms")]
     pub reverse_connect_failure_delay_ms: u64,
+    /// Allow deprecated security policies such as Basic128Rsa15 and Basic256.
+    #[serde(default)]
+    pub allow_legacy_crypto: bool,
+    /// Expected OAuth2 issuer for issued JWT identity tokens.
+    #[serde(default)]
+    pub oauth2_issuer: Option<String>,
+    /// Expected OAuth2 audience for issued JWT identity tokens.
+    #[serde(default)]
+    pub oauth2_audience: Option<String>,
 }
 
 mod defaults {
@@ -406,6 +415,9 @@ impl Default for ServerConfig {
             diagnostics: false,
             session_nonce_length: defaults::session_nonce_length(),
             reverse_connect_failure_delay_ms: defaults::reverse_connect_failure_delay_ms(),
+            allow_legacy_crypto: false,
+            oauth2_issuer: None,
+            oauth2_audience: None,
         }
     }
 }

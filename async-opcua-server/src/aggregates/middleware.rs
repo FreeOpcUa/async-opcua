@@ -35,6 +35,7 @@ pub async fn read_processed_aggregates(
         // Read all raw values from the backend for the range
         let mut raw_values = Vec::new();
         let mut next_token = None;
+        let mut read_failed = false;
         loop {
             let res = backend
                 .read_raw_modified(
@@ -57,12 +58,13 @@ pub async fn read_processed_aggregates(
                 }
                 Err(status) => {
                     hn.set_status(status);
+                    read_failed = true;
                     break;
                 }
             }
         }
 
-        if hn.status().is_bad() {
+        if read_failed {
             continue;
         }
 

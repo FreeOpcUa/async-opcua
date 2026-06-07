@@ -49,4 +49,5 @@ fn make_test_cert_2048() -> (X509, PrivateKey) {
 
 mod authentication;
 mod crypto;
+mod identity;
 mod security_policy;

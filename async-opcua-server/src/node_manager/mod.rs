@@ -30,7 +30,10 @@ mod query;
 mod utils;
 mod view;
 
-use crate::{diagnostics::NamespaceMetadata, ServerStatusWrapper};
+use crate::{
+    diagnostics::NamespaceMetadata, session::continuation_points::ContinuationPoint,
+    ServerStatusWrapper,
+};
 
 use super::{
     authenticator::AuthManager, info::ServerInfo, subscriptions::CreateMonitoredItem,
@@ -397,6 +400,16 @@ pub trait NodeManager: IntoAnyArc + Any {
         timestamps_to_return: TimestampsToReturn,
     ) -> Result<(), StatusCode> {
         Err(StatusCode::BadHistoryOperationUnsupported)
+    }
+
+    /// Release a history continuation point owned by this node manager.
+    async fn history_release_continuation_point(
+        &self,
+        context: &RequestContext,
+        node_id: &NodeId,
+        continuation_point: &ContinuationPoint,
+    ) -> Result<(), StatusCode> {
+        Ok(())
     }
 
     /// Perform the write service. This should write results

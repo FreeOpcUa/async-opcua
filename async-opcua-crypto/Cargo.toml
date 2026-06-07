@@ -23,7 +23,10 @@ name = "opcua_crypto"
 chrono = { workspace = true }
 gethostname = { workspace = true }
 num-bigint-dig = { workspace = true }
+base64 = { workspace = true }
+parking_lot = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 tracing = { workspace = true }
 
 async-opcua-types = { path = "../async-opcua-types", version = "0.18.0" }
@@ -44,4 +47,3 @@ tempdir = "0.3"
 [features]
 default = ["legacy-crypto"]
 legacy-crypto = []
-

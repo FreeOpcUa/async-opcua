@@ -23,4 +23,9 @@ pub trait HistoryStorageBackend: Send + Sync {
         perform_insert_replace: PerformUpdateType,
         values: Vec<DataValue>,
     ) -> Result<Vec<StatusCode>, StatusCode>;
+
+    /// Releases a backend-owned continuation point token.
+    async fn release_continuation_point(&self, _token: Vec<u8>) -> Result<(), StatusCode> {
+        Ok(())
+    }
 }

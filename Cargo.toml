@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
   "async-opcua",
+  "async-opcua-pubsub",
   "samples/*",
   "async-opcua-*",
   "tools/certificate-creator",

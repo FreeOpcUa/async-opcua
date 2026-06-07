@@ -415,6 +415,32 @@ impl InMemoryNodeManagerImpl for SimpleNodeManagerImpl {
         }
     }
 
+    async fn history_release_continuation_point(
+        &self,
+        _context: &RequestContext,
+        _node_id: &NodeId,
+        continuation_point: &crate::session::continuation_points::ContinuationPoint,
+    ) -> Result<(), StatusCode> {
+        let backend_token = continuation_point
+            .get::<crate::history::HistoryContinuationPoint>()
+            .and_then(|point| point.backend_token.clone());
+
+        let Some(backend_token) = backend_token else {
+            return Ok(());
+        };
+
+        let backend = {
+            let guard = self.history_backend.read();
+            guard.clone()
+        };
+
+        if let Some(backend) = backend {
+            backend.release_continuation_point(backend_token).await
+        } else {
+            Err(StatusCode::BadHistoryOperationUnsupported)
+        }
+    }
+
     async fn history_update(
         &self,
         _context: &RequestContext,

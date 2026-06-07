@@ -25,6 +25,8 @@ pub fn is_writable(
     node: &NodeType,
     attribute_id: AttributeId,
 ) -> Result<(), StatusCode> {
+    crate::services::node_access::validate_write_access(context)?;
+
     if let (NodeType::Variable(_), AttributeId::Value) = (node, attribute_id) {
         if !user_access_level(context, node).contains(AccessLevel::CURRENT_WRITE) {
             return Err(StatusCode::BadUserAccessDenied);
@@ -91,6 +93,7 @@ pub fn validate_node_read(
     context: &RequestContext,
     node_to_read: &ParsedReadValueId,
 ) -> Result<(), StatusCode> {
+    crate::services::node_access::validate_read_access(context)?;
     is_readable(context, node)?;
 
     if node_to_read.attribute_id != AttributeId::Value

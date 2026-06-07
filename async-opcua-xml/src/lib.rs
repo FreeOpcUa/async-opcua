@@ -14,6 +14,9 @@
 use ext::NodeExt;
 use roxmltree::Node;
 
+pub mod dependency_sort;
+pub mod diagnostics;
+
 mod encoding;
 mod error;
 mod ext;

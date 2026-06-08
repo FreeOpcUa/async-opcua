@@ -68,10 +68,13 @@ async fn test_udp_multicast_pubsub() {
     // Change value in Address Space to trigger bridge.
     // The bridge checks for changes every 50ms and publishes immediately when a change is detected.
     {
-        let mut space_lock = address_space.write();
-        if let Some(NodeType::Variable(ref mut var)) = space_lock.find_mut(&node_id) {
-            var.set_data_value(DataValue::value_only(Variant::from(25.5f64)));
-            println!("Changed value in Address Space to 25.5");
+        let space_lock = address_space.read();
+        let mut node_opt = space_lock.find_mut(&node_id);
+        if let Some(ref mut node_guard) = node_opt {
+            if let NodeType::Variable(ref mut var) = **node_guard {
+                var.set_data_value(DataValue::value_only(Variant::from(25.5f64)));
+                println!("Changed value in Address Space to 25.5");
+            }
         }
     }
 

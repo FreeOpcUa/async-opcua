@@ -3,6 +3,53 @@ use async_trait::async_trait;
 use opcua_types::{
     DataValue, DateTime, EventFilter, HistoryEventFieldList, NodeId, PerformUpdateType, StatusCode,
 };
+use moka::future::Cache;
+
+/// A cache for historical data values to avoid database hits.
+#[derive(Clone)]
+pub struct HistoryCache {
+    cache: Cache<(NodeId, i64, i64), Vec<DataValue>>,
+}
+
+impl HistoryCache {
+    /// Create a new HistoryCache with the given maximum capacity.
+    pub fn new(max_capacity: u64) -> Self {
+        Self {
+            cache: Cache::builder()
+                .max_capacity(max_capacity)
+                .time_to_idle(std::time::Duration::from_secs(300))
+                .build(),
+        }
+    }
+
+    /// Retrieve cached values.
+    pub async fn get(&self, key: &(NodeId, DateTime, DateTime)) -> Option<Vec<DataValue>> {
+        let cache_key = (key.0.clone(), key.1.ticks(), key.2.ticks());
+        self.cache.get(&cache_key).await
+    }
+
+    /// Insert values into the cache.
+    pub async fn insert(&self, key: (NodeId, DateTime, DateTime), values: Vec<DataValue>) {
+        let cache_key = (key.0, key.1.ticks(), key.2.ticks());
+        self.cache.insert(cache_key, values).await;
+    }
+
+    /// Get current size of cache.
+    pub fn entry_count(&self) -> u64 {
+        self.cache.entry_count()
+    }
+
+    /// Invalidate all entries in the cache.
+    pub fn invalidate_all(&self) {
+        self.cache.invalidate_all();
+    }
+
+    /// Force cache tasks to run (useful for testing eviction immediately).
+    pub async fn run_pending_tasks(&self) {
+        self.cache.run_pending_tasks().await;
+    }
+}
+
 
 /// Trait representing a storage backend for OPC-UA Historical Data Access (HDA).
 /// Custom backends (e.g. SQLite, In-Memory, etc.) implement this trait.

@@ -384,15 +384,15 @@ mod tests {
             .expect("temporary file node should be created");
 
         assert!(matches!(
-            address_space.find(&node.file_id),
+            address_space.find(&node.file_id).as_deref(),
             Some(NodeType::Object(_))
         ));
         assert!(matches!(
-            address_space.find(&node.size_id),
+            address_space.find(&node.size_id).as_deref(),
             Some(NodeType::Variable(_))
         ));
         assert!(matches!(
-            address_space.find(&node.write_id),
+            address_space.find(&node.write_id).as_deref(),
             Some(NodeType::Method(_))
         ));
         for node_id in node.node_ids() {

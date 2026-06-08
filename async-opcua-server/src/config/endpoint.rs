@@ -86,9 +86,7 @@ impl ServerEndpoint {
     /// Recommends a security level for the supplied security policy
     fn security_level(security_policy: SecurityPolicy, security_mode: MessageSecurityMode) -> u8 {
         let security_level = match security_policy {
-            SecurityPolicy::Basic128Rsa15 => 1,
             SecurityPolicy::Aes128Sha256RsaOaep => 2,
-            SecurityPolicy::Basic256 => 3,
             SecurityPolicy::Basic256Sha256 => 4,
             SecurityPolicy::Aes256Sha256RsaPss => 5,
             _ => 0,
@@ -113,84 +111,7 @@ impl ServerEndpoint {
         )
     }
 
-    #[deprecated]
-    /// Create a new server endpoint with Basic128 signature.
-    ///
-    /// # Warning
-    ///
-    /// This security mode is deprecated in the OPC-UA standard for being insecure.
-    pub fn new_basic128rsa15_sign<T>(path: T, user_token_ids: &[String]) -> Self
-    where
-        T: Into<String>,
-    {
-        Self::new(
-            path,
-            SecurityPolicy::Basic128Rsa15,
-            MessageSecurityMode::Sign,
-            user_token_ids,
-        )
-    }
-
-    #[deprecated]
-    /// Create a new server endpoint with Basic128 encryption.
-    ///
-    /// # Warning
-    ///
-    /// This security mode is deprecated in the OPC-UA standard for being insecure.
-    pub fn new_basic128rsa15_sign_encrypt<T>(path: T, user_token_ids: &[String]) -> Self
-    where
-        T: Into<String>,
-    {
-        Self::new(
-            path,
-            SecurityPolicy::Basic128Rsa15,
-            MessageSecurityMode::SignAndEncrypt,
-            user_token_ids,
-        )
-    }
-
-    #[deprecated]
-    /// Create a new server endpoint with Basic256 signature.
-    ///
-    /// # Warning
-    ///
-    /// This security mode is deprecated in the OPC-UA standard for being insecure.
-    pub fn new_basic256_sign<T>(path: T, user_token_ids: &[String]) -> Self
-    where
-        T: Into<String>,
-    {
-        Self::new(
-            path,
-            SecurityPolicy::Basic256,
-            MessageSecurityMode::Sign,
-            user_token_ids,
-        )
-    }
-
-    #[deprecated]
-    /// Create a new server endpoint with Basic256 encryption.
-    ///
-    /// # Warning
-    ///
-    /// This security mode is deprecated in the OPC-UA standard for being insecure.
-    pub fn new_basic256_sign_encrypt<T>(path: T, user_token_ids: &[String]) -> Self
-    where
-        T: Into<String>,
-    {
-        Self::new(
-            path,
-            SecurityPolicy::Basic256,
-            MessageSecurityMode::SignAndEncrypt,
-            user_token_ids,
-        )
-    }
-
-    #[deprecated]
-    /// Create a new server endpoint with Basic256/Sha256 signing.
-    ///
-    /// # Warning
-    ///
-    /// This security mode is deprecated in the OPC-UA standard for being insecure.
+    /// Create a new server endpoint with Basic256Sha256 signing.
     pub fn new_basic256sha256_sign<T>(path: T, user_token_ids: &[String]) -> Self
     where
         T: Into<String>,
@@ -203,11 +124,7 @@ impl ServerEndpoint {
         )
     }
 
-    /// Create a new server endpoint with Basic256/Sha256 encryption.
-    ///
-    /// # Warning
-    ///
-    /// This security mode is deprecated in the OPC-UA standard for being insecure.
+    /// Create a new server endpoint with Basic256Sha256 encryption.
     pub fn new_basic256sha256_sign_encrypt<T>(path: T, user_token_ids: &[String]) -> Self
     where
         T: Into<String>,
@@ -292,10 +209,10 @@ impl ServerEndpoint {
         }
 
         if let Some(ref password_security_policy) = self.password_security_policy {
-            let password_security_policy =
+            let parsed_password_security_policy =
                 SecurityPolicy::from_str(password_security_policy).unwrap();
-            if password_security_policy == SecurityPolicy::Unknown {
-                errors.push(format!("Endpoint {id} is invalid. Password security policy \"{password_security_policy}\" is invalid. Valid values are None, Basic128Rsa15, Basic256, Basic256Sha256"));
+            if parsed_password_security_policy == SecurityPolicy::Unknown {
+                errors.push(format!("Endpoint {id} is invalid. Password security policy \"{password_security_policy}\" is invalid. Valid values are None, Basic256Sha256, Aes128Sha256RsaOaep, Aes256Sha256RsaPss"));
             }
         }
 
@@ -303,7 +220,7 @@ impl ServerEndpoint {
         let security_policy = SecurityPolicy::from_str(&self.security_policy).unwrap();
         let security_mode = MessageSecurityMode::from(self.security_mode.as_ref());
         if security_policy == SecurityPolicy::Unknown {
-            errors.push(format!("Endpoint {} is invalid. Security policy \"{}\" is invalid. Valid values are None, Basic128Rsa15, Basic256, Basic256Sha256, Aes128Sha256RsaOaep, Aes256Sha256RsaPss,", id, self.security_policy));
+            errors.push(format!("Endpoint {} is invalid. Security policy \"{}\" is invalid. Valid values are None, Basic256Sha256, Aes128Sha256RsaOaep, Aes256Sha256RsaPss", id, self.security_policy));
         } else if security_mode == MessageSecurityMode::Invalid {
             errors.push(format!("Endpoint {} is invalid. Security mode \"{}\" is invalid. Valid values are None, Sign, SignAndEncrypt", id, self.security_mode));
         } else if (security_policy == SecurityPolicy::None
@@ -355,5 +272,65 @@ impl ServerEndpoint {
             }
         }
         password_security_policy
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn invalid_security_policy_message_excludes_legacy_policies() {
+        let user_tokens = BTreeMap::new();
+        let endpoint = ServerEndpoint {
+            path: "/".to_string(),
+            security_policy: "InvalidPolicy".to_string(),
+            security_mode: "Sign".to_string(),
+            security_level: 0,
+            password_security_policy: None,
+            user_token_ids: BTreeSet::new(),
+        };
+
+        let errors = endpoint.validate("invalid", &user_tokens).unwrap_err();
+        let message = errors.join("\n");
+
+        assert_eq!(
+            message,
+            "Endpoint invalid is invalid. Security policy \"InvalidPolicy\" is invalid. Valid values are None, Basic256Sha256, Aes128Sha256RsaOaep, Aes256Sha256RsaPss"
+        );
+    }
+
+    #[test]
+    fn invalid_password_security_policy_message_excludes_legacy_policies() {
+        let user_tokens = BTreeMap::new();
+        let mut endpoint = ServerEndpoint::new_basic256sha256_sign("/", &[]);
+        endpoint.password_security_policy = Some("InvalidPolicy".to_string());
+
+        let errors = endpoint.validate("invalid", &user_tokens).unwrap_err();
+        let message = errors.join("\n");
+
+        assert_eq!(
+            message,
+            "Endpoint invalid is invalid. Password security policy \"InvalidPolicy\" is invalid. Valid values are None, Basic256Sha256, Aes128Sha256RsaOaep, Aes256Sha256RsaPss"
+        );
+    }
+
+    #[test]
+    fn basic256sha256_convenience_constructors_remain() {
+        let user_token_ids = [];
+
+        let sign = ServerEndpoint::new_basic256sha256_sign("/", &user_token_ids);
+        let sign_encrypt = ServerEndpoint::new_basic256sha256_sign_encrypt("/", &user_token_ids);
+
+        assert_eq!(sign.security_policy(), SecurityPolicy::Basic256Sha256);
+        assert_eq!(sign.message_security_mode(), MessageSecurityMode::Sign);
+        assert_eq!(
+            sign_encrypt.security_policy(),
+            SecurityPolicy::Basic256Sha256
+        );
+        assert_eq!(
+            sign_encrypt.message_security_mode(),
+            MessageSecurityMode::SignAndEncrypt
+        );
     }
 }

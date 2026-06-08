@@ -650,7 +650,7 @@ impl SimpleNodeManagerImpl {
             }
         } else {
             // If it can't be found, read it from the node hierarchy.
-            read_node_value(node, context, node_to_read, max_age, timestamps_to_return)
+            read_node_value(&*node, context, node_to_read, max_age, timestamps_to_return)
         }
     }
 
@@ -662,7 +662,7 @@ impl SimpleNodeManagerImpl {
         type_tree: &DefaultTypeTree,
         write: &mut WriteNode,
     ) {
-        let node = match address_space.validate_node_write(context, write.value(), type_tree) {
+        let mut node = match address_space.validate_node_write(context, write.value(), type_tree) {
             Ok(v) => v,
             Err(e) => {
                 write.set_status(e);
@@ -682,7 +682,7 @@ impl SimpleNodeManagerImpl {
             write.set_status(cb(write.value().value.clone(), &write.value().index_range));
         } else if write.value().value.value.is_some() {
             // If not, write the value to the node hierarchy.
-            match write_node_value(node, write.value()) {
+            match write_node_value(&mut *node, write.value()) {
                 Ok(_) => write.set_status(StatusCode::Good),
                 Err(e) => write.set_status(e),
             }

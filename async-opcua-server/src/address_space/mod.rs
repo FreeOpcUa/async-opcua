@@ -11,18 +11,22 @@ pub use opcua_core_namespace::CoreNamespace;
 use std::collections::VecDeque;
 
 use hashbrown::{HashMap, HashSet};
+use dashmap::DashMap;
 use tracing::{debug, error, info, warn};
 
 use crate::node_manager::{ParsedReadValueId, ParsedWriteValue, RequestContext};
 use opcua_types::{
-    node_id::IntoNodeIdRef, BrowseDirection, DataValue, LocalizedText, NodeClass, NodeId,
+    node_id::{IntoNodeId, IntoNodeIdRef}, BrowseDirection, DataValue, LocalizedText, NodeClass, NodeId,
     QualifiedName, ReferenceTypeId, StatusCode, TimestampsToReturn,
 };
+
+/// Type alias for the concurrent node map using DashMap.
+pub type NodeMap = DashMap<NodeId, NodeType>;
 
 /// Represents an in-memory address space.
 #[derive(Default)]
 pub struct AddressSpace {
-    node_map: HashMap<NodeId, NodeType>,
+    node_map: NodeMap,
     namespaces: HashMap<u16, String>,
     references: References,
 }
@@ -31,7 +35,7 @@ impl AddressSpace {
     /// Create a new empty address space.
     pub fn new() -> Self {
         Self {
-            node_map: HashMap::new(),
+            node_map: NodeMap::new(),
             namespaces: HashMap::new(),
             references: References::new(),
         }
@@ -67,7 +71,8 @@ impl AddressSpace {
     pub fn load_into_type_tree(&self, type_tree: &mut DefaultTypeTree) {
         let mut found_ids = VecDeque::new();
         // Populate types first so that we have reference types to browse in the next stage.
-        for node in self.node_map.values() {
+        for entry in self.node_map.iter() {
+            let node = entry.value();
             let nc = node.node_class();
             if !matches!(
                 nc,
@@ -99,7 +104,7 @@ impl AddressSpace {
             };
 
             type_tree.add_type_node(node_id, &parent_id, nc);
-            found_ids.push_back((node_id, node_id, Vec::new(), nc));
+            found_ids.push_back((node_id.clone(), node_id.clone(), Vec::new(), nc));
         }
 
         let mut seen_nodes = HashSet::new();
@@ -107,7 +112,7 @@ impl AddressSpace {
         // Recursively browse each discovered type for non-type children
         while let Some((node, root_type, path, node_class)) = found_ids.pop_front() {
             for child in self.find_references(
-                node,
+                &node,
                 Some((ReferenceTypeId::HierarchicalReferences, true)),
                 type_tree,
                 BrowseDirection::Forward,
@@ -135,9 +140,9 @@ impl AddressSpace {
                     continue;
                 }
                 let mut path = path.clone();
-                path.push(node_type.as_node().browse_name());
+                path.push(node_type.as_node().browse_name().clone());
 
-                if !seen_nodes.insert(child.target_node) {
+                if !seen_nodes.insert(child.target_node.clone()) {
                     warn!(
                         "Found node {} more than once when browsing hierarchically",
                         child.target_node
@@ -145,11 +150,14 @@ impl AddressSpace {
                     continue;
                 }
 
-                found_ids.push_back((child.target_node, root_type, path, nc));
+                // Clone the target_node because `push_back` expects an owned NodeId
+                found_ids.push_back((child.target_node.clone(), root_type.clone(), path, nc));
             }
-
+            
             if !path.is_empty() {
-                type_tree.add_type_property(node, root_type, &path, node_class);
+                // Convert Vec<QualifiedName> to slice of references as required by the API
+                let path_refs: Vec<&QualifiedName> = path.iter().collect();
+                type_tree.add_type_property(&node, &root_type, &path_refs, node_class);
             }
         }
     }
@@ -163,7 +171,7 @@ impl AddressSpace {
     pub fn insert<'a, T, S>(
         &mut self,
         node: T,
-        references: Option<&'a [(&'a NodeId, &S, ReferenceDirection)]>,
+        references: Option<&'a [(&'a NodeId, &'a S, ReferenceDirection)]>,
     ) -> bool
     where
         T: Into<NodeType>,
@@ -174,17 +182,17 @@ impl AddressSpace {
 
         self.assert_namespace(&node_id);
 
-        if self.node_exists(&node_id) {
-            error!("This node {} already exists", node_id);
-            false
-        } else {
+        use dashmap::mapref::entry::Entry;
+        if let Entry::Vacant(entry) = self.node_map.entry(node_id.clone()) {
             // If references are supplied, add them now
             if let Some(references) = references {
                 self.references.insert::<S>(&node_id, references);
             }
-            self.node_map.insert(node_id, node_type);
-
+            entry.insert(node_type);
             true
+        } else {
+            error!("This node {} already exists", node_id);
+            false
         }
     }
 
@@ -193,16 +201,17 @@ impl AddressSpace {
         let node_id = node.node.node_id().clone();
 
         self.assert_namespace(&node_id);
-        if self.node_exists(&node_id) {
-            error!("This node {} already exists", node_id);
-            false
-        } else {
-            self.node_map.insert(node_id.clone(), node.node);
+
+        use dashmap::mapref::entry::Entry;
+        if let Entry::Vacant(entry) = self.node_map.entry(node_id.clone()) {
+            entry.insert(node.node);
             for r in node.references {
                 self.references.import_reference(node_id.clone(), r);
             }
-
             true
+        } else {
+            error!("This node {} already exists", node_id);
+            false
         }
     }
 
@@ -300,7 +309,7 @@ impl AddressSpace {
         type_tree: &'b dyn TypeTree,
         direction: BrowseDirection,
         browse_name: impl Into<QualifiedName>,
-    ) -> Option<&'a NodeType> {
+    ) -> Option<dashmap::mapref::one::Ref<'a, NodeId, NodeType>> {
         let name = browse_name.into();
         for rf in self.find_references(source_node, filter, type_tree, direction) {
             let node = self.find_node(rf.target_node);
@@ -322,22 +331,26 @@ impl AddressSpace {
         type_tree: &'b dyn TypeTree,
         direction: BrowseDirection,
         browse_path: &[QualifiedName],
-    ) -> Option<&'a NodeType> {
-        let mut node = self.find_node(source_node)?;
+    ) -> Option<dashmap::mapref::one::Ref<'a, NodeId, NodeType>> {
+        let mut current_node_id = source_node.into_node_id_ref().into_node_id();
+        let mut node = self.find_node(&current_node_id)?;
         let filter: Option<(NodeId, bool)> = filter.map(|(id, c)| (id.into(), c));
         for path_elem in browse_path {
-            let mut found = false;
-            for rf in self.find_references(node.node_id(), filter.clone(), type_tree, direction) {
+            let mut found = None;
+            for rf in self.find_references(&current_node_id, filter.clone(), type_tree, direction) {
                 let child = self.find_node(rf.target_node);
                 if let Some(child) = child {
                     if child.as_node().browse_name() == path_elem {
-                        node = child;
-                        found = true;
+                        let next_node_id = child.as_node().node_id().clone();
+                        found = Some((next_node_id, child));
                         break;
                     }
                 }
             }
-            if !found {
+            if let Some((next_node_id, child)) = found {
+                current_node_id = next_node_id;
+                node = child;
+            } else {
                 return None;
             }
         }
@@ -350,36 +363,68 @@ impl AddressSpace {
     }
 
     /// Find node by something that can be turned into a node id and return a reference to it.
-    pub fn find<'b>(&self, node_id: impl IntoNodeIdRef<'b>) -> Option<&NodeType> {
+    pub fn find<'b>(&self, node_id: impl IntoNodeIdRef<'b>) -> Option<dashmap::mapref::one::Ref<'_, NodeId, NodeType>> {
         self.find_node(node_id)
     }
 
     /// Find node by something that can be turned into a node id and return a mutable reference to it.
-    pub fn find_mut<'b>(&mut self, node_id: impl IntoNodeIdRef<'b>) -> Option<&mut NodeType> {
+    pub fn find_mut<'b>(&self, node_id: impl IntoNodeIdRef<'b>) -> Option<dashmap::mapref::one::RefMut<'_, NodeId, NodeType>> {
         self.find_node_mut(node_id)
     }
 
+
+
     /// Finds a node by its node id and returns a reference to it.
-    pub fn find_node<'b>(&self, node_id: impl IntoNodeIdRef<'b>) -> Option<&NodeType> {
-        self.node_map.get(&node_id.into_node_id_ref())
+    pub fn find_node<'b>(
+        &self,
+        node_id: impl IntoNodeIdRef<'b>,
+    ) -> Option<dashmap::mapref::one::Ref<'_, NodeId, NodeType>> {
+        let nid = node_id.into_node_id_ref().into_node_id();
+        self.node_map.get(&nid)
     }
 
     /// Returns an iterator over all nodes in this address space.
-    pub fn nodes(&self) -> impl Iterator<Item = &NodeType> {
-        self.node_map.values()
+    pub fn nodes(&self) -> impl Iterator<Item = dashmap::mapref::multiple::RefMulti<'_, NodeId, NodeType>> + '_ {
+        self.node_map.iter()
     }
 
     /// Finds a node by its node id and returns a mutable reference to it.
-    pub fn find_node_mut<'b>(&mut self, node_id: impl IntoNodeIdRef<'b>) -> Option<&mut NodeType> {
-        self.node_map.get_mut(&node_id.into_node_id_ref())
+    pub fn find_node_mut<'b>(
+        &self,
+        node_id: impl IntoNodeIdRef<'b>,
+    ) -> Option<dashmap::mapref::one::RefMut<'_, NodeId, NodeType>> {
+        let nid = node_id.into_node_id_ref().into_node_id();
+        self.node_map.get_mut(&nid)
     }
+
+    /// Finds a node by a predicate over its NodeId and returns the NodeId.
+    pub fn find_node_by_predicate<F>(&self, predicate: F) -> Option<NodeId>
+    where
+        F: Fn(&NodeId) -> bool,
+    {
+        self.node_map.iter().find_map(|entry| {
+            let nid = entry.key();
+            if predicate(nid) {
+                Some(nid.clone())
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Returns an iterator over all node IDs in this address space.
+    pub fn iter_node_ids(&self) -> impl Iterator<Item = NodeId> + '_ {
+        self.node_map.iter().map(|entry| entry.key().clone())
+    }
+
+
 
     /// Check if the read is allowed.
     pub fn validate_node_read<'a>(
         &'a self,
         context: &RequestContext,
         node_to_read: &ParsedReadValueId,
-    ) -> Result<&'a NodeType, StatusCode> {
+    ) -> Result<dashmap::mapref::one::Ref<'a, NodeId, NodeType>, StatusCode> {
         let Some(node) = self.find(&node_to_read.node_id) else {
             debug!(
                 "read_node_value result for read node id {}, attribute {:?} cannot find node",
@@ -388,7 +433,7 @@ impl AddressSpace {
             return Err(StatusCode::BadNodeIdUnknown);
         };
 
-        validate_node_read(node, context, node_to_read)?;
+        validate_node_read(&*node, context, node_to_read)?;
 
         Ok(node)
     }
@@ -412,16 +457,16 @@ impl AddressSpace {
             }
         };
 
-        read_node_value(node, context, node_to_read, max_age, timestamps_to_return)
+        read_node_value(&*node, context, node_to_read, max_age, timestamps_to_return)
     }
 
     /// Check if the given write is allowed.
     pub fn validate_node_write<'a>(
-        &'a mut self,
+        &'a self,
         context: &RequestContext,
         node_to_write: &ParsedWriteValue,
         type_tree: &dyn TypeTree,
-    ) -> Result<&'a mut NodeType, StatusCode> {
+    ) -> Result<dashmap::mapref::one::RefMut<'a, NodeId, NodeType>, StatusCode> {
         let Some(node) = self.find_mut(&node_to_write.node_id) else {
             debug!(
                 "write_node_value result for read node id {}, attribute {:?} cannot find node",
@@ -430,14 +475,14 @@ impl AddressSpace {
             return Err(StatusCode::BadNodeIdUnknown);
         };
 
-        validate_node_write(node, context, node_to_write, type_tree)?;
+        validate_node_write(&*node, context, node_to_write, type_tree)?;
 
         Ok(node)
     }
 
     /// Remove a node from the address space.
     pub fn delete(&mut self, node_id: &NodeId, delete_target_references: bool) -> Option<NodeType> {
-        let n = self.node_map.remove(node_id);
+        let n = self.node_map.remove(node_id).map(|(_, v)| v);
         self.references
             .delete_node_references(node_id, delete_target_references);
 
@@ -492,17 +537,17 @@ impl NodeInsertTarget for AddressSpace {
 
         self.assert_namespace(&node_id);
 
-        if self.node_exists(&node_id) {
-            error!("This node {} already exists", node_id);
-            false
-        } else {
+        use dashmap::mapref::entry::Entry;
+        if let Entry::Vacant(entry) = self.node_map.entry(node_id.clone()) {
             // If references are supplied, add them now
             if let Some(references) = references {
                 self.references.insert(&node_id, references);
             }
-            self.node_map.insert(node_id, node_type);
-
+            entry.insert(node_type);
             true
+        } else {
+            error!("This node {} already exists", node_id);
+            false
         }
     }
 }
@@ -566,7 +611,8 @@ mod tests {
         let node_type = address_space.find_node(&NodeId::new(0, 84));
         assert!(node_type.is_some());
 
-        let node = node_type.unwrap().as_node();
+        let node_guard = node_type.unwrap();
+        let node = node_guard.as_node();
         assert_eq!(node.node_id(), &NodeId::new(0, 84));
         assert_eq!(node.node_id(), &ObjectId::RootFolder);
     }
@@ -987,7 +1033,7 @@ mod tests {
             .insert(&mut address_space);
 
         // Verify the variable is there
-        let _o = match address_space.find_node(&node_id).unwrap() {
+        let _o = match &*address_space.find_node(&node_id).unwrap() {
             NodeType::Object(o) => o,
             _ => panic!(),
         };
@@ -1014,7 +1060,7 @@ mod tests {
             .subtype_of(ObjectTypeId::BaseObjectType)
             .insert(&mut address_space);
 
-        let _ot = match address_space.find_node(&node_type_id).unwrap() {
+        let _ot = match &*address_space.find_node(&node_type_id).unwrap() {
             NodeType::ObjectType(ot) => ot,
             _ => panic!(),
         };
@@ -1119,7 +1165,7 @@ mod tests {
         assert!(inserted);
 
         assert!(matches!(
-            address_space.find_node(&fn_node_id),
+            address_space.find_node(&fn_node_id).as_deref(),
             Some(NodeType::Method(_))
         ));
 
@@ -1136,7 +1182,7 @@ mod tests {
         let child = address_space
             .find_node(refs.first().unwrap().target_node)
             .unwrap();
-        if let NodeType::Variable(v) = child {
+        if let NodeType::Variable(v) = &*child {
             // verify OutputArguments
             // verify OutputArguments / Argument value
             assert_eq!(v.data_type(), DataTypeId::Argument);

@@ -97,6 +97,19 @@ pub fn validate_node_read(
     is_readable(context, node)?;
 
     if node_to_read.attribute_id != AttributeId::Value
+        && matches!(
+            node_to_read.data_encoding,
+            DataEncoding::XML | DataEncoding::JSON
+        )
+    {
+        debug!(
+            "read_node_value result for read node id {}, attribute {:?} is invalid data encoding",
+            node_to_read.node_id, node_to_read.attribute_id
+        );
+        return Err(StatusCode::BadDataEncodingInvalid);
+    }
+
+    if node_to_read.attribute_id != AttributeId::Value
         && node_to_read.index_range != NumericRange::None
     {
         return Err(StatusCode::BadIndexRangeDataMismatch);
@@ -403,4 +416,91 @@ pub fn add_namespaces(
         res.push(idx);
     }
     res
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use opcua_core::sync::RwLock;
+    use opcua_types::{
+        AnonymousIdentityToken, ApplicationDescription, ByteString, MessageSecurityMode, UAString,
+    };
+
+    use crate::{
+        authenticator::UserToken,
+        identity_token::IdentityToken,
+        node_manager::{ParsedReadValueId, RequestContext, RequestContextInner},
+        session::instance::Session,
+        ServerBuilder,
+    };
+
+    use super::*;
+
+    fn request_context() -> RequestContext {
+        let (_server, handle) = ServerBuilder::new_anonymous("test")
+            .build()
+            .expect("test server should build");
+        let info = handle.info().clone();
+        let session = Session::create(
+            &info,
+            NodeId::new(0, 1),
+            1,
+            60_000,
+            0,
+            0,
+            UAString::from("opc.tcp://localhost"),
+            opcua_crypto::SecurityPolicy::None.to_str().to_string(),
+            IdentityToken::Anonymous(AnonymousIdentityToken {
+                policy_id: UAString::from("anonymous"),
+            }),
+            None,
+            ByteString::null(),
+            UAString::from("test"),
+            ApplicationDescription::default(),
+            MessageSecurityMode::None,
+        );
+
+        RequestContext {
+            current_node_manager_index: 0,
+            inner: Arc::new(RequestContextInner {
+                session: Arc::new(RwLock::new(session)),
+                session_id: 1,
+                authenticator: info.authenticator.clone(),
+                token: UserToken("anonymous".to_string()),
+                type_tree: info.type_tree.clone(),
+                type_tree_getter: info.type_tree_getter.clone(),
+                subscriptions: handle.subscriptions().clone(),
+                info,
+            }),
+        }
+    }
+
+    #[tokio::test]
+    async fn validate_node_read_rejects_xml_and_json_encoding_for_non_value_attributes() {
+        let context = request_context();
+        let node = NodeType::Variable(Box::new(Variable::new(
+            &NodeId::new(1, "test"),
+            "test",
+            "test",
+            1i32,
+        )));
+
+        for (data_encoding, index_range) in [
+            (DataEncoding::XML, NumericRange::None),
+            (DataEncoding::JSON, NumericRange::Index(0)),
+        ] {
+            let node_to_read = ParsedReadValueId {
+                node_id: node.node_id().clone(),
+                attribute_id: AttributeId::DisplayName,
+                index_range,
+                data_encoding,
+            };
+
+            assert_eq!(
+                validate_node_read(&node, &context, &node_to_read),
+                Err(StatusCode::BadDataEncodingInvalid)
+            );
+        }
+    }
 }

@@ -98,7 +98,6 @@ impl ServerBuilder {
             .application_uri("urn:OPC UA Sample Server")
             .product_uri("urn:OPC UA Sample Server Testkit")
             .create_sample_keypair(true)
-            .allow_legacy_crypto(true)
             .certificate_path("own/cert.der")
             .private_key_path("private/private.pem")
             .pki_dir("./pki")
@@ -121,42 +120,6 @@ impl ServerBuilder {
                     endpoint_path,
                     SecurityPolicy::None,
                     MessageSecurityMode::None,
-                    &user_token_ids as &[&str],
-                ),
-            )
-            .add_endpoint(
-                "basic128rsa15_sign",
-                (
-                    endpoint_path,
-                    SecurityPolicy::Basic128Rsa15,
-                    MessageSecurityMode::Sign,
-                    &user_token_ids as &[&str],
-                ),
-            )
-            .add_endpoint(
-                "basic128rsa15_sign_encrypt",
-                (
-                    endpoint_path,
-                    SecurityPolicy::Basic128Rsa15,
-                    MessageSecurityMode::SignAndEncrypt,
-                    &user_token_ids as &[&str],
-                ),
-            )
-            .add_endpoint(
-                "basic256_sign",
-                (
-                    endpoint_path,
-                    SecurityPolicy::Basic256,
-                    MessageSecurityMode::Sign,
-                    &user_token_ids as &[&str],
-                ),
-            )
-            .add_endpoint(
-                "basic256_sign_encrypt",
-                (
-                    endpoint_path,
-                    SecurityPolicy::Basic256,
-                    MessageSecurityMode::SignAndEncrypt,
                     &user_token_ids as &[&str],
                 ),
             )

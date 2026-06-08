@@ -90,7 +90,6 @@ pub fn default_server() -> ServerBuilder {
         .create_sample_keypair(true)
         .host(hostname())
         .trust_client_certs(true)
-        .allow_legacy_crypto(true)
         .add_user_token(
             CLIENT_USERPASS_ID,
             ServerUserToken::user_pass(

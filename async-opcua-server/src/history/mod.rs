@@ -12,7 +12,7 @@ pub mod permissions;
 /// Read raw/modified response formatting and chronological sorting middleware.
 pub mod read;
 
-pub use backend::HistoryStorageBackend;
+pub use backend::{HistoryStorageBackend, HistoryCache};
 pub use continuation::{HistoryContinuationPoint, HistoryContinuationPointCache};
 pub use permissions::{validate_history_read_permission, validate_history_write_permission};
 pub use read::{format_history_result, sort_historical_values};

@@ -14,6 +14,7 @@ use crate::{
     security::{SecurityGroup, SharedSecurityGroup, UadpSecurityCodec},
     transport::{
         amqp::AmqpPublisher, mqtt::MqttPublisher, udp::UdpPublisher, websocket::WebSocketPublisher,
+        tsn::publisher::TsnPublisher,
     },
     PubSubConnectionConfig, PubSubPublisher,
 };
@@ -29,6 +30,8 @@ pub enum TransportKind {
     Amqp,
     /// WebSocket transport.
     WebSocket,
+    /// TSN transport.
+    Tsn,
 }
 
 impl TransportKind {
@@ -42,6 +45,10 @@ impl TransportKind {
 
         if address.starts_with("udp://") {
             return Ok(Self::Udp);
+        }
+
+        if address.starts_with("tsn://") {
+            return Ok(Self::Tsn);
         }
 
         if address.starts_with("amqp://") || address.starts_with("amqps://") {
@@ -249,6 +256,8 @@ impl PubSubEngine {
             TransportKind::Mqtt => MqttPublisher::new(self.address_space.clone())
                 .start_publishing(connection, cancel_token),
             TransportKind::Udp => UdpPublisher::new(self.address_space.clone())
+                .start_publishing(connection, cancel_token),
+            TransportKind::Tsn => TsnPublisher::new(self.address_space.clone())
                 .start_publishing(connection, cancel_token),
             TransportKind::Amqp => AmqpPublisher::new(self.address_space.clone())
                 .start_publishing(connection, cancel_token),

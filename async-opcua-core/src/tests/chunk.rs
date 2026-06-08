@@ -63,12 +63,14 @@ fn set_chunk_sequence_number(
     let mut chunk_info = chunk.chunk_info(secure_channel).unwrap();
     let old_sequence_number = chunk_info.sequence_header.sequence_number;
     chunk_info.sequence_header.sequence_number = sequence_number;
-    // Write the sequence header out again with new value
-    let mut stream = Cursor::new(&mut chunk.data[..]);
+    // Write the sequence header out again with new value by converting to Vec
+    let mut data_vec = chunk.data.to_vec();
+    let mut stream = Cursor::new(&mut data_vec[..]);
     stream.set_position(chunk_info.sequence_header_offset as u64);
     let ctx_r = ContextOwned::default();
     let ctx = ctx_r.context();
     let _ = chunk_info.sequence_header.encode(&mut stream, &ctx);
+    chunk.data = bytes::Bytes::from(data_vec);
     old_sequence_number
 }
 
@@ -81,12 +83,14 @@ fn set_chunk_request_id(
     let mut chunk_info = chunk.chunk_info(secure_channel).unwrap();
     let old_request_id = chunk_info.sequence_header.request_id;
     chunk_info.sequence_header.request_id = request_id;
-    // Write the sequence header out again with new value
-    let mut stream = Cursor::new(&mut chunk.data[..]);
+    // Write the sequence header out again with new value by converting to Vec
+    let mut data_vec = chunk.data.to_vec();
+    let mut stream = Cursor::new(&mut data_vec[..]);
     stream.set_position(chunk_info.sequence_header_offset as u64);
     let ctx_r = ContextOwned::default();
     let ctx = ctx_r.context();
     let _ = chunk_info.sequence_header.encode(&mut stream, &ctx);
+    chunk.data = bytes::Bytes::from(data_vec);
     old_request_id
 }
 
@@ -585,7 +589,7 @@ fn asymmetric_decrypt_and_verify_sample_chunk() {
     secure_channel.set_private_key(Some(our_key));
 
     let _ = secure_channel
-        .verify_and_remove_security(message_data)
+        .verify_and_remove_security(message_data.into())
         .unwrap();
 }
 

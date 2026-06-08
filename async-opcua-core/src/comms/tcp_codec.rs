@@ -127,10 +127,10 @@ impl TcpCodec {
     /// Reads a message out of the buffer, which is assumed by now to be the proper length
     fn decode_message(
         message_header: MessageHeader,
-        buf: &mut BytesMut,
+        bytes_mut: &mut BytesMut,
         decoding_options: &DecodingOptions,
     ) -> Result<Message, StatusCode> {
-        let mut buf = io::Cursor::new(&buf[..]);
+        let mut buf = io::Cursor::new(&bytes_mut[..]);
         match message_header.message_type {
             MessageType::Acknowledge => Ok(Message::Acknowledge(AcknowledgeMessage::decode(
                 &mut buf,
@@ -144,10 +144,13 @@ impl TcpCodec {
                 &mut buf,
                 decoding_options,
             )?)),
-            MessageType::Chunk => Ok(Message::Chunk(MessageChunk::decode(
-                &mut buf,
-                decoding_options,
-            )?)),
+            MessageType::Chunk => {
+                let mut bytes = bytes_mut.clone().freeze();
+                Ok(Message::Chunk(MessageChunk::decode_zero_copy(
+                    &mut bytes,
+                    decoding_options,
+                )?))
+            }
             MessageType::ReverseHello => Ok(Message::ReverseHello(ReverseHelloMessage::decode(
                 &mut buf,
                 decoding_options,

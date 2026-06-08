@@ -125,7 +125,7 @@ impl<'a> QueryNodeFilter<'a> {
         };
 
         target
-            .map(|node| read_attribute(node, attribute_id, index_range))
+            .map(|node| read_attribute(&*node, attribute_id, index_range))
             .unwrap_or(Variant::Empty)
     }
 

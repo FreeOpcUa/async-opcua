@@ -601,7 +601,7 @@ async fn write_bytestring_to_byte_array() {
     {
         let sp = nm.address_space().read();
         let node = sp.find(&id).unwrap();
-        let NodeType::Variable(v) = node else {
+        let NodeType::Variable(ref v) = *node else {
             panic!("");
         };
         let val = v.value(
@@ -675,7 +675,7 @@ async fn write_index_range() {
     let sp = nm.address_space().read();
     // Node 1
     let node = sp.find(&id1).unwrap();
-    let NodeType::Variable(v) = node else {
+    let NodeType::Variable(ref v) = *node else {
         panic!("");
     };
     let val = v.value(
@@ -689,7 +689,7 @@ async fn write_index_range() {
     assert_eq!(val.value.unwrap(), bytes.into());
     // Node 2
     let node = sp.find(&id2).unwrap();
-    let NodeType::Variable(v) = node else {
+    let NodeType::Variable(ref v) = *node else {
         panic!("");
     };
     let val = v.value(

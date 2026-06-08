@@ -42,7 +42,11 @@ async fn add_delete_node() {
 
     {
         let sp = nm.address_space().read();
-        let Some(NodeType::Object(o)) = sp.find(&id) else {
+        let node_opt = sp.find(&id);
+        let Some(node_guard) = node_opt else {
+            panic!("Missing");
+        };
+        let NodeType::Object(o) = &*node_guard else {
             panic!("Missing");
         };
         assert_eq!(o.browse_name(), &"MyNode".into());

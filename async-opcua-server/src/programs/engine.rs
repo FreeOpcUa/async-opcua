@@ -66,12 +66,12 @@ impl ProgramEngine {
     /// Helper to update a variable value in the Address Space.
     fn update_variable<T: Into<Variant>>(&self, suffix: &str, value: T) {
         let var_id = self.sub_node_id(suffix);
-        let mut space = self.address_space.write();
-        if let Some(node) = space.find_mut(&var_id) {
-            if let NodeType::Variable(ref mut var) = node {
+        let space = self.address_space.write();
+        if let Some(mut node) = space.find_mut(&var_id) {
+            if let NodeType::Variable(ref mut var) = &mut *node {
                 var.set_data_value(DataValue::value_only(value.into()));
             }
-        }
+        };
     }
 
     /// Updates all Program state and permission variables in the Address Space.
@@ -136,10 +136,12 @@ impl ProgramEngine {
                     engine_parent_id.namespace,
                     format!("{}_Progress", parent_str),
                 );
-                let mut space = address_space.write();
-                if let Some(NodeType::Variable(ref mut var)) = space.find_mut(&progress_id) {
-                    var.set_data_value(DataValue::value_only(Variant::from(i as i32)));
-                }
+                let space = address_space.write();
+                if let Some(mut node) = space.find_mut(&progress_id) {
+                    if let NodeType::Variable(ref mut var) = &mut *node {
+                        var.set_data_value(DataValue::value_only(Variant::from(i as i32)));
+                    }
+                };
             }
 
             // Task complete: transition to Halted
@@ -171,22 +173,32 @@ impl ProgramEngine {
                 format!("{}_Resetable", parent_str),
             );
 
-            let mut space = address_space.write();
-            if let Some(NodeType::Variable(ref mut var)) = space.find_mut(&current_state_id) {
-                var.set_data_value(DataValue::value_only(Variant::from("Halted".to_string())));
-            }
-            if let Some(NodeType::Variable(ref mut var)) = space.find_mut(&haltable_id) {
-                var.set_data_value(DataValue::value_only(Variant::from(false)));
-            }
-            if let Some(NodeType::Variable(ref mut var)) = space.find_mut(&suspendable_id) {
-                var.set_data_value(DataValue::value_only(Variant::from(false)));
-            }
-            if let Some(NodeType::Variable(ref mut var)) = space.find_mut(&resumable_id) {
-                var.set_data_value(DataValue::value_only(Variant::from(false)));
-            }
-            if let Some(NodeType::Variable(ref mut var)) = space.find_mut(&resetable_id) {
-                var.set_data_value(DataValue::value_only(Variant::from(true)));
-            }
+            let space = address_space.write();
+            if let Some(mut node) = space.find_mut(&current_state_id) {
+                if let NodeType::Variable(ref mut var) = &mut *node {
+                    var.set_data_value(DataValue::value_only(Variant::from("Halted".to_string())));
+                }
+            };
+            if let Some(mut node) = space.find_mut(&haltable_id) {
+                if let NodeType::Variable(ref mut var) = &mut *node {
+                    var.set_data_value(DataValue::value_only(Variant::from(false)));
+                }
+            };
+            if let Some(mut node) = space.find_mut(&suspendable_id) {
+                if let NodeType::Variable(ref mut var) = &mut *node {
+                    var.set_data_value(DataValue::value_only(Variant::from(false)));
+                }
+            };
+            if let Some(mut node) = space.find_mut(&resumable_id) {
+                if let NodeType::Variable(ref mut var) = &mut *node {
+                    var.set_data_value(DataValue::value_only(Variant::from(false)));
+                }
+            };
+            if let Some(mut node) = space.find_mut(&resetable_id) {
+                if let NodeType::Variable(ref mut var) = &mut *node {
+                    var.set_data_value(DataValue::value_only(Variant::from(true)));
+                }
+            };
         });
 
         *self.task_handle.write() = Some(handle);

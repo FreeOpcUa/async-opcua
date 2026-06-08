@@ -176,7 +176,8 @@ impl<'a, 'ctx> QueryFirstHandler<'a, 'ctx> {
                 self.type_tree,
                 BrowseDirection::Inverse,
             )
-            .filter_map(|reference| self.address_space.find(reference.target_node));
+            .filter(|reference| self.address_space.node_exists(reference.target_node))
+            .map(|reference| reference.target_node.clone());
 
         Some(QueryGraphTraversal::with_typed_candidates(
             self.address_space,
@@ -190,7 +191,7 @@ impl<'a, 'ctx> QueryFirstHandler<'a, 'ctx> {
     fn exact_type_candidates(
         &self,
         node_types: &'a [ParsedNodeTypeDescription],
-    ) -> Option<Vec<&'a NodeType>> {
+    ) -> Option<Vec<NodeId>> {
         if node_types.is_empty()
             || node_types
                 .iter()
@@ -206,10 +207,9 @@ impl<'a, 'ctx> QueryFirstHandler<'a, 'ctx> {
         let mut seen = HashSet::new();
         let mut candidates = Vec::new();
         for node_type in node_types {
-            for node in self.exact_type_candidate_nodes(node_type)? {
-                let node_id = node.node_id().clone();
-                if seen.insert(node_id) {
-                    candidates.push(node);
+            for node_id in self.exact_type_candidate_nodes(node_type)? {
+                if seen.insert(node_id.clone()) {
+                    candidates.push(node_id);
                 }
             }
         }
@@ -220,7 +220,7 @@ impl<'a, 'ctx> QueryFirstHandler<'a, 'ctx> {
     fn exact_type_candidate_nodes(
         &self,
         node_type: &'a ParsedNodeTypeDescription,
-    ) -> Option<Vec<&'a NodeType>> {
+    ) -> Option<Vec<NodeId>> {
         let type_id = node_type
             .type_definition_node
             .try_resolve(self.type_tree.namespaces())?;
@@ -231,8 +231,8 @@ impl<'a, 'ctx> QueryFirstHandler<'a, 'ctx> {
             self.type_tree,
             BrowseDirection::Inverse,
         ) {
-            if let Some(node) = self.address_space.find(reference.target_node) {
-                candidates.push(node);
+            if self.address_space.node_exists(reference.target_node) {
+                candidates.push(reference.target_node.clone());
             }
         }
 
@@ -291,10 +291,10 @@ impl<'a, 'ctx> QueryFirstHandler<'a, 'ctx> {
         };
 
         if let Some(context) = self.context {
-            return self.selected_value_with_context(node, description, context);
+            return self.selected_value_with_context(&*node, description, context);
         }
 
-        self.selected_value_unrestricted(node, description)
+        self.selected_value_unrestricted(&*node, description)
     }
 
     fn selected_value_with_context(
@@ -372,11 +372,12 @@ impl<'a, 'ctx> QueryFirstHandler<'a, 'ctx> {
             data_encoding: DataEncoding::Binary,
         };
 
-        validate_node_read(node, context, &node_to_read).is_ok()
+        validate_node_read(&*node, context, &node_to_read).is_ok()
     }
 
-    fn relative_path_target(&self, node_id: &NodeId, path: &RelativePath) -> Option<&'a NodeType> {
-        let mut node = self.address_space.find(node_id)?;
+    fn relative_path_target(&self, node_id: &NodeId, path: &RelativePath) -> Option<dashmap::mapref::one::Ref<'a, NodeId, NodeType>> {
+        let mut current_node_id = node_id.clone();
+        let mut node = self.address_space.find(&current_node_id)?;
 
         for element in path.elements.as_deref().unwrap_or_default() {
             let direction = if element.is_inverse {
@@ -387,7 +388,7 @@ impl<'a, 'ctx> QueryFirstHandler<'a, 'ctx> {
             let next = self
                 .address_space
                 .find_references(
-                    node.node_id(),
+                    &current_node_id,
                     Some((&element.reference_type_id, element.include_subtypes)),
                     self.type_tree,
                     direction,
@@ -395,6 +396,7 @@ impl<'a, 'ctx> QueryFirstHandler<'a, 'ctx> {
                 .filter_map(|reference| self.address_space.find(reference.target_node))
                 .find(|candidate| candidate.as_node().browse_name() == &element.target_name)?;
 
+            current_node_id = next.as_node().node_id().clone();
             node = next;
         }
 

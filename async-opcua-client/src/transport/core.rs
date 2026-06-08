@@ -21,7 +21,7 @@ use crate::transport::RequestRecv;
 #[derive(Debug)]
 struct MessageChunkWithChunkInfo {
     header: ChunkInfo,
-    data_with_header: Vec<u8>,
+    data_with_header: bytes::Bytes,
 }
 
 pub(crate) struct MessageState {
@@ -354,7 +354,7 @@ impl TransportState {
     ) -> Result<Vec<MessageChunk>, Error> {
         if chunks.len() == 1 {
             return Ok(vec![MessageChunk {
-                data: chunks.pop().unwrap().data_with_header,
+                data: chunks.pop().unwrap().data_with_header.into(),
             }]);
         }
         chunks.sort_by(|a, b| {
@@ -380,7 +380,7 @@ impl TransportState {
             }
             expect_sequence_number += 1;
             ret.push(MessageChunk {
-                data: c.data_with_header,
+                data: c.data_with_header.into(),
             });
         }
         Ok(ret)

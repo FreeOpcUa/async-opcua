@@ -11,6 +11,7 @@ publish = false
 name = "opcua_pubsub"
 
 [dependencies]
+xsk-rs = "0.3"
 async-opcua-core = { path = "../async-opcua-core", version = "0.18.0" }
 async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.18.0" }
 async-opcua-server = { path = "../async-opcua-server", version = "0.18.0" }

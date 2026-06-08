@@ -9,3 +9,6 @@ pub mod udp;
 
 /// WebSocket transport driver implementation.
 pub mod websocket;
+
+/// TSN transport driver implementation.
+pub mod tsn;

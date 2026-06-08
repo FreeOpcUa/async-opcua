@@ -18,7 +18,7 @@ mod json;
 #[cfg(feature = "xml")]
 mod xml;
 
-pub use id_ref::{IdentifierRef, IntoNodeIdRef, NodeIdRef};
+pub use id_ref::{IdentifierRef, IntoNodeIdRef, IntoNodeId, NodeIdRef};
 pub use identifier::Identifier;
 pub use identifier::{
     IDENTIFIER_HASH_BYTE_STRING, IDENTIFIER_HASH_GUID, IDENTIFIER_HASH_NUMERIC,

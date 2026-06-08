@@ -4,7 +4,7 @@ use crate::{migration::run_migrations, query};
 use async_trait::async_trait;
 use opcua_server::{
     aggregates::engine::{calculate_aggregate, get_value_timestamp, partition_intervals},
-    history::HistoryStorageBackend,
+    history::{HistoryStorageBackend, HistoryCache},
 };
 use opcua_types::{
     BinaryEncodable, ContextOwned, DataValue, DateTime, EventFilter, HistoryEventFieldList, NodeId,
@@ -20,6 +20,7 @@ use std::time::{Duration, Instant};
 pub struct SqliteHistoryBackend {
     connection: Arc<Mutex<Connection>>,
     continuation_points: Arc<Mutex<HashMap<Vec<u8>, CachedContinuationPoint>>>,
+    cache: HistoryCache,
 }
 
 struct CachedContinuationPoint {
@@ -35,6 +36,7 @@ impl SqliteHistoryBackend {
         Ok(Self {
             connection: Arc::new(Mutex::new(connection)),
             continuation_points: Arc::new(Mutex::new(HashMap::new())),
+            cache: HistoryCache::new(10000),
         })
     }
 
@@ -45,7 +47,13 @@ impl SqliteHistoryBackend {
         Ok(Self {
             connection: Arc::new(Mutex::new(connection)),
             continuation_points: Arc::new(Mutex::new(HashMap::new())),
+            cache: HistoryCache::new(10000),
         })
+    }
+
+    /// Returns the underlying database connection.
+    pub fn connection(&self) -> Arc<Mutex<Connection>> {
+        self.connection.clone()
     }
 
     fn prune_continuation_points(&self) {
@@ -87,6 +95,24 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
                 return Ok((values, None));
             }
             return Err(StatusCode::BadContinuationPointInvalid);
+        }
+
+        let cache_key = (node_id.clone(), start_time, end_time);
+        if let Some(cached_vals) = self.cache.get(&cache_key).await {
+            let mut values = cached_vals.clone();
+            if num_values_per_node > 0 && values.len() > num_values_per_node as usize {
+                let remaining = values.split_off(num_values_per_node as usize);
+                let token = uuid::Uuid::new_v4().as_bytes().to_vec();
+                self.continuation_points.lock().insert(
+                    token.clone(),
+                    CachedContinuationPoint {
+                        values: remaining,
+                        created_at: Instant::now(),
+                    },
+                );
+                return Ok((values, Some(token)));
+            }
+            return Ok((values, None));
         }
 
         let conn = self.connection.clone();
@@ -136,6 +162,8 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
 
         opcua_server::history::sort_historical_values(&mut values, start_time, end_time);
         values.dedup_by(|a, b| a.source_timestamp == b.source_timestamp);
+
+        self.cache.insert(cache_key, values.clone()).await;
 
         if num_values_per_node > 0 && values.len() > num_values_per_node as usize {
             let remaining = values.split_off(num_values_per_node as usize);
@@ -247,6 +275,7 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
         values: Vec<DataValue>,
     ) -> Result<Vec<StatusCode>, StatusCode> {
         self.prune_continuation_points();
+        self.cache.invalidate_all();
 
         let conn = self.connection.clone();
         let node_id_str = node_id.to_string();

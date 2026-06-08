@@ -125,10 +125,10 @@ impl From<ByteString> for Identifier {
 }
 
 macro_rules! impl_identifier_ref {
-    ($x:ident, $t:ty, $h:ident, $eq_p:pat, $h_expr:expr) => {
-        impl_identifier_ref!($x, $t, $h, $eq_p, $h_expr, $x);
+    ($x:ident, $t:ty, $h:ident, $eq_p:pat, $h_expr:expr, $to_ident:expr) => {
+        impl_identifier_ref!($x, $t, $h, $eq_p, $h_expr, $x, $to_ident);
     };
-    ($x:ident, $t:ty, $h:ident, $eq_p:pat, $h_expr:expr, $eq_expr:expr) => {
+    ($x:ident, $t:ty, $h:ident, $eq_p:pat, $h_expr:expr, $eq_expr:expr, $to_ident:expr) => {
         impl PartialEq<Identifier> for $t {
             fn eq(&self, other: &Identifier) -> bool {
                 match other {
@@ -144,25 +144,32 @@ macro_rules! impl_identifier_ref {
                 let $x = self;
                 $h_expr.hash(state);
             }
+
+            fn to_identifier(&self) -> Identifier {
+                let $x = self;
+                $to_ident
+            }
         }
     };
 }
 
-impl_identifier_ref!(x, u32, IDENTIFIER_HASH_NUMERIC, Identifier::Numeric(x), x);
+impl_identifier_ref!(x, u32, IDENTIFIER_HASH_NUMERIC, Identifier::Numeric(x), x, Identifier::Numeric(*x));
 impl_identifier_ref!(
     x,
     &u32,
     IDENTIFIER_HASH_NUMERIC,
     Identifier::Numeric(x),
     x,
-    &x
+    &x,
+    Identifier::Numeric(**x)
 );
 impl_identifier_ref!(
     x,
     UAString,
     IDENTIFIER_HASH_STRING,
     Identifier::String(x),
-    x.as_ref()
+    x.as_ref(),
+    Identifier::String(x.clone())
 );
 impl_identifier_ref!(
     x,
@@ -170,7 +177,8 @@ impl_identifier_ref!(
     IDENTIFIER_HASH_STRING,
     Identifier::String(x),
     x.as_ref(),
-    &x
+    &x,
+    Identifier::String((*x).clone())
 );
 impl_identifier_ref!(
     x,
@@ -178,39 +186,47 @@ impl_identifier_ref!(
     IDENTIFIER_HASH_STRING,
     Identifier::String(x),
     x.as_str(),
-    x.as_ref()
+    x.as_ref(),
+    Identifier::String(UAString::from(x.clone()))
 );
-impl_identifier_ref!(x, &str, IDENTIFIER_HASH_STRING, Identifier::String(x), x);
-impl_identifier_ref!(x, &String, IDENTIFIER_HASH_STRING, Identifier::String(x), x);
-impl_identifier_ref!(x, Guid, IDENTIFIER_HASH_GUID, Identifier::Guid(x), x);
+impl_identifier_ref!(x, &str, IDENTIFIER_HASH_STRING, Identifier::String(x), x, Identifier::String(UAString::from(*x)));
+impl_identifier_ref!(x, &String, IDENTIFIER_HASH_STRING, Identifier::String(x), x, Identifier::String(UAString::from((*x).clone())));
+impl_identifier_ref!(x, Guid, IDENTIFIER_HASH_GUID, Identifier::Guid(x), x, Identifier::Guid(x.clone()));
 impl_identifier_ref!(
     x,
     ByteString,
     IDENTIFIER_HASH_BYTE_STRING,
     Identifier::ByteString(x),
-    x
+    x,
+    Identifier::ByteString(x.clone())
 );
-impl_identifier_ref!(x, &Guid, IDENTIFIER_HASH_GUID, Identifier::Guid(x), x, &x);
+impl_identifier_ref!(x, &Guid, IDENTIFIER_HASH_GUID, Identifier::Guid(x), x, &x, Identifier::Guid((*x).clone()));
 impl_identifier_ref!(
     x,
     &ByteString,
     IDENTIFIER_HASH_BYTE_STRING,
     Identifier::ByteString(x),
     x,
-    &x
+    &x,
+    Identifier::ByteString((*x).clone())
 );
 impl_identifier_ref!(
     x,
     &[u8],
     IDENTIFIER_HASH_BYTE_STRING,
     Identifier::ByteString(x),
-    x
+    x,
+    Identifier::ByteString(ByteString::from(*x))
 );
-impl_identifier_ref!(x, GuidRef<'_>, IDENTIFIER_HASH_GUID, Identifier::Guid(x), x);
+impl_identifier_ref!(x, GuidRef<'_>, IDENTIFIER_HASH_GUID, Identifier::Guid(x), x, Identifier::Guid(Guid::from_bytes(*x.0)));
 
 impl IdentifierRef for Identifier {
     fn hash_as_identifier<H: Hasher>(&self, state: &mut H) {
         self.hash(state);
+    }
+
+    fn to_identifier(&self) -> Identifier {
+        self.clone()
     }
 }
 
@@ -223,5 +239,9 @@ impl PartialEq<Identifier> for &Identifier {
 impl IdentifierRef for &Identifier {
     fn hash_as_identifier<H: Hasher>(&self, state: &mut H) {
         self.hash(state);
+    }
+
+    fn to_identifier(&self) -> Identifier {
+        (*self).clone()
     }
 }

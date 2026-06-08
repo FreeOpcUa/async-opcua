@@ -1,4 +1,4 @@
-//! Security integration tests for deprecated security policies and OAuth2 identities.
+//! Security integration tests for PubSub keys, OAuth2 identities, and password identities.
 
 use std::{
     fs,
@@ -13,29 +13,24 @@ use std::{
 
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use opcua_client::{Client, ClientBuilder, IdentityToken};
 use opcua_crypto::{
     AlternateNames, CertificateStore, KeySize, PrivateKey, SecurityPolicy, X509Data, X509,
 };
 use opcua_server::{
     authenticator::{issued_token_security_policy, user_pass_security_policy_id, AuthManager},
     authorization::SessionAuthorizationProfile,
-    security::validate_security_policy,
     services::security::{
         GetSecurityKeysRequest, GetSecurityKeysResponse, SecurityGroupKeys, SecurityKeyService,
         CURRENT_SECURITY_TOKEN_ID,
     },
-    ServerBuilder, ServerConfig, ServerEndpoint, ServerHandle, ServerUserToken,
-    ANONYMOUS_USER_TOKEN_ID,
+    ServerBuilder, ServerEndpoint, ServerHandle, ServerUserToken,
 };
 use opcua_types::{
-    issued_token_types, ActivateSessionRequest, ApplicationDescription, ApplicationType,
-    ByteString, EndpointDescription, Error, ExtensionObject, IssuedIdentityToken, LocalizedText,
-    MessageSecurityMode, SignatureData, StatusCode, UAString, UserNameIdentityToken,
-    UserTokenPolicy, UserTokenType,
+    issued_token_types, ActivateSessionRequest, ByteString, Error, ExtensionObject,
+    IssuedIdentityToken, MessageSecurityMode, SignatureData, StatusCode, UAString,
+    UserNameIdentityToken, UserTokenPolicy, UserTokenType,
 };
 use serde_json::{json, Value};
-use tokio::net::TcpListener;
 
 const OAUTH2_PATH: &str = "/oauth2";
 const OAUTH2_ISSUER: &str = "https://issuer.example";
@@ -233,160 +228,6 @@ impl TempPath {
 impl Drop for TempPath {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
-    }
-}
-
-struct RunningServer {
-    endpoint_url: String,
-    handle: ServerHandle,
-    server_task: tokio::task::JoinHandle<()>,
-    client_pki: TempPath,
-    _server_pki: TempPath,
-}
-
-impl RunningServer {
-    async fn legacy(allow_legacy_crypto: bool) -> Self {
-        let server_pki = TempPath::new("legacy-server-pki");
-        let client_pki = TempPath::new("legacy-client-pki");
-        let listener = TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("test listener should bind");
-        let addr = listener.local_addr().expect("listener should have address");
-        let endpoint_url = format!("opc.tcp://127.0.0.1:{}/", addr.port());
-        let user_token_ids = [ANONYMOUS_USER_TOKEN_ID];
-
-        let (server, handle) = ServerBuilder::new()
-            .application_name("Security Test Server")
-            .application_uri("urn:security-test-server")
-            .product_uri("urn:security-test-server")
-            .host("127.0.0.1")
-            .port(addr.port())
-            .pki_dir(server_pki.path())
-            .create_sample_keypair(true)
-            .trust_client_certs(true)
-            .check_cert_time(false)
-            .allow_legacy_crypto(allow_legacy_crypto)
-            .discovery_urls(vec![endpoint_url.clone()])
-            .add_endpoint(
-                "basic128rsa15",
-                (
-                    "/",
-                    SecurityPolicy::Basic128Rsa15,
-                    MessageSecurityMode::Sign,
-                    &user_token_ids as &[&str],
-                ),
-            )
-            .add_endpoint(
-                "basic256",
-                (
-                    "/",
-                    SecurityPolicy::Basic256,
-                    MessageSecurityMode::Sign,
-                    &user_token_ids as &[&str],
-                ),
-            )
-            .build()
-            .expect("legacy security test server should build");
-
-        let server_task = tokio::spawn(async move {
-            server.run_with(listener).await.expect("server should run");
-        });
-
-        Self {
-            endpoint_url,
-            handle,
-            server_task,
-            client_pki,
-            _server_pki: server_pki,
-        }
-    }
-
-    fn legacy_endpoint(&self, security_policy: SecurityPolicy) -> EndpointDescription {
-        EndpointDescription {
-            endpoint_url: UAString::from(self.endpoint_url.as_str()),
-            server: ApplicationDescription {
-                application_uri: UAString::from("urn:security-test-server"),
-                product_uri: UAString::from("urn:security-test-server"),
-                application_name: LocalizedText::new("", "Security Test Server"),
-                application_type: ApplicationType::Server,
-                gateway_server_uri: UAString::null(),
-                discovery_profile_uri: UAString::null(),
-                discovery_urls: Some(vec![UAString::from(self.endpoint_url.as_str())]),
-            },
-            server_certificate: self.handle.info().server_certificate_as_byte_string(),
-            security_mode: MessageSecurityMode::Sign,
-            security_policy_uri: UAString::from(security_policy.to_uri()),
-            user_identity_tokens: Some(vec![UserTokenPolicy::anonymous()]),
-            transport_profile_uri: UAString::from(
-                opcua_types::profiles::TRANSPORT_PROFILE_URI_BINARY,
-            ),
-            security_level: 0,
-        }
-    }
-
-    fn client(&self) -> Client {
-        ClientBuilder::new()
-            .application_name("Security Test Client")
-            .application_uri("urn:security-test-client")
-            .pki_dir(self.client_pki.path())
-            .create_sample_keypair(true)
-            .trust_server_certs(true)
-            .verify_server_certs(false)
-            .session_retry_limit(0)
-            .session_retry_initial(Duration::from_millis(10))
-            .client()
-            .expect("security test client should build")
-    }
-}
-
-impl Drop for RunningServer {
-    fn drop(&mut self) {
-        self.handle.cancel();
-        self.server_task.abort();
-    }
-}
-
-#[test]
-fn deprecated_security_profiles_are_rejected_by_default() {
-    assert!(!ServerConfig::default().allow_legacy_crypto);
-    for security_policy in [SecurityPolicy::Basic128Rsa15, SecurityPolicy::Basic256] {
-        assert_eq!(
-            validate_security_policy(security_policy, false),
-            Err(StatusCode::BadSecurityPolicyRejected)
-        );
-    }
-}
-
-#[tokio::test]
-async fn deprecated_security_profiles_are_allowed_when_legacy_crypto_is_enabled() {
-    let server = RunningServer::legacy(true).await;
-
-    for security_policy in [SecurityPolicy::Basic128Rsa15, SecurityPolicy::Basic256] {
-        assert_eq!(validate_security_policy(security_policy, true), Ok(()));
-
-        let mut client = server.client();
-        let (session, event_loop) = client
-            .connect_to_endpoint_directly(
-                server.legacy_endpoint(security_policy),
-                IdentityToken::Anonymous,
-            )
-            .expect("direct legacy endpoint should build a client session");
-        let handle = event_loop.spawn();
-
-        tokio::time::timeout(Duration::from_secs(10), session.wait_for_connection())
-            .await
-            .expect("legacy connection should be allowed");
-
-        session
-            .disconnect()
-            .await
-            .expect("legacy test session should disconnect");
-        let status = tokio::time::timeout(Duration::from_secs(10), handle)
-            .await
-            .expect("event loop should stop")
-            .expect("event loop task should complete");
-
-        assert_eq!(status, StatusCode::Good);
     }
 }
 

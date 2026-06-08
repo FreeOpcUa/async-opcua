@@ -11,6 +11,7 @@ async-opcua-types = { path = "../../async-opcua-types" }
 tokio = { workspace = true, features = ["full", "rt-multi-thread"] }
 tokio-util = { workspace = true }
 async-opcua = { path = "../../async-opcua" }
+env_logger = { workspace = true }
 
 [[bin]]
 name = "plc-publisher"

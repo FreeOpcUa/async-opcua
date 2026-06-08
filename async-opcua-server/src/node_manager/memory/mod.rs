@@ -125,11 +125,11 @@ impl<TImpl: InMemoryNodeManagerImpl> InMemoryNodeManager<TImpl> {
         subscriptions: &SubscriptionCache,
         values: impl Iterator<Item = (&'a NodeId, AttributeId, Variant)>,
     ) -> Result<(), StatusCode> {
-        let mut address_space = trace_write_lock!(self.address_space);
+        let address_space = trace_write_lock!(self.address_space);
         let mut output = Vec::new();
 
         for (id, attribute_id, value) in values {
-            let Some(node) = address_space.find_mut(id) else {
+            let Some(mut node) = address_space.find_mut(id) else {
                 return Err(StatusCode::BadNodeIdUnknown);
             };
 
@@ -179,16 +179,16 @@ impl<TImpl: InMemoryNodeManagerImpl> InMemoryNodeManager<TImpl> {
         subscriptions: &SubscriptionCache,
         values: impl Iterator<Item = (&'a NodeId, Option<&'a NumericRange>, DataValue)>,
     ) -> Result<(), StatusCode> {
-        let mut address_space = trace_write_lock!(self.address_space);
+        let address_space = trace_write_lock!(self.address_space);
         let now = DateTime::now();
         let mut output = Vec::new();
 
         for (id, index_range, value) in values {
-            let Some(node) = address_space.find_mut(id) else {
+            let Some(mut node) = address_space.find_mut(id) else {
                 return Err(StatusCode::BadNodeIdUnknown);
             };
 
-            match node {
+            match &mut *node {
                 NodeType::Variable(v) => {
                     if let Some(range) = index_range {
                         let status = value.status();
@@ -340,7 +340,7 @@ impl<TImpl: InMemoryNodeManagerImpl> InMemoryNodeManager<TImpl> {
             };
 
             let r_node =
-                Self::get_reference(address_space, type_tree, target_node, node.result_mask());
+                Self::get_reference(address_space, type_tree, &*target_node, node.result_mask());
 
             let ref_desc = ReferenceDescription {
                 reference_type_id: reference.reference_type.clone(),
@@ -452,7 +452,7 @@ impl<TImpl: InMemoryNodeManagerImpl> InMemoryNodeManager<TImpl> {
             };
 
             if is_for_events {
-                let NodeType::Object(object) = node else {
+                let NodeType::Object(object) = &*node else {
                     history_node.set_status(StatusCode::BadHistoryOperationUnsupported);
                     continue;
                 };
@@ -465,12 +465,12 @@ impl<TImpl: InMemoryNodeManagerImpl> InMemoryNodeManager<TImpl> {
                     continue;
                 }
             } else {
-                let NodeType::Variable(_) = node else {
+                let NodeType::Variable(_) = &*node else {
                     history_node.set_status(StatusCode::BadHistoryOperationUnsupported);
                     continue;
                 };
 
-                let user_access_level = user_access_level(context, node);
+                let user_access_level = user_access_level(context, &*node);
 
                 if !user_access_level.contains(AccessLevel::HISTORY_READ) {
                     history_node.set_status(StatusCode::BadUserAccessDenied);
@@ -504,7 +504,7 @@ impl<TImpl: InMemoryNodeManagerImpl> InMemoryNodeManager<TImpl> {
             );
 
             if is_for_events {
-                let NodeType::Object(object) = node else {
+                let NodeType::Object(object) = &*node else {
                     history_node.set_status(StatusCode::BadHistoryOperationUnsupported);
                     continue;
                 };
@@ -517,12 +517,12 @@ impl<TImpl: InMemoryNodeManagerImpl> InMemoryNodeManager<TImpl> {
                     continue;
                 }
             } else {
-                let NodeType::Variable(_) = node else {
+                let NodeType::Variable(_) = &*node else {
                     history_node.set_status(StatusCode::BadHistoryOperationUnsupported);
                     continue;
                 };
 
-                let user_access_level = user_access_level(context, node);
+                let user_access_level = user_access_level(context, &*node);
 
                 if !user_access_level.contains(AccessLevel::HISTORY_WRITE) {
                     history_node.set_status(StatusCode::BadUserAccessDenied);
@@ -559,8 +559,12 @@ impl<TImpl: InMemoryNodeManagerImpl> InMemoryNodeManager<TImpl> {
                 continue;
             };
 
-            let Some(NodeType::Method(method_node)) = address_space.find(method_ref.target_node)
-            else {
+            let Some(method_ref_guard) = address_space.find(method_ref.target_node) else {
+                method.set_status(StatusCode::BadMethodInvalid);
+                continue;
+            };
+
+            let NodeType::Method(method_node) = &*method_ref_guard else {
                 method.set_status(StatusCode::BadMethodInvalid);
                 continue;
             };
@@ -594,7 +598,7 @@ impl<TImpl: InMemoryNodeManagerImpl> InMemoryNodeManager<TImpl> {
 
             // If the input arguments object is invalid, we pass it along anyway and leave it up to
             // the implementation to validate.
-            let NodeType::Variable(arg_var) = input_arguments else {
+            let NodeType::Variable(arg_var) = &*input_arguments else {
                 warn!(
                     "InputArguments for method with ID {} has incorrect node class",
                     method.method_id()
@@ -696,7 +700,7 @@ impl<TImpl: InMemoryNodeManagerImpl> NodeManager for InMemoryNodeManager<TImpl> 
             item.set(Self::get_reference(
                 &address_space,
                 &type_tree,
-                target_node,
+                &*target_node,
                 item.result_mask(),
             ));
         }
@@ -850,7 +854,7 @@ impl<TImpl: InMemoryNodeManagerImpl> NodeManager for InMemoryNodeManager<TImpl> 
                 };
 
                 let read_result = read_node_value(
-                    n,
+                    &*n,
                     context,
                     node.item_to_monitor(),
                     0.0,

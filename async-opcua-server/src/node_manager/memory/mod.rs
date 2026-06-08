@@ -125,7 +125,7 @@ impl<TImpl: InMemoryNodeManagerImpl> InMemoryNodeManager<TImpl> {
         subscriptions: &SubscriptionCache,
         values: impl Iterator<Item = (&'a NodeId, AttributeId, Variant)>,
     ) -> Result<(), StatusCode> {
-        let address_space = trace_write_lock!(self.address_space);
+        let address_space = trace_read_lock!(self.address_space);
         let mut output = Vec::new();
 
         for (id, attribute_id, value) in values {
@@ -179,7 +179,7 @@ impl<TImpl: InMemoryNodeManagerImpl> InMemoryNodeManager<TImpl> {
         subscriptions: &SubscriptionCache,
         values: impl Iterator<Item = (&'a NodeId, Option<&'a NumericRange>, DataValue)>,
     ) -> Result<(), StatusCode> {
-        let address_space = trace_write_lock!(self.address_space);
+        let address_space = trace_read_lock!(self.address_space);
         let now = DateTime::now();
         let mut output = Vec::new();
 

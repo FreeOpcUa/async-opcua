@@ -29,6 +29,7 @@ pub use transport::amqp::AmqpPublisher;
 pub use transport::mqtt::MqttPublisher;
 pub use transport::udp::UdpPublisher;
 pub use transport::websocket::WebSocketPublisher;
+pub use transport::tsn::publisher::TsnPublisher;
 
 pub use codec::json::{json_value_to_opcua, JsonDataSetMessage, JsonNetworkMessage};
 pub use codec::uadp::{PublisherId, UadpDataSetMessage, UadpNetworkMessage};

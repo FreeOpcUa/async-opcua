@@ -322,11 +322,11 @@ impl InMemoryNodeManagerImpl for TestNodeManagerImpl {
                     .push((node.value().node_id.clone(), node.value().attribute_id));
             }
         }
-        let mut address_space = trace_write_lock!(address_space);
+        let address_space = trace_write_lock!(address_space);
         let type_tree = trace_read_lock!(context.type_tree);
 
         for write in nodes_to_write {
-            let node = match address_space.validate_node_write(context, write.value(), &*type_tree)
+            let mut node = match address_space.validate_node_write(context, write.value(), &*type_tree)
             {
                 Ok(v) => v,
                 Err(e) => {
@@ -338,7 +338,7 @@ impl InMemoryNodeManagerImpl for TestNodeManagerImpl {
             if matches!(write.value().attribute_id, AttributeId::Value)
                 && node.node_class() == NodeClass::Variable
             {
-                let NodeType::Variable(var) = node else {
+                let NodeType::Variable(ref mut var) = *node else {
                     write.set_status(StatusCode::BadAttributeIdInvalid);
                     continue;
                 };

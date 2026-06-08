@@ -3,8 +3,8 @@ use std::hash::Hasher;
 use hashbrown::Equivalent;
 
 use crate::{
-    DataTypeId, Identifier, MethodId, NodeId, ObjectId, ObjectTypeId, ReferenceTypeId, VariableId,
-    VariableTypeId,
+    ByteString, DataTypeId, Guid, GuidRef, Identifier, MethodId, NodeId, ObjectId, ObjectTypeId,
+    ReferenceTypeId, UAString, VariableId, VariableTypeId,
 };
 
 // Cheap comparisons intended for use when comparing node IDs to constants.
@@ -93,6 +93,9 @@ pub trait IdentifierRef: PartialEq<Identifier> {
     /// Hash the value as if it was in an identifier. This _must_ result
     /// in the same hash as the equivalent identifier.
     fn hash_as_identifier<H: Hasher>(&self, state: &mut H);
+
+    /// Convert the reference to an owned Identifier.
+    fn to_identifier(&self) -> Identifier;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
@@ -275,3 +278,18 @@ enum_as_node_id_ref!(VariableId);
 enum_as_node_id_ref!(VariableTypeId);
 enum_as_node_id_ref!(DataTypeId);
 enum_as_node_id_ref!(MethodId);
+
+/// Trait to convert a type (typically a NodeIdRef) into an owned NodeId.
+pub trait IntoNodeId {
+    /// Convert the type into an owned NodeId.
+    fn into_node_id(self) -> NodeId;
+}
+
+impl<T: IdentifierRef> IntoNodeId for NodeIdRef<T> {
+    fn into_node_id(self) -> NodeId {
+        NodeId {
+            namespace: self.namespace,
+            identifier: self.identifier.to_identifier(),
+        }
+    }
+}

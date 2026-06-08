@@ -15,3 +15,10 @@ pub mod sequence_number;
 pub mod tcp_codec;
 pub mod tcp_types;
 pub mod url;
+
+use bytes::{Bytes, BytesMut};
+
+/// A zero-copy buffer used for reading from and writing to the network layer.
+pub type NetworkBuffer = BytesMut;
+/// A zero-copy byte slice containing a read/parsed payload from the network layer.
+pub type NetworkPayload = Bytes;

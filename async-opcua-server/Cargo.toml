@@ -32,12 +32,14 @@ json = ["async-opcua-nodes/json", "async-opcua-types/json"]
 discovery-server-registration = ["async-opcua-client"]
 
 [dependencies]
+moka = { version = "0.12", features = ["future", "sync"] }
 arc-swap = { workspace = true }
 argon2 = { version = "0.5.3", features = ["std"] }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 bitflags = { workspace = true }
 chrono = { workspace = true }
+dashmap = "6.1"
 futures = { workspace = true }
 hashbrown = { workspace = true }
 parking_lot = { workspace = true }
@@ -58,6 +60,8 @@ async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.18.0" }
 async-opcua-nodes = { path = "../async-opcua-nodes", features = ["xml"], version = "0.18.0" }
 async-opcua-types = { path = "../async-opcua-types", version = "0.18.0" }
 async-opcua-xml = { path = "../async-opcua-xml", version = "0.18.0" }
+async-opcua-safety = { path = "../async-opcua-safety", version = "0.1.0" }
+
 
 [dev-dependencies]
 async-opcua-client = { path = "../async-opcua-client" }

@@ -210,11 +210,12 @@ fn raise_machine_cycled_event(
     let machine_name = {
         let address_space = manager.address_space();
         let address_space_lck = address_space.read();
-        if let Some(node) = address_space_lck.find_node(source_machine_id) {
+        let name = if let Some(node) = address_space_lck.find_node(source_machine_id) {
             format!("{}", node.as_node().display_name().text)
         } else {
             "Machine ???".to_string()
-        }
+        };
+        name
     };
 
     // New event

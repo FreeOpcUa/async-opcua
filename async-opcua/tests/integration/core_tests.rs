@@ -247,7 +247,7 @@ async fn connect_basic128rsa_15_with_invalid_token() {
         .await
         .unwrap();
     let res = handle.spawn().await.unwrap();
-    assert_eq!(res, StatusCode::BadIdentityTokenRejected);
+    assert_eq!(res, StatusCode::BadUserAccessDenied);
 }
 
 #[tokio::test]

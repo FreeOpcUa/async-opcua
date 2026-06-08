@@ -293,7 +293,8 @@ fn string_variable(fixture: &ProgramFixture, suffix: &str) -> String {
 }
 
 fn variable_value(address_space: &AddressSpace, node_id: &NodeId) -> Variant {
-    let Some(NodeType::Variable(var)) = address_space.find(node_id) else {
+    let node_guard = address_space.find(node_id);
+    let Some(NodeType::Variable(var)) = node_guard.as_deref() else {
         panic!("expected variable node {node_id}");
     };
 

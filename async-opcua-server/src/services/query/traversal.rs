@@ -20,7 +20,7 @@ pub struct QueryGraphTraversal<'a> {
     content_filter: &'a ParsedContentFilter,
     has_related_to: bool,
     related_to_filter: Option<RelatedToFilter<'a>>,
-    nodes: Box<dyn Iterator<Item = &'a NodeType> + 'a>,
+    nodes: Box<dyn Iterator<Item = NodeId> + 'a>,
 }
 
 impl<'a> QueryGraphTraversal<'a> {
@@ -41,7 +41,7 @@ impl<'a> QueryGraphTraversal<'a> {
             content_filter,
             has_related_to: content_filter_has_related_to(content_filter),
             related_to_filter: single_related_to_filter(content_filter),
-            nodes: Box::new(address_space.nodes()),
+            nodes: Box::new(address_space.iter_node_ids()),
         }
     }
 
@@ -52,7 +52,7 @@ impl<'a> QueryGraphTraversal<'a> {
         type_tree: &'a dyn TypeTree,
         node_types: &'a [ParsedNodeTypeDescription],
         content_filter: &'a ParsedContentFilter,
-        candidates: impl Iterator<Item = &'a NodeType> + 'a,
+        candidates: impl Iterator<Item = NodeId> + 'a,
     ) -> Self {
         Self {
             address_space,
@@ -74,7 +74,7 @@ impl<'a> QueryGraphTraversal<'a> {
         type_tree: &'a dyn TypeTree,
         candidate_type: &'a NodeId,
         content_filter: &'a ParsedContentFilter,
-        candidates: impl Iterator<Item = &'a NodeType> + 'a,
+        candidates: impl Iterator<Item = NodeId> + 'a,
     ) -> Self {
         Self {
             address_space,
@@ -329,10 +329,9 @@ impl Iterator for QueryGraphTraversal<'_> {
     type Item = NodeId;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some(node) = self.nodes.next() {
-            let node_id = node.node_id();
-            if self.matches(node_id) {
-                return Some(node_id.clone());
+        while let Some(node_id) = self.nodes.next() {
+            if self.matches(&node_id) {
+                return Some(node_id);
             }
         }
 

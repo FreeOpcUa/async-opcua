@@ -55,7 +55,8 @@ impl ParsedEventFilter {
         client_handle: u32,
         type_tree: &dyn TypeTree,
     ) -> Option<EventFieldList> {
-        if !self.field_access.where_fields_are_authorized(type_tree) {
+        let event_type_id = event.event_type_id();
+        if !self.field_access.where_fields_are_authorized(event_type_id, type_tree) {
             return None;
         }
 
@@ -67,7 +68,7 @@ impl ParsedEventFilter {
             .select_clauses
             .extract_event_fields(event, client_handle);
         self.field_access
-            .mask_unauthorized_selected_fields(&mut fields, type_tree);
+            .mask_unauthorized_selected_fields(event_type_id, &mut fields, type_tree);
 
         Some(fields)
     }
@@ -94,14 +95,15 @@ impl EventFieldAccess {
         }
     }
 
-    fn where_fields_are_authorized(&self, type_tree: &dyn TypeTree) -> bool {
+    fn where_fields_are_authorized(&self, event_type_id: &NodeId, type_tree: &dyn TypeTree) -> bool {
         self.where_fields
             .iter()
-            .all(|field| field.is_authorized(type_tree))
+            .all(|field| field.is_authorized(event_type_id, type_tree))
     }
 
     fn mask_unauthorized_selected_fields(
         &self,
+        event_type_id: &NodeId,
         fields: &mut EventFieldList,
         type_tree: &dyn TypeTree,
     ) {
@@ -110,7 +112,7 @@ impl EventFieldAccess {
         };
 
         for (value, field) in values.iter_mut().zip(&self.select_fields) {
-            if !field.is_authorized(type_tree) {
+            if !field.is_authorized(event_type_id, type_tree) {
                 *value = Variant::StatusCode(StatusCode::BadUserAccessDenied);
             }
         }
@@ -133,14 +135,26 @@ impl EventFieldReference {
         })
     }
 
-    fn is_authorized(&self, type_tree: &dyn TypeTree) -> bool {
+    fn is_authorized(&self, event_type_id: &NodeId, type_tree: &dyn TypeTree) -> bool {
         if type_tree.get(&self.type_definition_id).is_none() {
             return true;
         }
+        if !type_tree.is_subtype_of(event_type_id, &self.type_definition_id) {
+            return true;
+        }
 
-        let Some(prop) =
-            type_tree.find_type_prop_by_browse_path(&self.type_definition_id, &self.browse_path)
-        else {
+        // Walk up the supertype hierarchy from event_type_id to find the property.
+        let mut current_type = Some(event_type_id);
+        let mut prop = None;
+        while let Some(t) = current_type {
+            if let Some(p) = type_tree.find_type_prop_by_browse_path(t, &self.browse_path) {
+                prop = Some(p);
+                break;
+            }
+            current_type = type_tree.get_supertype(t);
+        }
+
+        let Some(prop) = prop else {
             return false;
         };
 

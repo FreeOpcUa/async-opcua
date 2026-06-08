@@ -46,10 +46,6 @@ mod server_handle;
 mod server_status;
 /// Shared service-level authorization helpers.
 pub mod services;
-/// Secure-channel negotiation helpers.
-pub mod security {
-    pub use crate::session::negotiate::validate_security_policy;
-}
 mod session;
 mod subscriptions;
 mod transport;

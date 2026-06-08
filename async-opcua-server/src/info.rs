@@ -148,7 +148,6 @@ impl ServerInfo {
                 .config
                 .endpoints
                 .values()
-                .filter(|e| self.endpoint_is_visible(e))
                 .map(|e| self.new_endpoint_description(e, true))
                 .collect();
             return Some(endpoints);
@@ -166,7 +165,6 @@ impl ServerInfo {
                 .config
                 .endpoints
                 .values()
-                .filter(|e| self.endpoint_is_visible(e))
                 .filter(|e| {
                     url_matches_except_host(
                         &e.endpoint_url(&base_endpoint_url),
@@ -182,11 +180,7 @@ impl ServerInfo {
                 endpoint_url
             );
             if let Some(e) = self.config.default_endpoint() {
-                if self.endpoint_is_visible(e) {
-                    Some(vec![self.new_endpoint_description(e, true)])
-                } else {
-                    Some(vec![])
-                }
+                Some(vec![self.new_endpoint_description(e, true)])
             } else {
                 Some(vec![])
             }
@@ -230,7 +224,6 @@ impl ServerInfo {
         self.config
             .endpoints
             .values()
-            .filter(|endpoint| self.endpoint_is_visible(endpoint))
             .map(|endpoint| endpoint.endpoint_url(&base_endpoint_url))
             .chain(self.config.discovery_urls.iter().cloned())
             .any(|advertised_url| url_matches_except_host(&advertised_url, requested))
@@ -290,7 +283,6 @@ impl ServerInfo {
         self.config
             .endpoints
             .values()
-            .filter(|endpoint| self.endpoint_is_visible(endpoint))
             .map(|endpoint| endpoint.endpoint_url(&base_endpoint_url))
             .chain(self.config.discovery_urls.iter().cloned())
             .any(|advertised_url| {
@@ -315,8 +307,7 @@ impl ServerInfo {
             .iter()
             .filter(|&(_, e)| {
                 // Test end point's security_policy_uri and matching url
-                self.endpoint_is_visible(e)
-                    && url_matches_except_host(&e.endpoint_url(&base_endpoint_url), endpoint_url)
+                url_matches_except_host(&e.endpoint_url(&base_endpoint_url), endpoint_url)
             })
             .map(|(_, e)| self.new_endpoint_description(e, false))
             .collect();
@@ -378,10 +369,6 @@ impl ServerInfo {
             transport_profile_uri: UAString::from(profiles::TRANSPORT_PROFILE_URI_BINARY),
             security_level: endpoint.security_level,
         }
-    }
-
-    fn endpoint_is_visible(&self, endpoint: &ServerEndpoint) -> bool {
-        self.config.allow_legacy_crypto || !endpoint.security_policy().is_deprecated()
     }
 
     /// Get the list of discovery URLs on the server.
@@ -831,86 +818,6 @@ mod tests {
 
     use crate::{ServerBuilder, ANONYMOUS_USER_TOKEN_ID};
 
-    fn server_builder_with_legacy_and_modern_endpoints(allow_legacy_crypto: bool) -> ServerBuilder {
-        let user_token_ids = [ANONYMOUS_USER_TOKEN_ID];
-
-        ServerBuilder::new()
-            .without_node_managers()
-            .application_name("Endpoint Filter Test")
-            .application_uri("urn:endpoint-filter-test")
-            .product_uri("urn:endpoint-filter-test")
-            .discovery_urls(vec!["opc.tcp://127.0.0.1:4840/".to_string()])
-            .allow_legacy_crypto(allow_legacy_crypto)
-            .add_endpoint(
-                "legacy",
-                (
-                    "/",
-                    SecurityPolicy::Basic256,
-                    MessageSecurityMode::Sign,
-                    &user_token_ids as &[&str],
-                ),
-            )
-            .add_endpoint(
-                "modern",
-                (
-                    "/",
-                    SecurityPolicy::Aes256Sha256RsaPss,
-                    MessageSecurityMode::Sign,
-                    &user_token_ids as &[&str],
-                ),
-            )
-    }
-
-    #[tokio::test]
-    async fn endpoints_hide_deprecated_security_policies_by_default() {
-        let (_server, handle) = server_builder_with_legacy_and_modern_endpoints(false)
-            .build()
-            .expect("server should build");
-
-        let endpoints = handle
-            .info()
-            .endpoints(&UAString::from("opc.tcp://127.0.0.1:4840/"), &None)
-            .expect("endpoints should be returned");
-
-        assert_eq!(endpoints.len(), 1);
-        assert_eq!(
-            endpoints[0].security_policy_uri.as_ref(),
-            SecurityPolicy::Aes256Sha256RsaPss.to_uri()
-        );
-    }
-
-    #[tokio::test]
-    async fn new_endpoint_descriptions_hide_deprecated_security_policies_by_default() {
-        let (_server, handle) = server_builder_with_legacy_and_modern_endpoints(false)
-            .build()
-            .expect("server should build");
-
-        let endpoints = handle
-            .info()
-            .new_endpoint_descriptions("opc.tcp://localhost:4840/")
-            .expect("matching endpoints should be returned");
-
-        assert_eq!(endpoints.len(), 1);
-        assert_eq!(
-            endpoints[0].security_policy_uri.as_ref(),
-            SecurityPolicy::Aes256Sha256RsaPss.to_uri()
-        );
-    }
-
-    #[tokio::test]
-    async fn endpoints_include_deprecated_security_policies_when_legacy_crypto_is_enabled() {
-        let (_server, handle) = server_builder_with_legacy_and_modern_endpoints(true)
-            .build()
-            .expect("server should build");
-
-        let endpoints = handle
-            .info()
-            .endpoints(&UAString::from("opc.tcp://127.0.0.1:4840/"), &None)
-            .expect("endpoints should be returned");
-
-        assert_eq!(endpoints.len(), 2);
-    }
-
     #[tokio::test]
     async fn endpoints_filter_by_requested_endpoint_url() {
         let user_token_ids = [ANONYMOUS_USER_TOKEN_ID];
@@ -920,7 +827,6 @@ mod tests {
             .application_uri("urn:endpoint-url-filter-test")
             .product_uri("urn:endpoint-url-filter-test")
             .discovery_urls(vec!["opc.tcp://127.0.0.1:4840/".to_string()])
-            .allow_legacy_crypto(true)
             .host("127.0.0.1")
             .port(4840)
             .add_endpoint(

@@ -1,6 +1,5 @@
 use crate::session::continuation_points::ContinuationPoint;
 use opcua_types::{ByteString, DateTime, NodeId};
-use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 /// Historical read continuation point payload structure.
@@ -57,43 +56,52 @@ impl HistoryContinuationPoint {
 }
 
 /// Helper cache to manage continuation point lifecycles, pruning, and eviction.
-pub struct HistoryContinuationPointCache;
+#[derive(Clone)]
+pub struct HistoryContinuationPointCache {
+    cache: moka::sync::Cache<ByteString, std::sync::Arc<parking_lot::Mutex<Option<ContinuationPoint>>>>,
+}
 
 impl HistoryContinuationPointCache {
-    /// Prunes expired continuation points and evicts the oldest (LRU) history continuation points
-    /// if the number of points exceeds the specified maximum limit.
-    pub fn prune_and_evict(
-        points: &mut HashMap<ByteString, ContinuationPoint>,
-        max_limit: usize,
-        max_age: Duration,
-    ) {
-        // 1. Evict expired history continuation points
-        points.retain(|_, cp| {
-            if let Some(hcp) = cp.get::<HistoryContinuationPoint>() {
-                hcp.created_at.elapsed() < max_age
-            } else {
-                true // keep non-history continuation points or empty ones
-            }
-        });
-
-        let mut history_keys: Vec<(ByteString, Instant)> = points
-            .iter()
-            .filter_map(|(k, cp)| {
-                cp.get::<HistoryContinuationPoint>()
-                    .map(|hcp| (k.clone(), hcp.last_accessed_at))
-            })
-            .collect();
-
-        // 2. If the history size exceeds max_limit, evict the least recently used points.
-        if max_limit > 0 && history_keys.len() > max_limit {
-            // Sort by last accessed time (oldest first)
-            history_keys.sort_by_key(|&(_, last_accessed)| last_accessed);
-
-            let to_remove = history_keys.len() - max_limit;
-            for i in 0..to_remove.min(history_keys.len()) {
-                points.remove(&history_keys[i].0);
-            }
+    /// Creates a new HistoryContinuationPointCache.
+    pub fn new(max_limit: usize, max_age: Duration) -> Self {
+        let builder = moka::sync::Cache::builder();
+        let builder = if max_limit > 0 {
+            builder.max_capacity(max_limit as u64)
+        } else {
+            builder
+        };
+        Self {
+            cache: builder
+                .time_to_live(max_age)
+                .build(),
         }
+    }
+
+    /// Insert a continuation point.
+    pub fn insert(&self, id: ByteString, cp: ContinuationPoint) {
+        self.cache.insert(id, std::sync::Arc::new(parking_lot::Mutex::new(Some(cp))));
+    }
+
+    /// Remove a continuation point.
+    pub fn remove(&self, id: &ByteString) -> Option<ContinuationPoint> {
+        let cp_arc = self.cache.get(id);
+        self.cache.invalidate(id);
+        cp_arc.and_then(|arc| arc.lock().take())
+    }
+
+    /// Check if key exists.
+    pub fn contains_key(&self, id: &ByteString) -> bool {
+        self.cache.contains_key(id)
+    }
+
+    /// Get count of entries in the cache.
+    pub fn entry_count(&self) -> u64 {
+        self.cache.entry_count()
+    }
+
+    /// Force cache maintenance tasks to run.
+    pub fn run_pending_tasks(&self) {
+        self.cache.run_pending_tasks();
     }
 }
 
@@ -103,9 +111,8 @@ mod tests {
     use crate::session::continuation_points::ContinuationPoint;
     use opcua_types::{ByteString, DateTime, NodeId};
 
-    fn history_point(created_ago: Duration, accessed_ago: Duration) -> ContinuationPoint {
-        let now = Instant::now();
-        let mut point = HistoryContinuationPoint::new(
+    fn history_point() -> ContinuationPoint {
+        let point = HistoryContinuationPoint::new(
             NodeId::new(1, "history-node"),
             DateTime::null(),
             DateTime::null(),
@@ -113,64 +120,38 @@ mod tests {
             false,
             None,
         );
-        point.created_at = now - created_ago;
-        point.last_accessed_at = now - accessed_ago;
         ContinuationPoint::new(Box::new(point))
     }
 
-    fn non_history_point() -> ContinuationPoint {
-        ContinuationPoint::new(Box::new("browse-continuation".to_string()))
+    #[test]
+    fn cache_limits_size_via_eviction() {
+        let cache = HistoryContinuationPointCache::new(10, Duration::from_secs(300));
+        for i in 0..100 {
+            let key = ByteString::from(format!("key-{}", i).into_bytes());
+            cache.insert(key, history_point());
+        }
+        
+        // Force moka to process evictions
+        cache.run_pending_tasks();
+        
+        assert!(cache.entry_count() <= 10, "Cache size {} exceeded max capacity 10", cache.entry_count());
     }
 
     #[test]
-    fn prune_and_evict_removes_expired_history_points() {
-        let expired = ByteString::from(b"expired");
+    fn cache_removes_expired_history_points() {
+        // Use a short TTL of 50ms
+        let cache = HistoryContinuationPointCache::new(10, Duration::from_millis(50));
         let active = ByteString::from(b"active");
-        let non_history = ByteString::from(b"non-history");
-        let mut points = HashMap::new();
-        points.insert(
-            expired.clone(),
-            history_point(Duration::from_secs(301), Duration::from_secs(1)),
-        );
-        points.insert(
-            active.clone(),
-            history_point(Duration::from_secs(60), Duration::from_secs(1)),
-        );
-        points.insert(non_history.clone(), non_history_point());
 
-        HistoryContinuationPointCache::prune_and_evict(&mut points, 10, Duration::from_secs(300));
+        cache.insert(active.clone(), history_point());
+        assert!(cache.contains_key(&active));
 
-        assert!(!points.contains_key(&expired));
-        assert!(points.contains_key(&active));
-        assert!(points.contains_key(&non_history));
-    }
+        // Wait for it to expire
+        std::thread::sleep(Duration::from_millis(150));
 
-    #[test]
-    fn prune_and_evict_removes_least_recently_used_history_points() {
-        let oldest = ByteString::from(b"oldest");
-        let middle = ByteString::from(b"middle");
-        let newest = ByteString::from(b"newest");
-        let non_history = ByteString::from(b"non-history");
-        let mut points = HashMap::new();
-        points.insert(
-            oldest.clone(),
-            history_point(Duration::from_secs(1), Duration::from_secs(30)),
-        );
-        points.insert(
-            middle.clone(),
-            history_point(Duration::from_secs(1), Duration::from_secs(20)),
-        );
-        points.insert(
-            newest.clone(),
-            history_point(Duration::from_secs(1), Duration::from_secs(10)),
-        );
-        points.insert(non_history.clone(), non_history_point());
+        // Force expiration check
+        cache.run_pending_tasks();
 
-        HistoryContinuationPointCache::prune_and_evict(&mut points, 2, Duration::from_secs(300));
-
-        assert!(!points.contains_key(&oldest));
-        assert!(points.contains_key(&middle));
-        assert!(points.contains_key(&newest));
-        assert!(points.contains_key(&non_history));
+        assert!(!cache.contains_key(&active), "Active continuation point was not expired");
     }
 }

@@ -64,7 +64,7 @@ pub struct Session {
     /// Continuation points for browse.
     browse_continuation_points: HashMap<ByteString, BrowseContinuationPoint>,
     /// Continuation points for history.
-    history_continuation_points: HashMap<ByteString, ContinuationPoint>,
+    history_continuation_points: HistoryContinuationPointCache,
     /// Continuation points for querying.
     query_continuation_points: HashMap<ByteString, QueryContinuationPoint>,
     /// User token.
@@ -121,7 +121,10 @@ impl Session {
             max_history_continuation_points: info.config.limits.max_history_continuation_points,
             max_query_continuation_points: info.config.limits.max_query_continuation_points,
             browse_continuation_points: Default::default(),
-            history_continuation_points: Default::default(),
+            history_continuation_points: HistoryContinuationPointCache::new(
+                info.config.limits.max_history_continuation_points,
+                HISTORY_CONTINUATION_POINT_TTL,
+            ),
             query_continuation_points: Default::default(),
             user_token: None,
             claims: None,
@@ -266,12 +269,6 @@ impl Session {
         cp: ContinuationPoint,
     ) -> Result<(), ()> {
         self.history_continuation_points.insert(id.clone(), cp);
-        HistoryContinuationPointCache::prune_and_evict(
-            &mut self.history_continuation_points,
-            self.max_history_continuation_points,
-            HISTORY_CONTINUATION_POINT_TTL,
-        );
-
         if self.history_continuation_points.contains_key(id) {
             Ok(())
         } else {

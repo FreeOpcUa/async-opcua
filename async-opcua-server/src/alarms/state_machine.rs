@@ -224,52 +224,60 @@ impl ConditionStateMachine {
 
     /// Gets the current severity of the condition.
     pub fn get_severity(&self, address_space: &AddressSpace) -> u16 {
-        if let Some(NodeType::Variable(ref var)) = address_space.find(&self.severity_id) {
-            if let Some(Variant::UInt16(v)) = var
-                .value(
-                    opcua_types::TimestampsToReturn::Neither,
-                    &opcua_types::NumericRange::None,
-                    &opcua_types::DataEncoding::Binary,
-                    0.0,
-                )
-                .value
-            {
-                return v;
+        if let Some(node) = address_space.find(&self.severity_id) {
+            if let NodeType::Variable(ref var) = *node {
+                if let Some(Variant::UInt16(v)) = var
+                    .value(
+                        opcua_types::TimestampsToReturn::Neither,
+                        &opcua_types::NumericRange::None,
+                        &opcua_types::DataEncoding::Binary,
+                        0.0,
+                    )
+                    .value
+                {
+                    return v;
+                }
             }
-        }
+        };
         0
     }
 
     /// Sets the current severity of the condition.
     pub fn set_severity(&self, address_space: &mut AddressSpace, severity: u16) {
-        if let Some(NodeType::Variable(ref mut var)) = address_space.find_mut(&self.severity_id) {
-            let _ = var.set_value(&opcua_types::NumericRange::None, Variant::from(severity));
-        }
+        if let Some(mut node) = address_space.find_mut(&self.severity_id) {
+            if let NodeType::Variable(ref mut var) = &mut *node {
+                let _ = var.set_value(&opcua_types::NumericRange::None, Variant::from(severity));
+            }
+        };
     }
 
     /// Gets the current localized message of the condition.
     pub fn get_message(&self, address_space: &AddressSpace) -> LocalizedText {
-        if let Some(NodeType::Variable(ref var)) = address_space.find(&self.message_id) {
-            if let Some(Variant::LocalizedText(ref t)) = var
-                .value(
-                    opcua_types::TimestampsToReturn::Neither,
-                    &opcua_types::NumericRange::None,
-                    &opcua_types::DataEncoding::Binary,
-                    0.0,
-                )
-                .value
-            {
-                return (**t).clone();
+        if let Some(node) = address_space.find(&self.message_id) {
+            if let NodeType::Variable(ref var) = *node {
+                if let Some(Variant::LocalizedText(ref t)) = var
+                    .value(
+                        opcua_types::TimestampsToReturn::Neither,
+                        &opcua_types::NumericRange::None,
+                        &opcua_types::DataEncoding::Binary,
+                        0.0,
+                    )
+                    .value
+                {
+                    return (**t).clone();
+                }
             }
-        }
+        };
         LocalizedText::null()
     }
 
     /// Sets the current localized message of the condition.
     pub fn set_message(&self, address_space: &mut AddressSpace, message: LocalizedText) {
-        if let Some(NodeType::Variable(ref mut var)) = address_space.find_mut(&self.message_id) {
-            let _ = var.set_value(&opcua_types::NumericRange::None, Variant::from(message));
-        }
+        if let Some(mut node) = address_space.find_mut(&self.message_id) {
+            if let NodeType::Variable(ref mut var) = &mut *node {
+                let _ = var.set_value(&opcua_types::NumericRange::None, Variant::from(message));
+            }
+        };
     }
 
     /// Gets whether the condition is retained.
@@ -283,25 +291,29 @@ impl ConditionStateMachine {
     }
 
     fn get_bool_value(&self, address_space: &AddressSpace, id: &NodeId) -> bool {
-        if let Some(NodeType::Variable(ref var)) = address_space.find(id) {
-            if let Some(Variant::Boolean(b)) = var
-                .value(
-                    opcua_types::TimestampsToReturn::Neither,
-                    &opcua_types::NumericRange::None,
-                    &opcua_types::DataEncoding::Binary,
-                    0.0,
-                )
-                .value
-            {
-                return b;
+        if let Some(node) = address_space.find(id) {
+            if let NodeType::Variable(ref var) = *node {
+                if let Some(Variant::Boolean(b)) = var
+                    .value(
+                        opcua_types::TimestampsToReturn::Neither,
+                        &opcua_types::NumericRange::None,
+                        &opcua_types::DataEncoding::Binary,
+                        0.0,
+                    )
+                    .value
+                {
+                    return b;
+                }
             }
-        }
+        };
         false
     }
 
     fn set_bool_value(&self, address_space: &mut AddressSpace, id: &NodeId, value: bool) {
-        if let Some(NodeType::Variable(ref mut var)) = address_space.find_mut(id) {
-            let _ = var.set_value(&opcua_types::NumericRange::None, Variant::from(value));
-        }
+        if let Some(mut node) = address_space.find_mut(id) {
+            if let NodeType::Variable(ref mut var) = &mut *node {
+                let _ = var.set_value(&opcua_types::NumericRange::None, Variant::from(value));
+            }
+        };
     }
 }

@@ -203,7 +203,7 @@ fn build_writer_group_payload(
         let mut uadp_fields = Vec::new();
 
         for node_id in &writer.published_dataset.published_variables {
-            if let Some(NodeType::Variable(var)) = space.find(node_id) {
+            if let Some(NodeType::Variable(var)) = space.find(node_id).as_deref() {
                 let ctx_owned = ContextOwned::default();
                 let ctx = ctx_owned.context();
                 let data_value = var.value(

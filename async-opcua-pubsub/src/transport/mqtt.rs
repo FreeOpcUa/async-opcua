@@ -95,7 +95,7 @@ impl PubSubPublisher for MqttPublisher {
 
                         for node_id in &writer.published_dataset.published_variables {
                             if let Some(node) = space.find(node_id) {
-                                if let NodeType::Variable(ref var) = node {
+                                if let NodeType::Variable(ref var) = *node {
                                     // Use standard OPC UA getter
                                     let ctx_owned = ContextOwned::default();
                                     let ctx = ctx_owned.context();

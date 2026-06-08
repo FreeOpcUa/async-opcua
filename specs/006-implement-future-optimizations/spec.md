@@ -5,6 +5,15 @@
 **Status**: Draft  
 **Input**: User description: "implement the optimizations as outlined in specs/005-future-performance-optimizations/spec.md"
 
+## Clarifications
+
+### Session 2026-06-08
+- Q: Which observability mechanism should be implemented to monitor the performance of the new O(1) session registry, notification pool, zero-copy serializer, and session actors? → A: Core Performance Metrics: Implement instrumentation (counters/gauges) to track session lookup latency, pool usage, and serialization error rates.
+- Q: How should a session actor handle initialization failures or unexpected state transition errors? → A: Immediate Abort: Terminate the session actor immediately, notify the client, close the network channel, and remove the session from the O(1) registry.
+- Q: What should be declared as explicitly out-of-scope for this optimization phase? → A: All of the above: Both database/transport optimizations and client-side API modifications are out of scope.
+- Q: How should the notification pool behave under extreme burst conditions if all pooled objects are currently in use? → A: Block/Wait: Block the publishing thread until a notification structure is returned to the pool (ensures strict memory bounding).
+- Q: Which buffer management strategy should be used to reuse memory buffers on the transmit path? → A: Connection-local buffers: Maintain a single reusable buffer per network connection loop, resetting it (without deallocating) after each write.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Optimized Server and Client Performance (Priority: P1)
@@ -39,6 +48,8 @@ As a software maintainer, I want the optimization changes to be fully integrated
 
 - **Compatibility with Legacy Clients**: How do legacy clients negotiate connection or security settings under the new session actor and zero-copy write pipeline? The protocol handshakes must remain fully compliant.
 - **Buffer Boundary Wrapping**: What happens if the direct-serialized data exceeds the pre-allocated outbound buffer size? The buffer must dynamically resize, or split into multiple frames according to the max message size negotiated during the connection phase.
+- **Session Actor Initialization or State Transition Failures**: If a session actor fails to initialize or encounters a state transition error, it MUST abort immediately, close the client's network connection, and remove its authentication token from the O(1) registry to prevent lingering state or unauthorized access.
+- **Notification Pool Exhaustion**: Under extreme burst conditions where all pooled notification structures are in use, the publishing thread MUST block and wait until a structure is recycled and returned to the pool. This guarantees a strict upper bound on memory usage under load.
 
 ## Requirements *(mandatory)*
 
@@ -50,6 +61,8 @@ As a software maintainer, I want the optimization changes to be fully integrated
 - **FR-004**: The subscription notification generation logic MUST recycle notification message structures using an object pool.
 - **FR-005**: All updated components MUST maintain compatibility with the existing public OPC UA server and client APIs.
 - **FR-006**: All unit, integration, and performance tests MUST compile and pass successfully.
+- **FR-007**: The system MUST instrument key performance indicators (session lookup times, pool utilization, and serialization errors) using lightweight metrics (counters and gauges) for observability.
+- **FR-008**: The connection management loop MUST maintain a connection-local reusable write buffer that is reset after each transmission to achieve zero-allocation serialization.
 
 ### Key Entities
 
@@ -71,3 +84,4 @@ As a software maintainer, I want the optimization changes to be fully integrated
 
 - The implementation does not require breaking changes to public-facing API signatures.
 - The platform supports the lock-free data structures and async libraries utilized.
+- Database backend (SQLite) query optimizations, historical data caching, TSN transport layer adjustments, and client-side public API refactorings are explicitly out of scope for this feature.

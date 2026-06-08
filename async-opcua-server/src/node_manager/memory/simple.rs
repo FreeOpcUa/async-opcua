@@ -279,12 +279,12 @@ impl InMemoryNodeManagerImpl for SimpleNodeManagerImpl {
         address_space: &RwLock<AddressSpace>,
         nodes_to_write: &mut [&mut WriteNode],
     ) -> Result<(), StatusCode> {
-        let mut address_space = trace_write_lock!(address_space);
+        let address_space = trace_read_lock!(address_space);
         let type_tree = trace_read_lock!(context.type_tree);
         let cbs = trace_read_lock!(self.write_cbs);
 
         for write in nodes_to_write {
-            self.write_node_value(&cbs, context, &mut address_space, &type_tree, write);
+            self.write_node_value(&cbs, context, &address_space, &type_tree, write);
         }
 
         Ok(())
@@ -658,7 +658,7 @@ impl SimpleNodeManagerImpl {
         &self,
         cbs: &HashMap<NodeId, WriteCB>,
         context: &RequestContext,
-        address_space: &mut AddressSpace,
+        address_space: &AddressSpace,
         type_tree: &DefaultTypeTree,
         write: &mut WriteNode,
     ) {

@@ -11,7 +11,10 @@
 //! * MSG - Message chunk
 //! * OPN - Open Secure Channel message
 //! * CLO - Close Secure Channel message
-use std::io::{self, IoSlice};
+use std::{
+    io::{self, IoSlice},
+    sync::atomic::{AtomicU64, Ordering},
+};
 
 use bytes::{BufMut, BytesMut};
 use tokio::io::{AsyncWrite, AsyncWriteExt};
@@ -30,6 +33,34 @@ use super::{
         ReverseHelloMessage, MESSAGE_HEADER_LEN,
     },
 };
+
+/// Thread-safe counters for outbound serialization.
+#[derive(Debug)]
+pub struct SerializationMetrics {
+    /// Number of serialization failures observed while encoding outbound messages.
+    pub serialization_errors: AtomicU64,
+    /// Total number of bytes successfully written to outbound buffers.
+    pub bytes_written: AtomicU64,
+}
+
+impl SerializationMetrics {
+    /// Creates a zero-initialized serialization metrics registry.
+    pub const fn new() -> Self {
+        Self {
+            serialization_errors: AtomicU64::new(0),
+            bytes_written: AtomicU64::new(0),
+        }
+    }
+}
+
+impl Default for SerializationMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Global outbound serialization metrics registry.
+pub static SERIALIZATION_METRICS: SerializationMetrics = SerializationMetrics::new();
 
 #[derive(Debug)]
 /// Message type sent over OPC-UA streams.
@@ -109,11 +140,18 @@ impl Encoder<Message> for TcpCodec {
         };
 
         if let Err(err) = result {
+            SERIALIZATION_METRICS
+                .serialization_errors
+                .fetch_add(1, Ordering::Relaxed);
             self.reset_write_buffer();
             return Err(err);
         }
 
+        let bytes_written = self.write_buf.len() as u64;
         buf.put_slice(&self.write_buf);
+        SERIALIZATION_METRICS
+            .bytes_written
+            .fetch_add(bytes_written, Ordering::Relaxed);
         self.reset_write_buffer();
         Ok(())
     }

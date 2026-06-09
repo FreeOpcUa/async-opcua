@@ -64,10 +64,10 @@
 
 ### Implementation for User Story 2
 
-- [ ] T013 [P] [US2] Add `bytes = "1.5"` to dependencies in `async-opcua-core/Cargo.toml`
-- [ ] T014 [US2] Refactor connection write loop to hold a connection-local `BytesMut` buffer in `async-opcua-core/src/comms/tcp_codec.rs`
-- [ ] T015 [US2] Implement write buffer reset helper to clear and reset the connection-local write buffer in `async-opcua-core/src/comms/tcp_codec.rs`
-- [ ] T016 [US2] Refactor `BinaryEncodable::encode` serialization path to write directly to the mutable `BytesMut` buffer in `async-opcua-core/src/comms/tcp_codec.rs`
+- [X] T013 [P] [US2] Add `bytes = "1.5"` to dependencies in `async-opcua-core/Cargo.toml`
+- [X] T014 [US2] Refactor connection write loop to hold a connection-local `BytesMut` buffer in `async-opcua-core/src/comms/tcp_codec.rs`
+- [X] T015 [US2] Implement write buffer reset helper to clear and reset the connection-local write buffer in `async-opcua-core/src/comms/tcp_codec.rs`
+- [X] T016 [US2] Refactor `BinaryEncodable::encode` serialization path to write directly to the mutable `BytesMut` buffer in `async-opcua-core/src/comms/tcp_codec.rs`
 - [ ] T017 [US2] Update socket writing pipeline to utilize vectored write operations in `async-opcua-core/src/comms/tcp_codec.rs`
 - [ ] T018 [US2] Implement bounds check validation to resize the connection-local buffer in `async-opcua-core/src/comms/tcp_codec.rs`
 - [ ] T019 [US2] Instrument serialization metrics (counters for errors, bytes written) in `async-opcua-core/src/comms/tcp_codec.rs`

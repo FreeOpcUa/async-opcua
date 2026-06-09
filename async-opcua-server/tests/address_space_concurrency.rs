@@ -44,7 +44,9 @@ async fn test_concurrent_read_write() {
                 // Even tasks write, odd tasks read
                 if task_id % 2 == 0 {
                     let aspace = aspace_clone.write();
-                    if let Some(NodeType::Variable(ref mut var)) = aspace.find_mut(&node_id).as_deref_mut() {
+                    if let Some(NodeType::Variable(ref mut var)) =
+                        aspace.find_mut(&node_id).as_deref_mut()
+                    {
                         let _ = var.set_value(&NumericRange::None, Variant::from(i as i32));
                     };
                 } else {

@@ -10,14 +10,15 @@ pub use opcua_core_namespace::CoreNamespace;
 
 use std::collections::VecDeque;
 
-use hashbrown::{HashMap, HashSet};
 use dashmap::DashMap;
+use hashbrown::{HashMap, HashSet};
 use tracing::{debug, error, info, warn};
 
 use crate::node_manager::{ParsedReadValueId, ParsedWriteValue, RequestContext};
 use opcua_types::{
-    node_id::{IntoNodeId, IntoNodeIdRef}, BrowseDirection, DataValue, LocalizedText, NodeClass, NodeId,
-    QualifiedName, ReferenceTypeId, StatusCode, TimestampsToReturn,
+    node_id::{IntoNodeId, IntoNodeIdRef},
+    BrowseDirection, DataValue, LocalizedText, NodeClass, NodeId, QualifiedName, ReferenceTypeId,
+    StatusCode, TimestampsToReturn,
 };
 
 /// Type alias for the concurrent node map using DashMap.
@@ -153,7 +154,7 @@ impl AddressSpace {
                 // Clone the target_node because `push_back` expects an owned NodeId
                 found_ids.push_back((child.target_node.clone(), root_type.clone(), path, nc));
             }
-            
+
             if !path.is_empty() {
                 // Convert Vec<QualifiedName> to slice of references as required by the API
                 let path_refs: Vec<&QualifiedName> = path.iter().collect();
@@ -363,16 +364,20 @@ impl AddressSpace {
     }
 
     /// Find node by something that can be turned into a node id and return a reference to it.
-    pub fn find<'b>(&self, node_id: impl IntoNodeIdRef<'b>) -> Option<dashmap::mapref::one::Ref<'_, NodeId, NodeType>> {
+    pub fn find<'b>(
+        &self,
+        node_id: impl IntoNodeIdRef<'b>,
+    ) -> Option<dashmap::mapref::one::Ref<'_, NodeId, NodeType>> {
         self.find_node(node_id)
     }
 
     /// Find node by something that can be turned into a node id and return a mutable reference to it.
-    pub fn find_mut<'b>(&self, node_id: impl IntoNodeIdRef<'b>) -> Option<dashmap::mapref::one::RefMut<'_, NodeId, NodeType>> {
+    pub fn find_mut<'b>(
+        &self,
+        node_id: impl IntoNodeIdRef<'b>,
+    ) -> Option<dashmap::mapref::one::RefMut<'_, NodeId, NodeType>> {
         self.find_node_mut(node_id)
     }
-
-
 
     /// Finds a node by its node id and returns a reference to it.
     pub fn find_node<'b>(
@@ -384,7 +389,9 @@ impl AddressSpace {
     }
 
     /// Returns an iterator over all nodes in this address space.
-    pub fn nodes(&self) -> impl Iterator<Item = dashmap::mapref::multiple::RefMulti<'_, NodeId, NodeType>> + '_ {
+    pub fn nodes(
+        &self,
+    ) -> impl Iterator<Item = dashmap::mapref::multiple::RefMulti<'_, NodeId, NodeType>> + '_ {
         self.node_map.iter()
     }
 
@@ -416,8 +423,6 @@ impl AddressSpace {
     pub fn iter_node_ids(&self) -> impl Iterator<Item = NodeId> + '_ {
         self.node_map.iter().map(|entry| entry.key().clone())
     }
-
-
 
     /// Check if the read is allowed.
     pub fn validate_node_read<'a>(

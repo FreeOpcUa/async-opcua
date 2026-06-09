@@ -51,6 +51,7 @@ pub enum Message {
 /// messages so there is still some buffers within message chunks, but not at the raw socket level.
 pub struct TcpCodec {
     decoding_options: DecodingOptions,
+    write_buf: BytesMut,
 }
 
 impl Decoder for TcpCodec {
@@ -95,13 +96,24 @@ impl Encoder<Message> for TcpCodec {
     type Error = io::Error;
 
     fn encode(&mut self, data: Message, buf: &mut BytesMut) -> Result<(), io::Error> {
-        match data {
-            Message::Hello(msg) => self.write(msg, buf),
-            Message::Acknowledge(msg) => self.write(msg, buf),
-            Message::Error(msg) => self.write(msg, buf),
-            Message::Chunk(msg) => self.write(msg, buf),
-            Message::ReverseHello(msg) => self.write(msg, buf),
+        self.reset_write_buffer();
+
+        let result = match data {
+            Message::Hello(msg) => Self::write(msg, &mut self.write_buf),
+            Message::Acknowledge(msg) => Self::write(msg, &mut self.write_buf),
+            Message::Error(msg) => Self::write(msg, &mut self.write_buf),
+            Message::Chunk(msg) => Self::write(msg, &mut self.write_buf),
+            Message::ReverseHello(msg) => Self::write(msg, &mut self.write_buf),
+        };
+
+        if let Err(err) = result {
+            self.reset_write_buffer();
+            return Err(err);
         }
+
+        buf.put_slice(&self.write_buf);
+        self.reset_write_buffer();
+        Ok(())
     }
 }
 
@@ -109,11 +121,19 @@ impl TcpCodec {
     /// Constructs a new TcpCodec. The abort flag is set to terminate the codec even while it is
     /// waiting for a frame to arrive.
     pub fn new(decoding_options: DecodingOptions) -> TcpCodec {
-        TcpCodec { decoding_options }
+        TcpCodec {
+            decoding_options,
+            write_buf: BytesMut::with_capacity(65536),
+        }
+    }
+
+    /// Clears the reusable connection-local write buffer without releasing its allocation.
+    pub fn reset_write_buffer(&mut self) {
+        self.write_buf.clear();
     }
 
     // Writes the encodable thing into the buffer.
-    fn write<T>(&self, msg: T, buf: &mut BytesMut) -> Result<(), io::Error>
+    fn write<T>(msg: T, buf: &mut BytesMut) -> Result<(), io::Error>
     where
         T: SimpleBinaryEncodable + std::fmt::Debug,
     {

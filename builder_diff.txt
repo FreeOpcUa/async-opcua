@@ -1,0 +1,68 @@
+diff --git a/async-opcua-server/src/builder.rs b/async-opcua-server/src/builder.rs
+index 3d6e9926..0b97a405 100644
+--- a/async-opcua-server/src/builder.rs
++++ b/async-opcua-server/src/builder.rs
+@@ -98,7 +98,6 @@ impl ServerBuilder {
+             .application_uri("urn:OPC UA Sample Server")
+             .product_uri("urn:OPC UA Sample Server Testkit")
+             .create_sample_keypair(true)
+-            .allow_legacy_crypto(true)
+             .certificate_path("own/cert.der")
+             .private_key_path("private/private.pem")
+             .pki_dir("./pki")
+@@ -124,42 +123,6 @@ impl ServerBuilder {
+                     &user_token_ids as &[&str],
+                 ),
+             )
+-            .add_endpoint(
+-                "basic128rsa15_sign",
+-                (
+-                    endpoint_path,
+-                    SecurityPolicy::Basic128Rsa15,
+-                    MessageSecurityMode::Sign,
+-                    &user_token_ids as &[&str],
+-                ),
+-            )
+-            .add_endpoint(
+-                "basic128rsa15_sign_encrypt",
+-                (
+-                    endpoint_path,
+-                    SecurityPolicy::Basic128Rsa15,
+-                    MessageSecurityMode::SignAndEncrypt,
+-                    &user_token_ids as &[&str],
+-                ),
+-            )
+-            .add_endpoint(
+-                "basic256_sign",
+-                (
+-                    endpoint_path,
+-                    SecurityPolicy::Basic256,
+-                    MessageSecurityMode::Sign,
+-                    &user_token_ids as &[&str],
+-                ),
+-            )
+-            .add_endpoint(
+-                "basic256_sign_encrypt",
+-                (
+-                    endpoint_path,
+-                    SecurityPolicy::Basic256,
+-                    MessageSecurityMode::SignAndEncrypt,
+-                    &user_token_ids as &[&str],
+-                ),
+-            )
+             .add_endpoint(
+                 "basic256sha256_sign",
+                 (
+@@ -342,12 +305,6 @@ impl ServerBuilder {
+         self
+     }
+ 
+-    /// Allow deprecated security policies such as Basic128Rsa15 and Basic256.
+-    pub fn allow_legacy_crypto(mut self, allow: bool) -> Self {
+-        self.config.allow_legacy_crypto = allow;
+-        self
+-    }
+-
+     /// Expected OAuth2 issuer for issued JWT identity tokens.
+     pub fn oauth2_issuer(mut self, issuer: impl Into<String>) -> Self {
+         self.config.oauth2_issuer = Some(issuer.into());

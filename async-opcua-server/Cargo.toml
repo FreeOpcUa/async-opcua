@@ -30,8 +30,10 @@ json = ["async-opcua-nodes/json", "async-opcua-types/json"]
 # becoming a client to the LDS, which brings in a dependency to async-opcua-client.
 # Omitting the feature saves some memory.
 discovery-server-registration = ["async-opcua-client"]
+test-utils = []
 
 [dependencies]
+lockfree-object-pool = "0.1"
 moka = { version = "0.12", features = ["future", "sync"] }
 arc-swap = { workspace = true }
 argon2 = { version = "0.5.3", features = ["std"] }
@@ -69,6 +71,7 @@ async-opcua-history-sqlite = { path = "../async-opcua-history-sqlite" }
 async-opcua-server = { path = ".", features = [
   "discovery-server-registration",
   "json",
+  "test-utils",
 ] }
 serde_yaml = { workspace = true }
 

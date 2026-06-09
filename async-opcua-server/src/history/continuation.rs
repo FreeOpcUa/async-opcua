@@ -58,7 +58,10 @@ impl HistoryContinuationPoint {
 /// Helper cache to manage continuation point lifecycles, pruning, and eviction.
 #[derive(Clone)]
 pub struct HistoryContinuationPointCache {
-    cache: moka::sync::Cache<ByteString, std::sync::Arc<parking_lot::Mutex<Option<ContinuationPoint>>>>,
+    cache: moka::sync::Cache<
+        ByteString,
+        std::sync::Arc<parking_lot::Mutex<Option<ContinuationPoint>>>,
+    >,
 }
 
 impl HistoryContinuationPointCache {
@@ -71,15 +74,14 @@ impl HistoryContinuationPointCache {
             builder
         };
         Self {
-            cache: builder
-                .time_to_live(max_age)
-                .build(),
+            cache: builder.time_to_live(max_age).build(),
         }
     }
 
     /// Insert a continuation point.
     pub fn insert(&self, id: ByteString, cp: ContinuationPoint) {
-        self.cache.insert(id, std::sync::Arc::new(parking_lot::Mutex::new(Some(cp))));
+        self.cache
+            .insert(id, std::sync::Arc::new(parking_lot::Mutex::new(Some(cp))));
     }
 
     /// Remove a continuation point.
@@ -130,11 +132,15 @@ mod tests {
             let key = ByteString::from(format!("key-{}", i).into_bytes());
             cache.insert(key, history_point());
         }
-        
+
         // Force moka to process evictions
         cache.run_pending_tasks();
-        
-        assert!(cache.entry_count() <= 10, "Cache size {} exceeded max capacity 10", cache.entry_count());
+
+        assert!(
+            cache.entry_count() <= 10,
+            "Cache size {} exceeded max capacity 10",
+            cache.entry_count()
+        );
     }
 
     #[test]
@@ -152,6 +158,9 @@ mod tests {
         // Force expiration check
         cache.run_pending_tasks();
 
-        assert!(!cache.contains_key(&active), "Active continuation point was not expired");
+        assert!(
+            !cache.contains_key(&active),
+            "Active continuation point was not expired"
+        );
     }
 }

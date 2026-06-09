@@ -31,12 +31,16 @@ pub fn validate_safety_spdu(
     max_delay: u64,
     current_time: u64,
 ) -> Result<(), StatusCode> {
-    let mut validator = async_opcua_safety::SafetyValidator::new(expected_sequence_number, max_delay);
+    let mut validator =
+        async_opcua_safety::SafetyValidator::new(expected_sequence_number, max_delay);
     match validator.validate(spdu, current_time) {
         Ok(()) => Ok(()),
-        Err(async_opcua_safety::SafetyError::InvalidCrc) => Err(StatusCode::BadSecurityChecksFailed),
-        Err(async_opcua_safety::SafetyError::SequenceMismatch) => Err(StatusCode::BadSequenceNumberInvalid),
+        Err(async_opcua_safety::SafetyError::InvalidCrc) => {
+            Err(StatusCode::BadSecurityChecksFailed)
+        }
+        Err(async_opcua_safety::SafetyError::SequenceMismatch) => {
+            Err(StatusCode::BadSequenceNumberInvalid)
+        }
         Err(async_opcua_safety::SafetyError::Timeout) => Err(StatusCode::BadTimeout),
     }
 }
-

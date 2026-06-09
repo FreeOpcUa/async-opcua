@@ -1,0 +1,8 @@
+[2025-11-22T04:40:58Z INFO  opcua_server::server] Server has chosen to auto trust client certificates. You do not want to do this in production code.
+[2025-11-22T04:40:58Z INFO  opcua_server::address_space] Imported 5118 nodes
+[2025-11-22T04:40:58Z INFO  opcua_server::server] Try to bind address at 127.0.0.1:4840
+[2025-11-22T04:40:58Z ERROR opcua_server::server] Failed to bind socket: Os { code: 98, kind: AddrInUse, message: "Address in use" }
+
+thread 'main' panicked at samples/simple-server/src/main.rs:75:24:
+called `Result::unwrap()` on an `Err` value: "Failed to bind socket: Os { code: 98, kind: AddrInUse, message: \"Address in use\" }"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

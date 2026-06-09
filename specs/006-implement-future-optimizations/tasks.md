@@ -87,9 +87,9 @@
 
 - [X] T021 [P] [US3] Define the `SessionMessage` enum for actor command routing in `async-opcua-server/src/session/actor.rs`
 - [X] T022 [P] [US3] Implement `SessionActor` structure managing thread-isolated state in `async-opcua-server/src/session/actor.rs`
-- [ ] T023 [US3] Implement the main async message loop `SessionActor::run` in `async-opcua-server/src/session/actor.rs`
-- [ ] T024 [US3] Implement immediate connection abort and token registry cleanup logic in `SessionActor::run` in `async-opcua-server/src/session/actor.rs`
-- [ ] T025 [US3] Implement client notification callback dispatch within the actor in `async-opcua-server/src/session/actor.rs`
+- [X] T023 [US3] Implement the main async message loop `SessionActor::run` in `async-opcua-server/src/session/actor.rs`
+- [X] T024 [US3] Implement immediate connection abort and token registry cleanup logic in `SessionActor::run` in `async-opcua-server/src/session/actor.rs`
+- [X] T025 [US3] Implement client notification callback dispatch within the actor in `async-opcua-server/src/session/actor.rs`
 - [ ] T026 [US3] Update `SessionManager` to spawn `SessionActor` in a tokio task in `async-opcua-server/src/session/manager.rs`
 - [ ] T027 [US3] Refactor connection request handlers to send messages through the actor's `mpsc` sender in `async-opcua-server/src/session/manager.rs`
 - [ ] T028 [US3] Instrument actor message queue size gauges and processing times in `async-opcua-server/src/session/actor.rs`

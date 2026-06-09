@@ -579,7 +579,7 @@ impl Subscription {
         self.notifications.push_back(notification);
     }
 
-    pub(super) fn take_notification(&mut self) -> Option<NotificationMessage> {
+    pub(crate) fn take_notification(&mut self) -> Option<NotificationMessage> {
         self.notifications.pop_front()
     }
 

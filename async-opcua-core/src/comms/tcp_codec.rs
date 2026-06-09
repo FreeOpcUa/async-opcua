@@ -11,9 +11,10 @@
 //! * MSG - Message chunk
 //! * OPN - Open Secure Channel message
 //! * CLO - Close Secure Channel message
-use std::io;
+use std::io::{self, IoSlice};
 
 use bytes::{BufMut, BytesMut};
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 use tokio_util::codec::{Decoder, Encoder};
 use tracing::error;
 
@@ -130,6 +131,42 @@ impl TcpCodec {
     /// Clears the reusable connection-local write buffer without releasing its allocation.
     pub fn reset_write_buffer(&mut self) {
         self.write_buf.clear();
+    }
+
+    /// Writes one OPC UA TCP frame using vectored I/O, splitting the common header from the body.
+    pub async fn write_frame_vectored<W>(write: &mut W, frame: &[u8]) -> Result<usize, io::Error>
+    where
+        W: AsyncWrite + Unpin + ?Sized,
+    {
+        let slices = Self::frame_slices(frame);
+        write.write_vectored(&slices).await
+    }
+
+    /// Writes one complete OPC UA TCP frame using repeated vectored writes.
+    pub async fn write_all_frame_vectored<W>(
+        write: &mut W,
+        mut frame: &[u8],
+    ) -> Result<(), io::Error>
+    where
+        W: AsyncWrite + Unpin + ?Sized,
+    {
+        while !frame.is_empty() {
+            let written = Self::write_frame_vectored(write, frame).await?;
+            if written == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::WriteZero,
+                    "failed to write OPC UA frame",
+                ));
+            }
+            frame = &frame[written..];
+        }
+        Ok(())
+    }
+
+    fn frame_slices(frame: &[u8]) -> [IoSlice<'_>; 2] {
+        let split_at = frame.len().min(MESSAGE_HEADER_LEN);
+        let (header, body) = frame.split_at(split_at);
+        [IoSlice::new(header), IoSlice::new(body)]
     }
 
     // Writes the encodable thing into the buffer.

@@ -98,13 +98,14 @@ impl Encoder<Message> for TcpCodec {
 
     fn encode(&mut self, data: Message, buf: &mut BytesMut) -> Result<(), io::Error> {
         self.reset_write_buffer();
+        let max_message_size = self.decoding_options.max_message_size;
 
         let result = match data {
-            Message::Hello(msg) => Self::write(msg, &mut self.write_buf),
-            Message::Acknowledge(msg) => Self::write(msg, &mut self.write_buf),
-            Message::Error(msg) => Self::write(msg, &mut self.write_buf),
-            Message::Chunk(msg) => Self::write(msg, &mut self.write_buf),
-            Message::ReverseHello(msg) => Self::write(msg, &mut self.write_buf),
+            Message::Hello(msg) => Self::write(msg, max_message_size, &mut self.write_buf),
+            Message::Acknowledge(msg) => Self::write(msg, max_message_size, &mut self.write_buf),
+            Message::Error(msg) => Self::write(msg, max_message_size, &mut self.write_buf),
+            Message::Chunk(msg) => Self::write(msg, max_message_size, &mut self.write_buf),
+            Message::ReverseHello(msg) => Self::write(msg, max_message_size, &mut self.write_buf),
         };
 
         if let Err(err) = result {
@@ -170,11 +171,20 @@ impl TcpCodec {
     }
 
     // Writes the encodable thing into the buffer.
-    fn write<T>(msg: T, buf: &mut BytesMut) -> Result<(), io::Error>
+    fn write<T>(msg: T, max_message_size: usize, buf: &mut BytesMut) -> Result<(), io::Error>
     where
         T: SimpleBinaryEncodable + std::fmt::Debug,
     {
-        buf.reserve(msg.byte_len());
+        let encoded_len = msg.byte_len();
+        if max_message_size > 0 && encoded_len > max_message_size {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "Encoded message length {encoded_len} exceeds maximum message size {max_message_size}"
+                ),
+            ));
+        }
+        buf.reserve(encoded_len);
         msg.encode(&mut buf.writer()).map(|_| ()).map_err(|err| {
             error!("Error writing message {:?}, err = {}", msg, err);
             io::Error::other(format!("Error = {err}"))

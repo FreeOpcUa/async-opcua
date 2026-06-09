@@ -69,7 +69,7 @@
 - [X] T015 [US2] Implement write buffer reset helper to clear and reset the connection-local write buffer in `async-opcua-core/src/comms/tcp_codec.rs`
 - [X] T016 [US2] Refactor `BinaryEncodable::encode` serialization path to write directly to the mutable `BytesMut` buffer in `async-opcua-core/src/comms/tcp_codec.rs`
 - [X] T017 [US2] Update socket writing pipeline to utilize vectored write operations in `async-opcua-core/src/comms/tcp_codec.rs`
-- [ ] T018 [US2] Implement bounds check validation to resize the connection-local buffer in `async-opcua-core/src/comms/tcp_codec.rs`
+- [X] T018 [US2] Implement bounds check validation to resize the connection-local buffer in `async-opcua-core/src/comms/tcp_codec.rs`
 - [ ] T019 [US2] Instrument serialization metrics (counters for errors, bytes written) in `async-opcua-core/src/comms/tcp_codec.rs`
 - [ ] T020 [US2] Write unit test simulating outbound message stream writes in `async-opcua-core/tests/serialization_alloc.rs`
 

@@ -34,6 +34,8 @@ pub mod gds;
 pub mod history;
 mod identity_token;
 mod info;
+/// Server performance instrumentation.
+pub mod metrics;
 pub mod namespace;
 pub mod node_manager;
 /// Runtime NodeSet2 loader support.

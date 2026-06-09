@@ -1,6 +1,7 @@
 pub(crate) mod audit;
 pub(crate) mod continuation_points;
 pub(crate) mod controller;
+pub(crate) mod errors;
 pub(crate) mod identity;
 pub(crate) mod instance;
 pub(crate) mod manager;

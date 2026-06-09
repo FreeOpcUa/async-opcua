@@ -17,8 +17,8 @@
 
 **Purpose**: Project initialization and basic validation
 
-- [ ] T001 Configure workspace dependencies in `async-opcua-server/Cargo.toml` and `async-opcua-core/Cargo.toml`
-- [ ] T002 Verify all workspace projects compile clean before starting modifications by running `cargo check`
+- [X] T001 Configure workspace dependencies in `async-opcua-server/Cargo.toml` and `async-opcua-core/Cargo.toml`
+- [X] T002 Verify all workspace projects compile clean before starting modifications by running `cargo check`
 
 ---
 
@@ -28,8 +28,8 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T003 Create metrics instrumentation definitions in `async-opcua-server/src/metrics.rs`
-- [ ] T004 Define custom error types for session actor failure paths in `async-opcua-server/src/session/errors.rs`
+- [X] T003 Create metrics instrumentation definitions in `async-opcua-server/src/metrics.rs`
+- [X] T004 Define custom error types for session actor failure paths in `async-opcua-server/src/session/errors.rs`
 
 **Checkpoint**: Foundation ready - user story implementation can now begin
 

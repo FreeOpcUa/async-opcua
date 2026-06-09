@@ -1,6 +1,8 @@
 use opcua_types::{AttributeId, DataValue, IntegerId, NodeId, NotificationMessage, StatusCode};
 use tokio::sync::oneshot;
 
+use super::instance::Session;
+
 pub(crate) type ReadResponseSender = oneshot::Sender<Result<DataValue, StatusCode>>;
 pub(crate) type WriteResponseSender = oneshot::Sender<StatusCode>;
 pub(crate) type PublishResponseSender = oneshot::Sender<Result<NotificationMessage, StatusCode>>;
@@ -28,4 +30,18 @@ pub(crate) enum SessionMessage {
         reason: StatusCode,
         acknowledge: TerminateAckSender,
     },
+}
+
+pub(crate) struct SessionActor {
+    session: Session,
+    receiver: tokio::sync::mpsc::Receiver<SessionMessage>,
+}
+
+impl SessionActor {
+    pub(crate) fn new(
+        session: Session,
+        receiver: tokio::sync::mpsc::Receiver<SessionMessage>,
+    ) -> Self {
+        Self { session, receiver }
+    }
 }

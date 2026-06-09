@@ -86,7 +86,7 @@
 ### Implementation for User Story 3
 
 - [X] T021 [P] [US3] Define the `SessionMessage` enum for actor command routing in `async-opcua-server/src/session/actor.rs`
-- [ ] T022 [P] [US3] Implement `SessionActor` structure managing thread-isolated state in `async-opcua-server/src/session/actor.rs`
+- [X] T022 [P] [US3] Implement `SessionActor` structure managing thread-isolated state in `async-opcua-server/src/session/actor.rs`
 - [ ] T023 [US3] Implement the main async message loop `SessionActor::run` in `async-opcua-server/src/session/actor.rs`
 - [ ] T024 [US3] Implement immediate connection abort and token registry cleanup logic in `SessionActor::run` in `async-opcua-server/src/session/actor.rs`
 - [ ] T025 [US3] Implement client notification callback dispatch within the actor in `async-opcua-server/src/session/actor.rs`

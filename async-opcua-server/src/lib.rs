@@ -48,6 +48,10 @@ mod server_handle;
 mod server_status;
 /// Shared service-level authorization helpers.
 pub mod services;
+/// Server session internals.
+#[cfg(any(test, feature = "test-utils"))]
+pub mod session;
+#[cfg(not(any(test, feature = "test-utils")))]
 mod session;
 mod subscriptions;
 mod transport;

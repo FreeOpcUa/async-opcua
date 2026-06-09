@@ -44,13 +44,13 @@
 ### Implementation for User Story 1
 
 - [ ] T005 [P] [US1] Add `dashmap = "5.5"` to dependencies in `async-opcua-server/Cargo.toml`
-- [ ] T006 [P] [US1] Add `use dashmap::DashMap;` import to `async-opcua-server/src/session/manager.rs`
-- [ ] T007 [US1] Define concurrent lookup mapping registry `auth_tokens` in `async-opcua-server/src/session/manager.rs`
-- [ ] T008 [US1] Update session registration in `SessionManager::register_token` in `async-opcua-server/src/session/manager.rs` to insert tokens into `auth_tokens`
-- [ ] T009 [US1] Update session deregistration in `SessionManager::deregister_token` in `async-opcua-server/src/session/manager.rs` to remove tokens from `auth_tokens`
-- [ ] T010 [US1] Refactor `SessionManager::find_by_token` in `async-opcua-server/src/session/manager.rs` to query `auth_tokens` in O(1) time
-- [ ] T011 [US1] Instrument `find_by_token` lookup latency and registry size gauges using metrics in `async-opcua-server/src/session/manager.rs`
-- [ ] T012 [US1] Write unit test verifying O(1) lookup performance and registry consistency in `async-opcua-server/tests/session_lookup.rs`
+- [X] T006 [P] [US1] Add `use dashmap::DashMap;` import to `async-opcua-server/src/session/manager.rs`
+- [X] T007 [US1] Define concurrent lookup mapping registry `auth_tokens` in `async-opcua-server/src/session/manager.rs`
+- [X] T008 [US1] Update session registration in `SessionManager::register_token` in `async-opcua-server/src/session/manager.rs` to insert tokens into `auth_tokens`
+- [X] T009 [US1] Update session deregistration in `SessionManager::deregister_token` in `async-opcua-server/src/session/manager.rs` to remove tokens from `auth_tokens`
+- [X] T010 [US1] Refactor `SessionManager::find_by_token` in `async-opcua-server/src/session/manager.rs` to query `auth_tokens` in O(1) time
+- [X] T011 [US1] Instrument `find_by_token` lookup latency and registry size gauges using metrics in `async-opcua-server/src/session/manager.rs`
+- [X] T012 [US1] Write unit test verifying O(1) lookup performance and registry consistency in `async-opcua-server/tests/session_lookup.rs`
 
 **Checkpoint**: User Story 1 is fully functional and testable independently.
 

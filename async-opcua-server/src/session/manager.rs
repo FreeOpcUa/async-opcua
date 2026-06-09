@@ -7,6 +7,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use dashmap::DashMap;
 use opcua_core::{comms::secure_channel::SecureChannel, trace_read_lock, trace_write_lock};
 use opcua_crypto::{random, CertificateStore, SecurityPolicy};
 use parking_lot::RwLock;
@@ -33,14 +34,17 @@ pub(super) fn next_session_id() -> (NodeId, u32) {
 /// Manages all sessions on the server.
 pub struct SessionManager {
     sessions: HashMap<NodeId, Arc<RwLock<Session>>>,
+    auth_tokens: DashMap<NodeId, Arc<RwLock<Session>>>,
     info: Arc<ServerInfo>,
     notify: Arc<Notify>,
 }
 
 impl SessionManager {
-    pub(crate) fn new(info: Arc<ServerInfo>, notify: Arc<Notify>) -> Self {
+    /// Create a session manager for the supplied server information and expiry notifier.
+    pub fn new(info: Arc<ServerInfo>, notify: Arc<Notify>) -> Self {
         Self {
             sessions: Default::default(),
+            auth_tokens: Default::default(),
             info,
             notify,
         }
@@ -48,17 +52,31 @@ impl SessionManager {
 
     /// Get a session by its authentication token.
     pub fn find_by_token(&self, authentication_token: &NodeId) -> Option<Arc<RwLock<Session>>> {
-        Self::find_by_token_int(&self.sessions, authentication_token)
+        let lookup_start = Instant::now();
+        let session = self
+            .auth_tokens
+            .get(authentication_token)
+            .map(|session| Arc::clone(session.value()));
+        let lookup_duration_ns = lookup_start.elapsed().as_nanos() as u64;
+
+        crate::metrics::METRICS
+            .session_lookup_count
+            .fetch_add(1, Ordering::Relaxed);
+        crate::metrics::METRICS
+            .session_lookup_duration_ns
+            .fetch_add(lookup_duration_ns, Ordering::Relaxed);
+
+        session
     }
 
-    fn find_by_token_int(
-        sessions: &HashMap<NodeId, Arc<RwLock<Session>>>,
-        authentication_token: &NodeId,
-    ) -> Option<Arc<RwLock<Session>>> {
-        sessions
-            .iter()
-            .find(|(_, s)| &s.read().authentication_token == authentication_token)
-            .map(|p| p.1.clone())
+    /// Register an authentication token for direct session lookup.
+    pub fn register_token(&self, token: NodeId, session: Arc<RwLock<Session>>) {
+        self.auth_tokens.insert(token, session);
+    }
+
+    /// Remove an authentication token from the direct session lookup registry.
+    pub fn deregister_token(&self, token: &NodeId) {
+        self.auth_tokens.remove(token);
     }
 
     pub(crate) fn create_session(
@@ -164,8 +182,10 @@ impl SessionManager {
         info!("Created new session with ID {}", session.session_id());
 
         let session_id = session.session_id().clone();
+        let session_arc = Arc::new(RwLock::new(session));
         self.sessions
-            .insert(session_id.clone(), Arc::new(RwLock::new(session)));
+            .insert(session_id.clone(), session_arc.clone());
+        self.register_token(authentication_token.clone(), session_arc);
 
         // Increment metrics.
         self.info
@@ -231,6 +251,12 @@ impl SessionManager {
 
         info!("Session {id} has expired, removing it from the session map. Subscriptions will remain until they individually expire");
 
+        let token = {
+            let session = trace_read_lock!(session);
+            session.authentication_token.clone()
+        };
+        self.deregister_token(&token);
+
         let mut session = trace_write_lock!(session);
         session.close();
         drop(session);
@@ -282,10 +308,11 @@ pub(crate) async fn close_session(
         let Some(session) = mgr.find_by_token(&request.request_header.authentication_token) else {
             return Err(StatusCode::BadSessionIdInvalid);
         };
-        let (id, token, session_id) = {
+        let (id, token, session_id, authentication_token) = {
             let session = trace_read_lock!(session);
             let id = session.session_id_numeric();
             let token = session.user_token().cloned();
+            let authentication_token = session.authentication_token.clone();
 
             let secure_channel_id = channel.secure_channel_id();
             if !session.is_activated() && session.secure_channel_id() != secure_channel_id {
@@ -293,10 +320,11 @@ pub(crate) async fn close_session(
                 return Err(StatusCode::BadSecureChannelIdInvalid);
             }
             let session_id = session.session_id().clone();
-            (id, token, session_id)
+            (id, token, session_id, authentication_token)
         };
 
         info!("Closed session with ID {}", session_id);
+        mgr.deregister_token(&authentication_token);
         let session = mgr.sessions.remove(&session_id).unwrap();
         {
             let mut session_lck = trace_write_lock!(session);

@@ -73,7 +73,16 @@ async-opcua-server = { path = ".", features = [
   "json",
   "test-utils",
 ] }
+criterion = { workspace = true }
 serde_yaml = { workspace = true }
+
+[[bench]]
+name = "session_lookup"
+harness = false
+
+[[bench]]
+name = "notification_pool"
+harness = false
 
 [package.metadata.docs.rs]
 all-features = true

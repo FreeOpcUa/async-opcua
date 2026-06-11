@@ -438,7 +438,7 @@ impl AddressSpace {
             return Err(StatusCode::BadNodeIdUnknown);
         };
 
-        validate_node_read(&*node, context, node_to_read)?;
+        validate_node_read(&node, context, node_to_read)?;
 
         Ok(node)
     }
@@ -462,7 +462,7 @@ impl AddressSpace {
             }
         };
 
-        read_node_value(&*node, context, node_to_read, max_age, timestamps_to_return)
+        read_node_value(&node, context, node_to_read, max_age, timestamps_to_return)
     }
 
     /// Check if the given write is allowed.
@@ -480,7 +480,7 @@ impl AddressSpace {
             return Err(StatusCode::BadNodeIdUnknown);
         };
 
-        validate_node_write(&*node, context, node_to_write, type_tree)?;
+        validate_node_write(&node, context, node_to_write, type_tree)?;
 
         Ok(node)
     }

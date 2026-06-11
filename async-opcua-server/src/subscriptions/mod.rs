@@ -428,7 +428,7 @@ impl SubscriptionCache {
     ///     notifier.notify(node_id, AttributeId::Value, value);
     /// }
     /// ```
-    pub fn data_notifier<'a>(&'a self) -> SubscriptionDataNotifier<'a> {
+    pub fn data_notifier(&self) -> SubscriptionDataNotifier<'_> {
         SubscriptionDataNotifier::new(trace_read_lock!(self.inner))
     }
 
@@ -447,7 +447,7 @@ impl SubscriptionCache {
     ///     notifier.notify(emitter_id, evt);
     /// }
     /// ```
-    pub fn event_notifier<'a, 'b>(&'a self) -> SubscriptionEventNotifier<'a, 'b> {
+    pub fn event_notifier<'b>(&self) -> SubscriptionEventNotifier<'_, 'b> {
         SubscriptionEventNotifier::new(trace_read_lock!(self.inner))
     }
 

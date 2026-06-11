@@ -224,7 +224,7 @@ impl Drop for PooledNotificationBuffer<'_> {
 mod tests {
     use opcua_types::{DataValue, MonitoredItemNotification};
 
-    use super::{NotificationPool, Notification};
+    use super::{Notification, NotificationPool};
 
     fn notification() -> Notification {
         Notification::MonitoredItemNotification(MonitoredItemNotification {

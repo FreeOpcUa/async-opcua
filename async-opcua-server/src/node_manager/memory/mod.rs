@@ -340,7 +340,7 @@ impl<TImpl: InMemoryNodeManagerImpl> InMemoryNodeManager<TImpl> {
             };
 
             let r_node =
-                Self::get_reference(address_space, type_tree, &*target_node, node.result_mask());
+                Self::get_reference(address_space, type_tree, &target_node, node.result_mask());
 
             let ref_desc = ReferenceDescription {
                 reference_type_id: reference.reference_type.clone(),
@@ -470,7 +470,7 @@ impl<TImpl: InMemoryNodeManagerImpl> InMemoryNodeManager<TImpl> {
                     continue;
                 };
 
-                let user_access_level = user_access_level(context, &*node);
+                let user_access_level = user_access_level(context, &node);
 
                 if !user_access_level.contains(AccessLevel::HISTORY_READ) {
                     history_node.set_status(StatusCode::BadUserAccessDenied);
@@ -522,7 +522,7 @@ impl<TImpl: InMemoryNodeManagerImpl> InMemoryNodeManager<TImpl> {
                     continue;
                 };
 
-                let user_access_level = user_access_level(context, &*node);
+                let user_access_level = user_access_level(context, &node);
 
                 if !user_access_level.contains(AccessLevel::HISTORY_WRITE) {
                     history_node.set_status(StatusCode::BadUserAccessDenied);
@@ -700,7 +700,7 @@ impl<TImpl: InMemoryNodeManagerImpl> NodeManager for InMemoryNodeManager<TImpl> 
             item.set(Self::get_reference(
                 &address_space,
                 &type_tree,
-                &*target_node,
+                &target_node,
                 item.result_mask(),
             ));
         }
@@ -854,7 +854,7 @@ impl<TImpl: InMemoryNodeManagerImpl> NodeManager for InMemoryNodeManager<TImpl> 
                 };
 
                 let read_result = read_node_value(
-                    &*n,
+                    &n,
                     context,
                     node.item_to_monitor(),
                     0.0,

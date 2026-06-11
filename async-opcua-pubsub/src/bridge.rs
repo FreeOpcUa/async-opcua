@@ -87,74 +87,92 @@ impl PubSubBridge {
 
                 sleep(Duration::from_millis(50)).await;
 
-                let space = address_space.read();
+                // Collect changed messages while holding the read guard,
+                // publish only after it is dropped: the guard must not be
+                // held across an await.
+                let mut pending = Vec::new();
+                {
+                    let space = address_space.read();
 
-                for writer_group in &config.writer_groups {
-                    let mut group_changed = false;
-                    let mut json_dataset_messages = Vec::new();
-                    let mut uadp_dataset_messages = Vec::new();
+                    for writer_group in &config.writer_groups {
+                        let mut group_changed = false;
+                        let mut json_dataset_messages = Vec::new();
+                        let mut uadp_dataset_messages = Vec::new();
 
-                    for writer in &writer_group.dataset_writers {
-                        let mut payload_map = std::collections::HashMap::new();
-                        let mut uadp_fields = Vec::new();
-                        let mut writer_changed = false;
+                        for writer in &writer_group.dataset_writers {
+                            let mut payload_map = std::collections::HashMap::new();
+                            let mut uadp_fields = Vec::new();
+                            let mut writer_changed = false;
 
-                        for node_id in &writer.published_dataset.published_variables {
-                            if let Some(node) = space.find(node_id) {
-                                if let NodeType::Variable(ref var) = *node {
-                                    let ctx_owned = ContextOwned::default();
-                                    let ctx = ctx_owned.context();
-                                    let data_value = var.value(
-                                        TimestampsToReturn::Both,
-                                        &NumericRange::None,
-                                        &DataEncoding::Binary,
-                                        0.0,
-                                    );
+                            for node_id in &writer.published_dataset.published_variables {
+                                if let Some(node) = space.find(node_id) {
+                                    if let NodeType::Variable(ref var) = *node {
+                                        let ctx_owned = ContextOwned::default();
+                                        let ctx = ctx_owned.context();
+                                        let data_value = var.value(
+                                            TimestampsToReturn::Both,
+                                            &NumericRange::None,
+                                            &DataEncoding::Binary,
+                                            0.0,
+                                        );
 
-                                    if let Some(ref val) = data_value.value {
-                                        let prev = last_values.insert(node_id.clone(), val.clone());
-                                        if prev.as_ref() != Some(val) {
-                                            writer_changed = true;
-                                            group_changed = true;
-                                        }
-
-                                        if writer_group.encoding == MessageEncoding::Json {
-                                            if let Ok(val) = opcua_to_json_value(&data_value, &ctx)
-                                            {
-                                                payload_map.insert(node_id.to_string(), val);
+                                        if let Some(ref val) = data_value.value {
+                                            let prev =
+                                                last_values.insert(node_id.clone(), val.clone());
+                                            if prev.as_ref() != Some(val) {
+                                                writer_changed = true;
+                                                group_changed = true;
                                             }
-                                        } else {
-                                            uadp_fields.push(val.clone());
+
+                                            if writer_group.encoding == MessageEncoding::Json {
+                                                if let Ok(val) =
+                                                    opcua_to_json_value(&data_value, &ctx)
+                                                {
+                                                    payload_map.insert(node_id.to_string(), val);
+                                                }
+                                            } else {
+                                                uadp_fields.push(val.clone());
+                                            }
                                         }
+                                    }
+                                }
+                            }
+
+                            if writer_changed {
+                                sequence_number = sequence_number.wrapping_add(1);
+                                match writer_group.encoding {
+                                    MessageEncoding::Json => {
+                                        json_dataset_messages.push(JsonDataSetMessage {
+                                            dataset_writer_id: writer.dataset_writer_id,
+                                            sequence_number,
+                                            payload: payload_map,
+                                        });
+                                    }
+                                    MessageEncoding::Uadp => {
+                                        uadp_dataset_messages.push(UadpDataSetMessage {
+                                            dataset_writer_id: writer.dataset_writer_id,
+                                            sequence_number,
+                                            timestamp: Some(opcua_types::DateTime::now()),
+                                            status: Some(StatusCode::Good),
+                                            fields: uadp_fields,
+                                        });
                                     }
                                 }
                             }
                         }
 
-                        if writer_changed {
-                            sequence_number = sequence_number.wrapping_add(1);
-                            match writer_group.encoding {
-                                MessageEncoding::Json => {
-                                    json_dataset_messages.push(JsonDataSetMessage {
-                                        dataset_writer_id: writer.dataset_writer_id,
-                                        sequence_number,
-                                        payload: payload_map,
-                                    });
-                                }
-                                MessageEncoding::Uadp => {
-                                    uadp_dataset_messages.push(UadpDataSetMessage {
-                                        dataset_writer_id: writer.dataset_writer_id,
-                                        sequence_number,
-                                        timestamp: Some(opcua_types::DateTime::now()),
-                                        status: Some(StatusCode::Good),
-                                        fields: uadp_fields,
-                                    });
-                                }
-                            }
+                        if group_changed {
+                            pending.push((
+                                writer_group,
+                                json_dataset_messages,
+                                uadp_dataset_messages,
+                            ));
                         }
                     }
+                }
 
-                    if group_changed {
+                for (writer_group, json_dataset_messages, uadp_dataset_messages) in pending {
+                    {
                         let topic = format!("opcua/telemetry/{}", writer_group.writer_group_id);
                         match writer_group.encoding {
                             MessageEncoding::Json => {

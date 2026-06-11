@@ -8,7 +8,9 @@ fn main() {
 #[cfg(feature = "nightly")]
 libfuzzer_sys::fuzz_target!(|data: &[u8]| {
     use opcua::types::{
-        custom::{DataTypeTree, DynamicTypeLoader, EncodingIds, GenericTypeInfo, ParentIds, TypeInfo},
+        custom::{
+            DataTypeTree, DynamicTypeLoader, EncodingIds, GenericTypeInfo, ParentIds, TypeInfo,
+        },
         BinaryDecodable, ContextOwned, DataTypeDefinition, DataTypeId, DecodingOptions, Error,
         ExtensionObject, NamespaceMap, NodeId, ObjectId, StructureDefinition, StructureField,
         TypeLoaderCollection,

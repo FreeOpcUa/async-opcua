@@ -37,6 +37,7 @@ pub struct AlarmEvent {
 
 impl AlarmEvent {
     /// Creates a new `AlarmEvent` with default/initial settings.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         event_id: Vec<u8>,
         event_type: NodeId,

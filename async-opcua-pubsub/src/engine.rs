@@ -13,8 +13,7 @@ use crate::{
     codec::uadp::UadpNetworkMessage,
     security::{SecurityGroup, SharedSecurityGroup, UadpSecurityCodec},
     transport::{
-        amqp::AmqpPublisher, mqtt::MqttPublisher, udp::UdpPublisher,
-        websocket::WebSocketPublisher,
+        amqp::AmqpPublisher, mqtt::MqttPublisher, udp::UdpPublisher, websocket::WebSocketPublisher,
     },
     PubSubConnectionConfig, PubSubPublisher,
 };

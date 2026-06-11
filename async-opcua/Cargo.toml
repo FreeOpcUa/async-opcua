@@ -19,6 +19,9 @@ name = "opcua"
 [features]
 default = []
 all = ["server", "client"]
+# Forwards to the crypto crate's support for legacy (deprecated) security
+# policies: Basic128Rsa15 and Basic256.
+legacy-crypto = ["async-opcua-crypto/legacy-crypto"]
 # Server default settings
 server = ["base-server", "generated-address-space"]
 # Base server, without the core address space.
@@ -72,7 +75,7 @@ env_logger = { workspace = true }
 log = { workspace = true }
 
 # Include json when building tests
-async-opcua = { path = ".", features = ["all", "json", "xml"] }
+async-opcua = { path = ".", features = ["all", "json", "xml", "legacy-crypto"] }
 
 [package.metadata.docs.rs]
 all-features = true

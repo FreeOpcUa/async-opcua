@@ -11,7 +11,7 @@ pub struct ServerAlarmEvent<'a> {
     pub event: &'a AlarmEvent,
 }
 
-impl<'a> Event for ServerAlarmEvent<'a> {
+impl Event for ServerAlarmEvent<'_> {
     fn time(&self) -> &DateTime {
         &self.event.time
     }
@@ -31,7 +31,7 @@ impl<'a> Event for ServerAlarmEvent<'a> {
     }
 }
 
-impl<'a> EventField for ServerAlarmEvent<'a> {
+impl EventField for ServerAlarmEvent<'_> {
     fn get_value(
         &self,
         attribute_id: AttributeId,
@@ -74,8 +74,8 @@ impl<'a> EventField for ServerAlarmEvent<'a> {
                 "SourceName" => {
                     return Variant::from(UAString::from(self.event.source_name.clone()))
                 }
-                "Time" => return Variant::from(self.event.time.clone()),
-                "ReceiveTime" => return Variant::from(self.event.time.clone()),
+                "Time" => return Variant::from(self.event.time),
+                "ReceiveTime" => return Variant::from(self.event.time),
                 "Message" => return Variant::from(self.event.message.clone()),
                 "Severity" => return Variant::from(self.event.severity),
                 "ConditionId" => return Variant::from(self.event.condition_id.clone()),

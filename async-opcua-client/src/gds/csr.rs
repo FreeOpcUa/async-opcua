@@ -63,11 +63,8 @@ impl GdsCsrClient {
                 if result.status_code.is_good() {
                     if let Some(args) = result.output_arguments {
                         if !args.is_empty() {
-                            match &args[0] {
-                                Variant::NodeId(node_id) => {
-                                    return Ok(*node_id.clone());
-                                }
-                                _ => {}
+                            if let Variant::NodeId(node_id) = &args[0] {
+                                return Ok(*node_id.clone());
                             }
                         }
                     }

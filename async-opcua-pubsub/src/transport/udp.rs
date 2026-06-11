@@ -82,57 +82,61 @@ impl PubSubPublisher for UdpPublisher {
 
                         sleep(Duration::from_millis(writer_group.publishing_interval)).await;
 
-                        // Query address space
-                        let space = address_space.read();
+                        // Query address space inside a block: the guard
+                        // must not be in scope across an await.
                         let mut json_dataset_messages = Vec::new();
                         let mut uadp_dataset_messages = Vec::new();
+                        {
+                            let space = address_space.read();
 
-                        for writer in &writer_group.dataset_writers {
-                            let mut payload_map = std::collections::HashMap::new();
-                            let mut uadp_fields = Vec::new();
+                            for writer in &writer_group.dataset_writers {
+                                let mut payload_map = std::collections::HashMap::new();
+                                let mut uadp_fields = Vec::new();
 
-                            for node_id in &writer.published_dataset.published_variables {
-                                if let Some(node) = space.find(node_id) {
-                                    if let NodeType::Variable(ref var) = *node {
-                                        let ctx_owned = ContextOwned::default();
-                                        let ctx = ctx_owned.context();
-                                        let data_value = var.value(
-                                            TimestampsToReturn::Both,
-                                            &NumericRange::None,
-                                            &DataEncoding::Binary,
-                                            0.0,
-                                        );
+                                for node_id in &writer.published_dataset.published_variables {
+                                    if let Some(node) = space.find(node_id) {
+                                        if let NodeType::Variable(ref var) = *node {
+                                            let ctx_owned = ContextOwned::default();
+                                            let ctx = ctx_owned.context();
+                                            let data_value = var.value(
+                                                TimestampsToReturn::Both,
+                                                &NumericRange::None,
+                                                &DataEncoding::Binary,
+                                                0.0,
+                                            );
 
-                                        if writer_group.encoding == MessageEncoding::Json {
-                                            if let Ok(val) = opcua_to_json_value(&data_value, &ctx)
-                                            {
-                                                payload_map.insert(node_id.to_string(), val);
+                                            if writer_group.encoding == MessageEncoding::Json {
+                                                if let Ok(val) =
+                                                    opcua_to_json_value(&data_value, &ctx)
+                                                {
+                                                    payload_map.insert(node_id.to_string(), val);
+                                                }
+                                            } else if let Some(ref val) = data_value.value {
+                                                uadp_fields.push(val.clone());
                                             }
-                                        } else if let Some(ref val) = data_value.value {
-                                            uadp_fields.push(val.clone());
                                         }
                                     }
                                 }
-                            }
 
-                            sequence_number = sequence_number.wrapping_add(1);
+                                sequence_number = sequence_number.wrapping_add(1);
 
-                            match writer_group.encoding {
-                                MessageEncoding::Json => {
-                                    json_dataset_messages.push(JsonDataSetMessage {
-                                        dataset_writer_id: writer.dataset_writer_id,
-                                        sequence_number,
-                                        payload: payload_map,
-                                    });
-                                }
-                                MessageEncoding::Uadp => {
-                                    uadp_dataset_messages.push(UadpDataSetMessage {
-                                        dataset_writer_id: writer.dataset_writer_id,
-                                        sequence_number,
-                                        timestamp: Some(opcua_types::DateTime::now()),
-                                        status: Some(StatusCode::Good),
-                                        fields: uadp_fields,
-                                    });
+                                match writer_group.encoding {
+                                    MessageEncoding::Json => {
+                                        json_dataset_messages.push(JsonDataSetMessage {
+                                            dataset_writer_id: writer.dataset_writer_id,
+                                            sequence_number,
+                                            payload: payload_map,
+                                        });
+                                    }
+                                    MessageEncoding::Uadp => {
+                                        uadp_dataset_messages.push(UadpDataSetMessage {
+                                            dataset_writer_id: writer.dataset_writer_id,
+                                            sequence_number,
+                                            timestamp: Some(opcua_types::DateTime::now()),
+                                            status: Some(StatusCode::Good),
+                                            fields: uadp_fields,
+                                        });
+                                    }
                                 }
                             }
                         }
@@ -166,7 +170,7 @@ impl PubSubPublisher for UdpPublisher {
                             if payload.len() <= MTU {
                                 let _ = socket.send_to(&payload, &destination_address).await;
                             } else {
-                                let total_fragments = ((payload.len() + MTU - 1) / MTU) as u8;
+                                let total_fragments = payload.len().div_ceil(MTU) as u8;
                                 for fragment_index in 0..total_fragments {
                                     let start = fragment_index as usize * MTU;
                                     let end = std::cmp::min(start + MTU, payload.len());

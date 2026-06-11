@@ -1,6 +1,6 @@
 use opcua::core::sync::RwLock;
 use opcua::server::address_space::{AddressSpace, VariableBuilder};
-use opcua::types::{NodeId, Variant};
+use opcua::types::NodeId;
 use opcua_pubsub::{
     DataSetWriterConfig, MessageEncoding, PubSubConnectionConfig, PubSubPublisher,
     PublishedDataSetConfig, UdpPublisher, WriterGroupConfig,

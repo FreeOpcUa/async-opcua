@@ -760,7 +760,7 @@ impl SecureChannel {
             }
             SecurityPolicy::None => {
                 // Nothing to do
-                return Ok((MessageChunk { data: src.into() }, security_policy));
+                return Ok((MessageChunk { data: src }, security_policy));
             }
             _ => {}
         }
@@ -879,7 +879,7 @@ impl SecureChannel {
             let signed_range = 0..(message_size - signature_size);
             self.decrypt_chunk(src, security_header, signed_range, encrypted_range)
         } else {
-            Ok(MessageChunk { data: src.into() })
+            Ok(MessageChunk { data: src })
         }
     }
 
@@ -916,7 +916,7 @@ impl SecureChannel {
             let signed_range = 0..(message_size - signature_size);
             self.decrypt_chunk(src, security_header, signed_range, encrypted_range)
         } else {
-            Ok(MessageChunk { data: src.into() })
+            Ok(MessageChunk { data: src })
         }
     }
 

@@ -127,6 +127,7 @@ struct ChunkingStream<'a, 'b> {
 }
 
 impl<'a, 'b> ChunkingStream<'a, 'b> {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         message_type: MessageChunkType,
         secure_channel: &'a SecureChannel,
@@ -265,9 +266,7 @@ impl Write for ChunkingStream<'_, '_> {
             self.start_chunk()?;
         }
 
-        let to_read = buf
-            .len()
-            .min(self.current_body_target - self.body_written);
+        let to_read = buf.len().min(self.current_body_target - self.body_written);
         self.storage.extend_from_slice(&buf[..to_read]);
         self.body_written += to_read;
         if self.body_written == self.current_body_target {

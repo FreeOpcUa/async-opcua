@@ -20,10 +20,13 @@ use crate::{
 /// Maximum number of messages to keep in the local cache when disconnected.
 const MAX_CACHE_SIZE: usize = 1000;
 
+/// Cache of pending (topic, payload) messages awaiting (re)publication.
+type MessageCache = Arc<Mutex<VecDeque<(String, Vec<u8>)>>>;
+
 /// MQTT implementation of `PubSubPublisher` with reconnection, backoff, and local cache.
 pub struct MqttPublisher {
     address_space: Arc<RwLock<AddressSpace>>,
-    cache: Arc<Mutex<VecDeque<(String, Vec<u8>)>>>,
+    cache: MessageCache,
 }
 
 impl MqttPublisher {
@@ -211,9 +214,10 @@ impl PubSubPublisher for MqttPublisher {
                     }
 
                     if let Some((topic, payload)) = next_item {
-                        if let Err(_) = client
+                        if client
                             .publish(topic.clone(), QoS::AtLeastOnce, false, payload.clone())
                             .await
+                            .is_err()
                         {
                             // Put it back at the front and break to reconnect
                             {

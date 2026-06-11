@@ -33,10 +33,13 @@ struct AmqpAddressSettings {
     routing_key: String,
 }
 
+/// Cache of pending (routing key, payload) messages awaiting (re)publication.
+type MessageCache = Arc<Mutex<VecDeque<(String, Vec<u8>)>>>;
+
 /// AMQP implementation of `PubSubPublisher` with reconnection, backoff, and local cache.
 pub struct AmqpPublisher {
     address_space: Arc<RwLock<AddressSpace>>,
-    cache: Arc<Mutex<VecDeque<(String, Vec<u8>)>>>,
+    cache: MessageCache,
 }
 
 impl AmqpPublisher {
@@ -245,11 +248,7 @@ fn authority_has_port(authority: &str) -> bool {
     host_port.rsplit_once(':').is_some()
 }
 
-fn push_cached_message(
-    cache: &Arc<Mutex<VecDeque<(String, Vec<u8>)>>>,
-    routing_key: String,
-    payload: Vec<u8>,
-) {
+fn push_cached_message(cache: &MessageCache, routing_key: String, payload: Vec<u8>) {
     if let Ok(mut cache) = cache.lock() {
         if cache.len() >= MAX_CACHE_SIZE {
             let _ = cache.pop_front();

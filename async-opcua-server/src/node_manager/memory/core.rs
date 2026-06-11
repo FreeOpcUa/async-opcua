@@ -250,7 +250,7 @@ impl CoreNodeManagerImpl {
             v
         } else {
             // If it can't be found, read it from the node hierarchy.
-            read_node_value(&*node, context, node_to_read, max_age, timestamps_to_return)
+            read_node_value(&node, context, node_to_read, max_age, timestamps_to_return)
         }
     }
 

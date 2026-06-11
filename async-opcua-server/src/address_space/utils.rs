@@ -153,7 +153,7 @@ fn validate_value_data_type_to_write(
             return Err(StatusCode::BadTypeMismatch);
         };
         // Value is scalar, check if the data type matches
-        let data_type_matches = type_tree.is_subtype_of(&data_type, &node_data_type);
+        let data_type_matches = type_tree.is_subtype_of(&data_type, node_data_type);
 
         if !data_type_matches {
             if value.is_array() {

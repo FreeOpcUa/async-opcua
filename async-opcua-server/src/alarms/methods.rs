@@ -97,9 +97,7 @@ impl AlarmMethodHandler {
             event_id,
             &comment,
         );
-        if let Err(status) = res {
-            return Err(status);
-        }
+        res?;
 
         // Prepare and route the event notification
         let address_space = opcua_core::trace_read_lock!(self.address_space);

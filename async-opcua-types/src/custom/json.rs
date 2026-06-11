@@ -373,10 +373,11 @@ impl DynamicTypeLoader {
                 }))
             }
 
-            StructureType::StructureWithSubtypedValues
-            | StructureType::UnionWithSubtypedValues => Err(Error::decoding(
-                "Structures and unions with subtyped values are unsupported",
-            )),
+            StructureType::StructureWithSubtypedValues | StructureType::UnionWithSubtypedValues => {
+                Err(Error::decoding(
+                    "Structures and unions with subtyped values are unsupported",
+                ))
+            }
         }
     }
 }
@@ -435,8 +436,7 @@ impl JsonEncodable for DynamicStructure {
                 }
             }
 
-            StructureType::StructureWithSubtypedValues
-            | StructureType::UnionWithSubtypedValues => {
+            StructureType::StructureWithSubtypedValues | StructureType::UnionWithSubtypedValues => {
                 return Err(Error::encoding(
                     "Structures and unions with subtyped values are unsupported",
                 ));

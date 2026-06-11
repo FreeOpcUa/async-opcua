@@ -10,8 +10,8 @@ use futures::FutureExt;
 
 use opcua_core::sync::RwLock;
 use opcua_types::{
-    DataValue, DiagnosticBits, DiagnosticInfo, NodeId, ReadValueId, StatusCode,
-    TimestampsToReturn, WriteValue,
+    DataValue, DiagnosticBits, DiagnosticInfo, NodeId, ReadValueId, StatusCode, TimestampsToReturn,
+    WriteValue,
 };
 use tokio::sync::oneshot;
 use tracing::debug_span;
@@ -191,7 +191,10 @@ impl SessionActor {
             .info
             .metrics
             .actor_message_duration_ns
-            .fetch_add(processing_start.elapsed().as_nanos() as u64, Ordering::Relaxed);
+            .fetch_add(
+                processing_start.elapsed().as_nanos() as u64,
+                Ordering::Relaxed,
+            );
     }
 
     /// Close the session and run termination cleanup after the actor

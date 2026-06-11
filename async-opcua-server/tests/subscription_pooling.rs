@@ -36,10 +36,7 @@ fn high_frequency_acquire_release_keeps_memory_bounded() {
         handles.push(thread::spawn(move || {
             for _ in 0..CYCLES_PER_THREAD {
                 let buffer = pool.acquire();
-                assert!(
-                    buffer.is_empty(),
-                    "pooled buffers must be handed out clean"
-                );
+                assert!(buffer.is_empty(), "pooled buffers must be handed out clean");
                 assert!(
                     pool.active() <= POOL_CAPACITY,
                     "checked-out buffers must never exceed pool capacity"
@@ -54,7 +51,10 @@ fn high_frequency_acquire_release_keeps_memory_bounded() {
         handle.join().expect("load thread should complete");
     }
 
-    assert_eq!(completed.load(Ordering::Relaxed), THREADS * CYCLES_PER_THREAD);
+    assert_eq!(
+        completed.load(Ordering::Relaxed),
+        THREADS * CYCLES_PER_THREAD
+    );
     assert_eq!(pool.active(), 0, "all buffers must be returned");
     // Memory stability: 160k acquire/release cycles across 16 threads must
     // not allocate any buffers beyond the warmed-up pool.

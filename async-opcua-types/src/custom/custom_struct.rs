@@ -287,8 +287,9 @@ impl BinaryEncodable for DynamicStructure {
             }
             // Unsupported; encode returns an error for these before any
             // bytes are written, so the length is never used.
-            StructureType::StructureWithSubtypedValues
-            | StructureType::UnionWithSubtypedValues => return 0,
+            StructureType::StructureWithSubtypedValues | StructureType::UnionWithSubtypedValues => {
+                return 0
+            }
         }
 
         size
@@ -340,8 +341,7 @@ impl BinaryEncodable for DynamicStructure {
                     self.encode_field(stream, value, field, ctx)?;
                 }
             }
-            StructureType::StructureWithSubtypedValues
-            | StructureType::UnionWithSubtypedValues => {
+            StructureType::StructureWithSubtypedValues | StructureType::UnionWithSubtypedValues => {
                 return Err(Error::encoding(
                     "Structures and unions with subtyped values are unsupported",
                 ));
@@ -590,10 +590,11 @@ impl DynamicTypeLoader {
                     data: values,
                 }))
             }
-            StructureType::StructureWithSubtypedValues
-            | StructureType::UnionWithSubtypedValues => Err(Error::decoding(
-                "Structures and unions with subtyped values are unsupported",
-            )),
+            StructureType::StructureWithSubtypedValues | StructureType::UnionWithSubtypedValues => {
+                Err(Error::decoding(
+                    "Structures and unions with subtyped values are unsupported",
+                ))
+            }
         }
     }
 }

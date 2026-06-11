@@ -70,9 +70,7 @@ async fn ten_thousand_connections_complete_handshake() {
                     .await
                     .map_err(|_| std::io::Error::other("timed out waiting for ACK"))?;
                 match message {
-                    Some(Ok(Message::Acknowledge(_))) => {
-                        Ok::<_, std::io::Error>((framed, write))
-                    }
+                    Some(Ok(Message::Acknowledge(_))) => Ok::<_, std::io::Error>((framed, write)),
                     other => Err(std::io::Error::other(format!(
                         "expected ACK, got {other:?}"
                     ))),

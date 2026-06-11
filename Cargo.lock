@@ -430,6 +430,7 @@ dependencies = [
 name = "async-opcua-core"
 version = "0.18.0"
 dependencies = [
+ "async-opcua-core",
  "async-opcua-crypto",
  "async-opcua-types",
  "async-trait",

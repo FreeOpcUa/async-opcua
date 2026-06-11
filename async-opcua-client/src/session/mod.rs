@@ -282,6 +282,7 @@ impl Session {
     async fn wait_for_state(&self, connected: bool) -> bool {
         let mut rx = self.state_watch_rx.clone();
 
+        #[allow(clippy::let_and_return)]
         let res = rx
             .wait_for(|s| {
                 connected && matches!(*s, SessionState::Connected)

@@ -119,7 +119,7 @@ impl ServerHandle {
     /// Reloads the application certificate and private key from disk dynamically.
     pub fn reload_certificate(&self) -> Result<(), String> {
         let store = self.certificate_store.read();
-        let (cert, pkey) = opcua_crypto::gds_reload::reload_store_from_disk(&*store)?;
+        let (cert, pkey) = opcua_crypto::gds_reload::reload_store_from_disk(&store)?;
 
         let mut server_cert = self.info.server_certificate.write();
         let mut server_pkey = self.info.server_pkey.write();

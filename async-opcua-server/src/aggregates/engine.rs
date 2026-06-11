@@ -120,12 +120,10 @@ pub fn calculate_time_weighted_average(
                 } else {
                     t_curr
                 }
+            } else if t_curr > start {
+                start
             } else {
-                if t_curr > start {
-                    start
-                } else {
-                    t_curr
-                }
+                t_curr
             }
         } else {
             points[i].0

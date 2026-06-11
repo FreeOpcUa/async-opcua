@@ -10,6 +10,9 @@ pub struct AfXdp {
     /// Name of the network interface (e.g. "eth0").
     interface_name: String,
     /// Underlying Socket handle – currently unused and kept as an `Option`.
+    // Held for the future hardware-backed implementation; the simulated
+    // loopback never reads it.
+    #[allow(dead_code)]
     socket: Option<Socket>,
     /// Memory queue representing the Tx ring.
     tx_queue: Mutex<VecDeque<Vec<u8>>>,

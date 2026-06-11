@@ -1,3 +1,5 @@
+//! Concurrency tests for the DashMap-backed address space.
+
 use std::sync::Arc;
 use tokio::task;
 

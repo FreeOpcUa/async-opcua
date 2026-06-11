@@ -496,12 +496,14 @@ impl ServerInfo {
                     .map(|token| (token, None))
                 }
                 IdentityToken::X509(token) => {
-                    let server_cert_lock = self.server_certificate.read();
+                    // Clone out of the lock; the guard must not be held
+                    // across the await below.
+                    let server_cert = self.server_certificate.read().clone();
                     self.authenticate_x509_identity_token(
                         endpoint,
                         &token,
                         &request.user_token_signature,
-                        &*server_cert_lock,
+                        &server_cert,
                         server_nonce,
                     )
                     .await

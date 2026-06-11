@@ -16,10 +16,10 @@ jobs:
         run: cargo clippy --locked -- -D warnings
       
       - name: No default features
-        run: cargo clippy --locked --no-default-features -- -D warnings
+        run: cargo clippy --locked -p async-opcua --no-default-features -- -D warnings
 
       - name: Just xml
-        run: cargo clippy --locked --no-default-features --features xml -- -D warnings
+        run: cargo clippy --locked -p async-opcua --no-default-features --features xml -- -D warnings
 
       - name: Just json
-        run: cargo clippy --locked --no-default-features --features json -- -D warnings
+        run: cargo clippy --locked -p async-opcua --no-default-features --features json -- -D warnings

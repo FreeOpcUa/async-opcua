@@ -201,7 +201,7 @@ async fn call_fail() {
     assert_eq!(r.status_code, StatusCode::BadUserAccessDenied);
 
     {
-        let mut sp = nm.address_space().write();
+        let sp = nm.address_space().write();
         sp.find_mut(&id)
             .unwrap()
             .as_mut_node()

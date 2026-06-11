@@ -10,7 +10,7 @@ use std::{
     time::Duration,
 };
 
-use opcua_server::{metrics::METRICS, pool::NotificationPool};
+use opcua_server::pool::NotificationPool;
 
 const POOL_CAPACITY: usize = 8;
 const THREADS: usize = 16;
@@ -68,7 +68,7 @@ fn high_frequency_acquire_release_keeps_memory_bounded() {
 #[test]
 fn exhausted_pool_blocks_until_release_and_counts_waits() {
     let pool = Arc::new(NotificationPool::new(1));
-    let waits_before = METRICS.pooled_notifications_wait_count.load(Ordering::Relaxed);
+    let waits_before = pool.waits();
 
     let held = pool.acquire();
     let created_while_held = pool.created();
@@ -92,10 +92,10 @@ fn exhausted_pool_blocks_until_release_and_counts_waits() {
         .expect("blocked acquire must resume after a buffer is released");
     blocked.join().expect("blocked thread should complete");
 
-    let waits_after = METRICS.pooled_notifications_wait_count.load(Ordering::Relaxed);
+    let waits_after = pool.waits();
     assert!(
         waits_after > waits_before,
-        "pool exhaustion must be recorded in the wait-count metric"
+        "pool exhaustion must be recorded in the wait counter"
     );
     assert_eq!(pool.active(), 0);
     assert_eq!(

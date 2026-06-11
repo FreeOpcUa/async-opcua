@@ -94,6 +94,8 @@ pub struct ServerInfo {
     pub type_loaders: RwLock<TypeLoaderCollection>,
     /// Current server diagnostics.
     pub diagnostics: ServerDiagnostics,
+    /// Performance metrics for this server instance.
+    pub metrics: Arc<crate::metrics::ServerMetrics>,
 }
 
 impl ServerInfo {

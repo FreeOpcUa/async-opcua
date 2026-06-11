@@ -102,16 +102,26 @@ pub struct SubscriptionCache {
     inner: RwLock<SubscriptionCacheInner>,
     /// Configured limits on subscriptions.
     limits: SubscriptionLimits,
+    /// Reuse pool for notification scratch buffers, shared by all
+    /// subscriptions on this server.
+    pool: Arc<pool::NotificationPool>,
 }
 
 impl SubscriptionCache {
-    pub(crate) fn new(limits: SubscriptionLimits) -> Self {
+    pub(crate) fn new(
+        limits: SubscriptionLimits,
+        metrics: Arc<crate::metrics::ServerMetrics>,
+    ) -> Self {
         Self {
             inner: RwLock::new(SubscriptionCacheInner {
                 session_subscriptions: HashMap::new(),
                 subscription_to_session: HashMap::new(),
                 monitored_items: HashMap::new(),
             }),
+            pool: Arc::new(
+                pool::NotificationPool::new(limits.max_notification_pool_size)
+                    .with_metrics(metrics),
+            ),
             limits,
         }
     }
@@ -322,6 +332,7 @@ impl SubscriptionCache {
                     Self::get_key(&context.session),
                     context.session.clone(),
                     context.info.type_tree_getter.get_type_tree_static(context),
+                    Arc::clone(&self.pool),
                 )))
             })
             .clone();
@@ -732,6 +743,7 @@ impl SubscriptionCache {
                         key.clone(),
                         context.session.clone(),
                         context.info.type_tree_getter.get_type_tree_static(context),
+                        Arc::clone(&self.pool),
                     )))
                 })
                 .clone();

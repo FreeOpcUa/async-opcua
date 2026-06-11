@@ -7,22 +7,17 @@
 use std::{
     ops::{Deref, DerefMut},
     sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc, LazyLock,
+        atomic::{AtomicU64, AtomicUsize, Ordering},
+        Arc,
     },
 };
 
 use lockfree_object_pool::{LinearObjectPool, LinearReusable};
 use parking_lot::{Condvar, Mutex};
 
+use crate::metrics::ServerMetrics;
+
 use super::monitored_item::Notification;
-
-/// Default number of notification buffers available in the global pool.
-pub(crate) const NOTIFICATION_POOL_CAPACITY: usize = 1024;
-
-/// Global notification buffer pool shared by all subscriptions.
-pub(crate) static NOTIFICATION_POOL: LazyLock<NotificationPool> =
-    LazyLock::new(|| NotificationPool::new(NOTIFICATION_POOL_CAPACITY));
 
 /// Scratch buffers used while scanning monitored items for notifications.
 ///
@@ -71,6 +66,8 @@ pub struct NotificationPool {
     capacity: usize,
     active: AtomicUsize,
     created: Arc<AtomicUsize>,
+    waits: AtomicU64,
+    metrics: Option<Arc<ServerMetrics>>,
     wait_lock: Mutex<()>,
     wait_cvar: Condvar,
 }
@@ -97,9 +94,17 @@ impl NotificationPool {
             capacity,
             active: AtomicUsize::new(0),
             created,
+            waits: AtomicU64::new(0),
+            metrics: None,
             wait_lock: Mutex::new(()),
             wait_cvar: Condvar::new(),
         }
+    }
+
+    /// Publish pool statistics to the given server metrics registry.
+    pub fn with_metrics(mut self, metrics: Arc<ServerMetrics>) -> Self {
+        self.metrics = Some(metrics);
+        self
     }
 
     /// Acquire a buffer from the pool.
@@ -108,9 +113,12 @@ impl NotificationPool {
     /// released, enforcing a strict bound on notification scratch memory.
     pub fn acquire(&self) -> PooledNotificationBuffer<'_> {
         if !self.try_claim_slot() {
-            crate::metrics::METRICS
-                .pooled_notifications_wait_count
-                .fetch_add(1, Ordering::Relaxed);
+            self.waits.fetch_add(1, Ordering::Relaxed);
+            if let Some(metrics) = &self.metrics {
+                metrics
+                    .pooled_notifications_wait_count
+                    .fetch_add(1, Ordering::Relaxed);
+            }
             let mut guard = self.wait_lock.lock();
             while !self.try_claim_slot() {
                 self.wait_cvar.wait(&mut guard);
@@ -149,14 +157,21 @@ impl NotificationPool {
         self.created.load(Ordering::Relaxed)
     }
 
-    /// Publish active/total gauges to the global metrics registry.
+    /// Number of times acquisition had to wait for pool capacity.
+    pub fn waits(&self) -> u64 {
+        self.waits.load(Ordering::Relaxed)
+    }
+
+    /// Publish active/total gauges to the attached metrics registry, if any.
     fn publish_stats(&self) {
-        crate::metrics::METRICS
-            .pooled_notifications_active
-            .store(self.active(), Ordering::Relaxed);
-        crate::metrics::METRICS
-            .pooled_notifications_total
-            .store(self.created(), Ordering::Relaxed);
+        if let Some(metrics) = &self.metrics {
+            metrics
+                .pooled_notifications_active
+                .store(self.active(), Ordering::Relaxed);
+            metrics
+                .pooled_notifications_total
+                .store(self.created(), Ordering::Relaxed);
+        }
     }
 }
 

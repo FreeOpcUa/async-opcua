@@ -123,9 +123,11 @@ impl SessionActor {
     /// Run the actor until it is terminated or all senders are dropped.
     pub async fn run(&mut self, node_managers: NodeManagers) -> Result<(), SessionError> {
         while let Some(message) = self.receiver.recv().await {
-            crate::metrics::METRICS
-                .actor_queue_depth
-                .store(self.receiver.len(), Ordering::Relaxed);
+            self.context
+                .info
+                .metrics
+                .actor_queue_peak_depth
+                .fetch_max(self.receiver.len(), Ordering::Relaxed);
             let processing_start = Instant::now();
             match message {
                 SessionMessage::Read {
@@ -145,7 +147,7 @@ impl SessionActor {
                         )
                         .await;
                     let _ = response.send(result);
-                    Self::record_message_processed(processing_start);
+                    self.record_message_processed(processing_start);
                 }
                 SessionMessage::Write {
                     values,
@@ -156,7 +158,7 @@ impl SessionActor {
                         .write(node_managers.clone(), values, return_diagnostics)
                         .await;
                     let _ = response.send(result);
-                    Self::record_message_processed(processing_start);
+                    self.record_message_processed(processing_start);
                 }
                 SessionMessage::Terminate {
                     reason,
@@ -167,7 +169,7 @@ impl SessionActor {
                     self.run_termination_cleanup(&cleanup);
                     tracing::debug!(?reason, ?cleanup, "session actor terminating");
                     let _ = acknowledge.send(cleanup);
-                    Self::record_message_processed(processing_start);
+                    self.record_message_processed(processing_start);
                     return Ok(());
                 }
             }
@@ -179,11 +181,15 @@ impl SessionActor {
         Err(SessionError::ChannelClosed)
     }
 
-    fn record_message_processed(processing_start: Instant) {
-        crate::metrics::METRICS
+    fn record_message_processed(&self, processing_start: Instant) {
+        self.context
+            .info
+            .metrics
             .actor_messages_processed
             .fetch_add(1, Ordering::Relaxed);
-        crate::metrics::METRICS
+        self.context
+            .info
+            .metrics
             .actor_message_duration_ns
             .fetch_add(processing_start.elapsed().as_nanos() as u64, Ordering::Relaxed);
     }

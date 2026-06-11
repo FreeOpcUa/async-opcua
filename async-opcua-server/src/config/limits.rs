@@ -104,6 +104,11 @@ pub struct SubscriptionLimits {
     /// Maximum number of queued notifications per subscription. 0 for unlimited.
     #[serde(default = "defaults::max_queued_notifications")]
     pub max_queued_notifications: usize,
+    /// Number of notification scratch buffers in the reuse pool shared by
+    /// all subscriptions. Bounds notification scratch memory; subscription
+    /// ticks block while the pool is exhausted.
+    #[serde(default = "defaults::max_notification_pool_size")]
+    pub max_notification_pool_size: usize,
 }
 
 impl Default for SubscriptionLimits {
@@ -122,6 +127,7 @@ impl Default for SubscriptionLimits {
             max_lifetime_count: defaults::max_lifetime_count(),
             max_notifications_per_publish: defaults::max_notifications_per_publish(),
             max_queued_notifications: defaults::max_queued_notifications(),
+            max_notification_pool_size: defaults::max_notification_pool_size(),
         }
     }
 }
@@ -280,6 +286,9 @@ mod defaults {
     pub(super) fn max_queued_notifications() -> usize {
         constants::MAX_QUEUED_NOTIFICATIONS
     }
+    pub(super) fn max_notification_pool_size() -> usize {
+        1024
+    }
 
     pub(super) fn max_nodes_per_translate_browse_paths_to_node_ids() -> usize {
         constants::MAX_NODES_PER_TRANSLATE_BROWSE_PATHS_TO_NODE_IDS
@@ -377,6 +386,7 @@ mod tests {
                     max_lifetime_count: 90_000,
                     max_notifications_per_publish: 0,
                     max_queued_notifications: 20,
+                    max_notification_pool_size: 1024,
                 },
                 operational: OperationalLimits {
                     max_nodes_per_translate_browse_paths_to_node_ids: 100,

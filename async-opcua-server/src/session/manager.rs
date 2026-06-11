@@ -79,10 +79,12 @@ impl SessionManager {
             .map(|session| Arc::clone(session.value()));
         let lookup_duration_ns = lookup_start.elapsed().as_nanos() as u64;
 
-        crate::metrics::METRICS
+        self.info
+            .metrics
             .session_lookup_count
             .fetch_add(1, Ordering::Relaxed);
-        crate::metrics::METRICS
+        self.info
+            .metrics
             .session_lookup_duration_ns
             .fetch_add(lookup_duration_ns, Ordering::Relaxed);
 

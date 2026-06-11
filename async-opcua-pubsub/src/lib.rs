@@ -13,6 +13,11 @@ pub mod transport;
 pub mod engine;
 
 /// PubSub security key management.
+///
+/// Note: the message security envelope used here (`OPCUAPS1`) is a
+/// proprietary format, not the UADP SecurityHeader from OPC UA Part 14 —
+/// it does not interoperate with other PubSub stacks. Treat PubSub
+/// security as experimental until the spec header is implemented.
 pub mod security;
 
 pub use config::{
@@ -27,6 +32,7 @@ pub use security::{
 
 pub use transport::amqp::AmqpPublisher;
 pub use transport::mqtt::MqttPublisher;
+#[cfg(feature = "tsn")]
 pub use transport::tsn::publisher::TsnPublisher;
 pub use transport::udp::UdpPublisher;
 pub use transport::websocket::WebSocketPublisher;

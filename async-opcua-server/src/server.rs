@@ -13,9 +13,9 @@ use futures::{future::Either, never::Never, stream::FuturesUnordered, FutureExt,
 use opcua_core::{sync::RwLock, trace_read_lock, trace_write_lock};
 use opcua_nodes::DefaultTypeTree;
 use tokio::{
-    net::TcpListener,
+    net::{TcpListener, TcpStream},
     pin,
-    sync::Notify,
+    sync::{mpsc, Notify},
     task::{JoinError, JoinHandle},
 };
 use tokio_util::sync::CancellationToken;
@@ -51,6 +51,76 @@ use super::{
 
 struct ConnectionInfo {
     command_send: tokio::sync::mpsc::Sender<ControllerCommand>,
+}
+
+struct TcpConnectionDeps {
+    max_connections: usize,
+    transport_config: TransportConfig,
+    info: Arc<ServerInfo>,
+    session_manager: Arc<RwLock<SessionManager>>,
+    certificate_store: Arc<RwLock<CertificateStore>>,
+    node_managers: NodeManagers,
+    subscriptions: Arc<SubscriptionCache>,
+}
+
+impl TcpConnectionDeps {
+    fn accept(
+        &self,
+        connections: &mut FuturesUnordered<JoinHandle<u32>>,
+        connection_map: &mut HashMap<u32, ConnectionInfo>,
+        socket: TcpStream,
+        addr: SocketAddr,
+        connection_counter: u32,
+    ) -> bool {
+        if connection_map.len() >= self.max_connections {
+            warn!(
+                "Closing connection from {addr}: max_connections ({}) reached",
+                self.max_connections
+            );
+            drop(socket);
+            return false;
+        }
+
+        info!("Accept new connection from {addr} ({connection_counter})");
+        let conn = SessionStarter::new(
+            TcpConnector::new(
+                socket,
+                self.transport_config.clone(),
+                self.info.decoding_options(),
+            ),
+            self.info.clone(),
+            self.session_manager.clone(),
+            self.certificate_store.clone(),
+            self.node_managers.clone(),
+            self.subscriptions.clone(),
+        );
+
+        let (send, recv) = tokio::sync::mpsc::channel(5);
+        let handle = tokio::spawn(conn.run(recv, |_| {}).map(move |_| connection_counter));
+        connections.push(handle);
+        connection_map.insert(connection_counter, ConnectionInfo { command_send: send });
+        true
+    }
+}
+
+enum ConnectionSource {
+    Listener(TcpListener),
+    Streams(mpsc::Receiver<(TcpStream, SocketAddr)>),
+    Closed,
+}
+
+impl ConnectionSource {
+    async fn next(&mut self) -> Option<Result<(TcpStream, SocketAddr), std::io::Error>> {
+        match self {
+            Self::Listener(listener) => Some(listener.accept().await),
+            Self::Streams(rx) => rx.recv().await.map(Ok),
+            Self::Closed => futures::future::pending().await,
+        }
+    }
+
+    fn is_closed(&self) -> bool {
+        matches!(self, Self::Closed)
+    }
 }
 
 /// The server struct. This is consumed when run, so you will typically not hold onto this for longer
@@ -288,14 +358,8 @@ impl Server {
         .await
     }
 
-    /// Run the server using a given TCP listener.
-    /// Note that the configured TCP endpoint is still used to create the endpoint
-    /// descriptions, you must properly set `host` and `port` even when using this.
-    ///
-    /// This is useful for testing, as you can bind a `TcpListener` to port `0` auto-assign
-    /// a port.
-    pub async fn run_with(mut self, listener: TcpListener) -> Result<(), String> {
-        let context = ServerContext {
+    fn server_context(&self) -> ServerContext {
+        ServerContext {
             node_managers: self.node_managers.as_weak(),
             subscriptions: self.subscriptions.clone(),
             info: self.info.clone(),
@@ -303,24 +367,44 @@ impl Server {
             type_tree: self.info.type_tree.clone(),
             type_tree_getter: self.info.type_tree_getter.clone(),
             status: self.status.clone(),
-        };
+        }
+    }
 
-        self.initialize_node_managers(&context).await?;
+    async fn prepare_to_run(&self, context: &ServerContext) -> Result<(), String> {
+        self.initialize_node_managers(context).await?;
 
         self.status.set_server_started();
         self.info.start_time.store(Arc::new(DateTime::now()));
+        Ok(())
+    }
 
-        let addr = listener
-            .local_addr()
-            .map_err(|e| format!("Failed to bind socket: {e:?}"))?;
-        info!("Now listening for connections on {addr}");
+    fn transport_config(&self) -> TransportConfig {
+        TransportConfig {
+            send_buffer_size: self.info.config.limits.send_buffer_size,
+            max_message_size: self.info.config.limits.max_message_size,
+            max_chunk_count: self.info.config.limits.max_chunk_count,
+            receive_buffer_size: self.info.config.limits.receive_buffer_size,
+            hello_timeout: Duration::from_secs(self.info.config.tcp_config.hello_timeout as u64),
+        }
+    }
 
-        self.info
-            .port
-            .store(addr.port(), std::sync::atomic::Ordering::Relaxed);
+    fn tcp_connection_deps(&self) -> TcpConnectionDeps {
+        TcpConnectionDeps {
+            max_connections: self.config.max_connections,
+            transport_config: self.transport_config(),
+            info: self.info.clone(),
+            session_manager: self.session_manager.clone(),
+            certificate_store: self.certificate_store.clone(),
+            node_managers: self.node_managers.clone(),
+            subscriptions: self.subscriptions.clone(),
+        }
+    }
 
-        self.log_endpoint_info();
-
+    async fn run_connection_loop(
+        &mut self,
+        context: &ServerContext,
+        mut connection_source: ConnectionSource,
+    ) -> Result<(), String> {
         let mut connection_counter = 0;
 
         #[cfg(feature = "discovery-server-registration")]
@@ -332,7 +416,7 @@ impl Server {
         pin!(discovery_fut);
 
         let subscription_fut =
-            Self::run_subscription_ticks(self.config.subscription_poll_interval_ms, &context);
+            Self::run_subscription_ticks(self.config.subscription_poll_interval_ms, context);
         pin!(subscription_fut);
 
         let session_expiry_fut =
@@ -340,6 +424,10 @@ impl Server {
         pin!(session_expiry_fut);
 
         loop {
+            if connection_source.is_closed() && self.connections.is_empty() {
+                break;
+            }
+
             let conn_fut = if self.connections.is_empty() {
                 if self.token.is_cancelled() {
                     break;
@@ -367,43 +455,27 @@ impl Server {
                 _ = &mut subscription_fut => {}
                 _ = &mut discovery_fut => {}
                 _ = &mut session_expiry_fut => {}
-                rs = listener.accept() => {
+                rs = connection_source.next() => {
                     match rs {
-                        Ok((socket, addr)) => {
-                            if self.connection_map.len() >= self.config.max_connections {
-                                warn!(
-                                    "Closing connection from {addr}: max_connections ({}) reached",
-                                    self.config.max_connections
-                                );
-                                drop(socket);
-                                continue;
-                            }
-                            info!("Accept new connection from {addr} ({connection_counter})");
-                            let conn = SessionStarter::new(
-                                TcpConnector::new(socket, TransportConfig {
-                                    send_buffer_size: self.info.config.limits.send_buffer_size,
-                                    max_message_size: self.info.config.limits.max_message_size,
-                                    max_chunk_count: self.info.config.limits.max_chunk_count,
-                                    receive_buffer_size: self.info.config.limits.receive_buffer_size,
-                                    hello_timeout: Duration::from_secs(self.info.config.tcp_config.hello_timeout as u64),
-                                }, self.info.decoding_options()),
-                                self.info.clone(),
-                                self.session_manager.clone(),
-                                self.certificate_store.clone(),
-                                self.node_managers.clone(),
-                                self.subscriptions.clone()
+                        Some(Ok((socket, addr))) => {
+                            let deps = self.tcp_connection_deps();
+                            let accepted = deps.accept(
+                                &mut self.connections,
+                                &mut self.connection_map,
+                                socket,
+                                addr,
+                                connection_counter,
                             );
-
-                            let (send, recv) = tokio::sync::mpsc::channel(5);
-                            let handle = tokio::spawn(conn.run(recv, |_| {}).map(move |_| connection_counter));
-                            self.connections.push(handle);
-                            self.connection_map.insert(connection_counter, ConnectionInfo {
-                                command_send: send
-                            });
-                            connection_counter += 1;
+                            if accepted {
+                                connection_counter += 1;
+                            }
                         }
-                        Err(e) => {
+                        Some(Err(e)) => {
                             error!("Failed to accept client connection: {:?}", e);
+                        }
+                        None => {
+                            info!("Stream handoff channel closed");
+                            connection_source = ConnectionSource::Closed;
                         }
                     }
                 }
@@ -411,13 +483,7 @@ impl Server {
                     debug!("Attempting reverse connection to {:?}", rev_connect.target.address);
                     let conn = SessionStarter::new(
                         ReverseTcpConnector::new(
-                            TransportConfig {
-                                    send_buffer_size: self.info.config.limits.send_buffer_size,
-                                    max_message_size: self.info.config.limits.max_message_size,
-                                    max_chunk_count: self.info.config.limits.max_chunk_count,
-                                    receive_buffer_size: self.info.config.limits.receive_buffer_size,
-                                    hello_timeout: Duration::from_secs(self.info.config.tcp_config.hello_timeout as u64),
-                                },
+                            self.transport_config(),
                             self.info.decoding_options(),
                             rev_connect.target.address,
                             self.info.application_uri.to_string(),
@@ -456,6 +522,57 @@ impl Server {
         }
 
         Ok(())
+    }
+
+    /// Run the server using a given TCP listener.
+    /// Note that the configured TCP endpoint is still used to create the endpoint
+    /// descriptions, you must properly set `host` and `port` even when using this.
+    ///
+    /// This is useful for testing, as you can bind a `TcpListener` to port `0` auto-assign
+    /// a port.
+    pub async fn run_with(mut self, listener: TcpListener) -> Result<(), String> {
+        let context = self.server_context();
+        self.prepare_to_run(&context).await?;
+
+        let addr = listener
+            .local_addr()
+            .map_err(|e| format!("Failed to bind socket: {e:?}"))?;
+        info!("Now listening for connections on {addr}");
+
+        self.info
+            .port
+            .store(addr.port(), std::sync::atomic::Ordering::Relaxed);
+
+        self.log_endpoint_info();
+        self.run_connection_loop(&context, ConnectionSource::Listener(listener))
+            .await
+    }
+
+    /// Run the server using externally accepted TCP streams.
+    ///
+    /// The configured TCP endpoint is still used to create endpoint descriptions,
+    /// so callers must set `host` and `port` to match the listener that accepted
+    /// the streams. The server exits after the stream channel closes and active
+    /// connections finish.
+    pub async fn run_with_streams(
+        mut self,
+        rx: mpsc::Receiver<(TcpStream, SocketAddr)>,
+    ) -> Result<(), String> {
+        let context = self.server_context();
+        self.prepare_to_run(&context).await?;
+
+        let port = self.config.tcp_config.port;
+        self.info
+            .port
+            .store(port, std::sync::atomic::Ordering::Relaxed);
+        info!(
+            "Now accepting handed-off TCP connections for {}",
+            self.info.base_endpoint()
+        );
+
+        self.log_endpoint_info();
+        self.run_connection_loop(&context, ConnectionSource::Streams(rx))
+            .await
     }
 
     /// Run the server. The provided `token` can be used to stop the server gracefully.

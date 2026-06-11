@@ -9,7 +9,7 @@ use std::{
 };
 
 use arc_swap::ArcSwap;
-use futures::{future::Either, never::Never, stream::FuturesUnordered, FutureExt, StreamExt};
+use futures::{future::Either, never::Never, stream::FuturesUnordered, StreamExt};
 use opcua_core::{sync::RwLock, trace_read_lock, trace_write_lock};
 use opcua_nodes::DefaultTypeTree;
 use tokio::{
@@ -64,12 +64,13 @@ struct TcpConnectionDeps {
 }
 
 impl TcpConnectionDeps {
-    fn accept(
+    fn accept<T: Send + 'static>(
         &self,
         connections: &mut FuturesUnordered<JoinHandle<u32>>,
         connection_map: &mut HashMap<u32, ConnectionInfo>,
         socket: TcpStream,
         addr: SocketAddr,
+        token: Option<T>,
         connection_counter: u32,
     ) -> bool {
         if connection_map.len() >= self.max_connections {
@@ -78,6 +79,7 @@ impl TcpConnectionDeps {
                 self.max_connections
             );
             drop(socket);
+            drop(token);
             return false;
         }
 
@@ -96,24 +98,36 @@ impl TcpConnectionDeps {
         );
 
         let (send, recv) = tokio::sync::mpsc::channel(5);
-        let handle = tokio::spawn(conn.run(recv, |_| {}).map(move |_| connection_counter));
+        let handle = tokio::spawn(async move {
+            let _token = token;
+            conn.run(recv, |_| {}).await;
+            connection_counter
+        });
         connections.push(handle);
         connection_map.insert(connection_counter, ConnectionInfo { command_send: send });
         true
     }
 }
 
-enum ConnectionSource {
+enum ConnectionSource<T> {
     Listener(TcpListener),
-    Streams(mpsc::Receiver<(TcpStream, SocketAddr)>),
+    Streams(mpsc::Receiver<(TcpStream, SocketAddr, T)>),
     Closed,
 }
 
-impl ConnectionSource {
-    async fn next(&mut self) -> Option<Result<(TcpStream, SocketAddr), std::io::Error>> {
+impl<T> ConnectionSource<T> {
+    async fn next(&mut self) -> Option<Result<(TcpStream, SocketAddr, Option<T>), std::io::Error>> {
         match self {
-            Self::Listener(listener) => Some(listener.accept().await),
-            Self::Streams(rx) => rx.recv().await.map(Ok),
+            Self::Listener(listener) => Some(
+                listener
+                    .accept()
+                    .await
+                    .map(|(socket, addr)| (socket, addr, None)),
+            ),
+            Self::Streams(rx) => rx
+                .recv()
+                .await
+                .map(|(socket, addr, token)| Ok((socket, addr, Some(token)))),
             Self::Closed => futures::future::pending().await,
         }
     }
@@ -400,10 +414,10 @@ impl Server {
         }
     }
 
-    async fn run_connection_loop(
+    async fn run_connection_loop<T: Send + 'static>(
         &mut self,
         context: &ServerContext,
-        mut connection_source: ConnectionSource,
+        mut connection_source: ConnectionSource<T>,
     ) -> Result<(), String> {
         let mut connection_counter = 0;
 
@@ -457,13 +471,14 @@ impl Server {
                 _ = &mut session_expiry_fut => {}
                 rs = connection_source.next() => {
                     match rs {
-                        Some(Ok((socket, addr))) => {
+                        Some(Ok((socket, addr, token))) => {
                             let deps = self.tcp_connection_deps();
                             let accepted = deps.accept(
                                 &mut self.connections,
                                 &mut self.connection_map,
                                 socket,
                                 addr,
+                                token,
                                 connection_counter,
                             );
                             if accepted {
@@ -544,19 +559,24 @@ impl Server {
             .store(addr.port(), std::sync::atomic::Ordering::Relaxed);
 
         self.log_endpoint_info();
-        self.run_connection_loop(&context, ConnectionSource::Listener(listener))
+        self.run_connection_loop(&context, ConnectionSource::<()>::Listener(listener))
             .await
     }
 
-    /// Run the server using externally accepted TCP streams.
+    /// Run the server using externally accepted TCP streams and caller-owned
+    /// per-connection tokens.
     ///
     /// The configured TCP endpoint is still used to create endpoint descriptions,
     /// so callers must set `host` and `port` to match the listener that accepted
     /// the streams. The server exits after the stream channel closes and active
     /// connections finish.
-    pub async fn run_with_streams(
+    ///
+    /// The token is never inspected by the server. It is moved into the spawned
+    /// connection task and dropped when that task exits; if the stream is
+    /// rejected by `max_connections`, the token is dropped with the stream.
+    pub async fn run_with_streams<T: Send + 'static>(
         mut self,
-        rx: mpsc::Receiver<(TcpStream, SocketAddr)>,
+        rx: mpsc::Receiver<(TcpStream, SocketAddr, T)>,
     ) -> Result<(), String> {
         let context = self.server_context();
         self.prepare_to_run(&context).await?;

@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part14/6.3.2/#6.3.2.4.3
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct JsonDataSetReaderMessageDataType {
@@ -29,4 +41,47 @@ impl opcua::types::MessageInfo for JsonDataSetReaderMessageDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::JsonDataSetReaderMessageDataType
     }
+}
+impl opcua::types::BinaryEncodable for JsonDataSetReaderMessageDataType {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.network_message_content_mask, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.data_set_message_content_mask, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.network_message_content_mask, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.data_set_message_content_mask, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for JsonDataSetReaderMessageDataType {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            network_message_content_mask: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            data_set_message_content_mask: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for JsonDataSetReaderMessageDataType
+where
+    super::enums::JsonNetworkMessageContentMask: Send,
+    super::enums::JsonDataSetMessageContentMask: Send,
+{
+}
+unsafe impl Sync for JsonDataSetReaderMessageDataType
+where
+    super::enums::JsonNetworkMessageContentMask: Sync,
+    super::enums::JsonDataSetMessageContentMask: Sync,
+{
 }

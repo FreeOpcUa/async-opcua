@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/7.22.4
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct AggregateFilterResult {
@@ -30,4 +42,52 @@ impl opcua::types::MessageInfo for AggregateFilterResult {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::AggregateFilterResult
     }
+}
+impl opcua::types::BinaryEncodable for AggregateFilterResult {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.revised_start_time, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.revised_processing_interval, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.revised_aggregate_configuration, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.revised_start_time, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.revised_processing_interval, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.revised_aggregate_configuration, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for AggregateFilterResult {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            revised_start_time: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            revised_processing_interval: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            revised_aggregate_configuration: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for AggregateFilterResult
+where
+    opcua::types::data_types::UtcTime: Send,
+    opcua::types::data_types::Duration: Send,
+    super::aggregate_configuration::AggregateConfiguration: Send,
+{
+}
+unsafe impl Sync for AggregateFilterResult
+where
+    opcua::types::data_types::UtcTime: Sync,
+    opcua::types::data_types::Duration: Sync,
+    super::aggregate_configuration::AggregateConfiguration: Sync,
+{
 }

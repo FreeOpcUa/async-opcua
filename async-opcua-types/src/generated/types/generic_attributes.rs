@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/7.24.10
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct GenericAttributes {
@@ -33,4 +45,67 @@ impl opcua::types::MessageInfo for GenericAttributes {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::GenericAttributes
     }
+}
+impl opcua::types::BinaryEncodable for GenericAttributes {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.specified_attributes, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.display_name, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.description, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.write_mask, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.user_write_mask, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.attribute_values, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.specified_attributes, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.display_name, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.description, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.write_mask, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.user_write_mask, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.attribute_values, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for GenericAttributes {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            specified_attributes: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            display_name: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            description: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            write_mask: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            user_write_mask: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            attribute_values: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for GenericAttributes
+where
+    u32: Send,
+    opcua::types::localized_text::LocalizedText: Send,
+    opcua::types::localized_text::LocalizedText: Send,
+    u32: Send,
+    u32: Send,
+    Option<Vec<super::generic_attribute_value::GenericAttributeValue>>: Send,
+{
+}
+unsafe impl Sync for GenericAttributes
+where
+    u32: Sync,
+    opcua::types::localized_text::LocalizedText: Sync,
+    opcua::types::localized_text::LocalizedText: Sync,
+    u32: Sync,
+    u32: Sync,
+    Option<Vec<super::generic_attribute_value::GenericAttributeValue>>: Sync,
+{
 }

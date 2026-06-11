@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part11/6.6.2
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct HistoryData {
@@ -29,3 +41,33 @@ impl opcua::types::MessageInfo for HistoryData {
         opcua::types::DataTypeId::HistoryData
     }
 }
+impl opcua::types::BinaryEncodable for HistoryData {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.data_values, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.data_values, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for HistoryData {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            data_values: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for HistoryData where Option<Vec<opcua::types::data_value::DataValue>>: Send {}
+unsafe impl Sync for HistoryData where Option<Vec<opcua::types::data_value::DataValue>>: Sync {}

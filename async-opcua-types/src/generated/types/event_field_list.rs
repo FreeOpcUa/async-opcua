@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/7.25.3
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct EventFieldList {
@@ -29,4 +41,47 @@ impl opcua::types::MessageInfo for EventFieldList {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::EventFieldList
     }
+}
+impl opcua::types::BinaryEncodable for EventFieldList {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.client_handle, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.event_fields, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.client_handle, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.event_fields, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for EventFieldList {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            client_handle: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            event_fields: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for EventFieldList
+where
+    opcua::types::IntegerId: Send,
+    Option<Vec<opcua::types::variant::Variant>>: Send,
+{
+}
+unsafe impl Sync for EventFieldList
+where
+    opcua::types::IntegerId: Sync,
+    Option<Vec<opcua::types::variant::Variant>>: Sync,
+{
 }

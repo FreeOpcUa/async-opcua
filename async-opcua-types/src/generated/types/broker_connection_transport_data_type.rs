@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part14/6.4.2/#6.4.2.2.3
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct BrokerConnectionTransportDataType {
@@ -29,4 +41,47 @@ impl opcua::types::MessageInfo for BrokerConnectionTransportDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::BrokerConnectionTransportDataType
     }
+}
+impl opcua::types::BinaryEncodable for BrokerConnectionTransportDataType {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.resource_uri, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.authentication_profile_uri, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.resource_uri, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.authentication_profile_uri, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for BrokerConnectionTransportDataType {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            resource_uri: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            authentication_profile_uri: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for BrokerConnectionTransportDataType
+where
+    opcua::types::string::UAString: Send,
+    opcua::types::string::UAString: Send,
+{
+}
+unsafe impl Sync for BrokerConnectionTransportDataType
+where
+    opcua::types::string::UAString: Sync,
+    opcua::types::string::UAString: Sync,
+{
 }

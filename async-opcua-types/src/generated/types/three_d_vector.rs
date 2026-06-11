@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part5/12.24
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ThreeDVector {
@@ -30,4 +42,52 @@ impl opcua::types::MessageInfo for ThreeDVector {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::ThreeDVector
     }
+}
+impl opcua::types::BinaryEncodable for ThreeDVector {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.x, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.y, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.z, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.x, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.y, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.z, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for ThreeDVector {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            x: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            y: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            z: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for ThreeDVector
+where
+    f64: Send,
+    f64: Send,
+    f64: Send,
+{
+}
+unsafe impl Sync for ThreeDVector
+where
+    f64: Sync,
+    f64: Sync,
+    f64: Sync,
+{
 }

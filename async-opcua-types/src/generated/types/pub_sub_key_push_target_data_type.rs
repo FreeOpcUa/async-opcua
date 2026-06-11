@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part14/6.2.12/#6.2.12.3
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PubSubKeyPushTargetDataType {
@@ -36,4 +48,82 @@ impl opcua::types::MessageInfo for PubSubKeyPushTargetDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::PubSubKeyPushTargetDataType
     }
+}
+impl opcua::types::BinaryEncodable for PubSubKeyPushTargetDataType {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.application_uri, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.push_target_folder, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.endpoint_url, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.security_policy_uri, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.user_token_type, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.requested_key_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.retry_interval, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.push_target_properties, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.security_groups, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.application_uri, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.push_target_folder, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.endpoint_url, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.security_policy_uri, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.user_token_type, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.requested_key_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.retry_interval, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.push_target_properties, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.security_groups, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for PubSubKeyPushTargetDataType {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            application_uri: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            push_target_folder: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            endpoint_url: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            security_policy_uri: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            user_token_type: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            requested_key_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            retry_interval: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            push_target_properties: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            security_groups: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for PubSubKeyPushTargetDataType
+where
+    opcua::types::string::UAString: Send,
+    Option<Vec<opcua::types::string::UAString>>: Send,
+    opcua::types::string::UAString: Send,
+    opcua::types::string::UAString: Send,
+    super::user_token_policy::UserTokenPolicy: Send,
+    u16: Send,
+    opcua::types::data_types::Duration: Send,
+    Option<Vec<super::key_value_pair::KeyValuePair>>: Send,
+    Option<Vec<opcua::types::string::UAString>>: Send,
+{
+}
+unsafe impl Sync for PubSubKeyPushTargetDataType
+where
+    opcua::types::string::UAString: Sync,
+    Option<Vec<opcua::types::string::UAString>>: Sync,
+    opcua::types::string::UAString: Sync,
+    opcua::types::string::UAString: Sync,
+    super::user_token_policy::UserTokenPolicy: Sync,
+    u16: Sync,
+    opcua::types::data_types::Duration: Sync,
+    Option<Vec<super::key_value_pair::KeyValuePair>>: Sync,
+    Option<Vec<opcua::types::string::UAString>>: Sync,
+{
 }

@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part5/12.36
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct UABinaryFileDataType {
@@ -34,4 +46,72 @@ impl opcua::types::MessageInfo for UABinaryFileDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::UABinaryFileDataType
     }
+}
+impl opcua::types::BinaryEncodable for UABinaryFileDataType {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.namespaces, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.structure_data_types, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.enum_data_types, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.simple_data_types, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.schema_location, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.file_header, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.body, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.namespaces, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.structure_data_types, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.enum_data_types, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.simple_data_types, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.schema_location, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.file_header, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.body, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for UABinaryFileDataType {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            namespaces: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            structure_data_types: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            enum_data_types: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            simple_data_types: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            schema_location: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            file_header: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            body: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for UABinaryFileDataType
+where
+    Option<Vec<opcua::types::string::UAString>>: Send,
+    Option<Vec<super::structure_description::StructureDescription>>: Send,
+    Option<Vec<super::enum_description::EnumDescription>>: Send,
+    Option<Vec<super::simple_type_description::SimpleTypeDescription>>: Send,
+    opcua::types::string::UAString: Send,
+    Option<Vec<super::key_value_pair::KeyValuePair>>: Send,
+    opcua::types::variant::Variant: Send,
+{
+}
+unsafe impl Sync for UABinaryFileDataType
+where
+    Option<Vec<opcua::types::string::UAString>>: Sync,
+    Option<Vec<super::structure_description::StructureDescription>>: Sync,
+    Option<Vec<super::enum_description::EnumDescription>>: Sync,
+    Option<Vec<super::simple_type_description::SimpleTypeDescription>>: Sync,
+    opcua::types::string::UAString: Sync,
+    Option<Vec<super::key_value_pair::KeyValuePair>>: Sync,
+    opcua::types::variant::Variant: Sync,
+{
 }

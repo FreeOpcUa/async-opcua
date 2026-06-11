@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part5/12.2.12/#12.2.12.11
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TimeZoneDataType {
@@ -29,4 +41,47 @@ impl opcua::types::MessageInfo for TimeZoneDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::TimeZoneDataType
     }
+}
+impl opcua::types::BinaryEncodable for TimeZoneDataType {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.offset, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.daylight_saving_in_offset, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.offset, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.daylight_saving_in_offset, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for TimeZoneDataType {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            offset: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            daylight_saving_in_offset: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for TimeZoneDataType
+where
+    i16: Send,
+    bool: Send,
+{
+}
+unsafe impl Sync for TimeZoneDataType
+where
+    i16: Sync,
+    bool: Sync,
+{
 }

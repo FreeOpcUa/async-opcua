@@ -7,7 +7,19 @@
 // Copyright (C) 2017-2024 Einar Omang
 #![allow(non_camel_case_types)]
 #![allow(clippy::upper_case_acronyms)]
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v104/PROFINET/v101/docs/6.3.3/#6.3.3.1.1
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PnDeviceDiagnosisDataType {
@@ -54,7 +66,137 @@ impl opcua::types::ExpandedMessageInfo for PnDeviceDiagnosisDataType {
         opcua::types::ExpandedNodeId::from((id, "http://opcfoundation.org/UA/PROFINET/"))
     }
 }
-#[opcua::types::ua_encodable]
+impl opcua::types::BinaryEncodable for PnDeviceDiagnosisDataType {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.api, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.slot, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.subslot, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.channel_number, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.__type, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.accumulative, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.maintenance, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.specifier, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.direction, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.user_structure_identifier, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.channel_error_type, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.ext_channel_error_type, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.ext_channel_add_value, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.qualified_channel_qualifier, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.manufacturer_data, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.message, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.help_text, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.api, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.slot, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.subslot, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.channel_number, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.__type, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.accumulative, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.maintenance, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.specifier, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.direction, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.user_structure_identifier, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.channel_error_type, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.ext_channel_error_type, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.ext_channel_add_value, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.qualified_channel_qualifier, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.manufacturer_data, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.message, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.help_text, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for PnDeviceDiagnosisDataType {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            api: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            slot: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            subslot: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            channel_number: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            __type: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            accumulative: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            maintenance: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            specifier: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            direction: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            user_structure_identifier: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            channel_error_type: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            ext_channel_error_type: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            ext_channel_add_value: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            qualified_channel_qualifier: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            manufacturer_data: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            message: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            help_text: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for PnDeviceDiagnosisDataType
+where
+    u32: Send,
+    u16: Send,
+    u16: Send,
+    u16: Send,
+    super::enums::PnChannelTypeEnumeration: Send,
+    super::enums::PnChannelAccumulativeEnumeration: Send,
+    super::enums::PnChannelMaintenanceEnumeration: Send,
+    super::enums::PnChannelSpecifierEnumeration: Send,
+    super::enums::PnChannelDirectionEnumeration: Send,
+    u16: Send,
+    u16: Send,
+    u16: Send,
+    u32: Send,
+    u32: Send,
+    opcua::types::byte_string::ByteString: Send,
+    opcua::types::localized_text::LocalizedText: Send,
+    opcua::types::localized_text::LocalizedText: Send,
+{
+}
+unsafe impl Sync for PnDeviceDiagnosisDataType
+where
+    u32: Sync,
+    u16: Sync,
+    u16: Sync,
+    u16: Sync,
+    super::enums::PnChannelTypeEnumeration: Sync,
+    super::enums::PnChannelAccumulativeEnumeration: Sync,
+    super::enums::PnChannelMaintenanceEnumeration: Sync,
+    super::enums::PnChannelSpecifierEnumeration: Sync,
+    super::enums::PnChannelDirectionEnumeration: Sync,
+    u16: Sync,
+    u16: Sync,
+    u16: Sync,
+    u32: Sync,
+    u32: Sync,
+    opcua::types::byte_string::ByteString: Sync,
+    opcua::types::localized_text::LocalizedText: Sync,
+    opcua::types::localized_text::LocalizedText: Sync,
+{
+}
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v104/PROFINET/v101/docs/6.3.3/#6.3.3.2.1
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PnDeviceRoleOptionSet {
@@ -82,7 +224,62 @@ impl opcua::types::ExpandedMessageInfo for PnDeviceRoleOptionSet {
         opcua::types::ExpandedNodeId::from((id, "http://opcfoundation.org/UA/PROFINET/"))
     }
 }
-#[opcua::types::ua_encodable]
+impl opcua::types::BinaryEncodable for PnDeviceRoleOptionSet {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.value, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.valid_bits, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.value, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.valid_bits, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for PnDeviceRoleOptionSet {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            value: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            valid_bits: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for PnDeviceRoleOptionSet
+where
+    opcua::types::byte_string::ByteString: Send,
+    opcua::types::byte_string::ByteString: Send,
+{
+}
+unsafe impl Sync for PnDeviceRoleOptionSet
+where
+    opcua::types::byte_string::ByteString: Sync,
+    opcua::types::byte_string::ByteString: Sync,
+{
+}
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v104/PROFINET/v101/docs/6.3.3/#6.3.3.1.2
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PnIM5DataType {
@@ -116,4 +313,67 @@ impl opcua::types::ExpandedMessageInfo for PnIM5DataType {
         let id: opcua::types::NodeId = crate::DataTypeId::PnIM5DataType.into();
         opcua::types::ExpandedNodeId::from((id, "http://opcfoundation.org/UA/PROFINET/"))
     }
+}
+impl opcua::types::BinaryEncodable for PnIM5DataType {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.annotation, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.order_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.vendor_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.serial_number, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.hardware_revision, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.software_revision, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.annotation, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.order_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.vendor_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.serial_number, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.hardware_revision, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.software_revision, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for PnIM5DataType {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            annotation: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            order_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            vendor_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            serial_number: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            hardware_revision: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            software_revision: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for PnIM5DataType
+where
+    opcua::types::string::UAString: Send,
+    opcua::types::string::UAString: Send,
+    u16: Send,
+    opcua::types::string::UAString: Send,
+    opcua::types::string::UAString: Send,
+    opcua::types::string::UAString: Send,
+{
+}
+unsafe impl Sync for PnIM5DataType
+where
+    opcua::types::string::UAString: Sync,
+    opcua::types::string::UAString: Sync,
+    u16: Sync,
+    opcua::types::string::UAString: Sync,
+    opcua::types::string::UAString: Sync,
+    opcua::types::string::UAString: Sync,
+{
 }

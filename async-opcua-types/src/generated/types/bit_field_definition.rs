@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part5/12.45
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct BitFieldDefinition {
@@ -32,4 +44,62 @@ impl opcua::types::MessageInfo for BitFieldDefinition {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::BitFieldDefinition
     }
+}
+impl opcua::types::BinaryEncodable for BitFieldDefinition {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.name, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.description, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.reserved, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.starting_bit_position, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.ending_bit_position, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.name, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.description, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.reserved, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.starting_bit_position, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.ending_bit_position, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for BitFieldDefinition {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            name: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            description: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            reserved: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            starting_bit_position: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            ending_bit_position: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for BitFieldDefinition
+where
+    opcua::types::string::UAString: Send,
+    opcua::types::localized_text::LocalizedText: Send,
+    bool: Send,
+    u32: Send,
+    u32: Send,
+{
+}
+unsafe impl Sync for BitFieldDefinition
+where
+    opcua::types::string::UAString: Sync,
+    opcua::types::localized_text::LocalizedText: Sync,
+    bool: Sync,
+    u32: Sync,
+    u32: Sync,
+{
 }

@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/7.31
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct RelativePathElement {
@@ -31,4 +43,57 @@ impl opcua::types::MessageInfo for RelativePathElement {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::RelativePathElement
     }
+}
+impl opcua::types::BinaryEncodable for RelativePathElement {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.reference_type_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.is_inverse, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.include_subtypes, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.target_name, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.reference_type_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.is_inverse, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.include_subtypes, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.target_name, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for RelativePathElement {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            reference_type_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            is_inverse: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            include_subtypes: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            target_name: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for RelativePathElement
+where
+    opcua::types::node_id::NodeId: Send,
+    bool: Send,
+    bool: Send,
+    opcua::types::qualified_name::QualifiedName: Send,
+{
+}
+unsafe impl Sync for RelativePathElement
+where
+    opcua::types::node_id::NodeId: Sync,
+    bool: Sync,
+    bool: Sync,
+    opcua::types::qualified_name::QualifiedName: Sync,
+{
 }

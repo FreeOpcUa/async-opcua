@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part14/6.2.3/#6.2.3.7.2
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PublishedDataItemsDataType {
@@ -28,4 +40,40 @@ impl opcua::types::MessageInfo for PublishedDataItemsDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::PublishedDataItemsDataType
     }
+}
+impl opcua::types::BinaryEncodable for PublishedDataItemsDataType {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.published_data, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.published_data, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for PublishedDataItemsDataType {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            published_data: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for PublishedDataItemsDataType where
+    Option<Vec<super::published_variable_data_type::PublishedVariableDataType>>: Send
+{
+}
+unsafe impl Sync for PublishedDataItemsDataType where
+    Option<Vec<super::published_variable_data_type::PublishedVariableDataType>>: Sync
+{
 }

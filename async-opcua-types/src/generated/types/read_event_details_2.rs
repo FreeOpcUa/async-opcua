@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part11/6.5.2/#6.5.2.3
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ReadEventDetails2 {
@@ -32,4 +44,62 @@ impl opcua::types::MessageInfo for ReadEventDetails2 {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::ReadEventDetails2
     }
+}
+impl opcua::types::BinaryEncodable for ReadEventDetails2 {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.num_values_per_node, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.start_time, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.end_time, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.filter, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.read_modified, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.num_values_per_node, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.start_time, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.end_time, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.filter, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.read_modified, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for ReadEventDetails2 {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            num_values_per_node: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            start_time: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            end_time: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            filter: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            read_modified: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for ReadEventDetails2
+where
+    opcua::types::Counter: Send,
+    opcua::types::data_types::UtcTime: Send,
+    opcua::types::data_types::UtcTime: Send,
+    super::event_filter::EventFilter: Send,
+    bool: Send,
+{
+}
+unsafe impl Sync for ReadEventDetails2
+where
+    opcua::types::Counter: Sync,
+    opcua::types::data_types::UtcTime: Sync,
+    opcua::types::data_types::UtcTime: Sync,
+    super::event_filter::EventFilter: Sync,
+    bool: Sync,
+{
 }

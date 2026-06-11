@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part18/4.4.2
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct EndpointType {
@@ -31,4 +43,57 @@ impl opcua::types::MessageInfo for EndpointType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::EndpointType
     }
+}
+impl opcua::types::BinaryEncodable for EndpointType {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.endpoint_url, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.security_mode, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.security_policy_uri, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.transport_profile_uri, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.endpoint_url, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.security_mode, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.security_policy_uri, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.transport_profile_uri, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for EndpointType {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            endpoint_url: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            security_mode: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            security_policy_uri: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            transport_profile_uri: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for EndpointType
+where
+    opcua::types::string::UAString: Send,
+    super::enums::MessageSecurityMode: Send,
+    opcua::types::string::UAString: Send,
+    opcua::types::string::UAString: Send,
+{
+}
+unsafe impl Sync for EndpointType
+where
+    opcua::types::string::UAString: Sync,
+    super::enums::MessageSecurityMode: Sync,
+    opcua::types::string::UAString: Sync,
+    opcua::types::string::UAString: Sync,
+{
 }

@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part8/5.6.2
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Range {
@@ -29,4 +41,47 @@ impl opcua::types::MessageInfo for Range {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::Range
     }
+}
+impl opcua::types::BinaryEncodable for Range {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.low, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.high, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.low, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.high, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for Range {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            low: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            high: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for Range
+where
+    f64: Send,
+    f64: Send,
+{
+}
+unsafe impl Sync for Range
+where
+    f64: Sync,
+    f64: Sync,
+{
 }

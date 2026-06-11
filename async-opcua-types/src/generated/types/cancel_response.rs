@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/5.7.5/#5.7.5.2
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct CancelResponse {
@@ -29,4 +41,51 @@ impl opcua::types::MessageInfo for CancelResponse {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::CancelResponse
     }
+}
+impl opcua::types::BinaryEncodable for CancelResponse {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.response_header, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.cancel_count, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.response_header, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.cancel_count, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for CancelResponse {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        let response_header: opcua::types::response_header::ResponseHeader =
+            opcua::types::BinaryDecodable::decode(stream, ctx)?;
+        let __request_handle = response_header.request_handle;
+        Ok(Self {
+            response_header,
+            cancel_count: opcua::types::BinaryDecodable::decode(stream, ctx)
+                .map_err(|e| e.with_request_handle(__request_handle))?,
+        })
+    }
+}
+unsafe impl Send for CancelResponse
+where
+    opcua::types::response_header::ResponseHeader: Send,
+    u32: Send,
+{
+}
+unsafe impl Sync for CancelResponse
+where
+    opcua::types::response_header::ResponseHeader: Sync,
+    u32: Sync,
+{
 }

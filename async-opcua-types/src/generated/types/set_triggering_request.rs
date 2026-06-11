@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/5.13.5/#5.13.5.2
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SetTriggeringRequest {
@@ -32,4 +44,69 @@ impl opcua::types::MessageInfo for SetTriggeringRequest {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::SetTriggeringRequest
     }
+}
+impl opcua::types::BinaryEncodable for SetTriggeringRequest {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.request_header, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.subscription_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.triggering_item_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.links_to_add, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.links_to_remove, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.request_header, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.subscription_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.triggering_item_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.links_to_add, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.links_to_remove, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for SetTriggeringRequest {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        let request_header: opcua::types::request_header::RequestHeader =
+            opcua::types::BinaryDecodable::decode(stream, ctx)?;
+        let __request_handle = request_header.request_handle;
+        Ok(Self {
+            request_header,
+            subscription_id: opcua::types::BinaryDecodable::decode(stream, ctx)
+                .map_err(|e| e.with_request_handle(__request_handle))?,
+            triggering_item_id: opcua::types::BinaryDecodable::decode(stream, ctx)
+                .map_err(|e| e.with_request_handle(__request_handle))?,
+            links_to_add: opcua::types::BinaryDecodable::decode(stream, ctx)
+                .map_err(|e| e.with_request_handle(__request_handle))?,
+            links_to_remove: opcua::types::BinaryDecodable::decode(stream, ctx)
+                .map_err(|e| e.with_request_handle(__request_handle))?,
+        })
+    }
+}
+unsafe impl Send for SetTriggeringRequest
+where
+    opcua::types::request_header::RequestHeader: Send,
+    opcua::types::IntegerId: Send,
+    opcua::types::IntegerId: Send,
+    Option<Vec<opcua::types::IntegerId>>: Send,
+    Option<Vec<opcua::types::IntegerId>>: Send,
+{
+}
+unsafe impl Sync for SetTriggeringRequest
+where
+    opcua::types::request_header::RequestHeader: Sync,
+    opcua::types::IntegerId: Sync,
+    opcua::types::IntegerId: Sync,
+    Option<Vec<opcua::types::IntegerId>>: Sync,
+    Option<Vec<opcua::types::IntegerId>>: Sync,
+{
 }

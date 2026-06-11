@@ -636,24 +636,27 @@ impl MessageHandler {
             return Self::service_fault(&data, StatusCode::BadSessionClosed);
         };
         let include_diagnostics = !request.request_header.return_diagnostics.is_empty();
-        let mut results = Vec::with_capacity(nodes_to_read.len());
-        let mut diagnostics = include_diagnostics.then(|| Vec::with_capacity(nodes_to_read.len()));
 
-        for node in nodes_to_read {
-            let read_result = Self::actor_read(
-                &actor_sender,
-                node,
-                request.max_age,
-                request.timestamps_to_return,
-                request.request_header.return_diagnostics,
-            )
-            .await;
-            let (result, diagnostic) = match read_result {
-                Ok(r) => r,
-                // The actor faulted (node manager panic) or the session is
-                // gone; fail the whole service call like the pre-actor path.
-                Err(status) => return Self::service_fault(&data, status),
-            };
+        // The whole batch is one actor round-trip; node managers run
+        // concurrently within it.
+        let batch = match Self::actor_read(
+            &actor_sender,
+            nodes_to_read,
+            request.max_age,
+            request.timestamps_to_return,
+            request.request_header.return_diagnostics,
+        )
+        .await
+        {
+            Ok(r) => r,
+            // The actor faulted (node manager panic) or the session is
+            // gone; fail the whole service call like the pre-actor path.
+            Err(status) => return Self::service_fault(&data, status),
+        };
+
+        let mut results = Vec::with_capacity(batch.len());
+        let mut diagnostics = include_diagnostics.then(|| Vec::with_capacity(batch.len()));
+        for (result, diagnostic) in batch {
             results.push(result);
             if let Some(diagnostics) = &mut diagnostics {
                 diagnostics.push(diagnostic.unwrap_or_default());
@@ -673,15 +676,15 @@ impl MessageHandler {
 
     async fn actor_read(
         actor_sender: &mpsc::Sender<SessionMessage>,
-        node: ReadValueId,
+        nodes: Vec<ReadValueId>,
         max_age: f64,
         timestamps_to_return: TimestampsToReturn,
         return_diagnostics: DiagnosticBits,
-    ) -> Result<(DataValue, Option<DiagnosticInfo>), StatusCode> {
+    ) -> Result<Vec<(DataValue, Option<DiagnosticInfo>)>, StatusCode> {
         let (response, recv) = oneshot::channel();
         if actor_sender
             .send(SessionMessage::Read {
-                node,
+                nodes,
                 max_age,
                 timestamps_to_return,
                 return_diagnostics,
@@ -723,22 +726,25 @@ impl MessageHandler {
             return Self::service_fault(&data, StatusCode::BadSessionClosed);
         };
         let include_diagnostics = !request.request_header.return_diagnostics.is_empty();
-        let mut results = Vec::with_capacity(nodes_to_write.len());
-        let mut diagnostics = include_diagnostics.then(|| Vec::with_capacity(nodes_to_write.len()));
 
-        for value in nodes_to_write {
-            let write_result = Self::actor_write(
-                &actor_sender,
-                value,
-                request.request_header.return_diagnostics,
-            )
-            .await;
-            let (status, diagnostic) = match write_result {
-                Ok(r) => r,
-                // The actor faulted (node manager panic) or the session is
-                // gone; fail the whole service call like the pre-actor path.
-                Err(status) => return Self::service_fault(&data, status),
-            };
+        // The whole batch is one actor round-trip; node managers run
+        // concurrently within it.
+        let batch = match Self::actor_write(
+            &actor_sender,
+            nodes_to_write,
+            request.request_header.return_diagnostics,
+        )
+        .await
+        {
+            Ok(r) => r,
+            // The actor faulted (node manager panic) or the session is
+            // gone; fail the whole service call like the pre-actor path.
+            Err(status) => return Self::service_fault(&data, status),
+        };
+
+        let mut results = Vec::with_capacity(batch.len());
+        let mut diagnostics = include_diagnostics.then(|| Vec::with_capacity(batch.len()));
+        for (status, diagnostic) in batch {
             results.push(status);
             if let Some(diagnostics) = &mut diagnostics {
                 diagnostics.push(diagnostic.unwrap_or_default());
@@ -758,13 +764,13 @@ impl MessageHandler {
 
     async fn actor_write(
         actor_sender: &mpsc::Sender<SessionMessage>,
-        value: opcua_types::WriteValue,
+        values: Vec<opcua_types::WriteValue>,
         return_diagnostics: DiagnosticBits,
-    ) -> Result<(StatusCode, Option<DiagnosticInfo>), StatusCode> {
+    ) -> Result<Vec<(StatusCode, Option<DiagnosticInfo>)>, StatusCode> {
         let (response, recv) = oneshot::channel();
         if actor_sender
             .send(SessionMessage::Write {
-                value,
+                values,
                 return_diagnostics,
                 response,
             })

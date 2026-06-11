@@ -64,16 +64,17 @@ async fn run_load_test() {
                 let (response, response_rx) = oneshot::channel();
                 sender
                     .send(SessionMessage::Write {
-                        value: write_value(&node_id, value),
+                        values: vec![write_value(&node_id, value)],
                         return_diagnostics: DiagnosticBits::empty(),
                         response,
                     })
                     .await
                     .expect("actor should accept write message");
-                let (status, _) = response_rx
+                let results = response_rx
                     .await
                     .expect("write response should arrive")
                     .expect("write should not fault the service");
+                let (status, _) = results.into_iter().next().expect("one write result");
                 assert!(
                     status.is_good(),
                     "write of {value} to {node_id} failed: {status}"
@@ -82,7 +83,7 @@ async fn run_load_test() {
                 let (response, response_rx) = oneshot::channel();
                 sender
                     .send(SessionMessage::Read {
-                        node: read_value_id(&node_id),
+                        nodes: vec![read_value_id(&node_id)],
                         max_age: 0.0,
                         timestamps_to_return: TimestampsToReturn::Neither,
                         return_diagnostics: DiagnosticBits::empty(),
@@ -90,10 +91,11 @@ async fn run_load_test() {
                     })
                     .await
                     .expect("actor should accept read message");
-                let (data_value, _) = response_rx
+                let results = response_rx
                     .await
                     .expect("read response should arrive")
                     .expect("read should not fault the service");
+                let (data_value, _) = results.into_iter().next().expect("one read result");
                 assert!(
                     data_value.status.unwrap_or(StatusCode::Good).is_good(),
                     "read of {node_id} failed: {:?}",

@@ -373,12 +373,10 @@ impl DynamicTypeLoader {
                 }))
             }
 
-            StructureType::StructureWithSubtypedValues => {
-                todo!("StructureWithSubtypedValues is unsupported")
-            }
-            StructureType::UnionWithSubtypedValues => {
-                todo!("UnionWithSubtypedValues is unsupported")
-            }
+            StructureType::StructureWithSubtypedValues
+            | StructureType::UnionWithSubtypedValues => Err(Error::decoding(
+                "Structures and unions with subtyped values are unsupported",
+            )),
         }
     }
 }
@@ -437,11 +435,11 @@ impl JsonEncodable for DynamicStructure {
                 }
             }
 
-            StructureType::StructureWithSubtypedValues => {
-                todo!("StructureWithSubtypedValues is unsupported")
-            }
-            StructureType::UnionWithSubtypedValues => {
-                todo!("UnionWithSubtypedValues is unsupported")
+            StructureType::StructureWithSubtypedValues
+            | StructureType::UnionWithSubtypedValues => {
+                return Err(Error::encoding(
+                    "Structures and unions with subtyped values are unsupported",
+                ));
             }
         }
         stream.end_object()?;

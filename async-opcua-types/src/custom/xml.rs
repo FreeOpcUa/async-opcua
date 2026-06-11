@@ -384,12 +384,10 @@ impl DynamicTypeLoader {
                     data: vec![value],
                 }))
             }
-            StructureType::StructureWithSubtypedValues => {
-                todo!("StructureWithSubtypedValues is unsupported")
-            }
-            StructureType::UnionWithSubtypedValues => {
-                todo!("UnionWithSubtypedValues is unsupported")
-            }
+            StructureType::StructureWithSubtypedValues
+            | StructureType::UnionWithSubtypedValues => Err(Error::decoding(
+                "Structures and unions with subtyped values are unsupported",
+            )),
         }
     }
 }
@@ -437,11 +435,11 @@ impl XmlEncodable for DynamicStructure {
                 };
                 self.xml_encode_field(stream, value, field, ctx)?;
             }
-            StructureType::StructureWithSubtypedValues => {
-                todo!("StructureWithSubtypedValues is unsupported")
-            }
-            StructureType::UnionWithSubtypedValues => {
-                todo!("UnionWithSubtypedValues is unsupported")
+            StructureType::StructureWithSubtypedValues
+            | StructureType::UnionWithSubtypedValues => {
+                return Err(Error::encoding(
+                    "Structures and unions with subtyped values are unsupported",
+                ));
             }
         }
 

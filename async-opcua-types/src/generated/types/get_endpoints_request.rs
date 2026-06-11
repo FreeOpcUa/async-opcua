@@ -46,6 +46,7 @@ impl opcua::types::MessageInfo for GetEndpointsRequest {
 }
 impl opcua::types::BinaryEncodable for GetEndpointsRequest {
     #[allow(unused)]
+    #[allow(clippy::let_and_return)]
     fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
         let mut size = 0usize;
         size += opcua::types::BinaryEncodable::byte_len(&self.request_header, ctx);

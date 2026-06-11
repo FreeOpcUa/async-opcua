@@ -45,6 +45,7 @@ impl opcua::types::MessageInfo for ParsingResult {
 }
 impl opcua::types::BinaryEncodable for ParsingResult {
     #[allow(unused)]
+    #[allow(clippy::let_and_return)]
     fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
         let mut size = 0usize;
         size += opcua::types::BinaryEncodable::byte_len(&self.status_code, ctx);

@@ -49,6 +49,7 @@ impl opcua::types::MessageInfo for DatagramWriterGroupTransport2DataType {
 }
 impl opcua::types::BinaryEncodable for DatagramWriterGroupTransport2DataType {
     #[allow(unused)]
+    #[allow(clippy::let_and_return)]
     fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
         let mut size = 0usize;
         size += opcua::types::BinaryEncodable::byte_len(&self.message_repeat_count, ctx);

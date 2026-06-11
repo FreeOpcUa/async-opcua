@@ -43,6 +43,7 @@ impl opcua::types::MessageInfo for DatagramConnectionTransportDataType {
 }
 impl opcua::types::BinaryEncodable for DatagramConnectionTransportDataType {
     #[allow(unused)]
+    #[allow(clippy::let_and_return)]
     fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
         let mut size = 0usize;
         size += opcua::types::BinaryEncodable::byte_len(&self.discovery_address, ctx);

@@ -44,6 +44,7 @@ impl opcua::types::MessageInfo for JsonDataSetReaderMessageDataType {
 }
 impl opcua::types::BinaryEncodable for JsonDataSetReaderMessageDataType {
     #[allow(unused)]
+    #[allow(clippy::let_and_return)]
     fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
         let mut size = 0usize;
         size += opcua::types::BinaryEncodable::byte_len(&self.network_message_content_mask, ctx);

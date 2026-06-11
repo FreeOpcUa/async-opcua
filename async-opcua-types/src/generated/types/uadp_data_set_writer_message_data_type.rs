@@ -46,6 +46,7 @@ impl opcua::types::MessageInfo for UadpDataSetWriterMessageDataType {
 }
 impl opcua::types::BinaryEncodable for UadpDataSetWriterMessageDataType {
     #[allow(unused)]
+    #[allow(clippy::let_and_return)]
     fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
         let mut size = 0usize;
         size += opcua::types::BinaryEncodable::byte_len(&self.data_set_message_content_mask, ctx);

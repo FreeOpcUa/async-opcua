@@ -39,6 +39,7 @@ pub struct JsonActionResponseMessage {
 }
 impl opcua::types::BinaryEncodable for JsonActionResponseMessage {
     #[allow(unused)]
+    #[allow(clippy::let_and_return)]
     fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
         let mut size = 0usize;
         size += opcua::types::BinaryEncodable::byte_len(&self.data_set_writer_id, ctx);

@@ -45,6 +45,7 @@ impl opcua::types::MessageInfo for EventFilterResult {
 }
 impl opcua::types::BinaryEncodable for EventFilterResult {
     #[allow(unused)]
+    #[allow(clippy::let_and_return)]
     fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
         let mut size = 0usize;
         size += opcua::types::BinaryEncodable::byte_len(&self.select_clause_results, ctx);

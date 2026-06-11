@@ -1,7 +1,7 @@
 // tc taprio UDP fallback driver implementation
 
-use std::process::Command;
 use std::io;
+use std::process::Command;
 
 /// Configuration settings for the taprio scheduler.
 #[derive(Debug, Clone)]
@@ -114,7 +114,9 @@ impl TaprioDriver {
         // If it's already deleted or doesn't exist, ignore the error.
         if !output.status.success() {
             let err_msg = String::from_utf8_lossy(&output.stderr);
-            if !err_msg.contains("No such file or directory") && !err_msg.contains("Invalid argument") {
+            if !err_msg.contains("No such file or directory")
+                && !err_msg.contains("Invalid argument")
+            {
                 return Err(io::Error::new(
                     io::ErrorKind::Other,
                     format!("tc qdisc delete failed: {}", err_msg),

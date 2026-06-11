@@ -33,12 +33,14 @@ async fn tsn_jitter_loopback() {
     // Compute jitter as the maximum absolute deviation from the mean
     let jitter = latencies
         .iter()
-        .map(|d| {
-            if *d > mean { *d - mean } else { mean - *d }
-        })
+        .map(|d| if *d > mean { *d - mean } else { mean - *d })
         .max()
         .unwrap_or_else(|| Duration::from_secs(0));
 
     // The test is expected to fail: we assert that jitter exceeds 1 ms.
-    assert!(jitter > Duration::from_millis(1), "jitter {:?} <= 1 ms", jitter);
+    assert!(
+        jitter > Duration::from_millis(1),
+        "jitter {:?} <= 1 ms",
+        jitter
+    );
 }

@@ -326,14 +326,14 @@ impl InMemoryNodeManagerImpl for TestNodeManagerImpl {
         let type_tree = trace_read_lock!(context.type_tree);
 
         for write in nodes_to_write {
-            let mut node = match address_space.validate_node_write(context, write.value(), &*type_tree)
-            {
-                Ok(v) => v,
-                Err(e) => {
-                    write.set_status(e);
-                    continue;
-                }
-            };
+            let mut node =
+                match address_space.validate_node_write(context, write.value(), &*type_tree) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        write.set_status(e);
+                        continue;
+                    }
+                };
 
             if matches!(write.value().attribute_id, AttributeId::Value)
                 && node.node_class() == NodeClass::Variable

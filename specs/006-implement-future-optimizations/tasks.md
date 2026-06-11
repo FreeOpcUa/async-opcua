@@ -90,8 +90,8 @@
 - [X] T023 [US3] Implement the main async message loop `SessionActor::run` in `async-opcua-server/src/session/actor.rs`
 - [X] T024 [US3] Implement immediate connection abort and token registry cleanup logic in `SessionActor::run` in `async-opcua-server/src/session/actor.rs`
 - [X] T025 [US3] Implement client notification callback dispatch within the actor in `async-opcua-server/src/session/actor.rs`
-- [ ] T026 [US3] Update `SessionManager` to spawn `SessionActor` in a tokio task in `async-opcua-server/src/session/manager.rs`
-- [ ] T027 [US3] Refactor connection request handlers to send messages through the actor's `mpsc` sender in `async-opcua-server/src/session/manager.rs`
+- [X] T026 [US3] Update `SessionManager` to spawn `SessionActor` in a tokio task in `async-opcua-server/src/session/manager.rs`
+- [X] T027 [US3] Refactor connection request handlers to send messages through the actor's `mpsc` sender in `async-opcua-server/src/session/manager.rs`
 - [ ] T028 [US3] Instrument actor message queue size gauges and processing times in `async-opcua-server/src/session/actor.rs`
 - [ ] T029 [US3] Write concurrent load test verifying session state updates under high request volume in `async-opcua-server/tests/session_actor_load.rs`
 

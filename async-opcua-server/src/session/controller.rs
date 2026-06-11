@@ -81,6 +81,7 @@ pub(crate) struct SessionController {
     secure_channel_state: SecureChannelState,
     session_manager: Arc<RwLock<SessionManager>>,
     certificate_store: Arc<RwLock<CertificateStore>>,
+    node_managers: NodeManagers,
     message_handler: MessageHandler,
     subscriptions: Arc<SubscriptionCache>,
     pending_messages: FuturesUnordered<Pin<Box<PendingMessageResponse>>>,
@@ -190,6 +191,7 @@ impl SessionController {
             secure_channel_state: SecureChannelState::new(info.secure_channel_id_handle.clone()),
             session_manager,
             certificate_store,
+            node_managers: node_managers.clone(),
             message_handler: MessageHandler::new(
                 info.clone(),
                 node_managers,
@@ -355,7 +357,13 @@ impl SessionController {
             RequestMessage::CreateSession(request) => {
                 let _h = span.enter();
                 let mut mgr = trace_write_lock!(self.session_manager);
-                let res = mgr.create_session(&mut self.channel, &self.certificate_store, &request);
+                let res = mgr.create_session(
+                    &mut self.channel,
+                    &self.certificate_store,
+                    self.node_managers.clone(),
+                    self.subscriptions.clone(),
+                    &request,
+                );
                 drop(mgr);
                 self.process_service_result(res, request.request_header.request_handle, id)
             }
@@ -528,6 +536,7 @@ impl SessionController {
                 );
                 let mgr = trace_read_lock!(self.session_manager);
                 let session = mgr.find_by_token(&message.request_header().authentication_token);
+                let actor_sender = mgr.actor_sender(&message.request_header().authentication_token);
 
                 let (session_id, session, user_token) =
                     match Self::validate_request(&message, session, &self.channel) {
@@ -580,10 +589,14 @@ impl SessionController {
                 };
                 let request_handle = message.request_handle();
 
-                match self
-                    .message_handler
-                    .handle_message(message, session_id, session, user_token, id)
-                {
+                match self.message_handler.handle_message(
+                    message,
+                    session_id,
+                    session,
+                    user_token,
+                    id,
+                    actor_sender,
+                ) {
                     super::message_handler::HandleMessageResult::AsyncMessage(mut handle) => {
                         let audit_context = audit_context.clone();
                         let info = self.info.clone();

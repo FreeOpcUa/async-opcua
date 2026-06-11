@@ -4,7 +4,7 @@ use crate::{migration::run_migrations, query};
 use async_trait::async_trait;
 use opcua_server::{
     aggregates::engine::{calculate_aggregate, get_value_timestamp, partition_intervals},
-    history::{HistoryStorageBackend, HistoryCache},
+    history::{HistoryCache, HistoryStorageBackend},
 };
 use opcua_types::{
     BinaryEncodable, ContextOwned, DataValue, DateTime, EventFilter, HistoryEventFieldList, NodeId,

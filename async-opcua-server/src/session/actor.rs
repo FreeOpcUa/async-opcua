@@ -2,20 +2,22 @@ use std::sync::Arc;
 
 use opcua_core::sync::RwLock;
 use opcua_types::{
-    AttributeId, DataValue, DiagnosticBits, IntegerId, NodeId, NotificationMessage, ReadValueId,
+    DataValue, DiagnosticBits, DiagnosticInfo, IntegerId, NodeId, NotificationMessage, ReadValueId,
     StatusCode, TimestampsToReturn, WriteValue,
 };
 use tokio::sync::oneshot;
 use tracing::debug_span;
 use tracing_futures::Instrument;
 
-use crate::node_manager::{NodeManagers, ReadNode, RequestContext, RequestContextInner, WriteNode};
+use crate::node_manager::{
+    IntoResult, NodeManagers, ReadNode, RequestContext, RequestContextInner, WriteNode,
+};
 
 use super::errors::SessionError;
 use super::instance::Session;
 
-pub(crate) type ReadResponseSender = oneshot::Sender<Result<DataValue, StatusCode>>;
-pub(crate) type WriteResponseSender = oneshot::Sender<StatusCode>;
+pub(crate) type ReadResponseSender = oneshot::Sender<(DataValue, Option<DiagnosticInfo>)>;
+pub(crate) type WriteResponseSender = oneshot::Sender<(StatusCode, Option<DiagnosticInfo>)>;
 pub(crate) type PublishResponseSender = oneshot::Sender<Result<NotificationMessage, StatusCode>>;
 pub(crate) type TerminateAckSender = oneshot::Sender<TerminatedSession>;
 pub(crate) type TerminationCleanup = Arc<dyn Fn(&TerminatedSession) + Send + Sync>;
@@ -31,14 +33,15 @@ pub(crate) struct TerminatedSession {
 #[derive(Debug)]
 pub(crate) enum SessionMessage {
     Read {
-        target: NodeId,
-        attribute_id: AttributeId,
+        node: ReadValueId,
+        max_age: f64,
+        timestamps_to_return: TimestampsToReturn,
+        return_diagnostics: DiagnosticBits,
         response: ReadResponseSender,
     },
     Write {
-        target: NodeId,
-        attribute_id: AttributeId,
-        value: DataValue,
+        value: WriteValue,
+        return_diagnostics: DiagnosticBits,
         response: WriteResponseSender,
     },
     Publish {
@@ -85,23 +88,32 @@ impl SessionActor {
         while let Some(message) = self.receiver.recv().await {
             match message {
                 SessionMessage::Read {
-                    target,
-                    attribute_id,
+                    node,
+                    max_age,
+                    timestamps_to_return,
+                    return_diagnostics,
                     response,
                 } => {
-                    let result = self.read(node_managers.clone(), target, attribute_id).await;
+                    let result = self
+                        .read(
+                            node_managers.clone(),
+                            node,
+                            max_age,
+                            timestamps_to_return,
+                            return_diagnostics,
+                        )
+                        .await;
                     let _ = response.send(result);
                 }
                 SessionMessage::Write {
-                    target,
-                    attribute_id,
                     value,
+                    return_diagnostics,
                     response,
                 } => {
-                    let status = self
-                        .write(node_managers.clone(), target, attribute_id, value)
+                    let result = self
+                        .write(node_managers.clone(), value, return_diagnostics)
                         .await;
-                    let _ = response.send(status);
+                    let _ = response.send(result);
                 }
                 SessionMessage::Publish {
                     subscription_id,
@@ -146,91 +158,93 @@ impl SessionActor {
     }
 
     fn request_context(&self, current_node_manager_index: usize) -> RequestContext {
+        let token = {
+            let session = self.session.read();
+            session
+                .user_token()
+                .cloned()
+                .unwrap_or_else(|| self.context.token.clone())
+        };
+
         RequestContext {
             current_node_manager_index,
-            inner: self.context.clone(),
+            inner: Arc::new(RequestContextInner {
+                session: self.session.clone(),
+                session_id: self.context.session_id,
+                authenticator: self.context.authenticator.clone(),
+                token,
+                type_tree: self.context.type_tree.clone(),
+                type_tree_getter: self.context.type_tree_getter.clone(),
+                subscriptions: self.context.subscriptions.clone(),
+                info: self.context.info.clone(),
+            }),
         }
     }
 
     async fn read(
         &self,
         node_managers: NodeManagers,
-        target: NodeId,
-        attribute_id: AttributeId,
-    ) -> Result<DataValue, StatusCode> {
-        let mut node = ReadNode::new(
-            ReadValueId {
-                node_id: target,
-                attribute_id: attribute_id as IntegerId,
-                ..Default::default()
-            },
-            DiagnosticBits::default(),
-        );
+        node: ReadValueId,
+        max_age: f64,
+        timestamps_to_return: TimestampsToReturn,
+        return_diagnostics: DiagnosticBits,
+    ) -> (DataValue, Option<DiagnosticInfo>) {
+        let mut node = ReadNode::new(node, return_diagnostics);
 
-        for (idx, node_manager) in node_managers.iter().enumerate() {
-            if node.status() != StatusCode::BadNodeIdUnknown
-                || !node_manager.owns_node(&node.node().node_id)
-            {
-                continue;
-            }
+        if node.status() == StatusCode::BadNodeIdUnknown {
+            for (idx, node_manager) in node_managers.iter().enumerate() {
+                if !node_manager.owns_node(&node.node().node_id) {
+                    continue;
+                }
 
-            let context = self.request_context(idx);
-            let mut batch = [&mut node];
-            if let Err(status) = node_manager
-                .read(&context, 0.0, TimestampsToReturn::Neither, &mut batch)
-                .instrument(debug_span!("SessionActorRead", node_manager = %node_manager.name()))
-                .await
-            {
-                batch[0].set_error(status);
+                let context = self.request_context(idx);
+                let mut batch = [&mut node];
+                if let Err(status) = node_manager
+                    .read(&context, max_age, timestamps_to_return, &mut batch)
+                    .instrument(
+                        debug_span!("SessionActorRead", node_manager = %node_manager.name()),
+                    )
+                    .await
+                {
+                    batch[0].set_error(status);
+                }
+                break;
             }
-            break;
         }
 
-        let status = node.status();
-        if status.is_good() {
-            Ok(node.result)
-        } else {
-            Err(status)
-        }
+        node.into_result()
     }
 
     async fn write(
         &self,
         node_managers: NodeManagers,
-        target: NodeId,
-        attribute_id: AttributeId,
-        value: DataValue,
-    ) -> StatusCode {
-        let mut node = WriteNode::new(
-            WriteValue {
-                node_id: target,
-                attribute_id: attribute_id as IntegerId,
-                value,
-                ..Default::default()
-            },
-            DiagnosticBits::default(),
-        );
+        value: WriteValue,
+        return_diagnostics: DiagnosticBits,
+    ) -> (StatusCode, Option<DiagnosticInfo>) {
+        let mut node = WriteNode::new(value, return_diagnostics);
 
-        for (idx, node_manager) in node_managers.iter().enumerate() {
-            if node.status() != StatusCode::BadNodeIdUnknown
-                || !node_manager.owns_node(&node.value().node_id)
-            {
-                continue;
-            }
+        if node.status() == StatusCode::BadNodeIdUnknown {
+            for (idx, node_manager) in node_managers.iter().enumerate() {
+                if !node_manager.owns_node(&node.value().node_id) {
+                    continue;
+                }
 
-            let context = self.request_context(idx);
-            let mut batch = [&mut node];
-            if let Err(status) = node_manager
-                .write(&context, &mut batch)
-                .instrument(debug_span!("SessionActorWrite", node_manager = %node_manager.name()))
-                .await
-            {
-                batch[0].set_status(status);
+                let context = self.request_context(idx);
+                let mut batch = [&mut node];
+                if let Err(status) = node_manager
+                    .write(&context, &mut batch)
+                    .instrument(
+                        debug_span!("SessionActorWrite", node_manager = %node_manager.name()),
+                    )
+                    .await
+                {
+                    batch[0].set_status(status);
+                }
+                break;
             }
-            break;
         }
 
-        node.status()
+        node.into_result()
     }
 
     fn publish(&self, subscription_id: IntegerId) -> Result<NotificationMessage, StatusCode> {

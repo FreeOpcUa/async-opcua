@@ -3,7 +3,7 @@
 //! This test asserts that the SafetyValidator rejects corrupted, delayed,
 //! or out-of-order SPDUs.
 
-use async_opcua_safety::{SpduBuilder, SafetyValidator, SafetyError, Spdu};
+use async_opcua_safety::{SafetyError, SafetyValidator, Spdu, SpduBuilder};
 
 #[test]
 fn test_valid_spdu_passes() {
@@ -70,8 +70,5 @@ fn test_timestamp_delay_rejected() {
     let mut validator = SafetyValidator::new(1, 50);
     // At time 160, elapsed time is 60, which exceeds max_delay of 50.
     // The validator MUST reject delayed messages.
-    assert_eq!(
-        validator.validate(&spdu, 160),
-        Err(SafetyError::Timeout)
-    );
+    assert_eq!(validator.validate(&spdu, 160), Err(SafetyError::Timeout));
 }

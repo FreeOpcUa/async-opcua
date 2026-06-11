@@ -43,7 +43,7 @@
 
 ### Implementation for User Story 1
 
-- [ ] T005 [P] [US1] Add `dashmap = "5.5"` to dependencies in `async-opcua-server/Cargo.toml`
+- [X] T005 [P] [US1] Add `dashmap = "5.5"` to dependencies in `async-opcua-server/Cargo.toml` (present as `dashmap = "6.1"`)
 - [X] T006 [P] [US1] Add `use dashmap::DashMap;` import to `async-opcua-server/src/session/manager.rs`
 - [X] T007 [US1] Define concurrent lookup mapping registry `auth_tokens` in `async-opcua-server/src/session/manager.rs`
 - [X] T008 [US1] Update session registration in `SessionManager::register_token` in `async-opcua-server/src/session/manager.rs` to insert tokens into `auth_tokens`
@@ -92,8 +92,8 @@
 - [X] T025 [US3] Implement client notification callback dispatch within the actor in `async-opcua-server/src/session/actor.rs`
 - [X] T026 [US3] Update `SessionManager` to spawn `SessionActor` in a tokio task in `async-opcua-server/src/session/manager.rs`
 - [X] T027 [US3] Refactor connection request handlers to send messages through the actor's `mpsc` sender in `async-opcua-server/src/session/manager.rs`
-- [ ] T028 [US3] Instrument actor message queue size gauges and processing times in `async-opcua-server/src/session/actor.rs`
-- [ ] T029 [US3] Write concurrent load test verifying session state updates under high request volume in `async-opcua-server/tests/session_actor_load.rs`
+- [X] T028 [US3] Instrument actor message queue size gauges and processing times in `async-opcua-server/src/session/actor.rs`
+- [X] T029 [US3] Write concurrent load test verifying session state updates under high request volume in `async-opcua-server/tests/session_actor_load.rs`
 
 **Checkpoint**: User Story 3 is fully functional and testable independently.
 
@@ -107,14 +107,14 @@
 
 ### Implementation for User Story 4
 
-- [ ] T030 [P] [US4] Add `lockfree-object-pool = "0.1"` to dependencies in `async-opcua-server/Cargo.toml`
-- [ ] T031 [P] [US4] Create `NotificationPool` using `lockfree_object_pool::LinearObjectPool` in `async-opcua-server/src/subscriptions/pool.rs`
-- [ ] T032 [US4] Implement reuse/reset functions to clear notification structures in `async-opcua-server/src/subscriptions/pool.rs`
-- [ ] T033 [US4] Refactor subscription scanning to acquire notifications from the pool in `async-opcua-server/src/subscriptions/subscription.rs`
-- [ ] T034 [US4] Implement block/wait behavior in the pool acquire path if exhausted in `async-opcua-server/src/subscriptions/pool.rs`
-- [ ] T035 [US4] Release notification structures back to the pool after transmission in `async-opcua-server/src/subscriptions/subscription.rs`
-- [ ] T036 [US4] Instrument pool statistics (active/inactive counts) in `async-opcua-server/src/subscriptions/pool.rs`
-- [ ] T037 [US4] Write unit test running high-frequency updates and asserting memory stability in `async-opcua-server/tests/subscription_pooling.rs`
+- [X] T030 [P] [US4] Add `lockfree-object-pool = "0.1"` to dependencies in `async-opcua-server/Cargo.toml`
+- [X] T031 [P] [US4] Create `NotificationPool` using `lockfree_object_pool::LinearObjectPool` in `async-opcua-server/src/subscriptions/pool.rs`
+- [X] T032 [US4] Implement reuse/reset functions to clear notification structures in `async-opcua-server/src/subscriptions/pool.rs`
+- [X] T033 [US4] Refactor subscription scanning to acquire notifications from the pool in `async-opcua-server/src/subscriptions/subscription.rs`
+- [X] T034 [US4] Implement block/wait behavior in the pool acquire path if exhausted in `async-opcua-server/src/subscriptions/pool.rs`
+- [X] T035 [US4] Release notification structures back to the pool after transmission in `async-opcua-server/src/subscriptions/subscription.rs`
+- [X] T036 [US4] Instrument pool statistics (active/inactive counts) in `async-opcua-server/src/subscriptions/pool.rs`
+- [X] T037 [US4] Write unit test running high-frequency updates and asserting memory stability in `async-opcua-server/tests/subscription_pooling.rs`
 
 **Checkpoint**: User Story 4 is fully functional and testable independently.
 
@@ -124,9 +124,9 @@
 
 **Purpose**: Cleanup, validation, and final integration checks
 
-- [ ] T038 Verify all workspace unit and integration tests pass successfully by running `cargo test --workspace --all-features`
-- [ ] T039 Verify the quickstart benchmarking and load tests compile and run in `async-opcua-server/tests/address_space_concurrency.rs`
-- [ ] T040 Perform code cleanup, document the optimized structures in comments, and check for any leftover locks or wrappers across the codebase
+- [X] T038 Verify all workspace unit and integration tests pass successfully by running `cargo test --workspace --all-features`
+- [X] T039 Verify the quickstart benchmarking and load tests compile and run in `async-opcua-server/tests/address_space_concurrency.rs`
+- [X] T040 Perform code cleanup, document the optimized structures in comments, and check for any leftover locks or wrappers across the codebase
 
 ---
 

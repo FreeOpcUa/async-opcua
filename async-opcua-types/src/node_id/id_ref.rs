@@ -3,8 +3,8 @@ use std::hash::Hasher;
 use hashbrown::Equivalent;
 
 use crate::{
-    ByteString, DataTypeId, Guid, GuidRef, Identifier, MethodId, NodeId, ObjectId, ObjectTypeId,
-    ReferenceTypeId, UAString, VariableId, VariableTypeId,
+    DataTypeId, Identifier, MethodId, NodeId, ObjectId, ObjectTypeId, ReferenceTypeId, VariableId,
+    VariableTypeId,
 };
 
 // Cheap comparisons intended for use when comparing node IDs to constants.

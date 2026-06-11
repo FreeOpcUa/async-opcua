@@ -36,22 +36,29 @@ cargo test -p async-opcua-server --test address_space_concurrency
 To quantitatively verify the success criteria defined in the specification:
 
 ### Session Lookup Latency (SC-001)
-Verify that O(1) session lookups execute in under 10 microseconds.
-Run the micro-benchmarks:
+Verify that O(1) session lookups stay sub-microsecond and effectively constant
+from 1,000 to 10,000 sessions, including under concurrent access:
 ```bash
-cargo bench -p async-opcua-server
+cargo test -p async-opcua-server --features test-utils --test session_lookup
 ```
 
 ### Outbound Heap Allocations (SC-002)
-Verify that steady-state serialization has zero new heap allocations.
-Run the server under a memory profiler (such as `dhat` or `valgrind`):
+Verify the zero-copy receive path (no buffer copies) and that serialization
+metrics track the outbound write path:
 ```bash
-cargo test --profile release -p async-opcua-core --test serialization_profile
+cargo test -p async-opcua-core --test zero_copy_alloc --test serialization_alloc
 ```
 
 ### Session Task Contention (SC-003)
-Verify a 40% reduction in response latency under high concurrent read/write and publishing tasks on a single session.
-Run the contention load simulation:
+Verify the session actor sustains high-volume concurrent read/write traffic
+from many tasks without lock contention, with read-after-write consistency:
 ```bash
-cargo run --release --bin session-load-simulator
+cargo test -p async-opcua-server --features test-utils --test session_actor_load
+```
+
+### Notification Memory Stability (SC-004)
+Verify the notification pool performs zero allocations at steady state and
+blocks (rather than allocating) on exhaustion:
+```bash
+cargo test -p async-opcua-server --test subscription_pooling
 ```

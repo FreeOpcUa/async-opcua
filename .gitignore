@@ -17,3 +17,6 @@ async-opcua/certs
 **/pki-ext-client
 local/
 
+
+# Stray runtime logs
+*.log

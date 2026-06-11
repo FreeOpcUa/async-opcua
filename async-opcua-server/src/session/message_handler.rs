@@ -21,7 +21,7 @@ use crate::{
     subscriptions::{PendingPublish, SubscriptionCache},
 };
 use opcua_types::{
-    AttributeId, DataValue, DateTime, DiagnosticBits, DiagnosticInfo, NamespaceMap, PublishRequest,
+    AttributeId, DataValue, DiagnosticBits, DiagnosticInfo, NamespaceMap, PublishRequest,
     ReadRequest, ReadResponse, ReadValueId, ResponseHeader, ServiceFault, SetTriggeringRequest,
     SetTriggeringResponse, StatusCode, TimestampsToReturn, WriteRequest, WriteResponse,
 };
@@ -640,7 +640,7 @@ impl MessageHandler {
         let mut diagnostics = include_diagnostics.then(|| Vec::with_capacity(nodes_to_read.len()));
 
         for node in nodes_to_read {
-            let (result, diagnostic) = Self::actor_read(
+            let read_result = Self::actor_read(
                 &actor_sender,
                 node,
                 request.max_age,
@@ -648,6 +648,12 @@ impl MessageHandler {
                 request.request_header.return_diagnostics,
             )
             .await;
+            let (result, diagnostic) = match read_result {
+                Ok(r) => r,
+                // The actor faulted (node manager panic) or the session is
+                // gone; fail the whole service call like the pre-actor path.
+                Err(status) => return Self::service_fault(&data, status),
+            };
             results.push(result);
             if let Some(diagnostics) = &mut diagnostics {
                 diagnostics.push(diagnostic.unwrap_or_default());
@@ -671,7 +677,7 @@ impl MessageHandler {
         max_age: f64,
         timestamps_to_return: TimestampsToReturn,
         return_diagnostics: DiagnosticBits,
-    ) -> (DataValue, Option<DiagnosticInfo>) {
+    ) -> Result<(DataValue, Option<DiagnosticInfo>), StatusCode> {
         let (response, recv) = oneshot::channel();
         if actor_sender
             .send(SessionMessage::Read {
@@ -684,11 +690,10 @@ impl MessageHandler {
             .await
             .is_err()
         {
-            return (Self::read_error(StatusCode::BadSessionClosed), None);
+            return Err(StatusCode::BadSessionClosed);
         }
 
-        recv.await
-            .unwrap_or_else(|_| (Self::read_error(StatusCode::BadSessionClosed), None))
+        recv.await.unwrap_or(Err(StatusCode::BadSessionClosed))
     }
 
     fn write(&self, request: Box<WriteRequest>, data: RequestData) -> HandleMessageResult {
@@ -722,12 +727,18 @@ impl MessageHandler {
         let mut diagnostics = include_diagnostics.then(|| Vec::with_capacity(nodes_to_write.len()));
 
         for value in nodes_to_write {
-            let (status, diagnostic) = Self::actor_write(
+            let write_result = Self::actor_write(
                 &actor_sender,
                 value,
                 request.request_header.return_diagnostics,
             )
             .await;
+            let (status, diagnostic) = match write_result {
+                Ok(r) => r,
+                // The actor faulted (node manager panic) or the session is
+                // gone; fail the whole service call like the pre-actor path.
+                Err(status) => return Self::service_fault(&data, status),
+            };
             results.push(status);
             if let Some(diagnostics) = &mut diagnostics {
                 diagnostics.push(diagnostic.unwrap_or_default());
@@ -749,7 +760,7 @@ impl MessageHandler {
         actor_sender: &mpsc::Sender<SessionMessage>,
         value: opcua_types::WriteValue,
         return_diagnostics: DiagnosticBits,
-    ) -> (StatusCode, Option<DiagnosticInfo>) {
+    ) -> Result<(StatusCode, Option<DiagnosticInfo>), StatusCode> {
         let (response, recv) = oneshot::channel();
         if actor_sender
             .send(SessionMessage::Write {
@@ -760,18 +771,10 @@ impl MessageHandler {
             .await
             .is_err()
         {
-            return (StatusCode::BadSessionClosed, None);
+            return Err(StatusCode::BadSessionClosed);
         }
 
-        recv.await.unwrap_or((StatusCode::BadSessionClosed, None))
-    }
-
-    fn read_error(status: StatusCode) -> DataValue {
-        DataValue {
-            status: Some(status),
-            server_timestamp: Some(DateTime::now()),
-            ..Default::default()
-        }
+        recv.await.unwrap_or(Err(StatusCode::BadSessionClosed))
     }
 
     fn service_fault(data: &RequestData, status: StatusCode) -> Response {

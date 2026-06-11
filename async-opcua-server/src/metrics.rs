@@ -17,6 +17,12 @@ pub struct ServerMetrics {
     pub pooled_notifications_wait_count: AtomicU64,
     /// Number of serialization errors observed on outbound responses.
     pub serialization_errors: AtomicU64,
+    /// Number of messages processed by session actors.
+    pub actor_messages_processed: AtomicU64,
+    /// Total nanoseconds spent processing session actor messages.
+    pub actor_message_duration_ns: AtomicU64,
+    /// Number of messages currently queued on session actor channels.
+    pub actor_queue_depth: AtomicUsize,
 }
 
 impl ServerMetrics {
@@ -29,6 +35,9 @@ impl ServerMetrics {
             pooled_notifications_total: AtomicUsize::new(0),
             pooled_notifications_wait_count: AtomicU64::new(0),
             serialization_errors: AtomicU64::new(0),
+            actor_messages_processed: AtomicU64::new(0),
+            actor_message_duration_ns: AtomicU64::new(0),
+            actor_queue_depth: AtomicUsize::new(0),
         }
     }
 }

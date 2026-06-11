@@ -2,17 +2,32 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (C) 2017-2024 Adam Lock
 
+// Items are `pub` for tests; outside test builds the parent module is
+// `pub(crate)`, which would otherwise trigger unreachable_pub.
+#![cfg_attr(not(any(test, feature = "test-utils")), allow(unreachable_pub))]
+
 use std::{error::Error, fmt};
 
 /// Error returned from session actor setup and message-routing paths.
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum SessionError {
+pub enum SessionError {
+    /// Session setup failed before the actor could start.
     InitializationFailed(String),
-    InvalidStateTransition { from: String, to: String },
+    /// A session state transition was rejected.
+    InvalidStateTransition {
+        /// State the session was in.
+        from: String,
+        /// State the transition attempted to reach.
+        to: String,
+    },
+    /// An authentication token was registered twice.
     DuplicateSessionToken,
+    /// The actor message queue is full.
     MessageQueueFull,
+    /// The actor channel is closed.
     ChannelClosed,
+    /// The security policy did not match the session's secure channel.
     SecurityPolicyMismatch,
 }
 

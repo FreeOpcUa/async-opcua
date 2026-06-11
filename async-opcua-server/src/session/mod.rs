@@ -1,7 +1,15 @@
+/// Session actor internals.
+#[cfg(any(test, feature = "test-utils"))]
+pub mod actor;
+#[cfg(not(any(test, feature = "test-utils")))]
 pub(crate) mod actor;
 pub(crate) mod audit;
 pub(crate) mod continuation_points;
 pub(crate) mod controller;
+/// Session error types.
+#[cfg(any(test, feature = "test-utils"))]
+pub mod errors;
+#[cfg(not(any(test, feature = "test-utils")))]
 pub(crate) mod errors;
 pub(crate) mod identity;
 /// Session instance internals.

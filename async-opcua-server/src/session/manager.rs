@@ -8,6 +8,7 @@ use std::{
 };
 
 use dashmap::DashMap;
+use futures::FutureExt;
 use opcua_core::{comms::secure_channel::SecureChannel, trace_read_lock, trace_write_lock};
 use opcua_crypto::{random, CertificateStore, SecurityPolicy};
 use parking_lot::RwLock;
@@ -47,7 +48,11 @@ pub(super) fn next_session_id() -> (NodeId, u32) {
 /// Manages all sessions on the server.
 pub struct SessionManager {
     sessions: HashMap<NodeId, Arc<RwLock<Session>>>,
+    /// O(1) lock-free lookup from authentication token to session,
+    /// avoiding a linear scan of `sessions` on every request.
     auth_tokens: Arc<DashMap<NodeId, Arc<RwLock<Session>>>>,
+    /// Lock-free lookup from authentication token to the session actor's
+    /// message queue.
     actor_senders: Arc<DashMap<NodeId, mpsc::Sender<SessionMessage>>>,
     info: Arc<ServerInfo>,
     notify: Arc<Notify>,
@@ -148,8 +153,15 @@ impl SessionManager {
             });
 
         tokio::spawn(async move {
-            if let Err(err) = actor.run(node_managers).await {
-                tracing::debug!(%err, "session actor stopped");
+            // Catch panics so a dying actor always cleans its tokens out of
+            // the lookup registries.
+            match std::panic::AssertUnwindSafe(actor.run(node_managers))
+                .catch_unwind()
+                .await
+            {
+                Ok(Ok(())) => {}
+                Ok(Err(err)) => tracing::debug!(%err, "session actor stopped"),
+                Err(_) => actor.abort_after_panic(),
             }
         });
     }

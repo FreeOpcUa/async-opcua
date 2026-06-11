@@ -6,7 +6,7 @@ use tracing::{debug_span, Instrument};
 use crate::{
     node_manager::{
         consume_results, DynNodeManager, HistoryNode, HistoryReadDetails, HistoryUpdateDetails,
-        HistoryUpdateNode, NodeManagers, ReadNode, RequestContext, WriteNode,
+        HistoryUpdateNode, NodeManagers, ReadNode, RequestContext,
     },
     session::{
         controller::Response,
@@ -17,7 +17,7 @@ use crate::{
 use opcua_types::{
     ByteString, DeleteAtTimeDetails, ExtensionObject, HistoryReadRequest, HistoryReadResponse,
     HistoryReadResult, HistoryUpdateRequest, HistoryUpdateResponse, NodeId, ObjectId, ReadRequest,
-    ReadResponse, ResponseHeader, StatusCode, TimestampsToReturn, WriteRequest, WriteResponse,
+    ReadResponse, ResponseHeader, StatusCode, TimestampsToReturn,
 };
 pub(crate) async fn read(node_managers: NodeManagers, request: Request<ReadRequest>) -> Response {
     let context = request.context();
@@ -83,66 +83,6 @@ pub(crate) async fn read(node_managers: NodeManagers, request: Request<ReadReque
 
     Response {
         message: ReadResponse {
-            response_header: ResponseHeader::new_good(request.request_handle),
-            results,
-            diagnostic_infos,
-        }
-        .into(),
-        request_id: request.request_id,
-    }
-}
-
-pub(crate) async fn write(node_managers: NodeManagers, request: Request<WriteRequest>) -> Response {
-    let context = request.context();
-    let nodes_to_write = take_service_items!(
-        request,
-        request.request.nodes_to_write,
-        request.info.operational_limits.max_nodes_per_write
-    );
-
-    let mut results: Vec<_> = nodes_to_write
-        .into_iter()
-        .map(|n| WriteNode::new(n, request.request.request_header.return_diagnostics))
-        .collect();
-
-    struct WriteServiceCb;
-
-    impl ServiceCb<WriteNode> for WriteServiceCb {
-        async fn call(
-            &self,
-            batch: &mut [&mut WriteNode],
-            node_manager: &Arc<DynNodeManager>,
-            context: RequestContext,
-        ) {
-            if let Err(e) = node_manager
-                .write(&context, batch)
-                .instrument(debug_span!("Write", node_manager = %node_manager.name()))
-                .await
-            {
-                for node in batch {
-                    node.set_status(e);
-                }
-            }
-        }
-    }
-
-    invoke_service_concurrently_mut(
-        context,
-        &mut results,
-        &node_managers,
-        WriteServiceCb,
-        |node, node_manager| {
-            node_manager.owns_node(&node.value().node_id)
-                && node.status() == StatusCode::BadNodeIdUnknown
-        },
-    )
-    .await;
-
-    let (results, diagnostic_infos) =
-        consume_results(results, request.request.request_header.return_diagnostics);
-
-    Response {
-        message: WriteResponse {
             response_header: ResponseHeader::new_good(request.request_handle),
             results,
             diagnostic_infos,

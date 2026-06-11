@@ -11,6 +11,7 @@ use tracing::{debug, trace, warn};
 use crate::node_manager::MonitoredItemRef;
 
 use super::monitored_item::{MonitoredItem, Notification};
+use super::pool::{NotificationBuffer, NOTIFICATION_POOL};
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 /// Current internal state of the subscription.
@@ -548,10 +549,16 @@ impl Subscription {
             }
             UpdateStateAction::ReturnNotifications => {
                 let resend_data = std::mem::take(&mut self.resend_data);
-                let messages = self.tick_monitored_items(now, resend_data);
+                let mut buffer = NOTIFICATION_POOL.acquire();
+                let messages = self.tick_monitored_items(now, resend_data, &mut buffer);
                 for msg in messages {
                     self.enqueue_notification(msg);
                 }
+                // Every notification has been moved into an enqueued message
+                // at this point, so the scratch buffer can safely return to
+                // the pool while the messages await publishing.
+                debug_assert!(buffer.is_empty());
+                drop(buffer);
                 TickResult::Enqueued
             }
             UpdateStateAction::SubscriptionCreated => TickResult::None,
@@ -594,11 +601,11 @@ impl Subscription {
     fn handle_triggers(
         &mut self,
         now: &DateTimeUtc,
-        triggers: Vec<(u32, u32)>,
+        triggers: &mut Vec<(u32, u32)>,
         notifications: &mut Vec<Notification>,
         messages: &mut Vec<NotificationMessage>,
     ) {
-        for (triggering_item, item_id) in triggers {
+        for (triggering_item, item_id) in triggers.drain(..) {
             let Some(item) = self.monitored_items.get_mut(&item_id) else {
                 if let Some(item) = self.monitored_items.get_mut(&triggering_item) {
                     item.remove_dead_trigger(item_id);
@@ -613,7 +620,7 @@ impl Subscription {
                 {
                     messages.push(Self::make_notification_message(
                         self.sequence_number.next(),
-                        std::mem::take(notifications),
+                        notifications,
                         now,
                     ));
                 }
@@ -621,15 +628,17 @@ impl Subscription {
         }
     }
 
+    /// Build a notification message by draining the pooled scratch buffer,
+    /// retaining its allocated capacity for reuse.
     fn make_notification_message(
         next_sequence_number: u32,
-        notifications: Vec<Notification>,
+        notifications: &mut Vec<Notification>,
         now: &DateTimeUtc,
     ) -> NotificationMessage {
         let mut data_change_notifications = Vec::new();
         let mut event_notifications = Vec::new();
 
-        for notif in notifications {
+        for notif in notifications.drain(..) {
             match notif {
                 Notification::MonitoredItemNotification(n) => data_change_notifications.push(n),
                 Notification::Event(n) => event_notifications.push(n),
@@ -677,7 +686,7 @@ impl Subscription {
                     if notifications.len() >= max_notifications && max_notifications > 0 {
                         messages.push(Self::make_notification_message(
                             sequence_numbers.next(),
-                            std::mem::take(notifications),
+                            notifications,
                             now,
                         ));
                     }
@@ -686,14 +695,19 @@ impl Subscription {
         }
     }
 
+    /// Scan monitored items for notifications, accumulating them in the
+    /// pooled scratch `buffer` rather than freshly allocated storage.
     fn tick_monitored_items(
         &mut self,
         now: &DateTimeUtc,
         resend_data: bool,
+        buffer: &mut NotificationBuffer,
     ) -> Vec<NotificationMessage> {
-        let mut notifications = Vec::new();
         let mut messages = Vec::new();
-        let mut triggers = Vec::new();
+        let NotificationBuffer {
+            notifications,
+            triggers,
+        } = buffer;
 
         // If resend data is true, we must visit ever monitored item
         if resend_data {
@@ -703,8 +717,8 @@ impl Subscription {
                     now,
                     resend_data,
                     self.max_notifications_per_publish,
-                    &mut triggers,
-                    &mut notifications,
+                    triggers,
+                    notifications,
                     &mut messages,
                     &mut self.sequence_number,
                 );
@@ -719,15 +733,15 @@ impl Subscription {
                     now,
                     resend_data,
                     self.max_notifications_per_publish,
-                    &mut triggers,
-                    &mut notifications,
+                    triggers,
+                    notifications,
                     &mut messages,
                     &mut self.sequence_number,
                 );
             }
         }
 
-        self.handle_triggers(now, triggers, &mut notifications, &mut messages);
+        self.handle_triggers(now, triggers, notifications, &mut messages);
 
         if !notifications.is_empty() {
             messages.push(Self::make_notification_message(
@@ -1101,7 +1115,7 @@ mod tests {
         assert!(sub.take_notification().is_none());
 
         // Notify the first item
-        sub.notify_data_value(&1, DataValue::new_at(1, time.into()), &time);
+        sub.notify_data_value(&1, DataValue::new_at(1, time), &time);
         let (time, time_inst) = offset(start_dt, start, 200);
         sub.tick(&time, time_inst, TickReason::TickTimerFired, true);
         let notif = sub.take_notification().unwrap();

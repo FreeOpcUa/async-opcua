@@ -71,6 +71,13 @@ pub use subscriptions::{
     SubscriptionCache, SubscriptionState,
 };
 
+/// Notification allocation pooling utilities.
+pub mod pool {
+    pub use super::subscriptions::pool::{
+        NotificationBuffer, NotificationPool, PooledNotificationBuffer,
+    };
+}
+
 /// Utilities for efficiently notifying subscriptions.
 ///
 /// See [SubscriptionCache::data_notifier] and [SubscriptionCache::event_notifier].

@@ -42,6 +42,7 @@ impl opcua::types::MessageInfo for CloseSecureChannelResponse {
 }
 impl opcua::types::BinaryEncodable for CloseSecureChannelResponse {
     #[allow(unused)]
+    #[allow(clippy::let_and_return)]
     fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
         let mut size = 0usize;
         size += opcua::types::BinaryEncodable::byte_len(&self.response_header, ctx);

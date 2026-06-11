@@ -33,6 +33,7 @@ pub struct JsonNetworkMessage {
 }
 impl opcua::types::BinaryEncodable for JsonNetworkMessage {
     #[allow(unused)]
+    #[allow(clippy::let_and_return)]
     fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
         let mut size = 0usize;
         size += opcua::types::BinaryEncodable::byte_len(&self.message_id, ctx);

@@ -23,6 +23,10 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: ${{ matrix.toolchain }}
+      # libelf is needed by libbpf-sys, pulled in by xsk-rs when the
+      # pubsub tsn feature is enabled via --all-features.
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libelf-dev
       - name: Build
         run: cargo check --locked
       - name: Run tests

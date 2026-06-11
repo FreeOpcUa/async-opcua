@@ -68,6 +68,7 @@ impl opcua::types::ExpandedMessageInfo for PnDeviceDiagnosisDataType {
 }
 impl opcua::types::BinaryEncodable for PnDeviceDiagnosisDataType {
     #[allow(unused)]
+    #[allow(clippy::let_and_return)]
     fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
         let mut size = 0usize;
         size += opcua::types::BinaryEncodable::byte_len(&self.api, ctx);
@@ -226,6 +227,7 @@ impl opcua::types::ExpandedMessageInfo for PnDeviceRoleOptionSet {
 }
 impl opcua::types::BinaryEncodable for PnDeviceRoleOptionSet {
     #[allow(unused)]
+    #[allow(clippy::let_and_return)]
     fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
         let mut size = 0usize;
         size += opcua::types::BinaryEncodable::byte_len(&self.value, ctx);
@@ -316,6 +318,7 @@ impl opcua::types::ExpandedMessageInfo for PnIM5DataType {
 }
 impl opcua::types::BinaryEncodable for PnIM5DataType {
     #[allow(unused)]
+    #[allow(clippy::let_and_return)]
     fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
         let mut size = 0usize;
         size += opcua::types::BinaryEncodable::byte_len(&self.annotation, ctx);

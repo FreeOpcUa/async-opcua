@@ -50,6 +50,7 @@ impl opcua::types::MessageInfo for EndpointConfiguration {
 }
 impl opcua::types::BinaryEncodable for EndpointConfiguration {
     #[allow(unused)]
+    #[allow(clippy::let_and_return)]
     fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
         let mut size = 0usize;
         size += opcua::types::BinaryEncodable::byte_len(&self.operation_timeout, ctx);

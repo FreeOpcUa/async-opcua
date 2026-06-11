@@ -7,22 +7,37 @@ use std::{
     time::{Duration, Instant},
 };
 
+use dashmap::DashMap;
+use futures::FutureExt;
 use opcua_core::{comms::secure_channel::SecureChannel, trace_read_lock, trace_write_lock};
 use opcua_crypto::{random, CertificateStore, SecurityPolicy};
 use parking_lot::RwLock;
-use tokio::sync::Notify;
+use tokio::sync::{mpsc, Notify};
 use tracing::{error, info};
 
-use crate::{fota::cleanup::cleanup_session, identity_token::IdentityToken, info::ServerInfo};
+use crate::{
+    authenticator::UserToken,
+    config::ANONYMOUS_USER_TOKEN_ID,
+    fota::cleanup::cleanup_session,
+    identity_token::IdentityToken,
+    info::ServerInfo,
+    node_manager::{NodeManagers, RequestContext, RequestContextInner},
+    subscriptions::SubscriptionCache,
+};
 use opcua_types::{
     ActivateSessionRequest, ActivateSessionResponse, CloseSessionRequest, CloseSessionResponse,
     CreateSessionRequest, CreateSessionResponse, Error, NodeId, ResponseHeader, SignatureData,
     StatusCode,
 };
 
-use super::{instance::Session, message_handler::MessageHandler};
+use super::{
+    actor::{SessionActor, SessionMessage},
+    instance::Session,
+    message_handler::MessageHandler,
+};
 
 static NEXT_SESSION_ID: AtomicU32 = AtomicU32::new(1);
+const SESSION_ACTOR_QUEUE_CAPACITY: usize = 256;
 
 pub(super) fn next_session_id() -> (NodeId, u32) {
     // Session id will be a string identifier
@@ -33,14 +48,23 @@ pub(super) fn next_session_id() -> (NodeId, u32) {
 /// Manages all sessions on the server.
 pub struct SessionManager {
     sessions: HashMap<NodeId, Arc<RwLock<Session>>>,
+    /// O(1) lock-free lookup from authentication token to session,
+    /// avoiding a linear scan of `sessions` on every request.
+    auth_tokens: Arc<DashMap<NodeId, Arc<RwLock<Session>>>>,
+    /// Lock-free lookup from authentication token to the session actor's
+    /// message queue.
+    actor_senders: Arc<DashMap<NodeId, mpsc::Sender<SessionMessage>>>,
     info: Arc<ServerInfo>,
     notify: Arc<Notify>,
 }
 
 impl SessionManager {
-    pub(crate) fn new(info: Arc<ServerInfo>, notify: Arc<Notify>) -> Self {
+    /// Create a session manager for the supplied server information and expiry notifier.
+    pub fn new(info: Arc<ServerInfo>, notify: Arc<Notify>) -> Self {
         Self {
             sessions: Default::default(),
+            auth_tokens: Default::default(),
+            actor_senders: Default::default(),
             info,
             notify,
         }
@@ -48,23 +72,106 @@ impl SessionManager {
 
     /// Get a session by its authentication token.
     pub fn find_by_token(&self, authentication_token: &NodeId) -> Option<Arc<RwLock<Session>>> {
-        Self::find_by_token_int(&self.sessions, authentication_token)
+        let lookup_start = Instant::now();
+        let session = self
+            .auth_tokens
+            .get(authentication_token)
+            .map(|session| Arc::clone(session.value()));
+        let lookup_duration_ns = lookup_start.elapsed().as_nanos() as u64;
+
+        crate::metrics::METRICS
+            .session_lookup_count
+            .fetch_add(1, Ordering::Relaxed);
+        crate::metrics::METRICS
+            .session_lookup_duration_ns
+            .fetch_add(lookup_duration_ns, Ordering::Relaxed);
+
+        session
     }
 
-    fn find_by_token_int(
-        sessions: &HashMap<NodeId, Arc<RwLock<Session>>>,
+    /// Register an authentication token for direct session lookup.
+    pub fn register_token(&self, token: NodeId, session: Arc<RwLock<Session>>) {
+        self.auth_tokens.insert(token, session);
+    }
+
+    /// Remove an authentication token from the direct session lookup registry.
+    pub fn deregister_token(&self, token: &NodeId) {
+        self.actor_senders.remove(token);
+        self.auth_tokens.remove(token);
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn actor_sender(
+        &self,
         authentication_token: &NodeId,
-    ) -> Option<Arc<RwLock<Session>>> {
-        sessions
-            .iter()
-            .find(|(_, s)| &s.read().authentication_token == authentication_token)
-            .map(|p| p.1.clone())
+    ) -> Option<mpsc::Sender<SessionMessage>> {
+        self.actor_senders
+            .get(authentication_token)
+            .map(|sender| sender.value().clone())
+    }
+
+    fn register_actor_sender(
+        &self,
+        authentication_token: NodeId,
+        sender: mpsc::Sender<SessionMessage>,
+    ) {
+        self.actor_senders.insert(authentication_token, sender);
+    }
+
+    fn spawn_session_actor(
+        &self,
+        authentication_token: NodeId,
+        session: Arc<RwLock<Session>>,
+        session_id_numeric: u32,
+        node_managers: NodeManagers,
+        subscriptions: Arc<SubscriptionCache>,
+    ) {
+        let (sender, receiver) = mpsc::channel(SESSION_ACTOR_QUEUE_CAPACITY);
+        self.register_actor_sender(authentication_token.clone(), sender);
+
+        let context = RequestContext {
+            current_node_manager_index: 0,
+            inner: Arc::new(RequestContextInner {
+                session,
+                session_id: session_id_numeric,
+                authenticator: self.info.authenticator.clone(),
+                token: UserToken(ANONYMOUS_USER_TOKEN_ID.to_string()),
+                type_tree: self.info.type_tree.clone(),
+                type_tree_getter: self.info.type_tree_getter.clone(),
+                subscriptions,
+                info: self.info.clone(),
+            }),
+        };
+
+        let auth_tokens = Arc::clone(&self.auth_tokens);
+        let actor_senders = Arc::clone(&self.actor_senders);
+        let mut actor =
+            SessionActor::new(context, receiver).with_termination_cleanup(move |terminated| {
+                auth_tokens.remove(&terminated.authentication_token);
+                actor_senders.remove(&terminated.authentication_token);
+                cleanup_session(&terminated.session_id);
+            });
+
+        tokio::spawn(async move {
+            // Catch panics so a dying actor always cleans its tokens out of
+            // the lookup registries.
+            match std::panic::AssertUnwindSafe(actor.run(node_managers))
+                .catch_unwind()
+                .await
+            {
+                Ok(Ok(())) => {}
+                Ok(Err(err)) => tracing::debug!(%err, "session actor stopped"),
+                Err(_) => actor.abort_after_panic(),
+            }
+        });
     }
 
     pub(crate) fn create_session(
         &mut self,
         channel: &mut SecureChannel,
         certificate_store: &RwLock<CertificateStore>,
+        node_managers: NodeManagers,
+        subscriptions: Arc<SubscriptionCache>,
         request: &CreateSessionRequest,
     ) -> Result<CreateSessionResponse, StatusCode> {
         if self.sessions.len() >= self.info.config.limits.max_sessions {
@@ -164,8 +271,18 @@ impl SessionManager {
         info!("Created new session with ID {}", session.session_id());
 
         let session_id = session.session_id().clone();
+        let session_id_numeric = session.session_id_numeric();
+        let session_arc = Arc::new(RwLock::new(session));
         self.sessions
-            .insert(session_id.clone(), Arc::new(RwLock::new(session)));
+            .insert(session_id.clone(), session_arc.clone());
+        self.register_token(authentication_token.clone(), session_arc.clone());
+        self.spawn_session_actor(
+            authentication_token.clone(),
+            session_arc,
+            session_id_numeric,
+            node_managers,
+            subscriptions,
+        );
 
         // Increment metrics.
         self.info
@@ -231,6 +348,12 @@ impl SessionManager {
 
         info!("Session {id} has expired, removing it from the session map. Subscriptions will remain until they individually expire");
 
+        let token = {
+            let session = trace_read_lock!(session);
+            session.authentication_token.clone()
+        };
+        self.deregister_token(&token);
+
         let mut session = trace_write_lock!(session);
         session.close();
         drop(session);
@@ -277,37 +400,52 @@ pub(crate) async fn close_session(
     handler: &mut MessageHandler,
     request: &CloseSessionRequest,
 ) -> Result<CloseSessionResponse, StatusCode> {
-    let (session, id, token) = {
-        let mut mgr = trace_write_lock!(mgr_lck);
+    let (session, id, token, actor_sender) = {
+        let mgr = trace_read_lock!(mgr_lck);
         let Some(session) = mgr.find_by_token(&request.request_header.authentication_token) else {
             return Err(StatusCode::BadSessionIdInvalid);
         };
-        let (id, token, session_id) = {
+        let (id, token, authentication_token) = {
             let session = trace_read_lock!(session);
             let id = session.session_id_numeric();
             let token = session.user_token().cloned();
+            let authentication_token = session.authentication_token.clone();
 
             let secure_channel_id = channel.secure_channel_id();
             if !session.is_activated() && session.secure_channel_id() != secure_channel_id {
                 error!("close_session rejected, secure channel id {} for inactive session does not match one used to create session, {}", secure_channel_id, session.secure_channel_id());
                 return Err(StatusCode::BadSecureChannelIdInvalid);
             }
-            let session_id = session.session_id().clone();
-            (id, token, session_id)
+            (id, token, authentication_token)
         };
 
-        info!("Closed session with ID {}", session_id);
-        let session = mgr.sessions.remove(&session_id).unwrap();
-        {
-            let mut session_lck = trace_write_lock!(session);
-            session_lck.close();
-        }
-        cleanup_session(&session_id);
+        let Some(actor_sender) = mgr.actor_sender(&authentication_token) else {
+            return Err(StatusCode::BadSessionClosed);
+        };
+
+        (session, id, token, actor_sender)
+    };
+
+    let (acknowledge, acknowledged) = tokio::sync::oneshot::channel();
+    actor_sender
+        .send(SessionMessage::Terminate {
+            reason: StatusCode::Good,
+            acknowledge,
+        })
+        .await
+        .map_err(|_| StatusCode::BadSessionClosed)?;
+
+    let terminated = acknowledged
+        .await
+        .map_err(|_| StatusCode::BadSessionClosed)?;
+    {
+        let mut mgr = trace_write_lock!(mgr_lck);
+        mgr.sessions.remove(&terminated.session_id);
         mgr.info
             .diagnostics
             .set_current_session_count(mgr.sessions.len() as u32);
-        (session, id, token)
-    };
+    }
+    info!("Closed session with ID {}", terminated.session_id);
 
     if request.delete_subscriptions {
         if let Some(token) = token {

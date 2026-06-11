@@ -56,7 +56,10 @@ impl ParsedEventFilter {
         type_tree: &dyn TypeTree,
     ) -> Option<EventFieldList> {
         let event_type_id = event.event_type_id();
-        if !self.field_access.where_fields_are_authorized(event_type_id, type_tree) {
+        if !self
+            .field_access
+            .where_fields_are_authorized(event_type_id, type_tree)
+        {
             return None;
         }
 
@@ -95,7 +98,11 @@ impl EventFieldAccess {
         }
     }
 
-    fn where_fields_are_authorized(&self, event_type_id: &NodeId, type_tree: &dyn TypeTree) -> bool {
+    fn where_fields_are_authorized(
+        &self,
+        event_type_id: &NodeId,
+        type_tree: &dyn TypeTree,
+    ) -> bool {
         self.where_fields
             .iter()
             .all(|field| field.is_authorized(event_type_id, type_tree))

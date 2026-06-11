@@ -153,7 +153,14 @@ macro_rules! impl_identifier_ref {
     };
 }
 
-impl_identifier_ref!(x, u32, IDENTIFIER_HASH_NUMERIC, Identifier::Numeric(x), x, Identifier::Numeric(*x));
+impl_identifier_ref!(
+    x,
+    u32,
+    IDENTIFIER_HASH_NUMERIC,
+    Identifier::Numeric(x),
+    x,
+    Identifier::Numeric(*x)
+);
 impl_identifier_ref!(
     x,
     &u32,
@@ -189,9 +196,30 @@ impl_identifier_ref!(
     x.as_ref(),
     Identifier::String(UAString::from(x.clone()))
 );
-impl_identifier_ref!(x, &str, IDENTIFIER_HASH_STRING, Identifier::String(x), x, Identifier::String(UAString::from(*x)));
-impl_identifier_ref!(x, &String, IDENTIFIER_HASH_STRING, Identifier::String(x), x, Identifier::String(UAString::from((*x).clone())));
-impl_identifier_ref!(x, Guid, IDENTIFIER_HASH_GUID, Identifier::Guid(x), x, Identifier::Guid(x.clone()));
+impl_identifier_ref!(
+    x,
+    &str,
+    IDENTIFIER_HASH_STRING,
+    Identifier::String(x),
+    x,
+    Identifier::String(UAString::from(*x))
+);
+impl_identifier_ref!(
+    x,
+    &String,
+    IDENTIFIER_HASH_STRING,
+    Identifier::String(x),
+    x,
+    Identifier::String(UAString::from((*x).clone()))
+);
+impl_identifier_ref!(
+    x,
+    Guid,
+    IDENTIFIER_HASH_GUID,
+    Identifier::Guid(x),
+    x,
+    Identifier::Guid(x.clone())
+);
 impl_identifier_ref!(
     x,
     ByteString,
@@ -200,7 +228,15 @@ impl_identifier_ref!(
     x,
     Identifier::ByteString(x.clone())
 );
-impl_identifier_ref!(x, &Guid, IDENTIFIER_HASH_GUID, Identifier::Guid(x), x, &x, Identifier::Guid((*x).clone()));
+impl_identifier_ref!(
+    x,
+    &Guid,
+    IDENTIFIER_HASH_GUID,
+    Identifier::Guid(x),
+    x,
+    &x,
+    Identifier::Guid((*x).clone())
+);
 impl_identifier_ref!(
     x,
     &ByteString,
@@ -218,7 +254,14 @@ impl_identifier_ref!(
     x,
     Identifier::ByteString(ByteString::from(*x))
 );
-impl_identifier_ref!(x, GuidRef<'_>, IDENTIFIER_HASH_GUID, Identifier::Guid(x), x, Identifier::Guid(Guid::from_bytes(*x.0)));
+impl_identifier_ref!(
+    x,
+    GuidRef<'_>,
+    IDENTIFIER_HASH_GUID,
+    Identifier::Guid(x),
+    x,
+    Identifier::Guid(Guid::from_bytes(*x.0))
+);
 
 impl IdentifierRef for Identifier {
     fn hash_as_identifier<H: Hasher>(&self, state: &mut H) {

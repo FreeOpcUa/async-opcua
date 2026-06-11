@@ -24,7 +24,7 @@ use opcua_types::{DecodingOptions, Error, ResponseHeader, ServiceFault, StatusCo
 
 use futures::StreamExt;
 use tokio::{
-    io::{AsyncWriteExt, ReadHalf, WriteHalf},
+    io::{ReadHalf, WriteHalf},
     net::TcpStream,
 };
 use tokio_util::{codec::FramedRead, sync::CancellationToken};
@@ -203,12 +203,14 @@ impl TcpConnector {
         opcua_types::SimpleBinaryEncodable::encode(&acknowledge, &mut buf)
             .map_err(|e| ErrorMessage::new(e.into(), "Failed to encode ack"))?;
 
-        self.write.write_all(&buf).await.map_err(|e| {
-            ErrorMessage::new(
-                StatusCode::BadCommunicationError,
-                &format!("Failed to send ack: {e}"),
-            )
-        })?;
+        TcpCodec::write_all_frame_vectored(&mut self.write, &buf)
+            .await
+            .map_err(|e| {
+                ErrorMessage::new(
+                    StatusCode::BadCommunicationError,
+                    &format!("Failed to send ack: {e}"),
+                )
+            })?;
 
         Ok(buffer)
     }
@@ -239,7 +241,7 @@ impl Connector for TcpConnector {
         // there's a good chance the channel is closed, so just ignore any errors.
         let mut buf = Vec::with_capacity(opcua_types::SimpleBinaryEncodable::byte_len(&err));
         if opcua_types::SimpleBinaryEncodable::encode(&err, &mut buf).is_ok() {
-            let _ = self.write.write_all(&buf).await;
+            let _ = TcpCodec::write_all_frame_vectored(&mut self.write, &buf).await;
         }
 
         Err(err.error)

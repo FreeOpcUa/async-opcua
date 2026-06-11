@@ -9,7 +9,7 @@ use std::{
 };
 
 use arc_swap::ArcSwap;
-use futures::{future::Either, never::Never, stream::FuturesUnordered, StreamExt};
+use futures::{future::Either, never::Never, stream::FuturesUnordered, FutureExt, StreamExt};
 use opcua_core::{sync::RwLock, trace_read_lock, trace_write_lock};
 use opcua_nodes::DefaultTypeTree;
 use tokio::{
@@ -100,13 +100,30 @@ impl TcpConnectionDeps {
         let (send, recv) = tokio::sync::mpsc::channel(5);
         let handle = tokio::spawn(async move {
             let _token = token;
-            conn.run(recv, |_| {}).await;
+            // Catch panics so the task always yields its counter, otherwise
+            // the connection_map slot leaks and permanently consumes
+            // max_connections capacity.
+            if let Err(payload) = std::panic::AssertUnwindSafe(conn.run(recv, |_| {}))
+                .catch_unwind()
+                .await
+            {
+                log_connection_panic(connection_counter, payload);
+            }
             connection_counter
         });
         connections.push(handle);
         connection_map.insert(connection_counter, ConnectionInfo { command_send: send });
         true
     }
+}
+
+fn log_connection_panic(connection_counter: u32, payload: Box<dyn std::any::Any + Send>) {
+    let message = payload
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("unknown panic payload");
+    error!("Connection task {connection_counter} panicked: {message}");
 }
 
 enum ConnectionSource<T> {
@@ -517,9 +534,15 @@ impl Server {
                     let (send, recv) = tokio::sync::mpsc::channel(5);
                     let rev_handle = rev_connect.handle;
                     let handle = tokio::spawn(async move {
-                        conn.run(recv, |status| {
+                        let run = conn.run(recv, |status| {
                             rev_handle.set_result(status);
-                        }).await;
+                        });
+                        if let Err(payload) = std::panic::AssertUnwindSafe(run)
+                            .catch_unwind()
+                            .await
+                        {
+                            log_connection_panic(connection_counter, payload);
+                        }
                         connection_counter
                     });
                     self.connections.push(handle);

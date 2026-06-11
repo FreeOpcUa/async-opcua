@@ -1,12 +1,12 @@
+use opcua::core::sync::RwLock;
 use opcua::server::address_space::{AddressSpace, VariableBuilder};
 use opcua::types::{NodeId, Variant};
+use opcua_pubsub::{
+    DataSetWriterConfig, MessageEncoding, PubSubConnectionConfig, PubSubPublisher,
+    PublishedDataSetConfig, UdpPublisher, WriterGroupConfig,
+};
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
-use opcua_pubsub::{
-    DataSetWriterConfig, MessageEncoding, PubSubConnectionConfig, PublishedDataSetConfig,
-    UdpPublisher, WriterGroupConfig, PubSubPublisher
-};
-use opcua::core::sync::RwLock;
 
 #[tokio::main]
 async fn main() {
@@ -15,16 +15,16 @@ async fn main() {
     let mut space = AddressSpace::new();
     space.add_namespace("http://opcfoundation.org/UA/", 0);
     space.add_namespace("urn:test", 1);
-    
+
     let var = VariableBuilder::new(&node_id, "TemperatureSensor", "TemperatureSensor")
         .data_type(opcua::types::DataTypeId::Double)
         .value(20.0f64)
         .build();
     space.insert(var, None::<&[(_, &NodeId, _)]>);
-    
+
     let address_space = Arc::new(RwLock::new(space));
     let udp_publisher = Arc::new(UdpPublisher::new(address_space.clone()));
-    
+
     let connection_config = PubSubConnectionConfig {
         connection_id: "UdpPublisher1".to_string(),
         name: "UdpPublisher".to_string(),
@@ -42,12 +42,12 @@ async fn main() {
             }],
         }],
     };
-    
+
     let cancel_token = CancellationToken::new();
     let publisher_handle = udp_publisher
         .start_publishing(connection_config, cancel_token.clone())
         .unwrap();
-        
+
     println!("Publisher started. Sending data to 192.168.150.203...");
     tokio::time::sleep(std::time::Duration::from_secs(60)).await;
     cancel_token.cancel();

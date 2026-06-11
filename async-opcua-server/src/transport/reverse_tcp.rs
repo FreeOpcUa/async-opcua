@@ -3,7 +3,7 @@ use std::{net::SocketAddr, time::Instant};
 use opcua_core::comms::{tcp_codec::TcpCodec, tcp_types::ReverseHelloMessage};
 use opcua_types::{DecodingOptions, Error, StatusCode};
 use tokio::{
-    io::{AsyncWriteExt, ReadHalf, WriteHalf},
+    io::{ReadHalf, WriteHalf},
     net::TcpStream,
 };
 use tokio_util::codec::FramedRead;
@@ -68,12 +68,14 @@ impl ReverseTcpConnector {
         opcua_types::SimpleBinaryEncodable::encode(&reverse_hello, &mut buf)
             .map_err(|e| Error::new(e.into(), "Failed to encode reverse hello"))?;
 
-        write_half.write_all(&buf).await.map_err(|e| {
-            Error::new(
-                opcua_types::StatusCode::BadCommunicationError,
-                format!("Failed to send reverse hello: {}", e),
-            )
-        })?;
+        TcpCodec::write_all_frame_vectored(&mut write_half, &buf)
+            .await
+            .map_err(|e| {
+                Error::new(
+                    opcua_types::StatusCode::BadCommunicationError,
+                    format!("Failed to send reverse hello: {}", e),
+                )
+            })?;
         Ok((read, write_half))
     }
 }

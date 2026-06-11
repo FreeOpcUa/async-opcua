@@ -124,6 +124,16 @@ pub struct RequestContextInner {
 }
 
 impl RequestContext {
+    /// Create a request context directly from its inner state.
+    /// Test utility, not intended for production use.
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn new_test(inner: Arc<RequestContextInner>) -> Self {
+        Self {
+            current_node_manager_index: 0,
+            inner,
+        }
+    }
+
     /// Get the type tree for the current user.
     pub fn get_type_tree_for_user<'a>(&'a self) -> Box<dyn TypeTreeReadContext + 'a> {
         self.type_tree_getter.get_type_tree_for_user(self)

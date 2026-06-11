@@ -6,11 +6,13 @@ use std::{
     io::{BufRead, Cursor},
 };
 
-use tokio::io::AsyncWriteExt;
 use tracing::trace;
 
 use crate::{
-    comms::{chunker::Chunker, message_chunk::MessageChunk, secure_channel::SecureChannel},
+    comms::{
+        chunker::Chunker, message_chunk::MessageChunk, secure_channel::SecureChannel,
+        tcp_codec::TcpCodec,
+    },
     Message,
 };
 
@@ -195,7 +197,7 @@ impl SendBuffer {
         // Write to the stream, note that we do not actually advance the stream before
         // after we have written. This means that since `write` is cancellation safe, our stream is
         // cancellation safe, which is essential.
-        let written = write.write(buf).await?;
+        let written = TcpCodec::write_frame_vectored(write, buf).await?;
 
         self.buffer.consume(written);
 
@@ -239,14 +241,18 @@ impl SendBuffer {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
+    use std::io::{Cursor, IoSlice};
+    use std::pin::Pin;
     use std::sync::Arc;
+    use std::task::{Context, Poll};
 
     use parking_lot::RwLock;
+    use tokio::io::AsyncWrite;
 
     use super::SendBuffer;
 
     use crate::comms::secure_channel::{Role, SecureChannel};
+    use crate::comms::tcp_types::AcknowledgeMessage;
     use crate::RequestMessage;
     use opcua_crypto::CertificateStore;
     use opcua_types::StatusCode;
@@ -265,6 +271,65 @@ mod tests {
         );
 
         (buffer, channel)
+    }
+
+    #[derive(Default)]
+    struct VectoredOnlyWriter {
+        data: Vec<u8>,
+        scalar_writes: usize,
+        vectored_writes: usize,
+    }
+
+    impl AsyncWrite for VectoredOnlyWriter {
+        fn poll_write(
+            mut self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            _buf: &[u8],
+        ) -> Poll<std::io::Result<usize>> {
+            self.scalar_writes += 1;
+            Poll::Ready(Err(std::io::Error::other("scalar write used")))
+        }
+
+        fn poll_write_vectored(
+            mut self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            bufs: &[IoSlice<'_>],
+        ) -> Poll<std::io::Result<usize>> {
+            self.vectored_writes += 1;
+            let written = bufs.iter().map(|buf| buf.len()).sum();
+            for buf in bufs {
+                self.data.extend_from_slice(buf);
+            }
+            Poll::Ready(Ok(written))
+        }
+
+        fn is_write_vectored(&self) -> bool {
+            true
+        }
+
+        fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+            Poll::Ready(Ok(()))
+        }
+
+        fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+            Poll::Ready(Ok(()))
+        }
+    }
+
+    #[tokio::test]
+    async fn test_buffer_read_uses_vectored_write() {
+        let (mut buffer, channel) = get_buffer_and_channel();
+
+        buffer.write_ack(AcknowledgeMessage::new(0, 8192, 8192, 0, 0));
+        buffer.encode_next_chunk(&channel).unwrap();
+
+        let mut writer = VectoredOnlyWriter::default();
+        buffer.read_into_async(&mut writer).await.unwrap();
+
+        assert_eq!(writer.scalar_writes, 0);
+        assert_eq!(writer.vectored_writes, 1);
+        assert!(!writer.data.is_empty());
+        assert!(!buffer.can_read());
     }
 
     #[tokio::test]

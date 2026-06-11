@@ -192,7 +192,7 @@ impl ReferenceType {
                 node.set_is_abstract(attributes.is_abstract);
             }
             if mask.contains(AttributesMask::SYMMETRIC) {
-                node.set_symmetric(attributes.is_abstract);
+                node.set_symmetric(attributes.symmetric);
             }
             if mask.contains(AttributesMask::INVERSE_NAME) {
                 node.set_inverse_name(attributes.inverse_name);

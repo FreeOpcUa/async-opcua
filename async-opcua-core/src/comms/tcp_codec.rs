@@ -11,9 +11,13 @@
 //! * MSG - Message chunk
 //! * OPN - Open Secure Channel message
 //! * CLO - Close Secure Channel message
-use std::io;
+use std::{
+    io::{self, IoSlice},
+    sync::atomic::{AtomicU64, Ordering},
+};
 
 use bytes::{BufMut, BytesMut};
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 use tokio_util::codec::{Decoder, Encoder};
 use tracing::error;
 
@@ -29,6 +33,34 @@ use super::{
         ReverseHelloMessage, MESSAGE_HEADER_LEN,
     },
 };
+
+/// Thread-safe counters for outbound serialization.
+#[derive(Debug)]
+pub struct SerializationMetrics {
+    /// Number of serialization failures observed while encoding outbound messages.
+    pub serialization_errors: AtomicU64,
+    /// Total number of bytes successfully written to outbound buffers.
+    pub bytes_written: AtomicU64,
+}
+
+impl SerializationMetrics {
+    /// Creates a zero-initialized serialization metrics registry.
+    pub const fn new() -> Self {
+        Self {
+            serialization_errors: AtomicU64::new(0),
+            bytes_written: AtomicU64::new(0),
+        }
+    }
+}
+
+impl Default for SerializationMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Global outbound serialization metrics registry.
+pub static SERIALIZATION_METRICS: SerializationMetrics = SerializationMetrics::new();
 
 #[derive(Debug)]
 /// Message type sent over OPC-UA streams.
@@ -51,6 +83,7 @@ pub enum Message {
 /// messages so there is still some buffers within message chunks, but not at the raw socket level.
 pub struct TcpCodec {
     decoding_options: DecodingOptions,
+    write_buf: BytesMut,
 }
 
 impl Decoder for TcpCodec {
@@ -95,13 +128,32 @@ impl Encoder<Message> for TcpCodec {
     type Error = io::Error;
 
     fn encode(&mut self, data: Message, buf: &mut BytesMut) -> Result<(), io::Error> {
-        match data {
-            Message::Hello(msg) => self.write(msg, buf),
-            Message::Acknowledge(msg) => self.write(msg, buf),
-            Message::Error(msg) => self.write(msg, buf),
-            Message::Chunk(msg) => self.write(msg, buf),
-            Message::ReverseHello(msg) => self.write(msg, buf),
+        self.reset_write_buffer();
+        let max_message_size = self.decoding_options.max_message_size;
+
+        let result = match data {
+            Message::Hello(msg) => Self::write(msg, max_message_size, &mut self.write_buf),
+            Message::Acknowledge(msg) => Self::write(msg, max_message_size, &mut self.write_buf),
+            Message::Error(msg) => Self::write(msg, max_message_size, &mut self.write_buf),
+            Message::Chunk(msg) => Self::write(msg, max_message_size, &mut self.write_buf),
+            Message::ReverseHello(msg) => Self::write(msg, max_message_size, &mut self.write_buf),
+        };
+
+        if let Err(err) = result {
+            SERIALIZATION_METRICS
+                .serialization_errors
+                .fetch_add(1, Ordering::Relaxed);
+            self.reset_write_buffer();
+            return Err(err);
         }
+
+        let bytes_written = self.write_buf.len() as u64;
+        buf.put_slice(&self.write_buf);
+        SERIALIZATION_METRICS
+            .bytes_written
+            .fetch_add(bytes_written, Ordering::Relaxed);
+        self.reset_write_buffer();
+        Ok(())
     }
 }
 
@@ -109,15 +161,68 @@ impl TcpCodec {
     /// Constructs a new TcpCodec. The abort flag is set to terminate the codec even while it is
     /// waiting for a frame to arrive.
     pub fn new(decoding_options: DecodingOptions) -> TcpCodec {
-        TcpCodec { decoding_options }
+        TcpCodec {
+            decoding_options,
+            write_buf: BytesMut::with_capacity(65536),
+        }
+    }
+
+    /// Clears the reusable connection-local write buffer without releasing its allocation.
+    pub fn reset_write_buffer(&mut self) {
+        self.write_buf.clear();
+    }
+
+    /// Writes one OPC UA TCP frame using vectored I/O, splitting the common header from the body.
+    pub async fn write_frame_vectored<W>(write: &mut W, frame: &[u8]) -> Result<usize, io::Error>
+    where
+        W: AsyncWrite + Unpin + ?Sized,
+    {
+        let slices = Self::frame_slices(frame);
+        write.write_vectored(&slices).await
+    }
+
+    /// Writes one complete OPC UA TCP frame using repeated vectored writes.
+    pub async fn write_all_frame_vectored<W>(
+        write: &mut W,
+        mut frame: &[u8],
+    ) -> Result<(), io::Error>
+    where
+        W: AsyncWrite + Unpin + ?Sized,
+    {
+        while !frame.is_empty() {
+            let written = Self::write_frame_vectored(write, frame).await?;
+            if written == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::WriteZero,
+                    "failed to write OPC UA frame",
+                ));
+            }
+            frame = &frame[written..];
+        }
+        Ok(())
+    }
+
+    fn frame_slices(frame: &[u8]) -> [IoSlice<'_>; 2] {
+        let split_at = frame.len().min(MESSAGE_HEADER_LEN);
+        let (header, body) = frame.split_at(split_at);
+        [IoSlice::new(header), IoSlice::new(body)]
     }
 
     // Writes the encodable thing into the buffer.
-    fn write<T>(&self, msg: T, buf: &mut BytesMut) -> Result<(), io::Error>
+    fn write<T>(msg: T, max_message_size: usize, buf: &mut BytesMut) -> Result<(), io::Error>
     where
         T: SimpleBinaryEncodable + std::fmt::Debug,
     {
-        buf.reserve(msg.byte_len());
+        let encoded_len = msg.byte_len();
+        if max_message_size > 0 && encoded_len > max_message_size {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "Encoded message length {encoded_len} exceeds maximum message size {max_message_size}"
+                ),
+            ));
+        }
+        buf.reserve(encoded_len);
         msg.encode(&mut buf.writer()).map(|_| ()).map_err(|err| {
             error!("Error writing message {:?}, err = {}", msg, err);
             io::Error::other(format!("Error = {err}"))

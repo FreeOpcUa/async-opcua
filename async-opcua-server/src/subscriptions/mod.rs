@@ -1,5 +1,6 @@
 mod monitored_item;
 mod notify;
+pub(crate) mod pool;
 mod session_subscriptions;
 mod subscription;
 

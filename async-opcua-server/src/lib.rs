@@ -34,6 +34,8 @@ pub mod gds;
 pub mod history;
 mod identity_token;
 mod info;
+/// Server performance instrumentation.
+pub mod metrics;
 pub mod namespace;
 pub mod node_manager;
 /// Runtime NodeSet2 loader support.
@@ -46,6 +48,10 @@ mod server_handle;
 mod server_status;
 /// Shared service-level authorization helpers.
 pub mod services;
+/// Server session internals.
+#[cfg(any(test, feature = "test-utils"))]
+pub mod session;
+#[cfg(not(any(test, feature = "test-utils")))]
 mod session;
 mod subscriptions;
 mod transport;
@@ -64,6 +70,13 @@ pub use subscriptions::{
     CreateMonitoredItem, MonitoredItem, MonitoredItemHandle, SessionSubscriptions, Subscription,
     SubscriptionCache, SubscriptionState,
 };
+
+/// Notification allocation pooling utilities.
+pub mod pool {
+    pub use super::subscriptions::pool::{
+        NotificationBuffer, NotificationPool, PooledNotificationBuffer,
+    };
+}
 
 /// Utilities for efficiently notifying subscriptions.
 ///

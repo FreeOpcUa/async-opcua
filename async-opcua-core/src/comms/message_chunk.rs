@@ -196,7 +196,9 @@ impl SimpleBinaryDecodable for MessageChunk {
             // Read remainder of stream into slice after the header
             in_stream.read_exact(&mut data[chunk_header_size..])?;
 
-            Ok(MessageChunk { data: bytes::Bytes::from(data) })
+            Ok(MessageChunk {
+                data: bytes::Bytes::from(data),
+            })
         }
     }
 }
@@ -213,10 +215,14 @@ impl MessageChunk {
         decoding_options: &DecodingOptions,
     ) -> EncodingResult<Self> {
         let message_size = buf.len();
-        if decoding_options.max_message_size > 0 && message_size > decoding_options.max_message_size {
+        if decoding_options.max_message_size > 0 && message_size > decoding_options.max_message_size
+        {
             return Err(Error::new(
                 StatusCode::BadTcpMessageTooLarge,
-                format!("Message size {} exceeds maximum message size {}", message_size, decoding_options.max_message_size),
+                format!(
+                    "Message size {} exceeds maximum message size {}",
+                    message_size, decoding_options.max_message_size
+                ),
             ));
         }
         let data = buf.split_to(message_size);
@@ -269,7 +275,9 @@ impl MessageChunk {
         // write message
         stream.write_all(data)?;
 
-        Ok(MessageChunk { data: bytes::Bytes::from(buf) })
+        Ok(MessageChunk {
+            data: bytes::Bytes::from(buf),
+        })
     }
 
     /// Calculates the body size that fit inside of a message chunk of a particular size.

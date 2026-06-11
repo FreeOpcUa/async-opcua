@@ -375,7 +375,11 @@ impl<'a, 'ctx> QueryFirstHandler<'a, 'ctx> {
         validate_node_read(&*node, context, &node_to_read).is_ok()
     }
 
-    fn relative_path_target(&self, node_id: &NodeId, path: &RelativePath) -> Option<dashmap::mapref::one::Ref<'a, NodeId, NodeType>> {
+    fn relative_path_target(
+        &self,
+        node_id: &NodeId,
+        path: &RelativePath,
+    ) -> Option<dashmap::mapref::one::Ref<'a, NodeId, NodeType>> {
         let mut current_node_id = node_id.clone();
         let mut node = self.address_space.find(&current_node_id)?;
 

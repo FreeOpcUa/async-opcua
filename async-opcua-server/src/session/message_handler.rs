@@ -3,7 +3,10 @@ use std::{sync::Arc, time::Instant};
 use chrono::Utc;
 use opcua_core::{Message, RequestMessage, ResponseMessage};
 use parking_lot::RwLock;
-use tokio::task::JoinHandle;
+use tokio::{
+    sync::{mpsc, oneshot},
+    task::JoinHandle,
+};
 use tracing::{debug, debug_span, warn};
 use tracing_futures::Instrument;
 
@@ -18,11 +21,12 @@ use crate::{
     subscriptions::{PendingPublish, SubscriptionCache},
 };
 use opcua_types::{
-    AttributeId, NamespaceMap, PublishRequest, ReadValueId, ResponseHeader, ServiceFault,
-    SetTriggeringRequest, SetTriggeringResponse, StatusCode, TimestampsToReturn,
+    AttributeId, DataValue, DiagnosticBits, DiagnosticInfo, NamespaceMap, PublishRequest,
+    ReadRequest, ReadResponse, ReadValueId, ResponseHeader, ServiceFault, SetTriggeringRequest,
+    SetTriggeringResponse, StatusCode, TimestampsToReturn, WriteRequest, WriteResponse,
 };
 
-use super::{controller::Response, instance::Session};
+use super::{actor::SessionMessage, controller::Response, instance::Session};
 
 /// Type that takes care of incoming requests that have passed
 /// the initial validation stage, meaning that they have a session and a valid
@@ -165,6 +169,7 @@ struct RequestData {
     session: Arc<RwLock<Session>>,
     token: UserToken,
     session_id: u32,
+    actor_sender: Option<mpsc::Sender<SessionMessage>>,
 }
 
 impl MessageHandler {
@@ -192,6 +197,7 @@ impl MessageHandler {
         session: Arc<RwLock<Session>>,
         token: UserToken,
         request_id: u32,
+        actor_sender: Option<mpsc::Sender<SessionMessage>>,
     ) -> HandleMessageResult {
         let data = RequestData {
             request_id,
@@ -199,12 +205,11 @@ impl MessageHandler {
             session,
             token,
             session_id,
+            actor_sender,
         };
         // Session management requests are not handled here.
         match message {
-            RequestMessage::Read(request) => {
-                async_service_call!(services::read, self, request, data)
-            }
+            RequestMessage::Read(request) => self.read(request, data),
 
             RequestMessage::Browse(request) => {
                 async_service_call!(services::browse, self, request, data)
@@ -310,9 +315,7 @@ impl MessageHandler {
                 async_service_call!(services::history_update, self, request, data)
             }
 
-            RequestMessage::Write(request) => {
-                async_service_call!(services::write, self, request, data)
-            }
+            RequestMessage::Write(request) => self.write(request, data),
 
             RequestMessage::QueryFirst(request) => {
                 async_service_call!(services::query_first, self, request, data)
@@ -597,6 +600,188 @@ impl MessageHandler {
             self.subscriptions.clone(),
             dt.session_id,
         )
+    }
+
+    fn read(&self, request: Box<ReadRequest>, data: RequestData) -> HandleMessageResult {
+        let info = self.info.clone();
+        HandleMessageResult::AsyncMessage(tokio::task::spawn(async move {
+            Self::read_via_actor(request, data, info).await
+        }))
+    }
+
+    async fn read_via_actor(
+        request: Box<ReadRequest>,
+        data: RequestData,
+        info: Arc<ServerInfo>,
+    ) -> Response {
+        let request = *request;
+        if request.max_age < 0.0 {
+            return Self::service_fault(&data, StatusCode::BadMaxAgeInvalid);
+        }
+        if request.timestamps_to_return == TimestampsToReturn::Invalid {
+            return Self::service_fault(&data, StatusCode::BadTimestampsToReturnInvalid);
+        }
+
+        let Some(nodes_to_read) = request.nodes_to_read else {
+            return Self::service_fault(&data, StatusCode::BadNothingToDo);
+        };
+        if nodes_to_read.is_empty() {
+            return Self::service_fault(&data, StatusCode::BadNothingToDo);
+        }
+        if nodes_to_read.len() > info.operational_limits.max_nodes_per_read {
+            return Self::service_fault(&data, StatusCode::BadTooManyOperations);
+        }
+
+        let Some(actor_sender) = data.actor_sender.clone() else {
+            return Self::service_fault(&data, StatusCode::BadSessionClosed);
+        };
+        let include_diagnostics = !request.request_header.return_diagnostics.is_empty();
+        let mut results = Vec::with_capacity(nodes_to_read.len());
+        let mut diagnostics = include_diagnostics.then(|| Vec::with_capacity(nodes_to_read.len()));
+
+        for node in nodes_to_read {
+            let read_result = Self::actor_read(
+                &actor_sender,
+                node,
+                request.max_age,
+                request.timestamps_to_return,
+                request.request_header.return_diagnostics,
+            )
+            .await;
+            let (result, diagnostic) = match read_result {
+                Ok(r) => r,
+                // The actor faulted (node manager panic) or the session is
+                // gone; fail the whole service call like the pre-actor path.
+                Err(status) => return Self::service_fault(&data, status),
+            };
+            results.push(result);
+            if let Some(diagnostics) = &mut diagnostics {
+                diagnostics.push(diagnostic.unwrap_or_default());
+            }
+        }
+
+        Response {
+            message: ReadResponse {
+                response_header: ResponseHeader::new_good(data.request_handle),
+                results: Some(results),
+                diagnostic_infos: diagnostics,
+            }
+            .into(),
+            request_id: data.request_id,
+        }
+    }
+
+    async fn actor_read(
+        actor_sender: &mpsc::Sender<SessionMessage>,
+        node: ReadValueId,
+        max_age: f64,
+        timestamps_to_return: TimestampsToReturn,
+        return_diagnostics: DiagnosticBits,
+    ) -> Result<(DataValue, Option<DiagnosticInfo>), StatusCode> {
+        let (response, recv) = oneshot::channel();
+        if actor_sender
+            .send(SessionMessage::Read {
+                node,
+                max_age,
+                timestamps_to_return,
+                return_diagnostics,
+                response,
+            })
+            .await
+            .is_err()
+        {
+            return Err(StatusCode::BadSessionClosed);
+        }
+
+        recv.await.unwrap_or(Err(StatusCode::BadSessionClosed))
+    }
+
+    fn write(&self, request: Box<WriteRequest>, data: RequestData) -> HandleMessageResult {
+        let info = self.info.clone();
+        HandleMessageResult::AsyncMessage(tokio::task::spawn(async move {
+            Self::write_via_actor(request, data, info).await
+        }))
+    }
+
+    async fn write_via_actor(
+        request: Box<WriteRequest>,
+        data: RequestData,
+        info: Arc<ServerInfo>,
+    ) -> Response {
+        let request = *request;
+        let Some(nodes_to_write) = request.nodes_to_write else {
+            return Self::service_fault(&data, StatusCode::BadNothingToDo);
+        };
+        if nodes_to_write.is_empty() {
+            return Self::service_fault(&data, StatusCode::BadNothingToDo);
+        }
+        if nodes_to_write.len() > info.operational_limits.max_nodes_per_write {
+            return Self::service_fault(&data, StatusCode::BadTooManyOperations);
+        }
+
+        let Some(actor_sender) = data.actor_sender.clone() else {
+            return Self::service_fault(&data, StatusCode::BadSessionClosed);
+        };
+        let include_diagnostics = !request.request_header.return_diagnostics.is_empty();
+        let mut results = Vec::with_capacity(nodes_to_write.len());
+        let mut diagnostics = include_diagnostics.then(|| Vec::with_capacity(nodes_to_write.len()));
+
+        for value in nodes_to_write {
+            let write_result = Self::actor_write(
+                &actor_sender,
+                value,
+                request.request_header.return_diagnostics,
+            )
+            .await;
+            let (status, diagnostic) = match write_result {
+                Ok(r) => r,
+                // The actor faulted (node manager panic) or the session is
+                // gone; fail the whole service call like the pre-actor path.
+                Err(status) => return Self::service_fault(&data, status),
+            };
+            results.push(status);
+            if let Some(diagnostics) = &mut diagnostics {
+                diagnostics.push(diagnostic.unwrap_or_default());
+            }
+        }
+
+        Response {
+            message: WriteResponse {
+                response_header: ResponseHeader::new_good(data.request_handle),
+                results: Some(results),
+                diagnostic_infos: diagnostics,
+            }
+            .into(),
+            request_id: data.request_id,
+        }
+    }
+
+    async fn actor_write(
+        actor_sender: &mpsc::Sender<SessionMessage>,
+        value: opcua_types::WriteValue,
+        return_diagnostics: DiagnosticBits,
+    ) -> Result<(StatusCode, Option<DiagnosticInfo>), StatusCode> {
+        let (response, recv) = oneshot::channel();
+        if actor_sender
+            .send(SessionMessage::Write {
+                value,
+                return_diagnostics,
+                response,
+            })
+            .await
+            .is_err()
+        {
+            return Err(StatusCode::BadSessionClosed);
+        }
+
+        recv.await.unwrap_or(Err(StatusCode::BadSessionClosed))
+    }
+
+    fn service_fault(data: &RequestData, status: StatusCode) -> Response {
+        Response {
+            message: ServiceFault::new(data.request_handle, status).into(),
+            request_id: data.request_id,
+        }
     }
 
     fn publish(&self, request: Box<PublishRequest>, data: RequestData) -> HandleMessageResult {

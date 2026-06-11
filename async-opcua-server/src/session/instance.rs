@@ -80,7 +80,7 @@ pub struct Session {
 impl Session {
     /// Create a new session object.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn create(
+    pub fn create(
         info: &ServerInfo,
         authentication_token: NodeId,
         secure_channel_id: u32,

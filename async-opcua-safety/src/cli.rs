@@ -1,9 +1,9 @@
 //! CLI parser implementation using `clap` for SPDU encoding and decoding/validation.
 
-use clap::{Parser, Subcommand};
 use crate::builder::SpduBuilder;
-use crate::validator::{SafetyValidator, SafetyError};
 use crate::spdu::Spdu;
+use crate::validator::{SafetyError, SafetyValidator};
+use clap::{Parser, Subcommand};
 
 /// CLI tool for SIL 3 OPC-UA Safety Profile (Part 15) SPDU validation and generation.
 #[derive(Parser, Debug)]
@@ -70,7 +70,11 @@ pub enum Commands {
 pub fn run_cli() -> Result<(), String> {
     let cli = Cli::parse();
     match cli.command {
-        Commands::Encode { safety_data, sequence_number, timestamp } => {
+        Commands::Encode {
+            safety_data,
+            sequence_number,
+            timestamp,
+        } => {
             let data = hex::decode(safety_data.trim_start_matches("0x"))
                 .map_err(|e| format!("Invalid hex safety data: {}", e))?;
             let spdu = SpduBuilder::new(data)
@@ -101,10 +105,16 @@ pub fn run_cli() -> Result<(), String> {
             match validator.validate(&spdu, current_time) {
                 Ok(()) => {
                     println!("Validation SUCCESS: SPDU is safe and authentic.");
-                    println!("Next expected sequence number: {}", validator.expected_sequence_number());
+                    println!(
+                        "Next expected sequence number: {}",
+                        validator.expected_sequence_number()
+                    );
                 }
                 Err(SafetyError::InvalidCrc) => {
-                    return Err("Validation FAILED: Invalid CRC checksum (data corruption detected).".to_string());
+                    return Err(
+                        "Validation FAILED: Invalid CRC checksum (data corruption detected)."
+                            .to_string(),
+                    );
                 }
                 Err(SafetyError::SequenceMismatch) => {
                     return Err(format!(

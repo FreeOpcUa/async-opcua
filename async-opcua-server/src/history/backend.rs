@@ -1,9 +1,9 @@
 use crate::aggregates::engine::{calculate_aggregate, get_value_timestamp, partition_intervals};
 use async_trait::async_trait;
+use moka::future::Cache;
 use opcua_types::{
     DataValue, DateTime, EventFilter, HistoryEventFieldList, NodeId, PerformUpdateType, StatusCode,
 };
-use moka::future::Cache;
 
 /// A cache for historical data values to avoid database hits.
 #[derive(Clone)]
@@ -49,7 +49,6 @@ impl HistoryCache {
         self.cache.run_pending_tasks().await;
     }
 }
-
 
 /// Trait representing a storage backend for OPC-UA Historical Data Access (HDA).
 /// Custom backends (e.g. SQLite, In-Memory, etc.) implement this trait.

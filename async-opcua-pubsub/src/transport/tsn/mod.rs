@@ -11,5 +11,3 @@ pub mod taprio;
 
 /// TSN publisher
 pub mod publisher;
-
-

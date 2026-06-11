@@ -110,8 +110,8 @@ where
         );
         tracing::trace!("Send hello message: {hello:?}");
 
-        writer
-            .write_all(&opcua_types::SimpleBinaryEncodable::encode_to_vec(&hello))
+        let hello_frame = opcua_types::SimpleBinaryEncodable::encode_to_vec(&hello);
+        TcpCodec::write_all_frame_vectored(writer, &hello_frame)
             .await
             .map_err(|err| {
                 error!("Cannot send hello to server, err = {}", err);

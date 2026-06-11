@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/5.5.3/#5.5.3.2
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ServerOnNetwork {
@@ -31,4 +43,57 @@ impl opcua::types::MessageInfo for ServerOnNetwork {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::ServerOnNetwork
     }
+}
+impl opcua::types::BinaryEncodable for ServerOnNetwork {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.record_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.server_name, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.discovery_url, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.server_capabilities, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.record_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.server_name, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.discovery_url, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.server_capabilities, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for ServerOnNetwork {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            record_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            server_name: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            discovery_url: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            server_capabilities: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for ServerOnNetwork
+where
+    u32: Send,
+    opcua::types::string::UAString: Send,
+    opcua::types::string::UAString: Send,
+    Option<Vec<opcua::types::string::UAString>>: Send,
+{
+}
+unsafe impl Sync for ServerOnNetwork
+where
+    u32: Sync,
+    opcua::types::string::UAString: Sync,
+    opcua::types::string::UAString: Sync,
+    Option<Vec<opcua::types::string::UAString>>: Sync,
+{
 }

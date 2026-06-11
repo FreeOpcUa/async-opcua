@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct MonitoringFilterResult {}
 impl opcua::types::MessageInfo for MonitoringFilterResult {
@@ -26,3 +38,29 @@ impl opcua::types::MessageInfo for MonitoringFilterResult {
         opcua::types::DataTypeId::MonitoringFilterResult
     }
 }
+impl opcua::types::BinaryEncodable for MonitoringFilterResult {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for MonitoringFilterResult {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {})
+    }
+}
+unsafe impl Send for MonitoringFilterResult {}
+unsafe impl Sync for MonitoringFilterResult {}

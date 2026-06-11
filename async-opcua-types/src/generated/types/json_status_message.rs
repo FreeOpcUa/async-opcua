@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct JsonStatusMessage {
     pub message_id: opcua::types::string::UAString,
@@ -19,4 +31,72 @@ pub struct JsonStatusMessage {
     pub is_cyclic: bool,
     pub status: super::enums::PubSubState,
     pub next_report_time: opcua::types::data_types::UtcTime,
+}
+impl opcua::types::BinaryEncodable for JsonStatusMessage {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.message_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.message_type, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.publisher_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.timestamp, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.is_cyclic, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.status, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.next_report_time, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.message_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.message_type, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.publisher_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.timestamp, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.is_cyclic, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.status, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.next_report_time, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for JsonStatusMessage {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            message_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            message_type: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            publisher_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            timestamp: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            is_cyclic: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            status: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            next_report_time: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for JsonStatusMessage
+where
+    opcua::types::string::UAString: Send,
+    opcua::types::string::UAString: Send,
+    opcua::types::string::UAString: Send,
+    opcua::types::data_types::UtcTime: Send,
+    bool: Send,
+    super::enums::PubSubState: Send,
+    opcua::types::data_types::UtcTime: Send,
+{
+}
+unsafe impl Sync for JsonStatusMessage
+where
+    opcua::types::string::UAString: Sync,
+    opcua::types::string::UAString: Sync,
+    opcua::types::string::UAString: Sync,
+    opcua::types::data_types::UtcTime: Sync,
+    bool: Sync,
+    super::enums::PubSubState: Sync,
+    opcua::types::data_types::UtcTime: Sync,
+{
 }

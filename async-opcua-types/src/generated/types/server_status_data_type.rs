@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part5/12.10
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ServerStatusDataType {
@@ -33,4 +45,67 @@ impl opcua::types::MessageInfo for ServerStatusDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::ServerStatusDataType
     }
+}
+impl opcua::types::BinaryEncodable for ServerStatusDataType {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.start_time, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.current_time, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.state, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.build_info, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.seconds_till_shutdown, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.shutdown_reason, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.start_time, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.current_time, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.state, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.build_info, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.seconds_till_shutdown, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.shutdown_reason, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for ServerStatusDataType {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            start_time: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            current_time: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            state: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            build_info: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            seconds_till_shutdown: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            shutdown_reason: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for ServerStatusDataType
+where
+    opcua::types::data_types::UtcTime: Send,
+    opcua::types::data_types::UtcTime: Send,
+    super::enums::ServerState: Send,
+    super::build_info::BuildInfo: Send,
+    u32: Send,
+    opcua::types::localized_text::LocalizedText: Send,
+{
+}
+unsafe impl Sync for ServerStatusDataType
+where
+    opcua::types::data_types::UtcTime: Sync,
+    opcua::types::data_types::UtcTime: Sync,
+    super::enums::ServerState: Sync,
+    super::build_info::BuildInfo: Sync,
+    u32: Sync,
+    opcua::types::localized_text::LocalizedText: Sync,
+{
 }

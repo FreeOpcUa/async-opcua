@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part14/6.2.10/#6.2.10.2.3
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct FieldTargetDataType {
@@ -34,4 +46,72 @@ impl opcua::types::MessageInfo for FieldTargetDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::FieldTargetDataType
     }
+}
+impl opcua::types::BinaryEncodable for FieldTargetDataType {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.data_set_field_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.receiver_index_range, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.target_node_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.attribute_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.write_index_range, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.override_value_handling, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.override_value, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.data_set_field_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.receiver_index_range, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.target_node_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.attribute_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.write_index_range, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.override_value_handling, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.override_value, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for FieldTargetDataType {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            data_set_field_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            receiver_index_range: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            target_node_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            attribute_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            write_index_range: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            override_value_handling: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            override_value: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for FieldTargetDataType
+where
+    opcua::types::guid::Guid: Send,
+    opcua::types::NumericRange: Send,
+    opcua::types::node_id::NodeId: Send,
+    opcua::types::IntegerId: Send,
+    opcua::types::NumericRange: Send,
+    super::enums::OverrideValueHandling: Send,
+    opcua::types::variant::Variant: Send,
+{
+}
+unsafe impl Sync for FieldTargetDataType
+where
+    opcua::types::guid::Guid: Sync,
+    opcua::types::NumericRange: Sync,
+    opcua::types::node_id::NodeId: Sync,
+    opcua::types::IntegerId: Sync,
+    opcua::types::NumericRange: Sync,
+    super::enums::OverrideValueHandling: Sync,
+    opcua::types::variant::Variant: Sync,
+{
 }

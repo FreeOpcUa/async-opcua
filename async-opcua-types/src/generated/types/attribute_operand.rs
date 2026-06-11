@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/7.7.4/#7.7.4.4
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct AttributeOperand {
@@ -32,4 +44,62 @@ impl opcua::types::MessageInfo for AttributeOperand {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::AttributeOperand
     }
+}
+impl opcua::types::BinaryEncodable for AttributeOperand {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.node_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.alias, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.browse_path, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.attribute_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.index_range, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.node_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.alias, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.browse_path, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.attribute_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.index_range, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for AttributeOperand {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            node_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            alias: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            browse_path: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            attribute_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            index_range: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for AttributeOperand
+where
+    opcua::types::node_id::NodeId: Send,
+    opcua::types::string::UAString: Send,
+    super::relative_path::RelativePath: Send,
+    opcua::types::IntegerId: Send,
+    opcua::types::NumericRange: Send,
+{
+}
+unsafe impl Sync for AttributeOperand
+where
+    opcua::types::node_id::NodeId: Sync,
+    opcua::types::string::UAString: Sync,
+    super::relative_path::RelativePath: Sync,
+    opcua::types::IntegerId: Sync,
+    opcua::types::NumericRange: Sync,
+{
 }

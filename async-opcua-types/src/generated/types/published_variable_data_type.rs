@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part14/6.2.3/#6.2.3.7.1
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PublishedVariableDataType {
@@ -35,4 +47,77 @@ impl opcua::types::MessageInfo for PublishedVariableDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::PublishedVariableDataType
     }
+}
+impl opcua::types::BinaryEncodable for PublishedVariableDataType {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.published_variable, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.attribute_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.sampling_interval_hint, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.deadband_type, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.deadband_value, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.index_range, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.substitute_value, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.meta_data_properties, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.published_variable, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.attribute_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.sampling_interval_hint, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.deadband_type, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.deadband_value, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.index_range, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.substitute_value, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.meta_data_properties, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for PublishedVariableDataType {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            published_variable: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            attribute_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            sampling_interval_hint: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            deadband_type: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            deadband_value: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            index_range: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            substitute_value: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            meta_data_properties: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for PublishedVariableDataType
+where
+    opcua::types::node_id::NodeId: Send,
+    opcua::types::IntegerId: Send,
+    opcua::types::data_types::Duration: Send,
+    u32: Send,
+    f64: Send,
+    opcua::types::NumericRange: Send,
+    opcua::types::variant::Variant: Send,
+    Option<Vec<opcua::types::qualified_name::QualifiedName>>: Send,
+{
+}
+unsafe impl Sync for PublishedVariableDataType
+where
+    opcua::types::node_id::NodeId: Sync,
+    opcua::types::IntegerId: Sync,
+    opcua::types::data_types::Duration: Sync,
+    u32: Sync,
+    f64: Sync,
+    opcua::types::NumericRange: Sync,
+    opcua::types::variant::Variant: Sync,
+    Option<Vec<opcua::types::qualified_name::QualifiedName>>: Sync,
+{
 }

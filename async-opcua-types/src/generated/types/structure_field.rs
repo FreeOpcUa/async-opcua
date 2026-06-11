@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part5/12.2.12/#12.2.12.10
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct StructureField {
@@ -34,4 +46,72 @@ impl opcua::types::MessageInfo for StructureField {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::StructureField
     }
+}
+impl opcua::types::BinaryEncodable for StructureField {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.name, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.description, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.data_type, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.value_rank, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.array_dimensions, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.max_string_length, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.is_optional, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.name, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.description, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.data_type, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.value_rank, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.array_dimensions, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.max_string_length, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.is_optional, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for StructureField {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            name: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            description: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            data_type: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            value_rank: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            array_dimensions: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            max_string_length: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            is_optional: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for StructureField
+where
+    opcua::types::string::UAString: Send,
+    opcua::types::localized_text::LocalizedText: Send,
+    opcua::types::node_id::NodeId: Send,
+    i32: Send,
+    Option<Vec<u32>>: Send,
+    u32: Send,
+    bool: Send,
+{
+}
+unsafe impl Sync for StructureField
+where
+    opcua::types::string::UAString: Sync,
+    opcua::types::localized_text::LocalizedText: Sync,
+    opcua::types::node_id::NodeId: Sync,
+    i32: Sync,
+    Option<Vec<u32>>: Sync,
+    u32: Sync,
+    bool: Sync,
+{
 }

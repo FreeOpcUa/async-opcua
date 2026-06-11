@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part14/6.2.10/#6.2.10.5
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct StandaloneSubscribedDataSetDataType {
@@ -31,4 +43,57 @@ impl opcua::types::MessageInfo for StandaloneSubscribedDataSetDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::StandaloneSubscribedDataSetDataType
     }
+}
+impl opcua::types::BinaryEncodable for StandaloneSubscribedDataSetDataType {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.name, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.data_set_folder, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.data_set_meta_data, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.subscribed_data_set, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.name, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.data_set_folder, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.data_set_meta_data, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.subscribed_data_set, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for StandaloneSubscribedDataSetDataType {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            name: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            data_set_folder: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            data_set_meta_data: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            subscribed_data_set: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for StandaloneSubscribedDataSetDataType
+where
+    opcua::types::string::UAString: Send,
+    Option<Vec<opcua::types::string::UAString>>: Send,
+    super::data_set_meta_data_type::DataSetMetaDataType: Send,
+    opcua::types::extension_object::ExtensionObject: Send,
+{
+}
+unsafe impl Sync for StandaloneSubscribedDataSetDataType
+where
+    opcua::types::string::UAString: Sync,
+    Option<Vec<opcua::types::string::UAString>>: Sync,
+    super::data_set_meta_data_type::DataSetMetaDataType: Sync,
+    opcua::types::extension_object::ExtensionObject: Sync,
+{
 }

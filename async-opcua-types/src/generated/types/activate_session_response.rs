@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/5.7.3/#5.7.3.2
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ActivateSessionResponse {
@@ -31,4 +43,63 @@ impl opcua::types::MessageInfo for ActivateSessionResponse {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::ActivateSessionResponse
     }
+}
+impl opcua::types::BinaryEncodable for ActivateSessionResponse {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.response_header, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.server_nonce, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.results, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.diagnostic_infos, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.response_header, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.server_nonce, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.results, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.diagnostic_infos, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for ActivateSessionResponse {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        let response_header: opcua::types::response_header::ResponseHeader =
+            opcua::types::BinaryDecodable::decode(stream, ctx)?;
+        let __request_handle = response_header.request_handle;
+        Ok(Self {
+            response_header,
+            server_nonce: opcua::types::BinaryDecodable::decode(stream, ctx)
+                .map_err(|e| e.with_request_handle(__request_handle))?,
+            results: opcua::types::BinaryDecodable::decode(stream, ctx)
+                .map_err(|e| e.with_request_handle(__request_handle))?,
+            diagnostic_infos: opcua::types::BinaryDecodable::decode(stream, ctx)
+                .map_err(|e| e.with_request_handle(__request_handle))?,
+        })
+    }
+}
+unsafe impl Send for ActivateSessionResponse
+where
+    opcua::types::response_header::ResponseHeader: Send,
+    opcua::types::byte_string::ByteString: Send,
+    Option<Vec<opcua::types::status_code::StatusCode>>: Send,
+    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Send,
+{
+}
+unsafe impl Sync for ActivateSessionResponse
+where
+    opcua::types::response_header::ResponseHeader: Sync,
+    opcua::types::byte_string::ByteString: Sync,
+    Option<Vec<opcua::types::status_code::StatusCode>>: Sync,
+    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Sync,
+{
 }

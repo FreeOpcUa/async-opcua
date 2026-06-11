@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part14/6.4.1/#6.4.1.3.3
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct DatagramWriterGroupTransportDataType {
@@ -29,4 +41,47 @@ impl opcua::types::MessageInfo for DatagramWriterGroupTransportDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::DatagramWriterGroupTransportDataType
     }
+}
+impl opcua::types::BinaryEncodable for DatagramWriterGroupTransportDataType {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.message_repeat_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.message_repeat_delay, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.message_repeat_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.message_repeat_delay, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for DatagramWriterGroupTransportDataType {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            message_repeat_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            message_repeat_delay: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for DatagramWriterGroupTransportDataType
+where
+    u8: Send,
+    opcua::types::data_types::Duration: Send,
+{
+}
+unsafe impl Sync for DatagramWriterGroupTransportDataType
+where
+    u8: Sync,
+    opcua::types::data_types::Duration: Sync,
+{
 }

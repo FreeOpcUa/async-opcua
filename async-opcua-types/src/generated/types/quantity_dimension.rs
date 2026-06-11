@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part8/6.6.4
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct QuantityDimension {
@@ -35,4 +47,77 @@ impl opcua::types::MessageInfo for QuantityDimension {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::QuantityDimension
     }
+}
+impl opcua::types::BinaryEncodable for QuantityDimension {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.mass_exponent, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.length_exponent, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.time_exponent, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.electric_current_exponent, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.amount_of_substance_exponent, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.luminous_intensity_exponent, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.absolute_temperature_exponent, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.dimensionless_exponent, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.mass_exponent, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.length_exponent, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.time_exponent, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.electric_current_exponent, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.amount_of_substance_exponent, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.luminous_intensity_exponent, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.absolute_temperature_exponent, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.dimensionless_exponent, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for QuantityDimension {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            mass_exponent: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            length_exponent: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            time_exponent: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            electric_current_exponent: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            amount_of_substance_exponent: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            luminous_intensity_exponent: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            absolute_temperature_exponent: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            dimensionless_exponent: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for QuantityDimension
+where
+    i8: Send,
+    i8: Send,
+    i8: Send,
+    i8: Send,
+    i8: Send,
+    i8: Send,
+    i8: Send,
+    i8: Send,
+{
+}
+unsafe impl Sync for QuantityDimension
+where
+    i8: Sync,
+    i8: Sync,
+    i8: Sync,
+    i8: Sync,
+    i8: Sync,
+    i8: Sync,
+    i8: Sync,
+    i8: Sync,
+{
 }

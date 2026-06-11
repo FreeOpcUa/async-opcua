@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part14/6.2.8/#6.2.8.2.1
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ReaderGroupDataType {
@@ -37,4 +49,87 @@ impl opcua::types::MessageInfo for ReaderGroupDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::ReaderGroupDataType
     }
+}
+impl opcua::types::BinaryEncodable for ReaderGroupDataType {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.name, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.enabled, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.security_mode, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.security_group_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.security_key_services, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.max_network_message_size, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.group_properties, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.transport_settings, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.message_settings, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.data_set_readers, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.name, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.enabled, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.security_mode, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.security_group_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.security_key_services, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.max_network_message_size, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.group_properties, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.transport_settings, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.message_settings, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.data_set_readers, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for ReaderGroupDataType {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            name: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            enabled: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            security_mode: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            security_group_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            security_key_services: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            max_network_message_size: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            group_properties: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            transport_settings: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            message_settings: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            data_set_readers: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for ReaderGroupDataType
+where
+    opcua::types::string::UAString: Send,
+    bool: Send,
+    super::enums::MessageSecurityMode: Send,
+    opcua::types::string::UAString: Send,
+    Option<Vec<super::endpoint_description::EndpointDescription>>: Send,
+    u32: Send,
+    Option<Vec<super::key_value_pair::KeyValuePair>>: Send,
+    opcua::types::extension_object::ExtensionObject: Send,
+    opcua::types::extension_object::ExtensionObject: Send,
+    Option<Vec<super::data_set_reader_data_type::DataSetReaderDataType>>: Send,
+{
+}
+unsafe impl Sync for ReaderGroupDataType
+where
+    opcua::types::string::UAString: Sync,
+    bool: Sync,
+    super::enums::MessageSecurityMode: Sync,
+    opcua::types::string::UAString: Sync,
+    Option<Vec<super::endpoint_description::EndpointDescription>>: Sync,
+    u32: Sync,
+    Option<Vec<super::key_value_pair::KeyValuePair>>: Sync,
+    opcua::types::extension_object::ExtensionObject: Sync,
+    opcua::types::extension_object::ExtensionObject: Sync,
+    Option<Vec<super::data_set_reader_data_type::DataSetReaderDataType>>: Sync,
+{
 }

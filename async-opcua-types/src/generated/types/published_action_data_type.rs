@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part14/6.2.3/#6.2.3.10.4
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PublishedActionDataType {
@@ -29,4 +41,47 @@ impl opcua::types::MessageInfo for PublishedActionDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::PublishedActionDataType
     }
+}
+impl opcua::types::BinaryEncodable for PublishedActionDataType {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.request_data_set_meta_data, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.action_targets, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.request_data_set_meta_data, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.action_targets, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for PublishedActionDataType {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            request_data_set_meta_data: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            action_targets: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for PublishedActionDataType
+where
+    super::data_set_meta_data_type::DataSetMetaDataType: Send,
+    Option<Vec<super::action_target_data_type::ActionTargetDataType>>: Send,
+{
+}
+unsafe impl Sync for PublishedActionDataType
+where
+    super::data_set_meta_data_type::DataSetMetaDataType: Sync,
+    Option<Vec<super::action_target_data_type::ActionTargetDataType>>: Sync,
+{
 }

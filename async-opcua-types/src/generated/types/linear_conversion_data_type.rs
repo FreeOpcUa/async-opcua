@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part8/6.6.2
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct LinearConversionDataType {
@@ -31,4 +43,57 @@ impl opcua::types::MessageInfo for LinearConversionDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::LinearConversionDataType
     }
+}
+impl opcua::types::BinaryEncodable for LinearConversionDataType {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.initial_addend, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.multiplicand, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.divisor, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.final_addend, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.initial_addend, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.multiplicand, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.divisor, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.final_addend, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for LinearConversionDataType {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            initial_addend: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            multiplicand: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            divisor: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            final_addend: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for LinearConversionDataType
+where
+    f32: Send,
+    f32: Send,
+    f32: Send,
+    f32: Send,
+{
+}
+unsafe impl Sync for LinearConversionDataType
+where
+    f32: Sync,
+    f32: Sync,
+    f32: Sync,
+    f32: Sync,
+{
 }

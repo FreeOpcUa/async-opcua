@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part22/5.3.2/#5.3.2.1
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PriorityMappingEntryType {
@@ -31,4 +43,57 @@ impl opcua::types::MessageInfo for PriorityMappingEntryType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::PriorityMappingEntryType
     }
+}
+impl opcua::types::BinaryEncodable for PriorityMappingEntryType {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.mapping_uri, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.priority_label, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.priority_value_pcp, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.priority_value_dscp, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.mapping_uri, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.priority_label, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.priority_value_pcp, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.priority_value_dscp, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for PriorityMappingEntryType {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            mapping_uri: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            priority_label: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            priority_value_pcp: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            priority_value_dscp: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for PriorityMappingEntryType
+where
+    opcua::types::string::UAString: Send,
+    opcua::types::string::UAString: Send,
+    u8: Send,
+    u32: Send,
+{
+}
+unsafe impl Sync for PriorityMappingEntryType
+where
+    opcua::types::string::UAString: Sync,
+    opcua::types::string::UAString: Sync,
+    u8: Sync,
+    u32: Sync,
+{
 }

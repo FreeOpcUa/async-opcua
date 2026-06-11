@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/7.22.3
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct EventFilter {
@@ -29,4 +41,47 @@ impl opcua::types::MessageInfo for EventFilter {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::EventFilter
     }
+}
+impl opcua::types::BinaryEncodable for EventFilter {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.select_clauses, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.where_clause, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.select_clauses, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.where_clause, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for EventFilter {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            select_clauses: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            where_clause: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for EventFilter
+where
+    Option<Vec<super::simple_attribute_operand::SimpleAttributeOperand>>: Send,
+    super::content_filter::ContentFilter: Send,
+{
+}
+unsafe impl Sync for EventFilter
+where
+    Option<Vec<super::simple_attribute_operand::SimpleAttributeOperand>>: Sync,
+    super::content_filter::ContentFilter: Sync,
+{
 }

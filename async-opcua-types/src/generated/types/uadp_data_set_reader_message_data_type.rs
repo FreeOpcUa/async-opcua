@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part14/6.3.1/#6.3.1.4.10
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct UadpDataSetReaderMessageDataType {
@@ -36,4 +48,82 @@ impl opcua::types::MessageInfo for UadpDataSetReaderMessageDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::UadpDataSetReaderMessageDataType
     }
+}
+impl opcua::types::BinaryEncodable for UadpDataSetReaderMessageDataType {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.group_version, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.network_message_number, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.data_set_offset, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.data_set_class_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.network_message_content_mask, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.data_set_message_content_mask, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.publishing_interval, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.receive_offset, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.processing_offset, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.group_version, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.network_message_number, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.data_set_offset, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.data_set_class_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.network_message_content_mask, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.data_set_message_content_mask, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.publishing_interval, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.receive_offset, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.processing_offset, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for UadpDataSetReaderMessageDataType {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            group_version: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            network_message_number: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            data_set_offset: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            data_set_class_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            network_message_content_mask: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            data_set_message_content_mask: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            publishing_interval: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            receive_offset: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            processing_offset: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for UadpDataSetReaderMessageDataType
+where
+    opcua::types::VersionTime: Send,
+    u16: Send,
+    u16: Send,
+    opcua::types::guid::Guid: Send,
+    super::enums::UadpNetworkMessageContentMask: Send,
+    super::enums::UadpDataSetMessageContentMask: Send,
+    opcua::types::data_types::Duration: Send,
+    opcua::types::data_types::Duration: Send,
+    opcua::types::data_types::Duration: Send,
+{
+}
+unsafe impl Sync for UadpDataSetReaderMessageDataType
+where
+    opcua::types::VersionTime: Sync,
+    u16: Sync,
+    u16: Sync,
+    opcua::types::guid::Guid: Sync,
+    super::enums::UadpNetworkMessageContentMask: Sync,
+    super::enums::UadpDataSetMessageContentMask: Sync,
+    opcua::types::data_types::Duration: Sync,
+    opcua::types::data_types::Duration: Sync,
+    opcua::types::data_types::Duration: Sync,
+{
 }

@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part5/12.19
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct NetworkGroupDataType {
@@ -29,4 +41,47 @@ impl opcua::types::MessageInfo for NetworkGroupDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::NetworkGroupDataType
     }
+}
+impl opcua::types::BinaryEncodable for NetworkGroupDataType {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.server_uri, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.network_paths, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.server_uri, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.network_paths, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for NetworkGroupDataType {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            server_uri: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            network_paths: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for NetworkGroupDataType
+where
+    opcua::types::string::UAString: Send,
+    Option<Vec<super::endpoint_url_list_data_type::EndpointUrlListDataType>>: Send,
+{
+}
+unsafe impl Sync for NetworkGroupDataType
+where
+    opcua::types::string::UAString: Sync,
+    Option<Vec<super::endpoint_url_list_data_type::EndpointUrlListDataType>>: Sync,
+{
 }

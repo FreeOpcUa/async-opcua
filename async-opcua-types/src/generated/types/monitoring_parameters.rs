@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/7.21
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct MonitoringParameters {
@@ -32,4 +44,62 @@ impl opcua::types::MessageInfo for MonitoringParameters {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::MonitoringParameters
     }
+}
+impl opcua::types::BinaryEncodable for MonitoringParameters {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.client_handle, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.sampling_interval, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.filter, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.queue_size, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.discard_oldest, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.client_handle, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.sampling_interval, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.filter, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.queue_size, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.discard_oldest, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for MonitoringParameters {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            client_handle: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            sampling_interval: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            filter: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            queue_size: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            discard_oldest: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for MonitoringParameters
+where
+    opcua::types::IntegerId: Send,
+    opcua::types::data_types::Duration: Send,
+    opcua::types::extension_object::ExtensionObject: Send,
+    opcua::types::Counter: Send,
+    bool: Send,
+{
+}
+unsafe impl Sync for MonitoringParameters
+where
+    opcua::types::IntegerId: Sync,
+    opcua::types::data_types::Duration: Sync,
+    opcua::types::extension_object::ExtensionObject: Sync,
+    opcua::types::Counter: Sync,
+    bool: Sync,
+{
 }

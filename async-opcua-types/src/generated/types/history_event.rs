@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part11/6.6.4
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct HistoryEvent {
@@ -28,4 +40,40 @@ impl opcua::types::MessageInfo for HistoryEvent {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::HistoryEvent
     }
+}
+impl opcua::types::BinaryEncodable for HistoryEvent {
+    #[allow(unused)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.events, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.events, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for HistoryEvent {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            events: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for HistoryEvent where
+    Option<Vec<super::history_event_field_list::HistoryEventFieldList>>: Send
+{
+}
+unsafe impl Sync for HistoryEvent where
+    Option<Vec<super::history_event_field_list::HistoryEventFieldList>>: Sync
+{
 }

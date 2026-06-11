@@ -3,8 +3,7 @@
 use std::collections::{HashSet, VecDeque};
 
 use crate::{
-    address_space::AddressSpace,
-    node_manager::ParsedNodeTypeDescription,
+    address_space::AddressSpace, node_manager::ParsedNodeTypeDescription,
     services::query::filter::QueryNodeFilter,
 };
 use opcua_nodes::{ParsedContentFilter, ParsedOperand, TypeTree};

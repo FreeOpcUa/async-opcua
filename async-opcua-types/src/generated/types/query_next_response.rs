@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/5.10.4/#5.10.4.2
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct QueryNextResponse {
@@ -30,4 +42,58 @@ impl opcua::types::MessageInfo for QueryNextResponse {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::QueryNextResponse
     }
+}
+impl opcua::types::BinaryEncodable for QueryNextResponse {
+    #[allow(unused)]
+    #[allow(clippy::let_and_return)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.response_header, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.query_data_sets, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.revised_continuation_point, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.response_header, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.query_data_sets, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.revised_continuation_point, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for QueryNextResponse {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        let response_header: opcua::types::response_header::ResponseHeader =
+            opcua::types::BinaryDecodable::decode(stream, ctx)?;
+        let __request_handle = response_header.request_handle;
+        Ok(Self {
+            response_header,
+            query_data_sets: opcua::types::BinaryDecodable::decode(stream, ctx)
+                .map_err(|e| e.with_request_handle(__request_handle))?,
+            revised_continuation_point: opcua::types::BinaryDecodable::decode(stream, ctx)
+                .map_err(|e| e.with_request_handle(__request_handle))?,
+        })
+    }
+}
+unsafe impl Send for QueryNextResponse
+where
+    opcua::types::response_header::ResponseHeader: Send,
+    Option<Vec<super::query_data_set::QueryDataSet>>: Send,
+    opcua::types::ContinuationPoint: Send,
+{
+}
+unsafe impl Sync for QueryNextResponse
+where
+    opcua::types::response_header::ResponseHeader: Sync,
+    Option<Vec<super::query_data_set::QueryDataSet>>: Sync,
+    opcua::types::ContinuationPoint: Sync,
+{
 }

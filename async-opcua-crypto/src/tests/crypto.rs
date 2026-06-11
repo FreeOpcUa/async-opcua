@@ -338,6 +338,7 @@ fn sign_verify_sha256_pss() {
 }
 
 #[test]
+#[cfg(feature = "legacy-crypto")]
 fn sign_hmac_sha1() {
     use crate::hash;
 

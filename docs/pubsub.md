@@ -71,3 +71,17 @@ let config = PubSubConnectionConfig {
 let server = Arc::new(server_instance);
 let _bridge = async_opcua_pubsub::start_pubsub_bridge(config, server).await.unwrap();
 ```
+
+## Limitations and experimental features
+
+- **Publisher only**: there is no subscriber/reader side yet, beyond decoding
+  secured UADP messages for registered security groups.
+- **Message security is non-interoperable**: the security envelope used by
+  this implementation (`OPCUAPS1`) is a proprietary format, not the UADP
+  SecurityHeader defined in OPC UA Part 14. Messages signed or encrypted by
+  this stack cannot be consumed by other PubSub implementations. Treat PubSub
+  security as experimental until the spec header is implemented.
+- **TSN is a simulated stub**: the `tsn://` transport is gated behind the
+  off-by-default `tsn` feature of `async-opcua-pubsub`. Its AF_XDP socket is
+  a simulated loopback and scheduling shells out to `tc taprio`; it has not
+  been validated on real TSN hardware (spec 004 T046).

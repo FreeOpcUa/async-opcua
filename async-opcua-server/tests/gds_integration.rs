@@ -118,7 +118,7 @@ async fn test_zero_downtime_certificate_rotation() {
     // Save new credentials to server files
     {
         let store = server_handle.certificate_store().read();
-        opcua_crypto::gds_reload::save_new_credentials(&*store, &cert_der, pem.as_bytes()).unwrap();
+        opcua_crypto::gds_reload::save_new_credentials(&store, &cert_der, pem.as_bytes()).unwrap();
     }
 
     // 5. Reload on Server

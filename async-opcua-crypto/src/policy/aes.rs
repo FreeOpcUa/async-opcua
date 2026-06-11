@@ -3,11 +3,13 @@ use std::marker::PhantomData;
 use opcua_types::{Error, StatusCode};
 use rsa::{Oaep, Pkcs1v15Encrypt};
 
+#[cfg(feature = "legacy-crypto")]
+use crate::SHA1_SIZE;
 use crate::{
     aes::calculate_cipher_text_size,
     hash,
     policy::{minimum_padding, PaddingInfo, SecurityPolicyImpl},
-    AesKey, KeySize, PrivateKey, PublicKey, SHA1_SIZE, SHA256_SIZE,
+    AesKey, KeySize, PrivateKey, PublicKey, SHA256_SIZE,
 };
 
 pub(crate) struct AesPolicy<T> {
@@ -57,7 +59,9 @@ pub(crate) trait AesSymmetricSignatureAlgorithm {
 }
 
 /// HMAC-SHA1 signature algorithm
+#[cfg(feature = "legacy-crypto")]
 pub(crate) struct DsigHmacSha1;
+#[cfg(feature = "legacy-crypto")]
 impl AesSymmetricSignatureAlgorithm for DsigHmacSha1 {
     const URI: &'static str = crate::algorithms::DSIG_HMAC_SHA1;
     const SIZE: usize = SHA1_SIZE;
@@ -138,7 +142,9 @@ impl AesAsymmetricSignatureAlgorithm for DsigRsaPssSha256 {
 }
 
 /// RSA-SHA1 asymmetric signature algorithm
+#[cfg(feature = "legacy-crypto")]
 pub(crate) struct DsigRsaSha1;
+#[cfg(feature = "legacy-crypto")]
 impl AesAsymmetricSignatureAlgorithm for DsigRsaSha1 {
     const URI: &'static str = crate::algorithms::DSIG_RSA_SHA1;
 
@@ -187,7 +193,7 @@ pub(crate) trait AesSymmetricEncryptionAlgorithm {
                     Self::BLOCK_SIZE
                 ),
             ))
-        } else if src.len() % Self::BLOCK_SIZE != 0 {
+        } else if !src.len().is_multiple_of(Self::BLOCK_SIZE) {
             Err(Error::new(
                 StatusCode::BadUnexpectedError,
                 format!(

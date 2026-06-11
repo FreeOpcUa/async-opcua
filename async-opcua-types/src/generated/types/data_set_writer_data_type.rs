@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part14/6.2.4/#6.2.4.5.1
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct DataSetWriterDataType {
@@ -36,4 +48,83 @@ impl opcua::types::MessageInfo for DataSetWriterDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::DataSetWriterDataType
     }
+}
+impl opcua::types::BinaryEncodable for DataSetWriterDataType {
+    #[allow(unused)]
+    #[allow(clippy::let_and_return)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.name, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.enabled, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.data_set_writer_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.data_set_field_content_mask, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.key_frame_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.data_set_name, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.data_set_writer_properties, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.transport_settings, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.message_settings, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.name, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.enabled, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.data_set_writer_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.data_set_field_content_mask, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.key_frame_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.data_set_name, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.data_set_writer_properties, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.transport_settings, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.message_settings, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for DataSetWriterDataType {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            name: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            enabled: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            data_set_writer_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            data_set_field_content_mask: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            key_frame_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            data_set_name: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            data_set_writer_properties: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            transport_settings: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            message_settings: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for DataSetWriterDataType
+where
+    opcua::types::string::UAString: Send,
+    bool: Send,
+    u16: Send,
+    super::enums::DataSetFieldContentMask: Send,
+    u32: Send,
+    opcua::types::string::UAString: Send,
+    Option<Vec<super::key_value_pair::KeyValuePair>>: Send,
+    opcua::types::extension_object::ExtensionObject: Send,
+    opcua::types::extension_object::ExtensionObject: Send,
+{
+}
+unsafe impl Sync for DataSetWriterDataType
+where
+    opcua::types::string::UAString: Sync,
+    bool: Sync,
+    u16: Sync,
+    super::enums::DataSetFieldContentMask: Sync,
+    u32: Sync,
+    opcua::types::string::UAString: Sync,
+    Option<Vec<super::key_value_pair::KeyValuePair>>: Sync,
+    opcua::types::extension_object::ExtensionObject: Sync,
+    opcua::types::extension_object::ExtensionObject: Sync,
+{
 }

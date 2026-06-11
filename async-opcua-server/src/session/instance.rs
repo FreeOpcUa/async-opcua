@@ -51,8 +51,6 @@ pub struct Session {
     endpoint_url: UAString,
     /// Maximum number of continuation points for browse
     max_browse_continuation_points: usize,
-    /// Maximum number of continuation points for history.
-    max_history_continuation_points: usize,
     /// Maximum number of continuation points for query.
     max_query_continuation_points: usize,
     /// Client application description
@@ -118,7 +116,6 @@ impl Session {
             max_response_message_size,
             endpoint_url,
             max_browse_continuation_points: info.config.limits.max_browse_continuation_points,
-            max_history_continuation_points: info.config.limits.max_history_continuation_points,
             max_query_continuation_points: info.config.limits.max_query_continuation_points,
             browse_continuation_points: Default::default(),
             history_continuation_points: HistoryContinuationPointCache::new(

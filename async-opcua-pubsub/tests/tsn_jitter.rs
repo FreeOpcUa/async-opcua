@@ -1,3 +1,6 @@
+//! TSN jitter measurement placeholder. Requires the `tsn` feature and
+//! real TSN hardware (spec 004 T046).
+#![cfg(feature = "tsn")]
 // async-opcua-pubsub/tests/tsn_jitter.rs
 // This test intentionally fails by asserting jitter > 1ms.
 // It uses a stub AF_XDP socket via the `xsk-rs` crate.

@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part11/6.5.4/#6.5.4.1
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ReadProcessedDetails {
@@ -32,4 +44,63 @@ impl opcua::types::MessageInfo for ReadProcessedDetails {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::ReadProcessedDetails
     }
+}
+impl opcua::types::BinaryEncodable for ReadProcessedDetails {
+    #[allow(unused)]
+    #[allow(clippy::let_and_return)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.start_time, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.end_time, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.processing_interval, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.aggregate_type, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.aggregate_configuration, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.start_time, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.end_time, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.processing_interval, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.aggregate_type, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.aggregate_configuration, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for ReadProcessedDetails {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            start_time: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            end_time: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            processing_interval: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            aggregate_type: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            aggregate_configuration: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for ReadProcessedDetails
+where
+    opcua::types::data_types::UtcTime: Send,
+    opcua::types::data_types::UtcTime: Send,
+    opcua::types::data_types::Duration: Send,
+    Option<Vec<opcua::types::node_id::NodeId>>: Send,
+    super::aggregate_configuration::AggregateConfiguration: Send,
+{
+}
+unsafe impl Sync for ReadProcessedDetails
+where
+    opcua::types::data_types::UtcTime: Sync,
+    opcua::types::data_types::UtcTime: Sync,
+    opcua::types::data_types::Duration: Sync,
+    Option<Vec<opcua::types::node_id::NodeId>>: Sync,
+    super::aggregate_configuration::AggregateConfiguration: Sync,
+{
 }

@@ -71,6 +71,7 @@ pub(crate) mod algorithms {
 
     /// SymmetricSignatureAlgorithm – HmacSha1 – (http://www.w3.org/2000/09/xmldsig#hmac-sha1).
     #[allow(unused)]
+    #[cfg(feature = "legacy-crypto")]
     pub(crate) const DSIG_HMAC_SHA1: &str = "http://www.w3.org/2000/09/xmldsig#hmac-sha1";
 
     /// SymmetricSignatureAlgorithm – HmacSha256 – (http://www.w3.org/2000/09/xmldsig#hmac-sha256).
@@ -78,6 +79,7 @@ pub(crate) mod algorithms {
     pub(crate) const DSIG_HMAC_SHA256: &str = "http://www.w3.org/2000/09/xmldsig#hmac-sha256";
 
     /// Asymmetric digital signature algorithm using RSA-SHA1
+    #[cfg(feature = "legacy-crypto")]
     pub(crate) const DSIG_RSA_SHA1: &str = "http://www.w3.org/2000/09/xmldsig#rsa-sha1";
 
     /// Asymmetric digital signature algorithm using RSA-SHA256

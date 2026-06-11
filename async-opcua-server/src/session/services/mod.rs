@@ -33,7 +33,7 @@ pub(super) use view::*;
 
 use crate::node_manager::{DynNodeManager, NodeManagers, RequestContext};
 
-trait ServiceCb<T> {
+pub(crate) trait ServiceCb<T> {
     fn call(
         &self,
         items: &mut [&mut T],
@@ -48,7 +48,7 @@ trait ServiceCb<T> {
 /// You need to manually implement the `ServiceCb` trait. This is a workaround
 /// for the lack of return type notation on async closures, otherwise we could use
 /// AsyncFn instead.
-async fn invoke_service_concurrently_mut<T, F>(
+pub(crate) async fn invoke_service_concurrently_mut<T, F>(
     context: RequestContext,
     items: &mut [T],
     node_managers: &NodeManagers,

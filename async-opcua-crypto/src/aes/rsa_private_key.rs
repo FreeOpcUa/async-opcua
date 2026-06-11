@@ -94,7 +94,7 @@ pub(crate) fn calculate_cipher_text_size<T: AesAsymmetricEncryptionAlgorithm>(
     data_size: usize,
 ) -> usize {
     let plain_text_block_size = T::get_plaintext_block_size(key_size);
-    let block_count = if data_size % plain_text_block_size == 0 {
+    let block_count = if data_size.is_multiple_of(plain_text_block_size) {
         data_size / plain_text_block_size
     } else {
         (data_size / plain_text_block_size) + 1

@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/5.14.5/#5.14.5.2
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PublishResponse {
@@ -34,4 +46,82 @@ impl opcua::types::MessageInfo for PublishResponse {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::PublishResponse
     }
+}
+impl opcua::types::BinaryEncodable for PublishResponse {
+    #[allow(unused)]
+    #[allow(clippy::let_and_return)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.response_header, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.subscription_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.available_sequence_numbers, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.more_notifications, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.notification_message, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.results, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.diagnostic_infos, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.response_header, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.subscription_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.available_sequence_numbers, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.more_notifications, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.notification_message, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.results, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.diagnostic_infos, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for PublishResponse {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        let response_header: opcua::types::response_header::ResponseHeader =
+            opcua::types::BinaryDecodable::decode(stream, ctx)?;
+        let __request_handle = response_header.request_handle;
+        Ok(Self {
+            response_header,
+            subscription_id: opcua::types::BinaryDecodable::decode(stream, ctx)
+                .map_err(|e| e.with_request_handle(__request_handle))?,
+            available_sequence_numbers: opcua::types::BinaryDecodable::decode(stream, ctx)
+                .map_err(|e| e.with_request_handle(__request_handle))?,
+            more_notifications: opcua::types::BinaryDecodable::decode(stream, ctx)
+                .map_err(|e| e.with_request_handle(__request_handle))?,
+            notification_message: opcua::types::BinaryDecodable::decode(stream, ctx)
+                .map_err(|e| e.with_request_handle(__request_handle))?,
+            results: opcua::types::BinaryDecodable::decode(stream, ctx)
+                .map_err(|e| e.with_request_handle(__request_handle))?,
+            diagnostic_infos: opcua::types::BinaryDecodable::decode(stream, ctx)
+                .map_err(|e| e.with_request_handle(__request_handle))?,
+        })
+    }
+}
+unsafe impl Send for PublishResponse
+where
+    opcua::types::response_header::ResponseHeader: Send,
+    opcua::types::IntegerId: Send,
+    Option<Vec<opcua::types::Counter>>: Send,
+    bool: Send,
+    super::notification_message::NotificationMessage: Send,
+    Option<Vec<opcua::types::status_code::StatusCode>>: Send,
+    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Send,
+{
+}
+unsafe impl Sync for PublishResponse
+where
+    opcua::types::response_header::ResponseHeader: Sync,
+    opcua::types::IntegerId: Sync,
+    Option<Vec<opcua::types::Counter>>: Sync,
+    bool: Sync,
+    super::notification_message::NotificationMessage: Sync,
+    Option<Vec<opcua::types::status_code::StatusCode>>: Sync,
+    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Sync,
+{
 }

@@ -124,7 +124,7 @@ impl<'a> SubscriptionDataNotifier<'a> {
     }
 }
 
-impl<'a> Drop for SubscriptionDataNotifier<'a> {
+impl Drop for SubscriptionDataNotifier<'_> {
     fn drop(&mut self) {
         for (sub_id, items) in std::mem::take(&mut self.by_subscription) {
             let Some(session_id) = self.lock.subscription_to_session.get(&sub_id) else {
@@ -156,7 +156,7 @@ pub struct SubscriptionEventNotifierBatch<'a, 'b> {
     by_subscription: &'a mut HashMap<u32, Vec<(MonitoredItemHandle, &'b dyn Event)>>,
 }
 
-impl<'a, 'b> SubscriptionEventNotifierBatch<'a, 'b> {
+impl<'b> SubscriptionEventNotifierBatch<'_, 'b> {
     /// Notify the referenced node of a new event.
     pub fn event(&mut self, event: &'b dyn Event) {
         for (handle, entry) in self
@@ -240,7 +240,7 @@ impl<'a, 'b> SubscriptionEventNotifier<'a, 'b> {
     }
 }
 
-impl<'a, 'b> Drop for SubscriptionEventNotifier<'a, 'b> {
+impl Drop for SubscriptionEventNotifier<'_, '_> {
     fn drop(&mut self) {
         for (sub_id, items) in std::mem::take(&mut self.by_subscription) {
             let Some(session_id) = self.lock.subscription_to_session.get(&sub_id) else {

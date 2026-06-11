@@ -275,12 +275,16 @@ impl Server {
                 enabled: config.diagnostics,
                 ..Default::default()
             },
+            metrics: Arc::new(crate::metrics::ServerMetrics::new()),
         };
 
         let certificate_store = Arc::new(RwLock::new(certificate_store));
 
         let info = Arc::new(info);
-        let subscriptions = Arc::new(SubscriptionCache::new(config.limits.subscriptions));
+        let subscriptions = Arc::new(SubscriptionCache::new(
+            config.limits.subscriptions,
+            info.metrics.clone(),
+        ));
 
         let node_managers_ref = NodeManagersRef::new_empty();
         let status_wrapper = Arc::new(ServerStatusWrapper::new(

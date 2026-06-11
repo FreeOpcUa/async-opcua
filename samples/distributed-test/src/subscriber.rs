@@ -1,4 +1,4 @@
-use opcua::types::{BinaryDecodable, Variant};
+use opcua::types::BinaryDecodable;
 use opcua_pubsub::UadpNetworkMessage;
 use tokio::net::UdpSocket;
 

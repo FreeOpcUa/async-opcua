@@ -77,6 +77,8 @@ pub(super) fn generate_binary_encode_impl(strct: EncodingStruct) -> syn::Result<
     Ok(quote! {
         impl opcua::types::BinaryEncodable for #ident {
             #[allow(unused)]
+            // Empty types produce the degenerate `let size = 0; size` form.
+            #[allow(clippy::let_and_return)]
             fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
                 let mut size = 0usize;
                 #byte_len_body
@@ -203,6 +205,8 @@ pub(super) fn generate_simple_enum_binary_encode_impl(en: SimpleEnum) -> syn::Re
     Ok(quote! {
         impl opcua::types::BinaryEncodable for #ident {
             #[allow(unused)]
+            // Empty types produce the degenerate `let size = 0; size` form.
+            #[allow(clippy::let_and_return)]
             fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
                 (*self as #repr).byte_len(ctx)
             }
@@ -296,6 +300,8 @@ pub(super) fn generate_union_binary_encode_impl(en: AdvancedEnum) -> syn::Result
     Ok(quote! {
         impl opcua::types::BinaryEncodable for #ident {
             #[allow(unused)]
+            // Empty types produce the degenerate `let size = 0; size` form.
+            #[allow(clippy::let_and_return)]
             fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
                 let mut byte_len = 4;
                 byte_len += match self {

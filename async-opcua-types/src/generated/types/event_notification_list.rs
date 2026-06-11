@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/7.25.3
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct EventNotificationList {
@@ -28,4 +40,41 @@ impl opcua::types::MessageInfo for EventNotificationList {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::EventNotificationList
     }
+}
+impl opcua::types::BinaryEncodable for EventNotificationList {
+    #[allow(unused)]
+    #[allow(clippy::let_and_return)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.events, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.events, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for EventNotificationList {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            events: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for EventNotificationList where
+    Option<Vec<super::event_field_list::EventFieldList>>: Send
+{
+}
+unsafe impl Sync for EventNotificationList where
+    Option<Vec<super::event_field_list::EventFieldList>>: Sync
+{
 }

@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part14/6.2.6/#6.2.6.7.1
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct WriterGroupDataType {
@@ -43,4 +55,118 @@ impl opcua::types::MessageInfo for WriterGroupDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::WriterGroupDataType
     }
+}
+impl opcua::types::BinaryEncodable for WriterGroupDataType {
+    #[allow(unused)]
+    #[allow(clippy::let_and_return)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.name, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.enabled, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.security_mode, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.security_group_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.security_key_services, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.max_network_message_size, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.group_properties, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.writer_group_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.publishing_interval, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.keep_alive_time, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.priority, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.locale_ids, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.header_layout_uri, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.transport_settings, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.message_settings, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.data_set_writers, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.name, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.enabled, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.security_mode, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.security_group_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.security_key_services, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.max_network_message_size, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.group_properties, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.writer_group_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.publishing_interval, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.keep_alive_time, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.priority, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.locale_ids, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.header_layout_uri, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.transport_settings, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.message_settings, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.data_set_writers, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for WriterGroupDataType {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            name: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            enabled: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            security_mode: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            security_group_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            security_key_services: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            max_network_message_size: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            group_properties: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            writer_group_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            publishing_interval: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            keep_alive_time: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            priority: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            locale_ids: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            header_layout_uri: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            transport_settings: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            message_settings: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            data_set_writers: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for WriterGroupDataType
+where
+    opcua::types::string::UAString: Send,
+    bool: Send,
+    super::enums::MessageSecurityMode: Send,
+    opcua::types::string::UAString: Send,
+    Option<Vec<super::endpoint_description::EndpointDescription>>: Send,
+    u32: Send,
+    Option<Vec<super::key_value_pair::KeyValuePair>>: Send,
+    u16: Send,
+    opcua::types::data_types::Duration: Send,
+    opcua::types::data_types::Duration: Send,
+    u8: Send,
+    Option<Vec<opcua::types::LocaleId>>: Send,
+    opcua::types::string::UAString: Send,
+    opcua::types::extension_object::ExtensionObject: Send,
+    opcua::types::extension_object::ExtensionObject: Send,
+    Option<Vec<super::data_set_writer_data_type::DataSetWriterDataType>>: Send,
+{
+}
+unsafe impl Sync for WriterGroupDataType
+where
+    opcua::types::string::UAString: Sync,
+    bool: Sync,
+    super::enums::MessageSecurityMode: Sync,
+    opcua::types::string::UAString: Sync,
+    Option<Vec<super::endpoint_description::EndpointDescription>>: Sync,
+    u32: Sync,
+    Option<Vec<super::key_value_pair::KeyValuePair>>: Sync,
+    u16: Sync,
+    opcua::types::data_types::Duration: Sync,
+    opcua::types::data_types::Duration: Sync,
+    u8: Sync,
+    Option<Vec<opcua::types::LocaleId>>: Sync,
+    opcua::types::string::UAString: Sync,
+    opcua::types::extension_object::ExtensionObject: Sync,
+    opcua::types::extension_object::ExtensionObject: Sync,
+    Option<Vec<super::data_set_writer_data_type::DataSetWriterDataType>>: Sync,
+{
 }

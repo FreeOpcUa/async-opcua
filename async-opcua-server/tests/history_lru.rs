@@ -37,7 +37,7 @@ async fn test_history_backend_caching_and_lru_eviction() {
         conn_lock
             .execute(
                 "DELETE FROM historical_data WHERE node_id = ?1",
-                &[&node_id.to_string()],
+                [&node_id.to_string()],
             )
             .unwrap();
     }

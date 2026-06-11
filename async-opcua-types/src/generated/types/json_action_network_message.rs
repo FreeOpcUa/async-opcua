@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct JsonActionNetworkMessage {
     pub message_id: opcua::types::string::UAString,
@@ -21,4 +33,83 @@ pub struct JsonActionNetworkMessage {
     pub requestor_id: opcua::types::string::UAString,
     pub timeout_hint: opcua::types::data_types::Duration,
     pub messages: Option<Vec<opcua::types::extension_object::ExtensionObject>>,
+}
+impl opcua::types::BinaryEncodable for JsonActionNetworkMessage {
+    #[allow(unused)]
+    #[allow(clippy::let_and_return)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.message_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.message_type, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.publisher_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.timestamp, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.response_address, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.correlation_data, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.requestor_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.timeout_hint, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.messages, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.message_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.message_type, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.publisher_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.timestamp, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.response_address, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.correlation_data, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.requestor_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.timeout_hint, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.messages, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for JsonActionNetworkMessage {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            message_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            message_type: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            publisher_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            timestamp: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            response_address: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            correlation_data: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            requestor_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            timeout_hint: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            messages: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for JsonActionNetworkMessage
+where
+    opcua::types::string::UAString: Send,
+    opcua::types::string::UAString: Send,
+    opcua::types::string::UAString: Send,
+    opcua::types::data_types::UtcTime: Send,
+    opcua::types::string::UAString: Send,
+    opcua::types::byte_string::ByteString: Send,
+    opcua::types::string::UAString: Send,
+    opcua::types::data_types::Duration: Send,
+    Option<Vec<opcua::types::extension_object::ExtensionObject>>: Send,
+{
+}
+unsafe impl Sync for JsonActionNetworkMessage
+where
+    opcua::types::string::UAString: Sync,
+    opcua::types::string::UAString: Sync,
+    opcua::types::string::UAString: Sync,
+    opcua::types::data_types::UtcTime: Sync,
+    opcua::types::string::UAString: Sync,
+    opcua::types::byte_string::ByteString: Sync,
+    opcua::types::string::UAString: Sync,
+    opcua::types::data_types::Duration: Sync,
+    Option<Vec<opcua::types::extension_object::ExtensionObject>>: Sync,
+{
 }

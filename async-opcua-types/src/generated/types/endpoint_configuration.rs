@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct EndpointConfiguration {
     pub operation_timeout: i32,
@@ -35,4 +47,83 @@ impl opcua::types::MessageInfo for EndpointConfiguration {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::EndpointConfiguration
     }
+}
+impl opcua::types::BinaryEncodable for EndpointConfiguration {
+    #[allow(unused)]
+    #[allow(clippy::let_and_return)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.operation_timeout, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.use_binary_encoding, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.max_string_length, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.max_byte_string_length, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.max_array_length, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.max_message_size, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.max_buffer_size, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.channel_lifetime, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.security_token_lifetime, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.operation_timeout, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.use_binary_encoding, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.max_string_length, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.max_byte_string_length, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.max_array_length, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.max_message_size, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.max_buffer_size, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.channel_lifetime, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.security_token_lifetime, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for EndpointConfiguration {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            operation_timeout: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            use_binary_encoding: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            max_string_length: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            max_byte_string_length: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            max_array_length: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            max_message_size: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            max_buffer_size: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            channel_lifetime: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            security_token_lifetime: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for EndpointConfiguration
+where
+    i32: Send,
+    bool: Send,
+    i32: Send,
+    i32: Send,
+    i32: Send,
+    i32: Send,
+    i32: Send,
+    i32: Send,
+    i32: Send,
+{
+}
+unsafe impl Sync for EndpointConfiguration
+where
+    i32: Sync,
+    bool: Sync,
+    i32: Sync,
+    i32: Sync,
+    i32: Sync,
+    i32: Sync,
+    i32: Sync,
+    i32: Sync,
+    i32: Sync,
+{
 }

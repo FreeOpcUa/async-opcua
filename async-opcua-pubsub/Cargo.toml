@@ -10,8 +10,13 @@ publish = false
 [lib]
 name = "opcua_pubsub"
 
+[features]
+# Experimental, simulated TSN transport (AF_XDP stub + tc-taprio shell-out).
+# Not suitable for production use; requires real TSN hardware validation.
+tsn = ["dep:xsk-rs"]
+
 [dependencies]
-xsk-rs = "0.3"
+xsk-rs = { version = "0.3", optional = true }
 async-opcua-core = { path = "../async-opcua-core", version = "0.18.0" }
 async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.18.0" }
 async-opcua-server = { path = "../async-opcua-server", version = "0.18.0" }

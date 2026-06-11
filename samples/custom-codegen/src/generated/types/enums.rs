@@ -245,16 +245,6 @@ pub enum PnPortStateEnumeration {
     BROKEN = 6i32,
 }
 #[opcua::types::ua_encodable]
-///https://reference.opcfoundation.org/v104/PROFINET/v101/docs/6.3.3/#6.3.3.3.5
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[repr(i32)]
-pub enum PnSubmoduleAddInfoEnumeration {
-    #[opcua(default)]
-    NO_ADD_INFO = 0i32,
-    ///This Submodule is not available for takeover by IOSAR.
-    TAKEOVER_NOT_ALLOWED = 1i32,
-}
-#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v104/PROFINET/v101/docs/6.3.3/#6.3.3.3.6
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(i32)]
@@ -270,6 +260,16 @@ pub enum PnSubmoduleARInfoEnumeration {
     LOCKED_BY_IO_CONTROLLER = 384i32,
     ///This AR is not owner of the submodule. It is owned by another IOSAR
     LOCKED_BY_IO_SUPERVISOR = 512i32,
+}
+#[opcua::types::ua_encodable]
+///https://reference.opcfoundation.org/v104/PROFINET/v101/docs/6.3.3/#6.3.3.3.5
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[repr(i32)]
+pub enum PnSubmoduleAddInfoEnumeration {
+    #[opcua(default)]
+    NO_ADD_INFO = 0i32,
+    ///This Submodule is not available for takeover by IOSAR.
+    TAKEOVER_NOT_ALLOWED = 1i32,
 }
 #[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v104/PROFINET/v101/docs/6.3.3/#6.3.3.3.7

@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part14/6.2.12/#6.2.12.4
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PubSubConfiguration2DataType {
@@ -42,4 +54,92 @@ impl opcua::types::MessageInfo for PubSubConfiguration2DataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::PubSubConfiguration2DataType
     }
+}
+impl opcua::types::BinaryEncodable for PubSubConfiguration2DataType {
+    #[allow(unused)]
+    #[allow(clippy::let_and_return)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.published_data_sets, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.connections, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.enabled, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.subscribed_data_sets, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.data_set_classes, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.default_security_key_services, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.security_groups, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.pub_sub_key_push_targets, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.configuration_version, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.configuration_properties, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.published_data_sets, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.connections, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.enabled, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.subscribed_data_sets, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.data_set_classes, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.default_security_key_services, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.security_groups, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.pub_sub_key_push_targets, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.configuration_version, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.configuration_properties, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for PubSubConfiguration2DataType {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            published_data_sets: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            connections: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            enabled: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            subscribed_data_sets: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            data_set_classes: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            default_security_key_services: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            security_groups: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            pub_sub_key_push_targets: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            configuration_version: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            configuration_properties: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for PubSubConfiguration2DataType
+where
+    Option<Vec<super::published_data_set_data_type::PublishedDataSetDataType>>: Send,
+    Option<Vec<super::pub_sub_connection_data_type::PubSubConnectionDataType>>: Send,
+    bool: Send,
+    Option<
+        Vec<super::standalone_subscribed_data_set_data_type::StandaloneSubscribedDataSetDataType>,
+    >: Send,
+    Option<Vec<super::data_set_meta_data_type::DataSetMetaDataType>>: Send,
+    Option<Vec<super::endpoint_description::EndpointDescription>>: Send,
+    Option<Vec<super::security_group_data_type::SecurityGroupDataType>>: Send,
+    Option<Vec<super::pub_sub_key_push_target_data_type::PubSubKeyPushTargetDataType>>: Send,
+    opcua::types::VersionTime: Send,
+    Option<Vec<super::key_value_pair::KeyValuePair>>: Send,
+{
+}
+unsafe impl Sync for PubSubConfiguration2DataType
+where
+    Option<Vec<super::published_data_set_data_type::PublishedDataSetDataType>>: Sync,
+    Option<Vec<super::pub_sub_connection_data_type::PubSubConnectionDataType>>: Sync,
+    bool: Sync,
+    Option<
+        Vec<super::standalone_subscribed_data_set_data_type::StandaloneSubscribedDataSetDataType>,
+    >: Sync,
+    Option<Vec<super::data_set_meta_data_type::DataSetMetaDataType>>: Sync,
+    Option<Vec<super::endpoint_description::EndpointDescription>>: Sync,
+    Option<Vec<super::security_group_data_type::SecurityGroupDataType>>: Sync,
+    Option<Vec<super::pub_sub_key_push_target_data_type::PubSubKeyPushTargetDataType>>: Sync,
+    opcua::types::VersionTime: Sync,
+    Option<Vec<super::key_value_pair::KeyValuePair>>: Sync,
+{
 }

@@ -46,6 +46,8 @@ pub struct SessionSubscriptions {
     session: Arc<RwLock<Session>>,
     /// Static reference to the type-tree for the user owning this.
     type_tree_for_user: Arc<dyn TypeTreeForUserStatic>,
+    /// Shared notification scratch buffer pool owned by the subscription cache.
+    pool: Arc<super::pool::NotificationPool>,
 }
 
 impl SessionSubscriptions {
@@ -54,6 +56,7 @@ impl SessionSubscriptions {
         user_token: PersistentSessionKey,
         session: Arc<RwLock<Session>>,
         type_tree_for_user: Arc<dyn TypeTreeForUserStatic>,
+        pool: Arc<super::pool::NotificationPool>,
     ) -> Self {
         Self {
             user_token,
@@ -63,6 +66,7 @@ impl SessionSubscriptions {
             limits,
             session,
             type_tree_for_user,
+            pool,
         }
     }
 
@@ -645,6 +649,7 @@ impl SessionSubscriptions {
         let mut responses = Vec::new();
         let mut more_notifications = false;
 
+        let pool = Arc::clone(&self.pool);
         for sub_id in subscription_ids {
             let subscription = self.subscriptions.get_mut(&sub_id).unwrap();
             let res = subscription.tick(
@@ -652,6 +657,7 @@ impl SessionSubscriptions {
                 now_instant,
                 tick_reason,
                 !self.publish_request_queue.is_empty(),
+                &pool,
             );
             // Get notifications and publish request pairs while there are any of either left.
             while !self.publish_request_queue.is_empty() {

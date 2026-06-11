@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part14/6.2.7/#6.2.7.5.4
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct NetworkAddressUrlDataType {
@@ -29,4 +41,48 @@ impl opcua::types::MessageInfo for NetworkAddressUrlDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::NetworkAddressUrlDataType
     }
+}
+impl opcua::types::BinaryEncodable for NetworkAddressUrlDataType {
+    #[allow(unused)]
+    #[allow(clippy::let_and_return)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.network_interface, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.url, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.network_interface, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.url, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for NetworkAddressUrlDataType {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            network_interface: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            url: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for NetworkAddressUrlDataType
+where
+    opcua::types::string::UAString: Send,
+    opcua::types::string::UAString: Send,
+{
+}
+unsafe impl Sync for NetworkAddressUrlDataType
+where
+    opcua::types::string::UAString: Sync,
+    opcua::types::string::UAString: Sync,
+{
 }

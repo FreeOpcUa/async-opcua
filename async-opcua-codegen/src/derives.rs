@@ -44,6 +44,8 @@ fn binary_impls(struct_name: &Ident, fields: &[StructFieldImpl]) -> Vec<Item> {
         parse_quote! {
             impl opcua::types::BinaryEncodable for #struct_name {
                 #[allow(unused)]
+                // Empty types produce the degenerate `let size = 0; size` form.
+                #[allow(clippy::let_and_return)]
                 fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
                     let mut size = 0usize;
                     #(#byte_len_body)*

@@ -1,4 +1,8 @@
 //! Server-side performance metrics.
+//!
+//! Each server owns its own [`ServerMetrics`] instance, available via
+//! `ServerInfo::metrics`, so multiple servers in one process do not share
+//! or clobber each other's counters.
 
 use std::sync::atomic::{AtomicU64, AtomicUsize};
 
@@ -21,8 +25,9 @@ pub struct ServerMetrics {
     pub actor_messages_processed: AtomicU64,
     /// Total nanoseconds spent processing session actor messages.
     pub actor_message_duration_ns: AtomicU64,
-    /// Number of messages currently queued on session actor channels.
-    pub actor_queue_depth: AtomicUsize,
+    /// Peak number of messages observed queued on a single session actor
+    /// channel.
+    pub actor_queue_peak_depth: AtomicUsize,
 }
 
 impl ServerMetrics {
@@ -37,7 +42,7 @@ impl ServerMetrics {
             serialization_errors: AtomicU64::new(0),
             actor_messages_processed: AtomicU64::new(0),
             actor_message_duration_ns: AtomicU64::new(0),
-            actor_queue_depth: AtomicUsize::new(0),
+            actor_queue_peak_depth: AtomicUsize::new(0),
         }
     }
 }
@@ -47,6 +52,3 @@ impl Default for ServerMetrics {
         Self::new()
     }
 }
-
-/// Global server metrics registry.
-pub static METRICS: ServerMetrics = ServerMetrics::new();

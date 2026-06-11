@@ -6,9 +6,9 @@ use opcua_types::{DataValue, DateTime, ExtensionObject, HistoryData, HistoryModi
 /// - If start_time >= end_time, sorts from newest to oldest (descending source_timestamp).
 pub fn sort_historical_values(values: &mut [DataValue], start_time: DateTime, end_time: DateTime) {
     if start_time < end_time {
-        values.sort_by(|a, b| a.source_timestamp.cmp(&b.source_timestamp));
+        values.sort_by_key(|v| v.source_timestamp);
     } else {
-        values.sort_by(|a, b| b.source_timestamp.cmp(&a.source_timestamp));
+        values.sort_by_key(|v| std::cmp::Reverse(v.source_timestamp));
     }
 }
 

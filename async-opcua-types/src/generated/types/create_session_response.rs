@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/5.7.2/#5.7.2.2
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct CreateSessionResponse {
@@ -38,4 +50,100 @@ impl opcua::types::MessageInfo for CreateSessionResponse {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::CreateSessionResponse
     }
+}
+impl opcua::types::BinaryEncodable for CreateSessionResponse {
+    #[allow(unused)]
+    #[allow(clippy::let_and_return)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.response_header, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.session_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.authentication_token, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.revised_session_timeout, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.server_nonce, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.server_certificate, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.server_endpoints, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.server_software_certificates, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.server_signature, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.max_request_message_size, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.response_header, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.session_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.authentication_token, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.revised_session_timeout, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.server_nonce, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.server_certificate, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.server_endpoints, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.server_software_certificates, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.server_signature, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.max_request_message_size, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for CreateSessionResponse {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        let response_header: opcua::types::response_header::ResponseHeader =
+            opcua::types::BinaryDecodable::decode(stream, ctx)?;
+        let __request_handle = response_header.request_handle;
+        Ok(Self {
+            response_header,
+            session_id: opcua::types::BinaryDecodable::decode(stream, ctx)
+                .map_err(|e| e.with_request_handle(__request_handle))?,
+            authentication_token: opcua::types::BinaryDecodable::decode(stream, ctx)
+                .map_err(|e| e.with_request_handle(__request_handle))?,
+            revised_session_timeout: opcua::types::BinaryDecodable::decode(stream, ctx)
+                .map_err(|e| e.with_request_handle(__request_handle))?,
+            server_nonce: opcua::types::BinaryDecodable::decode(stream, ctx)
+                .map_err(|e| e.with_request_handle(__request_handle))?,
+            server_certificate: opcua::types::BinaryDecodable::decode(stream, ctx)
+                .map_err(|e| e.with_request_handle(__request_handle))?,
+            server_endpoints: opcua::types::BinaryDecodable::decode(stream, ctx)
+                .map_err(|e| e.with_request_handle(__request_handle))?,
+            server_software_certificates: opcua::types::BinaryDecodable::decode(stream, ctx)
+                .map_err(|e| e.with_request_handle(__request_handle))?,
+            server_signature: opcua::types::BinaryDecodable::decode(stream, ctx)
+                .map_err(|e| e.with_request_handle(__request_handle))?,
+            max_request_message_size: opcua::types::BinaryDecodable::decode(stream, ctx)
+                .map_err(|e| e.with_request_handle(__request_handle))?,
+        })
+    }
+}
+unsafe impl Send for CreateSessionResponse
+where
+    opcua::types::response_header::ResponseHeader: Send,
+    opcua::types::node_id::NodeId: Send,
+    opcua::types::SessionAuthenticationToken: Send,
+    opcua::types::data_types::Duration: Send,
+    opcua::types::byte_string::ByteString: Send,
+    opcua::types::ApplicationInstanceCertificate: Send,
+    Option<Vec<super::endpoint_description::EndpointDescription>>: Send,
+    Option<Vec<super::signed_software_certificate::SignedSoftwareCertificate>>: Send,
+    super::signature_data::SignatureData: Send,
+    u32: Send,
+{
+}
+unsafe impl Sync for CreateSessionResponse
+where
+    opcua::types::response_header::ResponseHeader: Sync,
+    opcua::types::node_id::NodeId: Sync,
+    opcua::types::SessionAuthenticationToken: Sync,
+    opcua::types::data_types::Duration: Sync,
+    opcua::types::byte_string::ByteString: Sync,
+    opcua::types::ApplicationInstanceCertificate: Sync,
+    Option<Vec<super::endpoint_description::EndpointDescription>>: Sync,
+    Option<Vec<super::signed_software_certificate::SignedSoftwareCertificate>>: Sync,
+    super::signature_data::SignatureData: Sync,
+    u32: Sync,
+{
 }

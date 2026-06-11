@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct CloseSecureChannelResponse {
     pub response_header: opcua::types::response_header::ResponseHeader,
@@ -27,4 +39,42 @@ impl opcua::types::MessageInfo for CloseSecureChannelResponse {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::CloseSecureChannelResponse
     }
+}
+impl opcua::types::BinaryEncodable for CloseSecureChannelResponse {
+    #[allow(unused)]
+    #[allow(clippy::let_and_return)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.response_header, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.response_header, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for CloseSecureChannelResponse {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        let response_header: opcua::types::response_header::ResponseHeader =
+            opcua::types::BinaryDecodable::decode(stream, ctx)?;
+        let __request_handle = response_header.request_handle;
+        Ok(Self { response_header })
+    }
+}
+unsafe impl Send for CloseSecureChannelResponse where
+    opcua::types::response_header::ResponseHeader: Send
+{
+}
+unsafe impl Sync for CloseSecureChannelResponse where
+    opcua::types::response_header::ResponseHeader: Sync
+{
 }

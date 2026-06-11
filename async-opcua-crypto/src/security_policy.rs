@@ -21,7 +21,7 @@ use super::random;
 use crate::policy::{aes::*, AesDerivedKeys, AesPolicy, NonePolicy};
 
 macro_rules! call_with_policy {
-    (_inner $r:expr, $($p:ident: $ty:ty,)+ |$x:ident| $t:tt) => {
+    (_inner $r:expr, $($p:ident: $ty:ty,)+ |$x:ident| $t:expr) => {
         match $r {
             $(
                 Self::$p => {
@@ -34,7 +34,7 @@ macro_rules! call_with_policy {
         }
     };
 
-    ($r:expr, |$x:ident| $t:tt) => {
+    ($r:expr, |$x:ident| $t:expr) => {
         match $r {
             Self::None => {
                 type $x = NonePolicy;
@@ -144,7 +144,7 @@ impl SecurityPolicy {
     ///
     /// This will panic if the security policy is `Unknown`.
     pub fn to_uri(&self) -> &'static str {
-        call_with_policy!(self, |T| { T::uri() })
+        call_with_policy!(self, |T| T::uri())
     }
 
     /// Returns true if the security policy is supported. It might be recognized but be unsupported by the implementation
@@ -176,47 +176,47 @@ impl SecurityPolicy {
     /// Returns true if the security policy has been deprecated by the OPC UA specification
     pub fn is_deprecated(&self) -> bool {
         // Since 1.04 because SHA-1 is no longer considered safe
-        call_with_policy!(self, |T| { T::is_deprecated() })
+        call_with_policy!(self, |T| T::is_deprecated())
     }
 
     /// Get a string representation of this policy.
     ///
     /// This will panic if the security policy is `Unknown`.
     pub fn to_str(&self) -> &'static str {
-        call_with_policy!(self, |T| { T::as_str() })
+        call_with_policy!(self, |T| T::as_str())
     }
 
     /// Get the asymmetric encryption algorithm for this security policy.
     ///
     /// This will panic if the security policy is `Unknown` or `None`.
     pub fn asymmetric_encryption_algorithm(&self) -> Option<&'static str> {
-        call_with_policy!(self, |T| { T::asymmetric_encryption_algorithm() })
+        call_with_policy!(self, |T| T::asymmetric_encryption_algorithm())
     }
 
     /// Get the asymmetric signature algorithm for this security policy.
     ///
     /// This will panic if the security policy is `Unknown` or `None`.
     pub fn asymmetric_signature_algorithm(&self) -> &'static str {
-        call_with_policy!(self, |T| { T::asymmetric_signature_algorithm() })
+        call_with_policy!(self, |T| T::asymmetric_signature_algorithm())
     }
 
     /// Plaintext block size in bytes.
     ///
     /// This will panic if the security policy is `Unknown` or `None`.
     pub fn plain_block_size(&self) -> usize {
-        call_with_policy!(self, |T| { T::plain_text_block_size() })
+        call_with_policy!(self, |T| T::plain_text_block_size())
     }
 
     /// Signature size in bytes.
     ///
     /// This will panic if the security policy is `Unknown`.
     pub fn symmetric_signature_size(&self) -> usize {
-        call_with_policy!(self, |T| { T::symmetric_signature_size() })
+        call_with_policy!(self, |T| T::symmetric_signature_size())
     }
 
     /// Tests if the supplied key length is valid for this policy
     pub fn is_valid_keylength(&self, keylength: usize) -> bool {
-        call_with_policy!(self, |T| { T::is_valid_key_length(keylength) })
+        call_with_policy!(self, |T| T::is_valid_key_length(keylength))
     }
 
     /// Creates a random nonce in a bytestring with a length appropriate for the policy
@@ -234,7 +234,7 @@ impl SecurityPolicy {
             return 32;
         }
 
-        call_with_policy!(self, |T| { T::nonce_length() })
+        call_with_policy!(self, |T| T::nonce_length())
     }
 
     /// Get the security policy from the given URI. Returns `Unknown`
@@ -267,7 +267,7 @@ impl SecurityPolicy {
 
     /// Returns whether the security policy uses legacy sequence numbers.
     pub fn legacy_sequence_numbers(&self) -> bool {
-        call_with_policy!(self, |T| { T::uses_legacy_sequence_numbers() })
+        call_with_policy!(self, |T| T::uses_legacy_sequence_numbers())
     }
 
     /// Part 6
@@ -306,7 +306,7 @@ impl SecurityPolicy {
     /// are used to secure Messages sent by the Server.
     ///
     pub fn make_secure_channel_keys(&self, secret: &[u8], seed: &[u8]) -> AesDerivedKeys {
-        call_with_policy!(self, |T| { T::derive_secure_channel_keys(secret, seed) })
+        call_with_policy!(self, |T| T::derive_secure_channel_keys(secret, seed))
     }
 
     /// Produce a signature of the data using an asymmetric key. Stores the signature in the supplied
@@ -338,13 +338,13 @@ impl SecurityPolicy {
 
     /// Get information about message padding for symmetric encryption using this policy.
     pub fn symmetric_padding_info(&self) -> PaddingInfo {
-        call_with_policy!(self, |T| { T::symmetric_padding_info() })
+        call_with_policy!(self, |T| T::symmetric_padding_info())
     }
 
     /// Get information about message padding for asymmetric encryption using this policy,
     /// requires the public key of the receiver.
     pub fn asymmetric_padding_info(&self, remote_key: &PublicKey) -> PaddingInfo {
-        call_with_policy!(self, |T| { T::asymmetric_padding_info(remote_key) })
+        call_with_policy!(self, |T| T::asymmetric_padding_info(remote_key))
     }
 
     /// Calculate the size of the cipher text for asymmetric encryption.
@@ -389,7 +389,7 @@ impl SecurityPolicy {
         data: &[u8],
         signature: &mut [u8],
     ) -> Result<(), Error> {
-        call_with_policy!(self, |T| { T::symmetric_sign(keys, data, signature) })
+        call_with_policy!(self, |T| T::symmetric_sign(keys, data, signature))
     }
 
     /// Verify the signature of a data block using the supplied symmetric key.
@@ -411,7 +411,7 @@ impl SecurityPolicy {
         src: &[u8],
         dst: &mut [u8],
     ) -> Result<usize, Error> {
-        call_with_policy!(self, |T| { T::symmetric_encrypt(keys, src, dst) })
+        call_with_policy!(self, |T| T::symmetric_encrypt(keys, src, dst))
     }
 
     /// Decrypts the supplied data using the supplied key storing the result in the destination.
@@ -421,11 +421,11 @@ impl SecurityPolicy {
         src: &[u8],
         dst: &mut [u8],
     ) -> Result<usize, Error> {
-        call_with_policy!(self, |T| { T::symmetric_decrypt(keys, src, dst) })
+        call_with_policy!(self, |T| T::symmetric_decrypt(keys, src, dst))
     }
 
     /// Get the key length used for symmetric encryption.
     pub fn encrypting_key_length(&self) -> usize {
-        call_with_policy!(self, |T| { T::encrypting_key_length() })
+        call_with_policy!(self, |T| T::encrypting_key_length())
     }
 }

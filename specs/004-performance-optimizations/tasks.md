@@ -115,9 +115,9 @@ description: "Task list template for feature implementation"
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T043 Run integration tests for DashMap concurrent throughput.
-- [ ] T044 Run load test simulating 10k connections.
-- [ ] T045 Verify zero memory leaks using `valgrind` or similar during peak zero-copy parsing.
+- [X] T043 Run integration tests for DashMap concurrent throughput. (`address_space_concurrency::test_dashmap_concurrent_throughput`, ~150k ops/s)
+- [X] T044 Run load test simulating 10k connections. (`connection_load::ten_thousand_connections_complete_handshake`, ignored by default; 10k HEL/ACK in 2.1s)
+- [ ] T045 Verify zero memory leaks using `valgrind` or similar during peak zero-copy parsing. (`tools/leak_check.sh` provided; valgrind not installed on this machine)
 - [ ] T046 Verify TSN sub-millisecond jitter boundaries via hardware timers (SC-003).
 
 ---

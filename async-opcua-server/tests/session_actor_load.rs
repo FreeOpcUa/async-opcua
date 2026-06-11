@@ -14,7 +14,6 @@ use opcua_server::{
     address_space::{AddressSpace, NodeType, VariableBuilder},
     authenticator::UserToken,
     diagnostics::NamespaceMetadata,
-    metrics::METRICS,
     node_manager::{
         memory::{simple_node_manager, SimpleNodeManager},
         RequestContext, RequestContextInner,
@@ -49,8 +48,9 @@ async fn session_actor_processes_concurrent_load_and_terminates_cleanly() {
 async fn run_load_test() {
     let fixture = ActorFixture::new();
 
-    let messages_before = METRICS.actor_messages_processed.load(Ordering::Relaxed);
-    let duration_before = METRICS.actor_message_duration_ns.load(Ordering::Relaxed);
+    let metrics = Arc::clone(&fixture.handle.info().metrics);
+    let messages_before = metrics.actor_messages_processed.load(Ordering::Relaxed);
+    let duration_before = metrics.actor_message_duration_ns.load(Ordering::Relaxed);
 
     // Drive concurrent read/write traffic from multiple tasks. Each task owns
     // one variable node, so a read issued after an acknowledged write must
@@ -64,16 +64,17 @@ async fn run_load_test() {
                 let (response, response_rx) = oneshot::channel();
                 sender
                     .send(SessionMessage::Write {
-                        value: write_value(&node_id, value),
+                        values: vec![write_value(&node_id, value)],
                         return_diagnostics: DiagnosticBits::empty(),
                         response,
                     })
                     .await
                     .expect("actor should accept write message");
-                let (status, _) = response_rx
+                let results = response_rx
                     .await
                     .expect("write response should arrive")
                     .expect("write should not fault the service");
+                let (status, _) = results.into_iter().next().expect("one write result");
                 assert!(
                     status.is_good(),
                     "write of {value} to {node_id} failed: {status}"
@@ -82,7 +83,7 @@ async fn run_load_test() {
                 let (response, response_rx) = oneshot::channel();
                 sender
                     .send(SessionMessage::Read {
-                        node: read_value_id(&node_id),
+                        nodes: vec![read_value_id(&node_id)],
                         max_age: 0.0,
                         timestamps_to_return: TimestampsToReturn::Neither,
                         return_diagnostics: DiagnosticBits::empty(),
@@ -90,10 +91,11 @@ async fn run_load_test() {
                     })
                     .await
                     .expect("actor should accept read message");
-                let (data_value, _) = response_rx
+                let results = response_rx
                     .await
                     .expect("read response should arrive")
                     .expect("read should not fault the service");
+                let (data_value, _) = results.into_iter().next().expect("one read result");
                 assert!(
                     data_value.status.unwrap_or(StatusCode::Good).is_good(),
                     "read of {node_id} failed: {:?}",
@@ -127,8 +129,8 @@ async fn run_load_test() {
 
     // The actor metrics must have advanced by at least the message volume.
     let total_messages = (CONCURRENT_TASKS * WRITES_PER_TASK * 2) as u64;
-    let messages_after = METRICS.actor_messages_processed.load(Ordering::Relaxed);
-    let duration_after = METRICS.actor_message_duration_ns.load(Ordering::Relaxed);
+    let messages_after = metrics.actor_messages_processed.load(Ordering::Relaxed);
+    let duration_after = metrics.actor_message_duration_ns.load(Ordering::Relaxed);
     assert!(
         messages_after - messages_before >= total_messages,
         "metrics should count all processed messages: before={messages_before}, after={messages_after}"
@@ -138,8 +140,8 @@ async fn run_load_test() {
         "metrics should accumulate processing time"
     );
     assert!(
-        METRICS.actor_queue_depth.load(Ordering::Relaxed) <= ACTOR_QUEUE_CAPACITY,
-        "queue depth gauge must stay within the channel capacity"
+        metrics.actor_queue_peak_depth.load(Ordering::Relaxed) <= ACTOR_QUEUE_CAPACITY,
+        "peak queue depth must stay within the channel capacity"
     );
 
     // Terminate the actor and verify acknowledgement and cleanup.
@@ -174,7 +176,7 @@ async fn run_load_test() {
 
 struct ActorFixture {
     // The server must be kept alive for the duration of the test.
-    _handle: ServerHandle,
+    handle: ServerHandle,
     node_manager: Arc<SimpleNodeManager>,
     sender: mpsc::Sender<SessionMessage>,
     session_id: NodeId,
@@ -257,7 +259,7 @@ impl ActorFixture {
         let actor_task = tokio::spawn(async move { actor.run(node_managers).await });
 
         Self {
-            _handle: handle,
+            handle,
             node_manager,
             sender,
             session_id,

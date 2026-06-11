@@ -10,32 +10,32 @@ use futures::FutureExt;
 
 use opcua_core::sync::RwLock;
 use opcua_types::{
-    DataValue, DiagnosticBits, DiagnosticInfo, IntegerId, NodeId, NotificationMessage, ReadValueId,
-    StatusCode, TimestampsToReturn, WriteValue,
+    DataValue, DiagnosticBits, DiagnosticInfo, NodeId, ReadValueId, StatusCode, TimestampsToReturn,
+    WriteValue,
 };
 use tokio::sync::oneshot;
 use tracing::debug_span;
 use tracing_futures::Instrument;
 
 use crate::node_manager::{
-    IntoResult, NodeManagers, ReadNode, RequestContext, RequestContextInner, WriteNode,
+    DynNodeManager, IntoResult, NodeManagers, ReadNode, RequestContext, RequestContextInner,
+    WriteNode,
 };
 
 use super::errors::SessionError;
 use super::instance::Session;
+use super::services::{invoke_service_concurrently_mut, ServiceCb};
 
 /// Response channel for a [`SessionMessage::Read`] request. The outer
 /// `Err` is a service-level fault for the whole request, e.g. when the
 /// owning node manager panicked.
 pub type ReadResponseSender =
-    oneshot::Sender<Result<(DataValue, Option<DiagnosticInfo>), StatusCode>>;
+    oneshot::Sender<Result<Vec<(DataValue, Option<DiagnosticInfo>)>, StatusCode>>;
 /// Response channel for a [`SessionMessage::Write`] request. The outer
 /// `Err` is a service-level fault for the whole request, e.g. when the
 /// owning node manager panicked.
 pub type WriteResponseSender =
-    oneshot::Sender<Result<(StatusCode, Option<DiagnosticInfo>), StatusCode>>;
-/// Response channel for a [`SessionMessage::Publish`] request.
-pub type PublishResponseSender = oneshot::Sender<Result<NotificationMessage, StatusCode>>;
+    oneshot::Sender<Result<Vec<(StatusCode, Option<DiagnosticInfo>)>, StatusCode>>;
 /// Acknowledgement channel for a [`SessionMessage::Terminate`] request.
 pub type TerminateAckSender = oneshot::Sender<TerminatedSession>;
 /// Callback invoked when the actor terminates, used to clean up registry entries.
@@ -51,36 +51,33 @@ pub struct TerminatedSession {
 }
 
 /// Command routed to a [`SessionActor`] through its `mpsc` queue.
+///
+/// Read and Write carry the full request batch so a single service call is
+/// one actor round-trip, and node managers are still invoked concurrently
+/// within the batch.
 #[derive(Debug)]
 pub enum SessionMessage {
-    /// Read a single attribute through the owning node manager.
+    /// Read a batch of attributes through the owning node managers.
     Read {
-        /// Node and attribute to read.
-        node: ReadValueId,
-        /// Maximum age of the value in milliseconds.
+        /// Nodes and attributes to read.
+        nodes: Vec<ReadValueId>,
+        /// Maximum age of the values in milliseconds.
         max_age: f64,
         /// Which timestamps to return.
         timestamps_to_return: TimestampsToReturn,
         /// Requested diagnostics.
         return_diagnostics: DiagnosticBits,
-        /// Channel the result is sent on.
+        /// Channel the results are sent on.
         response: ReadResponseSender,
     },
-    /// Write a single attribute through the owning node manager.
+    /// Write a batch of attributes through the owning node managers.
     Write {
-        /// Value to write.
-        value: WriteValue,
+        /// Values to write.
+        values: Vec<WriteValue>,
         /// Requested diagnostics.
         return_diagnostics: DiagnosticBits,
-        /// Channel the result is sent on.
+        /// Channel the results are sent on.
         response: WriteResponseSender,
-    },
-    /// Take a pending notification from a subscription on this session.
-    Publish {
-        /// Subscription to publish for.
-        subscription_id: IntegerId,
-        /// Channel the result is sent on.
-        response: PublishResponseSender,
     },
     /// Terminate the actor, closing the session.
     Terminate {
@@ -126,13 +123,15 @@ impl SessionActor {
     /// Run the actor until it is terminated or all senders are dropped.
     pub async fn run(&mut self, node_managers: NodeManagers) -> Result<(), SessionError> {
         while let Some(message) = self.receiver.recv().await {
-            crate::metrics::METRICS
-                .actor_queue_depth
-                .store(self.receiver.len(), Ordering::Relaxed);
+            self.context
+                .info
+                .metrics
+                .actor_queue_peak_depth
+                .fetch_max(self.receiver.len(), Ordering::Relaxed);
             let processing_start = Instant::now();
             match message {
                 SessionMessage::Read {
-                    node,
+                    nodes,
                     max_age,
                     timestamps_to_return,
                     return_diagnostics,
@@ -141,33 +140,25 @@ impl SessionActor {
                     let result = self
                         .read(
                             node_managers.clone(),
-                            node,
+                            nodes,
                             max_age,
                             timestamps_to_return,
                             return_diagnostics,
                         )
                         .await;
                     let _ = response.send(result);
-                    Self::record_message_processed(processing_start);
+                    self.record_message_processed(processing_start);
                 }
                 SessionMessage::Write {
-                    value,
+                    values,
                     return_diagnostics,
                     response,
                 } => {
                     let result = self
-                        .write(node_managers.clone(), value, return_diagnostics)
+                        .write(node_managers.clone(), values, return_diagnostics)
                         .await;
                     let _ = response.send(result);
-                    Self::record_message_processed(processing_start);
-                }
-                SessionMessage::Publish {
-                    subscription_id,
-                    response,
-                } => {
-                    let result = self.publish(subscription_id);
-                    let _ = response.send(result);
-                    Self::record_message_processed(processing_start);
+                    self.record_message_processed(processing_start);
                 }
                 SessionMessage::Terminate {
                     reason,
@@ -178,7 +169,7 @@ impl SessionActor {
                     self.run_termination_cleanup(&cleanup);
                     tracing::debug!(?reason, ?cleanup, "session actor terminating");
                     let _ = acknowledge.send(cleanup);
-                    Self::record_message_processed(processing_start);
+                    self.record_message_processed(processing_start);
                     return Ok(());
                 }
             }
@@ -190,13 +181,20 @@ impl SessionActor {
         Err(SessionError::ChannelClosed)
     }
 
-    fn record_message_processed(processing_start: Instant) {
-        crate::metrics::METRICS
+    fn record_message_processed(&self, processing_start: Instant) {
+        self.context
+            .info
+            .metrics
             .actor_messages_processed
             .fetch_add(1, Ordering::Relaxed);
-        crate::metrics::METRICS
+        self.context
+            .info
+            .metrics
             .actor_message_duration_ns
-            .fetch_add(processing_start.elapsed().as_nanos() as u64, Ordering::Relaxed);
+            .fetch_add(
+                processing_start.elapsed().as_nanos() as u64,
+                Ordering::Relaxed,
+            );
     }
 
     /// Close the session and run termination cleanup after the actor
@@ -249,109 +247,117 @@ impl SessionActor {
     async fn read(
         &self,
         node_managers: NodeManagers,
-        node: ReadValueId,
+        nodes: Vec<ReadValueId>,
         max_age: f64,
         timestamps_to_return: TimestampsToReturn,
         return_diagnostics: DiagnosticBits,
-    ) -> Result<(DataValue, Option<DiagnosticInfo>), StatusCode> {
-        let mut node = ReadNode::new(node, return_diagnostics);
+    ) -> Result<Vec<(DataValue, Option<DiagnosticInfo>)>, StatusCode> {
+        let mut results: Vec<_> = nodes
+            .into_iter()
+            .map(|n| ReadNode::new(n, return_diagnostics))
+            .collect();
 
-        if node.status() == StatusCode::BadNodeIdUnknown {
-            for (idx, node_manager) in node_managers.iter().enumerate() {
-                if !node_manager.owns_node(&node.node().node_id) {
-                    continue;
-                }
+        struct ReadServiceCb {
+            max_age: f64,
+            timestamps_to_return: TimestampsToReturn,
+        }
 
-                let context = self.request_context(idx);
-                let mut batch = [&mut node];
-                // Catch panics so a faulty node manager faults the request
-                // instead of killing the actor and with it the session.
-                let result = AssertUnwindSafe(
-                    node_manager
-                        .read(&context, max_age, timestamps_to_return, &mut batch)
-                        .instrument(
-                            debug_span!("SessionActorRead", node_manager = %node_manager.name()),
-                        ),
-                )
-                .catch_unwind()
-                .await;
-                match result {
-                    Ok(Ok(())) => {}
-                    Ok(Err(status)) => batch[0].set_error(status),
-                    Err(_) => {
-                        tracing::error!(
-                            node_manager = %node_manager.name(),
-                            "node manager panicked during actor read"
-                        );
-                        return Err(StatusCode::BadInternalError);
+        impl ServiceCb<ReadNode> for ReadServiceCb {
+            async fn call(
+                &self,
+                batch: &mut [&mut ReadNode],
+                node_manager: &Arc<DynNodeManager>,
+                context: RequestContext,
+            ) {
+                if let Err(e) = node_manager
+                    .read(&context, self.max_age, self.timestamps_to_return, batch)
+                    .instrument(
+                        debug_span!("SessionActorRead", node_manager = %node_manager.name()),
+                    )
+                    .await
+                {
+                    for node in batch {
+                        node.set_error(e);
                     }
                 }
-                break;
             }
         }
 
-        Ok(node.into_result())
+        // Node managers run concurrently within the batch; the actor only
+        // serializes between requests on the same session. Catch panics so
+        // a faulty node manager faults the request instead of killing the
+        // actor and with it the session.
+        let fan_out = invoke_service_concurrently_mut(
+            self.request_context(0),
+            &mut results,
+            &node_managers,
+            ReadServiceCb {
+                max_age,
+                timestamps_to_return,
+            },
+            |node, node_manager| {
+                node_manager.owns_node(&node.node().node_id)
+                    && node.status() == StatusCode::BadNodeIdUnknown
+            },
+        );
+        if AssertUnwindSafe(fan_out).catch_unwind().await.is_err() {
+            tracing::error!("node manager panicked during actor read");
+            return Err(StatusCode::BadInternalError);
+        }
+
+        Ok(results.into_iter().map(|n| n.into_result()).collect())
     }
 
     async fn write(
         &self,
         node_managers: NodeManagers,
-        value: WriteValue,
+        values: Vec<WriteValue>,
         return_diagnostics: DiagnosticBits,
-    ) -> Result<(StatusCode, Option<DiagnosticInfo>), StatusCode> {
-        let mut node = WriteNode::new(value, return_diagnostics);
+    ) -> Result<Vec<(StatusCode, Option<DiagnosticInfo>)>, StatusCode> {
+        let mut results: Vec<_> = values
+            .into_iter()
+            .map(|v| WriteNode::new(v, return_diagnostics))
+            .collect();
 
-        if node.status() == StatusCode::BadNodeIdUnknown {
-            for (idx, node_manager) in node_managers.iter().enumerate() {
-                if !node_manager.owns_node(&node.value().node_id) {
-                    continue;
-                }
+        struct WriteServiceCb;
 
-                let context = self.request_context(idx);
-                let mut batch = [&mut node];
-                // Catch panics so a faulty node manager faults the request
-                // instead of killing the actor and with it the session.
-                let result = AssertUnwindSafe(
-                    node_manager.write(&context, &mut batch).instrument(
+        impl ServiceCb<WriteNode> for WriteServiceCb {
+            async fn call(
+                &self,
+                batch: &mut [&mut WriteNode],
+                node_manager: &Arc<DynNodeManager>,
+                context: RequestContext,
+            ) {
+                if let Err(e) = node_manager
+                    .write(&context, batch)
+                    .instrument(
                         debug_span!("SessionActorWrite", node_manager = %node_manager.name()),
-                    ),
-                )
-                .catch_unwind()
-                .await;
-                match result {
-                    Ok(Ok(())) => {}
-                    Ok(Err(status)) => batch[0].set_status(status),
-                    Err(_) => {
-                        tracing::error!(
-                            node_manager = %node_manager.name(),
-                            "node manager panicked during actor write"
-                        );
-                        return Err(StatusCode::BadInternalError);
+                    )
+                    .await
+                {
+                    for node in batch {
+                        node.set_status(e);
                     }
                 }
-                break;
             }
         }
 
-        Ok(node.into_result())
-    }
+        // See `read` for concurrency and panic semantics.
+        let fan_out = invoke_service_concurrently_mut(
+            self.request_context(0),
+            &mut results,
+            &node_managers,
+            WriteServiceCb,
+            |node, node_manager| {
+                node_manager.owns_node(&node.value().node_id)
+                    && node.status() == StatusCode::BadNodeIdUnknown
+            },
+        );
+        if AssertUnwindSafe(fan_out).catch_unwind().await.is_err() {
+            tracing::error!("node manager panicked during actor write");
+            return Err(StatusCode::BadInternalError);
+        }
 
-    fn publish(&self, subscription_id: IntegerId) -> Result<NotificationMessage, StatusCode> {
-        let Some(subscriptions) = self
-            .context
-            .subscriptions
-            .get_session_subscriptions(self.context.session_id)
-        else {
-            return Err(StatusCode::BadNoSubscription);
-        };
-
-        let mut subscriptions = subscriptions.lock();
-        let Some(subscription) = subscriptions.get_mut(subscription_id) else {
-            return Err(StatusCode::BadSubscriptionIdInvalid);
-        };
-
-        subscription
-            .take_notification()
-            .ok_or(StatusCode::BadNothingToDo)
+        Ok(results.into_iter().map(|n| n.into_result()).collect())
     }
 }

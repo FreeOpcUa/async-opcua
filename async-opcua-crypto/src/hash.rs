@@ -7,15 +7,20 @@
 use std::result::Result;
 
 use hmac::{digest, Hmac, Mac};
+#[cfg(feature = "legacy-crypto")]
 use sha1::Sha1;
 use sha2::Sha256;
 
 use opcua_types::{status_code::StatusCode, Error};
 
-use super::{SHA1_SIZE, SHA256_SIZE};
+#[cfg(feature = "legacy-crypto")]
+use super::SHA1_SIZE;
+use super::SHA256_SIZE;
 
 type HmacSha256 = Hmac<Sha256>;
+#[cfg(feature = "legacy-crypto")]
 type HmacSha1 = Hmac<Sha1>;
+#[cfg(feature = "legacy-crypto")]
 type Sha1Output = digest::CtOutput<HmacSha1>;
 type Sha256Output = digest::CtOutput<HmacSha256>;
 
@@ -33,6 +38,7 @@ type Sha256Output = digest::CtOutput<HmacSha256>;
 ///   A(0) = seed
 ///   A(n) = HMAC_SHA1(secret, A(n-1))
 /// + indicates that the results are appended to previous results.
+#[cfg(feature = "legacy-crypto")]
 pub(crate) fn p_sha1(secret: &[u8], seed: &[u8], length: usize) -> Vec<u8> {
     let mut result = Vec::with_capacity(length);
 
@@ -98,6 +104,7 @@ pub(crate) fn p_sha256(secret: &[u8], seed: &[u8], length: usize) -> Vec<u8> {
     result
 }
 
+#[cfg(feature = "legacy-crypto")]
 fn sign_sha1(key: &[u8], data: &[u8]) -> Sha1Output {
     let mut mac = HmacSha1::new_from_slice(key).unwrap();
     mac.update(data);
@@ -111,6 +118,7 @@ fn sign_sha256(key: &[u8], data: &[u8]) -> Sha256Output {
 }
 
 /// Write the SHA1 HMAC signature of `data` using `key` into `signature`.
+#[cfg(feature = "legacy-crypto")]
 pub(crate) fn hmac_sha1(key: &[u8], data: &[u8], signature: &mut [u8]) -> Result<(), Error> {
     if signature.len() == SHA1_SIZE {
         let result = sign_sha1(key, data);
@@ -128,6 +136,7 @@ pub(crate) fn hmac_sha1(key: &[u8], data: &[u8], signature: &mut [u8]) -> Result
 }
 
 /// Verify that the HMAC for the data block matches the supplied signature
+#[cfg(feature = "legacy-crypto")]
 pub(crate) fn verify_hmac_sha1(key: &[u8], data: &[u8], signature: &[u8]) -> bool {
     if signature.len() != SHA1_SIZE {
         false

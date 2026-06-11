@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part5/12.12
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionSecurityDiagnosticsDataType {
@@ -36,4 +48,83 @@ impl opcua::types::MessageInfo for SessionSecurityDiagnosticsDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::SessionSecurityDiagnosticsDataType
     }
+}
+impl opcua::types::BinaryEncodable for SessionSecurityDiagnosticsDataType {
+    #[allow(unused)]
+    #[allow(clippy::let_and_return)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.session_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.client_user_id_of_session, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.client_user_id_history, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.authentication_mechanism, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.encoding, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.transport_protocol, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.security_mode, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.security_policy_uri, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.client_certificate, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.session_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.client_user_id_of_session, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.client_user_id_history, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.authentication_mechanism, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.encoding, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.transport_protocol, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.security_mode, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.security_policy_uri, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.client_certificate, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for SessionSecurityDiagnosticsDataType {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            session_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            client_user_id_of_session: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            client_user_id_history: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            authentication_mechanism: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            encoding: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            transport_protocol: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            security_mode: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            security_policy_uri: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            client_certificate: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for SessionSecurityDiagnosticsDataType
+where
+    opcua::types::node_id::NodeId: Send,
+    opcua::types::string::UAString: Send,
+    Option<Vec<opcua::types::string::UAString>>: Send,
+    opcua::types::string::UAString: Send,
+    opcua::types::string::UAString: Send,
+    opcua::types::string::UAString: Send,
+    super::enums::MessageSecurityMode: Send,
+    opcua::types::string::UAString: Send,
+    opcua::types::byte_string::ByteString: Send,
+{
+}
+unsafe impl Sync for SessionSecurityDiagnosticsDataType
+where
+    opcua::types::node_id::NodeId: Sync,
+    opcua::types::string::UAString: Sync,
+    Option<Vec<opcua::types::string::UAString>>: Sync,
+    opcua::types::string::UAString: Sync,
+    opcua::types::string::UAString: Sync,
+    opcua::types::string::UAString: Sync,
+    super::enums::MessageSecurityMode: Sync,
+    opcua::types::string::UAString: Sync,
+    opcua::types::byte_string::ByteString: Sync,
+{
 }

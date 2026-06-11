@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct JsonActionResponseMessage {
     pub data_set_writer_id: u16,
@@ -24,4 +36,98 @@ pub struct JsonActionResponseMessage {
     pub request_id: u16,
     pub action_state: super::enums::ActionState,
     pub payload: opcua::types::extension_object::ExtensionObject,
+}
+impl opcua::types::BinaryEncodable for JsonActionResponseMessage {
+    #[allow(unused)]
+    #[allow(clippy::let_and_return)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.data_set_writer_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.action_target_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.data_set_writer_name, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.writer_group_name, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.meta_data_version, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.minor_version, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.timestamp, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.status, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.message_type, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.request_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.action_state, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.payload, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.data_set_writer_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.action_target_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.data_set_writer_name, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.writer_group_name, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.meta_data_version, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.minor_version, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.timestamp, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.status, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.message_type, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.request_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.action_state, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.payload, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for JsonActionResponseMessage {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            data_set_writer_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            action_target_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            data_set_writer_name: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            writer_group_name: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            meta_data_version: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            minor_version: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            timestamp: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            status: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            message_type: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            request_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            action_state: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            payload: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for JsonActionResponseMessage
+where
+    u16: Send,
+    u16: Send,
+    opcua::types::string::UAString: Send,
+    opcua::types::string::UAString: Send,
+    super::configuration_version_data_type::ConfigurationVersionDataType: Send,
+    opcua::types::VersionTime: Send,
+    opcua::types::date_time::DateTime: Send,
+    opcua::types::status_code::StatusCode: Send,
+    opcua::types::string::UAString: Send,
+    u16: Send,
+    super::enums::ActionState: Send,
+    opcua::types::extension_object::ExtensionObject: Send,
+{
+}
+unsafe impl Sync for JsonActionResponseMessage
+where
+    u16: Sync,
+    u16: Sync,
+    opcua::types::string::UAString: Sync,
+    opcua::types::string::UAString: Sync,
+    super::configuration_version_data_type::ConfigurationVersionDataType: Sync,
+    opcua::types::VersionTime: Sync,
+    opcua::types::date_time::DateTime: Sync,
+    opcua::types::status_code::StatusCode: Sync,
+    opcua::types::string::UAString: Sync,
+    u16: Sync,
+    super::enums::ActionState: Sync,
+    opcua::types::extension_object::ExtensionObject: Sync,
+{
 }

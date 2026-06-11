@@ -115,7 +115,7 @@ fn scan_related_to_query(
             BrowseDirection::Inverse,
         )
         .filter_map(|reference| {
-            if fixture.address_space.node_exists(&reference.target_node) {
+            if fixture.address_space.node_exists(reference.target_node) {
                 Some(reference.target_node.clone())
             } else {
                 None

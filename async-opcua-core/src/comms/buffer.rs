@@ -40,6 +40,12 @@ enum PendingPayload {
 pub struct SendBuffer {
     /// The send buffer
     buffer: Cursor<Vec<u8>>,
+    /// Reusable storage for encoded chunk data. Chunks hold zero-copy
+    /// slices of this buffer, and its allocation is reclaimed once they
+    /// have been sent, so steady-state encoding does not allocate.
+    chunk_storage: bytes::BytesMut,
+    /// Reusable scratch for chunks produced by a single message.
+    chunk_scratch: Vec<MessageChunk>,
     /// Queued chunks
     chunks: VecDeque<PendingPayload>,
     /// The last request id
@@ -71,6 +77,8 @@ impl SendBuffer {
     ) -> Self {
         Self {
             buffer: Cursor::new(vec![0u8; buffer_size + 1024]),
+            chunk_storage: bytes::BytesMut::new(),
+            chunk_scratch: Vec::new(),
             chunks: VecDeque::with_capacity(max_chunk_count),
             last_request_id: 1000,
             sequence_numbers: SequenceNumberHandle::new(sequence_numbers_legacy),
@@ -138,34 +146,38 @@ impl SendBuffer {
     ) -> Result<u32, Error> {
         trace!("Writing request to buffer");
 
-        // Turn message to chunk(s)
-        let chunks = Chunker::encode(
+        // Turn message to chunk(s), reusing the connection-local chunk
+        // storage and scratch so this does not allocate at steady state.
+        self.chunk_scratch.clear();
+        let chunk_count = Chunker::encode_into(
             self.sequence_numbers.clone(),
             request_id,
             self.max_message_size,
             self.send_buffer_size,
             secure_channel,
             &message,
+            &mut self.chunk_storage,
+            &mut self.chunk_scratch,
         )
         .map_err(|e| e.with_context(Some(request_id), Some(message.request_handle())))?;
 
-        if self.max_chunk_count > 0 && chunks.len() > self.max_chunk_count {
+        if self.max_chunk_count > 0 && chunk_count > self.max_chunk_count {
+            self.chunk_scratch.clear();
             Err(Error::new(
                 StatusCode::BadCommunicationError,
                 format!(
-                    "Cannot write message since {} chunks exceeds {} chunk limit",
-                    chunks.len(),
+                    "Cannot write message since {chunk_count} chunks exceeds {} chunk limit",
                     self.max_chunk_count
                 ),
             )
             .with_context(Some(request_id), Some(message.request_handle())))
         } else {
             // Sequence number monotonically increases per chunk
-            self.sequence_numbers.increment(chunks.len() as u32);
+            self.sequence_numbers.increment(chunk_count as u32);
 
             // Send chunks
             self.chunks
-                .extend(chunks.into_iter().map(PendingPayload::Chunk));
+                .extend(self.chunk_scratch.drain(..).map(PendingPayload::Chunk));
             Ok(request_id)
         }
     }
@@ -400,6 +412,57 @@ mod tests {
         assert!(!buffer.should_encode_chunks());
         assert!(!buffer.can_read());
         assert!(cursor.get_ref().len() > 8196 * 2 && cursor.get_ref().len() < 8196 * 3);
+    }
+
+    #[tokio::test]
+    async fn test_buffer_chunk_storage_is_reused() {
+        let (mut buffer, channel) = get_buffer_and_channel();
+
+        let mut sink = Cursor::new(Vec::new());
+        let mut warmed_ptr = None;
+        let mut warmed_capacity = None;
+        for i in 0..5u32 {
+            let message = ReadRequest {
+                request_header: RequestHeader::new(&NodeId::null(), &DateTime::null(), 101),
+                max_age: 0.0,
+                timestamps_to_return: TimestampsToReturn::Both,
+                nodes_to_read: Some(
+                    (0..1000)
+                        .map(|r| ReadValueId {
+                            node_id: (1, r).into(),
+                            attribute_id: 1,
+                            ..Default::default()
+                        })
+                        .collect(),
+                ),
+            };
+            let m: RequestMessage = message.into();
+            buffer.write(i + 1, m, &channel).unwrap();
+
+            // After the first message the storage is warmed; subsequent
+            // writes must reclaim the same allocation rather than grow or
+            // reallocate.
+            if i >= 1 {
+                let ptr = buffer.chunk_storage.as_ptr();
+                let capacity = buffer.chunk_storage.capacity();
+                if let (Some(warmed_ptr), Some(warmed_capacity)) = (warmed_ptr, warmed_capacity) {
+                    assert_eq!(
+                        ptr, warmed_ptr,
+                        "chunk storage should be reclaimed, not reallocated"
+                    );
+                    assert_eq!(capacity, warmed_capacity, "chunk storage should not grow");
+                }
+                warmed_ptr = Some(ptr);
+                warmed_capacity = Some(capacity);
+            }
+
+            while buffer.should_encode_chunks() {
+                buffer.encode_next_chunk(&channel).unwrap();
+                while buffer.can_read() {
+                    buffer.read_into_async(&mut sink).await.unwrap();
+                }
+            }
+        }
     }
 
     #[test]

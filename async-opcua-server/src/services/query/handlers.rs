@@ -291,10 +291,10 @@ impl<'a, 'ctx> QueryFirstHandler<'a, 'ctx> {
         };
 
         if let Some(context) = self.context {
-            return self.selected_value_with_context(&*node, description, context);
+            return self.selected_value_with_context(&node, description, context);
         }
 
-        self.selected_value_unrestricted(&*node, description)
+        self.selected_value_unrestricted(&node, description)
     }
 
     fn selected_value_with_context(
@@ -372,7 +372,7 @@ impl<'a, 'ctx> QueryFirstHandler<'a, 'ctx> {
             data_encoding: DataEncoding::Binary,
         };
 
-        validate_node_read(&*node, context, &node_to_read).is_ok()
+        validate_node_read(&node, context, &node_to_read).is_ok()
     }
 
     fn relative_path_target(

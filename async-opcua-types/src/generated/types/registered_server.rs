@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/7.32
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct RegisteredServer {
@@ -35,4 +47,78 @@ impl opcua::types::MessageInfo for RegisteredServer {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::RegisteredServer
     }
+}
+impl opcua::types::BinaryEncodable for RegisteredServer {
+    #[allow(unused)]
+    #[allow(clippy::let_and_return)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.server_uri, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.product_uri, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.server_names, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.server_type, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.gateway_server_uri, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.discovery_urls, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.semaphore_file_path, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.is_online, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.server_uri, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.product_uri, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.server_names, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.server_type, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.gateway_server_uri, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.discovery_urls, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.semaphore_file_path, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.is_online, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for RegisteredServer {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            server_uri: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            product_uri: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            server_names: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            server_type: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            gateway_server_uri: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            discovery_urls: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            semaphore_file_path: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            is_online: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for RegisteredServer
+where
+    opcua::types::string::UAString: Send,
+    opcua::types::string::UAString: Send,
+    Option<Vec<opcua::types::localized_text::LocalizedText>>: Send,
+    super::enums::ApplicationType: Send,
+    opcua::types::string::UAString: Send,
+    Option<Vec<opcua::types::string::UAString>>: Send,
+    opcua::types::string::UAString: Send,
+    bool: Send,
+{
+}
+unsafe impl Sync for RegisteredServer
+where
+    opcua::types::string::UAString: Sync,
+    opcua::types::string::UAString: Sync,
+    Option<Vec<opcua::types::localized_text::LocalizedText>>: Sync,
+    super::enums::ApplicationType: Sync,
+    opcua::types::string::UAString: Sync,
+    Option<Vec<opcua::types::string::UAString>>: Sync,
+    opcua::types::string::UAString: Sync,
+    bool: Sync,
+{
 }

@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part14/6.2.3/#6.2.3.10.6
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PublishedActionMethodDataType {
@@ -30,4 +42,53 @@ impl opcua::types::MessageInfo for PublishedActionMethodDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::PublishedActionMethodDataType
     }
+}
+impl opcua::types::BinaryEncodable for PublishedActionMethodDataType {
+    #[allow(unused)]
+    #[allow(clippy::let_and_return)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.request_data_set_meta_data, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.action_targets, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.action_methods, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.request_data_set_meta_data, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.action_targets, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.action_methods, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for PublishedActionMethodDataType {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            request_data_set_meta_data: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            action_targets: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            action_methods: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for PublishedActionMethodDataType
+where
+    super::data_set_meta_data_type::DataSetMetaDataType: Send,
+    Option<Vec<super::action_target_data_type::ActionTargetDataType>>: Send,
+    Option<Vec<super::action_method_data_type::ActionMethodDataType>>: Send,
+{
+}
+unsafe impl Sync for PublishedActionMethodDataType
+where
+    super::data_set_meta_data_type::DataSetMetaDataType: Sync,
+    Option<Vec<super::action_target_data_type::ActionTargetDataType>>: Sync,
+    Option<Vec<super::action_method_data_type::ActionMethodDataType>>: Sync,
+{
 }

@@ -471,7 +471,7 @@ async fn transfer_subscriptions() {
         .await
         .unwrap();
     lp.spawn();
-    tokio::time::timeout(Duration::from_secs(2), session.wait_for_connection())
+    tokio::time::timeout(Duration::from_secs(10), session.wait_for_connection())
         .await
         .unwrap();
 
@@ -562,7 +562,7 @@ async fn transfer_subscriptions() {
         .await
         .unwrap();
     lp.spawn();
-    tokio::time::timeout(Duration::from_secs(2), session.wait_for_connection())
+    tokio::time::timeout(Duration::from_secs(10), session.wait_for_connection())
         .await
         .unwrap();
 

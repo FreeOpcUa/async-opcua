@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part14/6.2.3/#6.2.3.8.4
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PublishedEventsDataType {
@@ -30,4 +42,53 @@ impl opcua::types::MessageInfo for PublishedEventsDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::PublishedEventsDataType
     }
+}
+impl opcua::types::BinaryEncodable for PublishedEventsDataType {
+    #[allow(unused)]
+    #[allow(clippy::let_and_return)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.event_notifier, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.selected_fields, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.filter, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.event_notifier, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.selected_fields, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.filter, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for PublishedEventsDataType {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            event_notifier: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            selected_fields: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            filter: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for PublishedEventsDataType
+where
+    opcua::types::node_id::NodeId: Send,
+    Option<Vec<super::simple_attribute_operand::SimpleAttributeOperand>>: Send,
+    super::content_filter::ContentFilter: Send,
+{
+}
+unsafe impl Sync for PublishedEventsDataType
+where
+    opcua::types::node_id::NodeId: Sync,
+    Option<Vec<super::simple_attribute_operand::SimpleAttributeOperand>>: Sync,
+    super::content_filter::ContentFilter: Sync,
+{
 }

@@ -18,11 +18,11 @@ use crate::{
 use opcua_crypto::SecurityPolicy;
 use opcua_types::{
     encoding::BinaryEncodable, node_id::NodeId, status_code::StatusCode, BinaryDecodable,
-    EncodingResult, Error, ObjectId,
+    EncodingResult, Error, ObjectId, SimpleBinaryEncodable,
 };
 use tracing::{debug, error, trace};
 
-use super::message_chunk::MessageChunkType;
+use super::{message_chunk::MessageChunkType, security_header::SequenceHeader};
 
 /// Read implementation for a sequence of message chunks.
 /// This lets us avoid allocating a buffer for the message.
@@ -102,13 +102,23 @@ impl<'a, T: Iterator<Item = &'a MessageChunk>> Read for ReceiveStream<'a, T> {
     }
 }
 
-struct ChunkingStream<'a> {
+/// Streaming chunk encoder that writes complete chunks (headers + body)
+/// contiguously into a caller-provided [`BytesMut`], emitting each chunk as a
+/// zero-copy [`Bytes`](bytes::Bytes) slice of that storage. With a reused
+/// connection-local storage buffer this makes steady-state transmit encoding
+/// allocation free: once the chunks from the previous message are dropped the
+/// storage allocation is reclaimed by `reserve`.
+struct ChunkingStream<'a, 'b> {
     secure_channel: &'a SecureChannel,
-    chunks: Vec<MessageChunk>,
+    storage: &'b mut bytes::BytesMut,
+    out: &'b mut Vec<MessageChunk>,
     expected_chunk_count: usize,
+    chunks_emitted: usize,
     max_body_per_chunk: usize,
-    next_buf: Vec<u8>,
-    buf_position: usize,
+    header_size: usize,
+    current_body_target: usize,
+    body_written: usize,
+    chunk_started: bool,
     is_closed: bool,
     sequence_number: SequenceNumberHandle,
     request_id: u32,
@@ -116,7 +126,8 @@ struct ChunkingStream<'a> {
     message_type: MessageChunkType,
 }
 
-impl<'a> ChunkingStream<'a> {
+impl<'a, 'b> ChunkingStream<'a, 'b> {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         message_type: MessageChunkType,
         secure_channel: &'a SecureChannel,
@@ -125,8 +136,10 @@ impl<'a> ChunkingStream<'a> {
         request_id: u32,
         request_handle: u32,
         sequence_number: SequenceNumberHandle,
+        storage: &'b mut bytes::BytesMut,
+        out: &'b mut Vec<MessageChunk>,
     ) -> Result<Self, Error> {
-        if max_chunk_size > 0 {
+        let (expected_chunk_count, max_body_per_chunk) = if max_chunk_size > 0 {
             let max_body_per_chunk = MessageChunk::body_size_from_message_size(
                 message_type,
                 secure_channel,
@@ -142,112 +155,145 @@ impl<'a> ChunkingStream<'a> {
                     },
                 )
             })?;
-            let expected_chunk_count = message_size / max_body_per_chunk + 1;
-            let next_buf_size = if expected_chunk_count == 1 {
-                message_size
-            } else {
-                max_body_per_chunk
-            };
-
-            Ok(Self {
-                secure_channel,
-                chunks: Vec::with_capacity(expected_chunk_count),
-                expected_chunk_count,
-                max_body_per_chunk,
-                next_buf: vec![0; next_buf_size],
-                buf_position: 0,
-                is_closed: false,
-                sequence_number,
-                request_id,
-                message_type,
-                message_size,
-            })
+            (message_size / max_body_per_chunk + 1, max_body_per_chunk)
         } else {
-            let expected_chunk_count = 1;
-            let max_body_per_chunk = 0;
-            let next_buf_size = message_size;
-            Ok(Self {
-                secure_channel,
-                chunks: Vec::with_capacity(expected_chunk_count),
-                expected_chunk_count,
-                max_body_per_chunk,
-                next_buf: vec![0; next_buf_size],
-                buf_position: 0,
-                is_closed: false,
-                sequence_number,
-                request_id,
-                message_type,
-                message_size,
-            })
-        }
+            (1, 0)
+        };
+
+        let security_header = secure_channel.make_security_header(message_type);
+        let header_size = super::message_chunk::MESSAGE_CHUNK_HEADER_SIZE
+            + SimpleBinaryEncodable::byte_len(&security_header)
+            + SimpleBinaryEncodable::byte_len(&SequenceHeader {
+                sequence_number: 0,
+                request_id: 0,
+            });
+
+        // Any leftovers from a previously failed encode are dead; this only
+        // touches the unsplit tail, so chunks still in flight are unaffected.
+        storage.clear();
+        // On a warmed buffer whose previous chunks have been sent and
+        // dropped, this reclaims the existing allocation instead of
+        // allocating anew.
+        storage.reserve(message_size + expected_chunk_count * header_size);
+
+        Ok(Self {
+            secure_channel,
+            storage,
+            out,
+            expected_chunk_count,
+            chunks_emitted: 0,
+            max_body_per_chunk,
+            header_size,
+            current_body_target: 0,
+            body_written: 0,
+            chunk_started: false,
+            is_closed: false,
+            sequence_number,
+            request_id,
+            message_type,
+            message_size,
+        })
     }
 
-    fn flush_chunk(&mut self) -> EncodingResult<()> {
-        if self.is_closed {
-            return Ok(());
-        }
-
-        let buf = std::mem::take(&mut self.next_buf);
-        let is_final = if self.chunks.len() == self.expected_chunk_count - 1 {
-            self.is_closed = true;
+    /// Write the chunk headers for the next chunk. The body size of every
+    /// chunk is known up front, so the headers can be written before the
+    /// body streams in.
+    fn start_chunk(&mut self) -> EncodingResult<()> {
+        let is_last = self.chunks_emitted == self.expected_chunk_count - 1;
+        self.current_body_target = if self.max_body_per_chunk == 0 {
+            self.message_size
+        } else if is_last {
+            self.message_size % self.max_body_per_chunk
+        } else {
+            self.max_body_per_chunk
+        };
+        let is_final = if is_last {
             MessageIsFinalType::Final
         } else {
             MessageIsFinalType::Intermediate
         };
 
-        let chunk = MessageChunk::new(
-            self.sequence_number.current(),
-            self.request_id,
-            self.message_type,
+        let chunk_header = super::message_chunk::MessageChunkHeader {
+            message_type: self.message_type,
             is_final,
-            self.secure_channel,
-            &buf,
-        )?;
+            message_size: (self.header_size + self.current_body_target) as u32,
+            secure_channel_id: self.secure_channel.secure_channel_id(),
+        };
+        let security_header = self.secure_channel.make_security_header(self.message_type);
+        let sequence_header = SequenceHeader {
+            sequence_number: self.sequence_number.current(),
+            request_id: self.request_id,
+        };
         self.sequence_number.increment(1);
-        self.chunks.push(chunk);
 
-        if !self.is_closed {
-            let next_buf_size = if self.chunks.len() == self.expected_chunk_count - 1 {
-                self.message_size % self.max_body_per_chunk
-            } else {
-                self.max_body_per_chunk
-            };
-            self.next_buf = vec![0; next_buf_size];
-            self.buf_position = 0;
-        }
+        let mut writer = bytes::BufMut::writer(&mut *self.storage);
+        SimpleBinaryEncodable::encode(&chunk_header, &mut writer)?;
+        SimpleBinaryEncodable::encode(&security_header, &mut writer)?;
+        SimpleBinaryEncodable::encode(&sequence_header, &mut writer)?;
 
+        self.body_written = 0;
+        self.chunk_started = true;
         Ok(())
     }
 
-    fn finish(self) -> EncodingResult<Vec<MessageChunk>> {
+    fn emit_chunk(&mut self) {
+        let chunk_len = self.header_size + self.current_body_target;
+        let data = self.storage.split_to(chunk_len).freeze();
+        self.out.push(MessageChunk { data });
+        self.chunks_emitted += 1;
+        self.chunk_started = false;
+        if self.chunks_emitted == self.expected_chunk_count {
+            self.is_closed = true;
+        }
+    }
+
+    fn finish(self) -> EncodingResult<usize> {
         if !self.is_closed {
             return Err(Error::encoding(
                 "Message did not encode to the expected size",
             ));
         }
-        Ok(self.chunks)
+        Ok(self.chunks_emitted)
     }
 }
 
-impl Write for ChunkingStream<'_> {
+impl Write for ChunkingStream<'_, '_> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         if self.is_closed {
             return Ok(0);
         }
+        if !self.chunk_started {
+            self.start_chunk()?;
+        }
 
-        let to_read = buf.len().min(self.next_buf.len() - self.buf_position);
-        self.next_buf[self.buf_position..(self.buf_position + to_read)]
-            .copy_from_slice(&buf[..to_read]);
-        self.buf_position += to_read;
-        if self.buf_position == self.next_buf.len() {
-            self.flush_chunk()?;
+        let to_read = buf.len().min(self.current_body_target - self.body_written);
+        self.storage.extend_from_slice(&buf[..to_read]);
+        self.body_written += to_read;
+        if self.body_written == self.current_body_target {
+            self.emit_chunk();
         }
 
         Ok(to_read)
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        self.flush_chunk()?;
+        if self.is_closed {
+            return Ok(());
+        }
+        if !self.chunk_started {
+            self.start_chunk()?;
+        }
+        // Mirror the old zero-initialized buffer: a message that encodes
+        // shorter than its declared byte_len pads the chunk with zeros.
+        if self.body_written < self.current_body_target {
+            bytes::BufMut::put_bytes(
+                &mut *self.storage,
+                0,
+                self.current_body_target - self.body_written,
+            );
+            self.body_written = self.current_body_target;
+        }
+        self.emit_chunk();
         Ok(())
     }
 }
@@ -321,6 +367,40 @@ impl Chunker {
         secure_channel: &SecureChannel,
         supported_message: &impl Message,
     ) -> std::result::Result<Vec<MessageChunk>, Error> {
+        let mut storage = bytes::BytesMut::new();
+        let mut chunks = Vec::new();
+        Self::encode_into(
+            sequence_number,
+            request_id,
+            max_message_size,
+            max_chunk_size,
+            secure_channel,
+            supported_message,
+            &mut storage,
+            &mut chunks,
+        )?;
+        Ok(chunks)
+    }
+
+    /// Encodes a message like [`Chunker::encode`], but writes the chunk data
+    /// into the reusable `storage` buffer and appends the resulting chunks to
+    /// `out`, returning how many chunks were produced.
+    ///
+    /// Each produced [`MessageChunk`] holds a zero-copy slice of `storage`;
+    /// once those chunks are dropped the storage allocation is reclaimed by
+    /// the next call, so a connection that reuses both buffers does not
+    /// allocate on the transmit path at steady state.
+    #[allow(clippy::too_many_arguments)]
+    pub fn encode_into(
+        sequence_number: SequenceNumberHandle,
+        request_id: u32,
+        max_message_size: usize,
+        max_chunk_size: usize,
+        secure_channel: &SecureChannel,
+        supported_message: &impl Message,
+        storage: &mut bytes::BytesMut,
+        out: &mut Vec<MessageChunk>,
+    ) -> std::result::Result<usize, Error> {
         let security_policy = secure_channel.security_policy();
         if security_policy == SecurityPolicy::Unknown {
             panic!("Security policy cannot be unknown");
@@ -367,6 +447,8 @@ impl Chunker {
             request_id,
             handle,
             sequence_number,
+            storage,
+            out,
         )?;
 
         node_id.encode(&mut stream, &ctx)?;

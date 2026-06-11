@@ -13,8 +13,7 @@ use crate::{
     codec::uadp::UadpNetworkMessage,
     security::{SecurityGroup, SharedSecurityGroup, UadpSecurityCodec},
     transport::{
-        amqp::AmqpPublisher, mqtt::MqttPublisher, tsn::publisher::TsnPublisher, udp::UdpPublisher,
-        websocket::WebSocketPublisher,
+        amqp::AmqpPublisher, mqtt::MqttPublisher, udp::UdpPublisher, websocket::WebSocketPublisher,
     },
     PubSubConnectionConfig, PubSubPublisher,
 };
@@ -30,7 +29,8 @@ pub enum TransportKind {
     Amqp,
     /// WebSocket transport.
     WebSocket,
-    /// TSN transport.
+    /// TSN transport. Experimental, requires the `tsn` feature.
+    #[cfg(feature = "tsn")]
     Tsn,
 }
 
@@ -47,6 +47,7 @@ impl TransportKind {
             return Ok(Self::Udp);
         }
 
+        #[cfg(feature = "tsn")]
         if address.starts_with("tsn://") {
             return Ok(Self::Tsn);
         }
@@ -257,8 +258,11 @@ impl PubSubEngine {
                 .start_publishing(connection, cancel_token),
             TransportKind::Udp => UdpPublisher::new(self.address_space.clone())
                 .start_publishing(connection, cancel_token),
-            TransportKind::Tsn => TsnPublisher::new(self.address_space.clone())
-                .start_publishing(connection, cancel_token),
+            #[cfg(feature = "tsn")]
+            TransportKind::Tsn => {
+                crate::transport::tsn::publisher::TsnPublisher::new(self.address_space.clone())
+                    .start_publishing(connection, cancel_token)
+            }
             TransportKind::Amqp => AmqpPublisher::new(self.address_space.clone())
                 .start_publishing(connection, cancel_token),
             TransportKind::WebSocket => WebSocketPublisher::new(self.address_space.clone())

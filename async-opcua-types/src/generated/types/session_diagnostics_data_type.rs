@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part5/12.11
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionDiagnosticsDataType {
@@ -71,4 +83,267 @@ impl opcua::types::MessageInfo for SessionDiagnosticsDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::SessionDiagnosticsDataType
     }
+}
+impl opcua::types::BinaryEncodable for SessionDiagnosticsDataType {
+    #[allow(unused)]
+    #[allow(clippy::let_and_return)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.session_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.session_name, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.client_description, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.server_uri, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.endpoint_url, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.locale_ids, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.actual_session_timeout, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.max_response_message_size, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.client_connection_time, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.client_last_contact_time, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.current_subscriptions_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.current_monitored_items_count, ctx);
+        size +=
+            opcua::types::BinaryEncodable::byte_len(&self.current_publish_requests_in_queue, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.total_request_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.unauthorized_request_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.read_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.history_read_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.write_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.history_update_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.call_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.create_monitored_items_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.modify_monitored_items_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.set_monitoring_mode_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.set_triggering_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.delete_monitored_items_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.create_subscription_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.modify_subscription_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.set_publishing_mode_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.publish_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.republish_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.transfer_subscriptions_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.delete_subscriptions_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.add_nodes_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.add_references_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.delete_nodes_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.delete_references_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.browse_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.browse_next_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(
+            &self.translate_browse_paths_to_node_ids_count,
+            ctx,
+        );
+        size += opcua::types::BinaryEncodable::byte_len(&self.query_first_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.query_next_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.register_nodes_count, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.unregister_nodes_count, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.session_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.session_name, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.client_description, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.server_uri, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.endpoint_url, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.locale_ids, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.actual_session_timeout, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.max_response_message_size, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.client_connection_time, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.client_last_contact_time, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.current_subscriptions_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.current_monitored_items_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(
+            &self.current_publish_requests_in_queue,
+            stream,
+            ctx,
+        )?;
+        opcua::types::BinaryEncodable::encode(&self.total_request_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.unauthorized_request_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.read_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.history_read_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.write_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.history_update_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.call_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.create_monitored_items_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.modify_monitored_items_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.set_monitoring_mode_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.set_triggering_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.delete_monitored_items_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.create_subscription_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.modify_subscription_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.set_publishing_mode_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.publish_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.republish_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.transfer_subscriptions_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.delete_subscriptions_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.add_nodes_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.add_references_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.delete_nodes_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.delete_references_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.browse_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.browse_next_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(
+            &self.translate_browse_paths_to_node_ids_count,
+            stream,
+            ctx,
+        )?;
+        opcua::types::BinaryEncodable::encode(&self.query_first_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.query_next_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.register_nodes_count, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.unregister_nodes_count, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for SessionDiagnosticsDataType {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            session_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            session_name: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            client_description: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            server_uri: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            endpoint_url: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            locale_ids: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            actual_session_timeout: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            max_response_message_size: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            client_connection_time: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            client_last_contact_time: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            current_subscriptions_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            current_monitored_items_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            current_publish_requests_in_queue: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            total_request_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            unauthorized_request_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            read_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            history_read_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            write_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            history_update_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            call_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            create_monitored_items_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            modify_monitored_items_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            set_monitoring_mode_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            set_triggering_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            delete_monitored_items_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            create_subscription_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            modify_subscription_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            set_publishing_mode_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            publish_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            republish_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            transfer_subscriptions_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            delete_subscriptions_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            add_nodes_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            add_references_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            delete_nodes_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            delete_references_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            browse_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            browse_next_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            translate_browse_paths_to_node_ids_count: opcua::types::BinaryDecodable::decode(
+                stream, ctx,
+            )?,
+            query_first_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            query_next_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            register_nodes_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            unregister_nodes_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for SessionDiagnosticsDataType
+where
+    opcua::types::node_id::NodeId: Send,
+    opcua::types::string::UAString: Send,
+    super::application_description::ApplicationDescription: Send,
+    opcua::types::string::UAString: Send,
+    opcua::types::string::UAString: Send,
+    Option<Vec<opcua::types::LocaleId>>: Send,
+    opcua::types::data_types::Duration: Send,
+    u32: Send,
+    opcua::types::data_types::UtcTime: Send,
+    opcua::types::data_types::UtcTime: Send,
+    u32: Send,
+    u32: Send,
+    u32: Send,
+    super::service_counter_data_type::ServiceCounterDataType: Send,
+    u32: Send,
+    super::service_counter_data_type::ServiceCounterDataType: Send,
+    super::service_counter_data_type::ServiceCounterDataType: Send,
+    super::service_counter_data_type::ServiceCounterDataType: Send,
+    super::service_counter_data_type::ServiceCounterDataType: Send,
+    super::service_counter_data_type::ServiceCounterDataType: Send,
+    super::service_counter_data_type::ServiceCounterDataType: Send,
+    super::service_counter_data_type::ServiceCounterDataType: Send,
+    super::service_counter_data_type::ServiceCounterDataType: Send,
+    super::service_counter_data_type::ServiceCounterDataType: Send,
+    super::service_counter_data_type::ServiceCounterDataType: Send,
+    super::service_counter_data_type::ServiceCounterDataType: Send,
+    super::service_counter_data_type::ServiceCounterDataType: Send,
+    super::service_counter_data_type::ServiceCounterDataType: Send,
+    super::service_counter_data_type::ServiceCounterDataType: Send,
+    super::service_counter_data_type::ServiceCounterDataType: Send,
+    super::service_counter_data_type::ServiceCounterDataType: Send,
+    super::service_counter_data_type::ServiceCounterDataType: Send,
+    super::service_counter_data_type::ServiceCounterDataType: Send,
+    super::service_counter_data_type::ServiceCounterDataType: Send,
+    super::service_counter_data_type::ServiceCounterDataType: Send,
+    super::service_counter_data_type::ServiceCounterDataType: Send,
+    super::service_counter_data_type::ServiceCounterDataType: Send,
+    super::service_counter_data_type::ServiceCounterDataType: Send,
+    super::service_counter_data_type::ServiceCounterDataType: Send,
+    super::service_counter_data_type::ServiceCounterDataType: Send,
+    super::service_counter_data_type::ServiceCounterDataType: Send,
+    super::service_counter_data_type::ServiceCounterDataType: Send,
+    super::service_counter_data_type::ServiceCounterDataType: Send,
+{
+}
+unsafe impl Sync for SessionDiagnosticsDataType
+where
+    opcua::types::node_id::NodeId: Sync,
+    opcua::types::string::UAString: Sync,
+    super::application_description::ApplicationDescription: Sync,
+    opcua::types::string::UAString: Sync,
+    opcua::types::string::UAString: Sync,
+    Option<Vec<opcua::types::LocaleId>>: Sync,
+    opcua::types::data_types::Duration: Sync,
+    u32: Sync,
+    opcua::types::data_types::UtcTime: Sync,
+    opcua::types::data_types::UtcTime: Sync,
+    u32: Sync,
+    u32: Sync,
+    u32: Sync,
+    super::service_counter_data_type::ServiceCounterDataType: Sync,
+    u32: Sync,
+    super::service_counter_data_type::ServiceCounterDataType: Sync,
+    super::service_counter_data_type::ServiceCounterDataType: Sync,
+    super::service_counter_data_type::ServiceCounterDataType: Sync,
+    super::service_counter_data_type::ServiceCounterDataType: Sync,
+    super::service_counter_data_type::ServiceCounterDataType: Sync,
+    super::service_counter_data_type::ServiceCounterDataType: Sync,
+    super::service_counter_data_type::ServiceCounterDataType: Sync,
+    super::service_counter_data_type::ServiceCounterDataType: Sync,
+    super::service_counter_data_type::ServiceCounterDataType: Sync,
+    super::service_counter_data_type::ServiceCounterDataType: Sync,
+    super::service_counter_data_type::ServiceCounterDataType: Sync,
+    super::service_counter_data_type::ServiceCounterDataType: Sync,
+    super::service_counter_data_type::ServiceCounterDataType: Sync,
+    super::service_counter_data_type::ServiceCounterDataType: Sync,
+    super::service_counter_data_type::ServiceCounterDataType: Sync,
+    super::service_counter_data_type::ServiceCounterDataType: Sync,
+    super::service_counter_data_type::ServiceCounterDataType: Sync,
+    super::service_counter_data_type::ServiceCounterDataType: Sync,
+    super::service_counter_data_type::ServiceCounterDataType: Sync,
+    super::service_counter_data_type::ServiceCounterDataType: Sync,
+    super::service_counter_data_type::ServiceCounterDataType: Sync,
+    super::service_counter_data_type::ServiceCounterDataType: Sync,
+    super::service_counter_data_type::ServiceCounterDataType: Sync,
+    super::service_counter_data_type::ServiceCounterDataType: Sync,
+    super::service_counter_data_type::ServiceCounterDataType: Sync,
+    super::service_counter_data_type::ServiceCounterDataType: Sync,
+    super::service_counter_data_type::ServiceCounterDataType: Sync,
+    super::service_counter_data_type::ServiceCounterDataType: Sync,
+{
 }

@@ -43,7 +43,7 @@ fn decrypt_with_padding<T: AesAsymmetricEncryptionAlgorithm>(
             "missing encrypted secret",
         ));
     }
-    if encrypted_secret.len() % block_size != 0 {
+    if !encrypted_secret.len().is_multiple_of(block_size) {
         return Err(Error::new(
             StatusCode::BadIdentityTokenInvalid,
             "encrypted secret length is not a complete RSA block",

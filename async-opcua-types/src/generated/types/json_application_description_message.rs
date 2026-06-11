@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct JsonApplicationDescriptionMessage {
     pub message_id: opcua::types::string::UAString,
@@ -18,4 +30,68 @@ pub struct JsonApplicationDescriptionMessage {
     pub timestamp: opcua::types::data_types::UtcTime,
     pub description: super::application_description::ApplicationDescription,
     pub server_capabilities: Option<Vec<opcua::types::string::UAString>>,
+}
+impl opcua::types::BinaryEncodable for JsonApplicationDescriptionMessage {
+    #[allow(unused)]
+    #[allow(clippy::let_and_return)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.message_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.message_type, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.publisher_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.timestamp, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.description, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.server_capabilities, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.message_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.message_type, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.publisher_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.timestamp, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.description, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.server_capabilities, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for JsonApplicationDescriptionMessage {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            message_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            message_type: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            publisher_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            timestamp: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            description: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            server_capabilities: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for JsonApplicationDescriptionMessage
+where
+    opcua::types::string::UAString: Send,
+    opcua::types::string::UAString: Send,
+    opcua::types::string::UAString: Send,
+    opcua::types::data_types::UtcTime: Send,
+    super::application_description::ApplicationDescription: Send,
+    Option<Vec<opcua::types::string::UAString>>: Send,
+{
+}
+unsafe impl Sync for JsonApplicationDescriptionMessage
+where
+    opcua::types::string::UAString: Sync,
+    opcua::types::string::UAString: Sync,
+    opcua::types::string::UAString: Sync,
+    opcua::types::data_types::UtcTime: Sync,
+    super::application_description::ApplicationDescription: Sync,
+    Option<Vec<opcua::types::string::UAString>>: Sync,
+{
 }

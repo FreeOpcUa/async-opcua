@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part5/12.3.7
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct DeleteReferencesItem {
@@ -32,4 +44,63 @@ impl opcua::types::MessageInfo for DeleteReferencesItem {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::DeleteReferencesItem
     }
+}
+impl opcua::types::BinaryEncodable for DeleteReferencesItem {
+    #[allow(unused)]
+    #[allow(clippy::let_and_return)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.source_node_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.reference_type_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.is_forward, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.target_node_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.delete_bidirectional, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.source_node_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.reference_type_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.is_forward, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.target_node_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.delete_bidirectional, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for DeleteReferencesItem {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            source_node_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            reference_type_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            is_forward: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            target_node_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            delete_bidirectional: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for DeleteReferencesItem
+where
+    opcua::types::node_id::NodeId: Send,
+    opcua::types::node_id::NodeId: Send,
+    bool: Send,
+    opcua::types::expanded_node_id::ExpandedNodeId: Send,
+    bool: Send,
+{
+}
+unsafe impl Sync for DeleteReferencesItem
+where
+    opcua::types::node_id::NodeId: Sync,
+    opcua::types::node_id::NodeId: Sync,
+    bool: Sync,
+    opcua::types::expanded_node_id::ExpandedNodeId: Sync,
+    bool: Sync,
+{
 }

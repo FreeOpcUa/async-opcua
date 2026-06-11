@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/5.9.4/#5.9.4.2
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct BrowsePathTarget {
@@ -29,4 +41,48 @@ impl opcua::types::MessageInfo for BrowsePathTarget {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::BrowsePathTarget
     }
+}
+impl opcua::types::BinaryEncodable for BrowsePathTarget {
+    #[allow(unused)]
+    #[allow(clippy::let_and_return)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.target_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.remaining_path_index, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.target_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.remaining_path_index, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for BrowsePathTarget {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            target_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            remaining_path_index: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for BrowsePathTarget
+where
+    opcua::types::expanded_node_id::ExpandedNodeId: Send,
+    opcua::types::Index: Send,
+{
+}
+unsafe impl Sync for BrowsePathTarget
+where
+    opcua::types::expanded_node_id::ExpandedNodeId: Sync,
+    opcua::types::Index: Sync,
+{
 }

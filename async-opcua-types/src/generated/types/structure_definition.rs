@@ -9,7 +9,19 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[opcua::types::ua_encodable]
+#[derive(opcua::types::UaNullable)]
+#[cfg_attr(
+    feature = "json",
+    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
+)]
+#[cfg_attr(
+    feature = "xml",
+    derive(
+        opcua::types::XmlEncodable,
+        opcua::types::XmlDecodable,
+        opcua::types::XmlType
+    )
+)]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part5/12.2.12/#12.2.12.5
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct StructureDefinition {
@@ -31,4 +43,58 @@ impl opcua::types::MessageInfo for StructureDefinition {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::StructureDefinition
     }
+}
+impl opcua::types::BinaryEncodable for StructureDefinition {
+    #[allow(unused)]
+    #[allow(clippy::let_and_return)]
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += opcua::types::BinaryEncodable::byte_len(&self.default_encoding_id, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.base_data_type, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.structure_type, ctx);
+        size += opcua::types::BinaryEncodable::byte_len(&self.fields, ctx);
+        size
+    }
+    #[allow(unused)]
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.default_encoding_id, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.base_data_type, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.structure_type, stream, ctx)?;
+        opcua::types::BinaryEncodable::encode(&self.fields, stream, ctx)?;
+        Ok(())
+    }
+}
+impl opcua::types::BinaryDecodable for StructureDefinition {
+    #[allow(unused_variables)]
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        Ok(Self {
+            default_encoding_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            base_data_type: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            structure_type: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+            fields: opcua::types::BinaryDecodable::decode(stream, ctx)?,
+        })
+    }
+}
+unsafe impl Send for StructureDefinition
+where
+    opcua::types::node_id::NodeId: Send,
+    opcua::types::node_id::NodeId: Send,
+    super::enums::StructureType: Send,
+    Option<Vec<super::structure_field::StructureField>>: Send,
+{
+}
+unsafe impl Sync for StructureDefinition
+where
+    opcua::types::node_id::NodeId: Sync,
+    opcua::types::node_id::NodeId: Sync,
+    super::enums::StructureType: Sync,
+    Option<Vec<super::structure_field::StructureField>>: Sync,
+{
 }

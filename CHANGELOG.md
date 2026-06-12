@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+* Legacy security policies (Basic128Rsa15, Basic256) are now compiled in by
+  default and controlled at runtime: servers and clients must opt in with
+  `allow_legacy_crypto: true` (config or builder). Legacy use is rejected
+  with `BadSecurityPolicyRejected` by default and logs a deprecation
+  warning when enabled. Builds with `default-features = false` exclude the
+  algorithms entirely, without panics.
+
 ## [0.18.0] - 2026-02-24
 
 Mostly bug fixes and refactoring, some of which is externally visible.

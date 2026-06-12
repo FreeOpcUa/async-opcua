@@ -35,8 +35,8 @@
 
 ## Phase 6: User Story 4 - Documentation (P3)
 
-- [ ] T014 [US4] Document the runtime-control story: feature flag, both switches, rejection status code, warnings (`docs/crypto.md`, `docs/compatibility.md`, `CHANGELOG.md`).
-- [ ] T015 [US4] Update the dotnet harness to rely on default features + runtime opt-in (`dotnet-tests/external-tests/Cargo.toml`, fixture config).
+- [X] T014 [US4] Document the runtime-control story: feature flag, both switches, rejection status code, warnings (`docs/crypto.md`, `docs/compatibility.md`, `CHANGELOG.md`).
+- [X] T015 [US4] Update the dotnet harness to rely on default features + runtime opt-in (`dotnet-tests/external-tests/Cargo.toml`, fixture config).
 
 ## Phase 7: Polish & Cross-Cutting
 

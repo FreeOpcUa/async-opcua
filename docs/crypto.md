@@ -39,7 +39,30 @@ It also supports these OPC UA 1.04 policies.
 * Aes128-Sha256-RsaOaep - AES-128 / SHA-256 / RSA-OAEP (a replacement for Basic128Rsa15 with stronger hash & padding)
 * Aes256-Sha256-RsaPss - AES256 / SHA-256 / RSA-OAEP with RSA-PSS for signature algorithm
 
-OPC UA 1.04 deprecates Basic128Rsa15 and Basic256 due to perceived weaknesses with SHA-1, but they remain supported by the implementation.
+OPC UA 1.04 deprecates Basic128Rsa15 and Basic256 due to perceived weaknesses with SHA-1.
+
+## Deprecated (legacy) security policies
+
+Basic128Rsa15 and Basic256 are compiled in by default (the `legacy-crypto`
+feature of `async-opcua-crypto`, forwarded by the `async-opcua` umbrella),
+but they are **disabled at runtime by default** and must be explicitly
+enabled on each side:
+
+* Servers: set `allow_legacy_crypto: true` in the server configuration (or
+  `ServerBuilder::allow_legacy_crypto(true)`). Without it, configuring a
+  legacy endpoint fails validation, legacy endpoints are not advertised via
+  GetEndpoints, and OpenSecureChannel requests for a legacy policy are
+  rejected with `BadSecurityPolicyRejected`.
+* Clients: set `allow_legacy_crypto: true` in the client configuration (or
+  `ClientBuilder::allow_legacy_crypto(true)`). Without it, connecting to a
+  legacy endpoint fails before any network traffic with
+  `BadSecurityPolicyRejected`.
+
+Every connection actually established with a deprecated policy logs a
+`warn!`-level deprecation message on both sides. Builds with
+`default-features = false` exclude the legacy algorithms entirely; legacy
+policies are still recognized by name so they can be rejected with proper
+errors rather than panics.
 
 ## Hash
 

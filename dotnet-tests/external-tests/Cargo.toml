@@ -16,7 +16,7 @@ log = { workspace = true }
 futures = { workspace = true }
 env_logger = { workspace = true }
 
-async-opcua = { path = "../../async-opcua", features = ["client", "server", "legacy-crypto"] }
+async-opcua = { path = "../../async-opcua", features = ["client", "server"] }
 async-opcua-pubsub = { path = "../../async-opcua-pubsub" }
 uuid = { workspace = true }
 

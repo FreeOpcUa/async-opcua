@@ -400,8 +400,7 @@ where
         self,
         certificate_store: Arc<RwLock<CertificateStore>>,
     ) -> Result<(Arc<Session>, ResultEventLoop<C>), Error> {
-        let security_policy =
-            SecurityPolicy::from_uri(self.endpoint.security_policy_uri.as_ref());
+        let security_policy = SecurityPolicy::from_uri(self.endpoint.security_policy_uri.as_ref());
         if security_policy.is_deprecated() && !self.config.allow_legacy_crypto {
             return Err(Error::new(
                 StatusCode::BadSecurityPolicyRejected,
@@ -481,8 +480,7 @@ where
         self,
         certificate_store: Arc<RwLock<CertificateStore>>,
     ) -> Result<AsyncSecureChannel, Error> {
-        let security_policy =
-            SecurityPolicy::from_uri(self.endpoint.security_policy_uri.as_ref());
+        let security_policy = SecurityPolicy::from_uri(self.endpoint.security_policy_uri.as_ref());
         if security_policy.is_deprecated() && !self.config.allow_legacy_crypto {
             return Err(Error::new(
                 StatusCode::BadSecurityPolicyRejected,

@@ -282,8 +282,6 @@ impl ServerEndpoint {
     }
 }
 
-
-
 /// Returns the validation error for a legacy (deprecated) security policy
 /// that is not currently usable, either because the deployment has not
 /// opted in via `allow_legacy_crypto` or because the build excludes the
@@ -325,7 +323,9 @@ mod tests {
             user_token_ids: BTreeSet::new(),
         };
 
-        let errors = endpoint.validate("invalid", &user_tokens, false).unwrap_err();
+        let errors = endpoint
+            .validate("invalid", &user_tokens, false)
+            .unwrap_err();
         let message = errors.join("\n");
 
         assert_eq!(
@@ -401,7 +401,9 @@ mod tests {
         let mut endpoint = ServerEndpoint::new_basic256sha256_sign("/", &[]);
         endpoint.password_security_policy = Some("InvalidPolicy".to_string());
 
-        let errors = endpoint.validate("invalid", &user_tokens, false).unwrap_err();
+        let errors = endpoint
+            .validate("invalid", &user_tokens, false)
+            .unwrap_err();
         let message = errors.join("\n");
 
         assert_eq!(

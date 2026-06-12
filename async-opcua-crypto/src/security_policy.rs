@@ -112,8 +112,9 @@ impl FromStr for SecurityPolicy {
             // without the legacy-crypto feature.
             constants::SECURITY_POLICY_BASIC_128_RSA_15
             | constants::SECURITY_POLICY_BASIC_128_RSA_15_URI => SecurityPolicy::Basic128Rsa15,
-            constants::SECURITY_POLICY_BASIC_256
-            | constants::SECURITY_POLICY_BASIC_256_URI => SecurityPolicy::Basic256,
+            constants::SECURITY_POLICY_BASIC_256 | constants::SECURITY_POLICY_BASIC_256_URI => {
+                SecurityPolicy::Basic256
+            }
             crate::policy::aes::Basic256Sha256::SECURITY_POLICY
             | crate::policy::aes::Basic256Sha256::SECURITY_POLICY_URI => {
                 SecurityPolicy::Basic256Sha256

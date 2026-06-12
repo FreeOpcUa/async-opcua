@@ -40,8 +40,8 @@
 
 ## Phase 7: Polish & Cross-Cutting
 
-- [ ] T016 Full verification: `cargo test --workspace` (default features), `cargo test --workspace --all-features`, all four CI clippy commands, `--no-default-features` check stays panic-free.
-- [ ] T017 Cleanup: simplify now-redundant explicit `legacy-crypto` test plumbing where safe; confirm SC-004 (single warning per connection).
+- [X] T016 Full verification: `cargo test --workspace` (default features), `cargo test --workspace --all-features`, all four CI clippy commands, `--no-default-features` check stays panic-free.
+- [X] T017 Cleanup: simplify now-redundant explicit `legacy-crypto` test plumbing where safe; confirm SC-004 (single warning per connection).
 
 ## Dependencies
 

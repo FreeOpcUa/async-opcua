@@ -304,10 +304,6 @@ impl<T: AesSecurityPolicy> SecurityPolicyImpl for AesPolicy<T> {
         T::SECURITY_POLICY_URI
     }
 
-    fn is_deprecated() -> bool {
-        T::DEPRECATED
-    }
-
     fn as_str() -> &'static str {
         T::SECURITY_POLICY
     }
@@ -476,8 +472,6 @@ pub(crate) trait AesSecurityPolicy {
     const SECURITY_POLICY: &'static str;
     /// The URI of the policy, as defined in the OPC-UA standard.
     const SECURITY_POLICY_URI: &'static str;
-    /// Whether the security policy is considered deprecated.
-    const DEPRECATED: bool = false;
     /// Length of the secure channel nonce.
     const NONCE_LENGTH: usize;
 
@@ -604,7 +598,6 @@ pub(crate) struct Basic128Rsa15;
 impl AesSecurityPolicy for Basic128Rsa15 {
     const SECURITY_POLICY: &str = "Basic128Rsa15";
     const SECURITY_POLICY_URI: &str = "http://opcfoundation.org/UA/SecurityPolicy#Basic128Rsa15";
-    const DEPRECATED: bool = true;
     const NONCE_LENGTH: usize = 16;
 
     const DERIVED_SIGNATURE_KEY_LENGTH: usize = 16;
@@ -635,7 +628,6 @@ pub(crate) struct Basic256;
 impl AesSecurityPolicy for Basic256 {
     const SECURITY_POLICY: &str = "Basic256";
     const SECURITY_POLICY_URI: &str = "http://opcfoundation.org/UA/SecurityPolicy#Basic256";
-    const DEPRECATED: bool = true;
     const NONCE_LENGTH: usize = 32;
 
     const DERIVED_SIGNATURE_KEY_LENGTH: usize = 24;

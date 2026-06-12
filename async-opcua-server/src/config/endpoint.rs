@@ -357,8 +357,11 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "legacy-crypto")]
     fn legacy_policy_accepted_when_allowed() {
+        if !SecurityPolicy::Basic128Rsa15.is_supported() {
+            // Build without the legacy-crypto feature.
+            return;
+        }
         let user_tokens = BTreeMap::new();
         let endpoint = ServerEndpoint {
             path: "/".to_string(),
@@ -387,8 +390,9 @@ mod tests {
             "error must name the runtime switch or missing feature: {message}"
         );
 
-        #[cfg(feature = "legacy-crypto")]
-        assert!(endpoint.validate("legacy", &user_tokens, true).is_ok());
+        if SecurityPolicy::Basic128Rsa15.is_supported() {
+            assert!(endpoint.validate("legacy", &user_tokens, true).is_ok());
+        }
     }
 
     #[test]

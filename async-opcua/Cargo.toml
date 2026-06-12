@@ -17,7 +17,8 @@ publish = true
 name = "opcua"
 
 [features]
-default = []
+# legacy-crypto is compiled in by default; runtime config gates its use.
+default = ["legacy-crypto"]
 all = ["server", "client"]
 # Forwards to the crypto crate's support for legacy (deprecated) security
 # policies: Basic128Rsa15 and Basic256.

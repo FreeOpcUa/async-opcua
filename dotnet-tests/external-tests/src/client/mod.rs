@@ -48,6 +48,8 @@ pub fn make_client(quick_timeout: bool) -> ClientBuilder {
         .pki_dir(format!("./pki-ext-client/{test_id}"))
         .create_sample_keypair(true)
         .trust_server_certs(true)
+        // The .NET test server matrix includes the deprecated policies.
+        .allow_legacy_crypto(true)
         .session_retry_initial(Duration::from_millis(200))
         .max_array_length(1024 * 1024 * 64)
         .max_chunk_count(64);

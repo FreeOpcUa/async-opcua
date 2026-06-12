@@ -194,6 +194,7 @@ impl ServerEndpoint {
         &self,
         id: &str,
         user_tokens: &BTreeMap<String, ServerUserToken>,
+        allow_legacy_crypto: bool,
     ) -> Result<(), Vec<String>> {
         let mut errors = Vec::new();
 
@@ -213,6 +214,10 @@ impl ServerEndpoint {
                 SecurityPolicy::from_str(password_security_policy).unwrap();
             if parsed_password_security_policy == SecurityPolicy::Unknown {
                 errors.push(format!("Endpoint {id} is invalid. Password security policy \"{password_security_policy}\" is invalid. Valid values are None, Basic256Sha256, Aes128Sha256RsaOaep, Aes256Sha256RsaPss"));
+            } else if let Some(error) =
+                legacy_policy_error(id, parsed_password_security_policy, allow_legacy_crypto)
+            {
+                errors.push(error);
             }
         }
 
@@ -221,6 +226,8 @@ impl ServerEndpoint {
         let security_mode = MessageSecurityMode::from(self.security_mode.as_ref());
         if security_policy == SecurityPolicy::Unknown {
             errors.push(format!("Endpoint {} is invalid. Security policy \"{}\" is invalid. Valid values are None, Basic256Sha256, Aes128Sha256RsaOaep, Aes256Sha256RsaPss", id, self.security_policy));
+        } else if let Some(error) = legacy_policy_error(id, security_policy, allow_legacy_crypto) {
+            errors.push(error);
         } else if security_mode == MessageSecurityMode::Invalid {
             errors.push(format!("Endpoint {} is invalid. Security mode \"{}\" is invalid. Valid values are None, Sign, SignAndEncrypt", id, self.security_mode));
         } else if (security_policy == SecurityPolicy::None
@@ -275,6 +282,31 @@ impl ServerEndpoint {
     }
 }
 
+/// Returns the validation error for a legacy (deprecated) security policy
+/// that is not currently usable, either because the deployment has not
+/// opted in via `allow_legacy_crypto` or because the build excludes the
+/// `legacy-crypto` feature.
+fn legacy_policy_error(
+    id: &str,
+    policy: SecurityPolicy,
+    allow_legacy_crypto: bool,
+) -> Option<String> {
+    if !policy.is_deprecated() {
+        return None;
+    }
+    if !policy.is_supported() {
+        Some(format!(
+            "Endpoint {id} is invalid. Security policy \"{policy}\" is deprecated and this build does not include the 'legacy-crypto' feature."
+        ))
+    } else if !allow_legacy_crypto {
+        Some(format!(
+            "Endpoint {id} is invalid. Security policy \"{policy}\" is deprecated and disabled by default. Set allow_legacy_crypto: true in the server configuration to enable it."
+        ))
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -291,7 +323,9 @@ mod tests {
             user_token_ids: BTreeSet::new(),
         };
 
-        let errors = endpoint.validate("invalid", &user_tokens).unwrap_err();
+        let errors = endpoint
+            .validate("invalid", &user_tokens, false)
+            .unwrap_err();
         let message = errors.join("\n");
 
         assert_eq!(
@@ -301,12 +335,75 @@ mod tests {
     }
 
     #[test]
+    fn legacy_policy_rejected_by_default_with_actionable_message() {
+        let user_tokens = BTreeMap::new();
+        let endpoint = ServerEndpoint {
+            path: "/".to_string(),
+            security_policy: "Basic256".to_string(),
+            security_mode: "SignAndEncrypt".to_string(),
+            security_level: 0,
+            password_security_policy: None,
+            user_token_ids: BTreeSet::new(),
+        };
+
+        let errors = endpoint
+            .validate("legacy", &user_tokens, false)
+            .unwrap_err();
+        let message = errors.join("\n");
+        assert!(
+            message.contains("allow_legacy_crypto") || message.contains("legacy-crypto"),
+            "error must name the runtime switch or missing feature: {message}"
+        );
+    }
+
+    #[test]
+    fn legacy_policy_accepted_when_allowed() {
+        if !SecurityPolicy::Basic128Rsa15.is_supported() {
+            // Build without the legacy-crypto feature.
+            return;
+        }
+        let user_tokens = BTreeMap::new();
+        let endpoint = ServerEndpoint {
+            path: "/".to_string(),
+            security_policy: "Basic128Rsa15".to_string(),
+            security_mode: "Sign".to_string(),
+            security_level: 0,
+            password_security_policy: None,
+            user_token_ids: BTreeSet::new(),
+        };
+
+        assert!(endpoint.validate("legacy", &user_tokens, true).is_ok());
+    }
+
+    #[test]
+    fn legacy_password_policy_follows_the_same_rules() {
+        let user_tokens = BTreeMap::new();
+        let mut endpoint = ServerEndpoint::new_basic256sha256_sign("/", &[]);
+        endpoint.password_security_policy = Some("Basic128Rsa15".to_string());
+
+        let errors = endpoint
+            .validate("legacy", &user_tokens, false)
+            .unwrap_err();
+        let message = errors.join("\n");
+        assert!(
+            message.contains("allow_legacy_crypto") || message.contains("legacy-crypto"),
+            "error must name the runtime switch or missing feature: {message}"
+        );
+
+        if SecurityPolicy::Basic128Rsa15.is_supported() {
+            assert!(endpoint.validate("legacy", &user_tokens, true).is_ok());
+        }
+    }
+
+    #[test]
     fn invalid_password_security_policy_message_excludes_legacy_policies() {
         let user_tokens = BTreeMap::new();
         let mut endpoint = ServerEndpoint::new_basic256sha256_sign("/", &[]);
         endpoint.password_security_policy = Some("InvalidPolicy".to_string());
 
-        let errors = endpoint.validate("invalid", &user_tokens).unwrap_err();
+        let errors = endpoint
+            .validate("invalid", &user_tokens, false)
+            .unwrap_err();
         let message = errors.join("\n");
 
         assert_eq!(

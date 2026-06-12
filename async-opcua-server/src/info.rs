@@ -239,6 +239,9 @@ impl ServerInfo {
         security_policy: SecurityPolicy,
         security_mode: MessageSecurityMode,
     ) -> bool {
+        if security_policy.is_deprecated() && !self.config.allow_legacy_crypto {
+            return false;
+        }
         self.config
             .find_endpoint(
                 endpoint_url,
@@ -310,6 +313,11 @@ impl ServerInfo {
             .filter(|&(_, e)| {
                 // Test end point's security_policy_uri and matching url
                 url_matches_except_host(&e.endpoint_url(&base_endpoint_url), endpoint_url)
+            })
+            // Deprecated policies are not advertised unless explicitly
+            // allowed at runtime.
+            .filter(|&(_, e)| {
+                self.config.allow_legacy_crypto || !e.security_policy().is_deprecated()
             })
             .map(|(_, e)| self.new_endpoint_description(e, false))
             .collect();

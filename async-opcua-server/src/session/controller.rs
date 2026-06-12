@@ -179,11 +179,12 @@ impl SessionController {
         node_managers: NodeManagers,
         subscriptions: Arc<SubscriptionCache>,
     ) -> Self {
-        let channel = SecureChannel::new(
+        let mut channel = SecureChannel::new(
             certificate_store.clone(),
             opcua_core::comms::secure_channel::Role::Server,
             Arc::new(RwLock::new(info.initial_encoding_context())),
         );
+        channel.set_allow_deprecated(info.config.allow_legacy_crypto);
 
         Self {
             channel,
@@ -777,6 +778,13 @@ impl SessionController {
                 // check to see if renew has been called before or not
                 if self.secure_channel_state.renew_count > 0 {
                     error!("Asked to issue token on session that has called renew before");
+                }
+                let issued_policy = self.channel.security_policy();
+                if issued_policy.is_deprecated() {
+                    tracing::warn!(
+                        "Connection established with deprecated security policy {issued_policy}. \
+                         This policy is allowed by allow_legacy_crypto but should be migrated."
+                    );
                 }
                 self.secure_channel_state.create_secure_channel_id()
             }

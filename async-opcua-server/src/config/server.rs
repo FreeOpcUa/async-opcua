@@ -363,7 +363,7 @@ impl Config for ServerConfig {
             errors.push("Server configuration is invalid. It defines no endpoints".to_owned());
         }
         for (id, endpoint) in &self.endpoints {
-            if let Err(e) = endpoint.validate(id, &self.user_tokens) {
+            if let Err(e) = endpoint.validate(id, &self.user_tokens, self.allow_legacy_crypto) {
                 errors.push(format!(
                     "Endpoint {id} failed to validate: {}",
                     e.join(", ")

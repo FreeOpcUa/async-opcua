@@ -304,6 +304,10 @@ pub struct ClientConfig {
     /// Requested session timeout in milliseconds
     #[serde(default = "defaults::session_timeout")]
     pub(crate) session_timeout: u32,
+    /// Allow connecting to endpoints using deprecated (legacy) security
+    /// policies such as Basic128Rsa15 and Basic256. Disabled by default.
+    #[serde(default)]
+    pub(crate) allow_legacy_crypto: bool,
 }
 
 impl Config for ClientConfig {
@@ -622,6 +626,7 @@ impl ClientConfig {
             recreate_subscriptions: defaults::recreate_subscriptions(),
             session_name: "Rust OPC UA Client".into(),
             session_timeout: defaults::session_timeout(),
+            allow_legacy_crypto: false,
             session_nonce_length: defaults::session_nonce_length(),
         }
     }

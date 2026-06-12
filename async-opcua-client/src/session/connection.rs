@@ -400,6 +400,16 @@ where
         self,
         certificate_store: Arc<RwLock<CertificateStore>>,
     ) -> Result<(Arc<Session>, ResultEventLoop<C>), Error> {
+        let security_policy = SecurityPolicy::from_uri(self.endpoint.security_policy_uri.as_ref());
+        if security_policy.is_deprecated() && !self.config.allow_legacy_crypto {
+            return Err(Error::new(
+                StatusCode::BadSecurityPolicyRejected,
+                format!(
+                    "Endpoint security policy {security_policy} is deprecated and disabled by default. Set allow_legacy_crypto: true in the client configuration to enable it."
+                ),
+            ));
+        }
+        security_policy.ensure_supported()?;
         let connector = self
             .connection_source
             .get_connector(&self.endpoint)?
@@ -470,6 +480,16 @@ where
         self,
         certificate_store: Arc<RwLock<CertificateStore>>,
     ) -> Result<AsyncSecureChannel, Error> {
+        let security_policy = SecurityPolicy::from_uri(self.endpoint.security_policy_uri.as_ref());
+        if security_policy.is_deprecated() && !self.config.allow_legacy_crypto {
+            return Err(Error::new(
+                StatusCode::BadSecurityPolicyRejected,
+                format!(
+                    "Endpoint security policy {security_policy} is deprecated and disabled by default. Set allow_legacy_crypto: true in the client configuration to enable it."
+                ),
+            ));
+        }
+        security_policy.ensure_supported()?;
         let ctx = self.make_encoding_context();
         Ok(Self::build_channel_inner(
             certificate_store,

@@ -110,11 +110,14 @@ Server and client support endpoints with the standard message security modes:
 The following security policies are supported:
 
 * None
-* Basic128Rsa15
-* Basic256
+* Basic128Rsa15 (deprecated; runtime opt-in via `allow_legacy_crypto`)
+* Basic256 (deprecated; runtime opt-in via `allow_legacy_crypto`)
 * Basic256Rsa256
 * Aes128-Sha256-RsaOaep
 * Aes256-Sha256-RsaPss
+
+The deprecated policies are compiled in by default but disabled at runtime
+unless both sides opt in; see [crypto.md](./crypto.md).
 
 ## User identities
 

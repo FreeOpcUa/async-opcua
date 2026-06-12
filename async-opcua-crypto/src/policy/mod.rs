@@ -35,9 +35,6 @@ pub(crate) trait SecurityPolicyImpl {
     /// The OPC-UA security policy URI for this policy.
     fn uri() -> &'static str;
 
-    /// Whether this security policy is deprecated.
-    fn is_deprecated() -> bool;
-
     /// Get the OPC-UA string for this policy.
     fn as_str() -> &'static str;
 
@@ -148,10 +145,6 @@ impl SecurityPolicyImpl for NonePolicy {
 
     fn uri() -> &'static str {
         constants::SECURITY_POLICY_NONE_URI
-    }
-
-    fn is_deprecated() -> bool {
-        false
     }
 
     fn as_str() -> &'static str {

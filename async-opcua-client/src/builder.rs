@@ -100,6 +100,14 @@ impl ClientBuilder {
         self
     }
 
+    /// Allow connecting to endpoints using deprecated (legacy) security
+    /// policies such as Basic128Rsa15 and Basic256. Disabled by default;
+    /// enabling this logs a deprecation warning per connection.
+    pub fn allow_legacy_crypto(mut self, allow: bool) -> Self {
+        self.config.allow_legacy_crypto = allow;
+        self
+    }
+
     /// Sets whether the client should automatically trust servers. If this is not set then
     /// the client will reject the server upon first connect and the server's certificate
     /// must be manually moved from pki's `/rejected` folder to the `/trusted` folder. If it is

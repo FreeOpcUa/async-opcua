@@ -3,6 +3,7 @@ mod browse;
 mod core_tests;
 mod custom_types;
 mod hda;
+mod legacy_crypto;
 mod methods;
 mod node_management;
 mod programs;

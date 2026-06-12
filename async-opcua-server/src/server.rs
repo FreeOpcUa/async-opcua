@@ -53,6 +53,15 @@ struct ConnectionInfo {
     command_send: tokio::sync::mpsc::Sender<ControllerCommand>,
 }
 
+fn log_connection_panic(id: u32, payload: Box<dyn std::any::Any + Send>) {
+    let message = payload
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("unknown panic payload");
+    error!("Connection task {id} panicked: {message}");
+}
+
 /// The server struct. This is consumed when run, so you will typically not hold onto this for longer
 /// periods of time.
 pub struct Server {
@@ -381,7 +390,16 @@ impl Server {
                             );
 
                             let (send, recv) = tokio::sync::mpsc::channel(5);
-                            let handle = tokio::spawn(conn.run(recv, |_| {}).map(move |_| connection_counter));
+                            let handle = tokio::spawn(async move {
+                                if let Err(payload) =
+                                    std::panic::AssertUnwindSafe(conn.run(recv, |_| {}))
+                                        .catch_unwind()
+                                        .await
+                                {
+                                    log_connection_panic(connection_counter, payload);
+                                }
+                                connection_counter
+                            });
                             self.connections.push(handle);
                             self.connection_map.insert(connection_counter, ConnectionInfo {
                                 command_send: send
@@ -422,9 +440,14 @@ impl Server {
                     let (send, recv) = tokio::sync::mpsc::channel(5);
                     let rev_handle = rev_connect.handle;
                     let handle = tokio::spawn(async move {
-                        conn.run(recv, |status| {
+                        let run = conn.run(recv, |status| {
                             rev_handle.set_result(status);
-                        }).await;
+                        });
+                        if let Err(payload) =
+                            std::panic::AssertUnwindSafe(run).catch_unwind().await
+                        {
+                            log_connection_panic(connection_counter, payload);
+                        }
                         connection_counter
                     });
                     self.connections.push(handle);

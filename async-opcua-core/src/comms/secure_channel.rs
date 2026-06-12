@@ -765,6 +765,18 @@ impl SecureChannel {
             _ => {}
         }
 
+        // Reject policies this build cannot serve (e.g. legacy policies in
+        // a build without the legacy-crypto feature) before any crypto is
+        // attempted.
+        if !security_policy.is_supported() {
+            return Err(Error::new(
+                StatusCode::BadSecurityPolicyRejected,
+                format!(
+                    "Security policy \"{security_policy_uri}\" is not supported by this build and has been rejected"
+                ),
+            ));
+        }
+
         // Asymmetric decrypt and verify
 
         // The OpenSecureChannel Messages are always signed and encrypted if the SecurityMode

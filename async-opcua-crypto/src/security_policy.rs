@@ -9,7 +9,7 @@ use std::str::FromStr;
 
 use tracing::error;
 
-use opcua_types::{constants, ByteString, Error};
+use opcua_types::{constants, ByteString, Error, StatusCode};
 
 use crate::{
     policy::{PaddingInfo, SecurityPolicyImpl},
@@ -64,7 +64,9 @@ macro_rules! call_with_policy {
             }
             #[cfg(not(feature = "legacy-crypto"))]
             Self::Basic128Rsa15 | Self::Basic256 => {
-                panic!("Legacy cryptographic security policies are disabled. Enable the 'legacy-crypto' feature flag to use them.");
+                panic!(
+                    "BUG: a cryptographic operation was invoked for a legacy security policy in a build without the 'legacy-crypto' feature. Entry points must reject unsupported policies (SecurityPolicy::ensure_supported) before any crypto call."
+                );
             }
             Self::Unknown => panic!("Unknown security policy"),
         }
@@ -105,14 +107,13 @@ impl FromStr for SecurityPolicy {
             constants::SECURITY_POLICY_NONE | constants::SECURITY_POLICY_NONE_URI => {
                 SecurityPolicy::None
             }
-            #[cfg(feature = "legacy-crypto")]
-            crate::policy::aes::Basic128Rsa15::SECURITY_POLICY
-            | crate::policy::aes::Basic128Rsa15::SECURITY_POLICY_URI => {
-                SecurityPolicy::Basic128Rsa15
-            }
-            #[cfg(feature = "legacy-crypto")]
-            crate::policy::aes::Basic256::SECURITY_POLICY
-            | crate::policy::aes::Basic256::SECURITY_POLICY_URI => SecurityPolicy::Basic256,
+            // Legacy policies are always recognizable so they can be
+            // named in errors and rejected deliberately, even in builds
+            // without the legacy-crypto feature.
+            constants::SECURITY_POLICY_BASIC_128_RSA_15
+            | constants::SECURITY_POLICY_BASIC_128_RSA_15_URI => SecurityPolicy::Basic128Rsa15,
+            constants::SECURITY_POLICY_BASIC_256
+            | constants::SECURITY_POLICY_BASIC_256_URI => SecurityPolicy::Basic256,
             crate::policy::aes::Basic256Sha256::SECURITY_POLICY
             | crate::policy::aes::Basic256Sha256::SECURITY_POLICY_URI => {
                 SecurityPolicy::Basic256Sha256
@@ -144,7 +145,11 @@ impl SecurityPolicy {
     ///
     /// This will panic if the security policy is `Unknown`.
     pub fn to_uri(&self) -> &'static str {
-        call_with_policy!(self, |T| T::uri())
+        match self {
+            SecurityPolicy::Basic128Rsa15 => constants::SECURITY_POLICY_BASIC_128_RSA_15_URI,
+            SecurityPolicy::Basic256 => constants::SECURITY_POLICY_BASIC_256_URI,
+            _ => call_with_policy!(self, |T| T::uri()),
+        }
     }
 
     /// Returns true if the security policy is supported. It might be recognized but be unsupported by the implementation
@@ -173,17 +178,41 @@ impl SecurityPolicy {
         }
     }
 
+    /// Returns an error if this policy cannot be used by this build,
+    /// e.g. a legacy policy in a build without the `legacy-crypto`
+    /// feature, or `Unknown`. Entry points must call this before invoking
+    /// any cryptographic operation on the policy.
+    pub fn ensure_supported(&self) -> Result<(), Error> {
+        if self.is_supported() {
+            Ok(())
+        } else {
+            Err(Error::new(
+                StatusCode::BadSecurityPolicyRejected,
+                format!("Security policy {self} is not supported by this build"),
+            ))
+        }
+    }
+
     /// Returns true if the security policy has been deprecated by the OPC UA specification
     pub fn is_deprecated(&self) -> bool {
-        // Since 1.04 because SHA-1 is no longer considered safe
-        call_with_policy!(self, |T| T::is_deprecated())
+        // Since 1.04 because SHA-1 is no longer considered safe.
+        // Answered directly so it works in every build; this is the single
+        // source of truth for "is this policy legacy".
+        matches!(
+            self,
+            SecurityPolicy::Basic128Rsa15 | SecurityPolicy::Basic256
+        )
     }
 
     /// Get a string representation of this policy.
     ///
     /// This will panic if the security policy is `Unknown`.
     pub fn to_str(&self) -> &'static str {
-        call_with_policy!(self, |T| T::as_str())
+        match self {
+            SecurityPolicy::Basic128Rsa15 => constants::SECURITY_POLICY_BASIC_128_RSA_15,
+            SecurityPolicy::Basic256 => constants::SECURITY_POLICY_BASIC_256,
+            _ => call_with_policy!(self, |T| T::as_str()),
+        }
     }
 
     /// Get the asymmetric encryption algorithm for this security policy.
@@ -242,10 +271,9 @@ impl SecurityPolicy {
     pub fn from_uri(uri: &str) -> SecurityPolicy {
         match uri {
             constants::SECURITY_POLICY_NONE_URI => SecurityPolicy::None,
-            #[cfg(feature = "legacy-crypto")]
-            crate::policy::aes::Basic128Rsa15::SECURITY_POLICY_URI => SecurityPolicy::Basic128Rsa15,
-            #[cfg(feature = "legacy-crypto")]
-            crate::policy::aes::Basic256::SECURITY_POLICY_URI => SecurityPolicy::Basic256,
+            // Always recognizable; see from_str.
+            constants::SECURITY_POLICY_BASIC_128_RSA_15_URI => SecurityPolicy::Basic128Rsa15,
+            constants::SECURITY_POLICY_BASIC_256_URI => SecurityPolicy::Basic256,
             crate::policy::aes::Basic256Sha256::SECURITY_POLICY_URI => {
                 SecurityPolicy::Basic256Sha256
             }

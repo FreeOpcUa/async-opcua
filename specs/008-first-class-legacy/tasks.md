@@ -7,12 +7,12 @@
 
 ## Phase 1: Setup
 
-- [ ] T001 Flip feature defaults: `default = ["legacy-crypto"]` in `async-opcua-crypto/Cargo.toml`, add `legacy-crypto` to the umbrella default set in `async-opcua/Cargo.toml`; verify `cargo check` for default and `--no-default-features` builds.
+- [X] T001 Flip feature defaults: `default = ["legacy-crypto"]` in `async-opcua-crypto/Cargo.toml`, add `legacy-crypto` to the umbrella default set in `async-opcua/Cargo.toml`; verify `cargo check` for default and `--no-default-features` builds.
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-- [ ] T002 Ungate identity paths in `async-opcua-crypto/src/security_policy.rs`: `from_uri`/`from_str` recognize legacy URIs in all builds, `to_uri`/`to_str`/`as_str`/`is_deprecated` work without the feature (constants need no crypto), so legacy policies can be named in errors instead of mapping to `Unknown`.
-- [ ] T003 Remove reachable panics for legacy policies without the feature in `async-opcua-crypto`: Result-returning operations return `Err(BadSecurityPolicyRejected)` from the no-feature arm; remaining infallible crypto accessors are made unreachable by entry-point gating and documented as such.
+- [X] T002 Ungate identity paths in `async-opcua-crypto/src/security_policy.rs`: `from_uri`/`from_str` recognize legacy URIs in all builds, `to_uri`/`to_str`/`as_str`/`is_deprecated` work without the feature (constants need no crypto), so legacy policies can be named in errors instead of mapping to `Unknown`.
+- [X] T003 Remove reachable panics for legacy policies without the feature in `async-opcua-crypto`: Result-returning operations return `Err(BadSecurityPolicyRejected)` from the no-feature arm; remaining infallible crypto accessors are made unreachable by entry-point gating and documented as such.
 
 ## Phase 3: User Story 1 - Runtime control, compiled in by default (P1)
 

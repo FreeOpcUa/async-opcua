@@ -54,6 +54,20 @@ pub mod constants {
     pub const SECURITY_POLICY_NONE_URI: &str = "http://opcfoundation.org/UA/SecurityPolicy#None";
     /// String used as shorthand in config files, debug etc.for `None` security policy
     pub const SECURITY_POLICY_NONE: &str = "None";
+    /// URI for the deprecated Basic128Rsa15 security policy. Always
+    /// recognizable so legacy policies can be named and rejected even in
+    /// builds without the `legacy-crypto` feature.
+    pub const SECURITY_POLICY_BASIC_128_RSA_15_URI: &str =
+        "http://opcfoundation.org/UA/SecurityPolicy#Basic128Rsa15";
+    /// Shorthand name for the deprecated Basic128Rsa15 security policy.
+    pub const SECURITY_POLICY_BASIC_128_RSA_15: &str = "Basic128Rsa15";
+    /// URI for the deprecated Basic256 security policy. Always recognizable
+    /// so legacy policies can be named and rejected even in builds without
+    /// the `legacy-crypto` feature.
+    pub const SECURITY_POLICY_BASIC_256_URI: &str =
+        "http://opcfoundation.org/UA/SecurityPolicy#Basic256";
+    /// Shorthand name for the deprecated Basic256 security policy.
+    pub const SECURITY_POLICY_BASIC_256: &str = "Basic256";
 }
 
 /// Contains constants for known issued token types as defined in the OPC-UA standard.

@@ -45,5 +45,9 @@ x509-cert = { workspace = true }
 tempdir = "0.3"
 
 [features]
-default = []
+# Legacy (deprecated) security policies are compiled in by default;
+# availability is controlled at runtime by allow_legacy_crypto config on
+# the client and server. Use default-features = false for a build that
+# excludes them entirely.
+default = ["legacy-crypto"]
 legacy-crypto = []

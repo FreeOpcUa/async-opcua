@@ -3,6 +3,7 @@
 use std::time::Duration;
 
 use crate::utils::{hostname, test_node_manager, test_server, Tester};
+use opcua::client::ClientBuilder;
 use opcua::{
     client::IdentityToken,
     crypto::SecurityPolicy,
@@ -158,4 +159,54 @@ async fn get_endpoints_includes_legacy_when_allowed() {
             "expected {policy} endpoint to be advertised when legacy is allowed"
         );
     }
+}
+
+#[tokio::test]
+async fn client_refuses_legacy_endpoint_without_opt_in() {
+    // Server allows legacy, but this client keeps the default
+    // allow_legacy_crypto: false and must refuse before any traffic.
+    let client = ClientBuilder::new()
+        .application_name("integration_client")
+        .application_uri("x")
+        .pki_dir("./pki-client/legacy-refusal")
+        .create_sample_keypair(true)
+        .trust_server_certs(true)
+        .session_retry_limit(1);
+    let mut tester = Tester::new_custom_client(test_server(), client).await;
+
+    let result = tester
+        .connect(
+            SecurityPolicy::Basic128Rsa15,
+            MessageSecurityMode::SignAndEncrypt,
+            IdentityToken::Anonymous,
+        )
+        .await;
+    let error = result.err().expect("client must refuse legacy endpoint");
+    assert_eq!(
+        error.status(),
+        opcua::types::StatusCode::BadSecurityPolicyRejected
+    );
+    assert!(
+        error.to_string().contains("allow_legacy_crypto"),
+        "error must name the client switch: {error}"
+    );
+}
+
+#[tokio::test]
+async fn client_connects_to_legacy_endpoint_with_opt_in() {
+    // Default test harness: both sides opt in.
+    let mut tester = Tester::new(test_server(), false).await;
+    let (session, lp) = tester
+        .connect(
+            SecurityPolicy::Basic128Rsa15,
+            MessageSecurityMode::SignAndEncrypt,
+            IdentityToken::Anonymous,
+        )
+        .await
+        .unwrap();
+    lp.spawn();
+    tokio::time::timeout(Duration::from_secs(10), session.wait_for_connection())
+        .await
+        .unwrap();
+    session.disconnect().await.unwrap();
 }

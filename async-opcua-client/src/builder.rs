@@ -104,6 +104,14 @@ impl ClientBuilder {
     /// the client will reject the server upon first connect and the server's certificate
     /// must be manually moved from pki's `/rejected` folder to the `/trusted` folder. If it is
     /// set, then the server cert will automatically be stored in the `/trusted` folder.
+    /// Allow connecting to endpoints using deprecated (legacy) security
+    /// policies such as Basic128Rsa15 and Basic256. Disabled by default;
+    /// enabling this logs a deprecation warning per connection.
+    pub fn allow_legacy_crypto(mut self, allow: bool) -> Self {
+        self.config.allow_legacy_crypto = allow;
+        self
+    }
+
     pub fn trust_server_certs(mut self, trust_server_certs: bool) -> Self {
         self.config.trust_server_certs = trust_server_certs;
         self

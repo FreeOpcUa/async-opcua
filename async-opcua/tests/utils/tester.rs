@@ -220,6 +220,8 @@ pub fn default_client(test_id: u16, quick_timeout: bool) -> ClientBuilder {
         .pki_dir(format!("./pki-client/{test_id}"))
         .create_sample_keypair(true)
         .trust_server_certs(true)
+        // The test endpoint matrix includes the deprecated policies.
+        .allow_legacy_crypto(true)
         .session_retry_initial(Duration::from_millis(200))
         .max_array_length(100_000)
         .max_message_size(1024 * 1024 * 64)

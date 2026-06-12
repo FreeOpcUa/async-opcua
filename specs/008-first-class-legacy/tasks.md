@@ -28,10 +28,10 @@
 
 ## Phase 5: User Story 3 - Client opt-in and warnings (P2)
 
-- [ ] T010 [US3] Add `ClientConfig.allow_legacy_crypto` (serde default false) + `ClientBuilder::allow_legacy_crypto` (`async-opcua-client/src/config.rs`, `builder.rs`).
-- [ ] T011 [US3] Enforce the client switch before any network I/O: endpoint matching in `SessionBuilder`/`connect_to_*` and `AsyncSecureChannel::connect` (`async-opcua-client/src/session/connection.rs`, `transport/channel.rs`).
-- [ ] T012 [US3] Log one `warn!` deprecation message per established connection using a legacy policy, on both client and server.
-- [ ] T013 [US3] Integration tests: client refuses legacy endpoint without opt-in (error names the switch, no traffic); connects with opt-in (`async-opcua/tests/integration/`).
+- [X] T010 [US3] Add `ClientConfig.allow_legacy_crypto` (serde default false) + `ClientBuilder::allow_legacy_crypto` (`async-opcua-client/src/config.rs`, `builder.rs`).
+- [X] T011 [US3] Enforce the client switch before any network I/O: endpoint matching in `SessionBuilder`/`connect_to_*` and `AsyncSecureChannel::connect` (`async-opcua-client/src/session/connection.rs`, `transport/channel.rs`).
+- [X] T012 [US3] Log one `warn!` deprecation message per established connection using a legacy policy, on both client and server.
+- [X] T013 [US3] Integration tests: client refuses legacy endpoint without opt-in (error names the switch, no traffic); connects with opt-in (`async-opcua/tests/integration/`).
 
 ## Phase 6: User Story 4 - Documentation (P3)
 

@@ -241,6 +241,13 @@ impl AsyncSecureChannel {
         loop {
             match self.connect_no_retry(connector).await {
                 Ok(event_loop) => {
+                    let security_policy = self.secure_channel.read().security_policy();
+                    if security_policy.is_deprecated() {
+                        tracing::warn!(
+                            "Connected using deprecated security policy {security_policy}. \
+                             This is allowed by allow_legacy_crypto but should be migrated."
+                        );
+                    }
                     break Ok(event_loop);
                 }
                 Err(s) => {

@@ -779,6 +779,13 @@ impl SessionController {
                 if self.secure_channel_state.renew_count > 0 {
                     error!("Asked to issue token on session that has called renew before");
                 }
+                let issued_policy = self.channel.security_policy();
+                if issued_policy.is_deprecated() {
+                    tracing::warn!(
+                        "Connection established with deprecated security policy {issued_policy}. \
+                         This policy is allowed by allow_legacy_crypto but should be migrated."
+                    );
+                }
                 self.secure_channel_state.create_secure_channel_id()
             }
             SecurityTokenRequestType::Renew => {

@@ -179,11 +179,12 @@ impl SessionController {
         node_managers: NodeManagers,
         subscriptions: Arc<SubscriptionCache>,
     ) -> Self {
-        let channel = SecureChannel::new(
+        let mut channel = SecureChannel::new(
             certificate_store.clone(),
             opcua_core::comms::secure_channel::Role::Server,
             Arc::new(RwLock::new(info.initial_encoding_context())),
         );
+        channel.set_allow_deprecated(info.config.allow_legacy_crypto);
 
         Self {
             channel,

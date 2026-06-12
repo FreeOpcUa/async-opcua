@@ -22,9 +22,9 @@
 
 ## Phase 4: User Story 2 - Server enforcement and filtering (P1)
 
-- [ ] T007 [US2] Filter deprecated endpoints from `ServerInfo::new_endpoint_descriptions` and `endpoint_exists` when legacy is not allowed (`async-opcua-server/src/info.rs`).
-- [ ] T008 [US2] Reject OpenSecureChannel with a legacy policy URI when not allowed: thread the allow flag into the server secure-channel acceptance path, respond `BadSecurityPolicyRejected` (`async-opcua-core/src/comms/secure_channel.rs`, `async-opcua-server/src/transport/`, `session/controller.rs` as needed).
-- [ ] T009 [US2] Integration tests: legacy OSC rejected when disallowed / accepted when allowed; GetEndpoints filtering (`async-opcua/tests/integration/`).
+- [X] T007 [US2] Filter deprecated endpoints from `ServerInfo::new_endpoint_descriptions` and `endpoint_exists` when legacy is not allowed (`async-opcua-server/src/info.rs`).
+- [X] T008 [US2] Reject OpenSecureChannel with a legacy policy URI when not allowed: thread the allow flag into the server secure-channel acceptance path, respond `BadSecurityPolicyRejected` (`async-opcua-core/src/comms/secure_channel.rs`, `async-opcua-server/src/transport/`, `session/controller.rs` as needed).
+- [X] T009 [US2] Integration tests: legacy OSC rejected when disallowed / accepted when allowed; GetEndpoints filtering (`async-opcua/tests/integration/`).
 
 ## Phase 5: User Story 3 - Client opt-in and warnings (P2)
 

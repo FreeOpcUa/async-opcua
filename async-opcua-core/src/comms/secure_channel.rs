@@ -53,6 +53,9 @@ struct RemoteKeys {
 pub struct SecureChannel {
     // The side of the secure channel that this role belongs to, client or server
     role: Role,
+    /// Whether deprecated (legacy) security policies may be negotiated on
+    /// this channel. Servers set this from their runtime configuration.
+    allow_deprecated: bool,
     /// The security policy for the connection, None or Encryption/Signing settings
     security_policy: SecurityPolicy,
     /// The security mode for the connection, None, Sign, SignAndEncrypt
@@ -96,6 +99,7 @@ impl SecureChannel {
     pub fn new_no_certificate_store() -> SecureChannel {
         SecureChannel {
             role: Role::Unknown,
+            allow_deprecated: true,
             security_policy: SecurityPolicy::None,
             security_mode: MessageSecurityMode::None,
             secure_channel_id: 0,
@@ -140,6 +144,7 @@ impl SecureChannel {
         };
         SecureChannel {
             role,
+            allow_deprecated: true,
             security_mode: MessageSecurityMode::None,
             security_policy: SecurityPolicy::None,
             secure_channel_id: 0,
@@ -195,6 +200,12 @@ impl SecureChannel {
     /// Set the application security mode.
     pub fn set_security_mode(&mut self, security_mode: MessageSecurityMode) {
         self.security_mode = security_mode;
+    }
+
+    /// Set whether deprecated (legacy) security policies may be negotiated
+    /// on this channel.
+    pub fn set_allow_deprecated(&mut self, allow: bool) {
+        self.allow_deprecated = allow;
     }
 
     /// Get the application security policy.
@@ -773,6 +784,17 @@ impl SecureChannel {
                 StatusCode::BadSecurityPolicyRejected,
                 format!(
                     "Security policy \"{security_policy_uri}\" is not supported by this build and has been rejected"
+                ),
+            ));
+        }
+
+        // Reject deprecated policies unless the deployment opted in at
+        // runtime (server allow_legacy_crypto).
+        if security_policy.is_deprecated() && !self.allow_deprecated {
+            return Err(Error::new(
+                StatusCode::BadSecurityPolicyRejected,
+                format!(
+                    "Security policy \"{security_policy_uri}\" is deprecated and disabled. Set allow_legacy_crypto: true in the server configuration to enable it."
                 ),
             ));
         }

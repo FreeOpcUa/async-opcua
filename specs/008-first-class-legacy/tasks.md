@@ -16,9 +16,9 @@
 
 ## Phase 3: User Story 1 - Runtime control, compiled in by default (P1)
 
-- [ ] T004 [US1] Enforce `allow_legacy_crypto` in server config validation: `ServerEndpoint::validate` (endpoint policy and `password_security_policy`) gains the allow flag, `ServerConfig::validate` passes it, error messages name the switch (`async-opcua-server/src/config/endpoint.rs`, `config/server.rs`).
-- [ ] T005 [US1] Unit tests for config validation: legacy allowed, legacy rejected by default, feature-off message (`async-opcua-server/src/config/`).
-- [ ] T006 [US1] Update the umbrella `Tester` harness to set `allow_legacy_crypto(true)` so the existing legacy connect matrix passes on default features (`async-opcua/tests/utils/tester.rs`).
+- [X] T004 [US1] Enforce `allow_legacy_crypto` in server config validation: `ServerEndpoint::validate` (endpoint policy and `password_security_policy`) gains the allow flag, `ServerConfig::validate` passes it, error messages name the switch (`async-opcua-server/src/config/endpoint.rs`, `config/server.rs`).
+- [X] T005 [US1] Unit tests for config validation: legacy allowed, legacy rejected by default, feature-off message (`async-opcua-server/src/config/`).
+- [X] T006 [US1] Update the umbrella `Tester` harness to set `allow_legacy_crypto(true)` so the existing legacy connect matrix passes on default features (`async-opcua/tests/utils/tester.rs`).
 
 ## Phase 4: User Story 2 - Server enforcement and filtering (P1)
 

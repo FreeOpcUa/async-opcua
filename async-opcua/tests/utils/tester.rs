@@ -88,6 +88,8 @@ pub fn default_server() -> ServerBuilder {
         .application_uri("urn:integration_server")
         .product_uri("urn:integration_server Testkit")
         .create_sample_keypair(true)
+        // The test endpoint matrix includes the deprecated policies.
+        .allow_legacy_crypto(true)
         .host(hostname())
         .trust_client_certs(true)
         .add_user_token(

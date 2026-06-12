@@ -127,8 +127,8 @@ pub use session::{
     Client, ConnectionSource, DataChangeCallback, DefaultRetryPolicy, DirectConnectionSource,
     EventCallback, HistoryReadAction, HistoryUpdateAction, MonitoredItem, MonitoredItemMap,
     OnSubscriptionNotification, OnSubscriptionNotificationCore, RequestRetryPolicy, Session,
-    SessionActivity, SessionBuilder, SessionConnectMode, SessionEventLoop, SessionPollResult,
-    Subscription, SubscriptionActivity, SubscriptionCallbacks, UARequest,
+    SessionActivity, SessionBuilder, SessionConnectMode, SessionDropGuard, SessionEventLoop,
+    SessionPollResult, Subscription, SubscriptionActivity, SubscriptionCallbacks, UARequest,
 };
 pub use transport::AsyncSecureChannel;
 

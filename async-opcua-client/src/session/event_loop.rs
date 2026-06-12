@@ -68,6 +68,7 @@ enum SessionEventLoopState<T: Transport + Send + Sync + 'static> {
 pub struct SessionEventLoop<T: Connector + Send + Sync + 'static> {
     inner: Arc<Session>,
     trigger_publish_recv: tokio::sync::watch::Receiver<Instant>,
+    close_rx: tokio::sync::watch::Receiver<bool>,
     retry: SessionRetryPolicy,
     keep_alive_interval: Duration,
     max_failed_keep_alive_count: u64,
@@ -79,6 +80,7 @@ impl<T: Connector + Send + Sync + 'static> SessionEventLoop<T> {
         inner: Arc<Session>,
         retry: SessionRetryPolicy,
         trigger_publish_recv: tokio::sync::watch::Receiver<Instant>,
+        close_rx: tokio::sync::watch::Receiver<bool>,
         keep_alive_interval: Duration,
         max_failed_keep_alive_count: u64,
         connector: T,
@@ -87,6 +89,7 @@ impl<T: Connector + Send + Sync + 'static> SessionEventLoop<T> {
             inner,
             retry,
             trigger_publish_recv,
+            close_rx,
             keep_alive_interval,
             max_failed_keep_alive_count,
             connector,
@@ -134,7 +137,12 @@ impl<T: Connector + Send + Sync + 'static> SessionEventLoop<T> {
     pub fn enter(self) -> impl Stream<Item = Result<SessionPollResult, StatusCode>> {
         futures::stream::try_unfold(
             (self, SessionEventLoopState::Disconnected),
-            |(slf, state)| async move {
+            |(mut slf, state)| async move {
+                // If SessionDropGuard was dropped, stop the loop immediately.
+                if *slf.close_rx.borrow_and_update() {
+                    return Ok(None);
+                }
+
                 let (res, state) = match state {
                     SessionEventLoopState::Connected(mut state) => {
                         tokio::select! {
@@ -219,6 +227,19 @@ impl<T: Connector + Send + Sync + 'static> SessionEventLoop<T> {
                                 Ok((
                                     SessionPollResult::FinishedDisconnect,
                                     SessionEventLoopState::Connected(state)
+                                ))
+                            }
+                            _ = slf.close_rx.changed(), if !state.currently_closing => {
+                                if *slf.close_rx.borrow_and_update() {
+                                    state.currently_closing = true;
+                                    let s = slf.inner.clone();
+                                    state.disconnect_fut = async move {
+                                        s.disconnect_inner(true, false).await
+                                    }.boxed();
+                                }
+                                Ok((
+                                    SessionPollResult::FinishedDisconnect,
+                                    SessionEventLoopState::Connected(state),
                                 ))
                             }
                         }

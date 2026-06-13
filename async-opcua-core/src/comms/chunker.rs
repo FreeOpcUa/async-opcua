@@ -155,7 +155,10 @@ impl<'a, 'b> ChunkingStream<'a, 'b> {
                     },
                 )
             })?;
-            (message_size / max_body_per_chunk + 1, max_body_per_chunk)
+            (
+                message_size.div_ceil(max_body_per_chunk).max(1),
+                max_body_per_chunk,
+            )
         } else {
             (1, 0)
         };
@@ -203,7 +206,7 @@ impl<'a, 'b> ChunkingStream<'a, 'b> {
         self.current_body_target = if self.max_body_per_chunk == 0 {
             self.message_size
         } else if is_last {
-            self.message_size % self.max_body_per_chunk
+            self.message_size - self.chunks_emitted * self.max_body_per_chunk
         } else {
             self.max_body_per_chunk
         };

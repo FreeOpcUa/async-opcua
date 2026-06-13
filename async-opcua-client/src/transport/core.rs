@@ -21,7 +21,7 @@ use crate::transport::RequestRecv;
 #[derive(Debug)]
 struct MessageChunkWithChunkInfo {
     header: ChunkInfo,
-    data_with_header: Vec<u8>,
+    data_with_header: bytes::Bytes,
 }
 
 pub(crate) struct MessageState {

@@ -161,6 +161,7 @@ dependencies = [
  "async-opcua-nodes",
  "async-opcua-types",
  "async-trait",
+ "bytes",
  "chrono",
  "futures",
  "hashbrown 0.15.5",
@@ -340,6 +341,10 @@ dependencies = [
  "thiserror 1.0.69",
  "tracing",
 ]
+
+[[package]]
+name = "async-opcua-safety"
+version = "0.1.0"
 
 [[package]]
 name = "async-opcua-server"

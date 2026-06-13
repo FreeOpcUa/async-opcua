@@ -139,10 +139,10 @@ impl MessageChunkHeader {}
 /// A chunk holds a message or a portion of a message, if the message has been split into multiple chunks.
 /// The chunk's data may be signed and encrypted. To extract the message requires all the chunks
 /// to be available in sequence so they can be formed back into the message.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MessageChunk {
     /// All of the chunk's data including headers, payload, padding, signature
-    pub data: Vec<u8>,
+    pub data: bytes::Bytes,
 }
 
 impl SimpleBinaryEncodable for MessageChunk {
@@ -194,7 +194,9 @@ impl SimpleBinaryDecodable for MessageChunk {
             // Read remainder of stream into slice after the header
             in_stream.read_exact(&mut data[chunk_header_size..])?;
 
-            Ok(MessageChunk { data })
+            Ok(MessageChunk {
+                data: bytes::Bytes::from(data),
+            })
         }
     }
 }
@@ -251,7 +253,9 @@ impl MessageChunk {
         // write message
         stream.write_all(data)?;
 
-        Ok(MessageChunk { data: buf })
+        Ok(MessageChunk {
+            data: bytes::Bytes::from(buf),
+        })
     }
 
     /// Calculates the body size that fit inside of a message chunk of a particular size.

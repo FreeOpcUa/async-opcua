@@ -21,6 +21,7 @@ name = "opcua_client"
 
 [dependencies]
 arc-swap = { workspace = true }
+bytes = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 futures = { workspace = true }

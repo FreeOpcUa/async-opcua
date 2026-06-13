@@ -139,8 +139,6 @@ impl MessageChunkHeader {}
 /// A chunk holds a message or a portion of a message, if the message has been split into multiple chunks.
 /// The chunk's data may be signed and encrypted. To extract the message requires all the chunks
 /// to be available in sequence so they can be formed back into the message.
-/// The chunk's data may be signed and encrypted. To extract the message requires all the chunks
-/// to be available in sequence so they can be formed back into the message.
 #[derive(Debug, Clone)]
 pub struct MessageChunk {
     /// All of the chunk's data including headers, payload, padding, signature
@@ -209,26 +207,6 @@ impl SimpleBinaryDecodable for MessageChunk {
 pub struct MessageChunkTooSmall;
 
 impl MessageChunk {
-    /// Decode the MessageChunk from a Bytes buffer using zero-copy slicing.
-    pub fn decode_zero_copy(
-        buf: &mut bytes::Bytes,
-        decoding_options: &DecodingOptions,
-    ) -> EncodingResult<Self> {
-        let message_size = buf.len();
-        if decoding_options.max_message_size > 0 && message_size > decoding_options.max_message_size
-        {
-            return Err(Error::new(
-                StatusCode::BadTcpMessageTooLarge,
-                format!(
-                    "Message size {} exceeds maximum message size {}",
-                    message_size, decoding_options.max_message_size
-                ),
-            ));
-        }
-        let data = buf.split_to(message_size);
-        Ok(MessageChunk { data })
-    }
-
     /// Create a new message chunk.
     pub fn new(
         sequence_number: u32,

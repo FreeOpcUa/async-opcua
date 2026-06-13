@@ -63,14 +63,14 @@ fn set_chunk_sequence_number(
     let mut chunk_info = chunk.chunk_info(secure_channel).unwrap();
     let old_sequence_number = chunk_info.sequence_header.sequence_number;
     chunk_info.sequence_header.sequence_number = sequence_number;
-    // Write the sequence header out again with new value by converting to Vec
-    let mut data_vec = chunk.data.to_vec();
-    let mut stream = Cursor::new(&mut data_vec[..]);
+    // Write the sequence header out again with new value
+    let mut data = chunk.data.to_vec();
+    let mut stream = Cursor::new(&mut data[..]);
     stream.set_position(chunk_info.sequence_header_offset as u64);
     let ctx_r = ContextOwned::default();
     let ctx = ctx_r.context();
     let _ = chunk_info.sequence_header.encode(&mut stream, &ctx);
-    chunk.data = bytes::Bytes::from(data_vec);
+    chunk.data = bytes::Bytes::from(data);
     old_sequence_number
 }
 
@@ -83,14 +83,14 @@ fn set_chunk_request_id(
     let mut chunk_info = chunk.chunk_info(secure_channel).unwrap();
     let old_request_id = chunk_info.sequence_header.request_id;
     chunk_info.sequence_header.request_id = request_id;
-    // Write the sequence header out again with new value by converting to Vec
-    let mut data_vec = chunk.data.to_vec();
-    let mut stream = Cursor::new(&mut data_vec[..]);
+    // Write the sequence header out again with new value
+    let mut data = chunk.data.to_vec();
+    let mut stream = Cursor::new(&mut data[..]);
     stream.set_position(chunk_info.sequence_header_offset as u64);
     let ctx_r = ContextOwned::default();
     let ctx = ctx_r.context();
     let _ = chunk_info.sequence_header.encode(&mut stream, &ctx);
-    chunk.data = bytes::Bytes::from(data_vec);
+    chunk.data = bytes::Bytes::from(data);
     old_request_id
 }
 

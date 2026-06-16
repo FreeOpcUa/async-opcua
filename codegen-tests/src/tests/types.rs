@@ -32,7 +32,7 @@ fn ctx() -> ContextOwned {
     let mut loaders = TypeLoaderCollection::new();
     loaders.add_type_loader(crate::generated::base::GeneratedTypeLoader);
     loaders.add_type_loader(crate::generated::ext::GeneratedTypeLoader);
-    
+
     ContextOwned::new(namespaces, loaders, DecodingOptions::default())
 }
 

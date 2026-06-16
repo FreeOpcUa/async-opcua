@@ -62,7 +62,7 @@ pub trait Config: serde::Serialize {
         f.read_to_string(&mut s)?;
         let mut value: serde_yaml::Value = serde_yaml::from_str(&s)?;
         expand_env_in_value(&mut value);
-        return Ok(serde_yaml::from_value(value)?);
+        Ok(serde_yaml::from_value(value)?)
     }
 
     /// Load the configuration object from the given path.

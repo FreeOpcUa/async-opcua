@@ -32,8 +32,8 @@ fn ctx() -> ContextOwned {
     let mut loaders = TypeLoaderCollection::new();
     loaders.add_type_loader(crate::generated::base::GeneratedTypeLoader);
     loaders.add_type_loader(crate::generated::ext::GeneratedTypeLoader);
-    let ctx_owned = ContextOwned::new(namespaces, loaders, DecodingOptions::default());
-    ctx_owned
+    
+    ContextOwned::new(namespaces, loaders, DecodingOptions::default())
 }
 
 fn all_encoding_roundtrip<
@@ -64,7 +64,7 @@ fn all_encoding_roundtrip<
     let mut stream = JsonStreamWriter::new(&mut cursor as &mut dyn Write);
     JsonEncodable::encode(ty, &mut stream, &ctx).unwrap();
     stream.finish_document().unwrap();
-    println!("JSON: {}", String::from_utf8_lossy(&cursor.get_ref()));
+    println!("JSON: {}", String::from_utf8_lossy(cursor.get_ref()));
     cursor.set_position(0);
     let mut stream = JsonStreamReader::new(&mut cursor as &mut dyn Read);
     let rf: T = JsonDecodable::decode(&mut stream, &ctx).unwrap();
@@ -74,7 +74,7 @@ fn all_encoding_roundtrip<
     let mut cursor = Cursor::new(Vec::new());
     let mut stream = XmlStreamWriter::new(&mut cursor as &mut dyn Write);
     XmlEncodable::encode(ty, &mut stream, &ctx).unwrap();
-    println!("XML: {}", String::from_utf8_lossy(&cursor.get_ref()));
+    println!("XML: {}", String::from_utf8_lossy(cursor.get_ref()));
     cursor.set_position(0);
     let mut stream = XmlStreamReader::new(&mut cursor as &mut dyn Read);
     let rf: T = XmlDecodable::decode(&mut stream, &ctx).unwrap();

@@ -1013,7 +1013,7 @@ mod tests {
         assert!(sub.take_notification().is_none());
 
         // Notify the first item
-        sub.notify_data_value(&1, DataValue::new_at(1, time.into()), &time);
+        sub.notify_data_value(&1, DataValue::new_at(1, time), &time);
         let (time, time_inst) = offset(start_dt, start, 200);
         sub.tick(&time, time_inst, TickReason::TickTimerFired, true);
         let notif = sub.take_notification().unwrap();

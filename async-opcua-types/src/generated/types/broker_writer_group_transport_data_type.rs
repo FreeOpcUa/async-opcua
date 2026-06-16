@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part14/6.4.2/#6.4.2.3.5
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct BrokerWriterGroupTransportDataType {
@@ -43,58 +31,4 @@ impl opcua::types::MessageInfo for BrokerWriterGroupTransportDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::BrokerWriterGroupTransportDataType
     }
-}
-impl opcua::types::BinaryEncodable for BrokerWriterGroupTransportDataType {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.queue_name, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.resource_uri, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.authentication_profile_uri, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.requested_delivery_guarantee, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.queue_name, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.resource_uri, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.authentication_profile_uri, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.requested_delivery_guarantee, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for BrokerWriterGroupTransportDataType {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            queue_name: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            resource_uri: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            authentication_profile_uri: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            requested_delivery_guarantee: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for BrokerWriterGroupTransportDataType
-where
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    super::enums::BrokerTransportQualityOfService: Send,
-{
-}
-unsafe impl Sync for BrokerWriterGroupTransportDataType
-where
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    super::enums::BrokerTransportQualityOfService: Sync,
-{
 }

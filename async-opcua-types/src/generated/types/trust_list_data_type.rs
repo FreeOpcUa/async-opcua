@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part12/7.8.2/#7.8.2.6
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TrustListDataType {
@@ -44,63 +32,4 @@ impl opcua::types::MessageInfo for TrustListDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::TrustListDataType
     }
-}
-impl opcua::types::BinaryEncodable for TrustListDataType {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.specified_lists, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.trusted_certificates, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.trusted_crls, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.issuer_certificates, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.issuer_crls, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.specified_lists, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.trusted_certificates, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.trusted_crls, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.issuer_certificates, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.issuer_crls, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for TrustListDataType {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            specified_lists: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            trusted_certificates: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            trusted_crls: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            issuer_certificates: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            issuer_crls: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for TrustListDataType
-where
-    u32: Send,
-    Option<Vec<opcua::types::byte_string::ByteString>>: Send,
-    Option<Vec<opcua::types::byte_string::ByteString>>: Send,
-    Option<Vec<opcua::types::byte_string::ByteString>>: Send,
-    Option<Vec<opcua::types::byte_string::ByteString>>: Send,
-{
-}
-unsafe impl Sync for TrustListDataType
-where
-    u32: Sync,
-    Option<Vec<opcua::types::byte_string::ByteString>>: Sync,
-    Option<Vec<opcua::types::byte_string::ByteString>>: Sync,
-    Option<Vec<opcua::types::byte_string::ByteString>>: Sync,
-    Option<Vec<opcua::types::byte_string::ByteString>>: Sync,
-{
 }

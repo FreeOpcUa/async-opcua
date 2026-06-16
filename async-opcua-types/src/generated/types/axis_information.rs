@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part8/5.6.6
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct AxisInformation {
@@ -44,63 +32,4 @@ impl opcua::types::MessageInfo for AxisInformation {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::AxisInformation
     }
-}
-impl opcua::types::BinaryEncodable for AxisInformation {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.engineering_units, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.eu_range, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.title, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.axis_scale_type, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.axis_steps, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.engineering_units, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.eu_range, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.title, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.axis_scale_type, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.axis_steps, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for AxisInformation {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            engineering_units: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            eu_range: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            title: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            axis_scale_type: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            axis_steps: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for AxisInformation
-where
-    super::eu_information::EUInformation: Send,
-    super::range::Range: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-    super::enums::AxisScaleEnumeration: Send,
-    Option<Vec<f64>>: Send,
-{
-}
-unsafe impl Sync for AxisInformation
-where
-    super::eu_information::EUInformation: Sync,
-    super::range::Range: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-    super::enums::AxisScaleEnumeration: Sync,
-    Option<Vec<f64>>: Sync,
-{
 }

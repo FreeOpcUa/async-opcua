@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/7.24.9
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ViewAttributes {
@@ -46,73 +34,4 @@ impl opcua::types::MessageInfo for ViewAttributes {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::ViewAttributes
     }
-}
-impl opcua::types::BinaryEncodable for ViewAttributes {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.specified_attributes, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.display_name, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.description, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.write_mask, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.user_write_mask, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.contains_no_loops, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.event_notifier, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.specified_attributes, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.display_name, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.description, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.write_mask, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.user_write_mask, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.contains_no_loops, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.event_notifier, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for ViewAttributes {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            specified_attributes: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            display_name: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            description: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            write_mask: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            user_write_mask: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            contains_no_loops: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            event_notifier: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for ViewAttributes
-where
-    u32: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-    u32: Send,
-    u32: Send,
-    bool: Send,
-    u8: Send,
-{
-}
-unsafe impl Sync for ViewAttributes
-where
-    u32: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-    u32: Sync,
-    u32: Sync,
-    bool: Sync,
-    u8: Sync,
-{
 }

@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/7.13.2
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct MdnsDiscoveryConfiguration {
@@ -41,48 +29,4 @@ impl opcua::types::MessageInfo for MdnsDiscoveryConfiguration {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::MdnsDiscoveryConfiguration
     }
-}
-impl opcua::types::BinaryEncodable for MdnsDiscoveryConfiguration {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.mdns_server_name, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.server_capabilities, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.mdns_server_name, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.server_capabilities, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for MdnsDiscoveryConfiguration {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            mdns_server_name: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            server_capabilities: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for MdnsDiscoveryConfiguration
-where
-    opcua::types::string::UAString: Send,
-    Option<Vec<opcua::types::string::UAString>>: Send,
-{
-}
-unsafe impl Sync for MdnsDiscoveryConfiguration
-where
-    opcua::types::string::UAString: Sync,
-    Option<Vec<opcua::types::string::UAString>>: Sync,
-{
 }

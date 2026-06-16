@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/5.9.5/#5.9.5.2
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct RegisterNodesRequest {
@@ -41,52 +29,4 @@ impl opcua::types::MessageInfo for RegisterNodesRequest {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::RegisterNodesRequest
     }
-}
-impl opcua::types::BinaryEncodable for RegisterNodesRequest {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.request_header, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.nodes_to_register, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.request_header, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.nodes_to_register, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for RegisterNodesRequest {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        let request_header: opcua::types::request_header::RequestHeader =
-            opcua::types::BinaryDecodable::decode(stream, ctx)?;
-        let __request_handle = request_header.request_handle;
-        Ok(Self {
-            request_header,
-            nodes_to_register: opcua::types::BinaryDecodable::decode(stream, ctx)
-                .map_err(|e| e.with_request_handle(__request_handle))?,
-        })
-    }
-}
-unsafe impl Send for RegisterNodesRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    Option<Vec<opcua::types::node_id::NodeId>>: Send,
-{
-}
-unsafe impl Sync for RegisterNodesRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    Option<Vec<opcua::types::node_id::NodeId>>: Sync,
-{
 }

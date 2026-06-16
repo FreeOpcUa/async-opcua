@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct OpenSecureChannelRequest {
     pub request_header: opcua::types::request_header::RequestHeader,
@@ -44,76 +32,4 @@ impl opcua::types::MessageInfo for OpenSecureChannelRequest {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::OpenSecureChannelRequest
     }
-}
-impl opcua::types::BinaryEncodable for OpenSecureChannelRequest {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.request_header, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.client_protocol_version, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.request_type, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.security_mode, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.client_nonce, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.requested_lifetime, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.request_header, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.client_protocol_version, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.request_type, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.security_mode, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.client_nonce, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.requested_lifetime, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for OpenSecureChannelRequest {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        let request_header: opcua::types::request_header::RequestHeader =
-            opcua::types::BinaryDecodable::decode(stream, ctx)?;
-        let __request_handle = request_header.request_handle;
-        Ok(Self {
-            request_header,
-            client_protocol_version: opcua::types::BinaryDecodable::decode(stream, ctx)
-                .map_err(|e| e.with_request_handle(__request_handle))?,
-            request_type: opcua::types::BinaryDecodable::decode(stream, ctx)
-                .map_err(|e| e.with_request_handle(__request_handle))?,
-            security_mode: opcua::types::BinaryDecodable::decode(stream, ctx)
-                .map_err(|e| e.with_request_handle(__request_handle))?,
-            client_nonce: opcua::types::BinaryDecodable::decode(stream, ctx)
-                .map_err(|e| e.with_request_handle(__request_handle))?,
-            requested_lifetime: opcua::types::BinaryDecodable::decode(stream, ctx)
-                .map_err(|e| e.with_request_handle(__request_handle))?,
-        })
-    }
-}
-unsafe impl Send for OpenSecureChannelRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    u32: Send,
-    super::enums::SecurityTokenRequestType: Send,
-    super::enums::MessageSecurityMode: Send,
-    opcua::types::byte_string::ByteString: Send,
-    u32: Send,
-{
-}
-unsafe impl Sync for OpenSecureChannelRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    u32: Sync,
-    super::enums::SecurityTokenRequestType: Sync,
-    super::enums::MessageSecurityMode: Sync,
-    opcua::types::byte_string::ByteString: Sync,
-    u32: Sync,
-{
 }

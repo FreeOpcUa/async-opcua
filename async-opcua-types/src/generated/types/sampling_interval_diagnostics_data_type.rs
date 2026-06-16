@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part5/12.8
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SamplingIntervalDiagnosticsDataType {
@@ -43,58 +31,4 @@ impl opcua::types::MessageInfo for SamplingIntervalDiagnosticsDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::SamplingIntervalDiagnosticsDataType
     }
-}
-impl opcua::types::BinaryEncodable for SamplingIntervalDiagnosticsDataType {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.sampling_interval, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.monitored_item_count, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.max_monitored_item_count, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.disabled_monitored_item_count, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.sampling_interval, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.monitored_item_count, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.max_monitored_item_count, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.disabled_monitored_item_count, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for SamplingIntervalDiagnosticsDataType {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            sampling_interval: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            monitored_item_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            max_monitored_item_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            disabled_monitored_item_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for SamplingIntervalDiagnosticsDataType
-where
-    opcua::types::data_types::Duration: Send,
-    u32: Send,
-    u32: Send,
-    u32: Send,
-{
-}
-unsafe impl Sync for SamplingIntervalDiagnosticsDataType
-where
-    opcua::types::data_types::Duration: Sync,
-    u32: Sync,
-    u32: Sync,
-    u32: Sync,
-{
 }

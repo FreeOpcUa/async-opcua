@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part8/5.6.8
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct XVType {
@@ -41,48 +29,4 @@ impl opcua::types::MessageInfo for XVType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::XVType
     }
-}
-impl opcua::types::BinaryEncodable for XVType {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.x, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.value, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.x, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.value, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for XVType {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            x: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            value: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for XVType
-where
-    f64: Send,
-    f32: Send,
-{
-}
-unsafe impl Sync for XVType
-where
-    f64: Sync,
-    f32: Sync,
-{
 }

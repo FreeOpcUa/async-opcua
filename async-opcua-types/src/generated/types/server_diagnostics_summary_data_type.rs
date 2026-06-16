@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part5/12.9
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ServerDiagnosticsSummaryDataType {
@@ -51,99 +39,4 @@ impl opcua::types::MessageInfo for ServerDiagnosticsSummaryDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::ServerDiagnosticsSummaryDataType
     }
-}
-impl opcua::types::BinaryEncodable for ServerDiagnosticsSummaryDataType {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.server_view_count, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.current_session_count, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.cumulated_session_count, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.security_rejected_session_count, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.rejected_session_count, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.session_timeout_count, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.session_abort_count, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.current_subscription_count, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.cumulated_subscription_count, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.publishing_interval_count, ctx);
-        size +=
-            opcua::types::BinaryEncodable::byte_len(&self.security_rejected_requests_count, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.rejected_requests_count, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.server_view_count, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.current_session_count, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.cumulated_session_count, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.security_rejected_session_count, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.rejected_session_count, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.session_timeout_count, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.session_abort_count, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.current_subscription_count, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.cumulated_subscription_count, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.publishing_interval_count, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.security_rejected_requests_count, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.rejected_requests_count, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for ServerDiagnosticsSummaryDataType {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            server_view_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            current_session_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            cumulated_session_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            security_rejected_session_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            rejected_session_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            session_timeout_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            session_abort_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            current_subscription_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            cumulated_subscription_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            publishing_interval_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            security_rejected_requests_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            rejected_requests_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for ServerDiagnosticsSummaryDataType
-where
-    u32: Send,
-    u32: Send,
-    u32: Send,
-    u32: Send,
-    u32: Send,
-    u32: Send,
-    u32: Send,
-    u32: Send,
-    u32: Send,
-    u32: Send,
-    u32: Send,
-    u32: Send,
-{
-}
-unsafe impl Sync for ServerDiagnosticsSummaryDataType
-where
-    u32: Sync,
-    u32: Sync,
-    u32: Sync,
-    u32: Sync,
-    u32: Sync,
-    u32: Sync,
-    u32: Sync,
-    u32: Sync,
-    u32: Sync,
-    u32: Sync,
-    u32: Sync,
-    u32: Sync,
-{
 }

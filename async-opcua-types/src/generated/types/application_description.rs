@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part14/7.2.4/#7.2.4.6.5
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ApplicationDescription {
@@ -46,73 +34,4 @@ impl opcua::types::MessageInfo for ApplicationDescription {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::ApplicationDescription
     }
-}
-impl opcua::types::BinaryEncodable for ApplicationDescription {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.application_uri, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.product_uri, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.application_name, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.application_type, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.gateway_server_uri, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.discovery_profile_uri, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.discovery_urls, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.application_uri, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.product_uri, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.application_name, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.application_type, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.gateway_server_uri, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.discovery_profile_uri, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.discovery_urls, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for ApplicationDescription {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            application_uri: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            product_uri: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            application_name: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            application_type: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            gateway_server_uri: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            discovery_profile_uri: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            discovery_urls: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for ApplicationDescription
-where
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-    super::enums::ApplicationType: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    Option<Vec<opcua::types::string::UAString>>: Send,
-{
-}
-unsafe impl Sync for ApplicationDescription
-where
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-    super::enums::ApplicationType: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    Option<Vec<opcua::types::string::UAString>>: Sync,
-{
 }

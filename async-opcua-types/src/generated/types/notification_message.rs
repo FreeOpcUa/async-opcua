@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/7.26
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct NotificationMessage {
@@ -42,53 +30,4 @@ impl opcua::types::MessageInfo for NotificationMessage {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::NotificationMessage
     }
-}
-impl opcua::types::BinaryEncodable for NotificationMessage {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.sequence_number, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.publish_time, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.notification_data, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.sequence_number, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.publish_time, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.notification_data, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for NotificationMessage {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            sequence_number: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            publish_time: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            notification_data: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for NotificationMessage
-where
-    opcua::types::Counter: Send,
-    opcua::types::data_types::UtcTime: Send,
-    Option<Vec<opcua::types::extension_object::ExtensionObject>>: Send,
-{
-}
-unsafe impl Sync for NotificationMessage
-where
-    opcua::types::Counter: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-    Option<Vec<opcua::types::extension_object::ExtensionObject>>: Sync,
-{
 }

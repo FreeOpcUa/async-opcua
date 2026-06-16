@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part14/9.1.3/#9.1.3.7.3
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PubSubConfigurationRefDataType {
@@ -43,58 +31,4 @@ impl opcua::types::MessageInfo for PubSubConfigurationRefDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::PubSubConfigurationRefDataType
     }
-}
-impl opcua::types::BinaryEncodable for PubSubConfigurationRefDataType {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.configuration_mask, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.element_index, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.connection_index, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.group_index, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.configuration_mask, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.element_index, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.connection_index, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.group_index, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for PubSubConfigurationRefDataType {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            configuration_mask: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            element_index: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            connection_index: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            group_index: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for PubSubConfigurationRefDataType
-where
-    super::enums::PubSubConfigurationRefMask: Send,
-    u16: Send,
-    u16: Send,
-    u16: Send,
-{
-}
-unsafe impl Sync for PubSubConfigurationRefDataType
-where
-    super::enums::PubSubConfigurationRefMask: Sync,
-    u16: Sync,
-    u16: Sync,
-    u16: Sync,
-{
 }

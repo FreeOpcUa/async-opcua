@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/5.13.3/#5.13.3.2
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct MonitoredItemModifyRequest {
@@ -41,48 +29,4 @@ impl opcua::types::MessageInfo for MonitoredItemModifyRequest {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::MonitoredItemModifyRequest
     }
-}
-impl opcua::types::BinaryEncodable for MonitoredItemModifyRequest {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.monitored_item_id, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.requested_parameters, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.monitored_item_id, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.requested_parameters, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for MonitoredItemModifyRequest {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            monitored_item_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            requested_parameters: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for MonitoredItemModifyRequest
-where
-    opcua::types::IntegerId: Send,
-    super::monitoring_parameters::MonitoringParameters: Send,
-{
-}
-unsafe impl Sync for MonitoredItemModifyRequest
-where
-    opcua::types::IntegerId: Sync,
-    super::monitoring_parameters::MonitoringParameters: Sync,
-{
 }

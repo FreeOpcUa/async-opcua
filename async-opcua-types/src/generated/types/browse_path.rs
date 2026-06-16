@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/5.9.4/#5.9.4.2
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct BrowsePath {
@@ -41,48 +29,4 @@ impl opcua::types::MessageInfo for BrowsePath {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::BrowsePath
     }
-}
-impl opcua::types::BinaryEncodable for BrowsePath {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.starting_node, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.relative_path, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.starting_node, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.relative_path, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for BrowsePath {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            starting_node: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            relative_path: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for BrowsePath
-where
-    opcua::types::node_id::NodeId: Send,
-    super::relative_path::RelativePath: Send,
-{
-}
-unsafe impl Sync for BrowsePath
-where
-    opcua::types::node_id::NodeId: Sync,
-    super::relative_path::RelativePath: Sync,
-{
 }

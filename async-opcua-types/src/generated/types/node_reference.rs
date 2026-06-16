@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct NodeReference {
     pub node_id: opcua::types::node_id::NodeId,
@@ -42,58 +30,4 @@ impl opcua::types::MessageInfo for NodeReference {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::NodeReference
     }
-}
-impl opcua::types::BinaryEncodable for NodeReference {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.node_id, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.reference_type_id, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.is_forward, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.referenced_node_ids, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.node_id, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.reference_type_id, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.is_forward, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.referenced_node_ids, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for NodeReference {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            node_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            reference_type_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            is_forward: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            referenced_node_ids: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for NodeReference
-where
-    opcua::types::node_id::NodeId: Send,
-    opcua::types::node_id::NodeId: Send,
-    bool: Send,
-    Option<Vec<opcua::types::node_id::NodeId>>: Send,
-{
-}
-unsafe impl Sync for NodeReference
-where
-    opcua::types::node_id::NodeId: Sync,
-    opcua::types::node_id::NodeId: Sync,
-    bool: Sync,
-    Option<Vec<opcua::types::node_id::NodeId>>: Sync,
-{
 }

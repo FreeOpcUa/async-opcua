@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part14/6.4.1/#6.4.1.7.6
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct DtlsPubSubConnectionDataType {
@@ -44,63 +32,4 @@ impl opcua::types::MessageInfo for DtlsPubSubConnectionDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::DtlsPubSubConnectionDataType
     }
-}
-impl opcua::types::BinaryEncodable for DtlsPubSubConnectionDataType {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.client_cipher_suite, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.server_cipher_suites, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.zero_rtt, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.certificate_group_id, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.verify_client_certificate, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.client_cipher_suite, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.server_cipher_suites, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.zero_rtt, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.certificate_group_id, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.verify_client_certificate, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for DtlsPubSubConnectionDataType {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            client_cipher_suite: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            server_cipher_suites: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            zero_rtt: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            certificate_group_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            verify_client_certificate: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for DtlsPubSubConnectionDataType
-where
-    opcua::types::string::UAString: Send,
-    Option<Vec<opcua::types::string::UAString>>: Send,
-    bool: Send,
-    opcua::types::node_id::NodeId: Send,
-    bool: Send,
-{
-}
-unsafe impl Sync for DtlsPubSubConnectionDataType
-where
-    opcua::types::string::UAString: Sync,
-    Option<Vec<opcua::types::string::UAString>>: Sync,
-    bool: Sync,
-    opcua::types::node_id::NodeId: Sync,
-    bool: Sync,
-{
 }

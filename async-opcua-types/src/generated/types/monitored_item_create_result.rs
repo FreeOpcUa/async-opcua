@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/5.13.2/#5.13.2.2
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct MonitoredItemCreateResult {
@@ -44,63 +32,4 @@ impl opcua::types::MessageInfo for MonitoredItemCreateResult {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::MonitoredItemCreateResult
     }
-}
-impl opcua::types::BinaryEncodable for MonitoredItemCreateResult {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.status_code, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.monitored_item_id, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.revised_sampling_interval, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.revised_queue_size, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.filter_result, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.status_code, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.monitored_item_id, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.revised_sampling_interval, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.revised_queue_size, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.filter_result, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for MonitoredItemCreateResult {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            status_code: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            monitored_item_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            revised_sampling_interval: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            revised_queue_size: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            filter_result: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for MonitoredItemCreateResult
-where
-    opcua::types::status_code::StatusCode: Send,
-    opcua::types::IntegerId: Send,
-    opcua::types::data_types::Duration: Send,
-    opcua::types::Counter: Send,
-    opcua::types::extension_object::ExtensionObject: Send,
-{
-}
-unsafe impl Sync for MonitoredItemCreateResult
-where
-    opcua::types::status_code::StatusCode: Sync,
-    opcua::types::IntegerId: Sync,
-    opcua::types::data_types::Duration: Sync,
-    opcua::types::Counter: Sync,
-    opcua::types::extension_object::ExtensionObject: Sync,
-{
 }

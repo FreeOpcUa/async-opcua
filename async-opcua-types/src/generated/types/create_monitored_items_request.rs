@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/5.13.2/#5.13.2.2
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct CreateMonitoredItemsRequest {
@@ -44,64 +32,4 @@ impl opcua::types::MessageInfo for CreateMonitoredItemsRequest {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::CreateMonitoredItemsRequest
     }
-}
-impl opcua::types::BinaryEncodable for CreateMonitoredItemsRequest {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.request_header, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.subscription_id, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.timestamps_to_return, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.items_to_create, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.request_header, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.subscription_id, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.timestamps_to_return, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.items_to_create, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for CreateMonitoredItemsRequest {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        let request_header: opcua::types::request_header::RequestHeader =
-            opcua::types::BinaryDecodable::decode(stream, ctx)?;
-        let __request_handle = request_header.request_handle;
-        Ok(Self {
-            request_header,
-            subscription_id: opcua::types::BinaryDecodable::decode(stream, ctx)
-                .map_err(|e| e.with_request_handle(__request_handle))?,
-            timestamps_to_return: opcua::types::BinaryDecodable::decode(stream, ctx)
-                .map_err(|e| e.with_request_handle(__request_handle))?,
-            items_to_create: opcua::types::BinaryDecodable::decode(stream, ctx)
-                .map_err(|e| e.with_request_handle(__request_handle))?,
-        })
-    }
-}
-unsafe impl Send for CreateMonitoredItemsRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    opcua::types::IntegerId: Send,
-    super::enums::TimestampsToReturn: Send,
-    Option<Vec<super::monitored_item_create_request::MonitoredItemCreateRequest>>: Send,
-{
-}
-unsafe impl Sync for CreateMonitoredItemsRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    opcua::types::IntegerId: Sync,
-    super::enums::TimestampsToReturn: Sync,
-    Option<Vec<super::monitored_item_create_request::MonitoredItemCreateRequest>>: Sync,
-{
 }

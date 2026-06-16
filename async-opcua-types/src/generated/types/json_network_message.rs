@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct JsonNetworkMessage {
     pub message_id: opcua::types::string::UAString,
@@ -30,68 +18,4 @@ pub struct JsonNetworkMessage {
     pub writer_group_name: opcua::types::string::UAString,
     pub data_set_class_id: opcua::types::string::UAString,
     pub messages: opcua::types::extension_object::ExtensionObject,
-}
-impl opcua::types::BinaryEncodable for JsonNetworkMessage {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.message_id, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.message_type, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.publisher_id, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.writer_group_name, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.data_set_class_id, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.messages, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.message_id, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.message_type, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.publisher_id, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.writer_group_name, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.data_set_class_id, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.messages, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for JsonNetworkMessage {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            message_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            message_type: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            publisher_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            writer_group_name: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            data_set_class_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            messages: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for JsonNetworkMessage
-where
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::extension_object::ExtensionObject: Send,
-{
-}
-unsafe impl Sync for JsonNetworkMessage
-where
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::extension_object::ExtensionObject: Sync,
-{
 }

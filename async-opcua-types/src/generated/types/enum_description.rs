@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part5/12.34
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct EnumDescription {
@@ -43,58 +31,4 @@ impl opcua::types::MessageInfo for EnumDescription {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::EnumDescription
     }
-}
-impl opcua::types::BinaryEncodable for EnumDescription {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.data_type_id, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.name, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.enum_definition, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.built_in_type, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.data_type_id, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.name, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.enum_definition, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.built_in_type, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for EnumDescription {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            data_type_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            name: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            enum_definition: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            built_in_type: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for EnumDescription
-where
-    opcua::types::node_id::NodeId: Send,
-    opcua::types::qualified_name::QualifiedName: Send,
-    super::enum_definition::EnumDefinition: Send,
-    u8: Send,
-{
-}
-unsafe impl Sync for EnumDescription
-where
-    opcua::types::node_id::NodeId: Sync,
-    opcua::types::qualified_name::QualifiedName: Sync,
-    super::enum_definition::EnumDefinition: Sync,
-    u8: Sync,
-{
 }

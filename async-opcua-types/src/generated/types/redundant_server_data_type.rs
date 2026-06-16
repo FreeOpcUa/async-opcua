@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part5/12.7
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct RedundantServerDataType {
@@ -42,53 +30,4 @@ impl opcua::types::MessageInfo for RedundantServerDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::RedundantServerDataType
     }
-}
-impl opcua::types::BinaryEncodable for RedundantServerDataType {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.server_id, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.service_level, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.server_state, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.server_id, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.service_level, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.server_state, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for RedundantServerDataType {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            server_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            service_level: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            server_state: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for RedundantServerDataType
-where
-    opcua::types::string::UAString: Send,
-    u8: Send,
-    super::enums::ServerState: Send,
-{
-}
-unsafe impl Sync for RedundantServerDataType
-where
-    opcua::types::string::UAString: Sync,
-    u8: Sync,
-    super::enums::ServerState: Sync,
-{
 }

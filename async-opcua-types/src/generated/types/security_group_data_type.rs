@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part14/6.2.12/#6.2.12.2
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SecurityGroupDataType {
@@ -48,83 +36,4 @@ impl opcua::types::MessageInfo for SecurityGroupDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::SecurityGroupDataType
     }
-}
-impl opcua::types::BinaryEncodable for SecurityGroupDataType {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.name, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.security_group_folder, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.key_lifetime, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.security_policy_uri, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.max_future_key_count, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.max_past_key_count, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.security_group_id, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.role_permissions, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.group_properties, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.name, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.security_group_folder, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.key_lifetime, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.security_policy_uri, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.max_future_key_count, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.max_past_key_count, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.security_group_id, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.role_permissions, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.group_properties, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for SecurityGroupDataType {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            name: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            security_group_folder: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            key_lifetime: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            security_policy_uri: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            max_future_key_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            max_past_key_count: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            security_group_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            role_permissions: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            group_properties: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for SecurityGroupDataType
-where
-    opcua::types::string::UAString: Send,
-    Option<Vec<opcua::types::string::UAString>>: Send,
-    opcua::types::data_types::Duration: Send,
-    opcua::types::string::UAString: Send,
-    u32: Send,
-    u32: Send,
-    opcua::types::string::UAString: Send,
-    Option<Vec<super::role_permission_type::RolePermissionType>>: Send,
-    Option<Vec<super::key_value_pair::KeyValuePair>>: Send,
-{
-}
-unsafe impl Sync for SecurityGroupDataType
-where
-    opcua::types::string::UAString: Sync,
-    Option<Vec<opcua::types::string::UAString>>: Sync,
-    opcua::types::data_types::Duration: Sync,
-    opcua::types::string::UAString: Sync,
-    u32: Sync,
-    u32: Sync,
-    opcua::types::string::UAString: Sync,
-    Option<Vec<super::role_permission_type::RolePermissionType>>: Sync,
-    Option<Vec<super::key_value_pair::KeyValuePair>>: Sync,
-{
 }

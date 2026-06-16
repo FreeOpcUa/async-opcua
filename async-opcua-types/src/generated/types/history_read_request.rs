@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/5.11.3/#5.11.3.2
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct HistoryReadRequest {
@@ -44,70 +32,4 @@ impl opcua::types::MessageInfo for HistoryReadRequest {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::HistoryReadRequest
     }
-}
-impl opcua::types::BinaryEncodable for HistoryReadRequest {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.request_header, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.history_read_details, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.timestamps_to_return, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.release_continuation_points, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.nodes_to_read, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.request_header, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.history_read_details, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.timestamps_to_return, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.release_continuation_points, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.nodes_to_read, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for HistoryReadRequest {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        let request_header: opcua::types::request_header::RequestHeader =
-            opcua::types::BinaryDecodable::decode(stream, ctx)?;
-        let __request_handle = request_header.request_handle;
-        Ok(Self {
-            request_header,
-            history_read_details: opcua::types::BinaryDecodable::decode(stream, ctx)
-                .map_err(|e| e.with_request_handle(__request_handle))?,
-            timestamps_to_return: opcua::types::BinaryDecodable::decode(stream, ctx)
-                .map_err(|e| e.with_request_handle(__request_handle))?,
-            release_continuation_points: opcua::types::BinaryDecodable::decode(stream, ctx)
-                .map_err(|e| e.with_request_handle(__request_handle))?,
-            nodes_to_read: opcua::types::BinaryDecodable::decode(stream, ctx)
-                .map_err(|e| e.with_request_handle(__request_handle))?,
-        })
-    }
-}
-unsafe impl Send for HistoryReadRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    opcua::types::extension_object::ExtensionObject: Send,
-    super::enums::TimestampsToReturn: Send,
-    bool: Send,
-    Option<Vec<super::history_read_value_id::HistoryReadValueId>>: Send,
-{
-}
-unsafe impl Sync for HistoryReadRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    opcua::types::extension_object::ExtensionObject: Sync,
-    super::enums::TimestampsToReturn: Sync,
-    bool: Sync,
-    Option<Vec<super::history_read_value_id::HistoryReadValueId>>: Sync,
-{
 }

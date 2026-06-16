@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/5.9.2/#5.9.2.2
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct BrowseDescription {
@@ -45,68 +33,4 @@ impl opcua::types::MessageInfo for BrowseDescription {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::BrowseDescription
     }
-}
-impl opcua::types::BinaryEncodable for BrowseDescription {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.node_id, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.browse_direction, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.reference_type_id, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.include_subtypes, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.node_class_mask, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.result_mask, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.node_id, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.browse_direction, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.reference_type_id, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.include_subtypes, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.node_class_mask, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.result_mask, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for BrowseDescription {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            node_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            browse_direction: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            reference_type_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            include_subtypes: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            node_class_mask: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            result_mask: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for BrowseDescription
-where
-    opcua::types::node_id::NodeId: Send,
-    super::enums::BrowseDirection: Send,
-    opcua::types::node_id::NodeId: Send,
-    bool: Send,
-    u32: Send,
-    u32: Send,
-{
-}
-unsafe impl Sync for BrowseDescription
-where
-    opcua::types::node_id::NodeId: Sync,
-    super::enums::BrowseDirection: Sync,
-    opcua::types::node_id::NodeId: Sync,
-    bool: Sync,
-    u32: Sync,
-    u32: Sync,
-{
 }

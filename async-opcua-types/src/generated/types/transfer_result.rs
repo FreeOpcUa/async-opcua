@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/5.14.7/#5.14.7.2
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TransferResult {
@@ -41,48 +29,4 @@ impl opcua::types::MessageInfo for TransferResult {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::TransferResult
     }
-}
-impl opcua::types::BinaryEncodable for TransferResult {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.status_code, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.available_sequence_numbers, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.status_code, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.available_sequence_numbers, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for TransferResult {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            status_code: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            available_sequence_numbers: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for TransferResult
-where
-    opcua::types::status_code::StatusCode: Send,
-    Option<Vec<opcua::types::Counter>>: Send,
-{
-}
-unsafe impl Sync for TransferResult
-where
-    opcua::types::status_code::StatusCode: Sync,
-    Option<Vec<opcua::types::Counter>>: Sync,
-{
 }

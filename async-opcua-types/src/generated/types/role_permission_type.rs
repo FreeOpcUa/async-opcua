@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part5/12.2.12/#12.2.12.9
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct RolePermissionType {
@@ -41,48 +29,4 @@ impl opcua::types::MessageInfo for RolePermissionType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::RolePermissionType
     }
-}
-impl opcua::types::BinaryEncodable for RolePermissionType {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.role_id, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.permissions, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.role_id, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.permissions, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for RolePermissionType {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            role_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            permissions: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for RolePermissionType
-where
-    opcua::types::node_id::NodeId: Send,
-    super::enums::PermissionType: Send,
-{
-}
-unsafe impl Sync for RolePermissionType
-where
-    opcua::types::node_id::NodeId: Sync,
-    super::enums::PermissionType: Sync,
-{
 }

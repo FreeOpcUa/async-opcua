@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct JsonActionMetaDataMessage {
     pub message_id: opcua::types::string::UAString,
@@ -34,88 +22,4 @@ pub struct JsonActionMetaDataMessage {
     pub request: super::data_set_meta_data_type::DataSetMetaDataType,
     pub response: super::data_set_meta_data_type::DataSetMetaDataType,
     pub action_methods: Option<Vec<super::action_method_data_type::ActionMethodDataType>>,
-}
-impl opcua::types::BinaryEncodable for JsonActionMetaDataMessage {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.message_id, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.message_type, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.publisher_id, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.data_set_writer_id, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.data_set_writer_name, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.timestamp, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.action_targets, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.request, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.response, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.action_methods, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.message_id, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.message_type, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.publisher_id, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.data_set_writer_id, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.data_set_writer_name, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.timestamp, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.action_targets, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.request, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.response, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.action_methods, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for JsonActionMetaDataMessage {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            message_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            message_type: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            publisher_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            data_set_writer_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            data_set_writer_name: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            timestamp: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            action_targets: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            request: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            response: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            action_methods: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for JsonActionMetaDataMessage
-where
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    u16: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::data_types::UtcTime: Send,
-    Option<Vec<super::action_target_data_type::ActionTargetDataType>>: Send,
-    super::data_set_meta_data_type::DataSetMetaDataType: Send,
-    super::data_set_meta_data_type::DataSetMetaDataType: Send,
-    Option<Vec<super::action_method_data_type::ActionMethodDataType>>: Send,
-{
-}
-unsafe impl Sync for JsonActionMetaDataMessage
-where
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    u16: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-    Option<Vec<super::action_target_data_type::ActionTargetDataType>>: Sync,
-    super::data_set_meta_data_type::DataSetMetaDataType: Sync,
-    super::data_set_meta_data_type::DataSetMetaDataType: Sync,
-    Option<Vec<super::action_method_data_type::ActionMethodDataType>>: Sync,
-{
 }

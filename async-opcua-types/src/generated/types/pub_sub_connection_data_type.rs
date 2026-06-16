@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part14/6.2.7/#6.2.7.5.1
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PubSubConnectionDataType {
@@ -48,83 +36,4 @@ impl opcua::types::MessageInfo for PubSubConnectionDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::PubSubConnectionDataType
     }
-}
-impl opcua::types::BinaryEncodable for PubSubConnectionDataType {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.name, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.enabled, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.publisher_id, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.transport_profile_uri, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.address, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.connection_properties, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.transport_settings, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.writer_groups, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.reader_groups, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.name, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.enabled, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.publisher_id, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.transport_profile_uri, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.address, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.connection_properties, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.transport_settings, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.writer_groups, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.reader_groups, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for PubSubConnectionDataType {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            name: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            enabled: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            publisher_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            transport_profile_uri: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            address: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            connection_properties: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            transport_settings: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            writer_groups: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            reader_groups: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for PubSubConnectionDataType
-where
-    opcua::types::string::UAString: Send,
-    bool: Send,
-    opcua::types::variant::Variant: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::extension_object::ExtensionObject: Send,
-    Option<Vec<super::key_value_pair::KeyValuePair>>: Send,
-    opcua::types::extension_object::ExtensionObject: Send,
-    Option<Vec<super::writer_group_data_type::WriterGroupDataType>>: Send,
-    Option<Vec<super::reader_group_data_type::ReaderGroupDataType>>: Send,
-{
-}
-unsafe impl Sync for PubSubConnectionDataType
-where
-    opcua::types::string::UAString: Sync,
-    bool: Sync,
-    opcua::types::variant::Variant: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::extension_object::ExtensionObject: Sync,
-    Option<Vec<super::key_value_pair::KeyValuePair>>: Sync,
-    opcua::types::extension_object::ExtensionObject: Sync,
-    Option<Vec<super::writer_group_data_type::WriterGroupDataType>>: Sync,
-    Option<Vec<super::reader_group_data_type::ReaderGroupDataType>>: Sync,
-{
 }

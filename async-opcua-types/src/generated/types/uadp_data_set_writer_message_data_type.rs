@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part14/6.3.1/#6.3.1.3.6
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct UadpDataSetWriterMessageDataType {
@@ -43,58 +31,4 @@ impl opcua::types::MessageInfo for UadpDataSetWriterMessageDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::UadpDataSetWriterMessageDataType
     }
-}
-impl opcua::types::BinaryEncodable for UadpDataSetWriterMessageDataType {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.data_set_message_content_mask, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.configured_size, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.network_message_number, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.data_set_offset, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.data_set_message_content_mask, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.configured_size, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.network_message_number, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.data_set_offset, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for UadpDataSetWriterMessageDataType {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            data_set_message_content_mask: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            configured_size: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            network_message_number: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            data_set_offset: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for UadpDataSetWriterMessageDataType
-where
-    super::enums::UadpDataSetMessageContentMask: Send,
-    u16: Send,
-    u16: Send,
-    u16: Send,
-{
-}
-unsafe impl Sync for UadpDataSetWriterMessageDataType
-where
-    super::enums::UadpDataSetMessageContentMask: Sync,
-    u16: Sync,
-    u16: Sync,
-    u16: Sync,
-{
 }

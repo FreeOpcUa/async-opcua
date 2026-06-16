@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part14/6.3.2/#6.3.2.1.2
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct JsonWriterGroupMessageDataType {
@@ -40,41 +28,4 @@ impl opcua::types::MessageInfo for JsonWriterGroupMessageDataType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::JsonWriterGroupMessageDataType
     }
-}
-impl opcua::types::BinaryEncodable for JsonWriterGroupMessageDataType {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.network_message_content_mask, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.network_message_content_mask, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for JsonWriterGroupMessageDataType {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            network_message_content_mask: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for JsonWriterGroupMessageDataType where
-    super::enums::JsonNetworkMessageContentMask: Send
-{
-}
-unsafe impl Sync for JsonWriterGroupMessageDataType where
-    super::enums::JsonNetworkMessageContentMask: Sync
-{
 }

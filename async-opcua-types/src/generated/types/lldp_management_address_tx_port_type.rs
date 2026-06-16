@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part22/5.3.2/#5.3.2.2
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct LldpManagementAddressTxPortType {
@@ -45,68 +33,4 @@ impl opcua::types::MessageInfo for LldpManagementAddressTxPortType {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::LldpManagementAddressTxPortType
     }
-}
-impl opcua::types::BinaryEncodable for LldpManagementAddressTxPortType {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.address_subtype, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.man_address, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.tx_enable, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.addr_len, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.if_subtype, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.if_id, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.address_subtype, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.man_address, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.tx_enable, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.addr_len, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.if_subtype, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.if_id, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for LldpManagementAddressTxPortType {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            address_subtype: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            man_address: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            tx_enable: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            addr_len: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            if_subtype: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            if_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for LldpManagementAddressTxPortType
-where
-    u32: Send,
-    opcua::types::string::UAString: Send,
-    bool: Send,
-    u32: Send,
-    super::enums::ManAddrIfSubtype: Send,
-    u32: Send,
-{
-}
-unsafe impl Sync for LldpManagementAddressTxPortType
-where
-    u32: Sync,
-    opcua::types::string::UAString: Sync,
-    bool: Sync,
-    u32: Sync,
-    super::enums::ManAddrIfSubtype: Sync,
-    u32: Sync,
-{
 }

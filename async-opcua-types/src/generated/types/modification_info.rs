@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part11/6.6.5
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ModificationInfo {
@@ -42,53 +30,4 @@ impl opcua::types::MessageInfo for ModificationInfo {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::ModificationInfo
     }
-}
-impl opcua::types::BinaryEncodable for ModificationInfo {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.modification_time, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.update_type, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.user_name, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.modification_time, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.update_type, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.user_name, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for ModificationInfo {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            modification_time: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            update_type: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            user_name: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for ModificationInfo
-where
-    opcua::types::data_types::UtcTime: Send,
-    super::enums::HistoryUpdateType: Send,
-    opcua::types::string::UAString: Send,
-{
-}
-unsafe impl Sync for ModificationInfo
-where
-    opcua::types::data_types::UtcTime: Sync,
-    super::enums::HistoryUpdateType: Sync,
-    opcua::types::string::UAString: Sync,
-{
 }

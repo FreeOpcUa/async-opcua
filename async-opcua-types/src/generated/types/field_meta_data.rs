@@ -9,19 +9,7 @@
 mod opcua {
     pub(super) use crate as types;
 }
-#[derive(opcua::types::UaNullable)]
-#[cfg_attr(
-    feature = "json",
-    derive(opcua::types::JsonEncodable, opcua::types::JsonDecodable)
-)]
-#[cfg_attr(
-    feature = "xml",
-    derive(
-        opcua::types::XmlEncodable,
-        opcua::types::XmlDecodable,
-        opcua::types::XmlType
-    )
-)]
+#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part14/6.2.3/#6.2.3.2.4
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct FieldMetaData {
@@ -49,88 +37,4 @@ impl opcua::types::MessageInfo for FieldMetaData {
     fn data_type_id(&self) -> opcua::types::DataTypeId {
         opcua::types::DataTypeId::FieldMetaData
     }
-}
-impl opcua::types::BinaryEncodable for FieldMetaData {
-    #[allow(unused)]
-    #[allow(clippy::let_and_return)]
-    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
-        let mut size = 0usize;
-        size += opcua::types::BinaryEncodable::byte_len(&self.name, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.description, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.field_flags, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.built_in_type, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.data_type, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.value_rank, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.array_dimensions, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.max_string_length, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.data_set_field_id, ctx);
-        size += opcua::types::BinaryEncodable::byte_len(&self.properties, ctx);
-        size
-    }
-    #[allow(unused)]
-    fn encode<S: std::io::Write + ?Sized>(
-        &self,
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<()> {
-        opcua::types::BinaryEncodable::encode(&self.name, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.description, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.field_flags, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.built_in_type, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.data_type, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.value_rank, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.array_dimensions, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.max_string_length, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.data_set_field_id, stream, ctx)?;
-        opcua::types::BinaryEncodable::encode(&self.properties, stream, ctx)?;
-        Ok(())
-    }
-}
-impl opcua::types::BinaryDecodable for FieldMetaData {
-    #[allow(unused_variables)]
-    fn decode<S: std::io::Read + ?Sized>(
-        stream: &mut S,
-        ctx: &opcua::types::Context<'_>,
-    ) -> opcua::types::EncodingResult<Self> {
-        Ok(Self {
-            name: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            description: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            field_flags: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            built_in_type: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            data_type: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            value_rank: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            array_dimensions: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            max_string_length: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            data_set_field_id: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-            properties: opcua::types::BinaryDecodable::decode(stream, ctx)?,
-        })
-    }
-}
-unsafe impl Send for FieldMetaData
-where
-    opcua::types::string::UAString: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-    super::enums::DataSetFieldFlags: Send,
-    u8: Send,
-    opcua::types::node_id::NodeId: Send,
-    i32: Send,
-    Option<Vec<u32>>: Send,
-    u32: Send,
-    opcua::types::guid::Guid: Send,
-    Option<Vec<super::key_value_pair::KeyValuePair>>: Send,
-{
-}
-unsafe impl Sync for FieldMetaData
-where
-    opcua::types::string::UAString: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-    super::enums::DataSetFieldFlags: Sync,
-    u8: Sync,
-    opcua::types::node_id::NodeId: Sync,
-    i32: Sync,
-    Option<Vec<u32>>: Sync,
-    u32: Sync,
-    opcua::types::guid::Guid: Sync,
-    Option<Vec<super::key_value_pair::KeyValuePair>>: Sync,
-{
 }

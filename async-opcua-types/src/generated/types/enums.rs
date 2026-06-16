@@ -476,17 +476,6 @@ pub enum HistoryUpdateType {
     Delete = 4i32,
 }
 #[opcua::types::ua_encodable]
-///https://reference.opcfoundation.org/v105/Core/docs/Part5/12.2.5/#12.2.5.1
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[repr(i32)]
-pub enum IdType {
-    #[opcua(default)]
-    Numeric = 0i32,
-    String = 1i32,
-    Guid = 2i32,
-    Opaque = 3i32,
-}
-#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part18/4.4.4
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(i32)]
@@ -509,6 +498,17 @@ pub enum IdentityCriteriaType {
     X509Subject = 8i32,
     ///The rule specifies any trusted application that has been authenticated with a trusted ApplicationInstance Certificate.
     TrustedApplication = 9i32,
+}
+#[opcua::types::ua_encodable]
+///https://reference.opcfoundation.org/v105/Core/docs/Part5/12.2.5/#12.2.5.1
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[repr(i32)]
+pub enum IdType {
+    #[opcua(default)]
+    Numeric = 0i32,
+    String = 1i32,
+    Guid = 2i32,
+    Opaque = 3i32,
 }
 #[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part22/5.3.1/#5.3.1.2

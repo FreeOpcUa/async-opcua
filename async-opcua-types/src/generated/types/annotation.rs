@@ -78,17 +78,3 @@ impl opcua::types::BinaryDecodable for Annotation {
         })
     }
 }
-unsafe impl Send for Annotation
-where
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::data_types::UtcTime: Send,
-{
-}
-unsafe impl Sync for Annotation
-where
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-{
-}

@@ -78,17 +78,3 @@ impl opcua::types::BinaryDecodable for MonitoredItemCreateRequest {
         })
     }
 }
-unsafe impl Send for MonitoredItemCreateRequest
-where
-    super::read_value_id::ReadValueId: Send,
-    super::enums::MonitoringMode: Send,
-    super::monitoring_parameters::MonitoringParameters: Send,
-{
-}
-unsafe impl Sync for MonitoredItemCreateRequest
-where
-    super::read_value_id::ReadValueId: Sync,
-    super::enums::MonitoringMode: Sync,
-    super::monitoring_parameters::MonitoringParameters: Sync,
-{
-}

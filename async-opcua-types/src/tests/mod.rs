@@ -1,10 +1,10 @@
 mod date_time;
 mod encoding;
 mod fallback;
-mod recursion_dos;
 #[cfg(feature = "json")]
 mod json;
 mod node_id;
+mod recursion_dos;
 mod variant;
 #[cfg(feature = "xml")]
 mod xml;

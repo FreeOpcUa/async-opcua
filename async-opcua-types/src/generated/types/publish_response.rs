@@ -103,25 +103,3 @@ impl opcua::types::BinaryDecodable for PublishResponse {
         })
     }
 }
-unsafe impl Send for PublishResponse
-where
-    opcua::types::response_header::ResponseHeader: Send,
-    opcua::types::IntegerId: Send,
-    Option<Vec<opcua::types::Counter>>: Send,
-    bool: Send,
-    super::notification_message::NotificationMessage: Send,
-    Option<Vec<opcua::types::status_code::StatusCode>>: Send,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Send,
-{
-}
-unsafe impl Sync for PublishResponse
-where
-    opcua::types::response_header::ResponseHeader: Sync,
-    opcua::types::IntegerId: Sync,
-    Option<Vec<opcua::types::Counter>>: Sync,
-    bool: Sync,
-    super::notification_message::NotificationMessage: Sync,
-    Option<Vec<opcua::types::status_code::StatusCode>>: Sync,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Sync,
-{
-}

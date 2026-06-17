@@ -102,29 +102,3 @@ impl opcua::types::BinaryDecodable for SessionSecurityDiagnosticsDataType {
         })
     }
 }
-unsafe impl Send for SessionSecurityDiagnosticsDataType
-where
-    opcua::types::node_id::NodeId: Send,
-    opcua::types::string::UAString: Send,
-    Option<Vec<opcua::types::string::UAString>>: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    super::enums::MessageSecurityMode: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::byte_string::ByteString: Send,
-{
-}
-unsafe impl Sync for SessionSecurityDiagnosticsDataType
-where
-    opcua::types::node_id::NodeId: Sync,
-    opcua::types::string::UAString: Sync,
-    Option<Vec<opcua::types::string::UAString>>: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    super::enums::MessageSecurityMode: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::byte_string::ByteString: Sync,
-{
-}

@@ -82,19 +82,3 @@ impl opcua::types::BinaryDecodable for WriteValue {
         })
     }
 }
-unsafe impl Send for WriteValue
-where
-    opcua::types::node_id::NodeId: Send,
-    opcua::types::IntegerId: Send,
-    opcua::types::NumericRange: Send,
-    opcua::types::data_value::DataValue: Send,
-{
-}
-unsafe impl Sync for WriteValue
-where
-    opcua::types::node_id::NodeId: Sync,
-    opcua::types::IntegerId: Sync,
-    opcua::types::NumericRange: Sync,
-    opcua::types::data_value::DataValue: Sync,
-{
-}

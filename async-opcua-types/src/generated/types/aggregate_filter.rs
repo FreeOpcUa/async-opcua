@@ -82,19 +82,3 @@ impl opcua::types::BinaryDecodable for AggregateFilter {
         })
     }
 }
-unsafe impl Send for AggregateFilter
-where
-    opcua::types::data_types::UtcTime: Send,
-    opcua::types::node_id::NodeId: Send,
-    opcua::types::data_types::Duration: Send,
-    super::aggregate_configuration::AggregateConfiguration: Send,
-{
-}
-unsafe impl Sync for AggregateFilter
-where
-    opcua::types::data_types::UtcTime: Sync,
-    opcua::types::node_id::NodeId: Sync,
-    opcua::types::data_types::Duration: Sync,
-    super::aggregate_configuration::AggregateConfiguration: Sync,
-{
-}

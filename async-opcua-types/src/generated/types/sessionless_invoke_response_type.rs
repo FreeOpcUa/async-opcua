@@ -77,17 +77,3 @@ impl opcua::types::BinaryDecodable for SessionlessInvokeResponseType {
         })
     }
 }
-unsafe impl Send for SessionlessInvokeResponseType
-where
-    Option<Vec<opcua::types::string::UAString>>: Send,
-    Option<Vec<opcua::types::string::UAString>>: Send,
-    u32: Send,
-{
-}
-unsafe impl Sync for SessionlessInvokeResponseType
-where
-    Option<Vec<opcua::types::string::UAString>>: Sync,
-    Option<Vec<opcua::types::string::UAString>>: Sync,
-    u32: Sync,
-{
-}

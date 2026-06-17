@@ -75,23 +75,3 @@ impl opcua::types::BinaryDecodable for JsonNetworkMessage {
         })
     }
 }
-unsafe impl Send for JsonNetworkMessage
-where
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::extension_object::ExtensionObject: Send,
-{
-}
-unsafe impl Sync for JsonNetworkMessage
-where
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::extension_object::ExtensionObject: Sync,
-{
-}

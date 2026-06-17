@@ -90,23 +90,3 @@ impl opcua::types::BinaryDecodable for ObjectAttributes {
         })
     }
 }
-unsafe impl Send for ObjectAttributes
-where
-    u32: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-    u32: Send,
-    u32: Send,
-    u8: Send,
-{
-}
-unsafe impl Sync for ObjectAttributes
-where
-    u32: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-    u32: Sync,
-    u32: Sync,
-    u8: Sync,
-{
-}

@@ -83,17 +83,3 @@ impl opcua::types::BinaryDecodable for FindServersOnNetworkResponse {
         })
     }
 }
-unsafe impl Send for FindServersOnNetworkResponse
-where
-    opcua::types::response_header::ResponseHeader: Send,
-    opcua::types::data_types::UtcTime: Send,
-    Option<Vec<super::server_on_network::ServerOnNetwork>>: Send,
-{
-}
-unsafe impl Sync for FindServersOnNetworkResponse
-where
-    opcua::types::response_header::ResponseHeader: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-    Option<Vec<super::server_on_network::ServerOnNetwork>>: Sync,
-{
-}

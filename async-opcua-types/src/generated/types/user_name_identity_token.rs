@@ -82,19 +82,3 @@ impl opcua::types::BinaryDecodable for UserNameIdentityToken {
         })
     }
 }
-unsafe impl Send for UserNameIdentityToken
-where
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::byte_string::ByteString: Send,
-    opcua::types::string::UAString: Send,
-{
-}
-unsafe impl Sync for UserNameIdentityToken
-where
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::byte_string::ByteString: Sync,
-    opcua::types::string::UAString: Sync,
-{
-}

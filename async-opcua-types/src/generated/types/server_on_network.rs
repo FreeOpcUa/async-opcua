@@ -82,19 +82,3 @@ impl opcua::types::BinaryDecodable for ServerOnNetwork {
         })
     }
 }
-unsafe impl Send for ServerOnNetwork
-where
-    u32: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    Option<Vec<opcua::types::string::UAString>>: Send,
-{
-}
-unsafe impl Sync for ServerOnNetwork
-where
-    u32: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    Option<Vec<opcua::types::string::UAString>>: Sync,
-{
-}

@@ -82,19 +82,3 @@ impl opcua::types::BinaryDecodable for RelativePathElement {
         })
     }
 }
-unsafe impl Send for RelativePathElement
-where
-    opcua::types::node_id::NodeId: Send,
-    bool: Send,
-    bool: Send,
-    opcua::types::qualified_name::QualifiedName: Send,
-{
-}
-unsafe impl Sync for RelativePathElement
-where
-    opcua::types::node_id::NodeId: Sync,
-    bool: Sync,
-    bool: Sync,
-    opcua::types::qualified_name::QualifiedName: Sync,
-{
-}

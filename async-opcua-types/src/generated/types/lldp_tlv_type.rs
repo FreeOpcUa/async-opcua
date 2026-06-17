@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for LldpTlvType {
         })
     }
 }
-unsafe impl Send for LldpTlvType
-where
-    u32: Send,
-    opcua::types::byte_string::ByteString: Send,
-{
-}
-unsafe impl Sync for LldpTlvType
-where
-    u32: Sync,
-    opcua::types::byte_string::ByteString: Sync,
-{
-}

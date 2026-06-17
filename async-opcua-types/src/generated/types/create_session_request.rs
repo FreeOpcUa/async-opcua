@@ -113,29 +113,3 @@ impl opcua::types::BinaryDecodable for CreateSessionRequest {
         })
     }
 }
-unsafe impl Send for CreateSessionRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    super::application_description::ApplicationDescription: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::byte_string::ByteString: Send,
-    opcua::types::ApplicationInstanceCertificate: Send,
-    opcua::types::data_types::Duration: Send,
-    u32: Send,
-{
-}
-unsafe impl Sync for CreateSessionRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    super::application_description::ApplicationDescription: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::byte_string::ByteString: Sync,
-    opcua::types::ApplicationInstanceCertificate: Sync,
-    opcua::types::data_types::Duration: Sync,
-    u32: Sync,
-{
-}

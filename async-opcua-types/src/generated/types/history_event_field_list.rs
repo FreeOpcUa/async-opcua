@@ -70,5 +70,3 @@ impl opcua::types::BinaryDecodable for HistoryEventFieldList {
         })
     }
 }
-unsafe impl Send for HistoryEventFieldList where Option<Vec<opcua::types::variant::Variant>>: Send {}
-unsafe impl Sync for HistoryEventFieldList where Option<Vec<opcua::types::variant::Variant>>: Sync {}

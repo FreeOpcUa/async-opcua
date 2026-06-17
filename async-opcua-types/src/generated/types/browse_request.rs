@@ -95,19 +95,3 @@ impl opcua::types::BinaryDecodable for BrowseRequest {
         })
     }
 }
-unsafe impl Send for BrowseRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    super::view_description::ViewDescription: Send,
-    opcua::types::Counter: Send,
-    Option<Vec<super::browse_description::BrowseDescription>>: Send,
-{
-}
-unsafe impl Sync for BrowseRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    super::view_description::ViewDescription: Sync,
-    opcua::types::Counter: Sync,
-    Option<Vec<super::browse_description::BrowseDescription>>: Sync,
-{
-}

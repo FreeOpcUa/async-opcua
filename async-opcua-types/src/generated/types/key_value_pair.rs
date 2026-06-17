@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for KeyValuePair {
         })
     }
 }
-unsafe impl Send for KeyValuePair
-where
-    opcua::types::qualified_name::QualifiedName: Send,
-    opcua::types::variant::Variant: Send,
-{
-}
-unsafe impl Sync for KeyValuePair
-where
-    opcua::types::qualified_name::QualifiedName: Sync,
-    opcua::types::variant::Variant: Sync,
-{
-}

@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for Range {
         })
     }
 }
-unsafe impl Send for Range
-where
-    f64: Send,
-    f64: Send,
-{
-}
-unsafe impl Sync for Range
-where
-    f64: Sync,
-    f64: Sync,
-{
-}

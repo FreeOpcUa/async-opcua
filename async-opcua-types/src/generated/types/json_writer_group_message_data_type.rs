@@ -70,11 +70,3 @@ impl opcua::types::BinaryDecodable for JsonWriterGroupMessageDataType {
         })
     }
 }
-unsafe impl Send for JsonWriterGroupMessageDataType where
-    super::enums::JsonNetworkMessageContentMask: Send
-{
-}
-unsafe impl Sync for JsonWriterGroupMessageDataType where
-    super::enums::JsonNetworkMessageContentMask: Sync
-{
-}

@@ -33,7 +33,7 @@ impl PartialEq<(u16, &[u8])> for NodeId {
         self.namespace == other.0
             && match &self.identifier {
                 Identifier::ByteString(s) => {
-                    s.value.as_ref().is_some_and(|v| v.as_slice() == other.1)
+                    s.value.as_ref().is_some_and(|v| v.as_ref() == other.1)
                 }
                 _ => false,
             }

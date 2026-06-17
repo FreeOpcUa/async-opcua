@@ -698,6 +698,7 @@ dependencies = [
  "base64",
  "bitflags 2.11.0",
  "byteorder",
+ "bytes",
  "chrono",
  "hashbrown 0.15.5",
  "percent-encoding-rfc3986",

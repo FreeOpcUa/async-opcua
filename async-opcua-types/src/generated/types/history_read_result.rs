@@ -78,17 +78,3 @@ impl opcua::types::BinaryDecodable for HistoryReadResult {
         })
     }
 }
-unsafe impl Send for HistoryReadResult
-where
-    opcua::types::status_code::StatusCode: Send,
-    opcua::types::ContinuationPoint: Send,
-    opcua::types::extension_object::ExtensionObject: Send,
-{
-}
-unsafe impl Sync for HistoryReadResult
-where
-    opcua::types::status_code::StatusCode: Sync,
-    opcua::types::ContinuationPoint: Sync,
-    opcua::types::extension_object::ExtensionObject: Sync,
-{
-}

@@ -82,19 +82,3 @@ impl opcua::types::BinaryDecodable for EnumField {
         })
     }
 }
-unsafe impl Send for EnumField
-where
-    i64: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-    opcua::types::string::UAString: Send,
-{
-}
-unsafe impl Sync for EnumField
-where
-    i64: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-    opcua::types::string::UAString: Sync,
-{
-}

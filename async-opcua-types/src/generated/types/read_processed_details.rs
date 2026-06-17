@@ -86,21 +86,3 @@ impl opcua::types::BinaryDecodable for ReadProcessedDetails {
         })
     }
 }
-unsafe impl Send for ReadProcessedDetails
-where
-    opcua::types::data_types::UtcTime: Send,
-    opcua::types::data_types::UtcTime: Send,
-    opcua::types::data_types::Duration: Send,
-    Option<Vec<opcua::types::node_id::NodeId>>: Send,
-    super::aggregate_configuration::AggregateConfiguration: Send,
-{
-}
-unsafe impl Sync for ReadProcessedDetails
-where
-    opcua::types::data_types::UtcTime: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-    opcua::types::data_types::Duration: Sync,
-    Option<Vec<opcua::types::node_id::NodeId>>: Sync,
-    super::aggregate_configuration::AggregateConfiguration: Sync,
-{
-}

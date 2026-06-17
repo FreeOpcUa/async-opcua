@@ -83,17 +83,3 @@ impl opcua::types::BinaryDecodable for DeleteMonitoredItemsRequest {
         })
     }
 }
-unsafe impl Send for DeleteMonitoredItemsRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    opcua::types::IntegerId: Send,
-    Option<Vec<opcua::types::IntegerId>>: Send,
-{
-}
-unsafe impl Sync for DeleteMonitoredItemsRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    opcua::types::IntegerId: Sync,
-    Option<Vec<opcua::types::IntegerId>>: Sync,
-{
-}

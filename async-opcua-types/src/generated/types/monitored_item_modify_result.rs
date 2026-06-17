@@ -82,19 +82,3 @@ impl opcua::types::BinaryDecodable for MonitoredItemModifyResult {
         })
     }
 }
-unsafe impl Send for MonitoredItemModifyResult
-where
-    opcua::types::status_code::StatusCode: Send,
-    opcua::types::data_types::Duration: Send,
-    opcua::types::Counter: Send,
-    opcua::types::extension_object::ExtensionObject: Send,
-{
-}
-unsafe impl Sync for MonitoredItemModifyResult
-where
-    opcua::types::status_code::StatusCode: Sync,
-    opcua::types::data_types::Duration: Sync,
-    opcua::types::Counter: Sync,
-    opcua::types::extension_object::ExtensionObject: Sync,
-{
-}

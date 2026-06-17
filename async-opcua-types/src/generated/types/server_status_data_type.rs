@@ -90,23 +90,3 @@ impl opcua::types::BinaryDecodable for ServerStatusDataType {
         })
     }
 }
-unsafe impl Send for ServerStatusDataType
-where
-    opcua::types::data_types::UtcTime: Send,
-    opcua::types::data_types::UtcTime: Send,
-    super::enums::ServerState: Send,
-    super::build_info::BuildInfo: Send,
-    u32: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-{
-}
-unsafe impl Sync for ServerStatusDataType
-where
-    opcua::types::data_types::UtcTime: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-    super::enums::ServerState: Sync,
-    super::build_info::BuildInfo: Sync,
-    u32: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-{
-}

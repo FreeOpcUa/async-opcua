@@ -78,17 +78,3 @@ impl opcua::types::BinaryDecodable for ActionTargetDataType {
         })
     }
 }
-unsafe impl Send for ActionTargetDataType
-where
-    u16: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-{
-}
-unsafe impl Sync for ActionTargetDataType
-where
-    u16: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-{
-}

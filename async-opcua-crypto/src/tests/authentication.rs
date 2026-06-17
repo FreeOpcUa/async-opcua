@@ -58,7 +58,7 @@ fn user_name_identity_token_encrypted() {
     let password1 = legacy_decrypt_secret(&token, nonce.as_ref(), &pkey).unwrap();
     assert_eq!(
         password,
-        String::from_utf8(password1.value.unwrap()).unwrap()
+        String::from_utf8(password1.value.unwrap().to_vec()).unwrap()
     );
 
     // #2 This should be plaintext since channel security policy is none, token policy is none
@@ -77,7 +77,7 @@ fn user_name_identity_token_encrypted() {
     let password1 = legacy_decrypt_secret(&token, nonce.as_ref(), &pkey).unwrap();
     assert_eq!(
         password,
-        String::from_utf8(password1.value.unwrap()).unwrap()
+        String::from_utf8(password1.value.unwrap().to_vec()).unwrap()
     );
 
     #[cfg(feature = "legacy-crypto")]
@@ -101,7 +101,7 @@ fn user_name_identity_token_encrypted() {
         let password1 = legacy_decrypt_secret(&token, nonce.as_ref(), &pkey).unwrap();
         assert_eq!(
             password,
-            String::from_utf8(password1.value.unwrap()).unwrap()
+            String::from_utf8(password1.value.unwrap().to_vec()).unwrap()
         );
 
         // #4 This should be Rsa-15 since channel security policy is Rsa15, token policy is empty
@@ -122,7 +122,7 @@ fn user_name_identity_token_encrypted() {
         let password1 = legacy_decrypt_secret(&token, nonce.as_ref(), &pkey).unwrap();
         assert_eq!(
             password,
-            String::from_utf8(password1.value.unwrap()).unwrap()
+            String::from_utf8(password1.value.unwrap().to_vec()).unwrap()
         );
 
         // #5 This should be Rsa-OAEP since channel security policy is Rsa-15, token policy is Rsa-OAEP
@@ -144,7 +144,7 @@ fn user_name_identity_token_encrypted() {
         let password1 = legacy_decrypt_secret(&token, nonce.as_ref(), &pkey).unwrap();
         assert_eq!(
             password,
-            String::from_utf8(password1.value.unwrap()).unwrap()
+            String::from_utf8(password1.value.unwrap().to_vec()).unwrap()
         );
     }
 
@@ -167,7 +167,7 @@ fn user_name_identity_token_encrypted() {
     let password1 = legacy_decrypt_secret(&token, nonce.as_ref(), &pkey).unwrap();
     assert_eq!(
         password,
-        String::from_utf8(password1.value.unwrap()).unwrap()
+        String::from_utf8(password1.value.unwrap().to_vec()).unwrap()
     );
 
     #[cfg(feature = "legacy-crypto")]
@@ -187,7 +187,7 @@ fn user_name_identity_token_encrypted() {
         let password1 = legacy_decrypt_secret(&token, nonce.as_ref(), &pkey).unwrap();
         assert_eq!(
             password,
-            String::from_utf8(password1.value.unwrap()).unwrap()
+            String::from_utf8(password1.value.unwrap().to_vec()).unwrap()
         );
     }
 }

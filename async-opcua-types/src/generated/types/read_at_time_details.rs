@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for ReadAtTimeDetails {
         })
     }
 }
-unsafe impl Send for ReadAtTimeDetails
-where
-    Option<Vec<opcua::types::data_types::UtcTime>>: Send,
-    bool: Send,
-{
-}
-unsafe impl Sync for ReadAtTimeDetails
-where
-    Option<Vec<opcua::types::data_types::UtcTime>>: Sync,
-    bool: Sync,
-{
-}

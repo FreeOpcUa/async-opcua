@@ -86,21 +86,3 @@ impl opcua::types::BinaryDecodable for MonitoringParameters {
         })
     }
 }
-unsafe impl Send for MonitoringParameters
-where
-    opcua::types::IntegerId: Send,
-    opcua::types::data_types::Duration: Send,
-    opcua::types::extension_object::ExtensionObject: Send,
-    opcua::types::Counter: Send,
-    bool: Send,
-{
-}
-unsafe impl Sync for MonitoringParameters
-where
-    opcua::types::IntegerId: Sync,
-    opcua::types::data_types::Duration: Sync,
-    opcua::types::extension_object::ExtensionObject: Sync,
-    opcua::types::Counter: Sync,
-    bool: Sync,
-{
-}

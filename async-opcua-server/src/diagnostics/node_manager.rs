@@ -13,9 +13,10 @@ use crate::{
     address_space::AccessLevel,
     node_manager::{
         as_opaque_node_id, from_opaque_node_id, impl_translate_browse_paths_using_browse,
-        AddReferenceResult, BrowseNode, BrowsePathItem, DynNodeManager, ExternalReferenceRequest,
-        NodeManager, NodeManagerBuilder, NodeManagersRef, NodeMetadata, QueryRequest, ReadNode,
-        RequestContext, ServerContext, SyncSampler,
+        AddReferenceResult, AttributeProvider, BrowseNode, BrowsePathItem, DynNodeManager,
+        ExternalReferenceRequest, HistoryProvider, MethodProvider, MonitoredItemProvider,
+        NodeManagerBuilder, NodeManagerCore, NodeManagersRef, NodeMetadata, NodeMutator,
+        QueryRequest, ReadNode, RequestContext, ServerContext, SyncSampler, ViewProvider,
     },
 };
 use opcua_types::{
@@ -549,7 +550,7 @@ impl DiagnosticsNodeManager {
 }
 
 #[async_trait]
-impl NodeManager for DiagnosticsNodeManager {
+impl NodeManagerCore for DiagnosticsNodeManager {
     fn owns_node(&self, id: &NodeId) -> bool {
         id.namespace == self.namespace_index
     }
@@ -582,7 +583,10 @@ impl NodeManager for DiagnosticsNodeManager {
             context.subscriptions.clone(),
         );
     }
+}
 
+#[async_trait]
+impl ViewProvider for DiagnosticsNodeManager {
     async fn resolve_external_references(
         &self,
         context: &RequestContext,
@@ -674,6 +678,17 @@ impl NodeManager for DiagnosticsNodeManager {
         Ok(())
     }
 
+    async fn translate_browse_paths_to_node_ids(
+        &self,
+        context: &RequestContext,
+        nodes: &mut [&mut BrowsePathItem],
+    ) -> Result<(), StatusCode> {
+        impl_translate_browse_paths_using_browse(self, context, nodes).await
+    }
+}
+
+#[async_trait]
+impl AttributeProvider for DiagnosticsNodeManager {
     async fn read(
         &self,
         context: &RequestContext,
@@ -700,12 +715,12 @@ impl NodeManager for DiagnosticsNodeManager {
         }
         Ok(())
     }
-
-    async fn translate_browse_paths_to_node_ids(
-        &self,
-        context: &RequestContext,
-        nodes: &mut [&mut BrowsePathItem],
-    ) -> Result<(), StatusCode> {
-        impl_translate_browse_paths_using_browse(self, context, nodes).await
-    }
 }
+
+impl HistoryProvider for DiagnosticsNodeManager {}
+
+impl MethodProvider for DiagnosticsNodeManager {}
+
+impl MonitoredItemProvider for DiagnosticsNodeManager {}
+
+impl NodeMutator for DiagnosticsNodeManager {}

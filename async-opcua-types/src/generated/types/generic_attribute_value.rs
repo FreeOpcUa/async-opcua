@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for GenericAttributeValue {
         })
     }
 }
-unsafe impl Send for GenericAttributeValue
-where
-    opcua::types::IntegerId: Send,
-    opcua::types::variant::Variant: Send,
-{
-}
-unsafe impl Sync for GenericAttributeValue
-where
-    opcua::types::IntegerId: Sync,
-    opcua::types::variant::Variant: Sync,
-{
-}

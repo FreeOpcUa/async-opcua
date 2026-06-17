@@ -78,17 +78,3 @@ impl opcua::types::BinaryDecodable for QueryDataSet {
         })
     }
 }
-unsafe impl Send for QueryDataSet
-where
-    opcua::types::expanded_node_id::ExpandedNodeId: Send,
-    opcua::types::expanded_node_id::ExpandedNodeId: Send,
-    Option<Vec<opcua::types::variant::Variant>>: Send,
-{
-}
-unsafe impl Sync for QueryDataSet
-where
-    opcua::types::expanded_node_id::ExpandedNodeId: Sync,
-    opcua::types::expanded_node_id::ExpandedNodeId: Sync,
-    Option<Vec<opcua::types::variant::Variant>>: Sync,
-{
-}

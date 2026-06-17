@@ -111,35 +111,3 @@ impl opcua::types::BinaryDecodable for PubSubConfiguration2DataType {
         })
     }
 }
-unsafe impl Send for PubSubConfiguration2DataType
-where
-    Option<Vec<super::published_data_set_data_type::PublishedDataSetDataType>>: Send,
-    Option<Vec<super::pub_sub_connection_data_type::PubSubConnectionDataType>>: Send,
-    bool: Send,
-    Option<
-        Vec<super::standalone_subscribed_data_set_data_type::StandaloneSubscribedDataSetDataType>,
-    >: Send,
-    Option<Vec<super::data_set_meta_data_type::DataSetMetaDataType>>: Send,
-    Option<Vec<super::endpoint_description::EndpointDescription>>: Send,
-    Option<Vec<super::security_group_data_type::SecurityGroupDataType>>: Send,
-    Option<Vec<super::pub_sub_key_push_target_data_type::PubSubKeyPushTargetDataType>>: Send,
-    opcua::types::VersionTime: Send,
-    Option<Vec<super::key_value_pair::KeyValuePair>>: Send,
-{
-}
-unsafe impl Sync for PubSubConfiguration2DataType
-where
-    Option<Vec<super::published_data_set_data_type::PublishedDataSetDataType>>: Sync,
-    Option<Vec<super::pub_sub_connection_data_type::PubSubConnectionDataType>>: Sync,
-    bool: Sync,
-    Option<
-        Vec<super::standalone_subscribed_data_set_data_type::StandaloneSubscribedDataSetDataType>,
-    >: Sync,
-    Option<Vec<super::data_set_meta_data_type::DataSetMetaDataType>>: Sync,
-    Option<Vec<super::endpoint_description::EndpointDescription>>: Sync,
-    Option<Vec<super::security_group_data_type::SecurityGroupDataType>>: Sync,
-    Option<Vec<super::pub_sub_key_push_target_data_type::PubSubKeyPushTargetDataType>>: Sync,
-    opcua::types::VersionTime: Sync,
-    Option<Vec<super::key_value_pair::KeyValuePair>>: Sync,
-{
-}

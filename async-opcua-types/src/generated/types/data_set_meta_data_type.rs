@@ -102,29 +102,3 @@ impl opcua::types::BinaryDecodable for DataSetMetaDataType {
         })
     }
 }
-unsafe impl Send for DataSetMetaDataType
-where
-    Option<Vec<opcua::types::string::UAString>>: Send,
-    Option<Vec<super::structure_description::StructureDescription>>: Send,
-    Option<Vec<super::enum_description::EnumDescription>>: Send,
-    Option<Vec<super::simple_type_description::SimpleTypeDescription>>: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-    Option<Vec<super::field_meta_data::FieldMetaData>>: Send,
-    opcua::types::guid::Guid: Send,
-    super::configuration_version_data_type::ConfigurationVersionDataType: Send,
-{
-}
-unsafe impl Sync for DataSetMetaDataType
-where
-    Option<Vec<opcua::types::string::UAString>>: Sync,
-    Option<Vec<super::structure_description::StructureDescription>>: Sync,
-    Option<Vec<super::enum_description::EnumDescription>>: Sync,
-    Option<Vec<super::simple_type_description::SimpleTypeDescription>>: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-    Option<Vec<super::field_meta_data::FieldMetaData>>: Sync,
-    opcua::types::guid::Guid: Sync,
-    super::configuration_version_data_type::ConfigurationVersionDataType: Sync,
-{
-}

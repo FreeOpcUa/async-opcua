@@ -102,29 +102,3 @@ impl opcua::types::BinaryDecodable for UadpDataSetReaderMessageDataType {
         })
     }
 }
-unsafe impl Send for UadpDataSetReaderMessageDataType
-where
-    opcua::types::VersionTime: Send,
-    u16: Send,
-    u16: Send,
-    opcua::types::guid::Guid: Send,
-    super::enums::UadpNetworkMessageContentMask: Send,
-    super::enums::UadpDataSetMessageContentMask: Send,
-    opcua::types::data_types::Duration: Send,
-    opcua::types::data_types::Duration: Send,
-    opcua::types::data_types::Duration: Send,
-{
-}
-unsafe impl Sync for UadpDataSetReaderMessageDataType
-where
-    opcua::types::VersionTime: Sync,
-    u16: Sync,
-    u16: Sync,
-    opcua::types::guid::Guid: Sync,
-    super::enums::UadpNetworkMessageContentMask: Sync,
-    super::enums::UadpDataSetMessageContentMask: Sync,
-    opcua::types::data_types::Duration: Sync,
-    opcua::types::data_types::Duration: Sync,
-    opcua::types::data_types::Duration: Sync,
-{
-}

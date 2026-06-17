@@ -98,23 +98,3 @@ impl opcua::types::BinaryDecodable for QueryFirstRequest {
         })
     }
 }
-unsafe impl Send for QueryFirstRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    super::view_description::ViewDescription: Send,
-    Option<Vec<super::node_type_description::NodeTypeDescription>>: Send,
-    super::content_filter::ContentFilter: Send,
-    opcua::types::Counter: Send,
-    opcua::types::Counter: Send,
-{
-}
-unsafe impl Sync for QueryFirstRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    super::view_description::ViewDescription: Sync,
-    Option<Vec<super::node_type_description::NodeTypeDescription>>: Sync,
-    super::content_filter::ContentFilter: Sync,
-    opcua::types::Counter: Sync,
-    opcua::types::Counter: Sync,
-{
-}

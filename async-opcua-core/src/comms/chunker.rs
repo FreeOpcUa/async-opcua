@@ -286,15 +286,12 @@ impl Write for ChunkingStream<'_, '_> {
         if !self.chunk_started {
             self.start_chunk()?;
         }
-        // Mirror the old zero-initialized buffer: a message that encodes
-        // shorter than its declared byte_len pads the chunk with zeros.
         if self.body_written < self.current_body_target {
-            bytes::BufMut::put_bytes(
-                &mut *self.storage,
-                0,
-                self.current_body_target - self.body_written,
-            );
-            self.body_written = self.current_body_target;
+            return Err(Error::encoding(format!(
+                "byte_len/encode mismatch: encoded {} bytes, expected {}",
+                self.body_written, self.current_body_target
+            ))
+            .into());
         }
         self.emit_chunk();
         Ok(())

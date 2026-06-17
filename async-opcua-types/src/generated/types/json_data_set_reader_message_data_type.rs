@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for JsonDataSetReaderMessageDataType {
         })
     }
 }
-unsafe impl Send for JsonDataSetReaderMessageDataType
-where
-    super::enums::JsonNetworkMessageContentMask: Send,
-    super::enums::JsonDataSetMessageContentMask: Send,
-{
-}
-unsafe impl Sync for JsonDataSetReaderMessageDataType
-where
-    super::enums::JsonNetworkMessageContentMask: Sync,
-    super::enums::JsonDataSetMessageContentMask: Sync,
-{
-}

@@ -86,21 +86,3 @@ impl opcua::types::BinaryDecodable for AxisInformation {
         })
     }
 }
-unsafe impl Send for AxisInformation
-where
-    super::eu_information::EUInformation: Send,
-    super::range::Range: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-    super::enums::AxisScaleEnumeration: Send,
-    Option<Vec<f64>>: Send,
-{
-}
-unsafe impl Sync for AxisInformation
-where
-    super::eu_information::EUInformation: Sync,
-    super::range::Range: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-    super::enums::AxisScaleEnumeration: Sync,
-    Option<Vec<f64>>: Sync,
-{
-}

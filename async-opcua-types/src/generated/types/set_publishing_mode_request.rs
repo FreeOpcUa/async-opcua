@@ -83,17 +83,3 @@ impl opcua::types::BinaryDecodable for SetPublishingModeRequest {
         })
     }
 }
-unsafe impl Send for SetPublishingModeRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    bool: Send,
-    Option<Vec<opcua::types::IntegerId>>: Send,
-{
-}
-unsafe impl Sync for SetPublishingModeRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    bool: Sync,
-    Option<Vec<opcua::types::IntegerId>>: Sync,
-{
-}

@@ -162,8 +162,15 @@ impl Error {
 
 impl From<Error> for StatusCode {
     fn from(value: Error) -> Self {
-        error!("{}", value);
-        value.status()
+        let status = value.status();
+        error!(
+            ?status,
+            request_id = ?value.request_id,
+            request_handle = ?value.request_handle,
+            error = %value.context,
+            "downgrading OPC UA error to status code"
+        );
+        status
     }
 }
 

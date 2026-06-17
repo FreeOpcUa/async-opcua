@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for ServiceCounterDataType {
         })
     }
 }
-unsafe impl Send for ServiceCounterDataType
-where
-    u32: Send,
-    u32: Send,
-{
-}
-unsafe impl Sync for ServiceCounterDataType
-where
-    u32: Sync,
-    u32: Sync,
-{
-}

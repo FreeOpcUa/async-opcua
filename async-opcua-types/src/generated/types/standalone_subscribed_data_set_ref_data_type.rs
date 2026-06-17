@@ -70,11 +70,3 @@ impl opcua::types::BinaryDecodable for StandaloneSubscribedDataSetRefDataType {
         })
     }
 }
-unsafe impl Send for StandaloneSubscribedDataSetRefDataType where
-    opcua::types::string::UAString: Send
-{
-}
-unsafe impl Sync for StandaloneSubscribedDataSetRefDataType where
-    opcua::types::string::UAString: Sync
-{
-}

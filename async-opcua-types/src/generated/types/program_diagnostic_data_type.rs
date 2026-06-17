@@ -105,31 +105,3 @@ impl opcua::types::BinaryDecodable for ProgramDiagnosticDataType {
         })
     }
 }
-unsafe impl Send for ProgramDiagnosticDataType
-where
-    opcua::types::node_id::NodeId: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::data_types::UtcTime: Send,
-    opcua::types::data_types::UtcTime: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::node_id::NodeId: Send,
-    Option<Vec<crate::argument::Argument>>: Send,
-    Option<Vec<crate::argument::Argument>>: Send,
-    opcua::types::data_types::UtcTime: Send,
-    super::status_result::StatusResult: Send,
-{
-}
-unsafe impl Sync for ProgramDiagnosticDataType
-where
-    opcua::types::node_id::NodeId: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::node_id::NodeId: Sync,
-    Option<Vec<crate::argument::Argument>>: Sync,
-    Option<Vec<crate::argument::Argument>>: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-    super::status_result::StatusResult: Sync,
-{
-}

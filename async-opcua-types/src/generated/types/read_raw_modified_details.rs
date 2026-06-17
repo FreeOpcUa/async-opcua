@@ -86,21 +86,3 @@ impl opcua::types::BinaryDecodable for ReadRawModifiedDetails {
         })
     }
 }
-unsafe impl Send for ReadRawModifiedDetails
-where
-    bool: Send,
-    opcua::types::data_types::UtcTime: Send,
-    opcua::types::data_types::UtcTime: Send,
-    opcua::types::Counter: Send,
-    bool: Send,
-{
-}
-unsafe impl Sync for ReadRawModifiedDetails
-where
-    bool: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-    opcua::types::Counter: Sync,
-    bool: Sync,
-{
-}

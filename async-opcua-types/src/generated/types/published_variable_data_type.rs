@@ -98,27 +98,3 @@ impl opcua::types::BinaryDecodable for PublishedVariableDataType {
         })
     }
 }
-unsafe impl Send for PublishedVariableDataType
-where
-    opcua::types::node_id::NodeId: Send,
-    opcua::types::IntegerId: Send,
-    opcua::types::data_types::Duration: Send,
-    u32: Send,
-    f64: Send,
-    opcua::types::NumericRange: Send,
-    opcua::types::variant::Variant: Send,
-    Option<Vec<opcua::types::qualified_name::QualifiedName>>: Send,
-{
-}
-unsafe impl Sync for PublishedVariableDataType
-where
-    opcua::types::node_id::NodeId: Sync,
-    opcua::types::IntegerId: Sync,
-    opcua::types::data_types::Duration: Sync,
-    u32: Sync,
-    f64: Sync,
-    opcua::types::NumericRange: Sync,
-    opcua::types::variant::Variant: Sync,
-    Option<Vec<opcua::types::qualified_name::QualifiedName>>: Sync,
-{
-}

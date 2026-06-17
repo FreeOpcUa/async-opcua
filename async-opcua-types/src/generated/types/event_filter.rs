@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for EventFilter {
         })
     }
 }
-unsafe impl Send for EventFilter
-where
-    Option<Vec<super::simple_attribute_operand::SimpleAttributeOperand>>: Send,
-    super::content_filter::ContentFilter: Send,
-{
-}
-unsafe impl Sync for EventFilter
-where
-    Option<Vec<super::simple_attribute_operand::SimpleAttributeOperand>>: Sync,
-    super::content_filter::ContentFilter: Sync,
-{
-}

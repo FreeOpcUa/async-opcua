@@ -82,19 +82,3 @@ impl opcua::types::BinaryDecodable for SimpleAttributeOperand {
         })
     }
 }
-unsafe impl Send for SimpleAttributeOperand
-where
-    opcua::types::node_id::NodeId: Send,
-    Option<Vec<opcua::types::qualified_name::QualifiedName>>: Send,
-    opcua::types::IntegerId: Send,
-    opcua::types::NumericRange: Send,
-{
-}
-unsafe impl Sync for SimpleAttributeOperand
-where
-    opcua::types::node_id::NodeId: Sync,
-    Option<Vec<opcua::types::qualified_name::QualifiedName>>: Sync,
-    opcua::types::IntegerId: Sync,
-    opcua::types::NumericRange: Sync,
-{
-}

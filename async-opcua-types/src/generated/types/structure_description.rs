@@ -78,17 +78,3 @@ impl opcua::types::BinaryDecodable for StructureDescription {
         })
     }
 }
-unsafe impl Send for StructureDescription
-where
-    opcua::types::node_id::NodeId: Send,
-    opcua::types::qualified_name::QualifiedName: Send,
-    super::structure_definition::StructureDefinition: Send,
-{
-}
-unsafe impl Sync for StructureDescription
-where
-    opcua::types::node_id::NodeId: Sync,
-    opcua::types::qualified_name::QualifiedName: Sync,
-    super::structure_definition::StructureDefinition: Sync,
-{
-}

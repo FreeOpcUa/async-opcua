@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for TimeZoneDataType {
         })
     }
 }
-unsafe impl Send for TimeZoneDataType
-where
-    i16: Send,
-    bool: Send,
-{
-}
-unsafe impl Sync for TimeZoneDataType
-where
-    i16: Sync,
-    bool: Sync,
-{
-}

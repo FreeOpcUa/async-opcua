@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for IdentityMappingRuleType {
         })
     }
 }
-unsafe impl Send for IdentityMappingRuleType
-where
-    super::enums::IdentityCriteriaType: Send,
-    opcua::types::string::UAString: Send,
-{
-}
-unsafe impl Sync for IdentityMappingRuleType
-where
-    super::enums::IdentityCriteriaType: Sync,
-    opcua::types::string::UAString: Sync,
-{
-}

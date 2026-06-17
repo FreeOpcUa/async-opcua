@@ -83,17 +83,3 @@ impl opcua::types::BinaryDecodable for BrowseNextRequest {
         })
     }
 }
-unsafe impl Send for BrowseNextRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    bool: Send,
-    Option<Vec<opcua::types::ContinuationPoint>>: Send,
-{
-}
-unsafe impl Sync for BrowseNextRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    bool: Sync,
-    Option<Vec<opcua::types::ContinuationPoint>>: Sync,
-{
-}

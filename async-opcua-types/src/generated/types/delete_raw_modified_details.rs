@@ -82,19 +82,3 @@ impl opcua::types::BinaryDecodable for DeleteRawModifiedDetails {
         })
     }
 }
-unsafe impl Send for DeleteRawModifiedDetails
-where
-    opcua::types::node_id::NodeId: Send,
-    bool: Send,
-    opcua::types::data_types::UtcTime: Send,
-    opcua::types::data_types::UtcTime: Send,
-{
-}
-unsafe impl Sync for DeleteRawModifiedDetails
-where
-    opcua::types::node_id::NodeId: Sync,
-    bool: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-{
-}

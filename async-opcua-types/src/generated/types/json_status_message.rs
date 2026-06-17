@@ -79,25 +79,3 @@ impl opcua::types::BinaryDecodable for JsonStatusMessage {
         })
     }
 }
-unsafe impl Send for JsonStatusMessage
-where
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::data_types::UtcTime: Send,
-    bool: Send,
-    super::enums::PubSubState: Send,
-    opcua::types::data_types::UtcTime: Send,
-{
-}
-unsafe impl Sync for JsonStatusMessage
-where
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-    bool: Sync,
-    super::enums::PubSubState: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-{
-}

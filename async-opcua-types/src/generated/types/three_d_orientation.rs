@@ -78,17 +78,3 @@ impl opcua::types::BinaryDecodable for ThreeDOrientation {
         })
     }
 }
-unsafe impl Send for ThreeDOrientation
-where
-    f64: Send,
-    f64: Send,
-    f64: Send,
-{
-}
-unsafe impl Sync for ThreeDOrientation
-where
-    f64: Sync,
-    f64: Sync,
-    f64: Sync,
-{
-}

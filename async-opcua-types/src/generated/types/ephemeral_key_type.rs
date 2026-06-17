@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for EphemeralKeyType {
         })
     }
 }
-unsafe impl Send for EphemeralKeyType
-where
-    opcua::types::byte_string::ByteString: Send,
-    opcua::types::byte_string::ByteString: Send,
-{
-}
-unsafe impl Sync for EphemeralKeyType
-where
-    opcua::types::byte_string::ByteString: Sync,
-    opcua::types::byte_string::ByteString: Sync,
-{
-}

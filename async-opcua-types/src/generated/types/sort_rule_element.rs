@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for SortRuleElement {
         })
     }
 }
-unsafe impl Send for SortRuleElement
-where
-    super::enums::SortOrderType: Send,
-    super::simple_attribute_operand::SimpleAttributeOperand: Send,
-{
-}
-unsafe impl Sync for SortRuleElement
-where
-    super::enums::SortOrderType: Sync,
-    super::simple_attribute_operand::SimpleAttributeOperand: Sync,
-{
-}

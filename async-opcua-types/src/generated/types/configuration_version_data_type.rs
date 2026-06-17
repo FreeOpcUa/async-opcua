@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for ConfigurationVersionDataType {
         })
     }
 }
-unsafe impl Send for ConfigurationVersionDataType
-where
-    opcua::types::VersionTime: Send,
-    opcua::types::VersionTime: Send,
-{
-}
-unsafe impl Sync for ConfigurationVersionDataType
-where
-    opcua::types::VersionTime: Sync,
-    opcua::types::VersionTime: Sync,
-{
-}

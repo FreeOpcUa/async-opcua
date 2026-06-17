@@ -94,25 +94,3 @@ impl opcua::types::BinaryDecodable for StructureField {
         })
     }
 }
-unsafe impl Send for StructureField
-where
-    opcua::types::string::UAString: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-    opcua::types::node_id::NodeId: Send,
-    i32: Send,
-    Option<Vec<u32>>: Send,
-    u32: Send,
-    bool: Send,
-{
-}
-unsafe impl Sync for StructureField
-where
-    opcua::types::string::UAString: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-    opcua::types::node_id::NodeId: Sync,
-    i32: Sync,
-    Option<Vec<u32>>: Sync,
-    u32: Sync,
-    bool: Sync,
-{
-}

@@ -98,27 +98,3 @@ impl opcua::types::BinaryDecodable for RegisteredServer {
         })
     }
 }
-unsafe impl Send for RegisteredServer
-where
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    Option<Vec<opcua::types::localized_text::LocalizedText>>: Send,
-    super::enums::ApplicationType: Send,
-    opcua::types::string::UAString: Send,
-    Option<Vec<opcua::types::string::UAString>>: Send,
-    opcua::types::string::UAString: Send,
-    bool: Send,
-{
-}
-unsafe impl Sync for RegisteredServer
-where
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    Option<Vec<opcua::types::localized_text::LocalizedText>>: Sync,
-    super::enums::ApplicationType: Sync,
-    opcua::types::string::UAString: Sync,
-    Option<Vec<opcua::types::string::UAString>>: Sync,
-    opcua::types::string::UAString: Sync,
-    bool: Sync,
-{
-}

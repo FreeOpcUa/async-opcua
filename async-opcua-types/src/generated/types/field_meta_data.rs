@@ -106,31 +106,3 @@ impl opcua::types::BinaryDecodable for FieldMetaData {
         })
     }
 }
-unsafe impl Send for FieldMetaData
-where
-    opcua::types::string::UAString: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-    super::enums::DataSetFieldFlags: Send,
-    u8: Send,
-    opcua::types::node_id::NodeId: Send,
-    i32: Send,
-    Option<Vec<u32>>: Send,
-    u32: Send,
-    opcua::types::guid::Guid: Send,
-    Option<Vec<super::key_value_pair::KeyValuePair>>: Send,
-{
-}
-unsafe impl Sync for FieldMetaData
-where
-    opcua::types::string::UAString: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-    super::enums::DataSetFieldFlags: Sync,
-    u8: Sync,
-    opcua::types::node_id::NodeId: Sync,
-    i32: Sync,
-    Option<Vec<u32>>: Sync,
-    u32: Sync,
-    opcua::types::guid::Guid: Sync,
-    Option<Vec<super::key_value_pair::KeyValuePair>>: Sync,
-{
-}

@@ -86,21 +86,3 @@ impl opcua::types::BinaryDecodable for DtlsPubSubConnectionDataType {
         })
     }
 }
-unsafe impl Send for DtlsPubSubConnectionDataType
-where
-    opcua::types::string::UAString: Send,
-    Option<Vec<opcua::types::string::UAString>>: Send,
-    bool: Send,
-    opcua::types::node_id::NodeId: Send,
-    bool: Send,
-{
-}
-unsafe impl Sync for DtlsPubSubConnectionDataType
-where
-    opcua::types::string::UAString: Sync,
-    Option<Vec<opcua::types::string::UAString>>: Sync,
-    bool: Sync,
-    opcua::types::node_id::NodeId: Sync,
-    bool: Sync,
-{
-}

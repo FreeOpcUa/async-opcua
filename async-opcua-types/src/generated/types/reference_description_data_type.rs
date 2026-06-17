@@ -81,19 +81,3 @@ impl opcua::types::BinaryDecodable for ReferenceDescriptionDataType {
         })
     }
 }
-unsafe impl Send for ReferenceDescriptionDataType
-where
-    opcua::types::node_id::NodeId: Send,
-    opcua::types::node_id::NodeId: Send,
-    bool: Send,
-    opcua::types::expanded_node_id::ExpandedNodeId: Send,
-{
-}
-unsafe impl Sync for ReferenceDescriptionDataType
-where
-    opcua::types::node_id::NodeId: Sync,
-    opcua::types::node_id::NodeId: Sync,
-    bool: Sync,
-    opcua::types::expanded_node_id::ExpandedNodeId: Sync,
-{
-}

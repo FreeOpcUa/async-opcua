@@ -27,6 +27,7 @@ name = "opcua_types"
 base64 = { workspace = true }
 bitflags = { workspace = true }
 byteorder = { workspace = true }
+bytes = { workspace = true }
 chrono = { workspace = true }
 hashbrown = { workspace = true }
 percent-encoding-rfc3986 = "0.1.3"

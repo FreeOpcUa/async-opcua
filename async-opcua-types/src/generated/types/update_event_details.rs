@@ -82,19 +82,3 @@ impl opcua::types::BinaryDecodable for UpdateEventDetails {
         })
     }
 }
-unsafe impl Send for UpdateEventDetails
-where
-    opcua::types::node_id::NodeId: Send,
-    super::enums::PerformUpdateType: Send,
-    super::event_filter::EventFilter: Send,
-    Option<Vec<super::history_event_field_list::HistoryEventFieldList>>: Send,
-{
-}
-unsafe impl Sync for UpdateEventDetails
-where
-    opcua::types::node_id::NodeId: Sync,
-    super::enums::PerformUpdateType: Sync,
-    super::event_filter::EventFilter: Sync,
-    Option<Vec<super::history_event_field_list::HistoryEventFieldList>>: Sync,
-{
-}

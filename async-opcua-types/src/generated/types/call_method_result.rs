@@ -82,19 +82,3 @@ impl opcua::types::BinaryDecodable for CallMethodResult {
         })
     }
 }
-unsafe impl Send for CallMethodResult
-where
-    opcua::types::status_code::StatusCode: Send,
-    Option<Vec<opcua::types::status_code::StatusCode>>: Send,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Send,
-    Option<Vec<opcua::types::variant::Variant>>: Send,
-{
-}
-unsafe impl Sync for CallMethodResult
-where
-    opcua::types::status_code::StatusCode: Sync,
-    Option<Vec<opcua::types::status_code::StatusCode>>: Sync,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Sync,
-    Option<Vec<opcua::types::variant::Variant>>: Sync,
-{
-}

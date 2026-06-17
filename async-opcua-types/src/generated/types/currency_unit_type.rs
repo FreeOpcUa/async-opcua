@@ -82,19 +82,3 @@ impl opcua::types::BinaryDecodable for CurrencyUnitType {
         })
     }
 }
-unsafe impl Send for CurrencyUnitType
-where
-    i16: Send,
-    i8: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-{
-}
-unsafe impl Sync for CurrencyUnitType
-where
-    i16: Sync,
-    i8: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-{
-}

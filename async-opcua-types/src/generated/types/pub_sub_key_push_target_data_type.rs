@@ -102,29 +102,3 @@ impl opcua::types::BinaryDecodable for PubSubKeyPushTargetDataType {
         })
     }
 }
-unsafe impl Send for PubSubKeyPushTargetDataType
-where
-    opcua::types::string::UAString: Send,
-    Option<Vec<opcua::types::string::UAString>>: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    super::user_token_policy::UserTokenPolicy: Send,
-    u16: Send,
-    opcua::types::data_types::Duration: Send,
-    Option<Vec<super::key_value_pair::KeyValuePair>>: Send,
-    Option<Vec<opcua::types::string::UAString>>: Send,
-{
-}
-unsafe impl Sync for PubSubKeyPushTargetDataType
-where
-    opcua::types::string::UAString: Sync,
-    Option<Vec<opcua::types::string::UAString>>: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    super::user_token_policy::UserTokenPolicy: Sync,
-    u16: Sync,
-    opcua::types::data_types::Duration: Sync,
-    Option<Vec<super::key_value_pair::KeyValuePair>>: Sync,
-    Option<Vec<opcua::types::string::UAString>>: Sync,
-{
-}

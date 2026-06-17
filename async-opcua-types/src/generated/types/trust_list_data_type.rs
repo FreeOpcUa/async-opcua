@@ -86,21 +86,3 @@ impl opcua::types::BinaryDecodable for TrustListDataType {
         })
     }
 }
-unsafe impl Send for TrustListDataType
-where
-    u32: Send,
-    Option<Vec<opcua::types::byte_string::ByteString>>: Send,
-    Option<Vec<opcua::types::byte_string::ByteString>>: Send,
-    Option<Vec<opcua::types::byte_string::ByteString>>: Send,
-    Option<Vec<opcua::types::byte_string::ByteString>>: Send,
-{
-}
-unsafe impl Sync for TrustListDataType
-where
-    u32: Sync,
-    Option<Vec<opcua::types::byte_string::ByteString>>: Sync,
-    Option<Vec<opcua::types::byte_string::ByteString>>: Sync,
-    Option<Vec<opcua::types::byte_string::ByteString>>: Sync,
-    Option<Vec<opcua::types::byte_string::ByteString>>: Sync,
-{
-}

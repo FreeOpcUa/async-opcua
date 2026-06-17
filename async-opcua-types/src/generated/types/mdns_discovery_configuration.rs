@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for MdnsDiscoveryConfiguration {
         })
     }
 }
-unsafe impl Send for MdnsDiscoveryConfiguration
-where
-    opcua::types::string::UAString: Send,
-    Option<Vec<opcua::types::string::UAString>>: Send,
-{
-}
-unsafe impl Sync for MdnsDiscoveryConfiguration
-where
-    opcua::types::string::UAString: Sync,
-    Option<Vec<opcua::types::string::UAString>>: Sync,
-{
-}

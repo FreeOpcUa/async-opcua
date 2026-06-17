@@ -88,19 +88,3 @@ impl opcua::types::BinaryDecodable for FindServersRequest {
         })
     }
 }
-unsafe impl Send for FindServersRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    opcua::types::string::UAString: Send,
-    Option<Vec<opcua::types::LocaleId>>: Send,
-    Option<Vec<opcua::types::string::UAString>>: Send,
-{
-}
-unsafe impl Sync for FindServersRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    opcua::types::string::UAString: Sync,
-    Option<Vec<opcua::types::LocaleId>>: Sync,
-    Option<Vec<opcua::types::string::UAString>>: Sync,
-{
-}

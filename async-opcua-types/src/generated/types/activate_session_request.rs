@@ -99,23 +99,3 @@ impl opcua::types::BinaryDecodable for ActivateSessionRequest {
         })
     }
 }
-unsafe impl Send for ActivateSessionRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    super::signature_data::SignatureData: Send,
-    Option<Vec<super::signed_software_certificate::SignedSoftwareCertificate>>: Send,
-    Option<Vec<opcua::types::LocaleId>>: Send,
-    opcua::types::extension_object::ExtensionObject: Send,
-    super::signature_data::SignatureData: Send,
-{
-}
-unsafe impl Sync for ActivateSessionRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    super::signature_data::SignatureData: Sync,
-    Option<Vec<super::signed_software_certificate::SignedSoftwareCertificate>>: Sync,
-    Option<Vec<opcua::types::LocaleId>>: Sync,
-    opcua::types::extension_object::ExtensionObject: Sync,
-    super::signature_data::SignatureData: Sync,
-{
-}

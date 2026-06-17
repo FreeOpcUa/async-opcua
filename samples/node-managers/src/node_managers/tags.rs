@@ -7,9 +7,10 @@ use opcua::{
         diagnostics::NamespaceMetadata,
         node_manager::{
             as_opaque_node_id, from_opaque_node_id, impl_translate_browse_paths_using_browse,
-            AddReferenceResult, BrowseNode, BrowsePathItem, ExternalReference,
-            ExternalReferenceRequest, NodeManager, NodeManagerBuilder, NodeMetadata,
-            ParsedReadValueId, ReadNode, RequestContext, ServerContext,
+            AddReferenceResult, AttributeProvider, BrowseNode, BrowsePathItem, ExternalReference,
+            ExternalReferenceRequest, HistoryProvider, MethodProvider, MonitoredItemProvider,
+            NodeManagerBuilder, NodeManagerCore, NodeMetadata, NodeMutator, ParsedReadValueId,
+            ReadNode, RequestContext, ServerContext, ViewProvider,
         },
         CreateMonitoredItem,
     },
@@ -80,7 +81,7 @@ pub struct TagNodeManager {
 }
 
 #[async_trait]
-impl NodeManager for TagNodeManager {
+impl NodeManagerCore for TagNodeManager {
     fn owns_node(&self, id: &NodeId) -> bool {
         // This method must return whether a node is "owned" by this node manager.
         // This is _not_ a check for whether this node exists, just that if it
@@ -102,7 +103,10 @@ impl NodeManager for TagNodeManager {
     }
 
     async fn init(&self, _type_tree: &mut DefaultTypeTree, _context: ServerContext) {}
+}
 
+#[async_trait]
+impl ViewProvider for TagNodeManager {
     async fn resolve_external_references(
         &self,
         _context: &RequestContext,
@@ -146,6 +150,24 @@ impl NodeManager for TagNodeManager {
         Ok(())
     }
 
+    async fn translate_browse_paths_to_node_ids(
+        &self,
+        context: &RequestContext,
+        nodes: &mut [&mut BrowsePathItem],
+    ) -> Result<(), StatusCode> {
+        // Translate browse paths is a bit of a niche service. Most clients
+        // will only use them when dealing with methods. Because of this,
+        // and the complexity of implementing it, we offer a generic implementation
+        // that uses `browse` to implement it, calling browse multiple times.
+
+        // If you have high overhead on individual browse calls, and you expect
+        // this service to be used a lot, you should consider manually implementing it.
+        impl_translate_browse_paths_using_browse(self, context, nodes).await
+    }
+}
+
+#[async_trait]
+impl AttributeProvider for TagNodeManager {
     async fn read(
         &self,
         _context: &RequestContext,
@@ -169,22 +191,10 @@ impl NodeManager for TagNodeManager {
 
         Ok(())
     }
+}
 
-    async fn translate_browse_paths_to_node_ids(
-        &self,
-        context: &RequestContext,
-        nodes: &mut [&mut BrowsePathItem],
-    ) -> Result<(), StatusCode> {
-        // Translate browse paths is a bit of a niche service. Most clients
-        // will only use them when dealing with methods. Because of this,
-        // and the complexity of implementing it, we offer a generic implementation
-        // that uses `browse` to implement it, calling browse multiple times.
-
-        // If you have high overhead on individual browse calls, and you expect
-        // this service to be used a lot, you should consider manually implementing it.
-        impl_translate_browse_paths_using_browse(self, context, nodes).await
-    }
-
+#[async_trait]
+impl MonitoredItemProvider for TagNodeManager {
     async fn create_monitored_items(
         &self,
         _context: &RequestContext,
@@ -209,6 +219,12 @@ impl NodeManager for TagNodeManager {
         Ok(())
     }
 }
+
+impl HistoryProvider for TagNodeManager {}
+
+impl MethodProvider for TagNodeManager {}
+
+impl NodeMutator for TagNodeManager {}
 
 #[derive(Serialize, Deserialize, Debug)]
 struct TagMetaId {

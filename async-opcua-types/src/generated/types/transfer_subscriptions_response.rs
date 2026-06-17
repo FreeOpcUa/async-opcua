@@ -83,17 +83,3 @@ impl opcua::types::BinaryDecodable for TransferSubscriptionsResponse {
         })
     }
 }
-unsafe impl Send for TransferSubscriptionsResponse
-where
-    opcua::types::response_header::ResponseHeader: Send,
-    Option<Vec<super::transfer_result::TransferResult>>: Send,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Send,
-{
-}
-unsafe impl Sync for TransferSubscriptionsResponse
-where
-    opcua::types::response_header::ResponseHeader: Sync,
-    Option<Vec<super::transfer_result::TransferResult>>: Sync,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Sync,
-{
-}

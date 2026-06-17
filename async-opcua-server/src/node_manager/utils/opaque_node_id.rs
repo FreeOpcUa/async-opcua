@@ -9,7 +9,7 @@ pub fn as_opaque_node_id<T: Serialize>(value: &T, namespace: u16) -> Option<Node
     let v = postcard::to_stdvec(&value).ok()?;
     Some(NodeId {
         namespace,
-        identifier: Identifier::ByteString(ByteString { value: Some(v) }),
+        identifier: Identifier::ByteString(ByteString::from(v)),
     })
 }
 

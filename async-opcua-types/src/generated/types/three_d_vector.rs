@@ -78,17 +78,3 @@ impl opcua::types::BinaryDecodable for ThreeDVector {
         })
     }
 }
-unsafe impl Send for ThreeDVector
-where
-    f64: Send,
-    f64: Send,
-    f64: Send,
-{
-}
-unsafe impl Sync for ThreeDVector
-where
-    f64: Sync,
-    f64: Sync,
-    f64: Sync,
-{
-}

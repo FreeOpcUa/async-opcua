@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for ActionMethodDataType {
         })
     }
 }
-unsafe impl Send for ActionMethodDataType
-where
-    opcua::types::node_id::NodeId: Send,
-    opcua::types::node_id::NodeId: Send,
-{
-}
-unsafe impl Sync for ActionMethodDataType
-where
-    opcua::types::node_id::NodeId: Sync,
-    opcua::types::node_id::NodeId: Sync,
-{
-}

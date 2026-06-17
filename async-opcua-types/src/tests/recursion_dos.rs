@@ -37,7 +37,8 @@ fn data_value_variant_cycle_is_bounded() {
         dv = DataValue::value_only(Variant::DataValue(Box::new(dv)));
     }
     let mut buf = Vec::new();
-    dv.encode(&mut buf, &ctx).expect("encode of bounded-depth value");
+    dv.encode(&mut buf, &ctx)
+        .expect("encode of bounded-depth value");
 
     let mut stream = Cursor::new(buf);
     let res = DataValue::decode(&mut stream, &ctx);

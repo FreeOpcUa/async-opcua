@@ -89,19 +89,3 @@ impl opcua::types::BinaryDecodable for CreateMonitoredItemsRequest {
         })
     }
 }
-unsafe impl Send for CreateMonitoredItemsRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    opcua::types::IntegerId: Send,
-    super::enums::TimestampsToReturn: Send,
-    Option<Vec<super::monitored_item_create_request::MonitoredItemCreateRequest>>: Send,
-{
-}
-unsafe impl Sync for CreateMonitoredItemsRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    opcua::types::IntegerId: Sync,
-    super::enums::TimestampsToReturn: Sync,
-    Option<Vec<super::monitored_item_create_request::MonitoredItemCreateRequest>>: Sync,
-{
-}

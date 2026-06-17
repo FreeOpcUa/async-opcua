@@ -93,21 +93,3 @@ impl opcua::types::BinaryDecodable for HistoryReadRequest {
         })
     }
 }
-unsafe impl Send for HistoryReadRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    opcua::types::extension_object::ExtensionObject: Send,
-    super::enums::TimestampsToReturn: Send,
-    bool: Send,
-    Option<Vec<super::history_read_value_id::HistoryReadValueId>>: Send,
-{
-}
-unsafe impl Sync for HistoryReadRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    opcua::types::extension_object::ExtensionObject: Sync,
-    super::enums::TimestampsToReturn: Sync,
-    bool: Sync,
-    Option<Vec<super::history_read_value_id::HistoryReadValueId>>: Sync,
-{
-}

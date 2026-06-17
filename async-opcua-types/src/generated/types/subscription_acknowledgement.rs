@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for SubscriptionAcknowledgement {
         })
     }
 }
-unsafe impl Send for SubscriptionAcknowledgement
-where
-    opcua::types::IntegerId: Send,
-    opcua::types::Counter: Send,
-{
-}
-unsafe impl Sync for SubscriptionAcknowledgement
-where
-    opcua::types::IntegerId: Sync,
-    opcua::types::Counter: Sync,
-{
-}

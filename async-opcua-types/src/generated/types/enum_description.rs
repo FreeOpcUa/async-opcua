@@ -82,19 +82,3 @@ impl opcua::types::BinaryDecodable for EnumDescription {
         })
     }
 }
-unsafe impl Send for EnumDescription
-where
-    opcua::types::node_id::NodeId: Send,
-    opcua::types::qualified_name::QualifiedName: Send,
-    super::enum_definition::EnumDefinition: Send,
-    u8: Send,
-{
-}
-unsafe impl Sync for EnumDescription
-where
-    opcua::types::node_id::NodeId: Sync,
-    opcua::types::qualified_name::QualifiedName: Sync,
-    super::enum_definition::EnumDefinition: Sync,
-    u8: Sync,
-{
-}

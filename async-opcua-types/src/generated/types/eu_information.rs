@@ -82,19 +82,3 @@ impl opcua::types::BinaryDecodable for EUInformation {
         })
     }
 }
-unsafe impl Send for EUInformation
-where
-    opcua::types::string::UAString: Send,
-    i32: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-{
-}
-unsafe impl Sync for EUInformation
-where
-    opcua::types::string::UAString: Sync,
-    i32: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-{
-}

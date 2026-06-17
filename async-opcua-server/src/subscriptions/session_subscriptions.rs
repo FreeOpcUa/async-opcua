@@ -577,7 +577,7 @@ impl SessionSubscriptions {
         retransmission_queue: &mut VecDeque<NonAckedPublish>,
         max_retransmission_queue_len: usize,
         subscription_id: u32,
-        notification: &NotificationMessage,
+        notification: Arc<NotificationMessage>,
     ) {
         // Keep-alive messages intentionally reuse the next sequence number, so they must not
         // enter the retransmission queue.
@@ -589,7 +589,7 @@ impl SessionSubscriptions {
             retransmission_queue.pop_front();
         }
         retransmission_queue.push_back(NonAckedPublish {
-            message: notification.clone(),
+            message: notification,
             subscription_id,
         });
     }
@@ -714,7 +714,7 @@ impl SessionSubscriptions {
                 if let Some(notification_message) = subscription.take_notification() {
                     tracing::trace!("Sending notification message {:?}", notification_message);
                     let publish_request = self.publish_request_queue.pop_front().unwrap();
-                    responses.push((publish_request, notification_message, sub_id));
+                    responses.push((publish_request, Arc::new(notification_message), sub_id));
                 } else {
                     break;
                 }
@@ -755,7 +755,7 @@ impl SessionSubscriptions {
                 &mut self.retransmission_queue,
                 max_retransmission_queue_len,
                 subscription_id,
-                &notification,
+                Arc::clone(&notification),
             );
 
             // Take note of the available sequence numbers after we have added the NonAckedPublish
@@ -773,7 +773,7 @@ impl SessionSubscriptions {
                     available_sequence_numbers,
                     // Only set more_notifications on the last publish response.
                     more_notifications: is_last && more_notifications,
-                    notification_message: notification,
+                    notification_message: (*notification).clone(),
                     results: publish_request.ack_results,
                     diagnostic_infos: None,
                 }
@@ -797,7 +797,7 @@ impl SessionSubscriptions {
         }) else {
             return Err(StatusCode::BadMessageNotAvailable);
         };
-        Ok(notification.message.clone())
+        Ok((*notification.message).clone())
     }
 
     fn remove_expired_publish_requests(&mut self, now: Instant) {
@@ -904,7 +904,7 @@ impl SessionSubscriptions {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::VecDeque;
+    use std::{collections::VecDeque, sync::Arc};
 
     use opcua_types::{DateTime, NotificationMessage, StatusCode};
 
@@ -918,7 +918,7 @@ mod tests {
             &mut retransmission_queue,
             2,
             1,
-            &NotificationMessage::keep_alive(7, DateTime::now()),
+            Arc::new(NotificationMessage::keep_alive(7, DateTime::now())),
         );
 
         assert!(retransmission_queue.is_empty());
@@ -932,7 +932,11 @@ mod tests {
             &mut retransmission_queue,
             2,
             1,
-            &NotificationMessage::status_change(7, DateTime::now(), StatusCode::BadTimeout),
+            Arc::new(NotificationMessage::status_change(
+                7,
+                DateTime::now(),
+                StatusCode::BadTimeout,
+            )),
         );
 
         assert_eq!(retransmission_queue.len(), 1);

@@ -70,5 +70,3 @@ impl opcua::types::BinaryDecodable for ElementOperand {
         })
     }
 }
-unsafe impl Send for ElementOperand where u32: Send {}
-unsafe impl Sync for ElementOperand where u32: Sync {}

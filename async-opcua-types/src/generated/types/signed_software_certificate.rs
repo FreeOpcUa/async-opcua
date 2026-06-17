@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for SignedSoftwareCertificate {
         })
     }
 }
-unsafe impl Send for SignedSoftwareCertificate
-where
-    opcua::types::byte_string::ByteString: Send,
-    opcua::types::byte_string::ByteString: Send,
-{
-}
-unsafe impl Sync for SignedSoftwareCertificate
-where
-    opcua::types::byte_string::ByteString: Sync,
-    opcua::types::byte_string::ByteString: Sync,
-{
-}

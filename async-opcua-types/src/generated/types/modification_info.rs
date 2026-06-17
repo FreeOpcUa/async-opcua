@@ -78,17 +78,3 @@ impl opcua::types::BinaryDecodable for ModificationInfo {
         })
     }
 }
-unsafe impl Send for ModificationInfo
-where
-    opcua::types::data_types::UtcTime: Send,
-    super::enums::HistoryUpdateType: Send,
-    opcua::types::string::UAString: Send,
-{
-}
-unsafe impl Sync for ModificationInfo
-where
-    opcua::types::data_types::UtcTime: Sync,
-    super::enums::HistoryUpdateType: Sync,
-    opcua::types::string::UAString: Sync,
-{
-}

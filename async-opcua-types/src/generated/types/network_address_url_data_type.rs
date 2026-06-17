@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for NetworkAddressUrlDataType {
         })
     }
 }
-unsafe impl Send for NetworkAddressUrlDataType
-where
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-{
-}
-unsafe impl Sync for NetworkAddressUrlDataType
-where
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-{
-}

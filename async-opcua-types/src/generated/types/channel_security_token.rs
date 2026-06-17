@@ -81,19 +81,3 @@ impl opcua::types::BinaryDecodable for ChannelSecurityToken {
         })
     }
 }
-unsafe impl Send for ChannelSecurityToken
-where
-    u32: Send,
-    u32: Send,
-    opcua::types::data_types::UtcTime: Send,
-    u32: Send,
-{
-}
-unsafe impl Sync for ChannelSecurityToken
-where
-    u32: Sync,
-    u32: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-    u32: Sync,
-{
-}

@@ -143,48 +143,6 @@ impl opcua::types::BinaryDecodable for PnDeviceDiagnosisDataType {
         })
     }
 }
-unsafe impl Send for PnDeviceDiagnosisDataType
-where
-    u32: Send,
-    u16: Send,
-    u16: Send,
-    u16: Send,
-    super::enums::PnChannelTypeEnumeration: Send,
-    super::enums::PnChannelAccumulativeEnumeration: Send,
-    super::enums::PnChannelMaintenanceEnumeration: Send,
-    super::enums::PnChannelSpecifierEnumeration: Send,
-    super::enums::PnChannelDirectionEnumeration: Send,
-    u16: Send,
-    u16: Send,
-    u16: Send,
-    u32: Send,
-    u32: Send,
-    opcua::types::byte_string::ByteString: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-{
-}
-unsafe impl Sync for PnDeviceDiagnosisDataType
-where
-    u32: Sync,
-    u16: Sync,
-    u16: Sync,
-    u16: Sync,
-    super::enums::PnChannelTypeEnumeration: Sync,
-    super::enums::PnChannelAccumulativeEnumeration: Sync,
-    super::enums::PnChannelMaintenanceEnumeration: Sync,
-    super::enums::PnChannelSpecifierEnumeration: Sync,
-    super::enums::PnChannelDirectionEnumeration: Sync,
-    u16: Sync,
-    u16: Sync,
-    u16: Sync,
-    u32: Sync,
-    u32: Sync,
-    opcua::types::byte_string::ByteString: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-{
-}
 #[derive(opcua::types::UaNullable)]
 #[cfg_attr(
     feature = "json",
@@ -256,18 +214,6 @@ impl opcua::types::BinaryDecodable for PnDeviceRoleOptionSet {
             valid_bits: opcua::types::BinaryDecodable::decode(stream, ctx)?,
         })
     }
-}
-unsafe impl Send for PnDeviceRoleOptionSet
-where
-    opcua::types::byte_string::ByteString: Send,
-    opcua::types::byte_string::ByteString: Send,
-{
-}
-unsafe impl Sync for PnDeviceRoleOptionSet
-where
-    opcua::types::byte_string::ByteString: Sync,
-    opcua::types::byte_string::ByteString: Sync,
-{
 }
 #[derive(opcua::types::UaNullable)]
 #[cfg_attr(
@@ -359,24 +305,4 @@ impl opcua::types::BinaryDecodable for PnIM5DataType {
             software_revision: opcua::types::BinaryDecodable::decode(stream, ctx)?,
         })
     }
-}
-unsafe impl Send for PnIM5DataType
-where
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    u16: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-{
-}
-unsafe impl Sync for PnIM5DataType
-where
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    u16: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-{
 }

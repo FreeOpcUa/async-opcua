@@ -94,25 +94,3 @@ impl opcua::types::BinaryDecodable for ViewAttributes {
         })
     }
 }
-unsafe impl Send for ViewAttributes
-where
-    u32: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-    u32: Send,
-    u32: Send,
-    bool: Send,
-    u8: Send,
-{
-}
-unsafe impl Sync for ViewAttributes
-where
-    u32: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-    u32: Sync,
-    u32: Sync,
-    bool: Sync,
-    u8: Sync,
-{
-}

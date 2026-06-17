@@ -82,19 +82,3 @@ impl opcua::types::BinaryDecodable for LinearConversionDataType {
         })
     }
 }
-unsafe impl Send for LinearConversionDataType
-where
-    f32: Send,
-    f32: Send,
-    f32: Send,
-    f32: Send,
-{
-}
-unsafe impl Sync for LinearConversionDataType
-where
-    f32: Sync,
-    f32: Sync,
-    f32: Sync,
-    f32: Sync,
-{
-}

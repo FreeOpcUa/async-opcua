@@ -78,15 +78,3 @@ impl opcua::types::BinaryDecodable for AddNodesRequest {
         })
     }
 }
-unsafe impl Send for AddNodesRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    Option<Vec<super::add_nodes_item::AddNodesItem>>: Send,
-{
-}
-unsafe impl Sync for AddNodesRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    Option<Vec<super::add_nodes_item::AddNodesItem>>: Sync,
-{
-}

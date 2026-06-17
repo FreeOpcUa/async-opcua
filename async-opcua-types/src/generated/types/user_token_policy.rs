@@ -86,21 +86,3 @@ impl opcua::types::BinaryDecodable for UserTokenPolicy {
         })
     }
 }
-unsafe impl Send for UserTokenPolicy
-where
-    opcua::types::string::UAString: Send,
-    super::enums::UserTokenType: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-{
-}
-unsafe impl Sync for UserTokenPolicy
-where
-    opcua::types::string::UAString: Sync,
-    super::enums::UserTokenType: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-{
-}

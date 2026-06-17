@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for BrowsePathResult {
         })
     }
 }
-unsafe impl Send for BrowsePathResult
-where
-    opcua::types::status_code::StatusCode: Send,
-    Option<Vec<super::browse_path_target::BrowsePathTarget>>: Send,
-{
-}
-unsafe impl Sync for BrowsePathResult
-where
-    opcua::types::status_code::StatusCode: Sync,
-    Option<Vec<super::browse_path_target::BrowsePathTarget>>: Sync,
-{
-}

@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for DeleteEventDetails {
         })
     }
 }
-unsafe impl Send for DeleteEventDetails
-where
-    opcua::types::node_id::NodeId: Send,
-    Option<Vec<opcua::types::byte_string::ByteString>>: Send,
-{
-}
-unsafe impl Sync for DeleteEventDetails
-where
-    opcua::types::node_id::NodeId: Sync,
-    Option<Vec<opcua::types::byte_string::ByteString>>: Sync,
-{
-}

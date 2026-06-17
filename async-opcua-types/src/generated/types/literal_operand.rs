@@ -70,5 +70,3 @@ impl opcua::types::BinaryDecodable for LiteralOperand {
         })
     }
 }
-unsafe impl Send for LiteralOperand where opcua::types::variant::Variant: Send {}
-unsafe impl Sync for LiteralOperand where opcua::types::variant::Variant: Sync {}

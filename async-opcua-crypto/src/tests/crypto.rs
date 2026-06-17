@@ -460,6 +460,6 @@ fn encrypt_decrypt_password() {
 
     assert_eq!(
         password,
-        String::from_utf8(password2.value.unwrap()).unwrap()
+        String::from_utf8(password2.value.unwrap().to_vec()).unwrap()
     );
 }

@@ -95,33 +95,3 @@ impl opcua::types::BinaryDecodable for JsonActionRequestMessage {
         })
     }
 }
-unsafe impl Send for JsonActionRequestMessage
-where
-    u16: Send,
-    u16: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    super::configuration_version_data_type::ConfigurationVersionDataType: Send,
-    opcua::types::VersionTime: Send,
-    opcua::types::date_time::DateTime: Send,
-    opcua::types::string::UAString: Send,
-    u16: Send,
-    super::enums::ActionState: Send,
-    opcua::types::extension_object::ExtensionObject: Send,
-{
-}
-unsafe impl Sync for JsonActionRequestMessage
-where
-    u16: Sync,
-    u16: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    super::configuration_version_data_type::ConfigurationVersionDataType: Sync,
-    opcua::types::VersionTime: Sync,
-    opcua::types::date_time::DateTime: Sync,
-    opcua::types::string::UAString: Sync,
-    u16: Sync,
-    super::enums::ActionState: Sync,
-    opcua::types::extension_object::ExtensionObject: Sync,
-{
-}

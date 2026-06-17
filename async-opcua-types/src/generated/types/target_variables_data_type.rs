@@ -70,11 +70,3 @@ impl opcua::types::BinaryDecodable for TargetVariablesDataType {
         })
     }
 }
-unsafe impl Send for TargetVariablesDataType where
-    Option<Vec<super::field_target_data_type::FieldTargetDataType>>: Send
-{
-}
-unsafe impl Sync for TargetVariablesDataType where
-    Option<Vec<super::field_target_data_type::FieldTargetDataType>>: Sync
-{
-}

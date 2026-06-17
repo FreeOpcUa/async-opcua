@@ -813,7 +813,7 @@ pub(crate) struct PendingPublish {
 }
 
 struct NonAckedPublish {
-    message: NotificationMessage,
+    message: Arc<NotificationMessage>,
     subscription_id: u32,
 }
 

@@ -90,23 +90,3 @@ impl opcua::types::BinaryDecodable for BrowseDescription {
         })
     }
 }
-unsafe impl Send for BrowseDescription
-where
-    opcua::types::node_id::NodeId: Send,
-    super::enums::BrowseDirection: Send,
-    opcua::types::node_id::NodeId: Send,
-    bool: Send,
-    u32: Send,
-    u32: Send,
-{
-}
-unsafe impl Sync for BrowseDescription
-where
-    opcua::types::node_id::NodeId: Sync,
-    super::enums::BrowseDirection: Sync,
-    opcua::types::node_id::NodeId: Sync,
-    bool: Sync,
-    u32: Sync,
-    u32: Sync,
-{
-}

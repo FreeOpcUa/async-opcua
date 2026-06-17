@@ -94,25 +94,3 @@ impl opcua::types::BinaryDecodable for FieldTargetDataType {
         })
     }
 }
-unsafe impl Send for FieldTargetDataType
-where
-    opcua::types::guid::Guid: Send,
-    opcua::types::NumericRange: Send,
-    opcua::types::node_id::NodeId: Send,
-    opcua::types::IntegerId: Send,
-    opcua::types::NumericRange: Send,
-    super::enums::OverrideValueHandling: Send,
-    opcua::types::variant::Variant: Send,
-{
-}
-unsafe impl Sync for FieldTargetDataType
-where
-    opcua::types::guid::Guid: Sync,
-    opcua::types::NumericRange: Sync,
-    opcua::types::node_id::NodeId: Sync,
-    opcua::types::IntegerId: Sync,
-    opcua::types::NumericRange: Sync,
-    super::enums::OverrideValueHandling: Sync,
-    opcua::types::variant::Variant: Sync,
-{
-}

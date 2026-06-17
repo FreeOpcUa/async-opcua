@@ -82,19 +82,3 @@ impl opcua::types::BinaryDecodable for SamplingIntervalDiagnosticsDataType {
         })
     }
 }
-unsafe impl Send for SamplingIntervalDiagnosticsDataType
-where
-    opcua::types::data_types::Duration: Send,
-    u32: Send,
-    u32: Send,
-    u32: Send,
-{
-}
-unsafe impl Sync for SamplingIntervalDiagnosticsDataType
-where
-    opcua::types::data_types::Duration: Sync,
-    u32: Sync,
-    u32: Sync,
-    u32: Sync,
-{
-}

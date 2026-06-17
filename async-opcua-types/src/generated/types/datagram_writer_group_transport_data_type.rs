@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for DatagramWriterGroupTransportDataType {
         })
     }
 }
-unsafe impl Send for DatagramWriterGroupTransportDataType
-where
-    u8: Send,
-    opcua::types::data_types::Duration: Send,
-{
-}
-unsafe impl Sync for DatagramWriterGroupTransportDataType
-where
-    u8: Sync,
-    opcua::types::data_types::Duration: Sync,
-{
-}

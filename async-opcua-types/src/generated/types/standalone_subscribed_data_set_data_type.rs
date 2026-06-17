@@ -82,19 +82,3 @@ impl opcua::types::BinaryDecodable for StandaloneSubscribedDataSetDataType {
         })
     }
 }
-unsafe impl Send for StandaloneSubscribedDataSetDataType
-where
-    opcua::types::string::UAString: Send,
-    Option<Vec<opcua::types::string::UAString>>: Send,
-    super::data_set_meta_data_type::DataSetMetaDataType: Send,
-    opcua::types::extension_object::ExtensionObject: Send,
-{
-}
-unsafe impl Sync for StandaloneSubscribedDataSetDataType
-where
-    opcua::types::string::UAString: Sync,
-    Option<Vec<opcua::types::string::UAString>>: Sync,
-    super::data_set_meta_data_type::DataSetMetaDataType: Sync,
-    opcua::types::extension_object::ExtensionObject: Sync,
-{
-}

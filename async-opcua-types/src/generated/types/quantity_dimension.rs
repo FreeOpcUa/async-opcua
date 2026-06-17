@@ -98,27 +98,3 @@ impl opcua::types::BinaryDecodable for QuantityDimension {
         })
     }
 }
-unsafe impl Send for QuantityDimension
-where
-    i8: Send,
-    i8: Send,
-    i8: Send,
-    i8: Send,
-    i8: Send,
-    i8: Send,
-    i8: Send,
-    i8: Send,
-{
-}
-unsafe impl Sync for QuantityDimension
-where
-    i8: Sync,
-    i8: Sync,
-    i8: Sync,
-    i8: Sync,
-    i8: Sync,
-    i8: Sync,
-    i8: Sync,
-    i8: Sync,
-{
-}

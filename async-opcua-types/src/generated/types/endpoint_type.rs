@@ -82,19 +82,3 @@ impl opcua::types::BinaryDecodable for EndpointType {
         })
     }
 }
-unsafe impl Send for EndpointType
-where
-    opcua::types::string::UAString: Send,
-    super::enums::MessageSecurityMode: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-{
-}
-unsafe impl Sync for EndpointType
-where
-    opcua::types::string::UAString: Sync,
-    super::enums::MessageSecurityMode: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-{
-}

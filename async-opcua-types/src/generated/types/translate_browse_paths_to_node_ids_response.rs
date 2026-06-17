@@ -83,17 +83,3 @@ impl opcua::types::BinaryDecodable for TranslateBrowsePathsToNodeIdsResponse {
         })
     }
 }
-unsafe impl Send for TranslateBrowsePathsToNodeIdsResponse
-where
-    opcua::types::response_header::ResponseHeader: Send,
-    Option<Vec<super::browse_path_result::BrowsePathResult>>: Send,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Send,
-{
-}
-unsafe impl Sync for TranslateBrowsePathsToNodeIdsResponse
-where
-    opcua::types::response_header::ResponseHeader: Sync,
-    Option<Vec<super::browse_path_result::BrowsePathResult>>: Sync,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Sync,
-{
-}

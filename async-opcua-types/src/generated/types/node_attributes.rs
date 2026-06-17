@@ -86,21 +86,3 @@ impl opcua::types::BinaryDecodable for NodeAttributes {
         })
     }
 }
-unsafe impl Send for NodeAttributes
-where
-    u32: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-    u32: Send,
-    u32: Send,
-{
-}
-unsafe impl Sync for NodeAttributes
-where
-    u32: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-    u32: Sync,
-    u32: Sync,
-{
-}

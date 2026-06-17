@@ -83,17 +83,3 @@ impl opcua::types::BinaryDecodable for AddReferencesResponse {
         })
     }
 }
-unsafe impl Send for AddReferencesResponse
-where
-    opcua::types::response_header::ResponseHeader: Send,
-    Option<Vec<opcua::types::status_code::StatusCode>>: Send,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Send,
-{
-}
-unsafe impl Sync for AddReferencesResponse
-where
-    opcua::types::response_header::ResponseHeader: Sync,
-    Option<Vec<opcua::types::status_code::StatusCode>>: Sync,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Sync,
-{
-}

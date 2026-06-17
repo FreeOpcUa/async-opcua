@@ -70,11 +70,3 @@ impl opcua::types::BinaryDecodable for RelativePath {
         })
     }
 }
-unsafe impl Send for RelativePath where
-    Option<Vec<super::relative_path_element::RelativePathElement>>: Send
-{
-}
-unsafe impl Sync for RelativePath where
-    Option<Vec<super::relative_path_element::RelativePathElement>>: Sync
-{
-}

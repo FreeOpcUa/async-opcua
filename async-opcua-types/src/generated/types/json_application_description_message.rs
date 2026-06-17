@@ -75,23 +75,3 @@ impl opcua::types::BinaryDecodable for JsonApplicationDescriptionMessage {
         })
     }
 }
-unsafe impl Send for JsonApplicationDescriptionMessage
-where
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::data_types::UtcTime: Send,
-    super::application_description::ApplicationDescription: Send,
-    Option<Vec<opcua::types::string::UAString>>: Send,
-{
-}
-unsafe impl Sync for JsonApplicationDescriptionMessage
-where
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-    super::application_description::ApplicationDescription: Sync,
-    Option<Vec<opcua::types::string::UAString>>: Sync,
-{
-}

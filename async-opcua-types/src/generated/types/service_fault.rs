@@ -71,5 +71,3 @@ impl opcua::types::BinaryDecodable for ServiceFault {
         Ok(Self { response_header })
     }
 }
-unsafe impl Send for ServiceFault where opcua::types::response_header::ResponseHeader: Send {}
-unsafe impl Sync for ServiceFault where opcua::types::response_header::ResponseHeader: Sync {}

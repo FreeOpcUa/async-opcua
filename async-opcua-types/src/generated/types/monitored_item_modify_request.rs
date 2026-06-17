@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for MonitoredItemModifyRequest {
         })
     }
 }
-unsafe impl Send for MonitoredItemModifyRequest
-where
-    opcua::types::IntegerId: Send,
-    super::monitoring_parameters::MonitoringParameters: Send,
-{
-}
-unsafe impl Sync for MonitoredItemModifyRequest
-where
-    opcua::types::IntegerId: Sync,
-    super::monitoring_parameters::MonitoringParameters: Sync,
-{
-}

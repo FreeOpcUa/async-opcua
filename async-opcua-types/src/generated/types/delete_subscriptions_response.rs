@@ -83,17 +83,3 @@ impl opcua::types::BinaryDecodable for DeleteSubscriptionsResponse {
         })
     }
 }
-unsafe impl Send for DeleteSubscriptionsResponse
-where
-    opcua::types::response_header::ResponseHeader: Send,
-    Option<Vec<opcua::types::status_code::StatusCode>>: Send,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Send,
-{
-}
-unsafe impl Sync for DeleteSubscriptionsResponse
-where
-    opcua::types::response_header::ResponseHeader: Sync,
-    Option<Vec<opcua::types::status_code::StatusCode>>: Sync,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Sync,
-{
-}

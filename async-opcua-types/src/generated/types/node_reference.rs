@@ -81,19 +81,3 @@ impl opcua::types::BinaryDecodable for NodeReference {
         })
     }
 }
-unsafe impl Send for NodeReference
-where
-    opcua::types::node_id::NodeId: Send,
-    opcua::types::node_id::NodeId: Send,
-    bool: Send,
-    Option<Vec<opcua::types::node_id::NodeId>>: Send,
-{
-}
-unsafe impl Sync for NodeReference
-where
-    opcua::types::node_id::NodeId: Sync,
-    opcua::types::node_id::NodeId: Sync,
-    bool: Sync,
-    Option<Vec<opcua::types::node_id::NodeId>>: Sync,
-{
-}

@@ -78,15 +78,3 @@ impl opcua::types::BinaryDecodable for WriteRequest {
         })
     }
 }
-unsafe impl Send for WriteRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    Option<Vec<super::write_value::WriteValue>>: Send,
-{
-}
-unsafe impl Sync for WriteRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    Option<Vec<super::write_value::WriteValue>>: Sync,
-{
-}

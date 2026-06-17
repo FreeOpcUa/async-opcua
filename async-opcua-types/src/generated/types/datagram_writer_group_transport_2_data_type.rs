@@ -94,25 +94,3 @@ impl opcua::types::BinaryDecodable for DatagramWriterGroupTransport2DataType {
         })
     }
 }
-unsafe impl Send for DatagramWriterGroupTransport2DataType
-where
-    u8: Send,
-    opcua::types::data_types::Duration: Send,
-    opcua::types::extension_object::ExtensionObject: Send,
-    opcua::types::string::UAString: Send,
-    Option<Vec<opcua::types::extension_object::ExtensionObject>>: Send,
-    u32: Send,
-    opcua::types::string::UAString: Send,
-{
-}
-unsafe impl Sync for DatagramWriterGroupTransport2DataType
-where
-    u8: Sync,
-    opcua::types::data_types::Duration: Sync,
-    opcua::types::extension_object::ExtensionObject: Sync,
-    opcua::types::string::UAString: Sync,
-    Option<Vec<opcua::types::extension_object::ExtensionObject>>: Sync,
-    u32: Sync,
-    opcua::types::string::UAString: Sync,
-{
-}

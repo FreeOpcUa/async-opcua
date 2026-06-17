@@ -88,19 +88,3 @@ impl opcua::types::BinaryDecodable for FindServersOnNetworkRequest {
         })
     }
 }
-unsafe impl Send for FindServersOnNetworkRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    opcua::types::Counter: Send,
-    u32: Send,
-    Option<Vec<opcua::types::string::UAString>>: Send,
-{
-}
-unsafe impl Sync for FindServersOnNetworkRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    opcua::types::Counter: Sync,
-    u32: Sync,
-    Option<Vec<opcua::types::string::UAString>>: Sync,
-{
-}

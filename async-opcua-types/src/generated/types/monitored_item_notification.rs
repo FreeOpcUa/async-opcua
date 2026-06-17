@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for MonitoredItemNotification {
         })
     }
 }
-unsafe impl Send for MonitoredItemNotification
-where
-    opcua::types::IntegerId: Send,
-    opcua::types::data_value::DataValue: Send,
-{
-}
-unsafe impl Sync for MonitoredItemNotification
-where
-    opcua::types::IntegerId: Sync,
-    opcua::types::data_value::DataValue: Sync,
-{
-}

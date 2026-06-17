@@ -609,12 +609,14 @@ impl ServerInfo {
                 if let Some(ref server_key) = server_key {
                     let decrypted =
                         decrypt_identity_token_secret(token, server_nonce.as_ref(), server_key)?;
-                    String::from_utf8(decrypted.value.unwrap_or_default()).map_err(|e| {
-                        Error::new(
-                            StatusCode::BadIdentityTokenInvalid,
-                            format!("Failed to decode identity token to string: {e}"),
-                        )
-                    })?
+                    String::from_utf8(decrypted.value.unwrap_or_default().to_vec()).map_err(
+                        |e| {
+                            Error::new(
+                                StatusCode::BadIdentityTokenInvalid,
+                                format!("Failed to decode identity token to string: {e}"),
+                            )
+                        },
+                    )?
                 } else {
                     error!(
                         "Identity token password is encrypted but no server private key was supplied"

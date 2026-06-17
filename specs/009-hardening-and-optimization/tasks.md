@@ -204,13 +204,13 @@ per-chunk allocations, lower idle CPU; `opc.wss` connects; all vs the T003 basel
 **Independent test**: generated types compile with no hand-written `unsafe impl`; errors keep request
 handle/context across boundaries; workspace builds with the new trait/type/feature layout.
 
-- [ ] T091 [US6] Codegen: stop emitting `unsafe impl Send/Sync`; emit `#[derive(BinaryEncodable, BinaryDecodable)]` in `async-opcua-codegen/src/derives.rs` (L1/R1/FR-036)
-- [ ] T092 [US6] Regenerate types; verify `ci_verify_clean_codegen` reproducibility (`cargo run --bin async-opcua-codegen … && cargo fmt` → clean `git status`) (FR-036)
-- [ ] T093 [US6] Segregate `NodeManager` into capability sub-traits + composing supertrait with default impls per `contracts/node-manager-traits.md` in `async-opcua-server/src/node_manager/mod.rs` + `memory/` (R3/FR-043)
-- [ ] T094 [US6] Return `opcua_types::Error` (not bare `StatusCode`) at public service boundaries; preserve request handle/context; structured `From` impl logging in `async-opcua-types/src/encoding.rs` + client/server service layers (R2/FR-037)
-- [ ] T095 [P] [US6] Surface `byte_len`/`encode` mismatch as error/assertion (not silent zero-pad corruption) in `async-opcua-core/src/comms/chunker.rs` (M2/FR-038)
-- [ ] T096 [US6] Make `ByteString` `Bytes`-backed (zero-copy decode) + update consumers in `async-opcua-types/src/byte_string.rs` (PERF-P5/FR-045)
-- [ ] T097 [US6] `Arc`-back large `Variant` array payloads + share retransmission `NotificationMessage` via `Arc` in `async-opcua-types/src/variant/mod.rs` + `async-opcua-server/src/subscriptions/` (PERF-P10/FR-045)
+- [X] T091 [US6] Codegen: stop emitting `unsafe impl Send/Sync`; emit `#[derive(BinaryEncodable, BinaryDecodable)]` in `async-opcua-codegen/src/derives.rs` (L1/R1/FR-036)
+- [X] T092 [US6] Regenerate types; verify `ci_verify_clean_codegen` reproducibility (`cargo run --bin async-opcua-codegen … && cargo fmt` → clean `git status`) (FR-036)
+- [X] T093 [US6] Segregate `NodeManager` into capability sub-traits + composing supertrait with default impls per `contracts/node-manager-traits.md` in `async-opcua-server/src/node_manager/mod.rs` + `memory/` (R3/FR-043)
+- [X] T094 [US6] Return `opcua_types::Error` (not bare `StatusCode`) at public service boundaries; preserve request handle/context; structured `From` impl logging in `async-opcua-types/src/encoding.rs` + client/server service layers (R2/FR-037)
+- [X] T095 [P] [US6] Surface `byte_len`/`encode` mismatch as error/assertion (not silent zero-pad corruption) in `async-opcua-core/src/comms/chunker.rs` (M2/FR-038)
+- [X] T096 [US6] Make `ByteString` `Bytes`-backed (zero-copy decode) + update consumers in `async-opcua-types/src/byte_string.rs` (PERF-P5/FR-045)
+- [X] T097 [US6] `Arc`-back large `Variant` array payloads + share retransmission `NotificationMessage` via `Arc` in `async-opcua-types/src/variant/mod.rs` + `async-opcua-server/src/subscriptions/` (PERF-P10/FR-045)
 - [ ] T098 [P] [US6] Bench re-measure PERF-P5/PERF-P10 (ByteString decode, notify fan-out) vs baseline in benches (PERF-P5/PERF-P10)
 
 ---

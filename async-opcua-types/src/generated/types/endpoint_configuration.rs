@@ -101,29 +101,3 @@ impl opcua::types::BinaryDecodable for EndpointConfiguration {
         })
     }
 }
-unsafe impl Send for EndpointConfiguration
-where
-    i32: Send,
-    bool: Send,
-    i32: Send,
-    i32: Send,
-    i32: Send,
-    i32: Send,
-    i32: Send,
-    i32: Send,
-    i32: Send,
-{
-}
-unsafe impl Sync for EndpointConfiguration
-where
-    i32: Sync,
-    bool: Sync,
-    i32: Sync,
-    i32: Sync,
-    i32: Sync,
-    i32: Sync,
-    i32: Sync,
-    i32: Sync,
-    i32: Sync,
-{
-}

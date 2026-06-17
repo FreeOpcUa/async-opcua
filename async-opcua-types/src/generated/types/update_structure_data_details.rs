@@ -78,17 +78,3 @@ impl opcua::types::BinaryDecodable for UpdateStructureDataDetails {
         })
     }
 }
-unsafe impl Send for UpdateStructureDataDetails
-where
-    opcua::types::node_id::NodeId: Send,
-    super::enums::PerformUpdateType: Send,
-    Option<Vec<opcua::types::data_value::DataValue>>: Send,
-{
-}
-unsafe impl Sync for UpdateStructureDataDetails
-where
-    opcua::types::node_id::NodeId: Sync,
-    super::enums::PerformUpdateType: Sync,
-    Option<Vec<opcua::types::data_value::DataValue>>: Sync,
-{
-}

@@ -70,5 +70,3 @@ impl opcua::types::BinaryDecodable for EndpointUrlListDataType {
         })
     }
 }
-unsafe impl Send for EndpointUrlListDataType where Option<Vec<opcua::types::string::UAString>>: Send {}
-unsafe impl Sync for EndpointUrlListDataType where Option<Vec<opcua::types::string::UAString>>: Sync {}

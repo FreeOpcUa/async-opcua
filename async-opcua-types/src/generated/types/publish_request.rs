@@ -79,15 +79,3 @@ impl opcua::types::BinaryDecodable for PublishRequest {
         })
     }
 }
-unsafe impl Send for PublishRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    Option<Vec<super::subscription_acknowledgement::SubscriptionAcknowledgement>>: Send,
-{
-}
-unsafe impl Sync for PublishRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    Option<Vec<super::subscription_acknowledgement::SubscriptionAcknowledgement>>: Sync,
-{
-}

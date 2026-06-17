@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for DeleteNodesItem {
         })
     }
 }
-unsafe impl Send for DeleteNodesItem
-where
-    opcua::types::node_id::NodeId: Send,
-    bool: Send,
-{
-}
-unsafe impl Sync for DeleteNodesItem
-where
-    opcua::types::node_id::NodeId: Sync,
-    bool: Sync,
-{
-}

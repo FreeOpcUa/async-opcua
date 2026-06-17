@@ -71,21 +71,3 @@ impl opcua::types::BinaryDecodable for JsonPubSubConnectionMessage {
         })
     }
 }
-unsafe impl Send for JsonPubSubConnectionMessage
-where
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::data_types::UtcTime: Send,
-    super::pub_sub_connection_data_type::PubSubConnectionDataType: Send,
-{
-}
-unsafe impl Sync for JsonPubSubConnectionMessage
-where
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-    super::pub_sub_connection_data_type::PubSubConnectionDataType: Sync,
-{
-}

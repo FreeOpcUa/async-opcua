@@ -103,25 +103,3 @@ impl opcua::types::BinaryDecodable for ModifySubscriptionRequest {
         })
     }
 }
-unsafe impl Send for ModifySubscriptionRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    opcua::types::IntegerId: Send,
-    opcua::types::data_types::Duration: Send,
-    opcua::types::Counter: Send,
-    opcua::types::Counter: Send,
-    opcua::types::Counter: Send,
-    u8: Send,
-{
-}
-unsafe impl Sync for ModifySubscriptionRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    opcua::types::IntegerId: Sync,
-    opcua::types::data_types::Duration: Sync,
-    opcua::types::Counter: Sync,
-    opcua::types::Counter: Sync,
-    opcua::types::Counter: Sync,
-    u8: Sync,
-{
-}

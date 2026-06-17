@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for ComplexNumberType {
         })
     }
 }
-unsafe impl Send for ComplexNumberType
-where
-    f32: Send,
-    f32: Send,
-{
-}
-unsafe impl Sync for ComplexNumberType
-where
-    f32: Sync,
-    f32: Sync,
-{
-}

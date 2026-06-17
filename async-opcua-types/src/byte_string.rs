@@ -10,6 +10,7 @@ use std::{
 };
 
 use base64::{engine::general_purpose::STANDARD, Engine};
+use bytes::Bytes;
 
 use crate::{
     encoding::{process_decode_io_result, process_encode_io_result, write_i32, EncodingResult},
@@ -21,13 +22,13 @@ use crate::{
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct ByteString {
     /// Raw inner byte string values as an array of bytes.
-    pub value: Option<Vec<u8>>,
+    pub value: Option<Box<Bytes>>,
 }
 
 impl AsRef<[u8]> for ByteString {
     fn as_ref(&self) -> &[u8] {
         match self.value.as_ref() {
-            Some(v) => v.as_slice(),
+            Some(v) => v.as_ref().as_ref(),
             None => &[],
         }
     }
@@ -173,7 +174,9 @@ impl SimpleBinaryDecodable for ByteString {
             // Create a buffer filled with zeroes and read the byte string over the top
             let mut buf: Vec<u8> = vec![0u8; len as usize];
             process_decode_io_result(stream.read_exact(&mut buf))?;
-            Ok(ByteString { value: Some(buf) })
+            Ok(ByteString {
+                value: Some(Box::new(Bytes::from(buf))),
+            })
         }
     }
 }
@@ -190,7 +193,24 @@ where
 impl From<Vec<u8>> for ByteString {
     fn from(value: Vec<u8>) -> Self {
         // Empty bytes will be treated as Some([])
-        ByteString { value: Some(value) }
+        ByteString {
+            value: Some(Box::new(Bytes::from(value))),
+        }
+    }
+}
+
+impl From<Bytes> for ByteString {
+    fn from(value: Bytes) -> Self {
+        // Empty bytes will be treated as Some([])
+        ByteString {
+            value: Some(Box::new(value)),
+        }
+    }
+}
+
+impl From<ByteString> for Vec<u8> {
+    fn from(value: ByteString) -> Self {
+        value.value.unwrap_or_default().to_vec()
     }
 }
 
@@ -279,7 +299,7 @@ impl ByteString {
     pub fn as_base64(&self) -> String {
         // Base64 encodes the byte string so it can be represented as a string
         if let Some(ref value) = self.value {
-            STANDARD.encode(value)
+            STANDARD.encode(value.as_ref())
         } else {
             STANDARD.encode("")
         }
@@ -333,7 +353,7 @@ fn bytestring_bytes() {
     let v = ByteString::from(&a);
     assert!(!v.is_null());
     assert!(!v.is_empty());
-    assert_eq!(v.value.as_ref().unwrap(), &a);
+    assert_eq!(v.value.as_ref().unwrap().as_ref().as_ref(), &a);
 }
 
 #[test]
@@ -341,16 +361,16 @@ fn bytestring_substring() {
     let a = [0x1u8, 0x2u8, 0x3u8, 0x4u8];
     let v = ByteString::from(&a);
     let v2 = v.substring(2, 10000).unwrap();
-    let a2 = v2.value.as_ref().unwrap().as_slice();
+    let a2 = v2.value.as_ref().unwrap().as_ref();
     assert_eq!(a2, &a[2..]);
 
     let v2 = v.substring(2, 2).unwrap();
-    let a2 = v2.value.as_ref().unwrap().as_slice();
+    let a2 = v2.value.as_ref().unwrap().as_ref();
     assert_eq!(a2, &a[2..3]);
 
     let v2 = v.substring(0, 2000).unwrap();
     assert_eq!(v, v2);
-    assert_eq!(v2.value.as_ref().unwrap(), &a);
+    assert_eq!(v2.value.as_ref().unwrap().as_ref().as_ref(), &a);
 
     assert!(v.substring(4, 10000).is_err());
     assert!(ByteString::null().substring(0, 0).is_err());

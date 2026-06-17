@@ -87,29 +87,3 @@ impl opcua::types::BinaryDecodable for JsonActionNetworkMessage {
         })
     }
 }
-unsafe impl Send for JsonActionNetworkMessage
-where
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::data_types::UtcTime: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::byte_string::ByteString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::data_types::Duration: Send,
-    Option<Vec<opcua::types::extension_object::ExtensionObject>>: Send,
-{
-}
-unsafe impl Sync for JsonActionNetworkMessage
-where
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::byte_string::ByteString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::data_types::Duration: Sync,
-    Option<Vec<opcua::types::extension_object::ExtensionObject>>: Sync,
-{
-}

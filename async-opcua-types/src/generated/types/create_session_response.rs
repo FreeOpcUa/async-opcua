@@ -119,31 +119,3 @@ impl opcua::types::BinaryDecodable for CreateSessionResponse {
         })
     }
 }
-unsafe impl Send for CreateSessionResponse
-where
-    opcua::types::response_header::ResponseHeader: Send,
-    opcua::types::node_id::NodeId: Send,
-    opcua::types::SessionAuthenticationToken: Send,
-    opcua::types::data_types::Duration: Send,
-    opcua::types::byte_string::ByteString: Send,
-    opcua::types::ApplicationInstanceCertificate: Send,
-    Option<Vec<super::endpoint_description::EndpointDescription>>: Send,
-    Option<Vec<super::signed_software_certificate::SignedSoftwareCertificate>>: Send,
-    super::signature_data::SignatureData: Send,
-    u32: Send,
-{
-}
-unsafe impl Sync for CreateSessionResponse
-where
-    opcua::types::response_header::ResponseHeader: Sync,
-    opcua::types::node_id::NodeId: Sync,
-    opcua::types::SessionAuthenticationToken: Sync,
-    opcua::types::data_types::Duration: Sync,
-    opcua::types::byte_string::ByteString: Sync,
-    opcua::types::ApplicationInstanceCertificate: Sync,
-    Option<Vec<super::endpoint_description::EndpointDescription>>: Sync,
-    Option<Vec<super::signed_software_certificate::SignedSoftwareCertificate>>: Sync,
-    super::signature_data::SignatureData: Sync,
-    u32: Sync,
-{
-}

@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for ContentFilterElement {
         })
     }
 }
-unsafe impl Send for ContentFilterElement
-where
-    super::enums::FilterOperator: Send,
-    Option<Vec<opcua::types::extension_object::ExtensionObject>>: Send,
-{
-}
-unsafe impl Sync for ContentFilterElement
-where
-    super::enums::FilterOperator: Sync,
-    Option<Vec<opcua::types::extension_object::ExtensionObject>>: Sync,
-{
-}

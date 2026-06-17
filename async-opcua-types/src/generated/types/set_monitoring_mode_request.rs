@@ -88,19 +88,3 @@ impl opcua::types::BinaryDecodable for SetMonitoringModeRequest {
         })
     }
 }
-unsafe impl Send for SetMonitoringModeRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    opcua::types::IntegerId: Send,
-    super::enums::MonitoringMode: Send,
-    Option<Vec<opcua::types::IntegerId>>: Send,
-{
-}
-unsafe impl Sync for SetMonitoringModeRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    opcua::types::IntegerId: Sync,
-    super::enums::MonitoringMode: Sync,
-    Option<Vec<opcua::types::IntegerId>>: Sync,
-{
-}

@@ -70,5 +70,3 @@ impl opcua::types::BinaryDecodable for AnonymousIdentityToken {
         })
     }
 }
-unsafe impl Send for AnonymousIdentityToken where opcua::types::string::UAString: Send {}
-unsafe impl Sync for AnonymousIdentityToken where opcua::types::string::UAString: Sync {}

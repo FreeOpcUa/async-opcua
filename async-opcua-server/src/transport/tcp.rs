@@ -10,7 +10,7 @@ use opcua_core::{
         chunker::Chunker,
         message_chunk::{MessageChunk, MessageIsFinalType},
         message_chunk_info::ChunkInfo,
-        secure_channel::SecureChannel,
+        secure_channel::{DecryptedChunkStorage, SecureChannel},
         sequence_number::SequenceNumberHandle,
         tcp_codec::{Message, TcpCodec},
         tcp_types::{AcknowledgeMessage, ErrorMessage, MIN_CHUNK_SIZE},
@@ -55,6 +55,7 @@ pub(crate) struct Transport<R, W> {
     read: FramedRead<R, TcpCodec>,
     write: W,
     send_buffer: SendBuffer,
+    decrypted_chunk_storage: DecryptedChunkStorage,
     state: TransportState,
     pending_chunks: Vec<MessageChunk>,
     /// Client protocol version set during HELLO
@@ -307,6 +308,7 @@ where
             sequence_numbers: SequenceNumberHandle::new(true),
             client_protocol_version: 0,
             send_buffer,
+            decrypted_chunk_storage: DecryptedChunkStorage::new(),
         }
     }
 
@@ -434,7 +436,10 @@ where
                     self.pending_chunks.clear();
                     Ok(None)
                 } else {
-                    let chunk = channel.verify_and_remove_security_server(chunk.data)?;
+                    let chunk = channel.verify_and_remove_security_server(
+                        chunk.data,
+                        &mut self.decrypted_chunk_storage,
+                    )?;
 
                     let max_chunks = effective_max_chunk_count(
                         self.send_buffer.max_chunk_count,

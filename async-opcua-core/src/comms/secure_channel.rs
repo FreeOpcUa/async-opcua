@@ -31,6 +31,9 @@ use super::{
     security_header::{AsymmetricSecurityHeader, SecurityHeader, SymmetricSecurityHeader},
 };
 
+/// Reusable scratch storage for secured chunk decryption.
+pub type DecryptedChunkStorage = bytes::BytesMut;
+
 thread_local! {
     static PADDING_AND_SIGNATURE_SCRATCH: std::cell::RefCell<Vec<u8>> = const { std::cell::RefCell::new(Vec::new()) };
     static SYMMETRIC_DECRYPT_SCRATCH: std::cell::RefCell<Vec<u8>> = const { std::cell::RefCell::new(Vec::new()) };
@@ -883,6 +886,7 @@ impl SecureChannel {
         security_header: SecurityHeader,
         signed_range: Range<usize>,
         encrypted_range: Range<usize>,
+        decrypted_data: &mut DecryptedChunkStorage,
     ) -> Result<MessageChunk, Error> {
         // Symmetric decrypt and verify
         trace!(
@@ -898,19 +902,21 @@ impl SecureChannel {
             ));
         };
 
-        let mut decrypted_data = vec![0u8; encrypted_range.end];
+        decrypted_data.clear();
+        decrypted_data.resize(encrypted_range.end, 0);
         let decrypted_size = self.symmetric_decrypt_and_verify(
             &src,
             signed_range,
             encrypted_range,
             security_header.token_id,
-            &mut decrypted_data,
+            &mut decrypted_data[..],
         )?;
 
         // Value returned from symmetric_decrypt_and_verify is the end of the actual decrypted data.
-        Ok(MessageChunk {
-            data: Self::update_message_size_and_truncate(decrypted_data, decrypted_size)?.into(),
-        })
+        Self::update_message_size(&mut decrypted_data[..], decrypted_size)?;
+        let data = decrypted_data.split_to(decrypted_size).freeze();
+        decrypted_data.reserve(src.len());
+        Ok(MessageChunk { data })
     }
 
     fn secure_message_ranges(
@@ -946,7 +952,11 @@ impl SecureChannel {
     }
 
     /// Decrypts and verifies the body data if the mode / policy requires it
-    pub fn verify_and_remove_security(&self, src: bytes::Bytes) -> Result<MessageChunk, Error> {
+    pub fn verify_and_remove_security(
+        &self,
+        src: bytes::Bytes,
+        decrypted_data: &mut DecryptedChunkStorage,
+    ) -> Result<MessageChunk, Error> {
         // Get message & security header from data
         let (message_header, security_header, encrypted_data_offset) =
             self.decode_message_header(&src)?;
@@ -968,7 +978,13 @@ impl SecureChannel {
             let signature_size = self.security_policy.symmetric_signature_size();
             let (signed_range, encrypted_range) =
                 Self::secure_message_ranges(message_size, encrypted_data_offset, signature_size)?;
-            self.decrypt_chunk(src, security_header, signed_range, encrypted_range)
+            self.decrypt_chunk(
+                src,
+                security_header,
+                signed_range,
+                encrypted_range,
+                decrypted_data,
+            )
         } else {
             Ok(MessageChunk { data: src })
         }
@@ -981,6 +997,7 @@ impl SecureChannel {
     pub fn verify_and_remove_security_server(
         &mut self,
         src: bytes::Bytes,
+        decrypted_data: &mut DecryptedChunkStorage,
     ) -> Result<MessageChunk, Error> {
         // Get message & security header from data
         let (message_header, security_header, encrypted_data_offset) =
@@ -1007,7 +1024,13 @@ impl SecureChannel {
             let signature_size = self.security_policy.symmetric_signature_size();
             let (signed_range, encrypted_range) =
                 Self::secure_message_ranges(message_size, encrypted_data_offset, signature_size)?;
-            self.decrypt_chunk(src, security_header, signed_range, encrypted_range)
+            self.decrypt_chunk(
+                src,
+                security_header,
+                signed_range,
+                encrypted_range,
+                decrypted_data,
+            )
         } else {
             Ok(MessageChunk { data: src })
         }

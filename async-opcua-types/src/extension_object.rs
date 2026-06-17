@@ -18,6 +18,24 @@ use super::{
     ObjectId,
 };
 
+fn validate_body_size(size: i32, max_message_size: usize) -> EncodingResult<Option<usize>> {
+    // An ExtensionObject body is an encoded structure (e.g. HistoryData carrying many
+    // values), not a ByteString, so it is bounded by the message size rather than
+    // `max_byte_string_length`. This still rejects the eager-allocation OOM (a crafted
+    // `size` of i32::MAX is far larger than any message) without rejecting legitimate
+    // large bodies that fit within `max_message_size`.
+    if size <= 0 {
+        Ok(None)
+    } else if size as usize > max_message_size {
+        Err(Error::decoding(format!(
+            "ExtensionObject body length {} exceeds max_message_size {}",
+            size, max_message_size
+        )))
+    } else {
+        Ok(Some(size as usize))
+    }
+}
+
 #[derive(Debug)]
 /// Error returned when working with extension objects.
 pub struct ExtensionObjectError;
@@ -570,11 +588,9 @@ impl BinaryDecodable for ExtensionObject {
             0x0 => None,
             0x1 => {
                 let size = i32::decode(stream, ctx)?;
-                if size <= 0 {
-                    None
-                } else {
-                    Some(ctx.load_from_binary(&node_id, &mut stream, Some(size as usize))?)
-                }
+                validate_body_size(size, ctx.options().max_message_size)?
+                    .map(|size| ctx.load_from_binary(&node_id, &mut stream, Some(size)))
+                    .transpose()?
             }
             0x2 => {
                 #[cfg(feature = "xml")]
@@ -596,8 +612,8 @@ impl BinaryDecodable for ExtensionObject {
                 #[cfg(not(feature = "xml"))]
                 {
                     let size = i32::decode(stream, ctx)?;
-                    if size > 0 {
-                        let mut bytes = vec![0u8; size as usize];
+                    if let Some(size) = validate_body_size(size, ctx.options().max_message_size)? {
+                        let mut bytes = vec![0u8; size];
                         stream.read_exact(&mut bytes)?;
                         Some(ExtensionObject::new(crate::type_loader::XmlBody::new(
                             bytes,
@@ -831,3 +847,22 @@ macro_rules! match_extension_object {
 }
 
 pub use match_extension_object;
+
+#[cfg(test)]
+mod body_size_tests {
+    use super::validate_body_size;
+
+    #[test]
+    fn validate_body_size_rejects_oversized_body() {
+        // Regression (HIGH panic audit): an ExtensionObject body length must be bounded
+        // by max_message_size BEFORE allocating, so a crafted size of i32::MAX
+        // cannot trigger a ~2 GB allocation / OOM.
+        assert!(validate_body_size(i32::MAX, 65536).is_err());
+        assert!(validate_body_size(65537, 65536).is_err());
+        // size <= 0 means "no body".
+        assert_eq!(validate_body_size(0, 65536).unwrap(), None);
+        assert_eq!(validate_body_size(-1, 65536).unwrap(), None);
+        // A normal in-limit body length is accepted unchanged.
+        assert_eq!(validate_body_size(128, 65536).unwrap(), Some(128));
+    }
+}

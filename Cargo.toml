@@ -61,6 +61,16 @@ tracing-futures = "0.2.5"
 url = "^2"
 uuid = { version = "^1", features = ["v4"] }
 
+# opc.wss (WebSocket) transport (feature 009 / R5 / FR-044). tokio-tungstenite carries
+# no TLS of its own (default-features = false); TLS is layered via tokio-rustls on the
+# in-tree rustls 0.23, so the workspace resolves a single rustls major.
+tokio-tungstenite = { version = "0.26", default-features = false, features = ["handshake"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-pemfile = "2"
+rustls-native-certs = "0.8"
+webpki-roots = "0.26"
+
 aes = { version = "^0.8", features = ["zeroize"] }
 cbc = "^0.1"
 const-oid = { version = "^0.9", features = ["db"] }

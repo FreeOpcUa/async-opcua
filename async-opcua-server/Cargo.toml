@@ -36,9 +36,23 @@ legacy-crypto = [
   "async-opcua-core/legacy-crypto",
   "async-opcua-crypto/legacy-crypto",
 ]
+# opc.wss (WebSocket) transport listener (feature 009 / R5 / FR-044). TLS is layered
+# via tokio-rustls on the in-tree rustls 0.23; tokio-tungstenite carries no TLS itself.
+wss = [
+  "async-opcua-core/wss",
+  "dep:tokio-tungstenite",
+  "dep:tokio-rustls",
+  "dep:rustls",
+  "dep:rustls-pemfile",
+]
 
 [dependencies]
 moka = { version = "0.12", features = ["future", "sync"] }
+# opc.wss transport (feature 009 / R5 / FR-044), gated by the `wss` feature.
+tokio-tungstenite = { workspace = true, optional = true }
+tokio-rustls = { workspace = true, optional = true }
+rustls = { workspace = true, optional = true }
+rustls-pemfile = { workspace = true, optional = true }
 arc-swap = { workspace = true }
 argon2 = { version = "0.5.3", features = ["std"] }
 async-trait = { workspace = true }

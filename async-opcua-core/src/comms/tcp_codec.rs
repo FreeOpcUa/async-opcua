@@ -29,8 +29,8 @@ use opcua_types::{
 use super::{
     message_chunk::MessageChunk,
     tcp_types::{
-        AcknowledgeMessage, ErrorMessage, HelloMessage, MessageHeader, MessageType,
-        ReverseHelloMessage, MESSAGE_HEADER_LEN,
+        AcknowledgeMessage, ErrorMessage, HelloMessage, MESSAGE_HEADER_LEN, MessageHeader,
+        MessageType, ReverseHelloMessage,
     },
 };
 

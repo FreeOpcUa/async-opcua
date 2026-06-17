@@ -5,7 +5,6 @@ use std::{
 };
 
 use opcua_core::{
-    RequestMessage, ResponseMessage,
     comms::{
         buffer::SendBuffer,
         chunker::Chunker,
@@ -16,6 +15,7 @@ use opcua_core::{
         tcp_codec::{Message, TcpCodec},
         tcp_types::{AcknowledgeMessage, ErrorMessage, MIN_CHUNK_SIZE},
     },
+    RequestMessage, ResponseMessage,
 };
 use tracing::error;
 use tracing_futures::Instrument;

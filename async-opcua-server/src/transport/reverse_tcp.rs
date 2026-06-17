@@ -14,8 +14,8 @@ use tracing::{debug, warn};
 use tracing_futures::Instrument;
 
 use crate::transport::{
-    Connector,
     tcp::{TcpConnector, TransportConfig},
+    Connector,
 };
 
 pub(crate) struct ReverseTcpConnector {

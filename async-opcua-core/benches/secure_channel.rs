@@ -18,7 +18,9 @@ use opcua_core::{
     RequestMessage,
 };
 use opcua_crypto::{CertificateStore, SecurityPolicy};
-use opcua_types::{ContextOwned, GetEndpointsRequest, MessageSecurityMode, RequestHeader, UAString};
+use opcua_types::{
+    ContextOwned, GetEndpointsRequest, MessageSecurityMode, RequestHeader, UAString,
+};
 
 fn make_channel(
     security_mode: MessageSecurityMode,
@@ -49,7 +51,9 @@ fn make_channels(
     security_policy: SecurityPolicy,
 ) -> (SecureChannel, SecureChannel) {
     let local = [0u8, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
-    let remote = [16u8, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31];
+    let remote = [
+        16u8, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
+    ];
     (
         make_channel(security_mode, security_policy, &local, &remote),
         make_channel(security_mode, security_policy, &remote, &local),

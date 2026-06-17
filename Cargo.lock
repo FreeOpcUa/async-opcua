@@ -397,11 +397,17 @@ dependencies = [
  "hashbrown 0.15.5",
  "parking_lot",
  "rsa",
+ "rustls",
+ "rustls-native-certs 0.8.4",
+ "rustls-pemfile",
  "serde",
  "socket2 0.6.2",
  "tokio",
+ "tokio-rustls",
+ "tokio-tungstenite 0.26.2",
  "tokio-util",
  "tracing",
+ "webpki-roots 0.26.11",
 ]
 
 [[package]]
@@ -439,6 +445,7 @@ dependencies = [
  "bytes",
  "chrono",
  "criterion",
+ "futures",
  "parking_lot",
  "regex",
  "serde",
@@ -448,6 +455,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-tungstenite 0.26.2",
  "tokio-util",
  "tracing",
  "url",
@@ -613,7 +621,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
- "tokio-tungstenite",
+ "tokio-tungstenite 0.21.0",
  "tokio-util",
  "tracing",
  "uuid",
@@ -656,11 +664,15 @@ dependencies = [
  "parking_lot",
  "postcard",
  "regex",
+ "rustls",
+ "rustls-pemfile",
  "serde",
  "serde_json",
  "serde_norway",
  "socket2 0.6.2",
  "tokio",
+ "tokio-rustls",
+ "tokio-tungstenite 0.26.2",
  "tokio-util",
  "tracing",
  "tracing-futures",
@@ -4017,7 +4029,19 @@ dependencies = [
  "futures-util",
  "log",
  "tokio",
- "tungstenite",
+ "tungstenite 0.21.0",
+]
+
+[[package]]
+name = "tokio-tungstenite"
+version = "0.26.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a9daff607c6d2bf6c16fd681ccb7eecc83e4e2cdc1ca067ffaadfca5de7f084"
+dependencies = [
+ "futures-util",
+ "log",
+ "tokio",
+ "tungstenite 0.26.2",
 ]
 
 [[package]]
@@ -4091,6 +4115,23 @@ dependencies = [
  "sha1",
  "thiserror 1.0.69",
  "url",
+ "utf-8",
+]
+
+[[package]]
+name = "tungstenite"
+version = "0.26.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4793cb5e56680ecbb1d843515b23b6de9a75eb04b66643e256a396d43be33c13"
+dependencies = [
+ "bytes",
+ "data-encoding",
+ "http",
+ "httparse",
+ "log",
+ "rand 0.9.4",
+ "sha1",
+ "thiserror 2.0.18",
  "utf-8",
 ]
 
@@ -4349,6 +4390,24 @@ checksum = "10053fbf9a374174094915bbce141e87a6bf32ecd9a002980db4b638405e8962"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "webpki-roots"
+version = "0.26.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "521bc38abb08001b01866da9f51eb7c5d647a19260e00054a8c7fd5f9e57f7a9"
+dependencies = [
+ "webpki-roots 1.0.8",
+]
+
+[[package]]
+name = "webpki-roots"
+version = "1.0.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf85cb06032201fa7c6f829d7db5a7e5aa45bcc0655327713065f6f0576731bf"
+dependencies = [
+ "rustls-pki-types",
 ]
 
 [[package]]

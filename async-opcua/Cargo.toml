@@ -27,6 +27,9 @@ legacy-crypto = [
   "async-opcua-crypto/legacy-crypto",
   "async-opcua-server/legacy-crypto",
 ]
+# opc.wss (WebSocket) transport (feature 009 / R5 / FR-044). Forwards to whichever of
+# the client/server crates is enabled; TLS is layered on the in-tree rustls 0.23.
+wss = ["async-opcua-client?/wss", "async-opcua-server?/wss"]
 # Server default settings
 server = ["base-server", "generated-address-space"]
 # Base server, without the core address space.

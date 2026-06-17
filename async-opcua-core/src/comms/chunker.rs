@@ -7,18 +7,18 @@
 use std::io::{Read, Write};
 
 use crate::{
+    Message,
     comms::{
         message_chunk::{MessageChunk, MessageIsFinalType},
         secure_channel::SecureChannel,
         sequence_number::SequenceNumberHandle,
     },
-    Message,
 };
 
 use opcua_crypto::SecurityPolicy;
 use opcua_types::{
-    encoding::BinaryEncodable, node_id::NodeId, status_code::StatusCode, BinaryDecodable,
-    EncodingResult, Error, ObjectId, SimpleBinaryEncodable,
+    BinaryDecodable, EncodingResult, Error, ObjectId, SimpleBinaryEncodable,
+    encoding::BinaryEncodable, node_id::NodeId, status_code::StatusCode,
 };
 use tracing::{debug, error, trace};
 
@@ -345,10 +345,16 @@ impl Chunker {
             if i == 0 {
                 expected_request_id = chunk_info.sequence_header.request_id;
             } else if chunk_info.sequence_header.request_id != expected_request_id {
-                return Err(Error::new(StatusCode::BadSequenceNumberInvalid, format!(
-                    "Chunk sequence number of {} has a request id {} which is not the expected value of {}, idx {}",
-                    sequence_number, chunk_info.sequence_header.request_id, expected_request_id, i
-                )));
+                return Err(Error::new(
+                    StatusCode::BadSequenceNumberInvalid,
+                    format!(
+                        "Chunk sequence number of {} has a request id {} which is not the expected value of {}, idx {}",
+                        sequence_number,
+                        chunk_info.sequence_header.request_id,
+                        expected_request_id,
+                        i
+                    ),
+                ));
             }
         }
         Ok(())

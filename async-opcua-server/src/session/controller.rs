@@ -4,8 +4,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-use futures::{Future, StreamExt, future::Either, stream::FuturesUnordered};
-use opcua_core::{Message, RequestMessage, ResponseMessage, trace_read_lock, trace_write_lock};
+use futures::{future::Either, stream::FuturesUnordered, Future, StreamExt};
+use opcua_core::{trace_read_lock, trace_write_lock, Message, RequestMessage, ResponseMessage};
 use tracing::{debug, debug_span, error, trace, warn};
 
 use opcua_core::{
@@ -30,17 +30,17 @@ use crate::{
     info::ServerInfo,
     node_manager::NodeManagers,
     subscriptions::SubscriptionCache,
-    transport::Connector,
     transport::tcp::{ConnectionTransport, Request, TransportPollResult},
+    transport::Connector,
 };
 
 use super::{
     audit::{
-        AuditEventContext, dispatch_activate_session_failure, dispatch_response_failure,
-        dispatch_service_failure,
+        dispatch_activate_session_failure, dispatch_response_failure, dispatch_service_failure,
+        AuditEventContext,
     },
     instance::Session,
-    manager::{SessionManager, activate_session, close_session},
+    manager::{activate_session, close_session, SessionManager},
     message_handler::MessageHandler,
 };
 

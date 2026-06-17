@@ -47,11 +47,8 @@ async fn cert_application_uri_mismatch_is_rejected() {
             // session activation in the event loop. The session must never reach
             // the connected state.
             let _h = evt_loop.spawn();
-            let connected = tokio::time::timeout(
-                Duration::from_secs(5),
-                session.wait_for_connection(),
-            )
-            .await;
+            let connected =
+                tokio::time::timeout(Duration::from_secs(5), session.wait_for_connection()).await;
             assert!(
                 connected.is_err(),
                 "session with mismatched cert URI must not connect"

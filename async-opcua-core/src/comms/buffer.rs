@@ -9,11 +9,11 @@ use std::{
 use tracing::trace;
 
 use crate::{
+    Message,
     comms::{
         chunker::Chunker, message_chunk::MessageChunk, secure_channel::SecureChannel,
         tcp_codec::TcpCodec,
     },
-    Message,
 };
 
 use opcua_types::{Error, SimpleBinaryEncodable, StatusCode};
@@ -263,9 +263,9 @@ mod tests {
 
     use super::SendBuffer;
 
+    use crate::RequestMessage;
     use crate::comms::secure_channel::{Role, SecureChannel};
     use crate::comms::tcp_types::AcknowledgeMessage;
-    use crate::RequestMessage;
     use opcua_crypto::CertificateStore;
     use opcua_types::StatusCode;
     use opcua_types::{

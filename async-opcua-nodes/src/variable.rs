@@ -4,17 +4,20 @@
 
 //! Contains the implementation of `Variable` and `VariableBuilder`.
 
-use std::{convert::Into, mem};
+use std::convert::Into;
+#[cfg(any(feature = "xml", feature = "json"))]
+use std::mem;
 
 #[cfg(feature = "json")]
 use opcua_types::JsonBody;
 #[cfg(feature = "xml")]
 use opcua_types::XmlBody;
 use opcua_types::{
-    AttributeId, AttributesMask, DataEncoding, DataTypeId, DataValue, DateTime, ExtensionObject,
-    NumericRange, StatusCode, TimestampsToReturn, TryFromVariant, VariableAttributes, Variant,
-    VariantScalarTypeId,
+    AttributeId, AttributesMask, DataEncoding, DataTypeId, DataValue, DateTime, NumericRange,
+    StatusCode, TimestampsToReturn, TryFromVariant, VariableAttributes, Variant,
 };
+#[cfg(any(feature = "xml", feature = "json"))]
+use opcua_types::{ExtensionObject, VariantScalarTypeId};
 use tracing::error;
 
 use crate::FromAttributesError;
@@ -293,6 +296,7 @@ fn encode_value_for_data_encoding(
     }
 }
 
+#[cfg(any(feature = "xml", feature = "json"))]
 fn encode_extension_object_values(
     value: Variant,
     encode_object: fn(ExtensionObject) -> Result<ExtensionObject, StatusCode>,

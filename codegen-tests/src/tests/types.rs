@@ -274,6 +274,14 @@ fn generated_companion_structs_use_static_binary_impls() {
 
     assert!(source.contains("impl opcua::types::BinaryEncodable for FunctionalGroupDataType"));
     assert!(source.contains("impl opcua::types::BinaryDecodable for FunctionalGroupDataType"));
-    assert!(source.contains("unsafe impl Send for FunctionalGroupDataType"));
-    assert!(source.contains("unsafe impl Sync for FunctionalGroupDataType"));
+    // R3: generated code must be sound without hand-written unsafe Send/Sync impls.
+    // Auto-derived Send/Sync (from the struct's fields) is relied on instead.
+    assert!(
+        !source.contains("unsafe impl Send"),
+        "generated code must not emit hand-written `unsafe impl Send`"
+    );
+    assert!(
+        !source.contains("unsafe impl Sync"),
+        "generated code must not emit hand-written `unsafe impl Sync`"
+    );
 }

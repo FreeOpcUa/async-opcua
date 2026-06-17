@@ -2,12 +2,69 @@
 
 ## Unreleased
 
-* Legacy security policies (Basic128Rsa15, Basic256) are now compiled in by
-  default and controlled at runtime: servers and clients must opt in with
-  `allow_legacy_crypto: true` (config or builder). Legacy use is rejected
-  with `BadSecurityPolicyRejected` by default and logs a deprecation
-  warning when enabled. Builds with `default-features = false` exclude the
-  algorithms entirely, without panics.
+This release is a security-hardening, cleanup and optimization pass over the
+whole workspace. It contains **breaking changes** (permitted at this 0.x
+boundary) — see "Breaking changes" below.
+
+### Security
+
+* **Decoder DoS fixed:** added recursion depth guards to `DiagnosticInfo`, the
+  `DataValue`/`Variant` cycle, and dynamic-struct decode — a crafted message can
+  no longer overflow the stack (it errors at the configured depth limit).
+* **Legacy identity-token decrypt** no longer panics on malformed ciphertext
+  (block-alignment / nonce-length validation); all RSA-decrypt failures now
+  return a single uniform error (removes a padding/validity oracle), and the
+  decrypted-nonce comparison is constant-time.
+* **RSA decryption migrated to the constant-time `aws-lc-rs` backend**, closing
+  the `rsa`-crate "Marvin" timing attack (RUSTSEC-2023-0071) on the
+  network-reachable decrypt paths. `rsa` is retained for signing/verify/keygen.
+  (RSA decrypt now requires keys ≥ 2048 bits.)
+* **Server resource limits** to resist single-peer/single-IP DoS: per-connection
+  in-flight request backpressure, per-secure-channel unactivated-session cap with
+  a short timeout, per-source-IP connection cap, an atomic per-subscription
+  monitored-item cap, and a hard inbound chunk-count ceiling even when
+  `max_chunk_count == 0`. `max_timeout_ms` is now a request-timeout *ceiling*.
+* **Session hijack fixed:** activated `SecurityPolicy::None` sessions can no
+  longer be transferred to a different secure channel.
+* Client certificates are validated against the request's application URI;
+  username auth is constant-time (no user enumeration); secrets are zeroized and
+  redacted from `Debug`; JWT `nbf` is validated; private keys are written `0o600`;
+  server-signature failure on a secured endpoint fails closed.
+* **Supply chain:** added a `deny.toml` + `cargo-deny` CI advisory gate; moved the
+  pub/sub MQTT TLS stack off EOL rustls 0.21/webpki 0.101 (rumqttc 0.25); bumped
+  `time`, `rand`, `thiserror` (v2), `env_logger`; removed tracked developer debris;
+  `SECURITY.md` now uses a private coordinated-disclosure channel.
+
+### Breaking changes
+
+* `legacy-crypto` is now **off by default** across all crates (was on). Enable the
+  `legacy-crypto` feature (umbrella/crate) to compile in Basic128Rsa15/Basic256;
+  the runtime `allow_legacy_crypto` flag still gates their use. `default-features =
+  false` excludes them entirely, without panics.
+* `ByteString` is now `bytes::Bytes`-backed (its `value` field changed); the wire
+  format is unchanged but accessor/`From` shapes differ.
+* `NodeManager` is split into capability sub-traits (`NodeManagerCore`,
+  `AttributeProvider`, `ViewProvider`, `MethodProvider`, `NodeMutator`,
+  `HistoryProvider`, `MonitoredItemProvider`) composed by a supertrait. Default
+  impls keep most implementers working with minimal change.
+* The internal `NotificationPool`/`PooledNotificationBuffer` types and the
+  `max_notification_pool_size` limit were removed (replaced by a per-tick buffer);
+  `Thumbprint::new` now returns `Result`.
+* Default value changes: `TCP_NODELAY` on; TCP keep-alive on; client
+  `max_failed_keep_alive_count` 0→3; client `channel_lifetime` 60s→600s;
+  `max_monitored_items_per_sub` 0→100000; new connection/session/in-flight limits.
+
+### Performance
+
+* Zero-copy inbound chunk decode; reusable scratch buffers and cached AES key
+  schedule on the secured path; O(1) `byte_len` for primitive arrays; the
+  subscription tick no longer holds the cache lock across the loop nor allocates
+  when idle; the notification pool no longer blocks a worker thread.
+
+### Codegen
+
+* Generated types no longer emit `unsafe impl Send/Sync` (auto-derived) — removes
+  all `unsafe` from the generated data types.
 
 ## [0.18.0] - 2026-02-24
 

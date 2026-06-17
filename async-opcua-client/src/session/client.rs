@@ -213,6 +213,7 @@ impl Client {
             endpoint_info,
             self.config.session_retry_policy(),
             self.config.performance.ignore_clock_skew,
+            self.config.allow_legacy_crypto,
             Arc::default(),
             TransportConfiguration {
                 send_buffer_size: self.config.decoding_options.max_chunk_size,

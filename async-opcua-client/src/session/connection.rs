@@ -462,6 +462,7 @@ where
             },
             config.session_retry_policy(),
             config.performance.ignore_clock_skew,
+            config.allow_legacy_crypto,
             Arc::default(),
             TransportConfiguration {
                 send_buffer_size: config.decoding_options.max_chunk_size,

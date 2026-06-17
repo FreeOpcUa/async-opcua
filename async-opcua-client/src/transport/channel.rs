@@ -143,17 +143,20 @@ impl AsyncSecureChannel {
         endpoint_info: EndpointInfo,
         session_retry_policy: SessionRetryPolicy,
         ignore_clock_skew: bool,
+        allow_legacy_crypto: bool,
         auth_token: Arc<ArcSwap<NodeId>>,
         transport_config: TransportConfiguration,
         channel_lifetime: u32,
         request_timeout: Duration,
         encoding_context: Arc<RwLock<ContextOwned>>,
     ) -> Self {
-        let secure_channel = Arc::new(RwLock::new(SecureChannel::new(
+        let mut secure_channel = SecureChannel::new(
             certificate_store.clone(),
             Role::Client,
             encoding_context.clone(),
-        )));
+        );
+        secure_channel.set_allow_deprecated(allow_legacy_crypto);
+        let secure_channel = Arc::new(RwLock::new(secure_channel));
 
         Self {
             transport_config,

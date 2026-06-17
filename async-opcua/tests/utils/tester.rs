@@ -216,7 +216,10 @@ pub fn default_server() -> ServerBuilder {
 pub fn default_client(test_id: u16, quick_timeout: bool) -> ClientBuilder {
     let client = ClientBuilder::new()
         .application_name("integration_client")
-        .application_uri("x")
+        // The integration harness shares one keypair (SAN urn:integration_server) for
+        // both peers; the declared applicationUri must match the client cert's SAN or
+        // the server rejects CreateSession with BadCertificateUriInvalid.
+        .application_uri("urn:integration_server")
         .pki_dir(format!("./pki-client/{test_id}"))
         .create_sample_keypair(true)
         .trust_server_certs(true)

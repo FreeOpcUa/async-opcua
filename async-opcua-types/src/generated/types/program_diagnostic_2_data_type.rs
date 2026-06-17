@@ -114,35 +114,3 @@ impl opcua::types::BinaryDecodable for ProgramDiagnostic2DataType {
         })
     }
 }
-unsafe impl Send for ProgramDiagnostic2DataType
-where
-    opcua::types::node_id::NodeId: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::data_types::UtcTime: Send,
-    opcua::types::data_types::UtcTime: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::node_id::NodeId: Send,
-    Option<Vec<crate::argument::Argument>>: Send,
-    Option<Vec<crate::argument::Argument>>: Send,
-    Option<Vec<opcua::types::variant::Variant>>: Send,
-    Option<Vec<opcua::types::variant::Variant>>: Send,
-    opcua::types::data_types::UtcTime: Send,
-    opcua::types::status_code::StatusCode: Send,
-{
-}
-unsafe impl Sync for ProgramDiagnostic2DataType
-where
-    opcua::types::node_id::NodeId: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::node_id::NodeId: Sync,
-    Option<Vec<crate::argument::Argument>>: Sync,
-    Option<Vec<crate::argument::Argument>>: Sync,
-    Option<Vec<opcua::types::variant::Variant>>: Sync,
-    Option<Vec<opcua::types::variant::Variant>>: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-    opcua::types::status_code::StatusCode: Sync,
-{
-}

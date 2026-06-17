@@ -82,19 +82,3 @@ impl opcua::types::BinaryDecodable for DatagramDataSetReaderTransportDataType {
         })
     }
 }
-unsafe impl Send for DatagramDataSetReaderTransportDataType
-where
-    opcua::types::extension_object::ExtensionObject: Send,
-    opcua::types::string::UAString: Send,
-    Option<Vec<opcua::types::extension_object::ExtensionObject>>: Send,
-    opcua::types::string::UAString: Send,
-{
-}
-unsafe impl Sync for DatagramDataSetReaderTransportDataType
-where
-    opcua::types::extension_object::ExtensionObject: Sync,
-    opcua::types::string::UAString: Sync,
-    Option<Vec<opcua::types::extension_object::ExtensionObject>>: Sync,
-    opcua::types::string::UAString: Sync,
-{
-}

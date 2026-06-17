@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for NetworkGroupDataType {
         })
     }
 }
-unsafe impl Send for NetworkGroupDataType
-where
-    opcua::types::string::UAString: Send,
-    Option<Vec<super::endpoint_url_list_data_type::EndpointUrlListDataType>>: Send,
-{
-}
-unsafe impl Sync for NetworkGroupDataType
-where
-    opcua::types::string::UAString: Sync,
-    Option<Vec<super::endpoint_url_list_data_type::EndpointUrlListDataType>>: Sync,
-{
-}

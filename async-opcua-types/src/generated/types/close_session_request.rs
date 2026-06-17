@@ -78,15 +78,3 @@ impl opcua::types::BinaryDecodable for CloseSessionRequest {
         })
     }
 }
-unsafe impl Send for CloseSessionRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    bool: Send,
-{
-}
-unsafe impl Sync for CloseSessionRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    bool: Sync,
-{
-}

@@ -83,17 +83,3 @@ impl opcua::types::BinaryDecodable for TransferSubscriptionsRequest {
         })
     }
 }
-unsafe impl Send for TransferSubscriptionsRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    Option<Vec<opcua::types::IntegerId>>: Send,
-    bool: Send,
-{
-}
-unsafe impl Sync for TransferSubscriptionsRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    Option<Vec<opcua::types::IntegerId>>: Sync,
-    bool: Sync,
-{
-}

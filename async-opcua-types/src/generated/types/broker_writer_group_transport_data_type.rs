@@ -82,19 +82,3 @@ impl opcua::types::BinaryDecodable for BrokerWriterGroupTransportDataType {
         })
     }
 }
-unsafe impl Send for BrokerWriterGroupTransportDataType
-where
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    super::enums::BrokerTransportQualityOfService: Send,
-{
-}
-unsafe impl Sync for BrokerWriterGroupTransportDataType
-where
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    super::enums::BrokerTransportQualityOfService: Sync,
-{
-}

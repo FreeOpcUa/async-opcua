@@ -1,6 +1,10 @@
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
-use opcua_core::{comms::url::is_opc_ua_binary_url, config::Config, sync::RwLock};
+use opcua_core::{
+    comms::url::{is_opc_ua_binary_url, is_opc_ua_wss_url},
+    config::Config,
+    sync::RwLock,
+};
 use opcua_crypto::{CertificateStore, SecurityPolicy};
 use opcua_types::{
     ContextOwned, EndpointDescription, Error, MessageSecurityMode, NamespaceMap, NodeId,
@@ -11,7 +15,8 @@ use tokio::net::TcpListener;
 use crate::{
     reverse_connect::TcpConnectorReceiver,
     transport::{
-        tcp::TransportConfiguration, ConnectorBuilder, ReverseHelloVerifier, ReverseTcpConnector,
+        tcp::TransportConfiguration, ConnectorBuilder, DefaultConnectorBuilder,
+        ReverseHelloVerifier, ReverseTcpConnector,
     },
     AsyncSecureChannel, ClientConfig, IdentityToken,
 };
@@ -44,7 +49,11 @@ pub trait ConnectionSource {
     type Builder: ConnectorBuilder;
 
     /// Get a connector builder for the given endpoint description.
-    fn get_connector(&self, endpoint: &EndpointDescription) -> Result<Self::Builder, Error>;
+    fn get_connector(
+        &self,
+        endpoint: &EndpointDescription,
+        config: &ClientConfig,
+    ) -> Result<Self::Builder, Error>;
 }
 
 /// Connection source for a direct OPC/TCP binary connection.
@@ -53,9 +62,24 @@ pub trait ConnectionSource {
 pub struct DirectConnectionSource;
 
 impl ConnectionSource for DirectConnectionSource {
-    type Builder = String;
-    fn get_connector(&self, endpoint: &EndpointDescription) -> Result<Self::Builder, Error> {
-        Ok(endpoint.endpoint_url.as_ref().to_string())
+    type Builder = DefaultConnectorBuilder;
+    fn get_connector(
+        &self,
+        endpoint: &EndpointDescription,
+        config: &ClientConfig,
+    ) -> Result<Self::Builder, Error> {
+        #[cfg(feature = "wss")]
+        {
+            Ok(DefaultConnectorBuilder::with_wss_tls(
+                endpoint.endpoint_url.as_ref(),
+                config.wss_tls.clone(),
+            ))
+        }
+        #[cfg(not(feature = "wss"))]
+        {
+            let _ = config;
+            Ok(DefaultConnectorBuilder::new(endpoint.endpoint_url.as_ref()))
+        }
     }
 }
 
@@ -98,7 +122,11 @@ impl ReverseConnectionSource {
 impl ConnectionSource for ReverseConnectionSource {
     type Builder = ReverseTcpConnector;
 
-    fn get_connector(&self, endpoint: &EndpointDescription) -> Result<Self::Builder, Error> {
+    fn get_connector(
+        &self,
+        endpoint: &EndpointDescription,
+        _config: &ClientConfig,
+    ) -> Result<Self::Builder, Error> {
         if let Some(verifier) = self.verifier.clone() {
             Ok(ReverseTcpConnector::new(
                 self.listener.clone(),
@@ -368,7 +396,9 @@ impl<'a, R, C> SessionBuilder<'a, (), R, C> {
         endpoint: impl Into<EndpointDescription>,
     ) -> Result<SessionBuilder<'a, EndpointDescription, R, C>, Error> {
         let endpoint = endpoint.into();
-        if !is_opc_ua_binary_url(endpoint.endpoint_url.as_ref()) {
+        if !is_opc_ua_binary_url(endpoint.endpoint_url.as_ref())
+            && !is_opc_ua_wss_url(endpoint.endpoint_url.as_ref())
+        {
             return Err(Error::new(
                 StatusCode::BadTcpEndpointUrlInvalid,
                 format!(
@@ -412,7 +442,7 @@ where
         security_policy.ensure_supported()?;
         let connector = self
             .connection_source
-            .get_connector(&self.endpoint)?
+            .get_connector(&self.endpoint, self.config)?
             .build()?;
         let ctx = self.make_encoding_context();
         Ok(Session::new(
@@ -462,14 +492,18 @@ where
             },
             config.session_retry_policy(),
             config.performance.ignore_clock_skew,
+            config.allow_legacy_crypto,
             Arc::default(),
             TransportConfiguration {
                 send_buffer_size: config.decoding_options.max_chunk_size,
                 recv_buffer_size: config.decoding_options.max_incoming_chunk_size,
                 max_message_size: config.decoding_options.max_message_size,
                 max_chunk_count: config.decoding_options.max_chunk_count,
+                connect_timeout: config.connect_timeout,
+                tcp_keepalive: config.tcp_keepalive,
             },
             config.channel_lifetime,
+            config.request_timeout,
             Arc::new(RwLock::new(ctx)),
         )
     }

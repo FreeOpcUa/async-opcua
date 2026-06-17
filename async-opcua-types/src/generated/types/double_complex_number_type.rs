@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for DoubleComplexNumberType {
         })
     }
 }
-unsafe impl Send for DoubleComplexNumberType
-where
-    f64: Send,
-    f64: Send,
-{
-}
-unsafe impl Sync for DoubleComplexNumberType
-where
-    f64: Sync,
-    f64: Sync,
-{
-}

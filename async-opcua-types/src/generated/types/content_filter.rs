@@ -70,11 +70,3 @@ impl opcua::types::BinaryDecodable for ContentFilter {
         })
     }
 }
-unsafe impl Send for ContentFilter where
-    Option<Vec<super::content_filter_element::ContentFilterElement>>: Send
-{
-}
-unsafe impl Sync for ContentFilter where
-    Option<Vec<super::content_filter_element::ContentFilterElement>>: Sync
-{
-}

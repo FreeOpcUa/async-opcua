@@ -83,17 +83,3 @@ impl opcua::types::BinaryDecodable for AddNodesResponse {
         })
     }
 }
-unsafe impl Send for AddNodesResponse
-where
-    opcua::types::response_header::ResponseHeader: Send,
-    Option<Vec<super::add_nodes_result::AddNodesResult>>: Send,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Send,
-{
-}
-unsafe impl Sync for AddNodesResponse
-where
-    opcua::types::response_header::ResponseHeader: Sync,
-    Option<Vec<super::add_nodes_result::AddNodesResult>>: Sync,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Sync,
-{
-}

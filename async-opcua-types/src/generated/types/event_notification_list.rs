@@ -70,11 +70,3 @@ impl opcua::types::BinaryDecodable for EventNotificationList {
         })
     }
 }
-unsafe impl Send for EventNotificationList where
-    Option<Vec<super::event_field_list::EventFieldList>>: Send
-{
-}
-unsafe impl Sync for EventNotificationList where
-    Option<Vec<super::event_field_list::EventFieldList>>: Sync
-{
-}

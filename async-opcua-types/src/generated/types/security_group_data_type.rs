@@ -102,29 +102,3 @@ impl opcua::types::BinaryDecodable for SecurityGroupDataType {
         })
     }
 }
-unsafe impl Send for SecurityGroupDataType
-where
-    opcua::types::string::UAString: Send,
-    Option<Vec<opcua::types::string::UAString>>: Send,
-    opcua::types::data_types::Duration: Send,
-    opcua::types::string::UAString: Send,
-    u32: Send,
-    u32: Send,
-    opcua::types::string::UAString: Send,
-    Option<Vec<super::role_permission_type::RolePermissionType>>: Send,
-    Option<Vec<super::key_value_pair::KeyValuePair>>: Send,
-{
-}
-unsafe impl Sync for SecurityGroupDataType
-where
-    opcua::types::string::UAString: Sync,
-    Option<Vec<opcua::types::string::UAString>>: Sync,
-    opcua::types::data_types::Duration: Sync,
-    opcua::types::string::UAString: Sync,
-    u32: Sync,
-    u32: Sync,
-    opcua::types::string::UAString: Sync,
-    Option<Vec<super::role_permission_type::RolePermissionType>>: Sync,
-    Option<Vec<super::key_value_pair::KeyValuePair>>: Sync,
-{
-}

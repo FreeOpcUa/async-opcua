@@ -78,17 +78,3 @@ impl opcua::types::BinaryDecodable for NotificationMessage {
         })
     }
 }
-unsafe impl Send for NotificationMessage
-where
-    opcua::types::Counter: Send,
-    opcua::types::data_types::UtcTime: Send,
-    Option<Vec<opcua::types::extension_object::ExtensionObject>>: Send,
-{
-}
-unsafe impl Sync for NotificationMessage
-where
-    opcua::types::Counter: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-    Option<Vec<opcua::types::extension_object::ExtensionObject>>: Sync,
-{
-}

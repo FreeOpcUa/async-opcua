@@ -86,21 +86,3 @@ impl opcua::types::BinaryDecodable for BitFieldDefinition {
         })
     }
 }
-unsafe impl Send for BitFieldDefinition
-where
-    opcua::types::string::UAString: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-    bool: Send,
-    u32: Send,
-    u32: Send,
-{
-}
-unsafe impl Sync for BitFieldDefinition
-where
-    opcua::types::string::UAString: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-    bool: Sync,
-    u32: Sync,
-    u32: Sync,
-{
-}

@@ -78,17 +78,3 @@ impl opcua::types::BinaryDecodable for QueryDataDescription {
         })
     }
 }
-unsafe impl Send for QueryDataDescription
-where
-    super::relative_path::RelativePath: Send,
-    opcua::types::IntegerId: Send,
-    opcua::types::NumericRange: Send,
-{
-}
-unsafe impl Sync for QueryDataDescription
-where
-    super::relative_path::RelativePath: Sync,
-    opcua::types::IntegerId: Sync,
-    opcua::types::NumericRange: Sync,
-{
-}

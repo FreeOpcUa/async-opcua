@@ -86,21 +86,3 @@ impl opcua::types::BinaryDecodable for ReadEventDetailsSorted {
         })
     }
 }
-unsafe impl Send for ReadEventDetailsSorted
-where
-    opcua::types::Counter: Send,
-    opcua::types::data_types::UtcTime: Send,
-    opcua::types::data_types::UtcTime: Send,
-    super::event_filter::EventFilter: Send,
-    Option<Vec<super::sort_rule_element::SortRuleElement>>: Send,
-{
-}
-unsafe impl Sync for ReadEventDetailsSorted
-where
-    opcua::types::Counter: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-    super::event_filter::EventFilter: Sync,
-    Option<Vec<super::sort_rule_element::SortRuleElement>>: Sync,
-{
-}

@@ -83,17 +83,3 @@ impl opcua::types::BinaryDecodable for QueryNextRequest {
         })
     }
 }
-unsafe impl Send for QueryNextRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    bool: Send,
-    opcua::types::ContinuationPoint: Send,
-{
-}
-unsafe impl Sync for QueryNextRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    bool: Sync,
-    opcua::types::ContinuationPoint: Sync,
-{
-}

@@ -94,25 +94,3 @@ impl opcua::types::BinaryDecodable for AddNodesItem {
         })
     }
 }
-unsafe impl Send for AddNodesItem
-where
-    opcua::types::expanded_node_id::ExpandedNodeId: Send,
-    opcua::types::node_id::NodeId: Send,
-    opcua::types::expanded_node_id::ExpandedNodeId: Send,
-    opcua::types::qualified_name::QualifiedName: Send,
-    super::enums::NodeClass: Send,
-    opcua::types::extension_object::ExtensionObject: Send,
-    opcua::types::expanded_node_id::ExpandedNodeId: Send,
-{
-}
-unsafe impl Sync for AddNodesItem
-where
-    opcua::types::expanded_node_id::ExpandedNodeId: Sync,
-    opcua::types::node_id::NodeId: Sync,
-    opcua::types::expanded_node_id::ExpandedNodeId: Sync,
-    opcua::types::qualified_name::QualifiedName: Sync,
-    super::enums::NodeClass: Sync,
-    opcua::types::extension_object::ExtensionObject: Sync,
-    opcua::types::expanded_node_id::ExpandedNodeId: Sync,
-{
-}

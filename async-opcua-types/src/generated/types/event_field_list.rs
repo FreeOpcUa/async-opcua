@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for EventFieldList {
         })
     }
 }
-unsafe impl Send for EventFieldList
-where
-    opcua::types::IntegerId: Send,
-    Option<Vec<opcua::types::variant::Variant>>: Send,
-{
-}
-unsafe impl Sync for EventFieldList
-where
-    opcua::types::IntegerId: Sync,
-    Option<Vec<opcua::types::variant::Variant>>: Sync,
-{
-}

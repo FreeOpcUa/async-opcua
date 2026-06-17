@@ -78,17 +78,3 @@ impl opcua::types::BinaryDecodable for CallMethodRequest {
         })
     }
 }
-unsafe impl Send for CallMethodRequest
-where
-    opcua::types::node_id::NodeId: Send,
-    opcua::types::node_id::NodeId: Send,
-    Option<Vec<opcua::types::variant::Variant>>: Send,
-{
-}
-unsafe impl Sync for CallMethodRequest
-where
-    opcua::types::node_id::NodeId: Sync,
-    opcua::types::node_id::NodeId: Sync,
-    Option<Vec<opcua::types::variant::Variant>>: Sync,
-{
-}

@@ -82,19 +82,3 @@ impl opcua::types::BinaryDecodable for ReadValueId {
         })
     }
 }
-unsafe impl Send for ReadValueId
-where
-    opcua::types::node_id::NodeId: Send,
-    opcua::types::IntegerId: Send,
-    opcua::types::NumericRange: Send,
-    opcua::types::qualified_name::QualifiedName: Send,
-{
-}
-unsafe impl Sync for ReadValueId
-where
-    opcua::types::node_id::NodeId: Sync,
-    opcua::types::IntegerId: Sync,
-    opcua::types::NumericRange: Sync,
-    opcua::types::qualified_name::QualifiedName: Sync,
-{
-}

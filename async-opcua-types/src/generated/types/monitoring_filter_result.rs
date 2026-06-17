@@ -63,5 +63,3 @@ impl opcua::types::BinaryDecodable for MonitoringFilterResult {
         Ok(Self {})
     }
 }
-unsafe impl Send for MonitoringFilterResult {}
-unsafe impl Sync for MonitoringFilterResult {}

@@ -82,19 +82,3 @@ impl opcua::types::BinaryDecodable for HistoryReadValueId {
         })
     }
 }
-unsafe impl Send for HistoryReadValueId
-where
-    opcua::types::node_id::NodeId: Send,
-    opcua::types::NumericRange: Send,
-    opcua::types::qualified_name::QualifiedName: Send,
-    opcua::types::ContinuationPoint: Send,
-{
-}
-unsafe impl Sync for HistoryReadValueId
-where
-    opcua::types::node_id::NodeId: Sync,
-    opcua::types::NumericRange: Sync,
-    opcua::types::qualified_name::QualifiedName: Sync,
-    opcua::types::ContinuationPoint: Sync,
-{
-}

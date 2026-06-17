@@ -103,7 +103,13 @@ impl UARequest for Call {
                         "call(), expecting {cnt} results from the call to the server, got {} results",
                         results.len()
                     );
-                    Err(Error::new(StatusCode::BadUnexpectedError, format!("call(), expecting {cnt} results from the call to the server, got {} results", results.len())))
+                    Err(Error::new(
+                        StatusCode::BadUnexpectedError,
+                        format!(
+                            "call(), expecting {cnt} results from the call to the server, got {} results",
+                            results.len()
+                        ),
+                    ))
                 } else {
                     Ok(*response)
                 }

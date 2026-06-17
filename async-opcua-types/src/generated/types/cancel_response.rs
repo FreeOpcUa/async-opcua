@@ -78,15 +78,3 @@ impl opcua::types::BinaryDecodable for CancelResponse {
         })
     }
 }
-unsafe impl Send for CancelResponse
-where
-    opcua::types::response_header::ResponseHeader: Send,
-    u32: Send,
-{
-}
-unsafe impl Sync for CancelResponse
-where
-    opcua::types::response_header::ResponseHeader: Sync,
-    u32: Sync,
-{
-}

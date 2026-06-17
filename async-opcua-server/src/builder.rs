@@ -1,5 +1,7 @@
 use std::{path::PathBuf, sync::Arc};
 
+#[cfg(feature = "wss")]
+use rustls_pki_types::{pem::PemObject, CertificateDer, PrivateKeyDer};
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
@@ -8,10 +10,15 @@ use opcua_core::config::Config;
 use opcua_crypto::SecurityPolicy;
 use opcua_types::{BuildInfo, MessageSecurityMode, TypeLoader, TypeLoaderCollection};
 
+#[cfg(feature = "wss")]
+use super::WssServerConfig;
 use super::{
     authenticator::AuthManager, node_manager::NodeManagerBuilder, Limits, Server, ServerConfig,
     ServerEndpoint, ServerHandle, ServerUserToken, ANONYMOUS_USER_TOKEN_ID,
 };
+
+#[cfg(feature = "wss")]
+const OPC_WSS_SUBPROTOCOL: &[u8] = b"opcua+uacp";
 
 /// Server builder, used to configure the server programatically,
 /// and for setting core components like node managers, authenticator,
@@ -292,6 +299,31 @@ impl ServerBuilder {
         self
     }
 
+    /// Set the rustls server configuration used for `opc.wss` listeners.
+    ///
+    /// The supplied configuration is used verbatim, including certificate chain,
+    /// private key, ALPN, protocol versions, and client-auth settings.
+    #[cfg(feature = "wss")]
+    pub fn websocket_rustls_config(mut self, config: Arc<rustls::ServerConfig>) -> Self {
+        self.config.wss_tls = Some(WssServerConfig(config));
+        self
+    }
+
+    /// Load a PEM certificate chain and private key for `opc.wss` listeners.
+    ///
+    /// This builds a hardened rustls server configuration with ALPN set to
+    /// `opcua+uacp` and no TLS client authentication.
+    #[cfg(feature = "wss")]
+    pub fn websocket_tls(
+        self,
+        cert_path: impl Into<PathBuf>,
+        key_path: impl Into<PathBuf>,
+    ) -> Result<Self, String> {
+        let mut config = build_wss_rustls_config(cert_path.into(), key_path.into())?;
+        config.alpn_protocols = vec![OPC_WSS_SUBPROTOCOL.to_vec()];
+        Ok(self.websocket_rustls_config(Arc::new(config)))
+    }
+
     /// Auto trust client certificates. Typically should only be used for testing
     /// or samples, as it is potentially unsafe.
     pub fn trust_client_certs(mut self, trust_client_certs: bool) -> Self {
@@ -542,4 +574,52 @@ impl ServerBuilder {
         self.config.diagnostics = enabled;
         self
     }
+}
+
+#[cfg(feature = "wss")]
+fn build_wss_rustls_config(
+    cert_path: PathBuf,
+    key_path: PathBuf,
+) -> Result<rustls::ServerConfig, String> {
+    let certs = CertificateDer::pem_file_iter(&cert_path)
+        .map_err(|err| {
+            format!(
+                "Failed to open WSS TLS certificate {}: {err}",
+                cert_path.display()
+            )
+        })?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|err| {
+            format!(
+                "Failed to read WSS TLS certificate {}: {err}",
+                cert_path.display()
+            )
+        })?;
+    if certs.is_empty() {
+        return Err(format!(
+            "WSS TLS certificate file {} contains no certificates",
+            cert_path.display()
+        ));
+    }
+
+    let key = PrivateKeyDer::from_pem_file(&key_path).map_err(|err| {
+        if matches!(err, rustls_pki_types::pem::Error::NoItemsFound) {
+            format!(
+                "WSS TLS private key file {} contains no private key",
+                key_path.display()
+            )
+        } else {
+            format!(
+                "Failed to read WSS TLS private key {}: {err}",
+                key_path.display()
+            )
+        }
+    })?;
+
+    rustls::ServerConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
+        .with_safe_default_protocol_versions()
+        .map_err(|err| format!("WSS TLS: {err}"))?
+        .with_no_client_auth()
+        .with_single_cert(certs, key)
+        .map_err(|err| format!("Failed to build WSS TLS server configuration: {err}"))
 }

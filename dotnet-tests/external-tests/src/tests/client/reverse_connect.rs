@@ -45,7 +45,10 @@ pub async fn with_reverse_connect_session<Fun: for<'a> WithSessionMethod<'a>>(
             // Using reverse connect for discovery as well.
             // This requires us to actually make the connector.
             ReverseConnectionSource::new_listener(listener.clone())
-                .get_connector(&format!("opc.tcp://{}:62546", hostname().unwrap()).into())
+                .get_connector(
+                    &format!("opc.tcp://{}:62546", hostname().unwrap()).into(),
+                    client.config(),
+                )
                 .unwrap(),
             &[],
             &[],

@@ -83,17 +83,3 @@ impl opcua::types::BinaryDecodable for RepublishRequest {
         })
     }
 }
-unsafe impl Send for RepublishRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    opcua::types::IntegerId: Send,
-    opcua::types::Counter: Send,
-{
-}
-unsafe impl Sync for RepublishRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    opcua::types::IntegerId: Sync,
-    opcua::types::Counter: Sync,
-{
-}

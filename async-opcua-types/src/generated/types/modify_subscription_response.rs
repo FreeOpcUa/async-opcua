@@ -88,19 +88,3 @@ impl opcua::types::BinaryDecodable for ModifySubscriptionResponse {
         })
     }
 }
-unsafe impl Send for ModifySubscriptionResponse
-where
-    opcua::types::response_header::ResponseHeader: Send,
-    opcua::types::data_types::Duration: Send,
-    opcua::types::Counter: Send,
-    opcua::types::Counter: Send,
-{
-}
-unsafe impl Sync for ModifySubscriptionResponse
-where
-    opcua::types::response_header::ResponseHeader: Sync,
-    opcua::types::data_types::Duration: Sync,
-    opcua::types::Counter: Sync,
-    opcua::types::Counter: Sync,
-{
-}

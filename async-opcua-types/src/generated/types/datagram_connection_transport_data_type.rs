@@ -70,11 +70,3 @@ impl opcua::types::BinaryDecodable for DatagramConnectionTransportDataType {
         })
     }
 }
-unsafe impl Send for DatagramConnectionTransportDataType where
-    opcua::types::extension_object::ExtensionObject: Send
-{
-}
-unsafe impl Sync for DatagramConnectionTransportDataType where
-    opcua::types::extension_object::ExtensionObject: Sync
-{
-}

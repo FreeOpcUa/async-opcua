@@ -93,21 +93,3 @@ impl opcua::types::BinaryDecodable for SetTriggeringRequest {
         })
     }
 }
-unsafe impl Send for SetTriggeringRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    opcua::types::IntegerId: Send,
-    opcua::types::IntegerId: Send,
-    Option<Vec<opcua::types::IntegerId>>: Send,
-    Option<Vec<opcua::types::IntegerId>>: Send,
-{
-}
-unsafe impl Sync for SetTriggeringRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    opcua::types::IntegerId: Sync,
-    opcua::types::IntegerId: Sync,
-    Option<Vec<opcua::types::IntegerId>>: Sync,
-    Option<Vec<opcua::types::IntegerId>>: Sync,
-{
-}

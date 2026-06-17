@@ -118,37 +118,3 @@ impl opcua::types::BinaryDecodable for VariableAttributes {
         })
     }
 }
-unsafe impl Send for VariableAttributes
-where
-    u32: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-    u32: Send,
-    u32: Send,
-    opcua::types::variant::Variant: Send,
-    opcua::types::node_id::NodeId: Send,
-    i32: Send,
-    Option<Vec<u32>>: Send,
-    u8: Send,
-    u8: Send,
-    opcua::types::data_types::Duration: Send,
-    bool: Send,
-{
-}
-unsafe impl Sync for VariableAttributes
-where
-    u32: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-    u32: Sync,
-    u32: Sync,
-    opcua::types::variant::Variant: Sync,
-    opcua::types::node_id::NodeId: Sync,
-    i32: Sync,
-    Option<Vec<u32>>: Sync,
-    u8: Sync,
-    u8: Sync,
-    opcua::types::data_types::Duration: Sync,
-    bool: Sync,
-{
-}

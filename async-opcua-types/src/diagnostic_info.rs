@@ -230,6 +230,7 @@ impl BinaryEncodable for DiagnosticInfo {
 
 impl BinaryDecodable for DiagnosticInfo {
     fn decode<S: Read + ?Sized>(stream: &mut S, ctx: &Context<'_>) -> EncodingResult<Self> {
+        let _depth_lock = ctx.options().depth_lock()?;
         let encoding_mask = DiagnosticInfoMask::from_bits_truncate(u8::decode(stream, ctx)?);
         let mut diagnostic_info = DiagnosticInfo::default();
 

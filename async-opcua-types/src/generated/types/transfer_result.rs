@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for TransferResult {
         })
     }
 }
-unsafe impl Send for TransferResult
-where
-    opcua::types::status_code::StatusCode: Send,
-    Option<Vec<opcua::types::Counter>>: Send,
-{
-}
-unsafe impl Sync for TransferResult
-where
-    opcua::types::status_code::StatusCode: Sync,
-    Option<Vec<opcua::types::Counter>>: Sync,
-{
-}

@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for HistoryModifiedData {
         })
     }
 }
-unsafe impl Send for HistoryModifiedData
-where
-    Option<Vec<opcua::types::data_value::DataValue>>: Send,
-    Option<Vec<super::modification_info::ModificationInfo>>: Send,
-{
-}
-unsafe impl Sync for HistoryModifiedData
-where
-    Option<Vec<opcua::types::data_value::DataValue>>: Sync,
-    Option<Vec<super::modification_info::ModificationInfo>>: Sync,
-{
-}

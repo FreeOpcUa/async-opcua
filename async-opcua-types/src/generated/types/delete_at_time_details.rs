@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for DeleteAtTimeDetails {
         })
     }
 }
-unsafe impl Send for DeleteAtTimeDetails
-where
-    opcua::types::node_id::NodeId: Send,
-    Option<Vec<opcua::types::data_types::UtcTime>>: Send,
-{
-}
-unsafe impl Sync for DeleteAtTimeDetails
-where
-    opcua::types::node_id::NodeId: Sync,
-    Option<Vec<opcua::types::data_types::UtcTime>>: Sync,
-{
-}

@@ -11,7 +11,7 @@ use opcua_core::comms::buffer::SendBuffer;
 use opcua_core::comms::message_chunk::{MessageFinalError, MessageIsFinalType};
 use opcua_core::comms::{
     chunker::Chunker, message_chunk::MessageChunk, message_chunk_info::ChunkInfo,
-    tcp_codec::Message,
+    tcp_codec::Message, tcp_types::MIN_CHUNK_SIZE,
 };
 use opcua_types::{Error, StatusCode, UAString};
 
@@ -41,6 +41,8 @@ pub struct TransportState {
     pub channel_state: Arc<SecureChannelState>,
     /// Max pending incoming messages
     max_chunk_count: usize,
+    /// Max incoming message size used to derive a hard chunk-count ceiling.
+    max_message_size: usize,
     /// Last decoded sequence number
     sequence_numbers: SequenceNumberHandle,
     /// Max size of incoming chunks
@@ -90,6 +92,7 @@ impl TransportState {
         channel_state: Arc<SecureChannelState>,
         outgoing_recv: RequestRecv,
         max_chunk_count: usize,
+        max_message_size: usize,
         receive_buffer_size: usize,
     ) -> Self {
         let legacy_sequence_numbers = channel_state
@@ -103,7 +106,16 @@ impl TransportState {
             message_states: HashMap::new(),
             sequence_numbers: SequenceNumberHandle::new(legacy_sequence_numbers),
             max_chunk_count,
+            max_message_size,
             receive_buffer_size,
+        }
+    }
+
+    fn effective_max_chunk_count(&self) -> usize {
+        if self.max_chunk_count > 0 {
+            self.max_chunk_count
+        } else {
+            (self.max_message_size / MIN_CHUNK_SIZE).max(1)
         }
     }
 
@@ -234,6 +246,7 @@ impl TransportState {
 
         // We do not care at all about incoming messages without a
         // corresponding request.
+        let max_chunks = self.effective_max_chunk_count();
         let Some(message_state) = self.message_states.get_mut(&req_id) else {
             trace!(
                 "Received chunk for unknown request id {}:{}. Ignoring.",
@@ -253,15 +266,8 @@ impl TransportState {
                     chunk_info.sequence_header.sequence_number,
                     chunk_info.body_length
                 );
-                message_state.chunks.push(MessageChunkWithChunkInfo {
-                    header: chunk_info,
-                    data_with_header: chunk.data,
-                });
-                if self.max_chunk_count > 0 && message_state.chunks.len() > self.max_chunk_count {
-                    error!(
-                        "Message has more than {} chunks, exceeding negotiated limits",
-                        self.max_chunk_count
-                    );
+                if message_state.chunks.len() >= max_chunks {
+                    error!("Message has more than {max_chunks} chunks, exceeding limits");
                     drop(_h);
                     // Removing the message state means that we ignore any further chunks.
                     let message_state = self.message_states.remove(&req_id).unwrap();
@@ -273,7 +279,12 @@ impl TransportState {
                         )
                         .with_request_id(req_id)));
                     });
+                    return Ok(());
                 }
+                message_state.chunks.push(MessageChunkWithChunkInfo {
+                    header: chunk_info,
+                    data_with_header: chunk.data,
+                });
             }
             MessageIsFinalType::FinalError => {
                 let err = match chunk.final_error_body(&chunk_info, &decoding_options) {
@@ -299,6 +310,20 @@ impl TransportState {
                     chunk_info.sequence_header.sequence_number,
                     chunk_info.body_length
                 );
+                if message_state.chunks.len() >= max_chunks {
+                    error!("Message has more than {max_chunks} chunks, exceeding limits");
+                    drop(_h);
+                    let message_state = self.message_states.remove(&req_id).unwrap();
+                    message_state.span.in_scope(|| {
+                        error!("Message {} exceeded max chunk count", req_id);
+                        let _ = message_state.callback.send(Err(Error::new(
+                            StatusCode::BadEncodingLimitsExceeded,
+                            "Message exceeded max chunk count",
+                        )
+                        .with_request_id(req_id)));
+                    });
+                    return Ok(());
+                }
                 message_state.chunks.push(MessageChunkWithChunkInfo {
                     header: chunk_info,
                     data_with_header: chunk.data,
@@ -321,7 +346,9 @@ impl TransportState {
                 if let ResponseMessage::OpenSecureChannel(msg) = &message {
                     let service_result = msg.response_header.service_result;
                     if !service_result.is_good() {
-                        error!("OpenSecureChannel response failed, request_id = {req_id}: {service_result}");
+                        error!(
+                            "OpenSecureChannel response failed, request_id = {req_id}: {service_result}"
+                        );
                         return Err(Error::new(
                             service_result,
                             "OpenSecureChannel received service fault from server",
@@ -378,7 +405,7 @@ impl TransportState {
                 );
                 continue; //may be duplicate chunk
             }
-            expect_sequence_number += 1;
+            expect_sequence_number = expect_sequence_number.wrapping_add(1);
             ret.push(MessageChunk {
                 data: c.data_with_header,
             });

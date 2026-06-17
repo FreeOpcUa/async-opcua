@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for BrowsePathTarget {
         })
     }
 }
-unsafe impl Send for BrowsePathTarget
-where
-    opcua::types::expanded_node_id::ExpandedNodeId: Send,
-    opcua::types::Index: Send,
-{
-}
-unsafe impl Sync for BrowsePathTarget
-where
-    opcua::types::expanded_node_id::ExpandedNodeId: Sync,
-    opcua::types::Index: Sync,
-{
-}

@@ -70,11 +70,3 @@ impl opcua::types::BinaryDecodable for PublishedDataItemsDataType {
         })
     }
 }
-unsafe impl Send for PublishedDataItemsDataType where
-    Option<Vec<super::published_variable_data_type::PublishedVariableDataType>>: Send
-{
-}
-unsafe impl Sync for PublishedDataItemsDataType where
-    Option<Vec<super::published_variable_data_type::PublishedVariableDataType>>: Sync
-{
-}

@@ -93,21 +93,3 @@ impl opcua::types::BinaryDecodable for CreateSubscriptionResponse {
         })
     }
 }
-unsafe impl Send for CreateSubscriptionResponse
-where
-    opcua::types::response_header::ResponseHeader: Send,
-    opcua::types::IntegerId: Send,
-    opcua::types::data_types::Duration: Send,
-    opcua::types::Counter: Send,
-    opcua::types::Counter: Send,
-{
-}
-unsafe impl Sync for CreateSubscriptionResponse
-where
-    opcua::types::response_header::ResponseHeader: Sync,
-    opcua::types::IntegerId: Sync,
-    opcua::types::data_types::Duration: Sync,
-    opcua::types::Counter: Sync,
-    opcua::types::Counter: Sync,
-{
-}

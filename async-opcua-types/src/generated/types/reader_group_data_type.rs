@@ -106,31 +106,3 @@ impl opcua::types::BinaryDecodable for ReaderGroupDataType {
         })
     }
 }
-unsafe impl Send for ReaderGroupDataType
-where
-    opcua::types::string::UAString: Send,
-    bool: Send,
-    super::enums::MessageSecurityMode: Send,
-    opcua::types::string::UAString: Send,
-    Option<Vec<super::endpoint_description::EndpointDescription>>: Send,
-    u32: Send,
-    Option<Vec<super::key_value_pair::KeyValuePair>>: Send,
-    opcua::types::extension_object::ExtensionObject: Send,
-    opcua::types::extension_object::ExtensionObject: Send,
-    Option<Vec<super::data_set_reader_data_type::DataSetReaderDataType>>: Send,
-{
-}
-unsafe impl Sync for ReaderGroupDataType
-where
-    opcua::types::string::UAString: Sync,
-    bool: Sync,
-    super::enums::MessageSecurityMode: Sync,
-    opcua::types::string::UAString: Sync,
-    Option<Vec<super::endpoint_description::EndpointDescription>>: Sync,
-    u32: Sync,
-    Option<Vec<super::key_value_pair::KeyValuePair>>: Sync,
-    opcua::types::extension_object::ExtensionObject: Sync,
-    opcua::types::extension_object::ExtensionObject: Sync,
-    Option<Vec<super::data_set_reader_data_type::DataSetReaderDataType>>: Sync,
-{
-}

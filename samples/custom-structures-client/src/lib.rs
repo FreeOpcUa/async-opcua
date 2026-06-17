@@ -53,6 +53,7 @@ pub async fn client_connect(
         .application_name("Simple Client")
         .application_uri("urn:SimpleClient")
         .product_uri("urn:SimpleClient")
+        // INSECURE: demo convenience only; do NOT copy into production
         .trust_server_certs(true)
         .create_sample_keypair(true)
         .session_retry_limit(3)

@@ -4,6 +4,8 @@
 
 //! Client configuration data.
 
+#[cfg(feature = "wss")]
+use std::sync::Arc;
 use std::{
     self,
     collections::BTreeMap,
@@ -41,6 +43,46 @@ pub struct ClientUserToken {
     /// Private key path for x509 authentication.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub private_key_path: Option<String>,
+}
+
+/// TLS configuration used for `opc.wss` WebSocket connections.
+#[cfg(feature = "wss")]
+#[derive(Clone, Default)]
+pub enum WssTlsConfig {
+    /// Use system and bundled WebPKI roots with hostname verification.
+    #[default]
+    Default,
+    /// Use system and bundled WebPKI roots, plus the certificates in this PEM file.
+    CaPem(PathBuf),
+    /// Use a caller-supplied rustls client configuration verbatim.
+    Custom(Arc<rustls::ClientConfig>),
+    /// Disable TLS certificate verification for WSS connections.
+    DangerouslyAcceptInvalid,
+}
+
+#[cfg(feature = "wss")]
+impl std::fmt::Debug for WssTlsConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Default => f.write_str("Default"),
+            Self::CaPem(path) => f.debug_tuple("CaPem").field(path).finish(),
+            Self::Custom(_) => f.write_str("Custom(<redacted>)"),
+            Self::DangerouslyAcceptInvalid => f.write_str("DangerouslyAcceptInvalid"),
+        }
+    }
+}
+
+#[cfg(feature = "wss")]
+impl PartialEq for WssTlsConfig {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Default, Self::Default) => true,
+            (Self::CaPem(a), Self::CaPem(b)) => a == b,
+            (Self::Custom(a), Self::Custom(b)) => Arc::ptr_eq(a, b),
+            (Self::DangerouslyAcceptInvalid, Self::DangerouslyAcceptInvalid) => true,
+            _ => false,
+        }
+    }
 }
 
 impl ClientUserToken {
@@ -234,8 +276,8 @@ pub struct ClientConfig {
     pub(crate) certificate_path: Option<PathBuf>,
     /// Custom private key path, to be used instead of the default private key path
     pub(crate) private_key_path: Option<PathBuf>,
-    /// Auto trusts server certificates. For testing/samples only unless you're sure what you're
-    /// doing.
+    /// Auto trusts server certificates. This trusts any unknown server certificate,
+    /// defeating MITM protection. For testing/samples only; do not use in production.
     pub(crate) trust_server_certs: bool,
     /// Verify server certificates. For testing/samples only unless you're sure what you're
     /// doing.
@@ -253,7 +295,7 @@ pub struct ClientConfig {
     /// Length of the nonce generated for CreateSession requests.
     #[serde(default = "defaults::session_nonce_length")]
     pub(crate) session_nonce_length: usize,
-    /// Requested channel lifetime in milliseconds.
+    /// Requested secure channel token lifetime in milliseconds. Default is 10 minutes.
     #[serde(default = "defaults::channel_lifetime")]
     pub(crate) channel_lifetime: u32,
     /// Decoding options used for serialization / deserialization
@@ -270,10 +312,21 @@ pub struct ClientConfig {
     /// Max delay between retry attempts.
     #[serde(default = "defaults::session_retry_max")]
     pub(crate) session_retry_max: Duration,
+    /// Timeout for opening outbound TCP connections.
+    #[serde(default = "defaults::connect_timeout")]
+    pub(crate) connect_timeout: Duration,
+    /// TCP keep-alive settings for long-lived connections.
+    #[serde(default)]
+    pub(crate) tcp_keepalive: TcpKeepaliveConfig,
+    /// TLS configuration used for `opc.wss` connections.
+    #[cfg(feature = "wss")]
+    #[serde(skip)]
+    pub(crate) wss_tls: WssTlsConfig,
     /// Interval between each keep-alive request sent to the server.
     #[serde(default = "defaults::keep_alive_interval")]
     pub(crate) keep_alive_interval: Duration,
     /// Maximum number of failed keep alives before the client will be closed.
+    /// Defaults to 3. Set to 0 to explicitly disable keep-alive disconnects.
     /// Note that this should not actually needed if the server is compliant,
     /// only if the connection ends up in a bad state and needs to be
     /// forcibly reset.
@@ -509,7 +562,7 @@ mod defaults {
     }
 
     pub(super) fn channel_lifetime() -> u32 {
-        60_000
+        600_000
     }
 
     pub(super) fn session_retry_limit() -> i32 {
@@ -522,6 +575,10 @@ mod defaults {
 
     pub(super) fn session_retry_max() -> Duration {
         Duration::from_secs(30)
+    }
+
+    pub(super) fn connect_timeout() -> Duration {
+        Duration::from_secs(10)
     }
 
     pub(super) fn keep_alive_interval() -> Duration {
@@ -545,7 +602,7 @@ mod defaults {
     }
 
     pub(super) fn max_failed_keep_alive_count() -> u64 {
-        0
+        3
     }
 
     pub(super) fn max_incoming_chunk_size() -> usize {
@@ -589,6 +646,52 @@ mod defaults {
     }
 }
 
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Copy)]
+/// TCP keep-alive settings.
+pub struct TcpKeepaliveConfig {
+    /// Whether TCP keep-alive is enabled.
+    #[serde(default = "tcp_keepalive_defaults::enabled")]
+    pub enabled: bool,
+    /// Idle time before keep-alive probes are sent.
+    #[serde(default = "tcp_keepalive_defaults::idle_secs")]
+    pub idle_secs: u64,
+    /// Interval between keep-alive probes.
+    #[serde(default = "tcp_keepalive_defaults::interval_secs")]
+    pub interval_secs: u64,
+    /// Number of failed keep-alive probes before the peer is considered dead.
+    #[serde(default = "tcp_keepalive_defaults::retries")]
+    pub retries: u32,
+}
+
+impl Default for TcpKeepaliveConfig {
+    fn default() -> Self {
+        Self {
+            enabled: tcp_keepalive_defaults::enabled(),
+            idle_secs: tcp_keepalive_defaults::idle_secs(),
+            interval_secs: tcp_keepalive_defaults::interval_secs(),
+            retries: tcp_keepalive_defaults::retries(),
+        }
+    }
+}
+
+mod tcp_keepalive_defaults {
+    pub(super) fn enabled() -> bool {
+        true
+    }
+
+    pub(super) fn idle_secs() -> u64 {
+        60
+    }
+
+    pub(super) fn interval_secs() -> u64 {
+        15
+    }
+
+    pub(super) fn retries() -> u32 {
+        4
+    }
+}
+
 impl ClientConfig {
     /// The default PKI directory
     pub const PKI_DIR: &'static str = "pki";
@@ -617,6 +720,10 @@ impl ClientConfig {
             session_retry_limit: defaults::session_retry_limit(),
             session_retry_initial: defaults::session_retry_initial(),
             session_retry_max: defaults::session_retry_max(),
+            connect_timeout: defaults::connect_timeout(),
+            tcp_keepalive: TcpKeepaliveConfig::default(),
+            #[cfg(feature = "wss")]
+            wss_tls: WssTlsConfig::default(),
             keep_alive_interval: defaults::keep_alive_interval(),
             max_failed_keep_alive_count: defaults::max_failed_keep_alive_count(),
             request_timeout: defaults::request_timeout(),
@@ -647,6 +754,30 @@ mod tests {
         let mut path = std::env::temp_dir();
         path.push(filename);
         path
+    }
+
+    /// US2 hardening defaults: dead-peer detection on (N8), a TCP connect timeout (N2),
+    /// and a non-trivially-short secure-channel lifetime (M10/N9).
+    #[test]
+    fn us2_client_hardening_defaults() {
+        let c = ClientConfig::default();
+        assert_eq!(
+            c.max_failed_keep_alive_count, 3,
+            "N8: keep-alive detection must be on by default"
+        );
+        assert_eq!(
+            c.connect_timeout,
+            std::time::Duration::from_secs(10),
+            "N2: a TCP connect timeout must be set"
+        );
+        assert_eq!(
+            c.channel_lifetime, 600_000,
+            "M10/N9: channel lifetime should be 10 min"
+        );
+        assert!(
+            !c.trust_server_certs,
+            "M9: server certs must not be auto-trusted by default"
+        );
     }
 
     fn sample_builder() -> ClientBuilder {

@@ -78,15 +78,3 @@ impl opcua::types::BinaryDecodable for CancelRequest {
         })
     }
 }
-unsafe impl Send for CancelRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    opcua::types::IntegerId: Send,
-{
-}
-unsafe impl Sync for CancelRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    opcua::types::IntegerId: Sync,
-{
-}

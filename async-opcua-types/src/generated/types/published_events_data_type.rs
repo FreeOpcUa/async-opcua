@@ -78,17 +78,3 @@ impl opcua::types::BinaryDecodable for PublishedEventsDataType {
         })
     }
 }
-unsafe impl Send for PublishedEventsDataType
-where
-    opcua::types::node_id::NodeId: Send,
-    Option<Vec<super::simple_attribute_operand::SimpleAttributeOperand>>: Send,
-    super::content_filter::ContentFilter: Send,
-{
-}
-unsafe impl Sync for PublishedEventsDataType
-where
-    opcua::types::node_id::NodeId: Sync,
-    Option<Vec<super::simple_attribute_operand::SimpleAttributeOperand>>: Sync,
-    super::content_filter::ContentFilter: Sync,
-{
-}

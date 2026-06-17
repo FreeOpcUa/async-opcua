@@ -78,15 +78,3 @@ impl opcua::types::BinaryDecodable for GetEndpointsResponse {
         })
     }
 }
-unsafe impl Send for GetEndpointsResponse
-where
-    opcua::types::response_header::ResponseHeader: Send,
-    Option<Vec<super::endpoint_description::EndpointDescription>>: Send,
-{
-}
-unsafe impl Sync for GetEndpointsResponse
-where
-    opcua::types::response_header::ResponseHeader: Sync,
-    Option<Vec<super::endpoint_description::EndpointDescription>>: Sync,
-{
-}

@@ -75,11 +75,11 @@ fn from_str() {
     {
         assert_eq!(
             SecurityPolicy::from_str("Basic128Rsa15").unwrap(),
-            SecurityPolicy::Unknown
+            SecurityPolicy::Basic128Rsa15
         );
         assert_eq!(
             SecurityPolicy::from_str("Basic256").unwrap(),
-            SecurityPolicy::Unknown
+            SecurityPolicy::Basic256
         );
     }
     assert_eq!(

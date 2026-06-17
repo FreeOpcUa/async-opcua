@@ -94,25 +94,3 @@ impl opcua::types::BinaryDecodable for UABinaryFileDataType {
         })
     }
 }
-unsafe impl Send for UABinaryFileDataType
-where
-    Option<Vec<opcua::types::string::UAString>>: Send,
-    Option<Vec<super::structure_description::StructureDescription>>: Send,
-    Option<Vec<super::enum_description::EnumDescription>>: Send,
-    Option<Vec<super::simple_type_description::SimpleTypeDescription>>: Send,
-    opcua::types::string::UAString: Send,
-    Option<Vec<super::key_value_pair::KeyValuePair>>: Send,
-    opcua::types::variant::Variant: Send,
-{
-}
-unsafe impl Sync for UABinaryFileDataType
-where
-    Option<Vec<opcua::types::string::UAString>>: Sync,
-    Option<Vec<super::structure_description::StructureDescription>>: Sync,
-    Option<Vec<super::enum_description::EnumDescription>>: Sync,
-    Option<Vec<super::simple_type_description::SimpleTypeDescription>>: Sync,
-    opcua::types::string::UAString: Sync,
-    Option<Vec<super::key_value_pair::KeyValuePair>>: Sync,
-    opcua::types::variant::Variant: Sync,
-{
-}

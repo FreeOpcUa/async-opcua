@@ -1,4 +1,7 @@
-use std::{net::SocketAddr, time::Instant};
+use std::{
+    net::SocketAddr,
+    time::{Duration, Instant},
+};
 
 use opcua_core::comms::{tcp_codec::TcpCodec, tcp_types::ReverseHelloMessage};
 use opcua_types::{DecodingOptions, Error, StatusCode};
@@ -7,7 +10,7 @@ use tokio::{
     net::TcpStream,
 };
 use tokio_util::codec::FramedRead;
-use tracing::debug;
+use tracing::{debug, warn};
 use tracing_futures::Instrument;
 
 use crate::transport::{
@@ -57,6 +60,18 @@ impl ReverseTcpConnector {
                 format!("Failed to connect to {}: {}", self.target, e),
             )
         })?;
+        if let Err(e) = stream.set_nodelay(true) {
+            warn!("Failed to set TCP_NODELAY for {}: {}", self.target, e);
+        }
+        if self.config.tcp_keepalive.enabled {
+            let keepalive = socket2::TcpKeepalive::new()
+                .with_time(Duration::from_secs(self.config.tcp_keepalive.idle_secs))
+                .with_interval(Duration::from_secs(self.config.tcp_keepalive.interval_secs))
+                .with_retries(self.config.tcp_keepalive.retries);
+            if let Err(e) = socket2::SockRef::from(&stream).set_tcp_keepalive(&keepalive) {
+                warn!("Failed to set TCP keep-alive for {}: {}", self.target, e);
+            }
+        }
 
         let (read_half, mut write_half) = tokio::io::split(stream);
         let read = FramedRead::new(read_half, TcpCodec::new(self.decoding_options.clone()));
@@ -81,11 +96,13 @@ impl ReverseTcpConnector {
 }
 
 impl Connector for ReverseTcpConnector {
+    type Transport = super::tcp::TcpTransport;
+
     async fn connect(
         mut self,
         info: std::sync::Arc<crate::ServerInfo>,
         token: tokio_util::sync::CancellationToken,
-    ) -> Result<super::tcp::TcpTransport, opcua_types::StatusCode> {
+    ) -> Result<Self::Transport, opcua_types::StatusCode> {
         tokio::select! {
             _ = tokio::time::sleep_until(self.deadline.into()) => {
                 debug!("Timeout sending REVERSE HELLO to {}", self.target);

@@ -78,17 +78,3 @@ impl opcua::types::BinaryDecodable for UserManagementDataType {
         })
     }
 }
-unsafe impl Send for UserManagementDataType
-where
-    opcua::types::string::UAString: Send,
-    super::enums::UserConfigurationMask: Send,
-    opcua::types::string::UAString: Send,
-{
-}
-unsafe impl Sync for UserManagementDataType
-where
-    opcua::types::string::UAString: Sync,
-    super::enums::UserConfigurationMask: Sync,
-    opcua::types::string::UAString: Sync,
-{
-}

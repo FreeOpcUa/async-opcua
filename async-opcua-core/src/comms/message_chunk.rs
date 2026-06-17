@@ -207,6 +207,50 @@ impl SimpleBinaryDecodable for MessageChunk {
 pub struct MessageChunkTooSmall;
 
 impl MessageChunk {
+    /// Decode a complete message chunk by slicing it out of the source buffer without copying.
+    pub fn decode_zero_copy(
+        src: &mut bytes::Bytes,
+        decoding_options: &DecodingOptions,
+    ) -> EncodingResult<MessageChunk> {
+        if src.len() < MESSAGE_SIZE_OFFSET + std::mem::size_of::<u32>() {
+            return Err(Error::decoding("Cannot decode chunk header"));
+        }
+
+        let message_size = u32::from_le_bytes([
+            src[MESSAGE_SIZE_OFFSET],
+            src[MESSAGE_SIZE_OFFSET + 1],
+            src[MESSAGE_SIZE_OFFSET + 2],
+            src[MESSAGE_SIZE_OFFSET + 3],
+        ]) as usize;
+        if decoding_options.max_message_size > 0 && message_size > decoding_options.max_message_size
+        {
+            return Err(Error::new(
+                StatusCode::BadTcpMessageTooLarge,
+                format!(
+                    "Message size {} exceeds maximum message size {}",
+                    message_size, decoding_options.max_message_size
+                ),
+            ));
+        }
+        if message_size < MESSAGE_CHUNK_HEADER_SIZE {
+            return Err(Error::decoding(format!(
+                "Message size {} is smaller than message chunk header size {}",
+                message_size, MESSAGE_CHUNK_HEADER_SIZE
+            )));
+        }
+        if message_size > src.len() {
+            return Err(Error::decoding(format!(
+                "Message size {} exceeds available bytes {}",
+                message_size,
+                src.len()
+            )));
+        }
+
+        Ok(MessageChunk {
+            data: src.split_to(message_size),
+        })
+    }
+
     /// Create a new message chunk.
     pub fn new(
         sequence_number: u32,
@@ -319,7 +363,29 @@ impl MessageChunk {
         // which would put us at 8192, which exceeds the configured limit.
         // So 8111 is the largest the chunk can possibly be with this chunk size.
 
-        Ok(aligned_max_chunk_size - header_size - signature_size - minimum_padding)
+        let overhead = header_size
+            .checked_add(signature_size)
+            .and_then(|overhead| overhead.checked_add(minimum_padding))
+            .ok_or_else(|| {
+                Error::new(
+                    StatusCode::BadTcpInternalError,
+                    "message chunk overhead size overflowed",
+                )
+            })?;
+        let body_size = aligned_max_chunk_size
+            .checked_sub(overhead)
+            .filter(|body_size| *body_size > 0)
+            .ok_or_else(|| {
+                Error::new(
+                    StatusCode::BadTcpInternalError,
+                    format!(
+                        "chunk headers/signature/padding ({}) do not leave room for a message body in the negotiated chunk size ({})",
+                        overhead, aligned_max_chunk_size
+                    ),
+                )
+            })?;
+
+        Ok(body_size)
     }
 
     /// Decode the message header from the inner data.

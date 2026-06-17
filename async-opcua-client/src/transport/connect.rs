@@ -1,10 +1,15 @@
 use std::{future::Future, sync::Arc};
 
-use opcua_types::{EndpointDescription, Error};
+use opcua_core::comms::url::{is_opc_ua_binary_url, is_opc_ua_wss_url};
+use opcua_types::{EndpointDescription, Error, StatusCode};
 
+#[cfg(feature = "wss")]
+use crate::config::WssTlsConfig;
 use crate::transport::{state::SecureChannelState, RequestRecv};
 
-use super::{tcp::TransportConfiguration, TcpConnector, TransportPollResult};
+use super::{tcp::TransportConfiguration, TcpConnector, TcpTransport, TransportPollResult};
+#[cfg(feature = "wss")]
+use super::{WebSocketConnector, WebSocketTransport};
 
 /// Trait implemented by simple wrapper types that create a connection to an OPC-UA server.
 ///
@@ -44,8 +49,135 @@ pub trait ConnectorBuilder: Send + Sync {
     fn build(self) -> Result<Self::ConnectorType, Error>;
 }
 
+/// Connector builder that selects the built-in connector from the endpoint URL scheme.
+pub struct DefaultConnectorBuilder {
+    endpoint_url: String,
+    #[cfg(feature = "wss")]
+    wss_tls: WssTlsConfig,
+}
+
+impl DefaultConnectorBuilder {
+    /// Creates a default connector builder for the given endpoint URL.
+    pub fn new(endpoint_url: impl Into<String>) -> Self {
+        Self {
+            endpoint_url: endpoint_url.into(),
+            #[cfg(feature = "wss")]
+            wss_tls: WssTlsConfig::Default,
+        }
+    }
+
+    /// Creates a default connector builder with explicit WSS TLS settings.
+    #[cfg(feature = "wss")]
+    pub fn with_wss_tls(endpoint_url: impl Into<String>, wss_tls: WssTlsConfig) -> Self {
+        Self {
+            endpoint_url: endpoint_url.into(),
+            wss_tls,
+        }
+    }
+}
+
+/// Built-in connector selected from an endpoint URL scheme.
+pub enum DefaultConnector {
+    /// OPC UA TCP connector.
+    Tcp(TcpConnector),
+    /// OPC UA secure WebSocket connector.
+    #[cfg(feature = "wss")]
+    Ws(WebSocketConnector),
+}
+
+/// Built-in transport selected from an endpoint URL scheme.
+pub enum DefaultTransport {
+    /// OPC UA TCP transport.
+    Tcp(TcpTransport),
+    /// OPC UA secure WebSocket transport.
+    #[cfg(feature = "wss")]
+    Ws(WebSocketTransport),
+}
+
+impl Transport for DefaultTransport {
+    async fn poll(&mut self) -> TransportPollResult {
+        match self {
+            Self::Tcp(transport) => transport.poll().await,
+            #[cfg(feature = "wss")]
+            Self::Ws(transport) => transport.poll().await,
+        }
+    }
+
+    fn connected_url(&self) -> &str {
+        match self {
+            Self::Tcp(transport) => transport.connected_url(),
+            #[cfg(feature = "wss")]
+            Self::Ws(transport) => transport.connected_url(),
+        }
+    }
+}
+
+impl Connector for DefaultConnector {
+    type Transport = DefaultTransport;
+
+    async fn connect(
+        &self,
+        channel: Arc<SecureChannelState>,
+        outgoing_recv: RequestRecv,
+        config: TransportConfiguration,
+    ) -> Result<Self::Transport, Error> {
+        match self {
+            Self::Tcp(connector) => connector
+                .connect(channel, outgoing_recv, config)
+                .await
+                .map(DefaultTransport::Tcp),
+            #[cfg(feature = "wss")]
+            Self::Ws(connector) => connector
+                .connect(channel, outgoing_recv, config)
+                .await
+                .map(DefaultTransport::Ws),
+        }
+    }
+
+    fn default_endpoint(&self) -> EndpointDescription {
+        match self {
+            Self::Tcp(connector) => connector.default_endpoint(),
+            #[cfg(feature = "wss")]
+            Self::Ws(connector) => connector.default_endpoint(),
+        }
+    }
+}
+
+impl ConnectorBuilder for DefaultConnectorBuilder {
+    type ConnectorType = DefaultConnector;
+
+    fn build(self) -> Result<Self::ConnectorType, Error> {
+        if is_opc_ua_binary_url(&self.endpoint_url) {
+            TcpConnector::new(&self.endpoint_url).map(DefaultConnector::Tcp)
+        } else if is_opc_ua_wss_url(&self.endpoint_url) {
+            #[cfg(feature = "wss")]
+            {
+                WebSocketConnector::new(&self.endpoint_url, self.wss_tls).map(DefaultConnector::Ws)
+            }
+            #[cfg(not(feature = "wss"))]
+            {
+                Err(Error::new(
+                    StatusCode::BadTcpEndpointUrlInvalid,
+                    format!(
+                        "Endpoint url {} uses opc.wss, but the client was built without the wss feature",
+                        self.endpoint_url
+                    ),
+                ))
+            }
+        } else {
+            Err(Error::new(
+                StatusCode::BadTcpEndpointUrlInvalid,
+                format!(
+                    "Endpoint url {} is not a valid / supported url",
+                    self.endpoint_url
+                ),
+            ))
+        }
+    }
+}
+
 impl ConnectorBuilder for String {
-    type ConnectorType = TcpConnector;
+    type ConnectorType = DefaultConnector;
 
     fn build(self) -> Result<Self::ConnectorType, Error> {
         ConnectorBuilder::build(self.as_str())
@@ -53,18 +185,26 @@ impl ConnectorBuilder for String {
 }
 
 impl ConnectorBuilder for &str {
-    type ConnectorType = TcpConnector;
+    type ConnectorType = DefaultConnector;
 
     fn build(self) -> Result<Self::ConnectorType, Error> {
-        TcpConnector::new(self)
+        DefaultConnectorBuilder::new(self).build()
     }
 }
 
 impl ConnectorBuilder for &String {
-    type ConnectorType = TcpConnector;
+    type ConnectorType = DefaultConnector;
 
     fn build(self) -> Result<Self::ConnectorType, Error> {
         ConnectorBuilder::build(self.as_str())
+    }
+}
+
+impl ConnectorBuilder for EndpointDescription {
+    type ConnectorType = DefaultConnector;
+
+    fn build(self) -> Result<Self::ConnectorType, Error> {
+        DefaultConnectorBuilder::new(self.endpoint_url.as_ref()).build()
     }
 }
 

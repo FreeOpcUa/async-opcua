@@ -1,6 +1,6 @@
 [package]
 name = "async-opcua-core"
-version = "0.18.0"
+version = "0.19.0"
 description = "OPC UA core utils for client and server"
 authors = ["Adam Lock <locka99@gmail.com>", "Einar Omang <einar@omang.com>"]
 homepage = "https://github.com/freeopcua/async-opcua"
@@ -24,7 +24,7 @@ sha2 = { workspace = true }
 parking_lot = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true }
-serde_yaml = { workspace = true }
+serde_norway = { workspace = true }
 shellexpand = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
@@ -32,12 +32,22 @@ tokio-util = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 
-async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.18.0" }
-async-opcua-types = { path = "../async-opcua-types", version = "0.18.0" }
+async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.19.0", default-features = false }
+async-opcua-types = { path = "../async-opcua-types", version = "0.19.0" }
+
+# opc.wss transport adapter (feature 009 / R5 / FR-044), gated by the `wss` feature.
+# Shared WebSocket<->byte-stream adapter lives here so both client and server reuse it.
+futures = { workspace = true, optional = true }
+tokio-tungstenite = { workspace = true, optional = true }
 
 [dev-dependencies]
 async-opcua-core = { path = ".", features = ["legacy-crypto"] }
 tempfile = { version = "^3" }
+criterion = { workspace = true }
+
+[[bench]]
+name = "secure_channel"
+harness = false
 
 [lints]
 workspace = true
@@ -47,3 +57,5 @@ env_expansion = ["dep:shellexpand"]
 # Forwards to the crypto crate's legacy policy support; used by tests
 # covering the legacy security policies.
 legacy-crypto = ["async-opcua-crypto/legacy-crypto"]
+# opc.wss (WebSocket) transport adapter (feature 009 / R5 / FR-044).
+wss = ["dep:tokio-tungstenite", "dep:futures"]

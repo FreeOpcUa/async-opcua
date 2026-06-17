@@ -82,19 +82,3 @@ impl opcua::types::BinaryDecodable for PubSubConfigurationRefDataType {
         })
     }
 }
-unsafe impl Send for PubSubConfigurationRefDataType
-where
-    super::enums::PubSubConfigurationRefMask: Send,
-    u16: Send,
-    u16: Send,
-    u16: Send,
-{
-}
-unsafe impl Sync for PubSubConfigurationRefDataType
-where
-    super::enums::PubSubConfigurationRefMask: Sync,
-    u16: Sync,
-    u16: Sync,
-    u16: Sync,
-{
-}

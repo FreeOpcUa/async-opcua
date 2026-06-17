@@ -94,25 +94,3 @@ impl opcua::types::BinaryDecodable for ReferenceDescription {
         })
     }
 }
-unsafe impl Send for ReferenceDescription
-where
-    opcua::types::node_id::NodeId: Send,
-    bool: Send,
-    opcua::types::expanded_node_id::ExpandedNodeId: Send,
-    opcua::types::qualified_name::QualifiedName: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-    super::enums::NodeClass: Send,
-    opcua::types::expanded_node_id::ExpandedNodeId: Send,
-{
-}
-unsafe impl Sync for ReferenceDescription
-where
-    opcua::types::node_id::NodeId: Sync,
-    bool: Sync,
-    opcua::types::expanded_node_id::ExpandedNodeId: Sync,
-    opcua::types::qualified_name::QualifiedName: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-    super::enums::NodeClass: Sync,
-    opcua::types::expanded_node_id::ExpandedNodeId: Sync,
-{
-}

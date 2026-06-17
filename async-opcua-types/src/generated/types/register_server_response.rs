@@ -71,7 +71,3 @@ impl opcua::types::BinaryDecodable for RegisterServerResponse {
         Ok(Self { response_header })
     }
 }
-unsafe impl Send for RegisterServerResponse where opcua::types::response_header::ResponseHeader: Send
-{}
-unsafe impl Sync for RegisterServerResponse where opcua::types::response_header::ResponseHeader: Sync
-{}

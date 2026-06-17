@@ -1,6 +1,6 @@
-use std::net::SocketAddr;
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
+use crate::config::TcpKeepaliveConfig;
 use crate::transport::state::SecureChannelState;
 use crate::transport::stream::{wait_for_reverse_hello, StreamConnection};
 use crate::transport::{StreamConnector, StreamTransport};
@@ -18,6 +18,21 @@ use tracing::{debug, error, warn};
 /// Type alias for a stream transport over TCP streams.
 pub type TcpTransport = StreamTransport<ReadHalf<TcpStream>, WriteHalf<TcpStream>>;
 
+fn configure_tcp_stream(stream: &TcpStream, addr: SocketAddr, tcp_keepalive: &TcpKeepaliveConfig) {
+    if let Err(e) = stream.set_nodelay(true) {
+        warn!("Failed to set TCP_NODELAY for {addr}: {e}");
+    }
+    if tcp_keepalive.enabled {
+        let keepalive = socket2::TcpKeepalive::new()
+            .with_time(Duration::from_secs(tcp_keepalive.idle_secs))
+            .with_interval(Duration::from_secs(tcp_keepalive.interval_secs))
+            .with_retries(tcp_keepalive.retries);
+        if let Err(e) = socket2::SockRef::from(stream).set_tcp_keepalive(&keepalive) {
+            warn!("Failed to set TCP keep-alive for {addr}: {e}");
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 /// Internal configuration options for transports.
 pub struct TransportConfiguration {
@@ -30,6 +45,10 @@ pub struct TransportConfiguration {
     pub max_message_size: usize,
     /// Maximum number of chunks in a message.
     pub max_chunk_count: usize,
+    /// Timeout for opening outbound TCP connections.
+    pub connect_timeout: Duration,
+    /// TCP keep-alive settings for long-lived connections.
+    pub tcp_keepalive: TcpKeepaliveConfig,
 }
 /// Connector for `opc.tcp` transport.
 pub struct TcpConnector {
@@ -54,6 +73,8 @@ impl TcpConnector {
     async fn connect_tcp(
         endpoint_url: String,
         decoding_options: DecodingOptions,
+        connect_timeout: Duration,
+        tcp_keepalive: TcpKeepaliveConfig,
     ) -> Result<StreamConnection<ReadHalf<TcpStream>, WriteHalf<TcpStream>>, Error> {
         let (host, port) = hostname_port_from_url(
             &endpoint_url,
@@ -93,13 +114,29 @@ impl TcpConnector {
 
         debug!("Connecting to {} with url {}", addr, endpoint_url);
 
-        let socket = TcpStream::connect(addr).await.map_err(|err| {
-            error!("Could not connect to host {}, {:?}", addr, err);
-            Error::new(
-                StatusCode::BadCommunicationError,
-                format!("Could not connect to host {}, {:?}", addr, err),
-            )
-        })?;
+        let socket = tokio::time::timeout(connect_timeout, TcpStream::connect(addr))
+            .await
+            .map_err(|_| {
+                error!(
+                    "Timed out connecting to host {} after {:?}",
+                    addr, connect_timeout
+                );
+                Error::new(
+                    StatusCode::BadTimeout,
+                    format!(
+                        "Timed out connecting to host {} after {:?}",
+                        addr, connect_timeout
+                    ),
+                )
+            })?
+            .map_err(|err| {
+                error!("Could not connect to host {}, {:?}", addr, err);
+                Error::new(
+                    StatusCode::BadCommunicationError,
+                    format!("Could not connect to host {}, {:?}", addr, err),
+                )
+            })?;
+        configure_tcp_stream(&socket, addr, &tcp_keepalive);
 
         let (reader, writer) = tokio::io::split(socket);
         Ok(StreamConnection::new(
@@ -119,7 +156,19 @@ impl Connector for TcpConnector {
         outgoing_recv: tokio::sync::mpsc::Receiver<OutgoingMessage>,
         config: TransportConfiguration,
     ) -> Result<TcpTransport, Error> {
-        let inner = StreamConnector::new(Self::connect_tcp, self.endpoint_url.clone());
+        let connect_timeout = config.connect_timeout;
+        let tcp_keepalive = config.tcp_keepalive;
+        let inner = StreamConnector::new(
+            move |endpoint_url: String, decoding_options: DecodingOptions| {
+                Self::connect_tcp(
+                    endpoint_url,
+                    decoding_options,
+                    connect_timeout,
+                    tcp_keepalive,
+                )
+            },
+            self.endpoint_url.clone(),
+        );
         inner.connect(channel, outgoing_recv, config).await
     }
 
@@ -235,6 +284,7 @@ impl ReverseTcpConnector {
         verifier: &(dyn ReverseHelloVerifier + Send + Sync),
         endpoint_url: String,
         decoding_options: DecodingOptions,
+        tcp_keepalive: TcpKeepaliveConfig,
     ) -> Result<StreamConnection<ReadHalf<TcpStream>, WriteHalf<TcpStream>>, Error> {
         let (stream, addr) = listener.accept().await.map_err(|err| {
             error!(
@@ -250,6 +300,7 @@ impl ReverseTcpConnector {
             )
         })?;
 
+        configure_tcp_stream(&stream, addr, &tcp_keepalive);
         debug!("Accepted connection from {} for url {}", addr, endpoint_url);
 
         let (reader, writer) = tokio::io::split(stream);
@@ -285,6 +336,7 @@ impl Connector for ReverseTcpConnector {
         match &self.listener {
             TcpConnectorReceiver::Listener(listener) => {
                 let verifier = self.verifier.as_ref();
+                let tcp_keepalive = config.tcp_keepalive;
                 let inner = StreamConnector::new(
                     |endpoint_url: String, decoding_options: DecodingOptions| {
                         Self::reverse_connect_tcp(
@@ -292,6 +344,7 @@ impl Connector for ReverseTcpConnector {
                             verifier,
                             endpoint_url,
                             decoding_options,
+                            tcp_keepalive,
                         )
                     },
                     self.target_endpoint.endpoint_url.to_string(),
@@ -307,6 +360,7 @@ impl Connector for ReverseTcpConnector {
                     )
                 })?;
                 let verifier = self.verifier.as_ref();
+                let tcp_keepalive = config.tcp_keepalive;
                 let inner = StreamConnector::new(
                     |endpoint_url: String, decoding_options: DecodingOptions| {
                         Self::reverse_connect_tcp(
@@ -314,6 +368,7 @@ impl Connector for ReverseTcpConnector {
                             verifier,
                             endpoint_url,
                             decoding_options,
+                            tcp_keepalive,
                         )
                     },
                     self.target_endpoint.endpoint_url.to_string(),

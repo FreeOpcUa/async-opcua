@@ -78,15 +78,3 @@ impl opcua::types::BinaryDecodable for FindServersResponse {
         })
     }
 }
-unsafe impl Send for FindServersResponse
-where
-    opcua::types::response_header::ResponseHeader: Send,
-    Option<Vec<super::application_description::ApplicationDescription>>: Send,
-{
-}
-unsafe impl Sync for FindServersResponse
-where
-    opcua::types::response_header::ResponseHeader: Sync,
-    Option<Vec<super::application_description::ApplicationDescription>>: Sync,
-{
-}

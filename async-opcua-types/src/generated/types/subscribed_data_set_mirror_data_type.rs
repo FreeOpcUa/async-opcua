@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for SubscribedDataSetMirrorDataType {
         })
     }
 }
-unsafe impl Send for SubscribedDataSetMirrorDataType
-where
-    opcua::types::string::UAString: Send,
-    Option<Vec<super::role_permission_type::RolePermissionType>>: Send,
-{
-}
-unsafe impl Sync for SubscribedDataSetMirrorDataType
-where
-    opcua::types::string::UAString: Sync,
-    Option<Vec<super::role_permission_type::RolePermissionType>>: Sync,
-{
-}

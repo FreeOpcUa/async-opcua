@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for SemanticChangeStructureDataType {
         })
     }
 }
-unsafe impl Send for SemanticChangeStructureDataType
-where
-    opcua::types::node_id::NodeId: Send,
-    opcua::types::node_id::NodeId: Send,
-{
-}
-unsafe impl Sync for SemanticChangeStructureDataType
-where
-    opcua::types::node_id::NodeId: Sync,
-    opcua::types::node_id::NodeId: Sync,
-{
-}

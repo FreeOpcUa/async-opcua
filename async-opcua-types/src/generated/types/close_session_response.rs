@@ -71,5 +71,3 @@ impl opcua::types::BinaryDecodable for CloseSessionResponse {
         Ok(Self { response_header })
     }
 }
-unsafe impl Send for CloseSessionResponse where opcua::types::response_header::ResponseHeader: Send {}
-unsafe impl Sync for CloseSessionResponse where opcua::types::response_header::ResponseHeader: Sync {}

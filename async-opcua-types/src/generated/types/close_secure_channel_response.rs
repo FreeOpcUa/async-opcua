@@ -70,11 +70,3 @@ impl opcua::types::BinaryDecodable for CloseSecureChannelResponse {
         Ok(Self { response_header })
     }
 }
-unsafe impl Send for CloseSecureChannelResponse where
-    opcua::types::response_header::ResponseHeader: Send
-{
-}
-unsafe impl Sync for CloseSecureChannelResponse where
-    opcua::types::response_header::ResponseHeader: Sync
-{
-}

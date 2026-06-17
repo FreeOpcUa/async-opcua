@@ -15,6 +15,8 @@ pub mod sequence_number;
 pub mod tcp_codec;
 pub mod tcp_types;
 pub mod url;
+#[cfg(feature = "wss")]
+pub mod wss;
 
 use bytes::{Bytes, BytesMut};
 

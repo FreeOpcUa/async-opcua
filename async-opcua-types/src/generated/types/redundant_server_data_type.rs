@@ -78,17 +78,3 @@ impl opcua::types::BinaryDecodable for RedundantServerDataType {
         })
     }
 }
-unsafe impl Send for RedundantServerDataType
-where
-    opcua::types::string::UAString: Send,
-    u8: Send,
-    super::enums::ServerState: Send,
-{
-}
-unsafe impl Sync for RedundantServerDataType
-where
-    opcua::types::string::UAString: Sync,
-    u8: Sync,
-    super::enums::ServerState: Sync,
-{
-}

@@ -86,21 +86,3 @@ impl opcua::types::BinaryDecodable for ReadEventDetails2 {
         })
     }
 }
-unsafe impl Send for ReadEventDetails2
-where
-    opcua::types::Counter: Send,
-    opcua::types::data_types::UtcTime: Send,
-    opcua::types::data_types::UtcTime: Send,
-    super::event_filter::EventFilter: Send,
-    bool: Send,
-{
-}
-unsafe impl Sync for ReadEventDetails2
-where
-    opcua::types::Counter: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-    super::event_filter::EventFilter: Sync,
-    bool: Sync,
-{
-}

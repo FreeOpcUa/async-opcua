@@ -73,15 +73,3 @@ impl opcua::types::BinaryDecodable for DecimalDataType {
         })
     }
 }
-unsafe impl Send for DecimalDataType
-where
-    i16: Send,
-    opcua::types::byte_string::ByteString: Send,
-{
-}
-unsafe impl Sync for DecimalDataType
-where
-    i16: Sync,
-    opcua::types::byte_string::ByteString: Sync,
-{
-}

@@ -83,17 +83,3 @@ impl opcua::types::BinaryDecodable for ModifyMonitoredItemsResponse {
         })
     }
 }
-unsafe impl Send for ModifyMonitoredItemsResponse
-where
-    opcua::types::response_header::ResponseHeader: Send,
-    Option<Vec<super::monitored_item_modify_result::MonitoredItemModifyResult>>: Send,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Send,
-{
-}
-unsafe impl Sync for ModifyMonitoredItemsResponse
-where
-    opcua::types::response_header::ResponseHeader: Sync,
-    Option<Vec<super::monitored_item_modify_result::MonitoredItemModifyResult>>: Sync,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Sync,
-{
-}

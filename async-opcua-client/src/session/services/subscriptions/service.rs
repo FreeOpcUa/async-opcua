@@ -452,9 +452,13 @@ impl UARequest for SetPublishingMode {
                     self.subscription_ids.len(),
                     num_results
                 );
-                return Err(Error::new(StatusCode::BadUnexpectedError, format!("set_publishing_mode returned an incorrect number of results. Expected {}, got {}",
-                    self.subscription_ids.len(),
-                    num_results)
+                return Err(Error::new(
+                    StatusCode::BadUnexpectedError,
+                    format!(
+                        "set_publishing_mode returned an incorrect number of results. Expected {}, got {}",
+                        self.subscription_ids.len(),
+                        num_results
+                    ),
                 ));
             }
 
@@ -831,6 +835,22 @@ impl UARequest for DeleteSubscriptions {
         let _h = span.enter();
         if let ResponseMessage::DeleteSubscriptions(response) = response {
             process_service_result(&response.response_header)?;
+            let num_results = response
+                .results
+                .as_ref()
+                .map(|l| l.len())
+                .unwrap_or_default();
+
+            if num_results != self.subscription_ids.len() {
+                builder_error!(
+                    self,
+                    "DeleteSubscriptions: server returned wrong number of results"
+                );
+                return Err(Error::new(
+                    StatusCode::BadUnknownResponse,
+                    "DeleteSubscriptions: server returned wrong number of results",
+                ));
+            }
 
             builder_debug!(self, "delete_subscriptions success");
             Ok(*response)
@@ -1017,9 +1037,13 @@ impl UARequest for CreateMonitoredItems<'_> {
                         results.len(),
                         num_items
                     );
-                    return Err(Error::new(StatusCode::BadUnexpectedError, format!("create_monitored_items, unexpected number of results. Got {}, expected {}",
-                        results.len(),
-                        num_items)
+                    return Err(Error::new(
+                        StatusCode::BadUnexpectedError,
+                        format!(
+                            "create_monitored_items, unexpected number of results. Got {}, expected {}",
+                            results.len(),
+                            num_items
+                        ),
                     ));
                 }
                 builder_debug!(self, "create_monitored_items, {} items created", num_items);
@@ -1929,7 +1953,12 @@ impl Session {
             ))
         } else {
             let result = self.delete_subscriptions(&[subscription_id]).await?;
-            Ok(result[0])
+            result.into_iter().next().ok_or_else(|| {
+                Error::new(
+                    StatusCode::BadUnexpectedError,
+                    "delete_subscription: server returned no results",
+                )
+            })
         }
     }
 
@@ -2410,7 +2439,10 @@ impl Session {
 
         // But if it didn't work, then some or all subscriptions have to be remade.
         if !subscription_ids_to_recreate.is_empty() {
-            session_warn!(self, "Some or all of the existing subscriptions could not be transferred and must be created manually");
+            session_warn!(
+                self,
+                "Some or all of the existing subscriptions could not be transferred and must be created manually"
+            );
         }
 
         for subscription_id in subscription_ids_to_recreate {

@@ -78,15 +78,3 @@ impl opcua::types::BinaryDecodable for AddReferencesRequest {
         })
     }
 }
-unsafe impl Send for AddReferencesRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    Option<Vec<super::add_references_item::AddReferencesItem>>: Send,
-{
-}
-unsafe impl Sync for AddReferencesRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    Option<Vec<super::add_references_item::AddReferencesItem>>: Sync,
-{
-}

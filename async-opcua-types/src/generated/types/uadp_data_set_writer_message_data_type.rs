@@ -82,19 +82,3 @@ impl opcua::types::BinaryDecodable for UadpDataSetWriterMessageDataType {
         })
     }
 }
-unsafe impl Send for UadpDataSetWriterMessageDataType
-where
-    super::enums::UadpDataSetMessageContentMask: Send,
-    u16: Send,
-    u16: Send,
-    u16: Send,
-{
-}
-unsafe impl Sync for UadpDataSetWriterMessageDataType
-where
-    super::enums::UadpDataSetMessageContentMask: Sync,
-    u16: Sync,
-    u16: Sync,
-    u16: Sync,
-{
-}

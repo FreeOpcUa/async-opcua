@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for PortableNodeId {
         })
     }
 }
-unsafe impl Send for PortableNodeId
-where
-    opcua::types::string::UAString: Send,
-    opcua::types::node_id::NodeId: Send,
-{
-}
-unsafe impl Sync for PortableNodeId
-where
-    opcua::types::string::UAString: Sync,
-    opcua::types::node_id::NodeId: Sync,
-{
-}

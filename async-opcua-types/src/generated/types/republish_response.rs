@@ -78,15 +78,3 @@ impl opcua::types::BinaryDecodable for RepublishResponse {
         })
     }
 }
-unsafe impl Send for RepublishResponse
-where
-    opcua::types::response_header::ResponseHeader: Send,
-    super::notification_message::NotificationMessage: Send,
-{
-}
-unsafe impl Sync for RepublishResponse
-where
-    opcua::types::response_header::ResponseHeader: Sync,
-    super::notification_message::NotificationMessage: Sync,
-{
-}

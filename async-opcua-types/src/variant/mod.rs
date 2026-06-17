@@ -247,17 +247,42 @@ impl Variant {
                 // Array length
                 let mut size = 4;
                 // Size of each value
-                size += array
-                    .values
-                    .iter()
-                    .map(|v| Variant::byte_len_variant_value(v, ctx))
-                    .sum::<usize>();
+                size += if let Some(value_len) =
+                    Variant::fixed_scalar_value_byte_len(array.value_type)
+                {
+                    array.values.len() * value_len
+                } else {
+                    array
+                        .values
+                        .iter()
+                        .map(|v| Variant::byte_len_variant_value(v, ctx))
+                        .sum::<usize>()
+                };
                 if let Some(ref dimensions) = array.dimensions {
                     // Dimensions (size + num elements)
                     size += 4 + dimensions.len() * 4;
                 }
                 size
             }
+        }
+    }
+
+    fn fixed_scalar_value_byte_len(value_type: VariantScalarTypeId) -> Option<usize> {
+        match value_type {
+            VariantScalarTypeId::Boolean
+            | VariantScalarTypeId::SByte
+            | VariantScalarTypeId::Byte => Some(1),
+            VariantScalarTypeId::Int16 | VariantScalarTypeId::UInt16 => Some(2),
+            VariantScalarTypeId::Int32
+            | VariantScalarTypeId::UInt32
+            | VariantScalarTypeId::Float
+            | VariantScalarTypeId::StatusCode => Some(4),
+            VariantScalarTypeId::Int64
+            | VariantScalarTypeId::UInt64
+            | VariantScalarTypeId::Double
+            | VariantScalarTypeId::DateTime => Some(8),
+            VariantScalarTypeId::Guid => Some(16),
+            _ => None,
         }
     }
 

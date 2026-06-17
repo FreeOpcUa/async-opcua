@@ -91,31 +91,3 @@ impl opcua::types::BinaryDecodable for JsonActionMetaDataMessage {
         })
     }
 }
-unsafe impl Send for JsonActionMetaDataMessage
-where
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    u16: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::data_types::UtcTime: Send,
-    Option<Vec<super::action_target_data_type::ActionTargetDataType>>: Send,
-    super::data_set_meta_data_type::DataSetMetaDataType: Send,
-    super::data_set_meta_data_type::DataSetMetaDataType: Send,
-    Option<Vec<super::action_method_data_type::ActionMethodDataType>>: Send,
-{
-}
-unsafe impl Sync for JsonActionMetaDataMessage
-where
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    u16: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-    Option<Vec<super::action_target_data_type::ActionTargetDataType>>: Sync,
-    super::data_set_meta_data_type::DataSetMetaDataType: Sync,
-    super::data_set_meta_data_type::DataSetMetaDataType: Sync,
-    Option<Vec<super::action_method_data_type::ActionMethodDataType>>: Sync,
-{
-}

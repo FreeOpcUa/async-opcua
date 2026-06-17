@@ -4,6 +4,7 @@ mod fallback;
 #[cfg(feature = "json")]
 mod json;
 mod node_id;
+mod recursion_dos;
 mod variant;
 #[cfg(feature = "xml")]
 mod xml;

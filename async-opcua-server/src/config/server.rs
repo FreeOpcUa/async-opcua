@@ -4,6 +4,8 @@
 
 //! Provides configuration settings for the server including serialization and deserialization from file.
 
+#[cfg(feature = "wss")]
+use std::sync::Arc;
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
@@ -34,10 +36,78 @@ pub const ANONYMOUS_USER_TOKEN_ID: &str = "ANONYMOUS";
 pub struct TcpConfig {
     /// Timeout for hello on a session in seconds
     pub hello_timeout: u32,
+    /// TCP keep-alive settings for long-lived connections.
+    #[serde(default)]
+    pub tcp_keepalive: TcpKeepaliveConfig,
     /// The hostname to supply in the endpoints
     pub host: String,
     /// The port number of the service
     pub port: u16,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
+/// TCP keep-alive settings.
+pub struct TcpKeepaliveConfig {
+    /// Whether TCP keep-alive is enabled.
+    #[serde(default = "tcp_keepalive_defaults::enabled")]
+    pub enabled: bool,
+    /// Idle time before keep-alive probes are sent.
+    #[serde(default = "tcp_keepalive_defaults::idle_secs")]
+    pub idle_secs: u64,
+    /// Interval between keep-alive probes.
+    #[serde(default = "tcp_keepalive_defaults::interval_secs")]
+    pub interval_secs: u64,
+    /// Number of failed keep-alive probes before the peer is considered dead.
+    #[serde(default = "tcp_keepalive_defaults::retries")]
+    pub retries: u32,
+}
+
+impl Default for TcpKeepaliveConfig {
+    fn default() -> Self {
+        Self {
+            enabled: tcp_keepalive_defaults::enabled(),
+            idle_secs: tcp_keepalive_defaults::idle_secs(),
+            interval_secs: tcp_keepalive_defaults::interval_secs(),
+            retries: tcp_keepalive_defaults::retries(),
+        }
+    }
+}
+
+/// TLS server configuration used for `opc.wss` listeners.
+#[cfg(feature = "wss")]
+#[derive(Clone)]
+pub struct WssServerConfig(pub(crate) Arc<rustls::ServerConfig>);
+
+#[cfg(feature = "wss")]
+impl std::fmt::Debug for WssServerConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("WssServerConfig(<redacted>)")
+    }
+}
+
+#[cfg(feature = "wss")]
+impl PartialEq for WssServerConfig {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+mod tcp_keepalive_defaults {
+    pub(super) fn enabled() -> bool {
+        true
+    }
+
+    pub(super) fn idle_secs() -> u64 {
+        60
+    }
+
+    pub(super) fn interval_secs() -> u64 {
+        15
+    }
+
+    pub(super) fn retries() -> u32 {
+        4
+    }
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Default)]
@@ -172,6 +242,14 @@ fn is_argon2id_password_hash(password_hash: &str) -> bool {
 mod tests {
     use super::*;
 
+    /// H3/N10: the per-source-IP connection cap config field exists; default 0 (unlimited,
+    /// opt-in) is deliberate to avoid breaking NAT/gateway deployments. Per-IP enforcement
+    /// behaviour is covered by integration/load testing (SC-002).
+    #[test]
+    fn max_connections_per_ip_defaults_to_unlimited_optin() {
+        assert_eq!(ServerConfig::default().max_connections_per_ip, 0);
+    }
+
     #[test]
     fn user_pass_stores_password_hash_not_plaintext() {
         let token = ServerUserToken::user_pass("brew-operator", "correct-password");
@@ -249,6 +327,10 @@ pub struct ServerConfig {
     /// Maximum number of active TCP connections before new incoming sockets are closed.
     #[serde(default = "defaults::max_connections")]
     pub max_connections: usize,
+    /// Maximum number of concurrent connections from a single source IP.
+    /// 0 = unlimited (opt-in); set to cap concurrent connections from a single source IP.
+    #[serde(default = "defaults::max_connections_per_ip")]
+    pub max_connections_per_ip: usize,
     /// Server OPA UA limits
     #[serde(default)]
     pub limits: Limits,
@@ -309,6 +391,14 @@ pub struct ServerConfig {
     /// Expected OAuth2 audience for issued JWT identity tokens.
     #[serde(default)]
     pub oauth2_audience: Option<String>,
+    /// TLS server configuration used for `opc.wss` listeners.
+    ///
+    /// Public so `ServerConfig` stays constructible via struct literal (like its sibling
+    /// fields); the inner `rustls::ServerConfig` remains crate-private, so external code
+    /// can only set this via the builder's `websocket_tls` / `websocket_rustls_config`.
+    #[cfg(feature = "wss")]
+    #[serde(skip)]
+    pub wss_tls: Option<WssServerConfig>,
 }
 
 mod defaults {
@@ -344,6 +434,10 @@ mod defaults {
 
     pub(super) fn max_connections() -> usize {
         constants::MAX_CONNECTIONS
+    }
+
+    pub(super) fn max_connections_per_ip() -> usize {
+        0
     }
 }
 
@@ -464,8 +558,10 @@ impl Default for ServerConfig {
                 host: "127.0.0.1".to_string(),
                 port: constants::DEFAULT_RUST_OPC_UA_SERVER_PORT,
                 hello_timeout: constants::DEFAULT_HELLO_TIMEOUT_SECONDS,
+                tcp_keepalive: TcpKeepaliveConfig::default(),
             },
             max_connections: defaults::max_connections(),
+            max_connections_per_ip: defaults::max_connections_per_ip(),
             limits: Limits::default(),
             user_tokens: BTreeMap::new(),
             locale_ids: vec!["en".to_string()],
@@ -483,6 +579,8 @@ impl Default for ServerConfig {
             allow_legacy_crypto: false,
             oauth2_issuer: None,
             oauth2_audience: None,
+            #[cfg(feature = "wss")]
+            wss_tls: None,
         }
     }
 }
@@ -528,6 +626,7 @@ impl ServerConfig {
                 host,
                 port,
                 hello_timeout: constants::DEFAULT_HELLO_TIMEOUT_SECONDS,
+                tcp_keepalive: TcpKeepaliveConfig::default(),
             },
             locale_ids,
             user_tokens,

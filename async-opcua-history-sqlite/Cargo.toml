@@ -1,6 +1,6 @@
 [package]
 name = "async-opcua-history-sqlite"
-version = "0.18.0"
+version = "0.19.0"
 description = "OPC UA History Data Access (Part 11) SQLite backend"
 authors = ["Adam Lock <locka99@gmail.com>", "Einar Omang <einar@omang.com>"]
 license = "MPL-2.0"
@@ -11,9 +11,9 @@ publish = false
 name = "opcua_history_sqlite"
 
 [dependencies]
-async-opcua-core = { path = "../async-opcua-core", version = "0.18.0" }
-async-opcua-types = { path = "../async-opcua-types", version = "0.18.0" }
-async-opcua-server = { path = "../async-opcua-server", version = "0.18.0" }
+async-opcua-core = { path = "../async-opcua-core", version = "0.19.0" }
+async-opcua-types = { path = "../async-opcua-types", version = "0.19.0" }
+async-opcua-server = { path = "../async-opcua-server", version = "0.19.0" }
 tokio = { workspace = true }
 tracing = { workspace = true }
 rusqlite = { version = "0.31.0", features = ["bundled"] }

@@ -64,5 +64,3 @@ impl opcua::types::BinaryDecodable for NotificationData {
         Ok(Self {})
     }
 }
-unsafe impl Send for NotificationData {}
-unsafe impl Sync for NotificationData {}

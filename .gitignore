@@ -20,3 +20,14 @@ local/
 
 # Stray runtime logs
 *.log
+
+# Prevent recurrence of throwaway developer debris (feature 009 / SEC-P3)
+/fix_*.py
+/fix_*.sh
+/pr*.diff
+/pr_*.json
+/pr_*.txt
+/client.py
+/server.py
+/orchestrate.sh
+/deploy.sh

@@ -11,7 +11,7 @@ use opcua_types::{
     ByteString, Error, MessageSecurityMode, NodeId, StatusCode, UAString, UserTokenPolicy,
     UserTokenType,
 };
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 
 use crate::identity_token::{
     POLICY_ID_ANONYMOUS, POLICY_ID_ISSUED_TOKEN_NONE, POLICY_ID_ISSUED_TOKEN_RSA_15,
@@ -24,6 +24,8 @@ use super::{
     address_space::AccessLevel, config::ANONYMOUS_USER_TOKEN_ID, ServerEndpoint, ServerUserToken,
 };
 use std::{collections::BTreeMap, fmt::Debug};
+
+const DECOY_PASSWORD_HASH: &str = "$argon2id$v=19$m=19456,t=2,p=1$ZGVjb3ktc2FsdC0xMjM0NTY$tv6WGcT9uuRv23+sSjogcakBT+4z2th9rluu4xRk60Q";
 
 /// Debug-safe wrapper around a password.
 #[derive(Clone, PartialEq, Eq)]
@@ -244,7 +246,13 @@ impl AuthManager for DefaultAuthenticator {
                     {
                         verify_password_hash(server_password_hash, token_password)
                     } else {
-                        token_password.is_empty()
+                        // A configured username/password token with no stored hash is passwordless:
+                        // only an empty password is accepted, and successful use is warned below.
+                        let valid = token_password.is_empty();
+                        if !valid {
+                            verify_decoy_password_hash(token_password);
+                        }
+                        valid
                     };
 
                     if !valid {
@@ -257,6 +265,12 @@ impl AuthManager for DefaultAuthenticator {
                             format!("Cannot authenticate user \"{username}\""),
                         ));
                     } else {
+                        if server_user_token.pass.is_none() {
+                            warn!(
+                                "Authenticated passwordless user \"{}\"; this account has no stored password hash and is unauthenticated",
+                                server_user_token.user
+                            );
+                        }
                         return Ok(UserToken(user_token_id.clone()));
                     }
                 }
@@ -266,6 +280,7 @@ impl AuthManager for DefaultAuthenticator {
             "Cannot authenticate \"{}\", user not found for endpoint",
             username
         );
+        verify_decoy_password_hash(token_password);
         Err(Error::new(
             StatusCode::BadIdentityTokenRejected,
             format!("Cannot authenticate \"{username}\""),
@@ -362,6 +377,10 @@ fn verify_password_hash(password_hash: &str, password: &str) -> bool {
                 .verify_password(password.as_bytes(), &parsed_hash)
                 .is_ok()
         })
+}
+
+fn verify_decoy_password_hash(password: &str) {
+    let _ = verify_password_hash(DECOY_PASSWORD_HASH, password);
 }
 
 /// Get the username and password policy ID for the given endpoint.

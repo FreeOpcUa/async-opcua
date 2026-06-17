@@ -83,17 +83,3 @@ impl opcua::types::BinaryDecodable for RegisterServer2Request {
         })
     }
 }
-unsafe impl Send for RegisterServer2Request
-where
-    opcua::types::request_header::RequestHeader: Send,
-    super::registered_server::RegisteredServer: Send,
-    Option<Vec<opcua::types::extension_object::ExtensionObject>>: Send,
-{
-}
-unsafe impl Sync for RegisterServer2Request
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    super::registered_server::RegisteredServer: Sync,
-    Option<Vec<opcua::types::extension_object::ExtensionObject>>: Sync,
-{
-}

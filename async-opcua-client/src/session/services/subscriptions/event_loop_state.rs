@@ -224,10 +224,123 @@ impl<T: Future<Output = Result<bool, Error>>, R: Fn() -> T, S: SubscriptionCache
                             },
                             _ => ()
                         }
+                        // `waiting_for_response` is a backoff latch for
+                        // BadTooManyPublishRequests; it must never persist once
+                        // there are no in-flight publish requests, otherwise if
+                        // the in-flight requests all drain to errors rather than
+                        // an Ok response, the send sites stay gated forever and
+                        // notification delivery freezes while the session stays alive.
+                        if self.futures.is_empty() {
+                            self.waiting_for_response = false;
+                        }
                         ActivityOrNext::Activity(SubscriptionActivity::PublishFailed(e.status()))
                     }
                 }
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        },
+        time::{Duration, Instant},
+    };
+
+    use opcua_types::{Error, StatusCode};
+    use tokio::{sync::watch, time::timeout};
+
+    use super::{SubscriptionCache, SubscriptionEventLoopState};
+    use crate::{session::services::subscriptions::PublishLimits, SubscriptionActivity};
+
+    struct ImmediateCache;
+    impl SubscriptionCache for ImmediateCache {
+        fn next_publish_time(&mut self, _set_last_publish: bool) -> Option<Instant> {
+            // Always due now, so internal ticks fire immediately under tokio time.
+            Some(Instant::now())
+        }
+    }
+
+    fn limits(min: usize, max: usize) -> PublishLimits {
+        PublishLimits {
+            message_roundtrip: Duration::from_millis(10),
+            publish_interval: Duration::ZERO,
+            subscriptions: 1,
+            min_publish_requests: min,
+            max_publish_requests: max,
+        }
+    }
+
+    /// Regression for the downstream QuackPLC 24h-soak freeze (issue #10): after a
+    /// `BadTooManyPublishRequests` sets the `waiting_for_response` backoff latch, if the
+    /// in-flight publish requests drain to errors (never an `Ok`), the client must still
+    /// resume sending Publish. Before the fix the latch stayed set forever and notification
+    /// delivery froze permanently while the session stayed alive — here the second
+    /// `iter_loop()` would hang and the timeout would fire.
+    #[tokio::test]
+    async fn publish_resumes_after_too_many_publish_requests_drains_to_error() {
+        let start = Instant::now();
+        let (trigger_tx, trigger_rx) = watch::channel(start);
+        let (_limits_tx, limits_rx) = watch::channel(limits(0, 1));
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let publish_source = {
+            let calls = calls.clone();
+            move || {
+                let n = calls.fetch_add(1, Ordering::SeqCst);
+                async move {
+                    if n == 0 {
+                        // First (and only in-flight) publish drains to an error that
+                        // sets the backoff latch — the exact stuck state from the report.
+                        Err(Error::new(
+                            StatusCode::BadTooManyPublishRequests,
+                            "too many",
+                        ))
+                    } else {
+                        Ok(false)
+                    }
+                }
+            }
+        };
+
+        let mut state = SubscriptionEventLoopState::new(
+            0,
+            trigger_rx,
+            limits_rx,
+            publish_source,
+            ImmediateCache,
+        );
+
+        // Bootstrap publishing with an external trigger (clears `no_active_subscription`).
+        trigger_tx.send(start + Duration::from_millis(1)).unwrap();
+
+        let first = timeout(Duration::from_secs(2), state.iter_loop())
+            .await
+            .expect("first publish attempt should complete");
+        assert!(
+            matches!(
+                first,
+                SubscriptionActivity::PublishFailed(StatusCode::BadTooManyPublishRequests)
+            ),
+            "expected BadTooManyPublishRequests, got {first:?}"
+        );
+
+        // The latch must have been re-armed once the in-flight set drained, so publishing
+        // resumes. Before the fix this hangs forever (stuck latch) and the timeout fires.
+        let second = timeout(Duration::from_secs(2), state.iter_loop())
+            .await
+            .expect("publishing must resume after BadTooManyPublishRequests drains (issue #10)");
+        assert!(
+            matches!(second, SubscriptionActivity::Publish),
+            "expected a successful Publish after resuming, got {second:?}"
+        );
+        assert!(
+            calls.load(Ordering::SeqCst) >= 2,
+            "publish_source must be invoked again after the backoff drains"
+        );
     }
 }

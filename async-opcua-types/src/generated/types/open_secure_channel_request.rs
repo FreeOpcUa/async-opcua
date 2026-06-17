@@ -97,23 +97,3 @@ impl opcua::types::BinaryDecodable for OpenSecureChannelRequest {
         })
     }
 }
-unsafe impl Send for OpenSecureChannelRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    u32: Send,
-    super::enums::SecurityTokenRequestType: Send,
-    super::enums::MessageSecurityMode: Send,
-    opcua::types::byte_string::ByteString: Send,
-    u32: Send,
-{
-}
-unsafe impl Sync for OpenSecureChannelRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    u32: Sync,
-    super::enums::SecurityTokenRequestType: Sync,
-    super::enums::MessageSecurityMode: Sync,
-    opcua::types::byte_string::ByteString: Sync,
-    u32: Sync,
-{
-}

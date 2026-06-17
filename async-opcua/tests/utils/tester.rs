@@ -15,7 +15,7 @@ use opcua::{
     server::{ServerBuilder, ServerHandle, ServerUserToken, ANONYMOUS_USER_TOKEN_ID},
     types::{MessageSecurityMode, StatusCode},
 };
-use opcua_client::transport::TcpConnector;
+use opcua_client::transport::DefaultConnector;
 use opcua_core::config::Config;
 use opcua_crypto::CertificateStore;
 use opcua_types::{ApplicationDescription, Error};
@@ -216,7 +216,10 @@ pub fn default_server() -> ServerBuilder {
 pub fn default_client(test_id: u16, quick_timeout: bool) -> ClientBuilder {
     let client = ClientBuilder::new()
         .application_name("integration_client")
-        .application_uri("x")
+        // The integration harness shares one keypair (SAN urn:integration_server) for
+        // both peers; the declared applicationUri must match the client cert's SAN or
+        // the server rejects CreateSession with BadCertificateUriInvalid.
+        .application_uri("urn:integration_server")
         .pki_dir(format!("./pki-client/{test_id}"))
         .create_sample_keypair(true)
         .trust_server_certs(true)
@@ -392,7 +395,7 @@ impl Tester {
         security_policy: SecurityPolicy,
         security_mode: MessageSecurityMode,
         user_identity: IdentityToken,
-    ) -> Result<(Arc<Session>, SessionEventLoop<TcpConnector>), Error> {
+    ) -> Result<(Arc<Session>, SessionEventLoop<DefaultConnector>), Error> {
         self.client
             .connect_to_matching_endpoint(
                 (
@@ -411,7 +414,7 @@ impl Tester {
         security_mode: MessageSecurityMode,
         user_identity: IdentityToken,
         path: &str,
-    ) -> Result<(Arc<Session>, SessionEventLoop<TcpConnector>), Error> {
+    ) -> Result<(Arc<Session>, SessionEventLoop<DefaultConnector>), Error> {
         self.client
             .connect_to_matching_endpoint(
                 (
@@ -455,7 +458,7 @@ impl Tester {
     #[allow(unused)]
     pub async fn connect_default(
         &mut self,
-    ) -> Result<(Arc<Session>, SessionEventLoop<TcpConnector>), Error> {
+    ) -> Result<(Arc<Session>, SessionEventLoop<DefaultConnector>), Error> {
         self.connect(
             SecurityPolicy::None,
             MessageSecurityMode::None,

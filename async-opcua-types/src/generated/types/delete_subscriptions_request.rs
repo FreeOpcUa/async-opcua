@@ -78,15 +78,3 @@ impl opcua::types::BinaryDecodable for DeleteSubscriptionsRequest {
         })
     }
 }
-unsafe impl Send for DeleteSubscriptionsRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    Option<Vec<opcua::types::IntegerId>>: Send,
-{
-}
-unsafe impl Sync for DeleteSubscriptionsRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    Option<Vec<opcua::types::IntegerId>>: Sync,
-{
-}

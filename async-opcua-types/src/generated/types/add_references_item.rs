@@ -90,23 +90,3 @@ impl opcua::types::BinaryDecodable for AddReferencesItem {
         })
     }
 }
-unsafe impl Send for AddReferencesItem
-where
-    opcua::types::node_id::NodeId: Send,
-    opcua::types::node_id::NodeId: Send,
-    bool: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::expanded_node_id::ExpandedNodeId: Send,
-    super::enums::NodeClass: Send,
-{
-}
-unsafe impl Sync for AddReferencesItem
-where
-    opcua::types::node_id::NodeId: Sync,
-    opcua::types::node_id::NodeId: Sync,
-    bool: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::expanded_node_id::ExpandedNodeId: Sync,
-    super::enums::NodeClass: Sync,
-{
-}

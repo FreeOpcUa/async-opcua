@@ -70,5 +70,3 @@ impl opcua::types::BinaryDecodable for PublishedDataSetCustomSourceDataType {
         })
     }
 }
-unsafe impl Send for PublishedDataSetCustomSourceDataType where bool: Send {}
-unsafe impl Sync for PublishedDataSetCustomSourceDataType where bool: Sync {}

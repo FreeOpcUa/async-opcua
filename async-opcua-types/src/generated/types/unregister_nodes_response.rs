@@ -71,11 +71,3 @@ impl opcua::types::BinaryDecodable for UnregisterNodesResponse {
         Ok(Self { response_header })
     }
 }
-unsafe impl Send for UnregisterNodesResponse where
-    opcua::types::response_header::ResponseHeader: Send
-{
-}
-unsafe impl Sync for UnregisterNodesResponse where
-    opcua::types::response_header::ResponseHeader: Sync
-{
-}

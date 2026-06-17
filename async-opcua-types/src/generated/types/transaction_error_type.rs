@@ -78,17 +78,3 @@ impl opcua::types::BinaryDecodable for TransactionErrorType {
         })
     }
 }
-unsafe impl Send for TransactionErrorType
-where
-    opcua::types::node_id::NodeId: Send,
-    opcua::types::status_code::StatusCode: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-{
-}
-unsafe impl Sync for TransactionErrorType
-where
-    opcua::types::node_id::NodeId: Sync,
-    opcua::types::status_code::StatusCode: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-{
-}

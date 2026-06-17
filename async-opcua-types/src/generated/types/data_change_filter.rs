@@ -78,17 +78,3 @@ impl opcua::types::BinaryDecodable for DataChangeFilter {
         })
     }
 }
-unsafe impl Send for DataChangeFilter
-where
-    super::enums::DataChangeTrigger: Send,
-    u32: Send,
-    f64: Send,
-{
-}
-unsafe impl Sync for DataChangeFilter
-where
-    super::enums::DataChangeTrigger: Sync,
-    u32: Sync,
-    f64: Sync,
-{
-}

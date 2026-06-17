@@ -78,15 +78,3 @@ impl opcua::types::BinaryDecodable for DeleteNodesRequest {
         })
     }
 }
-unsafe impl Send for DeleteNodesRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    Option<Vec<super::delete_nodes_item::DeleteNodesItem>>: Send,
-{
-}
-unsafe impl Sync for DeleteNodesRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    Option<Vec<super::delete_nodes_item::DeleteNodesItem>>: Sync,
-{
-}

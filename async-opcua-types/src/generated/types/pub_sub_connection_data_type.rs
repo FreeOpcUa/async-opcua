@@ -102,29 +102,3 @@ impl opcua::types::BinaryDecodable for PubSubConnectionDataType {
         })
     }
 }
-unsafe impl Send for PubSubConnectionDataType
-where
-    opcua::types::string::UAString: Send,
-    bool: Send,
-    opcua::types::variant::Variant: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::extension_object::ExtensionObject: Send,
-    Option<Vec<super::key_value_pair::KeyValuePair>>: Send,
-    opcua::types::extension_object::ExtensionObject: Send,
-    Option<Vec<super::writer_group_data_type::WriterGroupDataType>>: Send,
-    Option<Vec<super::reader_group_data_type::ReaderGroupDataType>>: Send,
-{
-}
-unsafe impl Sync for PubSubConnectionDataType
-where
-    opcua::types::string::UAString: Sync,
-    bool: Sync,
-    opcua::types::variant::Variant: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::extension_object::ExtensionObject: Sync,
-    Option<Vec<super::key_value_pair::KeyValuePair>>: Sync,
-    opcua::types::extension_object::ExtensionObject: Sync,
-    Option<Vec<super::writer_group_data_type::WriterGroupDataType>>: Sync,
-    Option<Vec<super::reader_group_data_type::ReaderGroupDataType>>: Sync,
-{
-}

@@ -78,17 +78,3 @@ impl opcua::types::BinaryDecodable for NodeTypeDescription {
         })
     }
 }
-unsafe impl Send for NodeTypeDescription
-where
-    opcua::types::expanded_node_id::ExpandedNodeId: Send,
-    bool: Send,
-    Option<Vec<super::query_data_description::QueryDataDescription>>: Send,
-{
-}
-unsafe impl Sync for NodeTypeDescription
-where
-    opcua::types::expanded_node_id::ExpandedNodeId: Sync,
-    bool: Sync,
-    Option<Vec<super::query_data_description::QueryDataDescription>>: Sync,
-{
-}

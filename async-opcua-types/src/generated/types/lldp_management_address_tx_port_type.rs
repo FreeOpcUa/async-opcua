@@ -90,23 +90,3 @@ impl opcua::types::BinaryDecodable for LldpManagementAddressTxPortType {
         })
     }
 }
-unsafe impl Send for LldpManagementAddressTxPortType
-where
-    u32: Send,
-    opcua::types::string::UAString: Send,
-    bool: Send,
-    u32: Send,
-    super::enums::ManAddrIfSubtype: Send,
-    u32: Send,
-{
-}
-unsafe impl Sync for LldpManagementAddressTxPortType
-where
-    u32: Sync,
-    opcua::types::string::UAString: Sync,
-    bool: Sync,
-    u32: Sync,
-    super::enums::ManAddrIfSubtype: Sync,
-    u32: Sync,
-{
-}

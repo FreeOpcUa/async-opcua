@@ -78,17 +78,3 @@ impl opcua::types::BinaryDecodable for PublishedActionMethodDataType {
         })
     }
 }
-unsafe impl Send for PublishedActionMethodDataType
-where
-    super::data_set_meta_data_type::DataSetMetaDataType: Send,
-    Option<Vec<super::action_target_data_type::ActionTargetDataType>>: Send,
-    Option<Vec<super::action_method_data_type::ActionMethodDataType>>: Send,
-{
-}
-unsafe impl Sync for PublishedActionMethodDataType
-where
-    super::data_set_meta_data_type::DataSetMetaDataType: Sync,
-    Option<Vec<super::action_target_data_type::ActionTargetDataType>>: Sync,
-    Option<Vec<super::action_method_data_type::ActionMethodDataType>>: Sync,
-{
-}

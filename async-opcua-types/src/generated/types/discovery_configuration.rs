@@ -64,5 +64,3 @@ impl opcua::types::BinaryDecodable for DiscoveryConfiguration {
         Ok(Self {})
     }
 }
-unsafe impl Send for DiscoveryConfiguration {}
-unsafe impl Sync for DiscoveryConfiguration {}

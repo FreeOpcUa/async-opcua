@@ -90,23 +90,3 @@ impl opcua::types::BinaryDecodable for GenericAttributes {
         })
     }
 }
-unsafe impl Send for GenericAttributes
-where
-    u32: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-    u32: Send,
-    u32: Send,
-    Option<Vec<super::generic_attribute_value::GenericAttributeValue>>: Send,
-{
-}
-unsafe impl Sync for GenericAttributes
-where
-    u32: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-    u32: Sync,
-    u32: Sync,
-    Option<Vec<super::generic_attribute_value::GenericAttributeValue>>: Sync,
-{
-}

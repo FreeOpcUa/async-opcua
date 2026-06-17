@@ -93,21 +93,3 @@ impl opcua::types::BinaryDecodable for SetTriggeringResponse {
         })
     }
 }
-unsafe impl Send for SetTriggeringResponse
-where
-    opcua::types::response_header::ResponseHeader: Send,
-    Option<Vec<opcua::types::status_code::StatusCode>>: Send,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Send,
-    Option<Vec<opcua::types::status_code::StatusCode>>: Send,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Send,
-{
-}
-unsafe impl Sync for SetTriggeringResponse
-where
-    opcua::types::response_header::ResponseHeader: Sync,
-    Option<Vec<opcua::types::status_code::StatusCode>>: Sync,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Sync,
-    Option<Vec<opcua::types::status_code::StatusCode>>: Sync,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Sync,
-{
-}

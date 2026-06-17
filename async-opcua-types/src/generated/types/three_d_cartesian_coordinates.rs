@@ -78,17 +78,3 @@ impl opcua::types::BinaryDecodable for ThreeDCartesianCoordinates {
         })
     }
 }
-unsafe impl Send for ThreeDCartesianCoordinates
-where
-    f64: Send,
-    f64: Send,
-    f64: Send,
-{
-}
-unsafe impl Sync for ThreeDCartesianCoordinates
-where
-    f64: Sync,
-    f64: Sync,
-    f64: Sync,
-{
-}

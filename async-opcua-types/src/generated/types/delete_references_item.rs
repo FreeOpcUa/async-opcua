@@ -86,21 +86,3 @@ impl opcua::types::BinaryDecodable for DeleteReferencesItem {
         })
     }
 }
-unsafe impl Send for DeleteReferencesItem
-where
-    opcua::types::node_id::NodeId: Send,
-    opcua::types::node_id::NodeId: Send,
-    bool: Send,
-    opcua::types::expanded_node_id::ExpandedNodeId: Send,
-    bool: Send,
-{
-}
-unsafe impl Sync for DeleteReferencesItem
-where
-    opcua::types::node_id::NodeId: Sync,
-    opcua::types::node_id::NodeId: Sync,
-    bool: Sync,
-    opcua::types::expanded_node_id::ExpandedNodeId: Sync,
-    bool: Sync,
-{
-}

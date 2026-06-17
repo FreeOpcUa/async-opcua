@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for RationalNumber {
         })
     }
 }
-unsafe impl Send for RationalNumber
-where
-    i32: Send,
-    u32: Send,
-{
-}
-unsafe impl Sync for RationalNumber
-where
-    i32: Sync,
-    u32: Sync,
-{
-}

@@ -86,21 +86,3 @@ impl opcua::types::BinaryDecodable for AttributeOperand {
         })
     }
 }
-unsafe impl Send for AttributeOperand
-where
-    opcua::types::node_id::NodeId: Send,
-    opcua::types::string::UAString: Send,
-    super::relative_path::RelativePath: Send,
-    opcua::types::IntegerId: Send,
-    opcua::types::NumericRange: Send,
-{
-}
-unsafe impl Sync for AttributeOperand
-where
-    opcua::types::node_id::NodeId: Sync,
-    opcua::types::string::UAString: Sync,
-    super::relative_path::RelativePath: Sync,
-    opcua::types::IntegerId: Sync,
-    opcua::types::NumericRange: Sync,
-{
-}

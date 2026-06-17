@@ -83,17 +83,3 @@ impl opcua::types::BinaryDecodable for ReadResponse {
         })
     }
 }
-unsafe impl Send for ReadResponse
-where
-    opcua::types::response_header::ResponseHeader: Send,
-    Option<Vec<opcua::types::data_value::DataValue>>: Send,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Send,
-{
-}
-unsafe impl Sync for ReadResponse
-where
-    opcua::types::response_header::ResponseHeader: Sync,
-    Option<Vec<opcua::types::data_value::DataValue>>: Sync,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Sync,
-{
-}

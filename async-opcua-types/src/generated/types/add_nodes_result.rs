@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for AddNodesResult {
         })
     }
 }
-unsafe impl Send for AddNodesResult
-where
-    opcua::types::status_code::StatusCode: Send,
-    opcua::types::node_id::NodeId: Send,
-{
-}
-unsafe impl Sync for AddNodesResult
-where
-    opcua::types::status_code::StatusCode: Sync,
-    opcua::types::node_id::NodeId: Sync,
-{
-}

@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for BrokerConnectionTransportDataType {
         })
     }
 }
-unsafe impl Send for BrokerConnectionTransportDataType
-where
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-{
-}
-unsafe impl Sync for BrokerConnectionTransportDataType
-where
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-{
-}

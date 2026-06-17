@@ -1,6 +1,6 @@
 [package]
 name = "async-opcua"
-version = "0.18.0"
+version = "0.19.0"
 description = "OPC UA client and server API"
 authors = ["Adam Lock <locka99@gmail.com>", "Einar Omang <einar@omang.com>"]
 homepage = "https://github.com/freeopcua/async-opcua"
@@ -17,12 +17,19 @@ publish = true
 name = "opcua"
 
 [features]
-# legacy-crypto is compiled in by default; runtime config gates its use.
-default = ["legacy-crypto"]
+default = []
 all = ["server", "client"]
 # Forwards to the crypto crate's support for legacy (deprecated) security
 # policies: Basic128Rsa15 and Basic256.
-legacy-crypto = ["async-opcua-crypto/legacy-crypto"]
+legacy-crypto = [
+  "async-opcua-client/legacy-crypto",
+  "async-opcua-core/legacy-crypto",
+  "async-opcua-crypto/legacy-crypto",
+  "async-opcua-server/legacy-crypto",
+]
+# opc.wss (WebSocket) transport (feature 009 / R5 / FR-044). Forwards to whichever of
+# the client/server crates is enabled; TLS is layered on the in-tree rustls 0.23.
+wss = ["async-opcua-client?/wss", "async-opcua-server?/wss"]
 # Server default settings
 server = ["base-server", "generated-address-space"]
 # Base server, without the core address space.
@@ -52,15 +59,15 @@ xml = ["async-opcua-types/xml", "async-opcua-nodes/xml", "async-opcua-xml"]
 [dependencies]
 chrono = { workspace = true }
 
-async-opcua-client = { path = "../async-opcua-client", optional = true, version = "0.18.0" }
-async-opcua-core = { path = "../async-opcua-core", version = "0.18.0" }
-async-opcua-core-namespace = { path = "../async-opcua-core-namespace", optional = true, version = "0.18.0" }
-async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.18.0" }
-async-opcua-macros = { path = "../async-opcua-macros", version = "0.18.0" }
-async-opcua-nodes = { path = "../async-opcua-nodes", optional = true, version = "0.18.0" }
-async-opcua-server = { path = "../async-opcua-server", optional = true, default-features = false, version = "0.18.0" }
-async-opcua-types = { path = "../async-opcua-types", version = "0.18.0" }
-async-opcua-xml = { path = "../async-opcua-xml", optional = true, version = "0.18.0" }
+async-opcua-client = { path = "../async-opcua-client", optional = true, version = "0.19.0", default-features = false }
+async-opcua-core = { path = "../async-opcua-core", version = "0.19.0", default-features = false }
+async-opcua-core-namespace = { path = "../async-opcua-core-namespace", optional = true, version = "0.19.0" }
+async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.19.0", default-features = false }
+async-opcua-macros = { path = "../async-opcua-macros", version = "0.19.0" }
+async-opcua-nodes = { path = "../async-opcua-nodes", optional = true, version = "0.19.0" }
+async-opcua-server = { path = "../async-opcua-server", optional = true, default-features = false, version = "0.19.0" }
+async-opcua-types = { path = "../async-opcua-types", version = "0.19.0" }
+async-opcua-xml = { path = "../async-opcua-xml", optional = true, version = "0.19.0" }
 
 [dev-dependencies]
 async-opcua-history-sqlite = { path = "../async-opcua-history-sqlite" }
@@ -69,14 +76,14 @@ async-trait = { workspace = true }
 base64 = { workspace = true }
 bytes = { workspace = true }
 serde_json = { workspace = true }
-tempdir = "0.3"
+tempfile = "3"
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 env_logger = { workspace = true }
 log = { workspace = true }
 
 # Include json when building tests
-async-opcua = { path = ".", features = ["all", "json", "xml", "legacy-crypto"] }
+async-opcua = { path = ".", features = ["all", "json", "xml", "legacy-crypto", "wss"] }
 
 [package.metadata.docs.rs]
 all-features = true

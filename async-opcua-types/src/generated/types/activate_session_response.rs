@@ -88,19 +88,3 @@ impl opcua::types::BinaryDecodable for ActivateSessionResponse {
         })
     }
 }
-unsafe impl Send for ActivateSessionResponse
-where
-    opcua::types::response_header::ResponseHeader: Send,
-    opcua::types::byte_string::ByteString: Send,
-    Option<Vec<opcua::types::status_code::StatusCode>>: Send,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Send,
-{
-}
-unsafe impl Sync for ActivateSessionResponse
-where
-    opcua::types::response_header::ResponseHeader: Sync,
-    opcua::types::byte_string::ByteString: Sync,
-    Option<Vec<opcua::types::status_code::StatusCode>>: Sync,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Sync,
-{
-}

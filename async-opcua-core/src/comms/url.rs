@@ -13,6 +13,8 @@ use opcua_types::status_code::StatusCode;
 
 /// Scheme for OPC-UA TCP.
 pub const OPC_TCP_SCHEME: &str = "opc.tcp";
+/// Scheme for OPC UA over secure WebSockets.
+pub const OPC_WSS_SCHEME: &str = "opc.wss";
 
 /// Creates a `Url` from the input string, supplying a default port if necessary.
 fn opc_url_from_str(s: &str) -> Result<Url, url::ParseError> {
@@ -41,7 +43,7 @@ pub fn url_with_replaced_hostname(url: &str, hostname: &str) -> Result<String, u
 pub fn url_matches_except_host(url1: &str, url2: &str) -> bool {
     if let Ok(url1) = opc_url_from_str(url1) {
         if let Ok(url2) = opc_url_from_str(url2) {
-            return url1.scheme() == url2.scheme() // Scheme must match
+            return schemes_compatible(url1.scheme(), url2.scheme()) // Scheme must match or be a compatible OPC UA binary transport.
                 && url1.path().trim_end_matches("/") == url2.path().trim_end_matches("/") // Path must match, except for trailing /
                 && url1.query() == url2.query() // Scheme and query must match, most OPC-UA endpoints won't have these.
                 && url1.fragment() == url2.fragment();
@@ -52,6 +54,20 @@ pub fn url_matches_except_host(url1: &str, url2: &str) -> bool {
         error!("Cannot parse url \"{}\"", url1);
     }
     false
+}
+
+/// Return true when two URL schemes represent the same OPC UA binary transport.
+///
+/// Servers advertise endpoint URLs from their endpoint configuration, which is
+/// historically `opc.tcp`, but the same OPC UA binary chunks can be carried over
+/// secure WebSockets as `opc.wss`. The lower transport differs, but endpoint
+/// matching should still validate the same path/query/fragment.
+fn schemes_compatible(a: &str, b: &str) -> bool {
+    a == b
+        || matches!(
+            (a, b),
+            (OPC_TCP_SCHEME, OPC_WSS_SCHEME) | (OPC_WSS_SCHEME, OPC_TCP_SCHEME)
+        )
 }
 
 /// Takes an endpoint url and strips off the path and args to leave just the protocol, host & port.
@@ -79,6 +95,15 @@ pub fn is_valid_opc_ua_url(url: &str) -> bool {
 pub fn is_opc_ua_binary_url(url: &str) -> bool {
     if let Ok(url) = opc_url_from_str(url) {
         url.scheme() == OPC_TCP_SCHEME
+    } else {
+        false
+    }
+}
+
+/// Check if this is an OPC UA secure WebSocket URL.
+pub fn is_opc_ua_wss_url(url: &str) -> bool {
+    if let Ok(url) = opc_url_from_str(url) {
+        url.scheme() == OPC_WSS_SCHEME
     } else {
         false
     }
@@ -134,6 +159,22 @@ pub fn hostname_port_from_url(url: &str, default_port: u16) -> Result<(String, u
     }
 }
 
+/// Get the hostname and port from an OPC UA WSS URL, defaulting to `default_port`.
+pub fn hostname_port_from_wss_url(
+    url: &str,
+    default_port: u16,
+) -> Result<(String, u16), StatusCode> {
+    let url = Url::parse(url).map_err(|_| StatusCode::BadTcpEndpointUrlInvalid)?;
+
+    if url.scheme() != OPC_WSS_SCHEME || !url.has_host() {
+        Err(StatusCode::BadTcpEndpointUrlInvalid)
+    } else {
+        let host = url.host_str().unwrap();
+        let port = url.port().unwrap_or(default_port);
+        Ok((host.to_string(), port))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -156,6 +197,26 @@ mod tests {
         assert!(!url_matches_except_host(
             "opc.tcp://localhost/xyz",
             "opc.tcp://127.0.0.1/abc"
+        ));
+    }
+
+    #[test]
+    fn url_matches_treats_opc_tcp_and_wss_as_compatible_transports() {
+        assert!(url_matches_except_host(
+            "opc.tcp://localhost:4840/UA/Sample",
+            "opc.wss://127.0.0.1:4840/UA/Sample"
+        ));
+        assert!(url_matches_except_host(
+            "opc.wss://localhost:4840/UA/Sample",
+            "opc.tcp://127.0.0.1:4840/UA/Sample"
+        ));
+        assert!(!url_matches_except_host(
+            "opc.tcp://localhost:4840/UA/Sample",
+            "https://127.0.0.1:4840/UA/Sample"
+        ));
+        assert!(!url_matches_except_host(
+            "opc.tcp://localhost:4840/UA/Sample",
+            "opc.wss://127.0.0.1:4840/UA/Other"
         ));
     }
 

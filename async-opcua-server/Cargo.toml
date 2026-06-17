@@ -1,6 +1,6 @@
 [package]
 name = "async-opcua-server"
-version = "0.18.0"
+version = "0.19.0"
 description = "OPC UA server API"
 authors = ["Adam Lock <locka99@gmail.com>", "Einar Omang <einar@omang.com>"]
 homepage = "https://github.com/freeopcua/async-opcua"
@@ -31,10 +31,28 @@ json = ["async-opcua-nodes/json", "async-opcua-types/json"]
 # Omitting the feature saves some memory.
 discovery-server-registration = ["async-opcua-client"]
 test-utils = []
+legacy-crypto = [
+  "async-opcua-client/legacy-crypto",
+  "async-opcua-core/legacy-crypto",
+  "async-opcua-crypto/legacy-crypto",
+]
+# opc.wss (WebSocket) transport listener (feature 009 / R5 / FR-044). TLS is layered
+# via tokio-rustls on the in-tree rustls 0.23; tokio-tungstenite carries no TLS itself.
+wss = [
+  "async-opcua-core/wss",
+  "dep:tokio-tungstenite",
+  "dep:tokio-rustls",
+  "dep:rustls",
+  "dep:rustls-pki-types",
+]
 
 [dependencies]
-lockfree-object-pool = "0.1"
 moka = { version = "0.12", features = ["future", "sync"] }
+# opc.wss transport (feature 009 / R5 / FR-044), gated by the `wss` feature.
+tokio-tungstenite = { workspace = true, optional = true }
+tokio-rustls = { workspace = true, optional = true }
+rustls = { workspace = true, optional = true }
+rustls-pki-types = { workspace = true, optional = true }
 arc-swap = { workspace = true }
 argon2 = { version = "0.5.3", features = ["std"] }
 async-trait = { workspace = true }
@@ -49,19 +67,20 @@ postcard = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+socket2 = { version = "0.6", features = ["all"] }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 tracing-futures = { workspace = true }
 uuid = { workspace = true }
 
-async-opcua-client = { path = "../async-opcua-client", optional = true, version = "0.18.0" }
-async-opcua-core = { path = "../async-opcua-core", version = "0.18.0" }
-async-opcua-core-namespace = { path = "../async-opcua-core-namespace", optional = true, version = "0.18.0" }
-async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.18.0" }
-async-opcua-nodes = { path = "../async-opcua-nodes", features = ["xml"], version = "0.18.0" }
-async-opcua-types = { path = "../async-opcua-types", version = "0.18.0" }
-async-opcua-xml = { path = "../async-opcua-xml", version = "0.18.0" }
+async-opcua-client = { path = "../async-opcua-client", optional = true, version = "0.19.0", default-features = false }
+async-opcua-core = { path = "../async-opcua-core", version = "0.19.0", default-features = false }
+async-opcua-core-namespace = { path = "../async-opcua-core-namespace", optional = true, version = "0.19.0" }
+async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.19.0", default-features = false }
+async-opcua-nodes = { path = "../async-opcua-nodes", features = ["xml"], version = "0.19.0" }
+async-opcua-types = { path = "../async-opcua-types", version = "0.19.0" }
+async-opcua-xml = { path = "../async-opcua-xml", version = "0.19.0" }
 async-opcua-safety = { path = "../async-opcua-safety", version = "0.1.0" }
 
 
@@ -74,14 +93,10 @@ async-opcua-server = { path = ".", features = [
   "test-utils",
 ] }
 criterion = { workspace = true }
-serde_yaml = { workspace = true }
+serde_norway = { workspace = true }
 
 [[bench]]
 name = "session_lookup"
-harness = false
-
-[[bench]]
-name = "notification_pool"
 harness = false
 
 [package.metadata.docs.rs]

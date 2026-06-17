@@ -70,5 +70,3 @@ impl opcua::types::BinaryDecodable for EnumDefinition {
         })
     }
 }
-unsafe impl Send for EnumDefinition where Option<Vec<super::enum_field::EnumField>>: Send {}
-unsafe impl Sync for EnumDefinition where Option<Vec<super::enum_field::EnumField>>: Sync {}

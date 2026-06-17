@@ -78,17 +78,3 @@ impl opcua::types::BinaryDecodable for EnumValueType {
         })
     }
 }
-unsafe impl Send for EnumValueType
-where
-    i64: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-{
-}
-unsafe impl Sync for EnumValueType
-where
-    i64: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-{
-}

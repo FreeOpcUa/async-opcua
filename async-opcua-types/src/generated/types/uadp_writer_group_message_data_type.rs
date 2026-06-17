@@ -86,21 +86,3 @@ impl opcua::types::BinaryDecodable for UadpWriterGroupMessageDataType {
         })
     }
 }
-unsafe impl Send for UadpWriterGroupMessageDataType
-where
-    opcua::types::VersionTime: Send,
-    super::enums::DataSetOrderingType: Send,
-    super::enums::UadpNetworkMessageContentMask: Send,
-    opcua::types::data_types::Duration: Send,
-    Option<Vec<opcua::types::data_types::Duration>>: Send,
-{
-}
-unsafe impl Sync for UadpWriterGroupMessageDataType
-where
-    opcua::types::VersionTime: Sync,
-    super::enums::DataSetOrderingType: Sync,
-    super::enums::UadpNetworkMessageContentMask: Sync,
-    opcua::types::data_types::Duration: Sync,
-    Option<Vec<opcua::types::data_types::Duration>>: Sync,
-{
-}

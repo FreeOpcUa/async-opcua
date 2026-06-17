@@ -78,17 +78,3 @@ impl opcua::types::BinaryDecodable for BrowseResult {
         })
     }
 }
-unsafe impl Send for BrowseResult
-where
-    opcua::types::status_code::StatusCode: Send,
-    opcua::types::ContinuationPoint: Send,
-    Option<Vec<super::reference_description::ReferenceDescription>>: Send,
-{
-}
-unsafe impl Sync for BrowseResult
-where
-    opcua::types::status_code::StatusCode: Sync,
-    opcua::types::ContinuationPoint: Sync,
-    Option<Vec<super::reference_description::ReferenceDescription>>: Sync,
-{
-}

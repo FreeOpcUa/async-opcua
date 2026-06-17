@@ -70,11 +70,3 @@ impl opcua::types::BinaryDecodable for ReadAnnotationDataDetails {
         })
     }
 }
-unsafe impl Send for ReadAnnotationDataDetails where
-    Option<Vec<opcua::types::data_types::UtcTime>>: Send
-{
-}
-unsafe impl Sync for ReadAnnotationDataDetails where
-    Option<Vec<opcua::types::data_types::UtcTime>>: Sync
-{
-}

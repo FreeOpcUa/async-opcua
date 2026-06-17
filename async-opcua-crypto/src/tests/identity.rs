@@ -64,7 +64,7 @@ fn create_signed_jwt(payload: serde_json::Value, private_key: &PrivateKey) -> St
     format!("{signing_input}.{encoded_signature}")
 }
 
-fn create_trusted_validator() -> (tempdir::TempDir, LocalOAuth2Validator, PrivateKey) {
+fn create_trusted_validator() -> (tempfile::TempDir, LocalOAuth2Validator, PrivateKey) {
     let (tmp_dir, cert_store) = make_certificate_store();
     let (cert, private_key) = make_test_cert_2048();
     let mut cert_path = cert_store.trusted_certs_dir();
@@ -178,5 +178,35 @@ fn rsa_oaep_secret_rejects_partial_ciphertext_block() {
     )
     .unwrap_err();
 
+    assert_eq!(err.status(), StatusCode::BadIdentityTokenInvalid);
+}
+
+#[test]
+fn legacy_secret_rejects_partial_ciphertext_block() {
+    // C2: a non-block-aligned legacy ciphertext must be rejected with an error,
+    // not panic via an out-of-bounds slice in private_decrypt.
+    let private_key = PrivateKey::new(2048).unwrap();
+    let server_nonce = [0u8; 32];
+    let short = opcua_types::ByteString::from(vec![0u8; private_key.cipher_text_block_size() - 1]);
+    let err = crate::user_identity::legacy_secret_decrypt::<crate::policy::aes::Pkcs1v15>(
+        &short,
+        &server_nonce,
+        &private_key,
+    )
+    .unwrap_err();
+    assert_eq!(err.status(), StatusCode::BadIdentityTokenInvalid);
+}
+
+#[test]
+fn legacy_secret_rejects_empty_ciphertext() {
+    // C2: empty ciphertext must be rejected, not panic.
+    let private_key = PrivateKey::new(2048).unwrap();
+    let server_nonce = [0u8; 32];
+    let err = crate::user_identity::legacy_secret_decrypt::<crate::policy::aes::Pkcs1v15>(
+        &opcua_types::ByteString::null(),
+        &server_nonce,
+        &private_key,
+    )
+    .unwrap_err();
     assert_eq!(err.status(), StatusCode::BadIdentityTokenInvalid);
 }

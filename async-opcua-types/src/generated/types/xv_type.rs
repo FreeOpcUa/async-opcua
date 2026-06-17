@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for XVType {
         })
     }
 }
-unsafe impl Send for XVType
-where
-    f64: Send,
-    f32: Send,
-{
-}
-unsafe impl Sync for XVType
-where
-    f64: Sync,
-    f32: Sync,
-{
-}

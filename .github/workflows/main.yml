@@ -10,6 +10,17 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Dependency-advisory gate (feature 009 / FR-022 / SEC-P1). cargo-deny-action v2
+  # bundles a cargo-deny new enough to parse CVSS 4.0 advisories. Policy + recorded
+  # exceptions live in deny.toml.
+  cargo-deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories bans sources
+
   build-linux:
     strategy:
       matrix:
@@ -31,6 +42,39 @@ jobs:
         run: cargo check --locked
       - name: Run tests
         run: cargo test --verbose --locked --all-features
+
+  # Feature-graph build matrix (feature 009 / SC-008). Every supported feature
+  # configuration must compile warning-free under -D warnings. The sample binaries
+  # legitimately require json/xml, so the --no-default-features leg scopes to the
+  # library crates; default and --all-features cover the full workspace.
+  build-matrix:
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: "-D warnings"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: default
+            args: --workspace
+          - name: all-features
+            args: --workspace --all-features
+          - name: no-default-features
+            args: >-
+              --no-default-features
+              -p async-opcua -p async-opcua-types -p async-opcua-core
+              -p async-opcua-crypto -p async-opcua-client -p async-opcua-server
+              -p async-opcua-nodes
+    steps:
+      - uses: actions/checkout@v4
+      - name: Provision toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libelf-dev
+      - name: Build (${{ matrix.name }})
+        run: cargo build --locked ${{ matrix.args }}
 
   test-external-server:
     runs-on: ubuntu-latest

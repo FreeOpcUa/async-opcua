@@ -79,17 +79,3 @@ impl opcua::types::BinaryDecodable for PubSubConfigurationDataType {
         })
     }
 }
-unsafe impl Send for PubSubConfigurationDataType
-where
-    Option<Vec<super::published_data_set_data_type::PublishedDataSetDataType>>: Send,
-    Option<Vec<super::pub_sub_connection_data_type::PubSubConnectionDataType>>: Send,
-    bool: Send,
-{
-}
-unsafe impl Sync for PubSubConfigurationDataType
-where
-    Option<Vec<super::published_data_set_data_type::PublishedDataSetDataType>>: Sync,
-    Option<Vec<super::pub_sub_connection_data_type::PubSubConnectionDataType>>: Sync,
-    bool: Sync,
-{
-}

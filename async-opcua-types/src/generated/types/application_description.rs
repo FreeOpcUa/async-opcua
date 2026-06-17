@@ -94,25 +94,3 @@ impl opcua::types::BinaryDecodable for ApplicationDescription {
         })
     }
 }
-unsafe impl Send for ApplicationDescription
-where
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-    super::enums::ApplicationType: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    Option<Vec<opcua::types::string::UAString>>: Send,
-{
-}
-unsafe impl Sync for ApplicationDescription
-where
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-    super::enums::ApplicationType: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    Option<Vec<opcua::types::string::UAString>>: Sync,
-{
-}

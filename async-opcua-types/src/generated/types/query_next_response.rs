@@ -83,17 +83,3 @@ impl opcua::types::BinaryDecodable for QueryNextResponse {
         })
     }
 }
-unsafe impl Send for QueryNextResponse
-where
-    opcua::types::response_header::ResponseHeader: Send,
-    Option<Vec<super::query_data_set::QueryDataSet>>: Send,
-    opcua::types::ContinuationPoint: Send,
-{
-}
-unsafe impl Sync for QueryNextResponse
-where
-    opcua::types::response_header::ResponseHeader: Sync,
-    Option<Vec<super::query_data_set::QueryDataSet>>: Sync,
-    opcua::types::ContinuationPoint: Sync,
-{
-}

@@ -77,17 +77,3 @@ impl opcua::types::BinaryDecodable for ReferenceListEntryDataType {
         })
     }
 }
-unsafe impl Send for ReferenceListEntryDataType
-where
-    opcua::types::node_id::NodeId: Send,
-    bool: Send,
-    opcua::types::expanded_node_id::ExpandedNodeId: Send,
-{
-}
-unsafe impl Sync for ReferenceListEntryDataType
-where
-    opcua::types::node_id::NodeId: Sync,
-    bool: Sync,
-    opcua::types::expanded_node_id::ExpandedNodeId: Sync,
-{
-}

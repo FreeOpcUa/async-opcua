@@ -88,12 +88,14 @@ impl Request {
                 return Err(Error::new(
                     StatusCode::BadConnectionClosed,
                     "Request failed due to the client suhtting down",
-                ))
+                ));
             }
-            Err(SendTimeoutError::Timeout(_)) => return Err(Error::new(
+            Err(SendTimeoutError::Timeout(_)) => {
+                return Err(Error::new(
                     StatusCode::BadTimeout,
                     "Request failed to send within timeout, likely because the request queue is backed up",
-                )),
+                ));
+            }
         }
 
         match cb_recv.await {

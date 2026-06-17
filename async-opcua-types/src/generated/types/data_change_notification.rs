@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for DataChangeNotification {
         })
     }
 }
-unsafe impl Send for DataChangeNotification
-where
-    Option<Vec<super::monitored_item_notification::MonitoredItemNotification>>: Send,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Send,
-{
-}
-unsafe impl Sync for DataChangeNotification
-where
-    Option<Vec<super::monitored_item_notification::MonitoredItemNotification>>: Sync,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Sync,
-{
-}

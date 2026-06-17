@@ -179,6 +179,18 @@ impl SessionManager {
         if self.sessions.len() >= self.info.config.limits.max_sessions {
             return Err(StatusCode::BadTooManySessions);
         }
+        let secure_channel_id = channel.secure_channel_id();
+        let unactivated_count = self
+            .sessions
+            .values()
+            .filter(|session| {
+                let session = trace_read_lock!(session);
+                session.secure_channel_id() == secure_channel_id && !session.is_activated()
+            })
+            .count();
+        if unactivated_count >= self.info.config.limits.max_unactivated_sessions_per_channel {
+            return Err(StatusCode::BadTooManySessions);
+        }
 
         // TODO: Auditing and diagnostics.
         let endpoints = self
@@ -203,20 +215,27 @@ impl SessionManager {
         if !matches!(security_policy, SecurityPolicy::None)
             && request.client_nonce.len() < self.info.config.session_nonce_length
         {
-            error!("Create session was passed a client nonce that is too short, expected at least {} bytes, got {}", 
-                self.info.config.session_nonce_length, request.client_nonce.len()
+            error!(
+                "Create session was passed a client nonce that is too short, expected at least {} bytes, got {}",
+                self.info.config.session_nonce_length,
+                request.client_nonce.len()
             );
             return Err(StatusCode::BadNonceInvalid);
         }
 
         let client_certificate = if security_policy != SecurityPolicy::None {
             let cert = opcua_crypto::X509::from_byte_string(&request.client_certificate)?;
+            let application_uri = if request.client_description.application_uri.is_empty() {
+                None
+            } else {
+                Some(request.client_description.application_uri.as_ref())
+            };
             let store = trace_read_lock!(certificate_store);
             store.validate_or_reject_application_instance_cert(
                 &cert,
                 security_policy,
                 None,
-                None,
+                application_uri,
             )?;
             Some(cert)
         } else {
@@ -232,19 +251,24 @@ impl SessionManager {
 
         let server_pkey = self.info.server_pkey.read();
         let server_signature = if let Some(ref pkey) = *server_pkey {
-            opcua_crypto::create_signature_data(
+            match opcua_crypto::create_signature_data(
                 pkey,
                 security_policy,
                 &request.client_certificate,
                 &request.client_nonce,
-            )
-            .unwrap_or_else(|err| {
-                error!(
-                    "Cannot create signature data from private key, check log and error {:?}",
-                    err
-                );
-                SignatureData::null()
-            })
+            ) {
+                Ok(signature) => signature,
+                Err(err) => {
+                    error!(
+                        "Cannot create signature data from private key, check log and error {:?}",
+                        err
+                    );
+                    if security_policy != SecurityPolicy::None {
+                        return Err(StatusCode::BadSecurityChecksFailed);
+                    }
+                    SignatureData::null()
+                }
+            }
         } else {
             SignatureData::null()
         };
@@ -257,7 +281,7 @@ impl SessionManager {
         let session = Session::create(
             &self.info,
             authentication_token.clone(),
-            channel.secure_channel_id(),
+            secure_channel_id,
             session_timeout,
             max_request_message_size,
             request.max_response_message_size,
@@ -348,7 +372,9 @@ impl SessionManager {
             .set_current_session_count(self.sessions.len() as u32);
         self.info.diagnostics.inc_session_timeout_count();
 
-        info!("Session {id} has expired, removing it from the session map. Subscriptions will remain until they individually expire");
+        info!(
+            "Session {id} has expired, removing it from the session map. Subscriptions will remain until they individually expire"
+        );
 
         let token = {
             let session = trace_read_lock!(session);
@@ -382,7 +408,16 @@ impl SessionManager {
         let mut expired = Vec::new();
         let mut expiry = now + Duration::from_millis(self.info.config.max_session_timeout_ms);
         for (id, session) in &self.sessions {
-            let deadline = session.read().deadline();
+            let session = session.read();
+            let mut deadline = session.deadline();
+            if !session.is_activated() {
+                deadline = deadline.min(
+                    session.created_at()
+                        + Duration::from_millis(
+                            self.info.config.limits.unactivated_session_timeout_ms,
+                        ),
+                );
+            }
             if deadline < now {
                 expired.push(id.clone());
             } else if deadline < expiry {
@@ -415,7 +450,11 @@ pub(crate) async fn close_session(
 
             let secure_channel_id = channel.secure_channel_id();
             if !session.is_activated() && session.secure_channel_id() != secure_channel_id {
-                error!("close_session rejected, secure channel id {} for inactive session does not match one used to create session, {}", secure_channel_id, session.secure_channel_id());
+                error!(
+                    "close_session rejected, secure channel id {} for inactive session does not match one used to create session, {}",
+                    secure_channel_id,
+                    session.secure_channel_id()
+                );
                 return Err(StatusCode::BadSecureChannelIdInvalid);
             }
             (id, token, authentication_token)
@@ -490,8 +529,10 @@ pub(crate) async fn activate_session(
                 .info
                 .endpoint_exists(&endpoint_url, security_policy, security_mode)
             {
-                error!("activate_session, Endpoint dues not exist for requested url & mode {}, {:?} / {:?}",
-                endpoint_url, security_policy, security_mode);
+                error!(
+                    "activate_session, Endpoint dues not exist for requested url & mode {}, {:?} / {:?}",
+                    endpoint_url, security_policy, security_mode
+                );
                 return Err(StatusCode::BadTcpEndpointUrlInvalid);
             }
 
@@ -522,8 +563,14 @@ pub(crate) async fn activate_session(
     let (server_nonce, session_id, user_changed) = {
         let mut session = trace_write_lock!(session_lck);
 
-        if !session.is_activated() && session.secure_channel_id() != secure_channel_id {
-            error!("activate session, rejected secure channel id {} for inactive session does not match one used to create session, {}", secure_channel_id, session.secure_channel_id());
+        if session.secure_channel_id() != secure_channel_id
+            && (!session.is_activated() || security_policy == SecurityPolicy::None)
+        {
+            error!(
+                "activate session, rejected secure channel id {} does not match session channel {} (transfer not permitted for SecurityPolicy::None)",
+                secure_channel_id,
+                session.secure_channel_id()
+            );
             return Err(StatusCode::BadSecureChannelIdInvalid);
         } else {
             // TODO additional secure channel validation here for client certificate and user identity

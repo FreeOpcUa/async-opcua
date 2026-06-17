@@ -70,11 +70,3 @@ impl opcua::types::BinaryDecodable for AdditionalParametersType {
         })
     }
 }
-unsafe impl Send for AdditionalParametersType where
-    Option<Vec<super::key_value_pair::KeyValuePair>>: Send
-{
-}
-unsafe impl Sync for AdditionalParametersType where
-    Option<Vec<super::key_value_pair::KeyValuePair>>: Sync
-{
-}

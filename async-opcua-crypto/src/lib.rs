@@ -167,6 +167,20 @@ pub fn verify_signature_data(
         let contained_cert = contained_cert.as_byte_string();
         let data = concat_data_and_nonce(contained_cert.as_ref(), contained_nonce);
 
+        if !matches!(
+            security_policy,
+            SecurityPolicy::None | SecurityPolicy::Unknown
+        ) {
+            let expected_algorithm = security_policy.asymmetric_signature_algorithm();
+            if !signature.algorithm.is_empty() && signature.algorithm.as_ref() != expected_algorithm
+            {
+                return Err(Error::new(
+                    StatusCode::BadSecurityChecksFailed,
+                    "Signature algorithm does not match security policy",
+                ));
+            }
+        }
+
         // Verify the signature
         security_policy.asymmetric_verify_signature(
             &verification_key,

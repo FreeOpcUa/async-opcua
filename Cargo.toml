@@ -33,7 +33,7 @@ bytes = "^1"
 chrono = { version = "^0.4", features = ["serde"] }
 convert_case = "^0.6"
 criterion = "^0.5"
-env_logger = "^0.10"
+env_logger = "0.11"
 futures = "^0.3"
 gethostname = "^0.5"
 hashbrown = "^0.15"
@@ -49,11 +49,11 @@ roxmltree = "^0.20"
 serde = { version = "^1", features = ["derive"] }
 serde_json = { version = "^1", features = ["arbitrary_precision"] }
 serde_with = "^3"
-serde_yaml = "^0.9"
+serde_norway = "0.9"
 shellexpand = { version = "3.1" }
 struson = { version = "^0.6" }
 syn = { version = "^2", features = ["full"] }
-thiserror = "^1"
+thiserror = "2"
 tokio = { version = "^1", features = ["full"] }
 tokio-util = { version = "^0.7", features = ["codec"] }
 tracing = { version = "0.1.41", features = ["log"] }
@@ -61,7 +61,19 @@ tracing-futures = "0.2.5"
 url = "^2"
 uuid = { version = "^1", features = ["v4"] }
 
-aes = "^0.8"
+# opc.wss (WebSocket) transport (feature 009 / R5 / FR-044). tokio-tungstenite carries
+# no TLS of its own (default-features = false); TLS is layered via tokio-rustls on the
+# in-tree rustls 0.23, so the workspace resolves a single rustls major.
+tokio-tungstenite = { version = "0.26", default-features = false, features = ["handshake"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+# PEM cert/key loading via the maintained rustls-pki-types (rustls-pemfile is unmaintained,
+# RUSTSEC-2025-0134; its functionality was folded into rustls-pki-types).
+rustls-pki-types = { version = "1", features = ["std"] }
+rustls-native-certs = "0.8"
+webpki-roots = "0.26"
+
+aes = { version = "^0.8", features = ["zeroize"] }
 cbc = "^0.1"
 const-oid = { version = "^0.9", features = ["db"] }
 hmac = "^0.12"

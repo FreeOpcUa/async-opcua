@@ -5,9 +5,12 @@
 //! The certificate store holds and retrieves private keys and certificates from disk. It is responsible
 //! for checking certificates supplied by the remote end to see if they are valid and trusted or not.
 
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 
 use opcua_types::Error;
 use tracing::{debug, error, info, trace, warn};
@@ -182,7 +185,7 @@ impl CertificateStore {
         let pem = doc
             .to_pem(rsa::pkcs8::PrivateKeyInfo::PEM_LABEL, pkcs8::LineEnding::CR)
             .unwrap();
-        let _ = CertificateStore::write_to_file(pem.as_bytes(), pkey_path, overwrite)?;
+        let _ = CertificateStore::write_private_key_to_file(pem.as_bytes(), pkey_path, overwrite)?;
         Ok((cert, pkey))
     }
 
@@ -595,6 +598,30 @@ impl CertificateStore {
                 CertificateStore::ensure_dir(parent)?;
             }
             match File::create(file_path) {
+                Ok(mut file) => file
+                    .write(bytes)
+                    .map_err(|_| format!("Could not write bytes to file {}", file_path.display())),
+                Err(_) => Err(format!("Could not create file {}", file_path.display())),
+            }
+        }
+    }
+
+    fn write_private_key_to_file(
+        bytes: &[u8],
+        file_path: &Path,
+        overwrite: bool,
+    ) -> Result<usize, String> {
+        if !overwrite && file_path.exists() {
+            Err(format!("File {} already exists and will not be overwritten. Enable overwrite to disable this safeguard.", file_path.display()))
+        } else {
+            if let Some(parent) = file_path.parent() {
+                CertificateStore::ensure_dir(parent)?;
+            }
+            let mut options = OpenOptions::new();
+            options.write(true).create(true).truncate(true);
+            #[cfg(unix)]
+            options.mode(0o600);
+            match options.open(file_path) {
                 Ok(mut file) => file
                     .write(bytes)
                     .map_err(|_| format!("Could not write bytes to file {}", file_path.display())),

@@ -78,15 +78,3 @@ impl opcua::types::BinaryDecodable for CallRequest {
         })
     }
 }
-unsafe impl Send for CallRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    Option<Vec<super::call_method_request::CallMethodRequest>>: Send,
-{
-}
-unsafe impl Sync for CallRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    Option<Vec<super::call_method_request::CallMethodRequest>>: Sync,
-{
-}

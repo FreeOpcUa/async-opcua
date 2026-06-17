@@ -98,27 +98,3 @@ impl opcua::types::BinaryDecodable for EndpointDescription {
         })
     }
 }
-unsafe impl Send for EndpointDescription
-where
-    opcua::types::string::UAString: Send,
-    super::application_description::ApplicationDescription: Send,
-    opcua::types::ApplicationInstanceCertificate: Send,
-    super::enums::MessageSecurityMode: Send,
-    opcua::types::string::UAString: Send,
-    Option<Vec<super::user_token_policy::UserTokenPolicy>>: Send,
-    opcua::types::string::UAString: Send,
-    u8: Send,
-{
-}
-unsafe impl Sync for EndpointDescription
-where
-    opcua::types::string::UAString: Sync,
-    super::application_description::ApplicationDescription: Sync,
-    opcua::types::ApplicationInstanceCertificate: Sync,
-    super::enums::MessageSecurityMode: Sync,
-    opcua::types::string::UAString: Sync,
-    Option<Vec<super::user_token_policy::UserTokenPolicy>>: Sync,
-    opcua::types::string::UAString: Sync,
-    u8: Sync,
-{
-}

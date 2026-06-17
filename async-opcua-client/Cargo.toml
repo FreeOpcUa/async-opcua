@@ -1,6 +1,6 @@
 [package]
 name = "async-opcua-client"
-version = "0.18.0"
+version = "0.19.0"
 description = "OPC UA client API"
 authors = ["Adam Lock <locka99@gmail.com>", "Einar Omang <einar@omang.com>"]
 homepage = "https://github.com/freeopcua/async-opcua"
@@ -19,6 +19,23 @@ workspace = true
 [lib]
 name = "opcua_client"
 
+[features]
+legacy-crypto = [
+  "async-opcua-core/legacy-crypto",
+  "async-opcua-crypto/legacy-crypto",
+]
+# opc.wss (WebSocket) transport (feature 009 / R5 / FR-044). TLS is layered via
+# tokio-rustls on the in-tree rustls 0.23; tokio-tungstenite carries no TLS itself.
+wss = [
+  "async-opcua-core/wss",
+  "dep:tokio-tungstenite",
+  "dep:tokio-rustls",
+  "dep:rustls",
+  "dep:rustls-pki-types",
+  "dep:rustls-native-certs",
+  "dep:webpki-roots",
+]
+
 [dependencies]
 arc-swap = { workspace = true }
 bytes = { workspace = true }
@@ -29,11 +46,20 @@ hashbrown = { workspace = true }
 parking_lot = { workspace = true }
 rsa = { workspace = true }
 serde = { workspace = true }
+socket2 = { version = "0.6", features = ["all"] }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 
-async-opcua-core = { path = "../async-opcua-core", version = "0.18.0" }
-async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.18.0" }
-async-opcua-nodes = { path = "../async-opcua-nodes", version = "0.18.0" }
-async-opcua-types = { path = "../async-opcua-types", version = "0.18.0" }
+# opc.wss transport (feature 009 / R5 / FR-044), gated by the `wss` feature.
+tokio-tungstenite = { workspace = true, optional = true }
+tokio-rustls = { workspace = true, optional = true }
+rustls = { workspace = true, optional = true }
+rustls-pki-types = { workspace = true, optional = true }
+rustls-native-certs = { workspace = true, optional = true }
+webpki-roots = { workspace = true, optional = true }
+
+async-opcua-core = { path = "../async-opcua-core", version = "0.19.0", default-features = false }
+async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.19.0", default-features = false }
+async-opcua-nodes = { path = "../async-opcua-nodes", version = "0.19.0" }
+async-opcua-types = { path = "../async-opcua-types", version = "0.19.0" }

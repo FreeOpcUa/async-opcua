@@ -87,21 +87,3 @@ impl opcua::types::BinaryDecodable for AggregateConfiguration {
         })
     }
 }
-unsafe impl Send for AggregateConfiguration
-where
-    bool: Send,
-    bool: Send,
-    u8: Send,
-    u8: Send,
-    bool: Send,
-{
-}
-unsafe impl Sync for AggregateConfiguration
-where
-    bool: Sync,
-    bool: Sync,
-    u8: Sync,
-    u8: Sync,
-    bool: Sync,
-{
-}

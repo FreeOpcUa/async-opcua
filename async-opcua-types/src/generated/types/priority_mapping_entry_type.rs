@@ -82,19 +82,3 @@ impl opcua::types::BinaryDecodable for PriorityMappingEntryType {
         })
     }
 }
-unsafe impl Send for PriorityMappingEntryType
-where
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    u8: Send,
-    u32: Send,
-{
-}
-unsafe impl Sync for PriorityMappingEntryType
-where
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    u8: Sync,
-    u32: Sync,
-{
-}

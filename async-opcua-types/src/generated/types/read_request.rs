@@ -88,19 +88,3 @@ impl opcua::types::BinaryDecodable for ReadRequest {
         })
     }
 }
-unsafe impl Send for ReadRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    opcua::types::data_types::Duration: Send,
-    super::enums::TimestampsToReturn: Send,
-    Option<Vec<super::read_value_id::ReadValueId>>: Send,
-{
-}
-unsafe impl Sync for ReadRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    opcua::types::data_types::Duration: Sync,
-    super::enums::TimestampsToReturn: Sync,
-    Option<Vec<super::read_value_id::ReadValueId>>: Sync,
-{
-}

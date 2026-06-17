@@ -95,33 +95,3 @@ impl opcua::types::BinaryDecodable for JsonDataSetMessage {
         })
     }
 }
-unsafe impl Send for JsonDataSetMessage
-where
-    u16: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    u32: Send,
-    super::configuration_version_data_type::ConfigurationVersionDataType: Send,
-    opcua::types::VersionTime: Send,
-    opcua::types::date_time::DateTime: Send,
-    opcua::types::status_code::StatusCode: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::extension_object::ExtensionObject: Send,
-{
-}
-unsafe impl Sync for JsonDataSetMessage
-where
-    u16: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    u32: Sync,
-    super::configuration_version_data_type::ConfigurationVersionDataType: Sync,
-    opcua::types::VersionTime: Sync,
-    opcua::types::date_time::DateTime: Sync,
-    opcua::types::status_code::StatusCode: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::extension_object::ExtensionObject: Sync,
-{
-}

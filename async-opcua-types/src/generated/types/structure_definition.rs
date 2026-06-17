@@ -82,19 +82,3 @@ impl opcua::types::BinaryDecodable for StructureDefinition {
         })
     }
 }
-unsafe impl Send for StructureDefinition
-where
-    opcua::types::node_id::NodeId: Send,
-    opcua::types::node_id::NodeId: Send,
-    super::enums::StructureType: Send,
-    Option<Vec<super::structure_field::StructureField>>: Send,
-{
-}
-unsafe impl Sync for StructureDefinition
-where
-    opcua::types::node_id::NodeId: Sync,
-    opcua::types::node_id::NodeId: Sync,
-    super::enums::StructureType: Sync,
-    Option<Vec<super::structure_field::StructureField>>: Sync,
-{
-}

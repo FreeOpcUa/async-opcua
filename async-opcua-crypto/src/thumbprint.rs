@@ -5,7 +5,7 @@
 //! Functionality for holding a message digest.
 use serde::{Deserialize, Serialize};
 
-use opcua_types::ByteString;
+use opcua_types::{ByteString, Error, StatusCode};
 
 /// The thumbprint holds a 20 byte representation of a certificate that can be used as a hash,
 /// handshake comparison, a filename hint or similar purpose where a shortened representation
@@ -27,14 +27,17 @@ impl Thumbprint {
     /// Size of thumbprint.
     pub const THUMBPRINT_SIZE: usize = 20;
 
-    /// Constructs a thumbprint from a message digest which is expected to be the proper length
-    pub fn new(digest: &[u8]) -> Thumbprint {
+    /// Constructs a thumbprint from a message digest which is expected to be the proper length.
+    pub fn new(digest: &[u8]) -> Result<Thumbprint, Error> {
         if digest.len() != Thumbprint::THUMBPRINT_SIZE {
-            panic!("Thumbprint is the wrong length, {}", digest.len());
+            return Err(Error::new(
+                StatusCode::BadUnexpectedError,
+                format!("Thumbprint is the wrong length, {}", digest.len()),
+            ));
         }
         let mut value = [0u8; Thumbprint::THUMBPRINT_SIZE];
         value.clone_from_slice(digest);
-        Thumbprint { value }
+        Ok(Thumbprint { value })
     }
 
     /// Create a byte string from this thumbprint.

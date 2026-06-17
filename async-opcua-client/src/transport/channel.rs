@@ -43,6 +43,7 @@ pub struct AsyncSecureChannel {
     state: Arc<SecureChannelState>,
     issue_channel_lock: tokio::sync::Mutex<()>,
     channel_lifetime: u32,
+    request_timeout: Duration,
 
     request_send: ArcSwapOption<RequestSend>,
     encoding_context: Arc<RwLock<ContextOwned>>,
@@ -142,16 +143,20 @@ impl AsyncSecureChannel {
         endpoint_info: EndpointInfo,
         session_retry_policy: SessionRetryPolicy,
         ignore_clock_skew: bool,
+        allow_legacy_crypto: bool,
         auth_token: Arc<ArcSwap<NodeId>>,
         transport_config: TransportConfiguration,
         channel_lifetime: u32,
+        request_timeout: Duration,
         encoding_context: Arc<RwLock<ContextOwned>>,
     ) -> Self {
-        let secure_channel = Arc::new(RwLock::new(SecureChannel::new(
+        let mut secure_channel = SecureChannel::new(
             certificate_store.clone(),
             Role::Client,
             encoding_context.clone(),
-        )));
+        );
+        secure_channel.set_allow_deprecated(allow_legacy_crypto);
+        let secure_channel = Arc::new(RwLock::new(secure_channel));
 
         Self {
             transport_config,
@@ -167,8 +172,14 @@ impl AsyncSecureChannel {
             session_retry_policy,
             request_send: Default::default(),
             channel_lifetime,
+            request_timeout,
             encoding_context,
         }
+    }
+
+    fn secure_channel_request_timeout(&self) -> Duration {
+        self.request_timeout
+            .min(Duration::from_millis(self.channel_lifetime as u64))
     }
 
     async fn renew_secure_channel(&self, send: Sender<OutgoingMessage>) -> Result<(), Error> {
@@ -186,11 +197,17 @@ impl AsyncSecureChannel {
             let request = self.state.begin_issue_or_renew_secure_channel(
                 SecurityTokenRequestType::Renew,
                 self.channel_lifetime,
-                Duration::from_secs(30),
+                self.secure_channel_request_timeout(),
                 send,
             );
 
-            let resp = request.send().await?;
+            let resp = match request.send().await {
+                Ok(resp) => resp,
+                Err(err) => {
+                    self.close_channel().await;
+                    return Err(err);
+                }
+            };
 
             if !matches!(resp, ResponseMessage::OpenSecureChannel(_)) {
                 return Err(process_unexpected_response(resp));

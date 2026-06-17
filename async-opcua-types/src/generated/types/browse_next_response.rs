@@ -83,17 +83,3 @@ impl opcua::types::BinaryDecodable for BrowseNextResponse {
         })
     }
 }
-unsafe impl Send for BrowseNextResponse
-where
-    opcua::types::response_header::ResponseHeader: Send,
-    Option<Vec<super::browse_result::BrowseResult>>: Send,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Send,
-{
-}
-unsafe impl Sync for BrowseNextResponse
-where
-    opcua::types::response_header::ResponseHeader: Sync,
-    Option<Vec<super::browse_result::BrowseResult>>: Sync,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Sync,
-{
-}

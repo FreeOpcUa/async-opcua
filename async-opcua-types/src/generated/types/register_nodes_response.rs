@@ -78,15 +78,3 @@ impl opcua::types::BinaryDecodable for RegisterNodesResponse {
         })
     }
 }
-unsafe impl Send for RegisterNodesResponse
-where
-    opcua::types::response_header::ResponseHeader: Send,
-    Option<Vec<opcua::types::node_id::NodeId>>: Send,
-{
-}
-unsafe impl Sync for RegisterNodesResponse
-where
-    opcua::types::response_header::ResponseHeader: Sync,
-    Option<Vec<opcua::types::node_id::NodeId>>: Sync,
-{
-}

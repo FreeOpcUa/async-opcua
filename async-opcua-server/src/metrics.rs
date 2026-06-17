@@ -13,12 +13,6 @@ pub struct ServerMetrics {
     pub session_lookup_count: AtomicU64,
     /// Total nanoseconds spent in session authentication token lookups.
     pub session_lookup_duration_ns: AtomicU64,
-    /// Number of pooled subscription notifications currently checked out.
-    pub pooled_notifications_active: AtomicUsize,
-    /// Total number of pooled subscription notifications managed by the server.
-    pub pooled_notifications_total: AtomicUsize,
-    /// Number of times notification acquisition had to wait for pool capacity.
-    pub pooled_notifications_wait_count: AtomicU64,
     /// Number of serialization errors observed on outbound responses.
     pub serialization_errors: AtomicU64,
     /// Number of messages processed by session actors.
@@ -36,9 +30,6 @@ impl ServerMetrics {
         Self {
             session_lookup_count: AtomicU64::new(0),
             session_lookup_duration_ns: AtomicU64::new(0),
-            pooled_notifications_active: AtomicUsize::new(0),
-            pooled_notifications_total: AtomicUsize::new(0),
-            pooled_notifications_wait_count: AtomicU64::new(0),
             serialization_errors: AtomicU64::new(0),
             actor_messages_processed: AtomicU64::new(0),
             actor_message_duration_ns: AtomicU64::new(0),

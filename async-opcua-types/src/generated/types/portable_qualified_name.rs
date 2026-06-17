@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for PortableQualifiedName {
         })
     }
 }
-unsafe impl Send for PortableQualifiedName
-where
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-{
-}
-unsafe impl Sync for PortableQualifiedName
-where
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-{
-}

@@ -94,25 +94,3 @@ impl opcua::types::BinaryDecodable for MethodAttributes {
         })
     }
 }
-unsafe impl Send for MethodAttributes
-where
-    u32: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-    opcua::types::localized_text::LocalizedText: Send,
-    u32: Send,
-    u32: Send,
-    bool: Send,
-    bool: Send,
-{
-}
-unsafe impl Sync for MethodAttributes
-where
-    u32: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-    opcua::types::localized_text::LocalizedText: Sync,
-    u32: Sync,
-    u32: Sync,
-    bool: Sync,
-    bool: Sync,
-{
-}

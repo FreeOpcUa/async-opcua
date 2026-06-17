@@ -87,19 +87,3 @@ impl opcua::types::BinaryDecodable for OpenSecureChannelResponse {
         })
     }
 }
-unsafe impl Send for OpenSecureChannelResponse
-where
-    opcua::types::response_header::ResponseHeader: Send,
-    u32: Send,
-    super::channel_security_token::ChannelSecurityToken: Send,
-    opcua::types::byte_string::ByteString: Send,
-{
-}
-unsafe impl Sync for OpenSecureChannelResponse
-where
-    opcua::types::response_header::ResponseHeader: Sync,
-    u32: Sync,
-    super::channel_security_token::ChannelSecurityToken: Sync,
-    opcua::types::byte_string::ByteString: Sync,
-{
-}

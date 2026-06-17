@@ -271,7 +271,8 @@ impl ServerEndpoint {
         if let Some(ref security_policy) = self.password_security_policy {
             match SecurityPolicy::from_str(security_policy).unwrap() {
                 SecurityPolicy::Unknown => {
-                    panic!("Password security policy {security_policy} is unrecognized");
+                    tracing::error!("Password security policy {security_policy} is unrecognized");
+                    password_security_policy = SecurityPolicy::None;
                 }
                 security_policy => {
                     password_security_policy = security_policy;
@@ -332,6 +333,22 @@ mod tests {
             message,
             "Endpoint invalid is invalid. Security policy \"InvalidPolicy\" is invalid. Valid values are None, Basic256Sha256, Aes128Sha256RsaOaep, Aes256Sha256RsaPss"
         );
+    }
+
+    /// L8: an unrecognized `password_security_policy` on a programmatically-built endpoint
+    /// (one that skipped `validate()`) must NOT panic on the auth hot path; it falls back
+    /// to the safe default (None).
+    #[test]
+    fn invalid_password_security_policy_does_not_panic() {
+        let endpoint = ServerEndpoint {
+            path: "/".to_string(),
+            security_policy: "None".to_string(),
+            security_mode: "None".to_string(),
+            security_level: 0,
+            password_security_policy: Some("InvalidPolicy".to_string()),
+            user_token_ids: BTreeSet::new(),
+        };
+        assert_eq!(endpoint.password_security_policy(), SecurityPolicy::None);
     }
 
     #[test]

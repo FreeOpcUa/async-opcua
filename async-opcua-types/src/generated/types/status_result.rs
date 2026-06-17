@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for StatusResult {
         })
     }
 }
-unsafe impl Send for StatusResult
-where
-    opcua::types::status_code::StatusCode: Send,
-    opcua::types::diagnostic_info::DiagnosticInfo: Send,
-{
-}
-unsafe impl Sync for StatusResult
-where
-    opcua::types::status_code::StatusCode: Sync,
-    opcua::types::diagnostic_info::DiagnosticInfo: Sync,
-{
-}

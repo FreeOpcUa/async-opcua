@@ -86,21 +86,3 @@ impl opcua::types::BinaryDecodable for DatagramConnectionTransport2DataType {
         })
     }
 }
-unsafe impl Send for DatagramConnectionTransport2DataType
-where
-    opcua::types::extension_object::ExtensionObject: Send,
-    u32: Send,
-    u32: Send,
-    opcua::types::string::UAString: Send,
-    Option<Vec<opcua::types::extension_object::ExtensionObject>>: Send,
-{
-}
-unsafe impl Sync for DatagramConnectionTransport2DataType
-where
-    opcua::types::extension_object::ExtensionObject: Sync,
-    u32: Sync,
-    u32: Sync,
-    opcua::types::string::UAString: Sync,
-    Option<Vec<opcua::types::extension_object::ExtensionObject>>: Sync,
-{
-}

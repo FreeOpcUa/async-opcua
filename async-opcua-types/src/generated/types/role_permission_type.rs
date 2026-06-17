@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for RolePermissionType {
         })
     }
 }
-unsafe impl Send for RolePermissionType
-where
-    opcua::types::node_id::NodeId: Send,
-    super::enums::PermissionType: Send,
-{
-}
-unsafe impl Sync for RolePermissionType
-where
-    opcua::types::node_id::NodeId: Sync,
-    super::enums::PermissionType: Sync,
-{
-}

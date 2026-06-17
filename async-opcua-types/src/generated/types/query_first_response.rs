@@ -98,23 +98,3 @@ impl opcua::types::BinaryDecodable for QueryFirstResponse {
         })
     }
 }
-unsafe impl Send for QueryFirstResponse
-where
-    opcua::types::response_header::ResponseHeader: Send,
-    Option<Vec<super::query_data_set::QueryDataSet>>: Send,
-    opcua::types::ContinuationPoint: Send,
-    Option<Vec<super::parsing_result::ParsingResult>>: Send,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Send,
-    super::content_filter_result::ContentFilterResult: Send,
-{
-}
-unsafe impl Sync for QueryFirstResponse
-where
-    opcua::types::response_header::ResponseHeader: Sync,
-    Option<Vec<super::query_data_set::QueryDataSet>>: Sync,
-    opcua::types::ContinuationPoint: Sync,
-    Option<Vec<super::parsing_result::ParsingResult>>: Sync,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Sync,
-    super::content_filter_result::ContentFilterResult: Sync,
-{
-}

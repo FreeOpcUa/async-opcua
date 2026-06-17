@@ -78,15 +78,3 @@ impl opcua::types::BinaryDecodable for HistoryUpdateRequest {
         })
     }
 }
-unsafe impl Send for HistoryUpdateRequest
-where
-    opcua::types::request_header::RequestHeader: Send,
-    Option<Vec<opcua::types::extension_object::ExtensionObject>>: Send,
-{
-}
-unsafe impl Sync for HistoryUpdateRequest
-where
-    opcua::types::request_header::RequestHeader: Sync,
-    Option<Vec<opcua::types::extension_object::ExtensionObject>>: Sync,
-{
-}

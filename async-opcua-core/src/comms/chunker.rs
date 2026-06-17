@@ -286,15 +286,12 @@ impl Write for ChunkingStream<'_, '_> {
         if !self.chunk_started {
             self.start_chunk()?;
         }
-        // Mirror the old zero-initialized buffer: a message that encodes
-        // shorter than its declared byte_len pads the chunk with zeros.
         if self.body_written < self.current_body_target {
-            bytes::BufMut::put_bytes(
-                &mut *self.storage,
-                0,
-                self.current_body_target - self.body_written,
-            );
-            self.body_written = self.current_body_target;
+            return Err(Error::encoding(format!(
+                "byte_len/encode mismatch: encoded {} bytes, expected {}",
+                self.body_written, self.current_body_target
+            ))
+            .into());
         }
         self.emit_chunk();
         Ok(())
@@ -348,10 +345,16 @@ impl Chunker {
             if i == 0 {
                 expected_request_id = chunk_info.sequence_header.request_id;
             } else if chunk_info.sequence_header.request_id != expected_request_id {
-                return Err(Error::new(StatusCode::BadSequenceNumberInvalid, format!(
-                    "Chunk sequence number of {} has a request id {} which is not the expected value of {}, idx {}",
-                    sequence_number, chunk_info.sequence_header.request_id, expected_request_id, i
-                )));
+                return Err(Error::new(
+                    StatusCode::BadSequenceNumberInvalid,
+                    format!(
+                        "Chunk sequence number of {} has a request id {} which is not the expected value of {}, idx {}",
+                        sequence_number,
+                        chunk_info.sequence_header.request_id,
+                        expected_request_id,
+                        i
+                    ),
+                ));
             }
         }
         Ok(())

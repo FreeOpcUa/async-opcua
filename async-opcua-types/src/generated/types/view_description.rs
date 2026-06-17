@@ -78,17 +78,3 @@ impl opcua::types::BinaryDecodable for ViewDescription {
         })
     }
 }
-unsafe impl Send for ViewDescription
-where
-    opcua::types::node_id::NodeId: Send,
-    opcua::types::data_types::UtcTime: Send,
-    u32: Send,
-{
-}
-unsafe impl Sync for ViewDescription
-where
-    opcua::types::node_id::NodeId: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-    u32: Sync,
-{
-}

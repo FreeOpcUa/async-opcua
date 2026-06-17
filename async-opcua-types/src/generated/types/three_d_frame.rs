@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for ThreeDFrame {
         })
     }
 }
-unsafe impl Send for ThreeDFrame
-where
-    super::three_d_cartesian_coordinates::ThreeDCartesianCoordinates: Send,
-    super::three_d_orientation::ThreeDOrientation: Send,
-{
-}
-unsafe impl Sync for ThreeDFrame
-where
-    super::three_d_cartesian_coordinates::ThreeDCartesianCoordinates: Sync,
-    super::three_d_orientation::ThreeDOrientation: Sync,
-{
-}

@@ -1,8 +1,12 @@
+#[cfg(feature = "wss")]
+use std::sync::Arc;
 use std::{path::PathBuf, time::Duration};
 
 use opcua_core::config::{Config, ConfigError};
-use tracing::error;
+use tracing::{error, warn};
 
+#[cfg(feature = "wss")]
+use super::config::WssTlsConfig;
 use super::{Client, ClientConfig, ClientEndpoint, ClientUserToken, ANONYMOUS_USER_TOKEN_ID};
 
 #[derive(Default)]
@@ -112,7 +116,15 @@ impl ClientBuilder {
     /// the client will reject the server upon first connect and the server's certificate
     /// must be manually moved from pki's `/rejected` folder to the `/trusted` folder. If it is
     /// set, then the server cert will automatically be stored in the `/trusted` folder.
+    ///
+    /// Enabling this auto-trusts any unknown server certificate and defeats
+    /// MITM protection. Do not use in production.
     pub fn trust_server_certs(mut self, trust_server_certs: bool) -> Self {
+        if trust_server_certs {
+            warn!(
+                "trust_server_certs is enabled: the client will auto-trust ANY server certificate, defeating MITM protection. Do not use in production."
+            );
+        }
         self.config.trust_server_certs = trust_server_certs;
         self
     }
@@ -123,6 +135,40 @@ impl ClientBuilder {
     /// verify the hostname, application uri and the not before / after values to ensure validity.
     pub fn verify_server_certs(mut self, verify_server_certs: bool) -> Self {
         self.config.verify_server_certs = verify_server_certs;
+        self
+    }
+
+    /// Sets a custom rustls client configuration for `opc.wss` connections.
+    ///
+    /// The supplied configuration is used verbatim, including certificate
+    /// verification, ALPN, protocol versions, and root stores.
+    #[cfg(feature = "wss")]
+    pub fn websocket_rustls_config(mut self, config: Arc<rustls::ClientConfig>) -> Self {
+        self.config.wss_tls = WssTlsConfig::Custom(config);
+        self
+    }
+
+    /// Adds a PEM file containing extra trust anchors for `opc.wss` connections.
+    ///
+    /// These roots are added to the default system and bundled WebPKI roots.
+    #[cfg(feature = "wss")]
+    pub fn websocket_ca_pem(mut self, path: impl Into<PathBuf>) -> Self {
+        self.config.wss_tls = WssTlsConfig::CaPem(path.into());
+        self
+    }
+
+    /// Sets whether WSS TLS certificate validation is disabled.
+    ///
+    /// This defeats TLS MITM protection for `opc.wss` and must not be used in
+    /// production.
+    #[cfg(feature = "wss")]
+    pub fn dangerously_accept_invalid_wss_certs(mut self, accept: bool) -> Self {
+        if accept {
+            warn!("WSS TLS certificate verification disabled -- do NOT use in production");
+            self.config.wss_tls = WssTlsConfig::DangerouslyAcceptInvalid;
+        } else {
+            self.config.wss_tls = WssTlsConfig::Default;
+        }
         self
     }
 
@@ -204,6 +250,12 @@ impl ClientBuilder {
     /// Maximum time between retries when backing off on session reconnects.
     pub fn session_retry_max(mut self, session_retry_max: Duration) -> Self {
         self.config.session_retry_max = session_retry_max;
+        self
+    }
+
+    /// Timeout for opening outbound TCP connections.
+    pub fn connect_timeout(mut self, connect_timeout: Duration) -> Self {
+        self.config.connect_timeout = connect_timeout;
         self
     }
 

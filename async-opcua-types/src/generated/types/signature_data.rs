@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for SignatureData {
         })
     }
 }
-unsafe impl Send for SignatureData
-where
-    opcua::types::string::UAString: Send,
-    opcua::types::byte_string::ByteString: Send,
-{
-}
-unsafe impl Sync for SignatureData
-where
-    opcua::types::string::UAString: Sync,
-    opcua::types::byte_string::ByteString: Sync,
-{
-}

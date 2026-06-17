@@ -127,8 +127,12 @@ pub mod gds;
 pub use gds::*;
 
 pub use builder::ClientBuilder;
+#[cfg(feature = "wss")]
+pub use config::WssTlsConfig;
 pub use config::{ClientConfig, ClientEndpoint, ClientUserToken, ANONYMOUS_USER_TOKEN_ID};
 pub use retry::{ExponentialBackoff, SessionRetryPolicy};
+#[cfg(feature = "wss")]
+pub use rustls;
 pub use session::{
     Client, ConnectionSource, DataChangeCallback, DefaultRetryPolicy, DirectConnectionSource,
     EventCallback, HistoryReadAction, HistoryUpdateAction, MonitoredItem, MonitoredItemMap,

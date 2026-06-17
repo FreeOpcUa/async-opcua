@@ -86,21 +86,3 @@ impl opcua::types::BinaryDecodable for BrokerDataSetReaderTransportDataType {
         })
     }
 }
-unsafe impl Send for BrokerDataSetReaderTransportDataType
-where
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    super::enums::BrokerTransportQualityOfService: Send,
-    opcua::types::string::UAString: Send,
-{
-}
-unsafe impl Sync for BrokerDataSetReaderTransportDataType
-where
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    super::enums::BrokerTransportQualityOfService: Sync,
-    opcua::types::string::UAString: Sync,
-{
-}

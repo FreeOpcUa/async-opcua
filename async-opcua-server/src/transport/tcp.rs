@@ -1,4 +1,5 @@
 use std::{
+    future::Future,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -12,7 +13,7 @@ use opcua_core::{
         secure_channel::SecureChannel,
         sequence_number::SequenceNumberHandle,
         tcp_codec::{Message, TcpCodec},
-        tcp_types::{AcknowledgeMessage, ErrorMessage},
+        tcp_types::{AcknowledgeMessage, ErrorMessage, MIN_CHUNK_SIZE},
     },
     RequestMessage, ResponseMessage,
 };
@@ -24,17 +25,35 @@ use opcua_types::{DecodingOptions, Error, ResponseHeader, ServiceFault, StatusCo
 
 use futures::StreamExt;
 use tokio::{
-    io::{ReadHalf, WriteHalf},
+    io::{AsyncRead, AsyncWrite, ReadHalf, WriteHalf},
     net::TcpStream,
 };
 use tokio_util::{codec::FramedRead, sync::CancellationToken};
 
 use super::connect::Connector;
+use crate::config::TcpKeepaliveConfig;
 
-/// Transport implementation for opc.tcp.
-pub(crate) struct TcpTransport {
-    read: FramedRead<ReadHalf<TcpStream>, TcpCodec>,
-    write: WriteHalf<TcpStream>,
+pub(crate) trait ConnectionTransport: Send + 'static {
+    fn set_closing(&mut self);
+    fn is_closing(&self) -> bool;
+    fn enqueue_error(&mut self, message: ErrorMessage);
+    fn enqueue_message_for_send(
+        &mut self,
+        channel: &mut SecureChannel,
+        message: ResponseMessage,
+        request_id: u32,
+    ) -> Result<(), StatusCode>;
+    fn client_protocol_version(&self) -> u32;
+    fn poll<'a>(
+        &'a mut self,
+        channel: &'a mut SecureChannel,
+    ) -> impl Future<Output = TransportPollResult> + Send + 'a;
+}
+
+/// Transport implementation for byte streams carrying OPC UA TCP frames.
+pub(crate) struct Transport<R, W> {
+    read: FramedRead<R, TcpCodec>,
+    write: W,
     send_buffer: SendBuffer,
     state: TransportState,
     pending_chunks: Vec<MessageChunk>,
@@ -43,6 +62,9 @@ pub(crate) struct TcpTransport {
     /// Last decoded sequence number
     sequence_numbers: SequenceNumberHandle,
 }
+
+/// Transport implementation for opc.tcp.
+pub(crate) type TcpTransport = Transport<ReadHalf<TcpStream>, WriteHalf<TcpStream>>;
 
 enum TransportState {
     Running,
@@ -56,6 +78,7 @@ pub(crate) struct TransportConfig {
     pub max_message_size: usize,
     pub max_chunk_count: usize,
     pub hello_timeout: Duration,
+    pub tcp_keepalive: TcpKeepaliveConfig,
 }
 
 #[derive(Debug)]
@@ -86,15 +109,25 @@ fn min_zero_infinite(server: u32, client: u32) -> u32 {
     }
 }
 
-pub(crate) struct TcpConnector {
-    read: FramedRead<ReadHalf<TcpStream>, TcpCodec>,
-    write: WriteHalf<TcpStream>,
+fn effective_max_chunk_count(max_chunk_count: usize, max_message_size: usize) -> usize {
+    if max_chunk_count > 0 {
+        max_chunk_count
+    } else if max_message_size > 0 {
+        (max_message_size / MIN_CHUNK_SIZE).max(1)
+    } else {
+        usize::MAX
+    }
+}
+
+pub(crate) struct TcpConnector<R = ReadHalf<TcpStream>, W = WriteHalf<TcpStream>> {
+    read: FramedRead<R, TcpCodec>,
+    write: W,
     deadline: Instant,
     config: TransportConfig,
     decoding_options: DecodingOptions,
 }
 
-impl TcpConnector {
+impl TcpConnector<ReadHalf<TcpStream>, WriteHalf<TcpStream>> {
     pub(crate) fn new(
         stream: TcpStream,
         config: TransportConfig,
@@ -110,10 +143,16 @@ impl TcpConnector {
             decoding_options,
         }
     }
+}
 
-    pub(super) fn new_split(
-        read: FramedRead<ReadHalf<TcpStream>, TcpCodec>,
-        write: WriteHalf<TcpStream>,
+impl<R, W> TcpConnector<R, W>
+where
+    R: AsyncRead + Unpin + Send + Sync + 'static,
+    W: AsyncWrite + Unpin + Send + Sync + 'static,
+{
+    pub(crate) fn new_split(
+        read: FramedRead<R, TcpCodec>,
+        write: W,
         config: TransportConfig,
         decoding_options: DecodingOptions,
     ) -> Self {
@@ -216,12 +255,18 @@ impl TcpConnector {
     }
 }
 
-impl Connector for TcpConnector {
+impl<R, W> Connector for TcpConnector<R, W>
+where
+    R: AsyncRead + Unpin + Send + Sync + 'static,
+    W: AsyncWrite + Unpin + Send + Sync + 'static,
+{
+    type Transport = Transport<R, W>;
+
     async fn connect(
         mut self,
         info: Arc<ServerInfo>,
         token: CancellationToken,
-    ) -> Result<TcpTransport, StatusCode> {
+    ) -> Result<Self::Transport, StatusCode> {
         let err = tokio::select! {
             _ = tokio::time::sleep_until(self.deadline.into()) => {
                 ErrorMessage::new(StatusCode::BadTimeout, "Timeout waiting for HELLO")
@@ -231,7 +276,7 @@ impl Connector for TcpConnector {
             }
             r = self.connect_inner(info).instrument(tracing::info_span!("OPC-UA TCP handshake")) => {
                 match r {
-                    Ok(r) => return Ok(TcpTransport::new(self.read, self.write, r)),
+                    Ok(r) => return Ok(Transport::new(self.read, self.write, r)),
                     Err(e) => e,
                 }
             }
@@ -248,12 +293,12 @@ impl Connector for TcpConnector {
     }
 }
 
-impl TcpTransport {
-    fn new(
-        read: FramedRead<ReadHalf<TcpStream>, TcpCodec>,
-        write: WriteHalf<TcpStream>,
-        send_buffer: SendBuffer,
-    ) -> Self {
+impl<R, W> Transport<R, W>
+where
+    R: AsyncRead + Unpin + Send + Sync + 'static,
+    W: AsyncWrite + Unpin + Send + Sync + 'static,
+{
+    fn new(read: FramedRead<R, TcpCodec>, write: W, send_buffer: SendBuffer) -> Self {
         Self {
             read,
             write,
@@ -265,21 +310,19 @@ impl TcpTransport {
         }
     }
 
-    /// Set the transport state to closing, once the final message is sent
-    /// the connection will be closed.
-    pub(crate) fn set_closing(&mut self) {
+    fn set_closing_inner(&mut self) {
         self.state = TransportState::Closing;
     }
 
-    pub(crate) fn is_closing(&self) -> bool {
+    fn is_closing_inner(&self) -> bool {
         matches!(self.state, TransportState::Closing)
     }
 
-    pub(crate) fn enqueue_error(&mut self, message: ErrorMessage) {
+    fn enqueue_error_inner(&mut self, message: ErrorMessage) {
         self.send_buffer.write_error(message);
     }
 
-    pub(crate) fn enqueue_message_for_send(
+    fn enqueue_message_for_send_inner(
         &mut self,
         channel: &mut SecureChannel,
         message: ResponseMessage,
@@ -308,7 +351,7 @@ impl TcpTransport {
         }
     }
 
-    pub(crate) async fn poll(&mut self, channel: &mut SecureChannel) -> TransportPollResult {
+    async fn poll_inner(&mut self, channel: &mut SecureChannel) -> TransportPollResult {
         // Either we've got something in the send buffer, which we can send,
         // or we're waiting for more outgoing messages.
         // We won't wait for outgoing messages while sending, since that
@@ -339,7 +382,7 @@ impl TcpTransport {
                 }
             }
         } else {
-            if self.is_closing() {
+            if self.is_closing_inner() {
                 return TransportPollResult::Closed;
             }
             let incoming = self.read.next().await;
@@ -393,12 +436,13 @@ impl TcpTransport {
                 } else {
                     let chunk = channel.verify_and_remove_security_server(chunk.data)?;
 
-                    if self.send_buffer.max_chunk_count > 0
-                        && self.pending_chunks.len() == self.send_buffer.max_chunk_count
-                    {
+                    let max_chunks = effective_max_chunk_count(
+                        self.send_buffer.max_chunk_count,
+                        self.send_buffer.max_message_size,
+                    );
+                    if self.pending_chunks.len() >= max_chunks {
                         return Err(Error::decoding(format!(
-                            "Message has more than {} chunks, exceeding negotiated limits",
-                            self.send_buffer.max_chunk_count
+                            "Message has more than {max_chunks} chunks, exceeding limits"
                         )));
                     }
                     let chunk_info = chunk.chunk_info(channel)?;
@@ -428,5 +472,60 @@ impl TcpTransport {
                 format!("Received unexpected message: {unexpected:?}"),
             )),
         }
+    }
+}
+
+impl<R, W> ConnectionTransport for Transport<R, W>
+where
+    R: AsyncRead + Unpin + Send + Sync + 'static,
+    W: AsyncWrite + Unpin + Send + Sync + 'static,
+{
+    fn set_closing(&mut self) {
+        self.set_closing_inner();
+    }
+
+    fn is_closing(&self) -> bool {
+        self.is_closing_inner()
+    }
+
+    fn enqueue_error(&mut self, message: ErrorMessage) {
+        self.enqueue_error_inner(message);
+    }
+
+    fn enqueue_message_for_send(
+        &mut self,
+        channel: &mut SecureChannel,
+        message: ResponseMessage,
+        request_id: u32,
+    ) -> Result<(), StatusCode> {
+        self.enqueue_message_for_send_inner(channel, message, request_id)
+    }
+
+    fn client_protocol_version(&self) -> u32 {
+        self.client_protocol_version
+    }
+
+    fn poll<'a>(
+        &'a mut self,
+        channel: &'a mut SecureChannel,
+    ) -> impl Future<Output = TransportPollResult> + Send + 'a {
+        self.poll_inner(channel)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::effective_max_chunk_count;
+
+    /// N6/M11: the inbound chunk-count ceiling must be enforced from `max_message_size`
+    /// when only `max_chunk_count` is 0, while preserving documented 0/0 unlimited semantics.
+    #[test]
+    fn chunk_count_ceiling_is_bounded_even_when_unlimited() {
+        // Explicit cap is honored.
+        assert_eq!(effective_max_chunk_count(5, 327_675), 5);
+        // 0 == unlimited -> derived ceiling = max_message_size / MIN_CHUNK_SIZE (8192).
+        assert_eq!(effective_max_chunk_count(0, 327_675), 327_675 / 8192);
+        // 0/0 means unlimited; do not collapse it to one chunk (P2 regression).
+        assert_eq!(effective_max_chunk_count(0, 0), usize::MAX);
     }
 }

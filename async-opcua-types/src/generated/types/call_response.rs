@@ -83,17 +83,3 @@ impl opcua::types::BinaryDecodable for CallResponse {
         })
     }
 }
-unsafe impl Send for CallResponse
-where
-    opcua::types::response_header::ResponseHeader: Send,
-    Option<Vec<super::call_method_result::CallMethodResult>>: Send,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Send,
-{
-}
-unsafe impl Sync for CallResponse
-where
-    opcua::types::response_header::ResponseHeader: Sync,
-    Option<Vec<super::call_method_result::CallMethodResult>>: Sync,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Sync,
-{
-}

@@ -78,17 +78,3 @@ impl opcua::types::BinaryDecodable for ContentFilterElementResult {
         })
     }
 }
-unsafe impl Send for ContentFilterElementResult
-where
-    opcua::types::status_code::StatusCode: Send,
-    Option<Vec<opcua::types::status_code::StatusCode>>: Send,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Send,
-{
-}
-unsafe impl Sync for ContentFilterElementResult
-where
-    opcua::types::status_code::StatusCode: Sync,
-    Option<Vec<opcua::types::status_code::StatusCode>>: Sync,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Sync,
-{
-}

@@ -9,6 +9,7 @@ use std::{
     result::Result,
 };
 
+use aws_lc_rs::rsa as aws_rsa;
 use rsa::pkcs1;
 use rsa::pkcs1v15;
 use rsa::pkcs8;
@@ -20,7 +21,7 @@ use x509_cert::spki::SubjectPublicKeyInfoOwned;
 
 use opcua_types::{status_code::StatusCode, Error};
 
-use crate::policy::aes::AesAsymmetricEncryptionAlgorithm;
+use crate::policy::aes::{AesAsymmetricEncryptionAlgorithm, RsaPrivateDecryptPadding};
 
 #[derive(Debug)]
 /// Error from working with a private key.
@@ -243,6 +244,8 @@ impl PrivateKey {
         dst: &mut [u8],
     ) -> Result<usize, PKeyError> {
         let cipher_text_block_size = self.cipher_text_block_size();
+        let decrypting_key = self.aws_lc_private_decrypting_key()?;
+        let padding = T::get_private_decrypt_padding();
         // Decrypt the data
         let mut src_idx = 0;
         let mut dst_idx = 0;
@@ -256,20 +259,47 @@ impl PrivateKey {
                 let src = &src[src_idx..src_end_index];
                 let dst = &mut dst[dst_idx..(dst_idx + cipher_text_block_size)];
 
-                let padding = T::get_padding();
-                let decrypted = self.value.decrypt(padding, src)?;
-
-                let size = decrypted.len();
-                if size == dst.len() {
-                    dst.copy_from_slice(&decrypted);
-                } else {
-                    dst[0..size].copy_from_slice(&decrypted);
-                }
-                size
+                aws_lc_private_decrypt(&decrypting_key, padding, src, dst)?
             };
             src_idx = src_end_index;
         }
         Ok(dst_idx)
+    }
+
+    fn aws_lc_private_decrypting_key(&self) -> Result<aws_rsa::PrivateDecryptingKey, PKeyError> {
+        let der = self.to_der().map_err(|_| PKeyError)?;
+        aws_rsa::PrivateDecryptingKey::from_pkcs8(der.as_bytes()).map_err(|_| PKeyError)
+    }
+}
+
+fn aws_lc_private_decrypt(
+    private_key: &aws_rsa::PrivateDecryptingKey,
+    padding: RsaPrivateDecryptPadding,
+    src: &[u8],
+    dst: &mut [u8],
+) -> Result<usize, PKeyError> {
+    match padding {
+        RsaPrivateDecryptPadding::Pkcs1v15 => {
+            let key = aws_rsa::Pkcs1PrivateDecryptingKey::new(private_key.clone())
+                .map_err(|_| PKeyError)?;
+            key.decrypt(src, dst)
+                .map(|plaintext| plaintext.len())
+                .map_err(|_| PKeyError)
+        }
+        RsaPrivateDecryptPadding::OaepSha1 => {
+            let key = aws_rsa::OaepPrivateDecryptingKey::new(private_key.clone())
+                .map_err(|_| PKeyError)?;
+            key.decrypt(&aws_rsa::OAEP_SHA1_MGF1SHA1, src, dst, None)
+                .map(|plaintext| plaintext.len())
+                .map_err(|_| PKeyError)
+        }
+        RsaPrivateDecryptPadding::OaepSha256 => {
+            let key = aws_rsa::OaepPrivateDecryptingKey::new(private_key.clone())
+                .map_err(|_| PKeyError)?;
+            key.decrypt(&aws_rsa::OAEP_SHA256_MGF1SHA256, src, dst, None)
+                .map(|plaintext| plaintext.len())
+                .map_err(|_| PKeyError)
+        }
     }
 }
 

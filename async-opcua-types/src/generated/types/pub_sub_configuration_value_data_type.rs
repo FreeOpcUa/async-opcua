@@ -79,17 +79,3 @@ impl opcua::types::BinaryDecodable for PubSubConfigurationValueDataType {
         })
     }
 }
-unsafe impl Send for PubSubConfigurationValueDataType
-where
-    super::pub_sub_configuration_ref_data_type::PubSubConfigurationRefDataType: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::variant::Variant: Send,
-{
-}
-unsafe impl Sync for PubSubConfigurationValueDataType
-where
-    super::pub_sub_configuration_ref_data_type::PubSubConfigurationRefDataType: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::variant::Variant: Sync,
-{
-}

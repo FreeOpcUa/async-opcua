@@ -46,10 +46,11 @@ use opcua_types::{
 use super::{
     build::NodeManagerBuilder,
     view::{AddReferenceResult, ExternalReference, ExternalReferenceRequest, NodeMetadata},
-    AddNodeItem, AddReferenceItem, BrowseNode, BrowsePathItem, DefaultTypeTree, DeleteNodeItem,
-    DeleteReferenceItem, DynNodeManager, HistoryNode, HistoryUpdateDetails, HistoryUpdateNode,
-    MethodCall, MonitoredItemRef, MonitoredItemUpdateRef, NodeManager, QueryRequest, ReadNode,
-    RegisterNodeItem, RequestContext, ServerContext, WriteNode,
+    AddNodeItem, AddReferenceItem, AttributeProvider, BrowseNode, BrowsePathItem, DefaultTypeTree,
+    DeleteNodeItem, DeleteReferenceItem, DynNodeManager, HistoryNode, HistoryProvider,
+    HistoryUpdateDetails, HistoryUpdateNode, MethodCall, MethodProvider, MonitoredItemProvider,
+    MonitoredItemRef, MonitoredItemUpdateRef, NodeManagerCore, NodeMutator, QueryRequest, ReadNode,
+    RegisterNodeItem, RequestContext, ServerContext, ViewProvider, WriteNode,
 };
 
 use crate::address_space::AddressSpace;
@@ -655,7 +656,7 @@ impl<TImpl: InMemoryNodeManagerImpl> InMemoryNodeManager<TImpl> {
 }
 
 #[async_trait]
-impl<TImpl: InMemoryNodeManagerImpl> NodeManager for InMemoryNodeManager<TImpl> {
+impl<TImpl: InMemoryNodeManagerImpl> NodeManagerCore for InMemoryNodeManager<TImpl> {
     fn owns_node(&self, id: &NodeId) -> bool {
         self.namespaces.contains_key(&id.namespace)
     }
@@ -681,7 +682,68 @@ impl<TImpl: InMemoryNodeManagerImpl> NodeManager for InMemoryNodeManager<TImpl> 
     fn handle_new_node(&self, parent_id: &ExpandedNodeId) -> bool {
         self.inner.handle_new_node(parent_id)
     }
+}
 
+#[async_trait]
+impl<TImpl: InMemoryNodeManagerImpl> AttributeProvider for InMemoryNodeManager<TImpl> {
+    async fn read(
+        &self,
+        context: &RequestContext,
+        max_age: f64,
+        timestamps_to_return: TimestampsToReturn,
+        nodes_to_read: &mut [&mut ReadNode],
+    ) -> Result<(), StatusCode> {
+        let mut read_values = Vec::new();
+        {
+            let address_space = trace_read_lock!(self.address_space);
+            for node in nodes_to_read {
+                if node.node().attribute_id == AttributeId::Value {
+                    read_values.push(node);
+                    continue;
+                }
+
+                node.set_result(address_space.read(
+                    context,
+                    node.node(),
+                    max_age,
+                    timestamps_to_return,
+                ));
+            }
+        }
+
+        if !read_values.is_empty() {
+            let ids: Vec<_> = read_values.iter().map(|r| r.node()).collect();
+            let values = self
+                .inner
+                .read_values(
+                    context,
+                    &self.address_space,
+                    &ids,
+                    max_age,
+                    timestamps_to_return,
+                )
+                .await;
+            for (read, value) in read_values.iter_mut().zip(values) {
+                read.set_result(value);
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn write(
+        &self,
+        context: &RequestContext,
+        nodes_to_write: &mut [&mut WriteNode],
+    ) -> Result<(), StatusCode> {
+        self.inner
+            .write(context, &self.address_space, nodes_to_write)
+            .await
+    }
+}
+
+#[async_trait]
+impl<TImpl: InMemoryNodeManagerImpl> ViewProvider for InMemoryNodeManager<TImpl> {
     async fn resolve_external_references(
         &self,
         context: &RequestContext,
@@ -743,51 +805,6 @@ impl<TImpl: InMemoryNodeManagerImpl> NodeManager for InMemoryNodeManager<TImpl> 
         Ok(())
     }
 
-    async fn read(
-        &self,
-        context: &RequestContext,
-        max_age: f64,
-        timestamps_to_return: TimestampsToReturn,
-        nodes_to_read: &mut [&mut ReadNode],
-    ) -> Result<(), StatusCode> {
-        let mut read_values = Vec::new();
-        {
-            let address_space = trace_read_lock!(self.address_space);
-            for node in nodes_to_read {
-                if node.node().attribute_id == AttributeId::Value {
-                    read_values.push(node);
-                    continue;
-                }
-
-                node.set_result(address_space.read(
-                    context,
-                    node.node(),
-                    max_age,
-                    timestamps_to_return,
-                ));
-            }
-        }
-
-        if !read_values.is_empty() {
-            let ids: Vec<_> = read_values.iter().map(|r| r.node()).collect();
-            let values = self
-                .inner
-                .read_values(
-                    context,
-                    &self.address_space,
-                    &ids,
-                    max_age,
-                    timestamps_to_return,
-                )
-                .await;
-            for (read, value) in read_values.iter_mut().zip(values) {
-                read.set_result(value);
-            }
-        }
-
-        Ok(())
-    }
-
     async fn translate_browse_paths_to_node_ids(
         &self,
         context: &RequestContext,
@@ -829,6 +846,34 @@ impl<TImpl: InMemoryNodeManagerImpl> NodeManager for InMemoryNodeManager<TImpl> 
             .await
     }
 
+    async fn query(
+        &self,
+        context: &RequestContext,
+        request: &mut QueryRequest,
+    ) -> Result<(), StatusCode> {
+        let address_space = trace_read_lock!(self.address_space);
+        let type_tree = context.get_type_tree_for_user();
+
+        if request.continuation_point().is_some() {
+            crate::services::query::handlers::QueryNextHandler::new(
+                &address_space,
+                type_tree.get(),
+                context,
+            )
+            .execute(request)
+        } else {
+            crate::services::query::handlers::QueryFirstHandler::new(
+                &address_space,
+                type_tree.get(),
+                context,
+            )
+            .execute(request)
+        }
+    }
+}
+
+#[async_trait]
+impl<TImpl: InMemoryNodeManagerImpl> MonitoredItemProvider for InMemoryNodeManager<TImpl> {
     async fn create_monitored_items(
         &self,
         context: &RequestContext,
@@ -955,32 +1000,10 @@ impl<TImpl: InMemoryNodeManagerImpl> NodeManager for InMemoryNodeManager<TImpl> 
             .collect();
         self.inner.delete_monitored_items(context, &items).await;
     }
+}
 
-    async fn query(
-        &self,
-        context: &RequestContext,
-        request: &mut QueryRequest,
-    ) -> Result<(), StatusCode> {
-        let address_space = trace_read_lock!(self.address_space);
-        let type_tree = context.get_type_tree_for_user();
-
-        if request.continuation_point().is_some() {
-            crate::services::query::handlers::QueryNextHandler::new(
-                &address_space,
-                type_tree.get(),
-                context,
-            )
-            .execute(request)
-        } else {
-            crate::services::query::handlers::QueryFirstHandler::new(
-                &address_space,
-                type_tree.get(),
-                context,
-            )
-            .execute(request)
-        }
-    }
-
+#[async_trait]
+impl<TImpl: InMemoryNodeManagerImpl> HistoryProvider for InMemoryNodeManager<TImpl> {
     async fn history_read_raw_modified(
         &self,
         context: &RequestContext,
@@ -1057,16 +1080,6 @@ impl<TImpl: InMemoryNodeManagerImpl> NodeManager for InMemoryNodeManager<TImpl> 
             .await
     }
 
-    async fn write(
-        &self,
-        context: &RequestContext,
-        nodes_to_write: &mut [&mut WriteNode],
-    ) -> Result<(), StatusCode> {
-        self.inner
-            .write(context, &self.address_space, nodes_to_write)
-            .await
-    }
-
     async fn history_update(
         &self,
         context: &RequestContext,
@@ -1075,7 +1088,10 @@ impl<TImpl: InMemoryNodeManagerImpl> NodeManager for InMemoryNodeManager<TImpl> 
         let mut nodes = self.validate_history_write_nodes(context, nodes);
         self.inner.history_update(context, &mut nodes).await
     }
+}
 
+#[async_trait]
+impl<TImpl: InMemoryNodeManagerImpl> MethodProvider for InMemoryNodeManager<TImpl> {
     async fn call(
         &self,
         context: &RequestContext,
@@ -1086,7 +1102,10 @@ impl<TImpl: InMemoryNodeManagerImpl> NodeManager for InMemoryNodeManager<TImpl> 
             .call(context, &self.address_space, &mut to_call)
             .await
     }
+}
 
+#[async_trait]
+impl<TImpl: InMemoryNodeManagerImpl> NodeMutator for InMemoryNodeManager<TImpl> {
     /// Add a list of nodes.
     ///
     /// This should create the nodes, or set a failed status as appropriate.

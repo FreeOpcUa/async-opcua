@@ -102,29 +102,3 @@ impl opcua::types::BinaryDecodable for DataSetWriterDataType {
         })
     }
 }
-unsafe impl Send for DataSetWriterDataType
-where
-    opcua::types::string::UAString: Send,
-    bool: Send,
-    u16: Send,
-    super::enums::DataSetFieldContentMask: Send,
-    u32: Send,
-    opcua::types::string::UAString: Send,
-    Option<Vec<super::key_value_pair::KeyValuePair>>: Send,
-    opcua::types::extension_object::ExtensionObject: Send,
-    opcua::types::extension_object::ExtensionObject: Send,
-{
-}
-unsafe impl Sync for DataSetWriterDataType
-where
-    opcua::types::string::UAString: Sync,
-    bool: Sync,
-    u16: Sync,
-    super::enums::DataSetFieldContentMask: Sync,
-    u32: Sync,
-    opcua::types::string::UAString: Sync,
-    Option<Vec<super::key_value_pair::KeyValuePair>>: Sync,
-    opcua::types::extension_object::ExtensionObject: Sync,
-    opcua::types::extension_object::ExtensionObject: Sync,
-{
-}

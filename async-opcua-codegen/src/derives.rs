@@ -21,7 +21,6 @@ impl StructFieldImpl {
 pub(crate) fn struct_impls(struct_name: &Ident, fields: &[StructFieldImpl]) -> Vec<Item> {
     let mut impls = Vec::new();
     impls.extend(binary_impls(struct_name, fields));
-    impls.extend(send_sync_impls(struct_name, fields));
     impls
 }
 
@@ -121,35 +120,4 @@ fn decode_body(fields: &[StructFieldImpl]) -> TokenStream {
             #field_build
         })
     }
-}
-
-fn send_sync_impls(struct_name: &Ident, fields: &[StructFieldImpl]) -> Vec<Item> {
-    if fields.is_empty() {
-        return vec![
-            parse_quote! {
-                unsafe impl Send for #struct_name {}
-            },
-            parse_quote! {
-                unsafe impl Sync for #struct_name {}
-            },
-        ];
-    }
-
-    let field_types = fields.iter().map(|field| &field.ty);
-    let field_types_sync = fields.iter().map(|field| &field.ty);
-
-    vec![
-        parse_quote! {
-            unsafe impl Send for #struct_name
-            where
-                #(#field_types: Send,)*
-            {}
-        },
-        parse_quote! {
-            unsafe impl Sync for #struct_name
-            where
-                #(#field_types_sync: Sync,)*
-            {}
-        },
-    ]
 }

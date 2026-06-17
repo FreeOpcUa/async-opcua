@@ -115,35 +115,3 @@ impl opcua::types::BinaryDecodable for ServerDiagnosticsSummaryDataType {
         })
     }
 }
-unsafe impl Send for ServerDiagnosticsSummaryDataType
-where
-    u32: Send,
-    u32: Send,
-    u32: Send,
-    u32: Send,
-    u32: Send,
-    u32: Send,
-    u32: Send,
-    u32: Send,
-    u32: Send,
-    u32: Send,
-    u32: Send,
-    u32: Send,
-{
-}
-unsafe impl Sync for ServerDiagnosticsSummaryDataType
-where
-    u32: Sync,
-    u32: Sync,
-    u32: Sync,
-    u32: Sync,
-    u32: Sync,
-    u32: Sync,
-    u32: Sync,
-    u32: Sync,
-    u32: Sync,
-    u32: Sync,
-    u32: Sync,
-    u32: Sync,
-{
-}

@@ -70,5 +70,3 @@ impl opcua::types::BinaryDecodable for TransmitQosPriorityDataType {
         })
     }
 }
-unsafe impl Send for TransmitQosPriorityDataType where opcua::types::string::UAString: Send {}
-unsafe impl Sync for TransmitQosPriorityDataType where opcua::types::string::UAString: Sync {}

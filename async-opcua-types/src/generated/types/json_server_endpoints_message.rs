@@ -75,23 +75,3 @@ impl opcua::types::BinaryDecodable for JsonServerEndpointsMessage {
         })
     }
 }
-unsafe impl Send for JsonServerEndpointsMessage
-where
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::string::UAString: Send,
-    opcua::types::data_types::UtcTime: Send,
-    super::application_description::ApplicationDescription: Send,
-    Option<Vec<super::endpoint_description::EndpointDescription>>: Send,
-{
-}
-unsafe impl Sync for JsonServerEndpointsMessage
-where
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::string::UAString: Sync,
-    opcua::types::data_types::UtcTime: Sync,
-    super::application_description::ApplicationDescription: Sync,
-    Option<Vec<super::endpoint_description::EndpointDescription>>: Sync,
-{
-}

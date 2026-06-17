@@ -62,6 +62,8 @@ pub use identity_token::IdentityToken;
 pub use info::ServerInfo;
 pub use opcua_types::event_field::EventField;
 pub use reverse_connect::ReverseConnectTargetConfig;
+#[cfg(feature = "wss")]
+pub use rustls;
 pub use server::Server;
 pub use server_handle::ServerHandle;
 pub use server_status::ServerStatusWrapper;
@@ -73,9 +75,7 @@ pub use subscriptions::{
 
 /// Notification allocation pooling utilities.
 pub mod pool {
-    pub use super::subscriptions::pool::{
-        NotificationBuffer, NotificationPool, PooledNotificationBuffer,
-    };
+    pub use super::subscriptions::pool::NotificationBuffer;
 }
 
 /// Utilities for efficiently notifying subscriptions.

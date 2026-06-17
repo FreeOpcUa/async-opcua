@@ -85,21 +85,3 @@ impl opcua::types::BinaryDecodable for SessionlessInvokeRequestType {
         })
     }
 }
-unsafe impl Send for SessionlessInvokeRequestType
-where
-    opcua::types::VersionTime: Send,
-    Option<Vec<opcua::types::string::UAString>>: Send,
-    Option<Vec<opcua::types::string::UAString>>: Send,
-    Option<Vec<opcua::types::LocaleId>>: Send,
-    u32: Send,
-{
-}
-unsafe impl Sync for SessionlessInvokeRequestType
-where
-    opcua::types::VersionTime: Sync,
-    Option<Vec<opcua::types::string::UAString>>: Sync,
-    Option<Vec<opcua::types::string::UAString>>: Sync,
-    Option<Vec<opcua::types::LocaleId>>: Sync,
-    u32: Sync,
-{
-}

@@ -83,17 +83,3 @@ impl opcua::types::BinaryDecodable for HistoryReadResponse {
         })
     }
 }
-unsafe impl Send for HistoryReadResponse
-where
-    opcua::types::response_header::ResponseHeader: Send,
-    Option<Vec<super::history_read_result::HistoryReadResult>>: Send,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Send,
-{
-}
-unsafe impl Sync for HistoryReadResponse
-where
-    opcua::types::response_header::ResponseHeader: Sync,
-    Option<Vec<super::history_read_result::HistoryReadResult>>: Sync,
-    Option<Vec<opcua::types::diagnostic_info::DiagnosticInfo>>: Sync,
-{
-}

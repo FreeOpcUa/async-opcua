@@ -533,6 +533,7 @@ impl DynamicTypeLoader {
         ctx: &Context<'_>,
         t: &Arc<StructTypeInfo>,
     ) -> crate::EncodingResult<Box<dyn crate::DynEncodable>> {
+        let _depth_lock = ctx.options().depth_lock()?;
         match t.structure_type {
             StructureType::Structure => {
                 let mut values = Vec::with_capacity(t.fields.len());

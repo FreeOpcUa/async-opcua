@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for AliasNameDataType {
         })
     }
 }
-unsafe impl Send for AliasNameDataType
-where
-    opcua::types::qualified_name::QualifiedName: Send,
-    Option<Vec<opcua::types::expanded_node_id::ExpandedNodeId>>: Send,
-{
-}
-unsafe impl Sync for AliasNameDataType
-where
-    opcua::types::qualified_name::QualifiedName: Sync,
-    Option<Vec<opcua::types::expanded_node_id::ExpandedNodeId>>: Sync,
-{
-}

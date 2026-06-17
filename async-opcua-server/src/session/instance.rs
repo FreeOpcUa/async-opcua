@@ -51,12 +51,16 @@ pub struct Session {
     endpoint_url: UAString,
     /// Maximum number of continuation points for browse
     max_browse_continuation_points: usize,
+    /// Maximum number of continuation points for history.
+    max_history_continuation_points: usize,
     /// Maximum number of continuation points for query.
     max_query_continuation_points: usize,
     /// Client application description
     application_description: ApplicationDescription,
     /// Message security mode. Set on the channel, but cached here.
     message_security_mode: MessageSecurityMode,
+    /// Time the session was created.
+    created_at: Instant,
     /// Time of last service request.
     last_service_request: ArcSwap<Instant>,
     /// Continuation points for browse.
@@ -95,6 +99,7 @@ impl Session {
         message_security_mode: MessageSecurityMode,
     ) -> Self {
         let (session_id, session_id_numeric) = next_session_id();
+        let now = Instant::now();
         Self {
             session_id,
             session_id_numeric,
@@ -109,13 +114,15 @@ impl Session {
             } else {
                 Duration::from_millis(session_timeout)
             },
-            last_service_request: ArcSwap::new(Arc::new(Instant::now())),
+            created_at: now,
+            last_service_request: ArcSwap::new(Arc::new(now)),
             user_identity,
             locale_ids: None,
             max_request_message_size,
             max_response_message_size,
             endpoint_url,
             max_browse_continuation_points: info.config.limits.max_browse_continuation_points,
+            max_history_continuation_points: info.config.limits.max_history_continuation_points,
             max_query_continuation_points: info.config.limits.max_query_continuation_points,
             browse_continuation_points: Default::default(),
             history_continuation_points: HistoryContinuationPointCache::new(
@@ -140,7 +147,10 @@ impl Session {
 
         if self.session_timeout < elapsed {
             // This will eventually be collected by the timeout monitor.
-            error!("Session has timed out because too much time has elapsed between service calls - elapsed time = {}ms", elapsed.as_millis());
+            error!(
+                "Session has timed out because too much time has elapsed between service calls - elapsed time = {}ms",
+                elapsed.as_millis()
+            );
             Err(StatusCode::BadSessionIdInvalid)
         } else {
             Ok(())
@@ -150,6 +160,11 @@ impl Session {
     /// Get the session timeout deadline.
     pub fn deadline(&self) -> Instant {
         **self.last_service_request.load() + self.session_timeout
+    }
+
+    /// Get the session creation time.
+    pub fn created_at(&self) -> Instant {
+        self.created_at
     }
 
     /// Check whether this session is validated and return the appropriate error if not.
@@ -265,11 +280,14 @@ impl Session {
         id: &ByteString,
         cp: ContinuationPoint,
     ) -> Result<(), ()> {
-        self.history_continuation_points.insert(id.clone(), cp);
-        if self.history_continuation_points.contains_key(id) {
-            Ok(())
-        } else {
+        if self.max_history_continuation_points
+            <= self.history_continuation_points.entry_count() as usize
+            && self.max_history_continuation_points > 0
+        {
             Err(())
+        } else {
+            self.history_continuation_points.insert(id.clone(), cp);
+            Ok(())
         }
     }
 

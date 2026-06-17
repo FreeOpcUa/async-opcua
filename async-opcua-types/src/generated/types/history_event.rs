@@ -70,11 +70,3 @@ impl opcua::types::BinaryDecodable for HistoryEvent {
         })
     }
 }
-unsafe impl Send for HistoryEvent where
-    Option<Vec<super::history_event_field_list::HistoryEventFieldList>>: Send
-{
-}
-unsafe impl Sync for HistoryEvent where
-    Option<Vec<super::history_event_field_list::HistoryEventFieldList>>: Sync
-{
-}

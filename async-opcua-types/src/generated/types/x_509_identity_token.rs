@@ -74,15 +74,3 @@ impl opcua::types::BinaryDecodable for X509IdentityToken {
         })
     }
 }
-unsafe impl Send for X509IdentityToken
-where
-    opcua::types::string::UAString: Send,
-    opcua::types::byte_string::ByteString: Send,
-{
-}
-unsafe impl Sync for X509IdentityToken
-where
-    opcua::types::string::UAString: Sync,
-    opcua::types::byte_string::ByteString: Sync,
-{
-}

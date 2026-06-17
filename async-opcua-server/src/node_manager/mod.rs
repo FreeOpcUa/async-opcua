@@ -281,11 +281,13 @@ impl<T: Send + Sync + 'static> IntoAnyArc for T {
 /// methods on this trait. If you need to do blocking work use `tokio::spawn_blocking`,
 /// though you should use async IO as much as possible.
 ///
+/// Core node-manager identity and lifecycle capability.
+///
 /// For a simpler interface see InMemoryNodeManager, use this trait directly
 /// if you need to control how all node information is stored.
-#[allow(unused_variables)]
 #[async_trait]
-pub trait NodeManager: IntoAnyArc + Any {
+#[allow(unused_variables)]
+pub trait NodeManagerCore: IntoAnyArc + Any {
     /// Return whether this node manager owns the given node, this is used for
     /// propagating service-level errors.
     ///
@@ -321,16 +323,12 @@ pub trait NodeManager: IntoAnyArc + Any {
     /// Perform any necessary loading of nodes, should populate the type tree if
     /// needed.
     async fn init(&self, type_tree: &mut DefaultTypeTree, context: ServerContext);
+}
 
-    /// Resolve a list of references given by a different node manager.
-    async fn resolve_external_references(
-        &self,
-        context: &RequestContext,
-        items: &mut [&mut ExternalReferenceRequest],
-    ) {
-    }
-
-    // ATTRIBUTES
+/// Attribute read/write capability for node managers.
+#[async_trait]
+#[allow(unused_variables)]
+pub trait AttributeProvider {
     /// Execute the Read service. This should set results on the given nodes_to_read as needed.
     async fn read(
         &self,
@@ -342,6 +340,21 @@ pub trait NodeManager: IntoAnyArc + Any {
         Err(StatusCode::BadServiceUnsupported)
     }
 
+    /// Perform the write service. This should write results
+    /// to the `nodes_to_write` list. The default result is `BadNodeIdUnknown`
+    async fn write(
+        &self,
+        context: &RequestContext,
+        nodes_to_write: &mut [&mut WriteNode],
+    ) -> Result<(), StatusCode> {
+        Err(StatusCode::BadServiceUnsupported)
+    }
+}
+
+/// Historical data read/update capability for node managers.
+#[async_trait]
+#[allow(unused_variables)]
+pub trait HistoryProvider {
     /// Perform the history read raw modified service. This should write results
     /// to the `nodes` list of type either `HistoryData` or `HistoryModifiedData`
     async fn history_read_raw_modified(
@@ -412,16 +425,6 @@ pub trait NodeManager: IntoAnyArc + Any {
         Ok(())
     }
 
-    /// Perform the write service. This should write results
-    /// to the `nodes_to_write` list. The default result is `BadNodeIdUnknown`
-    async fn write(
-        &self,
-        context: &RequestContext,
-        nodes_to_write: &mut [&mut WriteNode],
-    ) -> Result<(), StatusCode> {
-        Err(StatusCode::BadServiceUnsupported)
-    }
-
     /// Perform the HistoryUpdate service. This should write result
     /// status codes to the `nodes` list as appropriate.
     async fn history_update(
@@ -431,8 +434,20 @@ pub trait NodeManager: IntoAnyArc + Any {
     ) -> Result<(), StatusCode> {
         Err(StatusCode::BadHistoryOperationUnsupported)
     }
+}
 
-    // VIEW
+/// Address-space view capability for node managers.
+#[async_trait]
+#[allow(unused_variables)]
+pub trait ViewProvider {
+    /// Resolve a list of references given by a different node manager.
+    async fn resolve_external_references(
+        &self,
+        context: &RequestContext,
+        items: &mut [&mut ExternalReferenceRequest],
+    ) {
+    }
+
     /// Perform the Browse or BrowseNext service.
     async fn browse(
         &self,
@@ -478,6 +493,27 @@ pub trait NodeManager: IntoAnyArc + Any {
         Ok(())
     }
 
+    /// Perform a query on the address space.
+    ///
+    /// All node managers must be able to query in order for the
+    /// server to support querying.
+    ///
+    /// The node manager should set a continuation point if it reaches
+    /// limits, but is responsible for not exceeding max_data_sets_to_return
+    /// and max_references_to_return.
+    async fn query(
+        &self,
+        context: &RequestContext,
+        request: &mut QueryRequest,
+    ) -> Result<(), StatusCode> {
+        Err(StatusCode::BadServiceUnsupported)
+    }
+}
+
+/// Monitored-item lifecycle capability for node managers.
+#[async_trait]
+#[allow(unused_variables)]
+pub trait MonitoredItemProvider {
     /// Prepare for monitored item creation, the node manager must take action to
     /// sample data for each produced monitored item, according to the parameters.
     /// Monitored item parameters have already been revised according to server limits,
@@ -537,23 +573,12 @@ pub trait NodeManager: IntoAnyArc + Any {
     /// created for a different node manager. Attempting to delete a monitored item
     /// that does not exist is handled elsewhere and should be a no-op here.
     async fn delete_monitored_items(&self, context: &RequestContext, items: &[&MonitoredItemRef]) {}
+}
 
-    /// Perform a query on the address space.
-    ///
-    /// All node managers must be able to query in order for the
-    /// server to support querying.
-    ///
-    /// The node manager should set a continuation point if it reaches
-    /// limits, but is responsible for not exceeding max_data_sets_to_return
-    /// and max_references_to_return.
-    async fn query(
-        &self,
-        context: &RequestContext,
-        request: &mut QueryRequest,
-    ) -> Result<(), StatusCode> {
-        Err(StatusCode::BadServiceUnsupported)
-    }
-
+/// Method-call capability for node managers.
+#[async_trait]
+#[allow(unused_variables)]
+pub trait MethodProvider {
     /// Call a list of methods.
     ///
     /// The node manager should validate the method arguments and set
@@ -569,7 +594,12 @@ pub trait NodeManager: IntoAnyArc + Any {
     ) -> Result<(), StatusCode> {
         Err(StatusCode::BadServiceUnsupported)
     }
+}
 
+/// Address-space mutation capability for node managers.
+#[async_trait]
+#[allow(unused_variables)]
+pub trait NodeMutator {
     /// Add a list of nodes.
     ///
     /// This should create the nodes, or set a failed status as appropriate.
@@ -645,4 +675,28 @@ pub trait NodeManager: IntoAnyArc + Any {
     ) -> Result<(), StatusCode> {
         Err(StatusCode::BadServiceUnsupported)
     }
+}
+
+/// Full node-manager interface composed from capability traits.
+pub trait NodeManager:
+    NodeManagerCore
+    + AttributeProvider
+    + ViewProvider
+    + MethodProvider
+    + NodeMutator
+    + HistoryProvider
+    + MonitoredItemProvider
+{
+}
+
+impl<T> NodeManager for T where
+    T: NodeManagerCore
+        + AttributeProvider
+        + ViewProvider
+        + MethodProvider
+        + NodeMutator
+        + HistoryProvider
+        + MonitoredItemProvider
+        + ?Sized
+{
 }

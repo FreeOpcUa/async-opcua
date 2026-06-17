@@ -78,17 +78,3 @@ impl opcua::types::BinaryDecodable for ModelChangeStructureDataType {
         })
     }
 }
-unsafe impl Send for ModelChangeStructureDataType
-where
-    opcua::types::node_id::NodeId: Send,
-    opcua::types::node_id::NodeId: Send,
-    u8: Send,
-{
-}
-unsafe impl Sync for ModelChangeStructureDataType
-where
-    opcua::types::node_id::NodeId: Sync,
-    opcua::types::node_id::NodeId: Sync,
-    u8: Sync,
-{
-}

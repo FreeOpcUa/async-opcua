@@ -359,7 +359,7 @@ mod json {
                         return Err(Error::decoding("Missing extension object body"));
                     };
                     let len = raw.len();
-                    let mut cursor = Cursor::new(raw);
+                    let mut cursor = Cursor::new(raw.as_ref());
                     Ok(ctx.load_from_binary(&type_id, &mut cursor as &mut dyn Read, Some(len))?)
                 } else if encoding == 2 {
                     #[cfg(feature = "xml")]
@@ -461,7 +461,7 @@ mod xml {
                                 let val = ByteString::decode(reader, ctx)?;
                                 if let Some(raw) = val.value {
                                     let len = raw.len();
-                                    let mut cursor = std::io::Cursor::new(raw);
+                                    let mut cursor = std::io::Cursor::new(raw.as_ref());
                                     body = Some(ctx.load_from_binary(
                                         &type_id,
                                         &mut cursor,

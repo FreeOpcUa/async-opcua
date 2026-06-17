@@ -392,9 +392,13 @@ pub struct ServerConfig {
     #[serde(default)]
     pub oauth2_audience: Option<String>,
     /// TLS server configuration used for `opc.wss` listeners.
+    ///
+    /// Public so `ServerConfig` stays constructible via struct literal (like its sibling
+    /// fields); the inner `rustls::ServerConfig` remains crate-private, so external code
+    /// can only set this via the builder's `websocket_tls` / `websocket_rustls_config`.
     #[cfg(feature = "wss")]
     #[serde(skip)]
-    pub(crate) wss_tls: Option<WssServerConfig>,
+    pub wss_tls: Option<WssServerConfig>,
 }
 
 mod defaults {

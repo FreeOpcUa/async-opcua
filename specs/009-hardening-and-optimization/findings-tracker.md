@@ -66,6 +66,7 @@ one leg done, remainder deferred.
 | PERF-P1–P4 | — | T076–T079 | `a903156f` | round-trip + `byte_len` O(1) tests |
 | PERF-P5 ByteString zero-copy (FR-045) | — | T096 | `6ea75c21` | types tests; `Bytes`-backed |
 | PERF-P6, P7 | — | T080–T081 | `a903156f` | core tests |
+| N7 vectored multi-chunk writes | — | T083 | `a903156f` | `test_buffer_read_uses_vectored_write` (scalar=0, vectored=1) |
 | PERF-P10 Arc-shared retransmission (FR-045) | — | T097 | `6ea75c21` | server subscription tests |
 | R2 `Error` at service boundaries (FR-037) | — | T094 | `6ea75c21` | client/server compile + tests |
 | R3 NodeManager capability traits (FR-043) | — | T093 | `6ea75c21` | server compile + tests |
@@ -92,7 +93,6 @@ Full rationales live in `tasks.md` → "Consciously deferred findings". Summary:
 | L11 unchecked array-dim `checked_mul` | — | Debug-panic/release-undersized only; primary untrusted path already hardened. |
 | L13 keep-alive `*3` overflow | — | Operator-misconfig only, not client-controllable. |
 | N4 SO_SNDBUF/RCVBUF sizing | — | OS auto-tuning adequate on modern Linux. |
-| N7 vectored multi-chunk writes | T083 | Verify-only/low; SendBuffer already writes via `read_into_async`. |
 | N13 LDS re-registration backoff | — | Behind optional feature; no confirmed defect. |
 | cert-expiry monitoring hook | — | Additive operability feature, not a defect. |
 | PERF-P9 inline fast path for small Reads | T082 | Measure-first (needs P12 benches); trades away per-request panic isolation. |

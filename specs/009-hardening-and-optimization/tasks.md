@@ -187,7 +187,7 @@ per-chunk allocations, lower idle CPU; `opc.wss` connects; all vs the T003 basel
 - [X] T080 [US5] Skip/cache the per-tick priority sort for idle sessions in `async-opcua-server/src/subscriptions/session_subscriptions.rs` (PERF-P6)
 - [X] T081 [US5] Snapshot session Arcs; don't hold the cache read-lock across the whole tick loop in `async-opcua-server/src/subscriptions/mod.rs` (PERF-P7)
 - [ ] T082 [P] [US5] Inline fast path for small single-node-manager Reads (avoid per-request spawn) in `async-opcua-server/src/session/message_handler.rs` (PERF-P9)
-- [ ] T083 [P] [US5] Confirm vectored/batched multi-chunk writes after NODELAY in `async-opcua-core/src/comms/buffer.rs` (N7)
+- [X] T083 [P] [US5] Confirm vectored/batched multi-chunk writes after NODELAY in `async-opcua-core/src/comms/buffer.rs` (N7) — confirmed: `SendBuffer::read_into_async` writes via `TcpCodec::write_frame_vectored`; regression test `test_buffer_read_uses_vectored_write` asserts scalar_writes==0 / vectored_writes==1 (passes)
 - [X] T084 [P] [US5] Sort subscription publish priority descending (higher first) in `async-opcua-server/src/subscriptions/session_subscriptions.rs` (M14/FR-032)
 - [X] T085 [P] [US5] Enforce `max_history_continuation_points` cap in `async-opcua-server/src/session/instance.rs` (M13/FR-033)
 - [X] T086 [US5] Make `max_queued_notifications` a hard bound + surface drops as a diagnostic in `async-opcua-server/src/subscriptions/subscription.rs` (M7/FR-034)
@@ -252,7 +252,6 @@ deferral — none silently dropped"). T102 records the same in the tracker.
 | PERF-P12 benches (T001, T002, T003, T090) | PERFORMANCE_AUDIT | encode/decode + secured round-trip criterion benches and baseline capture/re-measure. Deferred: the perf changes (P1–P4) are verified by functional/round-trip tests; the criterion regression-guard infra + baseline runs are follow-up (also avoids long bench runs in this session). |
 | R6/FR-031 (T087) | ARCHITECTURE | Network/transport metrics counters + optional Prometheus/OTel exporter. Additive observability; deferred to a follow-up. |
 | PERF-P9 (T082) | PERFORMANCE_AUDIT | Inline fast path for small Reads (avoid per-request spawn). Deferred — the audit says measure-first (needs P12 benches), and it trades away per-request panic isolation. |
-| N7 (T083) | NETWORK_REVIEW | Confirm vectored/batched multi-chunk writes. Verify-only/low; the SendBuffer already writes via `read_into_async`. Deferred to follow-up review. |
 
 > **R4 ≡ C3**: the architecture review's R4 (server request-path bulkhead) is the same finding as
 > code-review C3 (unbounded in-flight queue); it is **covered** by T018–T019 (FR-003), not deferred.

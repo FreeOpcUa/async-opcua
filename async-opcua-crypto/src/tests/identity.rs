@@ -180,3 +180,34 @@ fn rsa_oaep_secret_rejects_partial_ciphertext_block() {
 
     assert_eq!(err.status(), StatusCode::BadIdentityTokenInvalid);
 }
+
+#[test]
+fn legacy_secret_rejects_partial_ciphertext_block() {
+    // C2: a non-block-aligned legacy ciphertext must be rejected with an error,
+    // not panic via an out-of-bounds slice in private_decrypt.
+    let private_key = PrivateKey::new(2048).unwrap();
+    let server_nonce = [0u8; 32];
+    let short =
+        opcua_types::ByteString::from(vec![0u8; private_key.cipher_text_block_size() - 1]);
+    let err = crate::user_identity::legacy_secret_decrypt::<crate::policy::aes::Pkcs1v15>(
+        &short,
+        &server_nonce,
+        &private_key,
+    )
+    .unwrap_err();
+    assert_eq!(err.status(), StatusCode::BadIdentityTokenInvalid);
+}
+
+#[test]
+fn legacy_secret_rejects_empty_ciphertext() {
+    // C2: empty ciphertext must be rejected, not panic.
+    let private_key = PrivateKey::new(2048).unwrap();
+    let server_nonce = [0u8; 32];
+    let err = crate::user_identity::legacy_secret_decrypt::<crate::policy::aes::Pkcs1v15>(
+        &opcua_types::ByteString::null(),
+        &server_nonce,
+        &private_key,
+    )
+    .unwrap_err();
+    assert_eq!(err.status(), StatusCode::BadIdentityTokenInvalid);
+}

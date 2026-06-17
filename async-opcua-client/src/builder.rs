@@ -7,7 +7,7 @@ use tracing::{error, warn};
 
 #[cfg(feature = "wss")]
 use super::config::WssTlsConfig;
-use super::{ANONYMOUS_USER_TOKEN_ID, Client, ClientConfig, ClientEndpoint, ClientUserToken};
+use super::{Client, ClientConfig, ClientEndpoint, ClientUserToken, ANONYMOUS_USER_TOKEN_ID};
 
 #[derive(Default)]
 /// Client builder.

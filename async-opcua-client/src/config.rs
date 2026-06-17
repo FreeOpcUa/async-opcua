@@ -754,7 +754,7 @@ mod tests {
     use opcua_crypto::SecurityPolicy;
     use opcua_types::MessageSecurityMode;
 
-    use super::{ANONYMOUS_USER_TOKEN_ID, ClientConfig, ClientEndpoint, ClientUserToken};
+    use super::{ClientConfig, ClientEndpoint, ClientUserToken, ANONYMOUS_USER_TOKEN_ID};
 
     fn make_test_file(filename: &str) -> PathBuf {
         let mut path = std::env::temp_dir();

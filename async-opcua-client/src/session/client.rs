@@ -5,20 +5,20 @@ use tokio::{pin, select};
 use tracing::error;
 
 use crate::{
-    transport::{
-        tcp::TransportConfiguration, Connector, ConnectorBuilder, DefaultConnector,
-        TransportPollResult,
-    },
     AsyncSecureChannel, ClientConfig, ClientEndpoint, IdentityToken,
+    transport::{
+        Connector, ConnectorBuilder, DefaultConnector, TransportPollResult,
+        tcp::TransportConfiguration,
+    },
 };
 use opcua_core::{
+    ResponseMessage,
     comms::url::{
         hostname_from_url, server_url_from_endpoint_url, url_matches_except_host,
         url_with_replaced_hostname,
     },
     config::Config,
     sync::RwLock,
-    ResponseMessage,
 };
 use opcua_crypto::{CertificateStore, SecurityPolicy};
 use opcua_types::{
@@ -29,8 +29,8 @@ use opcua_types::{
 };
 
 use super::{
-    connection::SessionBuilder, process_service_result, process_unexpected_response, EndpointInfo,
-    Session, SessionEventLoop,
+    EndpointInfo, Session, SessionEventLoop, connection::SessionBuilder, process_service_result,
+    process_unexpected_response,
 };
 
 /// Wrapper around common data for generating sessions and performing requests
@@ -89,6 +89,11 @@ impl Client {
     /// Get a new session builder that can be used to build a session dynamically.
     pub fn session_builder(&self) -> SessionBuilder<'_> {
         SessionBuilder::<'_>::new(&self.config)
+    }
+
+    /// Get a reference to the client configuration.
+    pub fn config(&self) -> &ClientConfig {
+        &self.config
     }
 
     /// Connects to a named endpoint that you have defined in the `ClientConfig`

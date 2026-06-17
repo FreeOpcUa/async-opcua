@@ -2,8 +2,8 @@ use std::{panic::AssertUnwindSafe, sync::Arc};
 
 use futures::FutureExt;
 use opcua::{
-    client::{reverse_connect::ReverseConnectionSource, ConnectionSource, IdentityToken},
-    crypto::{hostname, SecurityPolicy},
+    client::{ConnectionSource, IdentityToken, reverse_connect::ReverseConnectionSource},
+    crypto::{SecurityPolicy, hostname},
     types::{
         AttributeId, EndpointDescription, MessageSecurityMode, ReadValueId, ServerState,
         TimestampsToReturn, VariableId,
@@ -12,7 +12,7 @@ use opcua::{
 use tokio::{net::TcpListener, select};
 
 use crate::{
-    client::{make_client, ClientTestState},
+    client::{ClientTestState, make_client},
     common::{InMessage, JoinHandleAbortGuard, ReverseConnectMessage},
     tests::client::WithSessionMethod,
 };
@@ -45,7 +45,10 @@ pub async fn with_reverse_connect_session<Fun: for<'a> WithSessionMethod<'a>>(
             // Using reverse connect for discovery as well.
             // This requires us to actually make the connector.
             ReverseConnectionSource::new_listener(listener.clone())
-                .get_connector(&format!("opc.tcp://{}:62546", hostname().unwrap()).into())
+                .get_connector(
+                    &format!("opc.tcp://{}:62546", hostname().unwrap()).into(),
+                    client.config(),
+                )
                 .unwrap(),
             &[],
             &[],

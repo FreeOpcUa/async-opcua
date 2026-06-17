@@ -11,7 +11,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use opcua_core::{
     comms::{
         chunker::Chunker,
-        secure_channel::{Role, SecureChannel},
+        secure_channel::{DecryptedChunkStorage, Role, SecureChannel},
         sequence_number::SequenceNumberHandle,
     },
     sync::RwLock,
@@ -73,11 +73,12 @@ fn roundtrip(sender: &SecureChannel, receiver: &SecureChannel, message: &Request
     let chunks =
         Chunker::encode(SequenceNumberHandle::new(true), 1, 0, 0, sender, message).unwrap();
     let mut secured = Vec::new();
+    let mut decrypted_data = DecryptedChunkStorage::new();
     for chunk in &chunks {
         let mut encrypted = vec![0u8; chunk.data.len() + 4096];
         let n = sender.apply_security(chunk, &mut encrypted[..]).unwrap();
         let recovered = receiver
-            .verify_and_remove_security(encrypted[..n].to_vec().into())
+            .verify_and_remove_security(encrypted[..n].to_vec().into(), &mut decrypted_data)
             .unwrap();
         secured.push(recovered);
     }

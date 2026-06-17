@@ -4,7 +4,7 @@ use futures::StreamExt;
 use opcua_core::{
     comms::{
         buffer::SendBuffer,
-        secure_channel::SecureChannel,
+        secure_channel::{DecryptedChunkStorage, SecureChannel},
         tcp_codec::{Message, TcpCodec},
         tcp_types::{AcknowledgeMessage, HelloMessage, ReverseHelloMessage, MIN_CHUNK_SIZE},
     },
@@ -216,6 +216,7 @@ where
             read: connection.reader,
             write: connection.writer,
             send_buffer: buffer,
+            decrypted_chunk_storage: DecryptedChunkStorage::new(),
             should_close: false,
             closed: TransportCloseState::Open,
             connected_url: connection.endpoint_url,
@@ -235,6 +236,7 @@ pub struct StreamTransport<R, W> {
     read: FramedRead<R, TcpCodec>,
     write: W,
     send_buffer: SendBuffer,
+    decrypted_chunk_storage: DecryptedChunkStorage,
     should_close: bool,
     closed: TransportCloseState,
     connected_url: String,
@@ -251,7 +253,10 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> StreamTransport<R, W> {
         };
         match incoming {
             Ok(message) => {
-                if let Err(e) = self.state.handle_incoming_message(message) {
+                if let Err(e) = self
+                    .state
+                    .handle_incoming_message(message, &mut self.decrypted_chunk_storage)
+                {
                     error!(
                         "Failed to handle incoming message, closing transport: {}",
                         e

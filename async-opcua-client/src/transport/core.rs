@@ -3,7 +3,9 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use futures::future::Either;
-use opcua_core::comms::sequence_number::SequenceNumberHandle;
+use opcua_core::comms::{
+    secure_channel::DecryptedChunkStorage, sequence_number::SequenceNumberHandle,
+};
 use opcua_core::{trace_read_lock, RequestMessage, ResponseMessage};
 use tracing::{debug, error, trace, warn};
 
@@ -154,7 +156,11 @@ impl TransportState {
     }
 
     /// Store incoming messages in the message state.
-    pub fn handle_incoming_message(&mut self, message: Message) -> Result<(), Error> {
+    pub fn handle_incoming_message(
+        &mut self,
+        message: Message,
+        decrypted_chunk_storage: &mut DecryptedChunkStorage,
+    ) -> Result<(), Error> {
         match message {
             Message::Acknowledge(ack) => {
                 debug!("Reader got an unexpected ack {:?}", ack);
@@ -164,7 +170,7 @@ impl TransportState {
                 ))
             }
             Message::Chunk(chunk) => {
-                self.process_chunk(chunk)?;
+                self.process_chunk(chunk, decrypted_chunk_storage)?;
                 Ok(())
             }
             Message::Error(error) => {
@@ -231,10 +237,15 @@ impl TransportState {
         next_timeout
     }
 
-    fn process_chunk(&mut self, chunk: MessageChunk) -> Result<(), Error> {
+    fn process_chunk(
+        &mut self,
+        chunk: MessageChunk,
+        decrypted_chunk_storage: &mut DecryptedChunkStorage,
+    ) -> Result<(), Error> {
         let (chunk, chunk_info, decoding_options) = {
             let secure_channel = trace_read_lock!(self.channel_state.secure_channel());
-            let chunk = secure_channel.verify_and_remove_security(chunk.data)?;
+            let chunk =
+                secure_channel.verify_and_remove_security(chunk.data, decrypted_chunk_storage)?;
             let chunk_info = chunk.chunk_info(&secure_channel)?;
             let decoding_options = secure_channel.decoding_options();
             (chunk, chunk_info, decoding_options)

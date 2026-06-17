@@ -39,8 +39,12 @@ fn test_symmetric_encrypt_decrypt(
 
         // Decrypted message should identical to original with same length and
         // no signature or padding
+        let mut decrypted_data = DecryptedChunkStorage::new();
         let chunk2 = secure_channel2
-            .verify_and_remove_security(encrypted_data[..encrypted_size].to_vec().into())
+            .verify_and_remove_security(
+                encrypted_data[..encrypted_size].to_vec().into(),
+                &mut decrypted_data,
+            )
             .unwrap();
 
         assert_eq!(&chunk.data, &chunk2.data);
@@ -111,8 +115,12 @@ fn test_asymmetric_encrypt_decrypt(
         secure_channel.set_private_key(Some(their_key));
 
         // Compare up to original length
+        let mut decrypted_data = DecryptedChunkStorage::new();
         let chunk2 = secure_channel
-            .verify_and_remove_security(encrypted_data[..encrypted_size].to_vec().into())
+            .verify_and_remove_security(
+                encrypted_data[..encrypted_size].to_vec().into(),
+                &mut decrypted_data,
+            )
             .unwrap();
         assert_eq!(chunk.data.len(), chunk2.data.len());
         assert_eq!(&chunk.data, &chunk2.data);

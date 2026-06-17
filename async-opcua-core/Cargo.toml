@@ -7,7 +7,7 @@ homepage = "https://github.com/freeopcua/async-opcua"
 repository = "https://github.com/freeopcua/async-opcua"
 license = "MPL-2.0"
 keywords = ["opcua", "opc", "ua"]
-categories = ["embedded", "network-programming"]
+categories = ["network-programming"]
 readme = "README.md"
 documentation = "https://docs.rs/async-opcua-core/"
 edition = "2021"
@@ -53,6 +53,8 @@ harness = false
 workspace = true
 
 [features]
+default = ["aws-lc-rs"]
+aws-lc-rs = ["async-opcua-crypto/aws-lc-rs"]
 env_expansion = ["dep:shellexpand"]
 # Forwards to the crypto crate's legacy policy support; used by tests
 # covering the legacy security policies.

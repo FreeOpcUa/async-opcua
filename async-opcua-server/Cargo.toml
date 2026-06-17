@@ -7,7 +7,7 @@ homepage = "https://github.com/freeopcua/async-opcua"
 repository = "https://github.com/freeopcua/async-opcua"
 license = "MPL-2.0"
 keywords = ["opcua", "opc", "ua"]
-categories = ["embedded", "network-programming"]
+categories = ["network-programming"]
 readme = "README.md"
 documentation = "https://docs.rs/async-opcua-server/"
 edition = "2021"
@@ -20,7 +20,12 @@ workspace = true
 name = "opcua_server"
 
 [features]
-default = ["generated-address-space"]
+default = ["aws-lc-rs", "generated-address-space"]
+aws-lc-rs = [
+  "async-opcua-client?/aws-lc-rs",
+  "async-opcua-core/aws-lc-rs",
+  "async-opcua-crypto/aws-lc-rs",
+]
 # Includes all the code to populate the address space with the default node set
 # . This is something that embedded systems may or may not require.
 generated-address-space = ["async-opcua-core-namespace"]

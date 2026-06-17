@@ -7,7 +7,7 @@ homepage = "https://github.com/freeopcua/async-opcua"
 repository = "https://github.com/freeopcua/async-opcua"
 license = "MPL-2.0"
 keywords = ["opcua", "opc", "ua"]
-categories = ["embedded", "network-programming"]
+categories = ["network-programming"]
 readme = "README.md"
 documentation = "https://docs.rs/async-opcua-client/"
 edition = "2021"
@@ -20,6 +20,8 @@ workspace = true
 name = "opcua_client"
 
 [features]
+default = ["aws-lc-rs"]
+aws-lc-rs = ["async-opcua-core/aws-lc-rs", "async-opcua-crypto/aws-lc-rs"]
 legacy-crypto = [
   "async-opcua-core/legacy-crypto",
   "async-opcua-crypto/legacy-crypto",

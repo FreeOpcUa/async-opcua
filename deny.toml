@@ -12,7 +12,7 @@ ignore = [
     # `aws-lc-rs` backend (feature 009, finding D1/FR-042); `rsa` is retained only for
     # signing/verification/public-key-encrypt/keygen and X509 integration, which are
     # not affected by the decryption timing oracle. Re-evaluate when `rsa` ships a fix.
-    { id = "RUSTSEC-2023-0071", reason = "rsa decrypt path migrated to aws-lc-rs (D1); rsa kept for sign/verify/encrypt/keygen only; no upstream fix" },
+    { id = "RUSTSEC-2023-0071", reason = "Marvin RSA timing attack in rsa; no upstream fix. Default build uses the constant-time aws-lc-rs backend for RSA decrypt (D1); rsa is used for sign/verify/encrypt/keygen (unaffected). The pure-Rust build (--no-default-features, aws-lc-rs off, issue #13) uses rsa for decrypt too — not constant-time, an accepted trade-off for C-free cross-compilation; safe for SecurityPolicy::None / trusted networks." },
     # RUSTSEC-2024-0320 — serde_yaml is unmaintained (not a vulnerability). The library crates
     # were migrated to the maintained `serde_norway` fork (D5/T071). serde_yaml now remains ONLY
     # as a transitive dependency of `log4rs`, used by the demo-server sample — not by any

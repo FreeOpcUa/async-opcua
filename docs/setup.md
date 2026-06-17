@@ -45,9 +45,20 @@ The OPC UA server crate also provides some other features that you may or may no
 * `legacy-crypto` - When enabled (default is **disabled**), compiles in support for the deprecated security policies `Basic128Rsa15` and `Basic256`. **As of 0.19 these policies are opt-in.** Without this feature they are not compiled at all; with it, they are still rejected at runtime unless you also set `allow_legacy_crypto: true` (server: `ServerBuilder::allow_legacy_crypto`, client: `ClientBuilder::allow_legacy_crypto`). Only enable this if you must interoperate with legacy endpoints that cannot offer a modern policy.
 * `wss` - When enabled (default is **disabled**), compiles in the `opc.wss` (OPC UA over secure WebSocket) transport. TLS is layered via `tokio-rustls` on the in-tree `rustls` 0.23; the crate re-exports that exact `rustls` (`opcua::client::rustls` / `opcua::server::rustls`) so callers of the advanced config APIs cannot version-skew. The WSS/TLS certificate is **separate** from the OPC UA application certificate. Server: `ServerBuilder::websocket_tls(cert_pem, key_pem)` (hardened convenience) or `websocket_rustls_config(Arc<rustls::ServerConfig>)` (full control), served via `run_with_wss`. Client: secure-by-default WebPKI hostname verification, with `ClientBuilder::websocket_ca_pem` / `websocket_rustls_config` for custom trust and a loudly-gated `dangerously_accept_invalid_wss_certs` test-only escape hatch. The WebSocket subprotocol/ALPN is `opcua+uacp`. WSS secures only the transport — the OPC UA `SecurityPolicy` (sign/encrypt, application-cert auth, user tokens) still runs inside the WebSocket exactly as over `opc.tcp`.
 
-## Cryptographic backend (aws-lc-rs)
+## Cryptographic backend (`aws-lc-rs` feature, default on)
 
-As of 0.19 the crypto crate uses [`aws-lc-rs`](https://crates.io/crates/aws-lc-rs) for its RSA backend, which provides constant-time operations. `aws-lc-rs` builds a small amount of C/assembly via its bundled build, so a working **C compiler** (and, on some targets, `cmake`/`nasm`) must be on `PATH` when building. On most Linux/macOS toolchains the default `cc` is sufficient; see the [`aws-lc-rs` requirements](https://aws.github.io/aws-lc-rs/requirements/index.html) for cross-compilation and platform specifics.
+The RSA private-key **decrypt** path (OpenSecureChannel + legacy identity-token decryption) has two selectable backends:
+
+* **`aws-lc-rs` (default).** Uses [`aws-lc-rs`](https://crates.io/crates/aws-lc-rs) for **constant-time** RSA decryption — the recommended, secure default (mitigates the "Marvin" RSA timing attack). `aws-lc-rs` builds a small amount of C/assembly, so a working **C compiler** (and on some targets `cmake`/`nasm`) must be on `PATH` when building, including for cross-compilation. See the [`aws-lc-rs` requirements](https://aws.github.io/aws-lc-rs/requirements/index.html).
+* **Pure-Rust (disable the feature).** Build with `default-features = false` to drop `aws-lc-rs`; RSA decrypt then falls back to the pure-Rust [`rsa`](https://crates.io/crates/rsa) crate, so the build needs **no C toolchain** and cross-compiles cleanly to targets like `aarch64-unknown-linux-musl`. Trade-off: the `rsa` crate's RSA decryption is **not constant-time** (RUSTSEC-2023-0071). This is irrelevant for deployments that use `SecurityPolicy::None` or a trusted network (the decrypt path is never exercised), but for secured endpoints on an untrusted network prefer the default `aws-lc-rs` backend.
+
+Example C-free client build:
+
+```toml
+async-opcua = { version = "0.19", default-features = false, features = ["client"] }
+```
+
+The choice is a feature on every crate that pulls crypto (`async-opcua`, `-core`, `-client`, `-server`): `aws-lc-rs` is in their `default`, so omitting `default-features` keeps the constant-time backend; `default-features = false` selects the pure-Rust path.
 
 ## Workspace Layout
 

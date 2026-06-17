@@ -7,7 +7,7 @@ homepage = "https://github.com/freeopcua/async-opcua"
 repository = "https://github.com/freeopcua/async-opcua"
 license = "MPL-2.0"
 keywords = ["opcua", "opc", "ua"]
-categories = ["embedded", "network-programming"]
+categories = ["network-programming"]
 readme = "README.md"
 documentation = "https://docs.rs/async-opcua-crypto/"
 edition = "2021"
@@ -32,7 +32,7 @@ tracing = { workspace = true }
 async-opcua-types = { path = "../async-opcua-types", version = "0.19.0" }
 
 aes = { workspace = true }
-aws-lc-rs = "1.17.0"
+aws-lc-rs = { version = "1.17.0", optional = true }
 cbc = { workspace = true }
 const-oid = { workspace = true }
 hmac = { workspace = true }
@@ -48,5 +48,6 @@ zeroize = "1.8.2"
 tempfile = "3"
 
 [features]
-default = []
+default = ["aws-lc-rs"]
+aws-lc-rs = ["dep:aws-lc-rs"]
 legacy-crypto = []

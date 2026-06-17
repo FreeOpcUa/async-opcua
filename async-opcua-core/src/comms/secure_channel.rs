@@ -17,17 +17,17 @@ use chrono::Duration;
 use tracing::{error, trace};
 
 use opcua_crypto::{
-    AesDerivedKeys, CertificateStore, KeySize, PrivateKey, PublicKey, SecurityPolicy, X509, random,
+    random, AesDerivedKeys, CertificateStore, KeySize, PrivateKey, PublicKey, SecurityPolicy, X509,
 };
 use opcua_types::{
-    ByteString, ChannelSecurityToken, ContextOwned, DateTime, DecodingOptions, Error,
-    MessageSecurityMode, NamespaceMap, SimpleBinaryDecodable, status_code::StatusCode, write_bytes,
-    write_u8, write_u32,
+    status_code::StatusCode, write_bytes, write_u32, write_u8, ByteString, ChannelSecurityToken,
+    ContextOwned, DateTime, DecodingOptions, Error, MessageSecurityMode, NamespaceMap,
+    SimpleBinaryDecodable,
 };
 use parking_lot::RwLock;
 
 use super::{
-    message_chunk::{MESSAGE_SIZE_OFFSET, MessageChunk, MessageChunkHeader, MessageChunkType},
+    message_chunk::{MessageChunk, MessageChunkHeader, MessageChunkType, MESSAGE_SIZE_OFFSET},
     security_header::{AsymmetricSecurityHeader, SecurityHeader, SymmetricSecurityHeader},
 };
 
@@ -634,7 +634,8 @@ impl SecureChannel {
                 let extra_padding_byte = ((padding_size - 2) >> 8) as u8;
                 trace!(
                     "adding extra padding - padding_byte = {}, extra_padding_byte = {}",
-                    padding_byte, extra_padding_byte
+                    padding_byte,
+                    extra_padding_byte
                 );
                 let _ = write_bytes(data, padding_byte, padding_size - 1)?;
                 write_u8(data, extra_padding_byte)?;
@@ -886,7 +887,8 @@ impl SecureChannel {
         // Symmetric decrypt and verify
         trace!(
             "Decrypting block with signature info {:?} and encrypt info {:?}",
-            signed_range, encrypted_range
+            signed_range,
+            encrypted_range
         );
 
         let SecurityHeader::Symmetric(security_header) = security_header else {
@@ -1015,7 +1017,8 @@ impl SecureChannel {
                 security_policy.calculate_cipher_text_size(plain_text_size, &encryption_key);
             trace!(
                 "plain_text_size = {}, encrypted_text_size = {}",
-                plain_text_size, cipher_text_size
+                plain_text_size,
+                cipher_text_size
             );
             cipher_text_size
         };
@@ -1208,7 +1211,8 @@ impl SecureChannel {
             )?;
             trace!(
                 "Decrypted bytes = {} compared to encrypted range {}",
-                decrypted_size, encrypted_size
+                decrypted_size,
+                encrypted_size
             );
             // Self::log_crypto_data("Decrypted Bytes = ", &decrypted_tmp[..decrypted_size]);
 
@@ -1236,7 +1240,8 @@ impl SecureChannel {
             // Verify signature (contained encrypted portion) using verification key
             trace!(
                 "Verifying signature range {:?} with signature at {:?}",
-                signed_range_dst, signature_range_dst
+                signed_range_dst,
+                signature_range_dst
             );
             // Keysize for padding is publickey length if avaiable
             let key_size = if let Some(rem) = &self.cert {
@@ -1399,7 +1404,8 @@ impl SecureChannel {
         let signature_size = self.security_policy.symmetric_signature_size();
         trace!(
             "signed_range = {:?}, signature len = {}",
-            signed_range, signature_size
+            signed_range,
+            signature_size
         );
 
         // Sign the message header, security header, sequence header, body, padding
@@ -1441,7 +1447,8 @@ impl SecureChannel {
                 let signature_range = signed_range.end..src.len();
                 trace!(
                     "signed range = {:?}, signature range = {:?}",
-                    signed_range, signature_range
+                    signed_range,
+                    signature_range
                 );
                 let verification_key = self.get_remote_keys(token_id).ok_or_else(|| {
                     Error::new(
@@ -1508,7 +1515,8 @@ impl SecureChannel {
                     ..encrypted_range.end;
                 trace!(
                     "signed range = {:?}, signature range = {:?}",
-                    signed_range, signature_range
+                    signed_range,
+                    signature_range
                 );
                 let signature_start = signature_range.start;
                 self.security_policy.symmetric_verify_signature(

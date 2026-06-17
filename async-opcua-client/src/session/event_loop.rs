@@ -370,7 +370,7 @@ impl SessionActivityLoop {
                             return Some((
                                 SessionActivity::KeepAliveFailed(StatusCode::BadUnknownResponse),
                                 slf,
-                            ))
+                            ));
                         }
                         Err(e) => return Some((SessionActivity::KeepAliveFailed(e.status()), slf)),
                     };

@@ -55,7 +55,11 @@ impl SequenceNumberHandle {
 
     /// Get the minimum value of the sequence number.
     pub fn min_value(&self) -> u32 {
-        if self.is_legacy { 1 } else { 0 }
+        if self.is_legacy {
+            1
+        } else {
+            0
+        }
     }
 
     /// Get the current sequence number, which
@@ -94,7 +98,8 @@ impl SequenceNumberHandle {
             } else {
                 trace!(
                     "Expected sequence number {}, got {}",
-                    expected, incoming_sequence_number
+                    expected,
+                    incoming_sequence_number
                 );
                 return Err(Error::new(
                     StatusCode::BadSequenceNumberInvalid,

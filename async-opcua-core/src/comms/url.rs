@@ -13,6 +13,8 @@ use opcua_types::status_code::StatusCode;
 
 /// Scheme for OPC-UA TCP.
 pub const OPC_TCP_SCHEME: &str = "opc.tcp";
+/// Scheme for OPC UA over secure WebSockets.
+pub const OPC_WSS_SCHEME: &str = "opc.wss";
 
 /// Creates a `Url` from the input string, supplying a default port if necessary.
 fn opc_url_from_str(s: &str) -> Result<Url, url::ParseError> {
@@ -84,6 +86,15 @@ pub fn is_opc_ua_binary_url(url: &str) -> bool {
     }
 }
 
+/// Check if this is an OPC UA secure WebSocket URL.
+pub fn is_opc_ua_wss_url(url: &str) -> bool {
+    if let Ok(url) = opc_url_from_str(url) {
+        url.scheme() == OPC_WSS_SCHEME
+    } else {
+        false
+    }
+}
+
 /// Error returned when getting host name from URL.
 pub enum HostnameFromUrlError {
     /// URL failed to parse.
@@ -126,6 +137,22 @@ pub fn hostname_port_from_url(url: &str, default_port: u16) -> Result<(String, u
     let url = Url::parse(url).map_err(|_| StatusCode::BadTcpEndpointUrlInvalid)?;
 
     if url.scheme() != OPC_TCP_SCHEME || !url.has_host() {
+        Err(StatusCode::BadTcpEndpointUrlInvalid)
+    } else {
+        let host = url.host_str().unwrap();
+        let port = url.port().unwrap_or(default_port);
+        Ok((host.to_string(), port))
+    }
+}
+
+/// Get the hostname and port from an OPC UA WSS URL, defaulting to `default_port`.
+pub fn hostname_port_from_wss_url(
+    url: &str,
+    default_port: u16,
+) -> Result<(String, u16), StatusCode> {
+    let url = Url::parse(url).map_err(|_| StatusCode::BadTcpEndpointUrlInvalid)?;
+
+    if url.scheme() != OPC_WSS_SCHEME || !url.has_host() {
         Err(StatusCode::BadTcpEndpointUrlInvalid)
     } else {
         let host = url.host_str().unwrap();

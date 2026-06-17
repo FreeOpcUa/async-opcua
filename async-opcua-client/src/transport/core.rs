@@ -346,7 +346,9 @@ impl TransportState {
                 if let ResponseMessage::OpenSecureChannel(msg) = &message {
                     let service_result = msg.response_header.service_result;
                     if !service_result.is_good() {
-                        error!("OpenSecureChannel response failed, request_id = {req_id}: {service_result}");
+                        error!(
+                            "OpenSecureChannel response failed, request_id = {req_id}: {service_result}"
+                        );
                         return Err(Error::new(
                             service_result,
                             "OpenSecureChannel received service fault from server",

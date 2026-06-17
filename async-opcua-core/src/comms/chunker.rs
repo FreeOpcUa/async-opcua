@@ -7,18 +7,18 @@
 use std::io::{Read, Write};
 
 use crate::{
-    Message,
     comms::{
         message_chunk::{MessageChunk, MessageIsFinalType},
         secure_channel::SecureChannel,
         sequence_number::SequenceNumberHandle,
     },
+    Message,
 };
 
 use opcua_crypto::SecurityPolicy;
 use opcua_types::{
-    BinaryDecodable, EncodingResult, Error, ObjectId, SimpleBinaryEncodable,
-    encoding::BinaryEncodable, node_id::NodeId, status_code::StatusCode,
+    encoding::BinaryEncodable, node_id::NodeId, status_code::StatusCode, BinaryDecodable,
+    EncodingResult, Error, ObjectId, SimpleBinaryEncodable,
 };
 use tracing::{debug, error, trace};
 

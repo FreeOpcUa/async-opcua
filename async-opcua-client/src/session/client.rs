@@ -6,7 +6,8 @@ use tracing::error;
 
 use crate::{
     transport::{
-        tcp::TransportConfiguration, Connector, ConnectorBuilder, TcpConnector, TransportPollResult,
+        tcp::TransportConfiguration, Connector, ConnectorBuilder, DefaultConnector,
+        TransportPollResult,
     },
     AsyncSecureChannel, ClientConfig, ClientEndpoint, IdentityToken,
 };
@@ -65,7 +66,9 @@ impl Client {
                 application_description,
             );
         if client_certificate.is_none() || client_pkey.is_none() {
-            error!("Client is missing its application instance certificate and/or its private key. Encrypted endpoints will not function correctly.")
+            error!(
+                "Client is missing its application instance certificate and/or its private key. Encrypted endpoints will not function correctly."
+            )
         }
 
         // Clients may choose to skip additional server certificate validations
@@ -100,7 +103,7 @@ impl Client {
     pub async fn connect_to_endpoint_id(
         &mut self,
         endpoint_id: impl Into<String>,
-    ) -> Result<(Arc<Session>, SessionEventLoop<TcpConnector>), Error> {
+    ) -> Result<(Arc<Session>, SessionEventLoop<DefaultConnector>), Error> {
         self.session_builder()
             .with_endpoints(self.get_server_endpoints().await?)
             .connect_to_endpoint_id(endpoint_id)?
@@ -130,7 +133,7 @@ impl Client {
         &mut self,
         endpoint: impl Into<EndpointDescription>,
         user_identity_token: IdentityToken,
-    ) -> Result<(Arc<Session>, SessionEventLoop<TcpConnector>), Error> {
+    ) -> Result<(Arc<Session>, SessionEventLoop<DefaultConnector>), Error> {
         let endpoint = endpoint.into();
 
         // Get the server endpoints
@@ -165,7 +168,7 @@ impl Client {
         &mut self,
         endpoint: impl Into<EndpointDescription>,
         identity_token: IdentityToken,
-    ) -> Result<(Arc<Session>, SessionEventLoop<TcpConnector>), Error> {
+    ) -> Result<(Arc<Session>, SessionEventLoop<DefaultConnector>), Error> {
         self.session_builder()
             .connect_to_endpoint_directly(endpoint)?
             .user_identity_token(identity_token)
@@ -192,7 +195,7 @@ impl Client {
     ///
     pub async fn connect_to_default_endpoint(
         &mut self,
-    ) -> Result<(Arc<Session>, SessionEventLoop<TcpConnector>), Error> {
+    ) -> Result<(Arc<Session>, SessionEventLoop<DefaultConnector>), Error> {
         self.session_builder()
             .with_endpoints(self.get_server_endpoints().await?)
             .connect_to_default_endpoint()?

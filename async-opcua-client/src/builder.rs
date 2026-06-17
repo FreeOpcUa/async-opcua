@@ -1,9 +1,13 @@
+#[cfg(feature = "wss")]
+use std::sync::Arc;
 use std::{path::PathBuf, time::Duration};
 
 use opcua_core::config::{Config, ConfigError};
 use tracing::{error, warn};
 
-use super::{Client, ClientConfig, ClientEndpoint, ClientUserToken, ANONYMOUS_USER_TOKEN_ID};
+#[cfg(feature = "wss")]
+use super::config::WssTlsConfig;
+use super::{ANONYMOUS_USER_TOKEN_ID, Client, ClientConfig, ClientEndpoint, ClientUserToken};
 
 #[derive(Default)]
 /// Client builder.
@@ -131,6 +135,40 @@ impl ClientBuilder {
     /// verify the hostname, application uri and the not before / after values to ensure validity.
     pub fn verify_server_certs(mut self, verify_server_certs: bool) -> Self {
         self.config.verify_server_certs = verify_server_certs;
+        self
+    }
+
+    /// Sets a custom rustls client configuration for `opc.wss` connections.
+    ///
+    /// The supplied configuration is used verbatim, including certificate
+    /// verification, ALPN, protocol versions, and root stores.
+    #[cfg(feature = "wss")]
+    pub fn websocket_rustls_config(mut self, config: Arc<rustls::ClientConfig>) -> Self {
+        self.config.wss_tls = WssTlsConfig::Custom(config);
+        self
+    }
+
+    /// Adds a PEM file containing extra trust anchors for `opc.wss` connections.
+    ///
+    /// These roots are added to the default system and bundled WebPKI roots.
+    #[cfg(feature = "wss")]
+    pub fn websocket_ca_pem(mut self, path: impl Into<PathBuf>) -> Self {
+        self.config.wss_tls = WssTlsConfig::CaPem(path.into());
+        self
+    }
+
+    /// Sets whether WSS TLS certificate validation is disabled.
+    ///
+    /// This defeats TLS MITM protection for `opc.wss` and must not be used in
+    /// production.
+    #[cfg(feature = "wss")]
+    pub fn dangerously_accept_invalid_wss_certs(mut self, accept: bool) -> Self {
+        if accept {
+            warn!("WSS TLS certificate verification disabled -- do NOT use in production");
+            self.config.wss_tls = WssTlsConfig::DangerouslyAcceptInvalid;
+        } else {
+            self.config.wss_tls = WssTlsConfig::Default;
+        }
         self
     }
 

@@ -12,11 +12,11 @@ use std::{
 };
 
 use bytes::{Bytes, BytesMut};
-use futures::{Sink, Stream, ready};
+use futures::{ready, Sink, Stream};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio_tungstenite::{
-    WebSocketStream,
     tungstenite::{Error as TungsteniteError, Message},
+    WebSocketStream,
 };
 
 /// Adapts a WebSocket stream carrying binary UACP frames into an async byte stream.

@@ -374,7 +374,7 @@ impl<
                         return Err(Error::new(
                             StatusCode::BadBrowseDirectionInvalid,
                             "Produced an invalid browse direction",
-                        ))
+                        ));
                     }
                 }
 

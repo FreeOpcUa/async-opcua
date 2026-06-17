@@ -452,9 +452,13 @@ impl UARequest for SetPublishingMode {
                     self.subscription_ids.len(),
                     num_results
                 );
-                return Err(Error::new(StatusCode::BadUnexpectedError, format!("set_publishing_mode returned an incorrect number of results. Expected {}, got {}",
-                    self.subscription_ids.len(),
-                    num_results)
+                return Err(Error::new(
+                    StatusCode::BadUnexpectedError,
+                    format!(
+                        "set_publishing_mode returned an incorrect number of results. Expected {}, got {}",
+                        self.subscription_ids.len(),
+                        num_results
+                    ),
                 ));
             }
 
@@ -1033,9 +1037,13 @@ impl UARequest for CreateMonitoredItems<'_> {
                         results.len(),
                         num_items
                     );
-                    return Err(Error::new(StatusCode::BadUnexpectedError, format!("create_monitored_items, unexpected number of results. Got {}, expected {}",
-                        results.len(),
-                        num_items)
+                    return Err(Error::new(
+                        StatusCode::BadUnexpectedError,
+                        format!(
+                            "create_monitored_items, unexpected number of results. Got {}, expected {}",
+                            results.len(),
+                            num_items
+                        ),
                     ));
                 }
                 builder_debug!(self, "create_monitored_items, {} items created", num_items);
@@ -2431,7 +2439,10 @@ impl Session {
 
         // But if it didn't work, then some or all subscriptions have to be remade.
         if !subscription_ids_to_recreate.is_empty() {
-            session_warn!(self, "Some or all of the existing subscriptions could not be transferred and must be created manually");
+            session_warn!(
+                self,
+                "Some or all of the existing subscriptions could not be transferred and must be created manually"
+            );
         }
 
         for subscription_id in subscription_ids_to_recreate {

@@ -206,8 +206,13 @@ impl UARequest for CreateSession<'_> {
 
             if security_policy != SecurityPolicy::None {
                 if self.endpoint.server_certificate != response.server_certificate {
-                    error!("Server certificate in CreateSession response does not match channel certificate");
-                    return Err(Error::new(StatusCode::BadCertificateInvalid, "Server certificate in CreateSession response does not match channel certificate"));
+                    error!(
+                        "Server certificate in CreateSession response does not match channel certificate"
+                    );
+                    return Err(Error::new(
+                        StatusCode::BadCertificateInvalid,
+                        "Server certificate in CreateSession response does not match channel certificate",
+                    ));
                 }
                 let server_certificate =
                     opcua_crypto::X509::from_byte_string(&response.server_certificate)
@@ -451,8 +456,13 @@ impl ActivateSession {
                 let nonce = remote_nonce.as_ref();
                 let server_cert = remote_cert;
                 let Some(server_cert) = &server_cert else {
-                    error!("Cannot create an X509IdentityToken because the remote server has no cert with which to create a signature");
-                    return Err(Error::new(StatusCode::BadCertificateInvalid, "Cannot create an X509IdentityToken because the remote server has no cert with which to create a signature"));
+                    error!(
+                        "Cannot create an X509IdentityToken because the remote server has no cert with which to create a signature"
+                    );
+                    return Err(Error::new(
+                        StatusCode::BadCertificateInvalid,
+                        "Cannot create an X509IdentityToken because the remote server has no cert with which to create a signature",
+                    ));
                 };
 
                 let user_token_signature = opcua_crypto::create_signature_data(

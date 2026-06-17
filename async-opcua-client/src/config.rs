@@ -4,6 +4,8 @@
 
 //! Client configuration data.
 
+#[cfg(feature = "wss")]
+use std::sync::Arc;
 use std::{
     self,
     collections::BTreeMap,
@@ -41,6 +43,52 @@ pub struct ClientUserToken {
     /// Private key path for x509 authentication.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub private_key_path: Option<String>,
+}
+
+/// TLS configuration used for `opc.wss` WebSocket connections.
+#[cfg(feature = "wss")]
+#[derive(Clone)]
+pub enum WssTlsConfig {
+    /// Use system and bundled WebPKI roots with hostname verification.
+    Default,
+    /// Use system and bundled WebPKI roots, plus the certificates in this PEM file.
+    CaPem(PathBuf),
+    /// Use a caller-supplied rustls client configuration verbatim.
+    Custom(Arc<rustls::ClientConfig>),
+    /// Disable TLS certificate verification for WSS connections.
+    DangerouslyAcceptInvalid,
+}
+
+#[cfg(feature = "wss")]
+impl std::fmt::Debug for WssTlsConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Default => f.write_str("Default"),
+            Self::CaPem(path) => f.debug_tuple("CaPem").field(path).finish(),
+            Self::Custom(_) => f.write_str("Custom(<redacted>)"),
+            Self::DangerouslyAcceptInvalid => f.write_str("DangerouslyAcceptInvalid"),
+        }
+    }
+}
+
+#[cfg(feature = "wss")]
+impl PartialEq for WssTlsConfig {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Default, Self::Default) => true,
+            (Self::CaPem(a), Self::CaPem(b)) => a == b,
+            (Self::Custom(a), Self::Custom(b)) => Arc::ptr_eq(a, b),
+            (Self::DangerouslyAcceptInvalid, Self::DangerouslyAcceptInvalid) => true,
+            _ => false,
+        }
+    }
+}
+
+#[cfg(feature = "wss")]
+impl Default for WssTlsConfig {
+    fn default() -> Self {
+        Self::Default
+    }
 }
 
 impl ClientUserToken {
@@ -276,6 +324,10 @@ pub struct ClientConfig {
     /// TCP keep-alive settings for long-lived connections.
     #[serde(default)]
     pub(crate) tcp_keepalive: TcpKeepaliveConfig,
+    /// TLS configuration used for `opc.wss` connections.
+    #[cfg(feature = "wss")]
+    #[serde(skip)]
+    pub(crate) wss_tls: WssTlsConfig,
     /// Interval between each keep-alive request sent to the server.
     #[serde(default = "defaults::keep_alive_interval")]
     pub(crate) keep_alive_interval: Duration,
@@ -676,6 +728,8 @@ impl ClientConfig {
             session_retry_max: defaults::session_retry_max(),
             connect_timeout: defaults::connect_timeout(),
             tcp_keepalive: TcpKeepaliveConfig::default(),
+            #[cfg(feature = "wss")]
+            wss_tls: WssTlsConfig::default(),
             keep_alive_interval: defaults::keep_alive_interval(),
             max_failed_keep_alive_count: defaults::max_failed_keep_alive_count(),
             request_timeout: defaults::request_timeout(),
@@ -700,7 +754,7 @@ mod tests {
     use opcua_crypto::SecurityPolicy;
     use opcua_types::MessageSecurityMode;
 
-    use super::{ClientConfig, ClientEndpoint, ClientUserToken, ANONYMOUS_USER_TOKEN_ID};
+    use super::{ANONYMOUS_USER_TOKEN_ID, ClientConfig, ClientEndpoint, ClientUserToken};
 
     fn make_test_file(filename: &str) -> PathBuf {
         let mut path = std::env::temp_dir();

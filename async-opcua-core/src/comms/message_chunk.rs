@@ -8,9 +8,9 @@
 use std::io::{Cursor, Read, Write};
 
 use opcua_types::{
-    DecodingOptions, EncodingResult, Error, SimpleBinaryDecodable, SimpleBinaryEncodable, UAString,
-    process_decode_io_result, process_encode_io_result, read_u8, read_u32, status_code::StatusCode,
-    write_u8, write_u32,
+    process_decode_io_result, process_encode_io_result, read_u32, read_u8, status_code::StatusCode,
+    write_u32, write_u8, DecodingOptions, EncodingResult, Error, SimpleBinaryDecodable,
+    SimpleBinaryEncodable, UAString,
 };
 use tracing::trace;
 

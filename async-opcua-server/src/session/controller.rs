@@ -85,6 +85,7 @@ pub(crate) struct SessionController {
     message_handler: MessageHandler,
     subscriptions: Arc<SubscriptionCache>,
     pending_messages: FuturesUnordered<Pin<Box<PendingMessageResponse>>>,
+    max_inflight: usize,
     info: Arc<ServerInfo>,
     deadline: Instant,
 }
@@ -92,6 +93,16 @@ pub(crate) struct SessionController {
 enum RequestProcessResult {
     Ok,
     Close,
+}
+
+fn effective_request_timeout(timeout_hint: u32, max_timeout_ms: u32) -> u32 {
+    if max_timeout_ms == 0 {
+        timeout_hint
+    } else if timeout_hint == 0 {
+        max_timeout_ms
+    } else {
+        timeout_hint.min(max_timeout_ms)
+    }
 }
 
 pub(crate) struct SessionStarter<T> {
@@ -201,6 +212,7 @@ impl SessionController {
             subscriptions,
             deadline: Instant::now()
                 + Duration::from_secs(info.config.tcp_config.hello_timeout as u64),
+            max_inflight: info.config.limits.max_inflight_requests_per_connection,
             info,
             pending_messages: FuturesUnordered::new(),
         }
@@ -208,6 +220,8 @@ impl SessionController {
 
     async fn run(mut self, mut command: tokio::sync::mpsc::Receiver<ControllerCommand>) {
         loop {
+            let can_poll_transport =
+                self.max_inflight == 0 || self.pending_messages.len() < self.max_inflight;
             let resp_fut = if self.pending_messages.is_empty() {
                 Either::Left(futures::future::pending::<Option<Result<Response, String>>>())
             } else {
@@ -248,7 +262,7 @@ impl SessionController {
                         self.fatal_error(e, "Encoding error");
                     }
                 }
-                res = self.transport.poll(&mut self.channel) => {
+                res = self.transport.poll(&mut self.channel), if can_poll_transport => {
                     match res {
                         TransportPollResult::IncomingMessage(req) => {
                             if matches!(self.process_request(req).await, RequestProcessResult::Close) {
@@ -575,11 +589,7 @@ impl SessionController {
                 let deadline = {
                     let timeout = message.request_header().timeout_hint;
                     let max_timeout = self.info.config.max_timeout_ms;
-                    let timeout = if max_timeout == 0 {
-                        timeout
-                    } else {
-                        max_timeout.max(timeout)
-                    };
+                    let timeout = effective_request_timeout(timeout, max_timeout);
                     if timeout == 0 {
                         // Just set some huge value. A request taking a day can probably
                         // be safely canceled...
@@ -901,5 +911,24 @@ impl SecureChannelState {
     fn create_token_id(&mut self) -> u32 {
         self.last_token_id += 1;
         self.last_token_id
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::effective_request_timeout;
+
+    /// H2: `max_timeout_ms` must act as a CEILING on the client's `timeout_hint`,
+    /// never a floor.
+    #[test]
+    fn request_timeout_is_capped_not_floored() {
+        // No configured cap -> honor the client's hint.
+        assert_eq!(effective_request_timeout(5_000, 0), 5_000);
+        // Client sends 0 -> use the cap as the default.
+        assert_eq!(effective_request_timeout(0, 3_000), 3_000);
+        // Client exceeds the cap -> capped at the maximum (the bug being fixed).
+        assert_eq!(effective_request_timeout(60_000, 3_000), 3_000);
+        // Client below the cap -> honored.
+        assert_eq!(effective_request_timeout(1_000, 3_000), 1_000);
     }
 }

@@ -57,6 +57,8 @@ pub struct Session {
     application_description: ApplicationDescription,
     /// Message security mode. Set on the channel, but cached here.
     message_security_mode: MessageSecurityMode,
+    /// Time the session was created.
+    created_at: Instant,
     /// Time of last service request.
     last_service_request: ArcSwap<Instant>,
     /// Continuation points for browse.
@@ -95,6 +97,7 @@ impl Session {
         message_security_mode: MessageSecurityMode,
     ) -> Self {
         let (session_id, session_id_numeric) = next_session_id();
+        let now = Instant::now();
         Self {
             session_id,
             session_id_numeric,
@@ -109,7 +112,8 @@ impl Session {
             } else {
                 Duration::from_millis(session_timeout)
             },
-            last_service_request: ArcSwap::new(Arc::new(Instant::now())),
+            created_at: now,
+            last_service_request: ArcSwap::new(Arc::new(now)),
             user_identity,
             locale_ids: None,
             max_request_message_size,
@@ -150,6 +154,11 @@ impl Session {
     /// Get the session timeout deadline.
     pub fn deadline(&self) -> Instant {
         **self.last_service_request.load() + self.session_timeout
+    }
+
+    /// Get the session creation time.
+    pub fn created_at(&self) -> Instant {
+        self.created_at
     }
 
     /// Check whether this session is validated and return the appropriate error if not.

@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    net::{SocketAddr, ToSocketAddrs},
+    net::{IpAddr, SocketAddr, ToSocketAddrs},
     sync::{
         atomic::{AtomicU16, AtomicU8},
         Arc,
@@ -51,10 +51,12 @@ use super::{
 
 struct ConnectionInfo {
     command_send: tokio::sync::mpsc::Sender<ControllerCommand>,
+    ip: IpAddr,
 }
 
 struct TcpConnectionDeps {
     max_connections: usize,
+    max_connections_per_ip: usize,
     transport_config: TransportConfig,
     info: Arc<ServerInfo>,
     session_manager: Arc<RwLock<SessionManager>>,
@@ -81,6 +83,19 @@ impl TcpConnectionDeps {
             drop(socket);
             drop(token);
             return false;
+        }
+        let ip = addr.ip();
+        if self.max_connections_per_ip > 0 {
+            let connections_from_ip = connection_map
+                .values()
+                .filter(|connection| connection.ip == ip)
+                .count();
+            if connections_from_ip >= self.max_connections_per_ip {
+                warn!("Closing connection from {addr}: max_connections_per_ip reached");
+                drop(socket);
+                drop(token);
+                return false;
+            }
         }
 
         info!("Accept new connection from {addr} ({connection_counter})");
@@ -112,7 +127,13 @@ impl TcpConnectionDeps {
             connection_counter
         });
         connections.push(handle);
-        connection_map.insert(connection_counter, ConnectionInfo { command_send: send });
+        connection_map.insert(
+            connection_counter,
+            ConnectionInfo {
+                command_send: send,
+                ip,
+            },
+        );
         true
     }
 }
@@ -281,10 +302,7 @@ impl Server {
         let certificate_store = Arc::new(RwLock::new(certificate_store));
 
         let info = Arc::new(info);
-        let subscriptions = Arc::new(SubscriptionCache::new(
-            config.limits.subscriptions,
-            info.metrics.clone(),
-        ));
+        let subscriptions = Arc::new(SubscriptionCache::new(config.limits.subscriptions));
 
         let node_managers_ref = NodeManagersRef::new_empty();
         let status_wrapper = Arc::new(ServerStatusWrapper::new(
@@ -426,6 +444,7 @@ impl Server {
     fn tcp_connection_deps(&self) -> TcpConnectionDeps {
         TcpConnectionDeps {
             max_connections: self.config.max_connections,
+            max_connections_per_ip: self.config.max_connections_per_ip,
             transport_config: self.transport_config(),
             info: self.info.clone(),
             session_manager: self.session_manager.clone(),
@@ -551,7 +570,8 @@ impl Server {
                     });
                     self.connections.push(handle);
                     self.connection_map.insert(connection_counter, ConnectionInfo {
-                        command_send: send
+                        command_send: send,
+                        ip: rev_connect.target.address.ip(),
                     });
                     connection_counter += 1;
                 }

@@ -604,3 +604,30 @@ fn test_x509_cross_thread() {
     });
     let _ = child.join();
 }
+
+/// M1: `body_size_from_message_size` uses checked subtraction. For a normal secured
+/// OpenSecureChannel channel it must return a positive body size (and the chunker relies
+/// on that being >= 1). The underflow path — chunk headers larger than the negotiated
+/// chunk size, which requires a near-`MAX_CERTIFICATE_LENGTH` certificate — now returns
+/// `Err` instead of underflowing/panicking (that pathological case is inspection-verified).
+#[test]
+fn open_secure_channel_body_size_is_positive() {
+    let _ = Test::setup();
+    let (our_cert, our_key) = make_test_cert_2048();
+    let (their_cert, _their_key) = make_test_cert_4096();
+
+    let mut secure_channel = SecureChannel::new_no_certificate_store();
+    secure_channel.set_security_mode(MessageSecurityMode::SignAndEncrypt);
+    secure_channel.set_security_policy(opcua_crypto::SecurityPolicy::Basic256Sha256);
+    secure_channel.set_cert(Some(our_cert));
+    secure_channel.set_remote_cert(Some(their_cert));
+    secure_channel.set_private_key(Some(our_key));
+
+    let body = MessageChunk::body_size_from_message_size(
+        MessageChunkType::OpenSecureChannel,
+        &secure_channel,
+        MIN_CHUNK_SIZE,
+    )
+    .expect("a normal OPN channel must yield a positive body size, not error or panic");
+    assert!(body > 0);
+}

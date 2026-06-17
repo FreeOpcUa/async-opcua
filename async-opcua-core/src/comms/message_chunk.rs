@@ -319,7 +319,29 @@ impl MessageChunk {
         // which would put us at 8192, which exceeds the configured limit.
         // So 8111 is the largest the chunk can possibly be with this chunk size.
 
-        Ok(aligned_max_chunk_size - header_size - signature_size - minimum_padding)
+        let overhead = header_size
+            .checked_add(signature_size)
+            .and_then(|overhead| overhead.checked_add(minimum_padding))
+            .ok_or_else(|| {
+                Error::new(
+                    StatusCode::BadTcpInternalError,
+                    "message chunk overhead size overflowed",
+                )
+            })?;
+        let body_size = aligned_max_chunk_size
+            .checked_sub(overhead)
+            .filter(|body_size| *body_size > 0)
+            .ok_or_else(|| {
+                Error::new(
+                    StatusCode::BadTcpInternalError,
+                    format!(
+                        "chunk headers/signature/padding ({}) do not leave room for a message body in the negotiated chunk size ({})",
+                        overhead, aligned_max_chunk_size
+                    ),
+                )
+            })?;
+
+        Ok(body_size)
     }
 
     /// Decode the message header from the inner data.

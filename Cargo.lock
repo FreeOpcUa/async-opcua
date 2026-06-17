@@ -646,7 +646,6 @@ dependencies = [
  "dashmap",
  "futures",
  "hashbrown 0.15.5",
- "lockfree-object-pool",
  "moka",
  "parking_lot",
  "postcard",
@@ -2284,12 +2283,6 @@ checksum = "224399e74b87b5f3557511d98dff8b14089b3dadafcab6bb93eab67d3aace965"
 dependencies = [
  "scopeguard",
 ]
-
-[[package]]
-name = "lockfree-object-pool"
-version = "0.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9374ef4228402d4b7e403e5838cb880d9ee663314b0a900d5a6aabf0c213552e"
 
 [[package]]
 name = "log"

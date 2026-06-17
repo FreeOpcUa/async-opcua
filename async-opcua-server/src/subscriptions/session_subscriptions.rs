@@ -6,6 +6,7 @@ use std::{
 
 use super::{
     monitored_item::MonitoredItem,
+    pool::NotificationBuffer,
     subscription::{MonitoredItemHandle, Subscription, TickReason, TickResult},
     CreateMonitoredItem, NonAckedPublish, PendingPublish, PersistentSessionKey,
 };
@@ -46,8 +47,6 @@ pub struct SessionSubscriptions {
     session: Arc<RwLock<Session>>,
     /// Static reference to the type-tree for the user owning this.
     type_tree_for_user: Arc<dyn TypeTreeForUserStatic>,
-    /// Shared notification scratch buffer pool owned by the subscription cache.
-    pool: Arc<super::pool::NotificationPool>,
 }
 
 impl SessionSubscriptions {
@@ -56,7 +55,6 @@ impl SessionSubscriptions {
         user_token: PersistentSessionKey,
         session: Arc<RwLock<Session>>,
         type_tree_for_user: Arc<dyn TypeTreeForUserStatic>,
-        pool: Arc<super::pool::NotificationPool>,
     ) -> Self {
         Self {
             user_token,
@@ -66,7 +64,6 @@ impl SessionSubscriptions {
             limits,
             session,
             type_tree_for_user,
-            pool,
         }
     }
 
@@ -287,6 +284,7 @@ impl SessionSubscriptions {
         subscription_id: u32,
         requests: &[CreateMonitoredItem],
     ) -> Result<Vec<MonitoredItemCreateResult>, StatusCode> {
+        let cap = self.limits.max_monitored_items_per_sub;
         let Some(sub) = self.subscriptions.get_mut(&subscription_id) else {
             return Err(StatusCode::BadSubscriptionIdInvalid);
         };
@@ -298,6 +296,16 @@ impl SessionSubscriptions {
                 .map(|r| ExtensionObject::from_message(r.clone()))
                 .unwrap_or_else(ExtensionObject::null);
             if item.status_code().is_good() {
+                if cap > 0 && sub.len() >= cap {
+                    results.push(MonitoredItemCreateResult {
+                        status_code: StatusCode::BadTooManyMonitoredItems,
+                        monitored_item_id: 0,
+                        revised_sampling_interval: item.sampling_interval(),
+                        revised_queue_size: item.queue_size() as u32,
+                        filter_result,
+                    });
+                    continue;
+                }
                 let new_item = MonitoredItem::new(item);
                 results.push(MonitoredItemCreateResult {
                     status_code: StatusCode::Good,
@@ -592,9 +600,15 @@ impl SessionSubscriptions {
         now_instant: Instant,
         mut request: PendingPublish,
     ) {
+        let mut buffer = NotificationBuffer::new();
         if self.publish_request_queue.len() >= self.max_publish_requests() {
             // Tick to trigger publish, maybe remove a request to make space for new one
-            let _ = self.tick(now, now_instant, TickReason::ReceivePublishRequest);
+            let _ = self.tick(
+                now,
+                now_instant,
+                TickReason::ReceivePublishRequest,
+                &mut buffer,
+            );
         }
 
         if self.publish_request_queue.len() >= self.max_publish_requests() {
@@ -613,7 +627,12 @@ impl SessionSubscriptions {
 
         request.ack_results = self.process_subscription_acks(&request.request);
         self.publish_request_queue.push_back(request);
-        self.tick(now, now_instant, TickReason::ReceivePublishRequest);
+        self.tick(
+            now,
+            now_instant,
+            TickReason::ReceivePublishRequest,
+            &mut buffer,
+        );
     }
 
     pub(crate) fn tick(
@@ -621,6 +640,7 @@ impl SessionSubscriptions {
         now: &DateTimeUtc,
         now_instant: Instant,
         tick_reason: TickReason,
+        buffer: &mut NotificationBuffer,
     ) -> Vec<MonitoredItemRef> {
         let mut to_delete = Vec::new();
         if self.subscriptions.is_empty() {
@@ -649,15 +669,15 @@ impl SessionSubscriptions {
         let mut responses = Vec::new();
         let mut more_notifications = false;
 
-        let pool = Arc::clone(&self.pool);
         for sub_id in subscription_ids {
             let subscription = self.subscriptions.get_mut(&sub_id).unwrap();
+            buffer.reset();
             let res = subscription.tick(
                 now,
                 now_instant,
                 tick_reason,
                 !self.publish_request_queue.is_empty(),
-                &pool,
+                &mut *buffer,
             );
             // Get notifications and publish request pairs while there are any of either left.
             while !self.publish_request_queue.is_empty() {

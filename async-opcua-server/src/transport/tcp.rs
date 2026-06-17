@@ -12,7 +12,7 @@ use opcua_core::{
         secure_channel::SecureChannel,
         sequence_number::SequenceNumberHandle,
         tcp_codec::{Message, TcpCodec},
-        tcp_types::{AcknowledgeMessage, ErrorMessage},
+        tcp_types::{AcknowledgeMessage, ErrorMessage, MIN_CHUNK_SIZE},
     },
     RequestMessage, ResponseMessage,
 };
@@ -83,6 +83,14 @@ fn min_zero_infinite(server: u32, client: u32) -> u32 {
         client
     } else {
         client.min(server)
+    }
+}
+
+fn effective_max_chunk_count(max_chunk_count: usize, max_message_size: usize) -> usize {
+    if max_chunk_count > 0 {
+        max_chunk_count
+    } else {
+        (max_message_size / MIN_CHUNK_SIZE).max(1)
     }
 }
 
@@ -393,12 +401,13 @@ impl TcpTransport {
                 } else {
                     let chunk = channel.verify_and_remove_security_server(chunk.data)?;
 
-                    if self.send_buffer.max_chunk_count > 0
-                        && self.pending_chunks.len() == self.send_buffer.max_chunk_count
-                    {
+                    let max_chunks = effective_max_chunk_count(
+                        self.send_buffer.max_chunk_count,
+                        self.send_buffer.max_message_size,
+                    );
+                    if self.pending_chunks.len() >= max_chunks {
                         return Err(Error::decoding(format!(
-                            "Message has more than {} chunks, exceeding negotiated limits",
-                            self.send_buffer.max_chunk_count
+                            "Message has more than {max_chunks} chunks, exceeding limits"
                         )));
                     }
                     let chunk_info = chunk.chunk_info(channel)?;
@@ -428,5 +437,23 @@ impl TcpTransport {
                 format!("Received unexpected message: {unexpected:?}"),
             )),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::effective_max_chunk_count;
+
+    /// N6/M11: the inbound chunk-count ceiling must be enforced even when the negotiated
+    /// `max_chunk_count` is 0 ("unlimited"), by deriving a physical bound from
+    /// `max_message_size / MIN_CHUNK_SIZE`.
+    #[test]
+    fn chunk_count_ceiling_is_bounded_even_when_unlimited() {
+        // Explicit cap is honored.
+        assert_eq!(effective_max_chunk_count(5, 327_675), 5);
+        // 0 == unlimited -> derived ceiling = max_message_size / MIN_CHUNK_SIZE (8192).
+        assert_eq!(effective_max_chunk_count(0, 327_675), 327_675 / 8192);
+        // Never zero, even for a tiny max_message_size.
+        assert_eq!(effective_max_chunk_count(0, 0), 1);
     }
 }

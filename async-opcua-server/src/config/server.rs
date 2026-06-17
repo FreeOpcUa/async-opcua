@@ -172,6 +172,14 @@ fn is_argon2id_password_hash(password_hash: &str) -> bool {
 mod tests {
     use super::*;
 
+    /// H3/N10: the per-source-IP connection cap config field exists; default 0 (unlimited,
+    /// opt-in) is deliberate to avoid breaking NAT/gateway deployments. Per-IP enforcement
+    /// behaviour is covered by integration/load testing (SC-002).
+    #[test]
+    fn max_connections_per_ip_defaults_to_unlimited_optin() {
+        assert_eq!(ServerConfig::default().max_connections_per_ip, 0);
+    }
+
     #[test]
     fn user_pass_stores_password_hash_not_plaintext() {
         let token = ServerUserToken::user_pass("brew-operator", "correct-password");
@@ -249,6 +257,10 @@ pub struct ServerConfig {
     /// Maximum number of active TCP connections before new incoming sockets are closed.
     #[serde(default = "defaults::max_connections")]
     pub max_connections: usize,
+    /// Maximum number of concurrent connections from a single source IP.
+    /// 0 = unlimited (opt-in); set to cap concurrent connections from a single source IP.
+    #[serde(default = "defaults::max_connections_per_ip")]
+    pub max_connections_per_ip: usize,
     /// Server OPA UA limits
     #[serde(default)]
     pub limits: Limits,
@@ -344,6 +356,10 @@ mod defaults {
 
     pub(super) fn max_connections() -> usize {
         constants::MAX_CONNECTIONS
+    }
+
+    pub(super) fn max_connections_per_ip() -> usize {
+        0
     }
 }
 
@@ -466,6 +482,7 @@ impl Default for ServerConfig {
                 hello_timeout: constants::DEFAULT_HELLO_TIMEOUT_SECONDS,
             },
             max_connections: defaults::max_connections(),
+            max_connections_per_ip: defaults::max_connections_per_ip(),
             limits: Limits::default(),
             user_tokens: BTreeMap::new(),
             locale_ids: vec!["en".to_string()],

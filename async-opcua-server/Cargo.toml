@@ -33,7 +33,6 @@ discovery-server-registration = ["async-opcua-client"]
 test-utils = []
 
 [dependencies]
-lockfree-object-pool = "0.1"
 moka = { version = "0.12", features = ["future", "sync"] }
 arc-swap = { workspace = true }
 argon2 = { version = "0.5.3", features = ["std"] }
@@ -78,10 +77,6 @@ serde_yaml = { workspace = true }
 
 [[bench]]
 name = "session_lookup"
-harness = false
-
-[[bench]]
-name = "notification_pool"
 harness = false
 
 [package.metadata.docs.rs]

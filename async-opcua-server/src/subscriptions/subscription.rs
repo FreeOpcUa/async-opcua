@@ -11,7 +11,7 @@ use tracing::{debug, trace, warn};
 use crate::node_manager::MonitoredItemRef;
 
 use super::monitored_item::{MonitoredItem, Notification};
-use super::pool::{NotificationBuffer, NotificationPool};
+use super::pool::NotificationBuffer;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 /// Current internal state of the subscription.
@@ -506,7 +506,7 @@ impl Subscription {
         now_instant: Instant,
         tick_reason: TickReason,
         publishing_req_queued: bool,
-        pool: &NotificationPool,
+        buffer: &mut NotificationBuffer,
     ) -> TickResult {
         let publishing_interval_elapsed = match tick_reason {
             TickReason::ReceivePublishRequest => false,
@@ -550,16 +550,15 @@ impl Subscription {
             }
             UpdateStateAction::ReturnNotifications => {
                 let resend_data = std::mem::take(&mut self.resend_data);
-                let mut buffer = pool.acquire();
-                let messages = self.tick_monitored_items(now, resend_data, &mut buffer);
+                buffer.reset();
+                let messages = self.tick_monitored_items(now, resend_data, buffer);
                 for msg in messages {
                     self.enqueue_notification(msg);
                 }
                 // Every notification has been moved into an enqueued message
-                // at this point, so the scratch buffer can safely return to
-                // the pool while the messages await publishing.
+                // at this point, so the scratch buffer can safely be reused
+                // by the next subscription tick.
                 debug_assert!(buffer.is_empty());
-                drop(buffer);
                 TickResult::Enqueued
             }
             UpdateStateAction::SubscriptionCreated => TickResult::None,
@@ -938,7 +937,7 @@ mod tests {
 
     #[test]
     fn tick() {
-        let pool = super::NotificationPool::new(16);
+        let mut buffer = super::NotificationBuffer::new();
         let mut sub = Subscription::new(1, true, Duration::from_millis(100), 100, 20, 1, 100, 1000);
         let start = Instant::now();
         let start_dt = Utc::now();
@@ -947,12 +946,12 @@ mod tests {
 
         // Subscription is creating, handle the first tick.
         assert_eq!(sub.state, SubscriptionState::Creating);
-        sub.tick(&start_dt, start, TickReason::TickTimerFired, true, &pool);
+        sub.tick(&start_dt, start, TickReason::TickTimerFired, true, &mut buffer);
         assert_eq!(sub.state, SubscriptionState::Normal);
         assert!(!sub.first_message_sent);
 
         // Tick again before the publishing interval has elapsed, should change nothing.
-        sub.tick(&start_dt, start, TickReason::TickTimerFired, true, &pool);
+        sub.tick(&start_dt, start, TickReason::TickTimerFired, true, &mut buffer);
         assert_eq!(sub.state, SubscriptionState::Normal);
         assert!(!sub.first_message_sent);
 
@@ -975,7 +974,7 @@ mod tests {
         );
         // New tick at next publishing interval should produce something
         let (time, time_inst) = offset(start_dt, start, 100);
-        sub.tick(&time, time_inst, TickReason::TickTimerFired, true, &pool);
+        sub.tick(&time, time_inst, TickReason::TickTimerFired, true, &mut buffer);
         assert_eq!(sub.state, SubscriptionState::Normal);
         assert!(sub.first_message_sent);
         let notif = sub.take_notification().unwrap();
@@ -990,7 +989,7 @@ mod tests {
         // Next tick produces nothing
         let (time, time_inst) = offset(start_dt, start, 200);
 
-        sub.tick(&time, time_inst, TickReason::TickTimerFired, true, &pool);
+        sub.tick(&time, time_inst, TickReason::TickTimerFired, true, &mut buffer);
         // State transitions to keep alive due to empty publish.
         assert_eq!(sub.state, SubscriptionState::KeepAlive);
         assert_eq!(sub.lifetime_counter, 98);
@@ -1007,7 +1006,7 @@ mod tests {
             &DateTime::now(),
         );
         let (time, time_inst) = offset(start_dt, start, 300);
-        sub.tick(&time, time_inst, TickReason::TickTimerFired, true, &pool);
+        sub.tick(&time, time_inst, TickReason::TickTimerFired, true, &mut buffer);
         // State transitions back to normal.
         assert_eq!(sub.state, SubscriptionState::Normal);
         assert!(sub.first_message_sent);
@@ -1023,7 +1022,7 @@ mod tests {
 
         for i in 0..20 {
             let (time, time_inst) = offset(start_dt, start, 1000 + i * 100);
-            sub.tick(&time, time_inst, TickReason::TickTimerFired, true, &pool);
+            sub.tick(&time, time_inst, TickReason::TickTimerFired, true, &mut buffer);
             assert_eq!(sub.state, SubscriptionState::KeepAlive);
             assert_eq!(sub.lifetime_counter, (99 - i - 1) as u32);
             assert_eq!(sub.keep_alive_counter, (20 - i) as u32);
@@ -1034,7 +1033,7 @@ mod tests {
 
         // Tick one more time to get a keep alive
         let (time, time_inst) = offset(start_dt, start, 3000);
-        sub.tick(&time, time_inst, TickReason::TickTimerFired, true, &pool);
+        sub.tick(&time, time_inst, TickReason::TickTimerFired, true, &mut buffer);
         assert_eq!(sub.state, SubscriptionState::KeepAlive);
         assert_eq!(sub.lifetime_counter, 78);
         assert_eq!(sub.keep_alive_counter, 20);
@@ -1047,7 +1046,7 @@ mod tests {
         // Tick another 20 times to become late
         for i in 0..19 {
             let (time, time_inst) = offset(start_dt, start, 3100 + i * 100);
-            sub.tick(&time, time_inst, TickReason::TickTimerFired, false, &pool);
+            sub.tick(&time, time_inst, TickReason::TickTimerFired, false, &mut buffer);
             assert_eq!(sub.state, SubscriptionState::KeepAlive);
             assert_eq!(sub.lifetime_counter, (78 - i - 1) as u32);
         }
@@ -1055,14 +1054,14 @@ mod tests {
         // Tick another 58 times to expire
         for i in 0..58 {
             let (time, time_inst) = offset(start_dt, start, 5100 + i * 100);
-            sub.tick(&time, time_inst, TickReason::TickTimerFired, false, &pool);
+            sub.tick(&time, time_inst, TickReason::TickTimerFired, false, &mut buffer);
             assert_eq!(sub.state, SubscriptionState::Late);
             assert_eq!(sub.lifetime_counter, (58 - i) as u32);
         }
         assert_eq!(sub.lifetime_counter, 1);
 
         let (time, time_inst) = offset(start_dt, start, 20000);
-        sub.tick(&time, time_inst, TickReason::TickTimerFired, false, &pool);
+        sub.tick(&time, time_inst, TickReason::TickTimerFired, false, &mut buffer);
         assert_eq!(sub.state, SubscriptionState::Closed);
         let notif = sub.take_notification().unwrap();
         assert_eq!(notif.sequence_number, 3);
@@ -1075,7 +1074,7 @@ mod tests {
 
     #[test]
     fn monitored_item_triggers() {
-        let pool = super::NotificationPool::new(16);
+        let mut buffer = super::NotificationBuffer::new();
         let mut sub = Subscription::new(1, true, Duration::from_millis(100), 100, 20, 1, 100, 1000);
         let start = Instant::now();
         let start_dt = Utc::now();
@@ -1114,13 +1113,13 @@ mod tests {
         sub.notify_data_value(&4, DataValue::new_at(1, time), &time);
 
         // Should not cause a notification
-        sub.tick(&otime, time_inst, TickReason::TickTimerFired, true, &pool);
+        sub.tick(&otime, time_inst, TickReason::TickTimerFired, true, &mut buffer);
         assert!(sub.take_notification().is_none());
 
         // Notify the first item
         sub.notify_data_value(&1, DataValue::new_at(1, time), &time);
         let (time, time_inst) = offset(start_dt, start, 200);
-        sub.tick(&time, time_inst, TickReason::TickTimerFired, true, &pool);
+        sub.tick(&time, time_inst, TickReason::TickTimerFired, true, &mut buffer);
         let notif = sub.take_notification().unwrap();
         let its = get_notifications(&notif);
         assert_eq!(its.len(), 6);

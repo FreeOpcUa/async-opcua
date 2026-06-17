@@ -73,9 +73,7 @@ pub use subscriptions::{
 
 /// Notification allocation pooling utilities.
 pub mod pool {
-    pub use super::subscriptions::pool::{
-        NotificationBuffer, NotificationPool, PooledNotificationBuffer,
-    };
+    pub use super::subscriptions::pool::NotificationBuffer;
 }
 
 /// Utilities for efficiently notifying subscriptions.

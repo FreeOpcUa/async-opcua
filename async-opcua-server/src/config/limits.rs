@@ -39,6 +39,15 @@ pub struct Limits {
     /// Maximum number of query continuation points per session.
     #[serde(default = "defaults::max_query_continuation_points")]
     pub max_query_continuation_points: usize,
+    /// Maximum number of in-flight requests per connection. 0 for unlimited.
+    #[serde(default = "defaults::max_inflight_requests_per_connection")]
+    pub max_inflight_requests_per_connection: usize,
+    /// Maximum number of unactivated sessions per secure channel.
+    #[serde(default = "defaults::max_unactivated_sessions_per_channel")]
+    pub max_unactivated_sessions_per_channel: usize,
+    /// Timeout for unactivated sessions in milliseconds.
+    #[serde(default = "defaults::unactivated_session_timeout_ms")]
+    pub unactivated_session_timeout_ms: u64,
     /// Maximum number of registered sessions before new ones are rejected.
     #[serde(default = "defaults::max_sessions")]
     pub max_sessions: usize,
@@ -58,6 +67,11 @@ impl Default for Limits {
             max_browse_continuation_points: defaults::max_browse_continuation_points(),
             max_history_continuation_points: defaults::max_history_continuation_points(),
             max_query_continuation_points: defaults::max_query_continuation_points(),
+            max_inflight_requests_per_connection:
+                defaults::max_inflight_requests_per_connection(),
+            max_unactivated_sessions_per_channel:
+                defaults::max_unactivated_sessions_per_channel(),
+            unactivated_session_timeout_ms: defaults::unactivated_session_timeout_ms(),
             operational: OperationalLimits::default(),
             max_sessions: defaults::max_sessions(),
         }
@@ -89,7 +103,7 @@ pub struct SubscriptionLimits {
     /// Default value of `KeepAliveCount`, used if the client sets it to 0.
     #[serde(default = "defaults::default_keep_alive_count")]
     pub default_keep_alive_count: u32,
-    /// Maximum number of monitored items per subscription, 0 for no limit
+    /// Maximum number of monitored items per subscription. 0 for unlimited.
     #[serde(default = "defaults::max_monitored_items_per_sub")]
     pub max_monitored_items_per_sub: usize,
     /// Maximum number of values in a monitored item queue
@@ -104,11 +118,6 @@ pub struct SubscriptionLimits {
     /// Maximum number of queued notifications per subscription. 0 for unlimited.
     #[serde(default = "defaults::max_queued_notifications")]
     pub max_queued_notifications: usize,
-    /// Number of notification scratch buffers in the reuse pool shared by
-    /// all subscriptions. Bounds notification scratch memory; subscription
-    /// ticks block while the pool is exhausted.
-    #[serde(default = "defaults::max_notification_pool_size")]
-    pub max_notification_pool_size: usize,
 }
 
 impl Default for SubscriptionLimits {
@@ -127,7 +136,6 @@ impl Default for SubscriptionLimits {
             max_lifetime_count: defaults::max_lifetime_count(),
             max_notifications_per_publish: defaults::max_notifications_per_publish(),
             max_queued_notifications: defaults::max_queued_notifications(),
-            max_notification_pool_size: defaults::max_notification_pool_size(),
         }
     }
 }
@@ -246,6 +254,15 @@ mod defaults {
     pub(super) fn max_query_continuation_points() -> usize {
         constants::MAX_QUERY_CONTINUATION_POINTS
     }
+    pub(super) fn max_inflight_requests_per_connection() -> usize {
+        512
+    }
+    pub(super) fn max_unactivated_sessions_per_channel() -> usize {
+        5
+    }
+    pub(super) fn unactivated_session_timeout_ms() -> u64 {
+        10_000
+    }
     pub(super) fn max_sessions() -> usize {
         constants::MAX_SESSIONS
     }
@@ -272,7 +289,7 @@ mod defaults {
         constants::DEFAULT_KEEP_ALIVE_COUNT
     }
     pub(super) fn max_monitored_items_per_sub() -> usize {
-        constants::DEFAULT_MAX_MONITORED_ITEMS_PER_SUB
+        100_000
     }
     pub(super) fn max_monitored_item_queue_size() -> usize {
         constants::MAX_DATA_CHANGE_QUEUE_SIZE
@@ -285,9 +302,6 @@ mod defaults {
     }
     pub(super) fn max_queued_notifications() -> usize {
         constants::MAX_QUEUED_NOTIFICATIONS
-    }
-    pub(super) fn max_notification_pool_size() -> usize {
-        1024
     }
 
     pub(super) fn max_nodes_per_translate_browse_paths_to_node_ids() -> usize {
@@ -373,6 +387,9 @@ mod tests {
                 max_history_continuation_points: 500,
                 max_query_continuation_points: 500,
                 max_sessions: 20,
+                max_inflight_requests_per_connection: 512,
+                max_unactivated_sessions_per_channel: 5,
+                unactivated_session_timeout_ms: 10_000,
                 subscriptions: SubscriptionLimits {
                     max_subscriptions_per_session: 100,
                     max_pending_publish_requests: 20,
@@ -381,12 +398,11 @@ mod tests {
                     min_publishing_interval_ms: 100.0,
                     max_keep_alive_count: 30_000,
                     default_keep_alive_count: 10,
-                    max_monitored_items_per_sub: 0,
+                    max_monitored_items_per_sub: 100_000,
                     max_monitored_item_queue_size: 10,
                     max_lifetime_count: 90_000,
                     max_notifications_per_publish: 0,
                     max_queued_notifications: 20,
-                    max_notification_pool_size: 1024,
                 },
                 operational: OperationalLimits {
                     max_nodes_per_translate_browse_paths_to_node_ids: 100,
@@ -409,5 +425,39 @@ mod tests {
                 },
             }
         );
+    }
+
+    /// C3: the per-connection in-flight request cap must default to a safe, non-zero
+    /// value so a single connection cannot grow the pending-response queue without bound.
+    #[test]
+    fn inflight_request_cap_has_safe_default() {
+        let limits = Limits::default();
+        assert_ne!(
+            limits.max_inflight_requests_per_connection, 0,
+            "in-flight request cap must default to a bounded (non-zero) value"
+        );
+        assert_eq!(limits.max_inflight_requests_per_connection, 512);
+    }
+
+    /// C4: a single client must not be able to exhaust the global session pool with
+    /// unactivated sessions, so per-channel unactivated sessions are capped and expire
+    /// on a short deadline. Both must have safe, non-zero defaults.
+    #[test]
+    fn unactivated_session_limits_have_safe_defaults() {
+        let limits = Limits::default();
+        assert_eq!(limits.max_unactivated_sessions_per_channel, 5);
+        assert_eq!(limits.unactivated_session_timeout_ms, 10_000);
+        assert_ne!(limits.max_unactivated_sessions_per_channel, 0);
+        assert_ne!(limits.unactivated_session_timeout_ms, 0);
+    }
+
+    /// H4: the per-subscription monitored-item cap must ship with a non-zero default so
+    /// it is bounded out of the box (0 remains an explicit opt-out for unlimited).
+    /// Atomic enforcement inside create_monitored_items is covered by integration testing.
+    #[test]
+    fn monitored_items_per_sub_has_non_zero_default() {
+        let limits = Limits::default();
+        assert_ne!(limits.subscriptions.max_monitored_items_per_sub, 0);
+        assert_eq!(limits.subscriptions.max_monitored_items_per_sub, 100_000);
     }
 }

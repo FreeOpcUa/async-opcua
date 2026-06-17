@@ -74,10 +74,10 @@ N6+M11 chunk ceiling). That is one differentiated unit of work, **not** batching
 **Independent test**: feed crafted decode payloads, malformed legacy tokens, and single-peer
 request/session/connection floods; server errors cleanly and keeps serving others (no panic, bounded memory).
 
-- [ ] T011 [P] [US1] Reproduction test: deeply-nested DiagnosticInfo / DataValue↔Variant / dynamic-struct payloads stack-overflow in `async-opcua-types/tests/recursion_dos.rs` (C1, SC-001)
-- [ ] T012 [US1] Add `depth_lock()` to `DiagnosticInfo::decode` in `async-opcua-types/src/diagnostic_info.rs` (C1)
-- [ ] T013 [US1] Add `depth_lock()` to `DataValue::decode` / the `DATA_VALUE` branch in `async-opcua-types/src/data_value.rs` + `variant/mod.rs` (C1)
-- [ ] T014 [US1] Add `depth_lock()` to dynamic-struct `decode_type_inner` in `async-opcua-types/src/custom/custom_struct.rs` (C1)
+- [X] T011 [P] [US1] Reproduction test: deeply-nested DiagnosticInfo / DataValue↔Variant / dynamic-struct payloads stack-overflow in `async-opcua-types/tests/recursion_dos.rs` (C1, SC-001)
+- [X] T012 [US1] Add `depth_lock()` to `DiagnosticInfo::decode` in `async-opcua-types/src/diagnostic_info.rs` (C1)
+- [X] T013 [US1] Add `depth_lock()` to `DataValue::decode` / the `DATA_VALUE` branch in `async-opcua-types/src/data_value.rs` + `variant/mod.rs` (C1)
+- [X] T014 [US1] Add `depth_lock()` to dynamic-struct `decode_type_inner` in `async-opcua-types/src/custom/custom_struct.rs` (C1)
 - [ ] T015 [P] [US1] Extend fuzz corpus with deeply-nested inputs; run `fuzz_deserialize`/`fuzz_dynamic_struct` under a constrained stack in `fuzz/` (C1)
 - [ ] T016 [P] [US1] Reproduction test: non-block-aligned + undersized legacy identity-token ciphertext panics via ActivateSession in `async-opcua-crypto/tests/legacy_decrypt.rs` (C2, SC-001)
 - [ ] T017 [US1] Validate block-alignment and `actual_size >= nonce_len + 4` before slicing in `async-opcua-crypto/src/user_identity.rs` + `src/aes/rsa_private_key.rs` (C2)

@@ -212,6 +212,7 @@ impl BinaryEncodable for DataValue {
 
 impl BinaryDecodable for DataValue {
     fn decode<S: Read + ?Sized>(stream: &mut S, ctx: &Context<'_>) -> EncodingResult<Self> {
+        let _depth_lock = ctx.options().depth_lock()?;
         let encoding_mask = DataValueFlags::from_bits_truncate(u8::decode(stream, ctx)?);
 
         // Value

@@ -2429,12 +2429,15 @@ impl Session {
             subscription_ids.iter().copied().collect::<HashSet<u32>>();
         if let Ok(transfer_results) = self.transfer_subscriptions(&subscription_ids, true).await {
             session_debug!(self, "transfer_results = {:?}", transfer_results);
-            transfer_results.iter().enumerate().for_each(|(i, r)| {
-                if r.status_code.is_good() {
-                    // Subscription was transferred so it does not need to be recreated
-                    subscription_ids_to_recreate.remove(&subscription_ids[i]);
-                }
-            });
+            subscription_ids
+                .iter()
+                .zip(transfer_results.iter())
+                .for_each(|(id, r)| {
+                    if r.status_code.is_good() {
+                        // Subscription was transferred so it does not need to be recreated
+                        subscription_ids_to_recreate.remove(id);
+                    }
+                });
         }
 
         // But if it didn't work, then some or all subscriptions have to be remade.

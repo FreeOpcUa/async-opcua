@@ -58,6 +58,13 @@ impl TypeLoader for FallbackTypeLoader {
     ) -> Option<crate::EncodingResult<Box<dyn crate::DynEncodable>>> {
         // If the length is unknown, there really isn't a lot we can do.
         let length = length?;
+        if length > _ctx.options().max_message_size {
+            return Some(Err(Error::decoding(format!(
+                "ExtensionObject body length {} exceeds max_message_size {}",
+                length,
+                _ctx.options().max_message_size
+            ))));
+        }
         let mut buf = vec![0u8; length];
         if let Err(e) = stream.read_exact(&mut buf) {
             return Some(Err(e.into()));

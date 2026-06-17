@@ -1,13 +1,13 @@
 use std::{future::Future, time::Instant};
 
-use futures::{StreamExt, stream::FuturesUnordered};
+use futures::{stream::FuturesUnordered, StreamExt};
 use opcua_types::{Error, StatusCode};
 use tokio::{select, sync::watch::Receiver};
 use tracing::debug;
 
 use crate::{
-    SubscriptionActivity,
     session::{services::subscriptions::PublishLimits, session_debug, session_error},
+    SubscriptionActivity,
 };
 
 /// A trait for managing subscription state in the event loop.
@@ -296,7 +296,10 @@ mod tests {
                     if n == 0 {
                         // First (and only in-flight) publish drains to an error that
                         // sets the backoff latch — the exact stuck state from the report.
-                        Err(Error::new(StatusCode::BadTooManyPublishRequests, "too many"))
+                        Err(Error::new(
+                            StatusCode::BadTooManyPublishRequests,
+                            "too many",
+                        ))
                     } else {
                         Ok(false)
                     }
@@ -304,8 +307,13 @@ mod tests {
             }
         };
 
-        let mut state =
-            SubscriptionEventLoopState::new(0, trigger_rx, limits_rx, publish_source, ImmediateCache);
+        let mut state = SubscriptionEventLoopState::new(
+            0,
+            trigger_rx,
+            limits_rx,
+            publish_source,
+            ImmediateCache,
+        );
 
         // Bootstrap publishing with an external trigger (clears `no_active_subscription`).
         trigger_tx.send(start + Duration::from_millis(1)).unwrap();

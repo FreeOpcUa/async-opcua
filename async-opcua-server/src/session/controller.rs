@@ -4,8 +4,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-use futures::{future::Either, stream::FuturesUnordered, Future, StreamExt};
-use opcua_core::{trace_read_lock, trace_write_lock, Message, RequestMessage, ResponseMessage};
+use futures::{Future, StreamExt, future::Either, stream::FuturesUnordered};
+use opcua_core::{Message, RequestMessage, ResponseMessage, trace_read_lock, trace_write_lock};
 use tracing::{debug, debug_span, error, trace, warn};
 
 use opcua_core::{
@@ -30,17 +30,17 @@ use crate::{
     info::ServerInfo,
     node_manager::NodeManagers,
     subscriptions::SubscriptionCache,
-    transport::tcp::{ConnectionTransport, Request, TransportPollResult},
     transport::Connector,
+    transport::tcp::{ConnectionTransport, Request, TransportPollResult},
 };
 
 use super::{
     audit::{
-        dispatch_activate_session_failure, dispatch_response_failure, dispatch_service_failure,
-        AuditEventContext,
+        AuditEventContext, dispatch_activate_session_failure, dispatch_response_failure,
+        dispatch_service_failure,
     },
     instance::Session,
-    manager::{activate_session, close_session, SessionManager},
+    manager::{SessionManager, activate_session, close_session},
     message_handler::MessageHandler,
 };
 
@@ -95,13 +95,25 @@ enum RequestProcessResult {
     Close,
 }
 
+/// Backstop deadline for a request that specifies no timeout and where the
+/// server sets no `max_timeout_ms` ceiling. Bounds how long a non-returning
+/// handler can hold an in-flight slot. Publish requests use a separate path and
+/// are unaffected; clients needing longer should set `request_header.timeout_hint`.
+pub(crate) const DEFAULT_REQUEST_TIMEOUT_BACKSTOP_MS: u32 = 600_000;
+
 fn effective_request_timeout(timeout_hint: u32, max_timeout_ms: u32) -> u32 {
-    if max_timeout_ms == 0 {
+    let timeout = if max_timeout_ms == 0 {
         timeout_hint
     } else if timeout_hint == 0 {
         max_timeout_ms
     } else {
         timeout_hint.min(max_timeout_ms)
+    };
+
+    if timeout == 0 {
+        DEFAULT_REQUEST_TIMEOUT_BACKSTOP_MS
+    } else {
+        timeout
     }
 }
 
@@ -594,13 +606,7 @@ impl<T: ConnectionTransport> SessionController<T> {
                     let timeout = message.request_header().timeout_hint;
                     let max_timeout = self.info.config.max_timeout_ms;
                     let timeout = effective_request_timeout(timeout, max_timeout);
-                    if timeout == 0 {
-                        // Just set some huge value. A request taking a day can probably
-                        // be safely canceled...
-                        now + Duration::from_secs(60 * 60 * 24)
-                    } else {
-                        now + Duration::from_millis(timeout.into())
-                    }
+                    now + Duration::from_millis(timeout.into())
                 };
                 let request_handle = message.request_handle();
 
@@ -920,12 +926,18 @@ impl SecureChannelState {
 
 #[cfg(test)]
 mod tests {
-    use super::effective_request_timeout;
+    use super::{DEFAULT_REQUEST_TIMEOUT_BACKSTOP_MS, effective_request_timeout};
 
     /// H2: `max_timeout_ms` must act as a CEILING on the client's `timeout_hint`,
     /// never a floor.
     #[test]
     fn request_timeout_is_capped_not_floored() {
+        // In-flight hold hardening: no client hint and no server cap still gets
+        // a bounded async request backstop.
+        assert_eq!(
+            effective_request_timeout(0, 0),
+            DEFAULT_REQUEST_TIMEOUT_BACKSTOP_MS
+        );
         // No configured cap -> honor the client's hint.
         assert_eq!(effective_request_timeout(5_000, 0), 5_000);
         // Client sends 0 -> use the cap as the default.

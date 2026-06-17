@@ -160,14 +160,14 @@ jobs:
         uses: rickstaa/action-create-tag@v1
         id: "tag_create"
         with:
-          tag: ${{ needs.common.outputs.version }}
+          tag: ${{ needs.check_for_release.outputs.version }}
           tag_exists_error: true
-          message: Async OPC-UA version ${{ needs.common.outputs.version }}
+          message: Async OPC-UA version ${{ needs.check_for_release.outputs.version }}
 
       - name: Create github release
         uses: softprops/action-gh-release@v3.0.0
         with:
-          tag_name: ${{ needs.common.outputs.version }}
+          tag_name: ${{ needs.check_for_release.outputs.version }}
           generate_release_notes: true
 
       - name: Publish

@@ -509,7 +509,7 @@ impl CoreNodeManagerImpl {
                         value: None,
                         status: Some(e),
                         ..Default::default()
-                    })
+                    });
                 }
             }
         } else {

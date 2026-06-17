@@ -67,12 +67,12 @@ impl EventField for ServerAlarmEvent<'_> {
                 "EventId" => {
                     return Variant::from(opcua_types::ByteString::from(
                         self.event.event_id.clone(),
-                    ))
+                    ));
                 }
                 "EventType" => return Variant::from(self.event.event_type.clone()),
                 "SourceNode" => return Variant::from(self.event.source_node.clone()),
                 "SourceName" => {
-                    return Variant::from(UAString::from(self.event.source_name.clone()))
+                    return Variant::from(UAString::from(self.event.source_name.clone()));
                 }
                 "Time" => return Variant::from(self.event.time),
                 "ReceiveTime" => return Variant::from(self.event.time),
@@ -80,7 +80,7 @@ impl EventField for ServerAlarmEvent<'_> {
                 "Severity" => return Variant::from(self.event.severity),
                 "ConditionId" => return Variant::from(self.event.condition_id.clone()),
                 "ConditionName" => {
-                    return Variant::from(UAString::from(self.event.condition_name.clone()))
+                    return Variant::from(UAString::from(self.event.condition_name.clone()));
                 }
                 "Retain" => return Variant::from(self.event.retain),
                 "ActiveState" => return Variant::from(self.event.active_state),

@@ -215,8 +215,10 @@ impl SessionManager {
         if !matches!(security_policy, SecurityPolicy::None)
             && request.client_nonce.len() < self.info.config.session_nonce_length
         {
-            error!("Create session was passed a client nonce that is too short, expected at least {} bytes, got {}", 
-                self.info.config.session_nonce_length, request.client_nonce.len()
+            error!(
+                "Create session was passed a client nonce that is too short, expected at least {} bytes, got {}",
+                self.info.config.session_nonce_length,
+                request.client_nonce.len()
             );
             return Err(StatusCode::BadNonceInvalid);
         }
@@ -370,7 +372,9 @@ impl SessionManager {
             .set_current_session_count(self.sessions.len() as u32);
         self.info.diagnostics.inc_session_timeout_count();
 
-        info!("Session {id} has expired, removing it from the session map. Subscriptions will remain until they individually expire");
+        info!(
+            "Session {id} has expired, removing it from the session map. Subscriptions will remain until they individually expire"
+        );
 
         let token = {
             let session = trace_read_lock!(session);
@@ -446,7 +450,11 @@ pub(crate) async fn close_session(
 
             let secure_channel_id = channel.secure_channel_id();
             if !session.is_activated() && session.secure_channel_id() != secure_channel_id {
-                error!("close_session rejected, secure channel id {} for inactive session does not match one used to create session, {}", secure_channel_id, session.secure_channel_id());
+                error!(
+                    "close_session rejected, secure channel id {} for inactive session does not match one used to create session, {}",
+                    secure_channel_id,
+                    session.secure_channel_id()
+                );
                 return Err(StatusCode::BadSecureChannelIdInvalid);
             }
             (id, token, authentication_token)
@@ -521,8 +529,10 @@ pub(crate) async fn activate_session(
                 .info
                 .endpoint_exists(&endpoint_url, security_policy, security_mode)
             {
-                error!("activate_session, Endpoint dues not exist for requested url & mode {}, {:?} / {:?}",
-                endpoint_url, security_policy, security_mode);
+                error!(
+                    "activate_session, Endpoint dues not exist for requested url & mode {}, {:?} / {:?}",
+                    endpoint_url, security_policy, security_mode
+                );
                 return Err(StatusCode::BadTcpEndpointUrlInvalid);
             }
 
@@ -556,7 +566,11 @@ pub(crate) async fn activate_session(
         if session.secure_channel_id() != secure_channel_id
             && (!session.is_activated() || security_policy == SecurityPolicy::None)
         {
-            error!("activate session, rejected secure channel id {} does not match session channel {} (transfer not permitted for SecurityPolicy::None)", secure_channel_id, session.secure_channel_id());
+            error!(
+                "activate session, rejected secure channel id {} does not match session channel {} (transfer not permitted for SecurityPolicy::None)",
+                secure_channel_id,
+                session.secure_channel_id()
+            );
             return Err(StatusCode::BadSecureChannelIdInvalid);
         } else {
             // TODO additional secure channel validation here for client certificate and user identity

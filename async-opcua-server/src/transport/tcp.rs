@@ -117,15 +117,15 @@ fn effective_max_chunk_count(max_chunk_count: usize, max_message_size: usize) ->
     }
 }
 
-pub(crate) struct TcpConnector {
-    read: FramedRead<ReadHalf<TcpStream>, TcpCodec>,
-    write: WriteHalf<TcpStream>,
+pub(crate) struct TcpConnector<R = ReadHalf<TcpStream>, W = WriteHalf<TcpStream>> {
+    read: FramedRead<R, TcpCodec>,
+    write: W,
     deadline: Instant,
     config: TransportConfig,
     decoding_options: DecodingOptions,
 }
 
-impl TcpConnector {
+impl TcpConnector<ReadHalf<TcpStream>, WriteHalf<TcpStream>> {
     pub(crate) fn new(
         stream: TcpStream,
         config: TransportConfig,
@@ -141,10 +141,16 @@ impl TcpConnector {
             decoding_options,
         }
     }
+}
 
-    pub(super) fn new_split(
-        read: FramedRead<ReadHalf<TcpStream>, TcpCodec>,
-        write: WriteHalf<TcpStream>,
+impl<R, W> TcpConnector<R, W>
+where
+    R: AsyncRead + Unpin + Send + Sync + 'static,
+    W: AsyncWrite + Unpin + Send + Sync + 'static,
+{
+    pub(crate) fn new_split(
+        read: FramedRead<R, TcpCodec>,
+        write: W,
         config: TransportConfig,
         decoding_options: DecodingOptions,
     ) -> Self {
@@ -247,8 +253,12 @@ impl TcpConnector {
     }
 }
 
-impl Connector for TcpConnector {
-    type Transport = TcpTransport;
+impl<R, W> Connector for TcpConnector<R, W>
+where
+    R: AsyncRead + Unpin + Send + Sync + 'static,
+    W: AsyncWrite + Unpin + Send + Sync + 'static,
+{
+    type Transport = Transport<R, W>;
 
     async fn connect(
         mut self,

@@ -2,8 +2,8 @@ use std::{panic::AssertUnwindSafe, sync::Arc};
 
 use futures::FutureExt;
 use opcua::{
-    client::{ConnectionSource, IdentityToken, reverse_connect::ReverseConnectionSource},
-    crypto::{SecurityPolicy, hostname},
+    client::{reverse_connect::ReverseConnectionSource, ConnectionSource, IdentityToken},
+    crypto::{hostname, SecurityPolicy},
     types::{
         AttributeId, EndpointDescription, MessageSecurityMode, ReadValueId, ServerState,
         TimestampsToReturn, VariableId,
@@ -12,7 +12,7 @@ use opcua::{
 use tokio::{net::TcpListener, select};
 
 use crate::{
-    client::{ClientTestState, make_client},
+    client::{make_client, ClientTestState},
     common::{InMessage, JoinHandleAbortGuard, ReverseConnectMessage},
     tests::client::WithSessionMethod,
 };

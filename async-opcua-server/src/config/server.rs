@@ -4,14 +4,16 @@
 
 //! Provides configuration settings for the server including serialization and deserialization from file.
 
+#[cfg(feature = "wss")]
+use std::sync::Arc;
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
 };
 
 use argon2::{
-    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, SaltString},
     Argon2,
+    password_hash::{PasswordHash, PasswordHasher, SaltString, rand_core::OsRng},
 };
 use serde::{Deserialize, Serialize};
 use tracing::{trace, warn};
@@ -68,6 +70,25 @@ impl Default for TcpKeepaliveConfig {
             interval_secs: tcp_keepalive_defaults::interval_secs(),
             retries: tcp_keepalive_defaults::retries(),
         }
+    }
+}
+
+/// TLS server configuration used for `opc.wss` listeners.
+#[cfg(feature = "wss")]
+#[derive(Clone)]
+pub struct WssServerConfig(pub(crate) Arc<rustls::ServerConfig>);
+
+#[cfg(feature = "wss")]
+impl std::fmt::Debug for WssServerConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("WssServerConfig(<redacted>)")
+    }
+}
+
+#[cfg(feature = "wss")]
+impl PartialEq for WssServerConfig {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
     }
 }
 
@@ -370,6 +391,10 @@ pub struct ServerConfig {
     /// Expected OAuth2 audience for issued JWT identity tokens.
     #[serde(default)]
     pub oauth2_audience: Option<String>,
+    /// TLS server configuration used for `opc.wss` listeners.
+    #[cfg(feature = "wss")]
+    #[serde(skip)]
+    pub(crate) wss_tls: Option<WssServerConfig>,
 }
 
 mod defaults {
@@ -550,6 +575,8 @@ impl Default for ServerConfig {
             allow_legacy_crypto: false,
             oauth2_issuer: None,
             oauth2_audience: None,
+            #[cfg(feature = "wss")]
+            wss_tls: None,
         }
     }
 }

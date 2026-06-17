@@ -5,20 +5,20 @@ use tokio::{pin, select};
 use tracing::error;
 
 use crate::{
-    AsyncSecureChannel, ClientConfig, ClientEndpoint, IdentityToken,
     transport::{
-        Connector, ConnectorBuilder, DefaultConnector, TransportPollResult,
-        tcp::TransportConfiguration,
+        tcp::TransportConfiguration, Connector, ConnectorBuilder, DefaultConnector,
+        TransportPollResult,
     },
+    AsyncSecureChannel, ClientConfig, ClientEndpoint, IdentityToken,
 };
 use opcua_core::{
-    ResponseMessage,
     comms::url::{
         hostname_from_url, server_url_from_endpoint_url, url_matches_except_host,
         url_with_replaced_hostname,
     },
     config::Config,
     sync::RwLock,
+    ResponseMessage,
 };
 use opcua_crypto::{CertificateStore, SecurityPolicy};
 use opcua_types::{
@@ -29,8 +29,8 @@ use opcua_types::{
 };
 
 use super::{
-    EndpointInfo, Session, SessionEventLoop, connection::SessionBuilder, process_service_result,
-    process_unexpected_response,
+    connection::SessionBuilder, process_service_result, process_unexpected_response, EndpointInfo,
+    Session, SessionEventLoop,
 };
 
 /// Wrapper around common data for generating sessions and performing requests

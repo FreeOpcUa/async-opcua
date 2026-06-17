@@ -24,6 +24,8 @@ use tracing::{debug, error, info, warn};
 use opcua_core::{config::Config, handle::AtomicHandle};
 use opcua_crypto::CertificateStore;
 
+#[cfg(feature = "wss")]
+use crate::transport::WebSocketConnector;
 use crate::{
     diagnostics::ServerDiagnostics,
     node_manager::{DefaultTypeTreeGetter, ServerContext},
@@ -65,6 +67,13 @@ struct TcpConnectionDeps {
     subscriptions: Arc<SubscriptionCache>,
 }
 
+#[derive(Clone)]
+enum AcceptedTransport {
+    Tcp,
+    #[cfg(feature = "wss")]
+    Wss(Arc<rustls::ServerConfig>),
+}
+
 fn configure_tcp_stream(stream: &TcpStream, addr: SocketAddr, tcp_keepalive: &TcpKeepaliveConfig) {
     if let Err(e) = stream.set_nodelay(true) {
         warn!("Failed to set TCP_NODELAY for {addr}: {e}");
@@ -89,6 +98,7 @@ impl TcpConnectionDeps {
         addr: SocketAddr,
         token: Option<T>,
         connection_counter: u32,
+        transport: AcceptedTransport,
     ) -> bool {
         if connection_map.len() >= self.max_connections {
             warn!(
@@ -115,34 +125,42 @@ impl TcpConnectionDeps {
 
         configure_tcp_stream(&socket, addr, &self.transport_config.tcp_keepalive);
 
-        info!("Accept new connection from {addr} ({connection_counter})");
-        let conn = SessionStarter::new(
-            TcpConnector::new(
-                socket,
-                self.transport_config.clone(),
-                self.info.decoding_options(),
-            ),
-            self.info.clone(),
-            self.session_manager.clone(),
-            self.certificate_store.clone(),
-            self.node_managers.clone(),
-            self.subscriptions.clone(),
-        );
-
         let (send, recv) = tokio::sync::mpsc::channel(5);
-        let handle = tokio::spawn(async move {
-            let _token = token;
-            // Catch panics so the task always yields its counter, otherwise
-            // the connection_map slot leaks and permanently consumes
-            // max_connections capacity.
-            if let Err(payload) = std::panic::AssertUnwindSafe(conn.run(recv, |_| {}))
-                .catch_unwind()
-                .await
-            {
-                log_connection_panic(connection_counter, payload);
+        info!("Accept new connection from {addr} ({connection_counter})");
+        let handle = match transport {
+            AcceptedTransport::Tcp => {
+                let conn = SessionStarter::new(
+                    TcpConnector::new(
+                        socket,
+                        self.transport_config.clone(),
+                        self.info.decoding_options(),
+                    ),
+                    self.info.clone(),
+                    self.session_manager.clone(),
+                    self.certificate_store.clone(),
+                    self.node_managers.clone(),
+                    self.subscriptions.clone(),
+                );
+                spawn_connection(conn, recv, token, connection_counter)
             }
-            connection_counter
-        });
+            #[cfg(feature = "wss")]
+            AcceptedTransport::Wss(tls_config) => {
+                let conn = SessionStarter::new(
+                    WebSocketConnector::new(
+                        socket,
+                        tls_config,
+                        self.transport_config.clone(),
+                        self.info.decoding_options(),
+                    ),
+                    self.info.clone(),
+                    self.session_manager.clone(),
+                    self.certificate_store.clone(),
+                    self.node_managers.clone(),
+                    self.subscriptions.clone(),
+                );
+                spawn_connection(conn, recv, token, connection_counter)
+            }
+        };
         connections.push(handle);
         connection_map.insert(
             connection_counter,
@@ -153,6 +171,32 @@ impl TcpConnectionDeps {
         );
         true
     }
+}
+
+fn spawn_connection<C, T>(
+    conn: SessionStarter<C>,
+    recv: tokio::sync::mpsc::Receiver<ControllerCommand>,
+    token: Option<T>,
+    connection_counter: u32,
+) -> JoinHandle<u32>
+where
+    C: crate::transport::Connector + Send + 'static,
+    C::Transport: crate::transport::tcp::ConnectionTransport,
+    T: Send + 'static,
+{
+    tokio::spawn(async move {
+        let _token = token;
+        // Catch panics so the task always yields its counter, otherwise
+        // the connection_map slot leaks and permanently consumes
+        // max_connections capacity.
+        if let Err(payload) = std::panic::AssertUnwindSafe(conn.run(recv, |_| {}))
+            .catch_unwind()
+            .await
+        {
+            log_connection_panic(connection_counter, payload);
+        }
+        connection_counter
+    })
 }
 
 fn log_connection_panic(connection_counter: u32, payload: Box<dyn std::any::Any + Send>) {
@@ -262,13 +306,17 @@ impl Server {
             );
 
         if server_certificate.is_none() || server_pkey.is_none() {
-            warn!("Server is missing its application instance certificate and/or its private key. Encrypted endpoints will not function correctly.");
+            warn!(
+                "Server is missing its application instance certificate and/or its private key. Encrypted endpoints will not function correctly."
+            );
         }
 
         config.read_x509_thumbprints();
 
         if config.certificate_validation.trust_client_certs {
-            info!("Server has chosen to auto trust client certificates. You do not want to do this in production code.");
+            info!(
+                "Server has chosen to auto trust client certificates. You do not want to do this in production code."
+            );
             certificate_store.set_trust_unknown_certs(true);
         }
         certificate_store.set_check_time(config.certificate_validation.check_time);
@@ -476,6 +524,7 @@ impl Server {
         &mut self,
         context: &ServerContext,
         mut connection_source: ConnectionSource<T>,
+        transport: AcceptedTransport,
     ) -> Result<(), String> {
         let mut connection_counter = 0;
 
@@ -538,6 +587,7 @@ impl Server {
                                 addr,
                                 token,
                                 connection_counter,
+                                transport.clone(),
                             );
                             if accepted {
                                 connection_counter += 1;
@@ -624,8 +674,44 @@ impl Server {
             .store(addr.port(), std::sync::atomic::Ordering::Relaxed);
 
         self.log_endpoint_info();
-        self.run_connection_loop(&context, ConnectionSource::<()>::Listener(listener))
-            .await
+        self.run_connection_loop(
+            &context,
+            ConnectionSource::<()>::Listener(listener),
+            AcceptedTransport::Tcp,
+        )
+        .await
+    }
+
+    /// Run the server using a given TCP listener for `opc.wss` connections.
+    ///
+    /// The configured TCP endpoint is still used to create endpoint descriptions,
+    /// but accepted sockets are upgraded with TLS and WebSocket framing before
+    /// the normal OPC UA binary transport handshake.
+    #[cfg(feature = "wss")]
+    pub async fn run_with_wss(mut self, listener: TcpListener) -> Result<(), String> {
+        let Some(tls_config) = self.config.wss_tls.as_ref().map(|config| config.0.clone()) else {
+            return Err("Cannot run WSS listener without a WSS rustls ServerConfig".to_string());
+        };
+
+        let context = self.server_context();
+        self.prepare_to_run(&context).await?;
+
+        let addr = listener
+            .local_addr()
+            .map_err(|e| format!("Failed to bind socket: {e:?}"))?;
+        info!("Now listening for WSS connections on {addr}");
+
+        self.info
+            .port
+            .store(addr.port(), std::sync::atomic::Ordering::Relaxed);
+
+        self.log_endpoint_info();
+        self.run_connection_loop(
+            &context,
+            ConnectionSource::<()>::Listener(listener),
+            AcceptedTransport::Wss(tls_config),
+        )
+        .await
     }
 
     /// Run the server using externally accepted TCP streams and caller-owned
@@ -656,8 +742,12 @@ impl Server {
         );
 
         self.log_endpoint_info();
-        self.run_connection_loop(&context, ConnectionSource::Streams(rx))
-            .await
+        self.run_connection_loop(
+            &context,
+            ConnectionSource::Streams(rx),
+            AcceptedTransport::Tcp,
+        )
+        .await
     }
 
     /// Run the server. The provided `token` can be used to stop the server gracefully.

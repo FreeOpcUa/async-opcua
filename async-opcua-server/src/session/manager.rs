@@ -223,12 +223,17 @@ impl SessionManager {
 
         let client_certificate = if security_policy != SecurityPolicy::None {
             let cert = opcua_crypto::X509::from_byte_string(&request.client_certificate)?;
+            let application_uri = if request.client_description.application_uri.is_empty() {
+                None
+            } else {
+                Some(request.client_description.application_uri.as_ref())
+            };
             let store = trace_read_lock!(certificate_store);
             store.validate_or_reject_application_instance_cert(
                 &cert,
                 security_policy,
                 None,
-                None,
+                application_uri,
             )?;
             Some(cert)
         } else {
@@ -244,19 +249,24 @@ impl SessionManager {
 
         let server_pkey = self.info.server_pkey.read();
         let server_signature = if let Some(ref pkey) = *server_pkey {
-            opcua_crypto::create_signature_data(
+            match opcua_crypto::create_signature_data(
                 pkey,
                 security_policy,
                 &request.client_certificate,
                 &request.client_nonce,
-            )
-            .unwrap_or_else(|err| {
-                error!(
-                    "Cannot create signature data from private key, check log and error {:?}",
-                    err
-                );
-                SignatureData::null()
-            })
+            ) {
+                Ok(signature) => signature,
+                Err(err) => {
+                    error!(
+                        "Cannot create signature data from private key, check log and error {:?}",
+                        err
+                    );
+                    if security_policy != SecurityPolicy::None {
+                        return Err(StatusCode::BadSecurityChecksFailed);
+                    }
+                    SignatureData::null()
+                }
+            }
         } else {
             SignatureData::null()
         };
@@ -543,8 +553,10 @@ pub(crate) async fn activate_session(
     let (server_nonce, session_id, user_changed) = {
         let mut session = trace_write_lock!(session_lck);
 
-        if !session.is_activated() && session.secure_channel_id() != secure_channel_id {
-            error!("activate session, rejected secure channel id {} for inactive session does not match one used to create session, {}", secure_channel_id, session.secure_channel_id());
+        if session.secure_channel_id() != secure_channel_id
+            && (!session.is_activated() || security_policy == SecurityPolicy::None)
+        {
+            error!("activate session, rejected secure channel id {} does not match session channel {} (transfer not permitted for SecurityPolicy::None)", secure_channel_id, session.secure_channel_id());
             return Err(StatusCode::BadSecureChannelIdInvalid);
         } else {
             // TODO additional secure channel validation here for client certificate and user identity

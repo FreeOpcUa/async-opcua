@@ -4,6 +4,7 @@
 
 //! Symmetric encryption / decryption wrapper.
 
+use std::fmt::{Debug, Formatter};
 use std::result::Result;
 
 use aes::cipher::generic_array::GenericArray;
@@ -11,6 +12,7 @@ use aes::cipher::{block_padding::NoPadding, BlockDecryptMut, BlockEncryptMut, Ke
 
 use opcua_types::status_code::StatusCode;
 use opcua_types::Error;
+use zeroize::Zeroizing;
 
 type Aes128CbcEnc = cbc::Encryptor<aes::Aes128>;
 type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
@@ -22,15 +24,23 @@ type AesArray256 = GenericArray<u8, <aes::Aes256 as aes::cipher::KeySizeUser>::K
 
 type EncryptResult = Result<usize, Error>;
 
-#[derive(Debug)]
 /// Wrapper around an AES key.
 pub struct AesKey {
-    value: Vec<u8>,
+    value: Zeroizing<Vec<u8>>,
 }
+
+impl Debug for AesKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "AesKey(<redacted {} bytes>)", self.value.len())
+    }
+}
+
 impl AesKey {
     /// Create a new AES key with the given security policy and raw value.
     pub fn new(value: Vec<u8>) -> AesKey {
-        AesKey { value }
+        AesKey {
+            value: Zeroizing::new(value),
+        }
     }
 
     /// Get the raw value of this AES key.

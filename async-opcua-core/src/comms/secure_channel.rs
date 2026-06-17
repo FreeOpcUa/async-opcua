@@ -99,7 +99,7 @@ impl SecureChannel {
     pub fn new_no_certificate_store() -> SecureChannel {
         SecureChannel {
             role: Role::Unknown,
-            allow_deprecated: true,
+            allow_deprecated: false,
             security_policy: SecurityPolicy::None,
             security_mode: MessageSecurityMode::None,
             secure_channel_id: 0,
@@ -144,7 +144,7 @@ impl SecureChannel {
         };
         SecureChannel {
             role,
-            allow_deprecated: true,
+            allow_deprecated: false,
             security_mode: MessageSecurityMode::None,
             security_policy: SecurityPolicy::None,
             secure_channel_id: 0,

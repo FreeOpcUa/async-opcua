@@ -17,7 +17,9 @@ use opcua_types::{
     {SignatureData, UserNameIdentityToken, UserTokenPolicy, X509IdentityToken},
 };
 use opcua_types::{Error, IssuedIdentityToken, MessageSecurityMode};
+use subtle::ConstantTimeEq;
 use tracing::{error, warn};
+use zeroize::Zeroizing;
 
 use crate::policy::aes::{AesAsymmetricEncryptionAlgorithm, OaepSha1, OaepSha256, Pkcs1v15};
 
@@ -250,41 +252,34 @@ pub(crate) fn legacy_secret_decrypt<T: AesAsymmetricEncryptionAlgorithm>(
     server_nonce: &[u8],
     server_key: &PrivateKey,
 ) -> Result<ByteString, Error> {
-    if secret.is_null_or_empty() {
-        Err(Error::new(
+    let invalid_secret = || {
+        Error::new(
             StatusCode::BadIdentityTokenInvalid,
-            "missing encrypted secret",
-        ))
+            "invalid encrypted identity token secret",
+        )
+    };
+
+    if secret.is_null_or_empty() {
+        Err(invalid_secret())
     } else {
         // Decrypt the message
         let src = secret.value.as_ref().unwrap();
         let block_size = server_key.cipher_text_block_size();
         if !src.len().is_multiple_of(block_size) {
-            return Err(Error::new(
-                StatusCode::BadIdentityTokenInvalid,
-                "encrypted secret length is not a complete RSA block",
-            ));
+            return Err(invalid_secret());
         }
 
-        let mut dst = vec![0u8; src.len()];
+        let mut dst = Zeroizing::new(vec![0u8; src.len()]);
         let mut actual_size = server_key
-            .private_decrypt::<T>(src, &mut dst)
-            .map_err(Error::decoding)?;
+            .private_decrypt::<T>(src, dst.as_mut_slice())
+            .map_err(|_| invalid_secret())?;
         if actual_size > dst.len() {
-            return Err(Error::new(
-                StatusCode::BadIdentityTokenInvalid,
-                "invalid encrypted secret length",
-            ));
+            return Err(invalid_secret());
         }
 
-        let mut dst = Cursor::new(dst);
-        let plaintext_size = read_u32(&mut dst)? as usize;
-        let expected_size = plaintext_size.checked_add(4).ok_or_else(|| {
-            Error::new(
-                StatusCode::BadIdentityTokenInvalid,
-                "invalid encrypted secret length",
-            )
-        })?;
+        let mut plaintext = Cursor::new(dst.as_slice());
+        let plaintext_size = read_u32(&mut plaintext).map_err(|_| invalid_secret())? as usize;
+        let expected_size = plaintext_size.checked_add(4).ok_or_else(&invalid_secret)?;
 
         /* Remove padding
          *
@@ -294,7 +289,6 @@ pub(crate) fn legacy_secret_decrypt<T: AesAsymmetricEncryptionAlgorithm>(
          * that all padding bytes are zeros.
          *
          */
-        let mut dst = dst.into_inner();
         if actual_size > expected_size {
             let padding_bytes = &dst[expected_size..];
             /*
@@ -302,9 +296,7 @@ pub(crate) fn legacy_secret_decrypt<T: AesAsymmetricEncryptionAlgorithm>(
              * zeroes according to the 1.04.1 specification errata, chapter 3.
              */
             if !padding_bytes.iter().all(|&x| x == 0) {
-                return Err(Error::decoding(
-                    "Non-zero padding bytes in decrypted password",
-                ));
+                return Err(invalid_secret());
             } else {
                 dst.truncate(expected_size);
                 actual_size = dst.len();
@@ -312,25 +304,17 @@ pub(crate) fn legacy_secret_decrypt<T: AesAsymmetricEncryptionAlgorithm>(
         }
 
         if expected_size != actual_size {
-            Err(Error::decoding("Invalid plaintext size"))
+            Err(invalid_secret())
         } else {
             let nonce_len = server_nonce.len();
-            let min_plaintext_size = nonce_len.checked_add(4).ok_or_else(|| {
-                Error::new(
-                    StatusCode::BadIdentityTokenInvalid,
-                    "invalid encrypted secret length",
-                )
-            })?;
+            let min_plaintext_size = nonce_len.checked_add(4).ok_or_else(&invalid_secret)?;
             if actual_size < min_plaintext_size {
-                return Err(Error::new(
-                    StatusCode::BadIdentityTokenInvalid,
-                    "invalid encrypted secret length",
-                ));
+                return Err(invalid_secret());
             }
             let nonce_begin = actual_size - nonce_len;
             let nonce = &dst[nonce_begin..(nonce_begin + nonce_len)];
-            if nonce != server_nonce {
-                Err(Error::decoding("Invalid nonce"))
+            if nonce.len() != server_nonce.len() || nonce.ct_eq(server_nonce).unwrap_u8() != 1 {
+                Err(invalid_secret())
             } else {
                 let password = &dst[4..nonce_begin];
                 Ok(ByteString::from(password))

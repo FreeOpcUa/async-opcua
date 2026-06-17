@@ -582,6 +582,7 @@ fn asymmetric_decrypt_and_verify_sample_chunk() {
     let mut secure_channel = SecureChannel::new_no_certificate_store();
     secure_channel.set_security_mode(MessageSecurityMode::SignAndEncrypt);
     secure_channel.set_security_policy(SecurityPolicy::Basic128Rsa15);
+    secure_channel.set_allow_deprecated(true); // deprecated policy under test (L2 default is false)
 
     // First we shall sign with our private key and encrypt with their public.
     secure_channel.set_cert(Some(our_cert));

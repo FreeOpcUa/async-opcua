@@ -32,6 +32,7 @@ tracing = { workspace = true }
 async-opcua-types = { path = "../async-opcua-types", version = "0.18.0" }
 
 aes = { workspace = true }
+aws-lc-rs = "1.17.0"
 cbc = { workspace = true }
 const-oid = { workspace = true }
 hmac = { workspace = true }
@@ -39,15 +40,13 @@ rand = { workspace = true }
 rsa = { workspace = true }
 sha1 = { workspace = true }
 sha2 = { workspace = true }
+subtle = "2.6.1"
 x509-cert = { workspace = true }
+zeroize = "1.8.2"
 
 [dev-dependencies]
 tempdir = "0.3"
 
 [features]
-# Legacy (deprecated) security policies are compiled in by default;
-# availability is controlled at runtime by allow_legacy_crypto config on
-# the client and server. Use default-features = false for a build that
-# excludes them entirely.
-default = ["legacy-crypto"]
+default = []
 legacy-crypto = []

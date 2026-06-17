@@ -90,26 +90,36 @@ impl LocalOAuth2Validator {
         }
     }
 
-    fn validate_expiration(payload: &Value) -> Result<(), StatusCode> {
-        let exp = payload
-            .get("exp")
+    fn numeric_date_claim(payload: &Value, name: &str) -> Option<i64> {
+        payload
+            .get(name)
             .and_then(|value| {
                 value
                     .as_i64()
                     .or_else(|| value.as_u64().map(|value| value as i64))
             })
-            .filter(|exp| *exp >= 0)
-            .ok_or(StatusCode::BadIdentityTokenRejected)?;
+            .filter(|value| *value >= 0)
+    }
+
+    fn validate_expiration(payload: &Value) -> Result<(), StatusCode> {
+        let exp =
+            Self::numeric_date_claim(payload, "exp").ok_or(StatusCode::BadIdentityTokenRejected)?;
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|_| StatusCode::BadIdentityTokenRejected)?
             .as_secs() as i64;
 
-        if exp > now {
-            Ok(())
-        } else {
-            Self::reject()
+        if exp <= now {
+            return Self::reject();
         }
+
+        if let Some(nbf) = Self::numeric_date_claim(payload, "nbf") {
+            if now < nbf {
+                return Self::reject();
+            }
+        }
+
+        Ok(())
     }
 
     fn verify_signature(&self, data: &[u8], signature: &[u8]) -> Result<(), StatusCode> {

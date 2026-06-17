@@ -14,12 +14,17 @@ name = "opcua_pubsub"
 # Experimental, simulated TSN transport (AF_XDP stub + tc-taprio shell-out).
 # Not suitable for production use; requires real TSN hardware validation.
 tsn = ["dep:xsk-rs"]
+legacy-crypto = [
+  "async-opcua-core/legacy-crypto",
+  "async-opcua-crypto/legacy-crypto",
+  "async-opcua-server/legacy-crypto",
+]
 
 [dependencies]
 xsk-rs = { version = "0.3", optional = true }
-async-opcua-core = { path = "../async-opcua-core", version = "0.18.0" }
-async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.18.0" }
-async-opcua-server = { path = "../async-opcua-server", version = "0.18.0" }
+async-opcua-core = { path = "../async-opcua-core", version = "0.18.0", default-features = false }
+async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.18.0", default-features = false }
+async-opcua-server = { path = "../async-opcua-server", version = "0.18.0", default-features = false }
 async-opcua-types = { path = "../async-opcua-types", version = "0.18.0", features = ["json"] }
 futures = { workspace = true }
 tokio = { workspace = true }

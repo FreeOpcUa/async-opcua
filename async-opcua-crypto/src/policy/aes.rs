@@ -1,7 +1,9 @@
+use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
 
 use opcua_types::{Error, StatusCode};
 use rsa::{Oaep, Pkcs1v15Encrypt};
+use zeroize::Zeroizing;
 
 #[cfg(feature = "legacy-crypto")]
 use crate::SHA1_SIZE;
@@ -16,12 +18,27 @@ pub(crate) struct AesPolicy<T> {
     _phantom: PhantomData<T>,
 }
 
-#[derive(Debug)]
 /// Derived keys used for AES encryption
 pub struct AesDerivedKeys {
-    signing_key: Vec<u8>,
+    signing_key: Zeroizing<Vec<u8>>,
     encryption_key: AesKey,
-    initialization_vector: Vec<u8>,
+    initialization_vector: Zeroizing<Vec<u8>>,
+}
+
+impl Debug for AesDerivedKeys {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AesDerivedKeys")
+            .field(
+                "signing_key",
+                &format_args!("<redacted {} bytes>", self.signing_key.len()),
+            )
+            .field("encryption_key", &self.encryption_key)
+            .field(
+                "initialization_vector",
+                &format_args!("<redacted {} bytes>", self.initialization_vector.len()),
+            )
+            .finish()
+    }
 }
 
 impl AesDerivedKeys {
@@ -32,9 +49,9 @@ impl AesDerivedKeys {
         initialization_vector: Vec<u8>,
     ) -> Self {
         Self {
-            signing_key,
+            signing_key: Zeroizing::new(signing_key),
             encryption_key,
-            initialization_vector,
+            initialization_vector: Zeroizing::new(initialization_vector),
         }
     }
 }
@@ -247,7 +264,16 @@ pub(crate) trait AesAsymmetricEncryptionAlgorithm {
 
     fn get_padding() -> Self::Padding;
 
+    fn get_private_decrypt_padding() -> RsaPrivateDecryptPadding;
+
     fn get_plaintext_block_size(key_size: usize) -> usize;
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum RsaPrivateDecryptPadding {
+    Pkcs1v15,
+    OaepSha1,
+    OaepSha256,
 }
 
 /// PKCS1v15 asymmetric encryption algorithm
@@ -258,6 +284,10 @@ impl AesAsymmetricEncryptionAlgorithm for Pkcs1v15 {
 
     fn get_padding() -> Self::Padding {
         Pkcs1v15Encrypt
+    }
+
+    fn get_private_decrypt_padding() -> RsaPrivateDecryptPadding {
+        RsaPrivateDecryptPadding::Pkcs1v15
     }
 
     fn get_plaintext_block_size(key_size: usize) -> usize {
@@ -275,6 +305,10 @@ impl AesAsymmetricEncryptionAlgorithm for OaepSha1 {
         Oaep::new::<sha1::Sha1>()
     }
 
+    fn get_private_decrypt_padding() -> RsaPrivateDecryptPadding {
+        RsaPrivateDecryptPadding::OaepSha1
+    }
+
     fn get_plaintext_block_size(key_size: usize) -> usize {
         key_size - 42
     }
@@ -288,6 +322,10 @@ impl AesAsymmetricEncryptionAlgorithm for OaepSha256 {
 
     fn get_padding() -> Self::Padding {
         Oaep::new::<sha2::Sha256>()
+    }
+
+    fn get_private_decrypt_padding() -> RsaPrivateDecryptPadding {
+        RsaPrivateDecryptPadding::OaepSha256
     }
 
     fn get_plaintext_block_size(key_size: usize) -> usize {
@@ -413,9 +451,9 @@ impl<T: AesSecurityPolicy> SecurityPolicyImpl for AesPolicy<T> {
         );
 
         AesDerivedKeys {
-            signing_key,
+            signing_key: Zeroizing::new(signing_key),
             encryption_key: encrypting_key,
-            initialization_vector: iv,
+            initialization_vector: Zeroizing::new(iv),
         }
     }
 
@@ -656,9 +694,9 @@ mod tests {
         let aes_key = AesKey::new(raw_key.to_vec());
 
         let keys = AesDerivedKeys {
-            signing_key: [0u8; 16].to_vec(),
+            signing_key: zeroize::Zeroizing::new([0u8; 16].to_vec()),
             encryption_key: aes_key,
-            initialization_vector: iv.to_vec(),
+            initialization_vector: zeroize::Zeroizing::new(iv.to_vec()),
         };
 
         let policy = SecurityPolicy::Aes128Sha256RsaOaep;
@@ -802,18 +840,18 @@ mod tests {
         let remote_keys = security_policy.make_secure_channel_keys(&local_nonce, &remote_nonce);
 
         // Compare the keys we received against the expected
-        assert_eq!(local_keys.signing_key, local_signing_key);
+        assert_eq!(&local_keys.signing_key[..], &local_signing_key[..]);
         assert_eq!(
             local_keys.encryption_key.value().to_vec(),
             local_encrypting_key
         );
-        assert_eq!(local_keys.initialization_vector, local_iv);
+        assert_eq!(&local_keys.initialization_vector[..], &local_iv[..]);
 
-        assert_eq!(remote_keys.signing_key, remote_signing_key);
+        assert_eq!(&remote_keys.signing_key[..], &remote_signing_key[..]);
         assert_eq!(
             remote_keys.encryption_key.value().to_vec(),
             remote_encrypting_key
         );
-        assert_eq!(remote_keys.initialization_vector, remote_iv);
+        assert_eq!(&remote_keys.initialization_vector[..], &remote_iv[..]);
     }
 }

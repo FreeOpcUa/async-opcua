@@ -6,7 +6,13 @@
 //! Allows saving renewed certificate and key pairs, and reloading them into active memory.
 
 use crate::{CertificateStore, PrivateKey, X509};
-use std::fs;
+use std::{
+    fs::{self, OpenOptions},
+    io::Write,
+};
+
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 
 /// Reloads the certificate and private key from the store's configured paths on disk.
 pub fn reload_store_from_disk(store: &CertificateStore) -> Result<(X509, PrivateKey), String> {
@@ -36,7 +42,18 @@ pub fn save_new_credentials(
     fs::write(&cert_path, cert_der).map_err(|e| format!("Failed to write cert file: {e}"))?;
 
     // Write private key
-    fs::write(&pkey_path, pkey_pem).map_err(|e| format!("Failed to write pkey file: {e}"))?;
+    let mut pkey_file = {
+        let mut options = OpenOptions::new();
+        options.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        options.mode(0o600);
+        options
+            .open(&pkey_path)
+            .map_err(|e| format!("Failed to write pkey file: {e}"))?
+    };
+    pkey_file
+        .write_all(pkey_pem)
+        .map_err(|e| format!("Failed to write pkey file: {e}"))?;
 
     Ok(())
 }

@@ -18,7 +18,7 @@ use crate::{
     },
     user_identity::{legacy_secret_decrypt, legacy_secret_encrypt},
     x509::{X509Data, X509},
-    KeySize, PrivateKey, PublicKey, SecurityPolicy, SHA1_SIZE, SHA256_SIZE,
+    KeySize, PrivateKey, PublicKey, SecurityPolicy, SHA256_SIZE,
 };
 
 #[test]
@@ -87,10 +87,10 @@ fn test_and_reject_application_instance_cert() {
     let (tmp_dir, cert_store) = make_certificate_store();
 
     // Make an unrecognized cert
-    let (cert, _) = make_test_cert_1024();
+    let (cert, _) = make_test_cert_2048();
     let result = cert_store.validate_or_reject_application_instance_cert(
         &cert,
-        SecurityPolicy::Basic128Rsa15,
+        SecurityPolicy::Basic256Sha256,
         None,
         None,
     );
@@ -104,7 +104,7 @@ fn test_and_trust_application_instance_cert() {
     let (tmp_dir, cert_store) = make_certificate_store();
 
     // Make a cert, write it to the trusted dir
-    let (cert, _) = make_test_cert_1024();
+    let (cert, _) = make_test_cert_2048();
 
     // Simulate user/admin copying cert to the trusted folder
     let der = cert.to_der().unwrap();
@@ -119,7 +119,7 @@ fn test_and_trust_application_instance_cert() {
     // Now validate the cert was stored properly
     let result = cert_store.validate_or_reject_application_instance_cert(
         &cert,
-        SecurityPolicy::Basic128Rsa15,
+        SecurityPolicy::Basic256Sha256,
         None,
         None,
     );
@@ -191,13 +191,16 @@ fn test_asymmetric_encrypt_and_decrypt(
 fn asymmetric_encrypt_and_decrypt() {
     let (cert, key) = make_test_cert_2048();
     // Try all security policies, ensure they encrypt / decrypt for various sizes
-    for security_policy in &[
+    let security_policies = [
+        #[cfg(feature = "legacy-crypto")]
         SecurityPolicy::Basic128Rsa15,
+        #[cfg(feature = "legacy-crypto")]
         SecurityPolicy::Basic256,
         SecurityPolicy::Basic256Sha256,
         SecurityPolicy::Aes128Sha256RsaOaep,
         SecurityPolicy::Aes256Sha256RsaPss,
-    ] {
+    ];
+    for security_policy in &security_policies {
         for data_size in &[0, 1, 127, 128, 129, 255, 256, 257, 13001] {
             test_asymmetric_encrypt_and_decrypt(&cert, &key, *security_policy, *data_size);
         }
@@ -236,7 +239,7 @@ fn test_calculate_cipher_text_size() {
 
 #[test]
 fn calculate_cipher_text_size2() {
-    let (cert, private_key) = make_test_cert_1024();
+    let (cert, private_key) = make_test_cert_2048();
     let public_key = cert.public_key().unwrap();
 
     fn inner_test<T: AesAsymmetricEncryptionAlgorithm>(
@@ -345,10 +348,10 @@ fn sign_hmac_sha1() {
     let key = b"key";
     let data = b"";
 
-    let mut signature_wrong_size = [0u8; SHA1_SIZE - 1];
+    let mut signature_wrong_size = [0u8; crate::SHA1_SIZE - 1];
     assert!(hash::hmac_sha1(key, data, &mut signature_wrong_size).is_err());
 
-    let mut signature = [0u8; SHA1_SIZE];
+    let mut signature = [0u8; crate::SHA1_SIZE];
     assert!(hash::hmac_sha1(key, data, &mut signature).is_ok());
     let expected = from_hex("f42bb0eeb018ebbd4597ae7213711ec60760843f");
     assert_eq!(&signature, &expected[..]);
@@ -383,18 +386,21 @@ fn sign_hmac_sha256() {
     assert_eq!(&signature, &expected[..]);
 
     assert!(hash::verify_hmac_sha256(key, data, &expected));
-    assert!(!hash::verify_hmac_sha1(key, &data[1..], &expected));
+    assert!(!hash::verify_hmac_sha256(key, &data[1..], &expected));
 }
 
 #[test]
 fn generate_nonce() {
     // Generate a random nonce through the function and ensure it is the expected length
     assert!(SecurityPolicy::None.random_nonce().is_null());
-    assert_eq!(
-        SecurityPolicy::Basic128Rsa15.random_nonce().as_ref().len(),
-        16
-    );
-    assert_eq!(SecurityPolicy::Basic256.random_nonce().as_ref().len(), 32);
+    #[cfg(feature = "legacy-crypto")]
+    {
+        assert_eq!(
+            SecurityPolicy::Basic128Rsa15.random_nonce().as_ref().len(),
+            16
+        );
+        assert_eq!(SecurityPolicy::Basic256.random_nonce().as_ref().len(), 32);
+    }
     assert_eq!(
         SecurityPolicy::Basic256Sha256.random_nonce().as_ref().len(),
         32
@@ -438,7 +444,7 @@ fn encrypt_decrypt_password() {
     let password = String::from("abcdef123456");
     let nonce = random::byte_string(20);
 
-    let (cert, pkey) = make_test_cert_1024();
+    let (cert, pkey) = make_test_cert_2048();
 
     let secret = legacy_secret_encrypt(
         password.as_bytes(),

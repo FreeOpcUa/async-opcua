@@ -836,7 +836,7 @@ impl X509 {
         let mut hasher = sha1::Sha1::new();
         hasher.update(&der);
         let digest = hasher.finalize();
-        Thumbprint::new(&digest)
+        Thumbprint::new(&digest).expect("SHA-1 digest is 20 bytes")
     }
 
     /// Turn the Asn1 values into useful portable types

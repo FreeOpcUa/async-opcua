@@ -134,25 +134,25 @@ detects the dead peer, reconnects — no panic, no hang.
 cert URI validated; RSA-decrypt timing/error-uniform; advisory scan green or exception recorded).
 
 - [ ] T048 [P] [US3] Test: activated None-policy session transferable across channels in `async-opcua-server/tests/none_session_transfer.rs` (H1)
-- [ ] T049 [US3] Refuse cross-channel transfer of an activated None-policy session in `async-opcua-server/src/session/manager.rs` (H1)
+- [X] T049 [US3] Refuse cross-channel transfer of an activated None-policy session in `async-opcua-server/src/session/manager.rs` (H1)
 - [ ] T050 [P] [US3] Test: client cert with mismatched application URI accepted in `async-opcua-server/tests/cert_uri_binding.rs` (H5)
-- [ ] T051 [US3] Pass client `application_uri`/hostname into `validate_or_reject_application_instance_cert` in `async-opcua-server/src/session/manager.rs` (H5)
-- [ ] T052 [US3] Uniform error + timing on ALL RSA-decrypt failure paths (fold distinguishable errors) in `async-opcua-crypto/src/policy/aes.rs` + `user_identity.rs` (H6 — D1 phase-0 stopgap, lands first)
-- [ ] T053 [US3] Constant-time decrypted-nonce comparison (`subtle::ct_eq`) in `async-opcua-crypto/src/user_identity.rs` (H8)
-- [ ] T054 [P] [US3] Test: cross-backend RSA round-trip (`rsa` encrypt → `aws-lc-rs` decrypt), all 3 paddings, 2048/4096-bit, MGF1==OAEP hash in `async-opcua-crypto/tests/rsa_backend.rs` (D1/FR-042)
-- [ ] T055 [US3] Add `RsaDecryptor` trait + `aws-lc-rs` backend for the 3 decrypt paddings; route `private_decrypt` through it in `async-opcua-crypto/src/aes/rsa_private_key.rs` + Cargo.toml (D1/FR-042)
-- [ ] T056 [US3] Redacting `Debug` for `AesKey` + `Zeroizing`/`ZeroizeOnDrop` for key/IV/decrypted-password buffers in `async-opcua-crypto/src/aes/aeskey.rs` + `policy/aes.rs` + `user_identity.rs` (M3/M4 — cohesive pair: one secret-hygiene change, one verification)
+- [X] T051 [US3] Pass client `application_uri`/hostname into `validate_or_reject_application_instance_cert` in `async-opcua-server/src/session/manager.rs` (H5)
+- [X] T052 [US3] Uniform error + timing on ALL RSA-decrypt failure paths (fold distinguishable errors) in `async-opcua-crypto/src/policy/aes.rs` + `user_identity.rs` (H6 — D1 phase-0 stopgap, lands first)
+- [X] T053 [US3] Constant-time decrypted-nonce comparison (`subtle::ct_eq`) in `async-opcua-crypto/src/user_identity.rs` (H8)
+- [X] T054 [P] [US3] Test: cross-backend RSA round-trip (`rsa` encrypt → `aws-lc-rs` decrypt), all 3 paddings, 2048/4096-bit, MGF1==OAEP hash in `async-opcua-crypto/tests/rsa_backend.rs` (D1/FR-042)
+- [X] T055 [US3] Add `RsaDecryptor` trait + `aws-lc-rs` backend for the 3 decrypt paddings; route `private_decrypt` through it in `async-opcua-crypto/src/aes/rsa_private_key.rs` + Cargo.toml (D1/FR-042)
+- [X] T056 [US3] Redacting `Debug` for `AesKey` + `Zeroizing`/`ZeroizeOnDrop` for key/IV/decrypted-password buffers in `async-opcua-crypto/src/aes/aeskey.rs` + `policy/aes.rs` + `user_identity.rs` (M3/M4 — cohesive pair: one secret-hygiene change, one verification)
 - [ ] T057 [P] [US3] Test: username-auth timing reveals valid usernames in `async-opcua-server/tests/auth_timing.rs` (M6)
-- [ ] T058 [US3] Dummy Argon2 verification on the not-found path (uniform timing) in `async-opcua-server/src/authenticator.rs` (M6)
-- [ ] T059 [US3] `legacy-crypto` `default = []` in `-crypto`; add `legacy-crypto` feature to `-client` with `default-features = false`; umbrella opt-in; warn on enable — in the Cargo.tomls + crypto policy (M12/FR-019)
-- [ ] T060 [US3] Default `SecureChannel.allow_deprecated` to false (fail-closed) in `async-opcua-core/src/comms/secure_channel.rs` (L2)
-- [ ] T061 [P] [US3] Validate the signature `algorithm` field in `verify_signature_data` in `async-opcua-crypto/src/lib.rs` (L4)
-- [ ] T062 [P] [US3] Write private keys with mode `0o600` in `async-opcua-crypto/src/gds_reload.rs` + `certificate_store.rs` (L5)
-- [ ] T063 [P] [US3] Validate JWT `nbf` in `async-opcua-crypto/src/identity/jwt_validator.rs` (L6)
-- [ ] T064 [US3] Make empty-password accounts explicit/gated + documented in `async-opcua-server/src/authenticator.rs` (L7)
-- [ ] T065 [US3] Fail closed on server-signature generation failure (no null-signature degrade) in `async-opcua-server/src/session/manager.rs` (L9)
+- [X] T058 [US3] Dummy Argon2 verification on the not-found path (uniform timing) in `async-opcua-server/src/authenticator.rs` (M6)
+- [X] T059 [US3] `legacy-crypto` `default = []` in `-crypto`; add `legacy-crypto` feature to `-client` with `default-features = false`; umbrella opt-in; warn on enable — in the Cargo.tomls + crypto policy (M12/FR-019)
+- [X] T060 [US3] Default `SecureChannel.allow_deprecated` to false (fail-closed) in `async-opcua-core/src/comms/secure_channel.rs` (L2)
+- [X] T061 [P] [US3] Validate the signature `algorithm` field in `verify_signature_data` in `async-opcua-crypto/src/lib.rs` (L4)
+- [X] T062 [P] [US3] Write private keys with mode `0o600` in `async-opcua-crypto/src/gds_reload.rs` + `certificate_store.rs` (L5)
+- [X] T063 [P] [US3] Validate JWT `nbf` in `async-opcua-crypto/src/identity/jwt_validator.rs` (L6)
+- [X] T064 [US3] Make empty-password accounts explicit/gated + documented in `async-opcua-server/src/authenticator.rs` (L7)
+- [X] T065 [US3] Fail closed on server-signature generation failure (no null-signature degrade) in `async-opcua-server/src/session/manager.rs` (L9)
 - [ ] T066 [P] [US3] Give issued-token policy IDs distinct values in `async-opcua-server/src/identity_token.rs` (L10)
-- [ ] T067 [P] [US3] Return `Result` from `Thumbprint::new` (remove latent panic) in `async-opcua-crypto/src/thumbprint.rs` (L14)
+- [X] T067 [P] [US3] Return `Result` from `Thumbprint::new` (remove latent panic) in `async-opcua-crypto/src/thumbprint.rs` (L14)
 
 **Checkpoint**: all three P1 user stories complete — security baseline met.
 
@@ -246,6 +246,8 @@ deferral — none silently dropped"). T102 records the same in the tracker.
 | R8 | ARCHITECTURE_REVIEW | Relocate `ServerInfo` identity-token/JWT logic; mark `src/generated/**` `linguist-generated` in `.gitattributes`; document the hard tokio coupling. Low-impact polish/docs; defer. |
 | M8 (T047) | NETWORK_REVIEW / CODE_REVIEW | Server-cert/thumbprint **pinning** API for discovery. Additive defense-in-depth: the by-default MITM protection (trust store rejects unknown certs when `trust_server_certs=false`) is already in place, so this is opt-in hardening. Deferred to a focused follow-up so the security-sensitive API is designed carefully ("do it right once") rather than rushed. |
 | US2 behavioral tests (T035, T038, T042, T044) | — | Reproduction tests for H7 (empty-results panic), N2 (connect-hang), M10 (renewal-stall), M11 (chunk-flood) require the hostile-server mock harness (Phase-2 T009, not yet built). The fixes are verified by compile + config-default guards; behavioral coverage lands with the T009 harness. |
+| L10 (T066) | CODE_REVIEW | Issued-token policy-ID collision with user-pass IDs. Codex confirmed these IDs ARE advertised (`UserTokenPolicy.policy_id`, validated in `info.rs:720`), so changing them is a client-visible/advertised change for a latent, currently-harmless collision (DefaultAuthenticator doesn't process issued tokens). Not worth the break; deferred. |
+| US3 behavioral tests (T048, T050, T057) | — | Reproduction tests for H1 (None-session transfer), H5 (cert-URI mismatch), M6 (auth timing) need a `SessionManager`/authenticator integration harness (none exists). Fixes verified by compile + the exact code change; behavioral coverage is an integration/SC-002 concern. |
 
 > **R4 ≡ C3**: the architecture review's R4 (server request-path bulkhead) is the same finding as
 > code-review C3 (unbounded in-flight queue); it is **covered** by T018–T019 (FR-003), not deferred.

@@ -75,6 +75,9 @@ fn test_asymmetric_encrypt_decrypt(
         let mut secure_channel = SecureChannel::new_no_certificate_store();
         secure_channel.set_security_mode(security_mode);
         secure_channel.set_security_policy(security_policy);
+        // These tests deliberately exercise deprecated policies (Basic128Rsa15/Basic256),
+        // so opt in explicitly now that allow_deprecated defaults to false (L2).
+        secure_channel.set_allow_deprecated(true);
 
         // First we shall sign with our private key and encrypt with their public.
         secure_channel.set_cert(Some(our_cert));

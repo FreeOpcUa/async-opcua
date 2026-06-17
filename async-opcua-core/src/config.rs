@@ -10,7 +10,7 @@ use std::path::Path;
 use std::result::Result;
 
 use serde;
-use serde_yaml;
+use serde_norway;
 
 use opcua_types::{ApplicationDescription, ApplicationType, LocalizedText, UAString};
 
@@ -22,7 +22,7 @@ pub enum ConfigError {
     /// Reading or writing file failed.
     IO(std::io::Error),
     /// Failed to serialize or deserialize config object.
-    Yaml(serde_yaml::Error),
+    Yaml(serde_norway::Error),
 }
 
 impl From<std::io::Error> for ConfigError {
@@ -31,8 +31,8 @@ impl From<std::io::Error> for ConfigError {
     }
 }
 
-impl From<serde_yaml::Error> for ConfigError {
-    fn from(value: serde_yaml::Error) -> Self {
+impl From<serde_norway::Error> for ConfigError {
+    fn from(value: serde_norway::Error) -> Self {
         Self::Yaml(value)
     }
 }
@@ -45,7 +45,7 @@ pub trait Config: serde::Serialize {
         if let Err(e) = self.validate() {
             return Err(ConfigError::ConfigInvalid(e));
         }
-        let s = serde_yaml::to_string(&self)?;
+        let s = serde_norway::to_string(&self)?;
         let mut f = File::create(path)?;
         f.write_all(s.as_bytes())?;
         Ok(())
@@ -60,9 +60,9 @@ pub trait Config: serde::Serialize {
         let mut f = File::open(path)?;
         let mut s = String::new();
         f.read_to_string(&mut s)?;
-        let mut value: serde_yaml::Value = serde_yaml::from_str(&s)?;
+        let mut value: serde_norway::Value = serde_norway::from_str(&s)?;
         expand_env_in_value(&mut value);
-        return Ok(serde_yaml::from_value(value)?);
+        return Ok(serde_norway::from_value(value)?);
     }
 
     /// Load the configuration object from the given path.
@@ -74,7 +74,7 @@ pub trait Config: serde::Serialize {
         let mut f = File::open(path)?;
         let mut s = String::new();
         f.read_to_string(&mut s)?;
-        Ok(serde_yaml::from_str(&s)?)
+        Ok(serde_norway::from_str(&s)?)
     }
 
     /// Validate the config struct, returning a list of validation errors if it fails.
@@ -112,8 +112,8 @@ pub trait Config: serde::Serialize {
 }
 
 #[cfg(feature = "env_expansion")]
-fn expand_env_in_value(value: &mut serde_yaml::Value) {
-    use serde_yaml::Value;
+fn expand_env_in_value(value: &mut serde_norway::Value) {
+    use serde_norway::Value;
     match value {
         Value::String(s) => {
             *value = match shellexpand::env(s) {

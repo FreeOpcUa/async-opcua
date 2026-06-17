@@ -13,10 +13,11 @@ ignore = [
     # signing/verification/public-key-encrypt/keygen and X509 integration, which are
     # not affected by the decryption timing oracle. Re-evaluate when `rsa` ships a fix.
     { id = "RUSTSEC-2023-0071", reason = "rsa decrypt path migrated to aws-lc-rs (D1); rsa kept for sign/verify/encrypt/keygen only; no upstream fix" },
-    # RUSTSEC-2024-0320 — serde_yaml is unmaintained (not a vulnerability). Migration to a
-    # maintained fork (serde_yml/serde_norway) is deferred (D5/T071) — it was network-blocked
-    # at implementation time. serde_yaml remains functional; re-attempt the swap when online.
-    { id = "RUSTSEC-2024-0320", reason = "serde_yaml unmaintained; functional, no active vuln; migration deferred (T071, network-blocked)" },
+    # RUSTSEC-2024-0320 — serde_yaml is unmaintained (not a vulnerability). The library crates
+    # were migrated to the maintained `serde_norway` fork (D5/T071). serde_yaml now remains ONLY
+    # as a transitive dependency of `log4rs`, used by the demo-server sample — not by any
+    # published async-opcua crate. Exception retained until log4rs drops/replaces serde_yaml.
+    { id = "RUSTSEC-2024-0320", reason = "serde_yaml removed from all library crates (migrated to serde_norway, T071); remaining use is transitive via log4rs in the demo-server sample only" },
 ]
 
 [bans]

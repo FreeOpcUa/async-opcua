@@ -79,7 +79,7 @@ async-opcua-server = { path = ".", features = [
   "test-utils",
 ] }
 criterion = { workspace = true }
-serde_yaml = { workspace = true }
+serde_norway = { workspace = true }
 
 [[bench]]
 name = "session_lookup"

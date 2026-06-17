@@ -34,7 +34,7 @@ async-opcua-codegen [config].yml
     let config_text =
         std::fs::read_to_string(&config_path).expect("Failed to read config from file");
     let config: CodeGenConfig =
-        serde_yaml::from_str(&config_text).expect("Failed to parse config file");
+        serde_norway::from_str(&config_text).expect("Failed to parse config file");
 
     run_codegen(&config, root_path)?;
 

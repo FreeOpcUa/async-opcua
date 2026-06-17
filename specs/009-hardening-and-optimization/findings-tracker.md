@@ -71,6 +71,7 @@ one leg done, remainder deferred.
 | R3 NodeManager capability traits (FR-043) | — | T093 | `6ea75c21` | server compile + tests |
 | D1 aws-lc-rs constant-time RSA (FR-042) | — | T054–T055 | `547cbfbd` | crypto tests; documented in `docs/setup.md` |
 | D2 EOL TLS stack removed (FR-023) | — | T069 | `55dd35e1` | dependency tree clean; build green |
+| D5 serde_yaml → serde_norway | — | T071 | (US4 follow-up) | library crates migrated; `cargo build --all-features` + core/server YAML round-trip tests green; serde_yaml now only transitive via log4rs (demo-server sample) |
 | SEC-P1/FR-022 cargo-deny advisory gate | — | T004–T005 | `55dd35e1` | `deny.toml` + CI `cargo-deny` job |
 | SEC-P2/FR-025 | — | T073 | `55dd35e1` | build/tests |
 | SEC-P3/FR-021 | — | T068 | `547cbfbd` | tests |
@@ -97,7 +98,6 @@ Full rationales live in `tasks.md` → "Consciously deferred findings". Summary:
 | PERF-P9 inline fast path for small Reads | T082 | Measure-first (needs P12 benches); trades away per-request panic isolation. |
 | PERF-P11 retransmission-queue O(n) scan | — | Audit judged acceptable for the short, bounded queue. |
 | PERF-P12 benches + baseline | T001/T002/T003/T090/T098 | Perf changes verified functionally; criterion regression-guard infra is follow-up. |
-| D5 serde_yaml → serde_yml | T071 | Swap applied then reverted — crate not cached + crates.io unreachable mid-run. deny.toml records RUSTSEC-2024-0320. Re-attempt online. |
 | R5/FR-044 `opc.wss` WebSocket connector | T088/T089 | Network-blocked (tokio-tungstenite/tokio-rustls not cached). `StreamConnector` seam is ready. Re-attempt online. |
 | R6/FR-031 transport metrics + exporter | T087 | Additive observability. |
 | R7b/R7c/R8 | — | Packaging/build-hygiene/docs polish outside the clarified scope. |

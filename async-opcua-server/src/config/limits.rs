@@ -367,9 +367,9 @@ mod tests {
     fn server_conf_limits_match_struct_field_names() {
         let conf_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../samples/server.conf");
         let content = fs::read_to_string(&conf_path).unwrap();
-        let full_config: serde_yaml::Value = serde_yaml::from_str(&content).unwrap();
+        let full_config: serde_norway::Value = serde_norway::from_str(&content).unwrap();
         let limits_value = full_config.get("limits").unwrap().clone();
-        let limits: Limits = serde_yaml::from_value(limits_value).unwrap();
+        let limits: Limits = serde_norway::from_value(limits_value).unwrap();
 
         assert_eq!(
             limits,

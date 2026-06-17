@@ -24,7 +24,7 @@ sha2 = { workspace = true }
 parking_lot = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true }
-serde_yaml = { workspace = true }
+serde_norway = { workspace = true }
 shellexpand = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

@@ -287,7 +287,7 @@ mod defaults {
         constants::DEFAULT_KEEP_ALIVE_COUNT
     }
     pub(super) fn max_monitored_items_per_sub() -> usize {
-        100_000
+        10_000
     }
     pub(super) fn max_monitored_item_queue_size() -> usize {
         constants::MAX_DATA_CHANGE_QUEUE_SIZE
@@ -396,7 +396,7 @@ mod tests {
                     min_publishing_interval_ms: 100.0,
                     max_keep_alive_count: 30_000,
                     default_keep_alive_count: 10,
-                    max_monitored_items_per_sub: 100_000,
+                    max_monitored_items_per_sub: 10_000,
                     max_monitored_item_queue_size: 10,
                     max_lifetime_count: 90_000,
                     max_notifications_per_publish: 0,
@@ -456,6 +456,6 @@ mod tests {
     fn monitored_items_per_sub_has_non_zero_default() {
         let limits = Limits::default();
         assert_ne!(limits.subscriptions.max_monitored_items_per_sub, 0);
-        assert_eq!(limits.subscriptions.max_monitored_items_per_sub, 100_000);
+        assert_eq!(limits.subscriptions.max_monitored_items_per_sub, 10_000);
     }
 }

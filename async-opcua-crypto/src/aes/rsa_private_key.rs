@@ -245,12 +245,20 @@ impl PrivateKey {
         dst: &mut [u8],
     ) -> Result<usize, PKeyError> {
         let cipher_text_block_size = self.cipher_text_block_size();
+        // Reject non-block-aligned ciphertext: the per-block loop below slices
+        // `src[i..i+block]`, which would read out of bounds (panic) on a crafted
+        // OpenSecureChannel chunk whose encrypted span is not a whole multiple of the
+        // block size. Empty `src` is a multiple of the block size and the loop simply
+        // no-ops (returns 0), so it stays allowed.
+        if cipher_text_block_size == 0 || !src.len().is_multiple_of(cipher_text_block_size) {
+            return Err(PKeyError);
+        }
         #[cfg(feature = "aws-lc-rs")]
         let decrypting_key = self.aws_lc_private_decrypting_key()?;
         let padding = T::get_private_decrypt_padding();
         // Decrypt the data
-        let mut src_idx = 0;
-        let mut dst_idx = 0;
+        let mut src_idx: usize = 0;
+        let mut dst_idx: usize = 0;
 
         let src_len = src.len();
         while src_idx < src_len {
@@ -259,7 +267,11 @@ impl PrivateKey {
             // Decrypt and advance
             dst_idx += {
                 let src = &src[src_idx..src_end_index];
-                let dst = &mut dst[dst_idx..(dst_idx + cipher_text_block_size)];
+                let dst_end_index = dst_idx
+                    .checked_add(cipher_text_block_size)
+                    .filter(|end| *end <= dst.len())
+                    .ok_or(PKeyError)?;
+                let dst = &mut dst[dst_idx..dst_end_index];
 
                 #[cfg(feature = "aws-lc-rs")]
                 let block_len = aws_lc_private_decrypt(&decrypting_key, padding, src, dst)?;

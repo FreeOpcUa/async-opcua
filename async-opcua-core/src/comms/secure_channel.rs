@@ -913,6 +913,30 @@ impl SecureChannel {
         })
     }
 
+    fn secure_message_ranges(
+        message_size: usize,
+        encrypted_data_offset: usize,
+        signature_size: usize,
+    ) -> Result<(Range<usize>, Range<usize>), Error> {
+        if message_size < encrypted_data_offset {
+            return Err(Error::new(
+                StatusCode::BadSecurityChecksFailed,
+                format!(
+                    "Chunk message_size {message_size} is smaller than the encrypted data offset {encrypted_data_offset}"
+                ),
+            ));
+        }
+        let signed_end = message_size.checked_sub(signature_size).ok_or_else(|| {
+            Error::new(
+                StatusCode::BadSecurityChecksFailed,
+                format!(
+                    "Chunk message_size {message_size} is smaller than the {signature_size}-byte signature"
+                ),
+            )
+        })?;
+        Ok((0..signed_end, encrypted_data_offset..message_size))
+    }
+
     fn is_secure_connection(&self) -> bool {
         !matches!(self.security_policy, SecurityPolicy::None)
             && matches!(
@@ -927,7 +951,6 @@ impl SecureChannel {
         let (message_header, security_header, encrypted_data_offset) =
             self.decode_message_header(&src)?;
         let message_size = message_header.message_size as usize;
-        let encrypted_range = encrypted_data_offset..message_size;
 
         // S - Message Header
         // S - Security Header
@@ -936,12 +959,15 @@ impl SecureChannel {
         // S - Padding         - E
         //     Signature       - E
         if message_header.message_type.is_open_secure_channel() {
+            let (_, encrypted_range) =
+                Self::secure_message_ranges(message_size, encrypted_data_offset, 0)?;
             let (decrypted_chunk, _) =
                 self.decrypt_open_secure_channel(src, security_header, encrypted_range)?;
             Ok(decrypted_chunk)
         } else if self.is_secure_connection() {
             let signature_size = self.security_policy.symmetric_signature_size();
-            let signed_range = 0..(message_size - signature_size);
+            let (signed_range, encrypted_range) =
+                Self::secure_message_ranges(message_size, encrypted_data_offset, signature_size)?;
             self.decrypt_chunk(src, security_header, signed_range, encrypted_range)
         } else {
             Ok(MessageChunk { data: src })
@@ -960,7 +986,6 @@ impl SecureChannel {
         let (message_header, security_header, encrypted_data_offset) =
             self.decode_message_header(&src)?;
         let message_size = message_header.message_size as usize;
-        let encrypted_range = encrypted_data_offset..message_size;
 
         // S - Message Header
         // S - Security Header
@@ -972,13 +997,16 @@ impl SecureChannel {
             // The OpenSecureChannel is the first thing we receive so we must examine
             // the security policy and use it to determine if the packet must be decrypted.
 
+            let (_, encrypted_range) =
+                Self::secure_message_ranges(message_size, encrypted_data_offset, 0)?;
             let (decrypted_chunk, security_policy) =
                 self.decrypt_open_secure_channel(src, security_header, encrypted_range)?;
             self.security_policy = security_policy;
             Ok(decrypted_chunk)
         } else if self.is_secure_connection() {
             let signature_size = self.security_policy.symmetric_signature_size();
-            let signed_range = 0..(message_size - signature_size);
+            let (signed_range, encrypted_range) =
+                Self::secure_message_ranges(message_size, encrypted_data_offset, signature_size)?;
             self.decrypt_chunk(src, security_header, signed_range, encrypted_range)
         } else {
             Ok(MessageChunk { data: src })
@@ -1222,15 +1250,31 @@ impl SecureChannel {
                 verification_key_signature_size
             );
 
+            let decrypted_end = encrypted_range
+                .start
+                .checked_add(decrypted_size)
+                .filter(|end| *end <= dst.len())
+                .ok_or_else(|| {
+                    Error::new(
+                        StatusCode::BadSecurityChecksFailed,
+                        "decrypted chunk exceeds message buffer",
+                    )
+                })?;
+
             // Copy the bytes to dst
-            dst[encrypted_range.start..(encrypted_range.start + decrypted_size)]
-                .copy_from_slice(&decrypted_tmp[0..decrypted_size]);
+            dst[encrypted_range.start..decrypted_end]
+                .copy_from_slice(&decrypted_tmp[..decrypted_size]);
 
             // The signature range is at the end of the decrypted block for the verification key's signature
-            let signature_dst_offset =
-                encrypted_range.start + decrypted_size - verification_key_signature_size;
-            let signature_range_dst =
-                signature_dst_offset..(signature_dst_offset + verification_key_signature_size);
+            let signature_dst_offset = decrypted_end
+                .checked_sub(verification_key_signature_size)
+                .ok_or_else(|| {
+                Error::new(
+                    StatusCode::BadSecurityChecksFailed,
+                    "decrypted chunk is smaller than the signature",
+                )
+            })?;
+            let signature_range_dst = signature_dst_offset..decrypted_end;
 
             // The signed range is from 0 to the end of the plaintext except for key size
             let signed_range_dst = 0..signature_dst_offset;
@@ -1499,26 +1543,50 @@ impl SecureChannel {
                     )?;
 
                     // Self::log_crypto_data("Encrypted buffer", &src[..encrypted_range.end]);
-                    let decrypted_range =
-                        encrypted_range.start..(encrypted_range.start + decrypted_size);
+                    let decrypted_end = encrypted_range
+                        .start
+                        .checked_add(decrypted_size)
+                        .filter(|end| *end <= dst.len())
+                        .ok_or_else(|| {
+                            Error::new(
+                                StatusCode::BadSecurityChecksFailed,
+                                "decrypted chunk exceeds message buffer",
+                            )
+                        })?;
+                    let decrypted_range = encrypted_range.start..decrypted_end;
                     dst[decrypted_range].copy_from_slice(&decrypted_tmp[..decrypted_size]);
                     Ok::<usize, Error>(decrypted_size)
                 })?;
 
-                let encrypted_range =
-                    encrypted_range.start..(encrypted_range.start + decrypted_size);
+                let decrypted_end = encrypted_range
+                    .start
+                    .checked_add(decrypted_size)
+                    .filter(|end| *end <= dst.len())
+                    .ok_or_else(|| {
+                        Error::new(
+                            StatusCode::BadSecurityChecksFailed,
+                            "decrypted chunk exceeds message buffer",
+                        )
+                    })?;
+                let encrypted_range = encrypted_range.start..decrypted_end;
                 Self::log_crypto_data("Decrypted buffer", &dst[..encrypted_range.end]);
 
                 // Verify signature (after encrypted portion)
-                let signature_range = (encrypted_range.end
-                    - self.security_policy.symmetric_signature_size())
-                    ..encrypted_range.end;
+                let signature_start = encrypted_range
+                    .end
+                    .checked_sub(self.security_policy.symmetric_signature_size())
+                    .ok_or_else(|| {
+                        Error::new(
+                            StatusCode::BadSecurityChecksFailed,
+                            "decrypted chunk is smaller than the signature",
+                        )
+                    })?;
+                let signature_range = signature_start..encrypted_range.end;
                 trace!(
                     "signed range = {:?}, signature range = {:?}",
                     signed_range,
                     signature_range
                 );
-                let signature_start = signature_range.start;
                 self.security_policy.symmetric_verify_signature(
                     keys,
                     &dst[signed_range],
@@ -1557,5 +1625,23 @@ impl SecureChannel {
     /// Set the token lifetime.
     pub fn set_token_lifetime(&mut self, token_lifetime: u32) {
         self.token_lifetime = token_lifetime;
+    }
+}
+
+#[cfg(test)]
+mod secure_message_range_tests {
+    use super::SecureChannel;
+
+    #[test]
+    fn secure_message_ranges_rejects_undersized_chunk() {
+        // Regression (CRITICAL panic audit): a chunk whose message_size is smaller than
+        // the symmetric signature (or the encrypted-data offset) must be rejected, not
+        // underflow `message_size - signature_size` into an out-of-bounds slice panic.
+        assert!(SecureChannel::secure_message_ranges(10, 8, 20).is_err()); // < signature
+        assert!(SecureChannel::secure_message_ranges(4, 8, 2).is_err()); // < offset
+                                                                         // Correctly-sized chunk still yields the expected ranges.
+        let (signed, encrypted) = SecureChannel::secure_message_ranges(100, 8, 20).unwrap();
+        assert_eq!(signed, 0..80);
+        assert_eq!(encrypted, 8..100);
     }
 }

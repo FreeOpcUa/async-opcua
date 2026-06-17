@@ -655,6 +655,36 @@ impl SessionSubscriptions {
 
         self.remove_expired_publish_requests(now_instant);
 
+        if self.publish_request_queue.is_empty() {
+            let mut to_remove = Vec::new();
+            for (sub_id, subscription) in &mut self.subscriptions {
+                buffer.reset();
+                let res = subscription.tick(now, now_instant, tick_reason, false, &mut *buffer);
+                if matches!(res, TickResult::Expired) {
+                    to_delete.extend(subscription.drain().map(|item| {
+                        MonitoredItemRef::new(
+                            MonitoredItemHandle {
+                                subscription_id: *sub_id,
+                                monitored_item_id: item.1.id(),
+                            },
+                            item.1.item_to_monitor().node_id.clone(),
+                            item.1.item_to_monitor().attribute_id,
+                        )
+                    }))
+                }
+
+                if subscription.ready_to_remove() {
+                    to_remove.push(*sub_id);
+                }
+            }
+            for sub_id in to_remove {
+                self.subscriptions.remove(&sub_id);
+                self.retransmission_queue
+                    .retain(|f| f.subscription_id != sub_id);
+            }
+            return to_delete;
+        }
+
         let subscription_ids = {
             // Sort subscriptions by priority
             let mut subscription_priority: Vec<(u32, u8)> = self
@@ -662,7 +692,7 @@ impl SessionSubscriptions {
                 .values()
                 .map(|v| (v.id(), v.priority()))
                 .collect();
-            subscription_priority.sort_by_key(|s1| s1.1);
+            subscription_priority.sort_by_key(|s1| std::cmp::Reverse(s1.1));
             subscription_priority.into_iter().map(|s| s.0)
         };
 

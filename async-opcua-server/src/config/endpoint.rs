@@ -271,9 +271,7 @@ impl ServerEndpoint {
         if let Some(ref security_policy) = self.password_security_policy {
             match SecurityPolicy::from_str(security_policy).unwrap() {
                 SecurityPolicy::Unknown => {
-                    tracing::error!(
-                        "Password security policy {security_policy} is unrecognized"
-                    );
+                    tracing::error!("Password security policy {security_policy} is unrecognized");
                     password_security_policy = SecurityPolicy::None;
                 }
                 security_policy => {

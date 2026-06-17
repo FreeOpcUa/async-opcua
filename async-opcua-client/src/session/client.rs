@@ -220,6 +220,7 @@ impl Client {
                 max_message_size: self.config.decoding_options.max_message_size,
                 max_chunk_count: self.config.decoding_options.max_chunk_count,
                 connect_timeout: self.config.connect_timeout,
+                tcp_keepalive: self.config.tcp_keepalive,
             },
             channel_lifetime,
             self.config.request_timeout,

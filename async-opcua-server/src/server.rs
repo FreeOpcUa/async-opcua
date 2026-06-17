@@ -40,7 +40,7 @@ use opcua_types::{DateTime, LocalizedText, ServerState, UAString};
 use super::{
     authenticator::DefaultAuthenticator,
     builder::ServerBuilder,
-    config::ServerConfig,
+    config::{ServerConfig, TcpKeepaliveConfig},
     info::ServerInfo,
     node_manager::{NodeManagers, NodeManagersRef},
     server_handle::ServerHandle,
@@ -63,6 +63,21 @@ struct TcpConnectionDeps {
     certificate_store: Arc<RwLock<CertificateStore>>,
     node_managers: NodeManagers,
     subscriptions: Arc<SubscriptionCache>,
+}
+
+fn configure_tcp_stream(stream: &TcpStream, addr: SocketAddr, tcp_keepalive: &TcpKeepaliveConfig) {
+    if let Err(e) = stream.set_nodelay(true) {
+        warn!("Failed to set TCP_NODELAY for {addr}: {e}");
+    }
+    if tcp_keepalive.enabled {
+        let keepalive = socket2::TcpKeepalive::new()
+            .with_time(Duration::from_secs(tcp_keepalive.idle_secs))
+            .with_interval(Duration::from_secs(tcp_keepalive.interval_secs))
+            .with_retries(tcp_keepalive.retries);
+        if let Err(e) = socket2::SockRef::from(stream).set_tcp_keepalive(&keepalive) {
+            warn!("Failed to set TCP keep-alive for {addr}: {e}");
+        }
+    }
 }
 
 impl TcpConnectionDeps {
@@ -97,6 +112,8 @@ impl TcpConnectionDeps {
                 return false;
             }
         }
+
+        configure_tcp_stream(&socket, addr, &self.transport_config.tcp_keepalive);
 
         info!("Accept new connection from {addr} ({connection_counter})");
         let conn = SessionStarter::new(
@@ -438,6 +455,7 @@ impl Server {
             max_chunk_count: self.info.config.limits.max_chunk_count,
             receive_buffer_size: self.info.config.limits.receive_buffer_size,
             hello_timeout: Duration::from_secs(self.info.config.tcp_config.hello_timeout as u64),
+            tcp_keepalive: self.info.config.tcp_config.tcp_keepalive,
         }
     }
 

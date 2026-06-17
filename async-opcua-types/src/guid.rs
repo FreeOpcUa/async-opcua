@@ -126,6 +126,10 @@ impl BinaryEncodable for Guid {
         16
     }
 
+    fn fixed_byte_len() -> Option<usize> {
+        Some(16)
+    }
+
     fn encode<S: Write + ?Sized>(
         &self,
         stream: &mut S,

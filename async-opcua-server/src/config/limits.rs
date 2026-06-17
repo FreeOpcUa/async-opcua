@@ -67,10 +67,8 @@ impl Default for Limits {
             max_browse_continuation_points: defaults::max_browse_continuation_points(),
             max_history_continuation_points: defaults::max_history_continuation_points(),
             max_query_continuation_points: defaults::max_query_continuation_points(),
-            max_inflight_requests_per_connection:
-                defaults::max_inflight_requests_per_connection(),
-            max_unactivated_sessions_per_channel:
-                defaults::max_unactivated_sessions_per_channel(),
+            max_inflight_requests_per_connection: defaults::max_inflight_requests_per_connection(),
+            max_unactivated_sessions_per_channel: defaults::max_unactivated_sessions_per_channel(),
             unactivated_session_timeout_ms: defaults::unactivated_session_timeout_ms(),
             operational: OperationalLimits::default(),
             max_sessions: defaults::max_sessions(),

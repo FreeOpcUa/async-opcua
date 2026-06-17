@@ -417,6 +417,13 @@ pub trait BinaryEncodable {
     /// This may be called prior to writing to ensure the correct amount of space is available.
     #[allow(unused)]
     fn byte_len(&self, ctx: &crate::Context<'_>) -> usize;
+    /// Returns a constant byte length for fixed-width values.
+    fn fixed_byte_len() -> Option<usize>
+    where
+        Self: Sized,
+    {
+        None
+    }
     /// Encodes the instance to the write stream.
     fn encode<S: Write + ?Sized>(&self, stream: &mut S, ctx: &Context<'_>) -> EncodingResult<()>;
 
@@ -451,6 +458,13 @@ pub trait SimpleBinaryEncodable {
     // Returns the exact byte length of the structure as it would be if `encode` were called.
     /// This may be called prior to writing to ensure the correct amount of space is available.
     fn byte_len(&self) -> usize;
+    /// Returns a constant byte length for fixed-width values.
+    fn fixed_byte_len() -> Option<usize>
+    where
+        Self: Sized,
+    {
+        None
+    }
 
     /// Encodes the instance to the write stream.
     fn encode<S: Write + ?Sized>(&self, stream: &mut S) -> EncodingResult<()>;
@@ -470,6 +484,13 @@ where
 {
     fn byte_len(&self, _ctx: &crate::Context<'_>) -> usize {
         SimpleBinaryEncodable::byte_len(self)
+    }
+
+    fn fixed_byte_len() -> Option<usize>
+    where
+        Self: Sized,
+    {
+        <T as SimpleBinaryEncodable>::fixed_byte_len()
     }
 
     fn encode<S: Write + ?Sized>(&self, stream: &mut S, _ctx: &Context<'_>) -> EncodingResult<()> {
@@ -516,7 +537,11 @@ where
     fn byte_len(&self, ctx: &crate::Context<'_>) -> usize {
         let mut size = 4;
         if let Some(ref values) = self {
-            size += values.iter().map(|v| v.byte_len(ctx)).sum::<usize>();
+            size += if let Some(value_len) = T::fixed_byte_len() {
+                values.len() * value_len
+            } else {
+                values.iter().map(|v| v.byte_len(ctx)).sum::<usize>()
+            };
         }
         size
     }
@@ -569,7 +594,11 @@ where
 pub fn byte_len_array<T: BinaryEncodable>(values: &Option<Vec<T>>, ctx: &Context<'_>) -> usize {
     let mut size = 4;
     if let Some(ref values) = values {
-        size += values.iter().map(|v| v.byte_len(ctx)).sum::<usize>();
+        size += if let Some(value_len) = T::fixed_byte_len() {
+            values.len() * value_len
+        } else {
+            values.iter().map(|v| v.byte_len(ctx)).sum::<usize>()
+        };
     }
     size
 }

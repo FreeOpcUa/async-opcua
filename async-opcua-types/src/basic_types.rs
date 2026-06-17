@@ -28,6 +28,10 @@ impl SimpleBinaryEncodable for bool {
         1
     }
 
+    fn fixed_byte_len() -> Option<usize> {
+        Some(1)
+    }
+
     fn encode<S: Write + ?Sized>(&self, stream: &mut S) -> EncodingResult<()> {
         // 0, or 1 for true or false, single byte
         write_u8(stream, if *self { 1 } else { 0 })
@@ -46,6 +50,10 @@ impl SimpleBinaryDecodable for bool {
 impl SimpleBinaryEncodable for i8 {
     fn byte_len(&self) -> usize {
         1
+    }
+
+    fn fixed_byte_len() -> Option<usize> {
+        Some(1)
     }
 
     fn encode<S: Write + ?Sized>(&self, stream: &mut S) -> EncodingResult<()> {
@@ -68,6 +76,10 @@ impl SimpleBinaryEncodable for u8 {
         1
     }
 
+    fn fixed_byte_len() -> Option<usize> {
+        Some(1)
+    }
+
     fn encode<S: Write + ?Sized>(&self, stream: &mut S) -> EncodingResult<()> {
         write_u8(stream, *self)
     }
@@ -86,6 +98,10 @@ impl SimpleBinaryDecodable for u8 {
 impl SimpleBinaryEncodable for i16 {
     fn byte_len(&self) -> usize {
         2
+    }
+
+    fn fixed_byte_len() -> Option<usize> {
+        Some(2)
     }
 
     fn encode<S: Write + ?Sized>(&self, stream: &mut S) -> EncodingResult<()> {
@@ -108,6 +124,10 @@ impl SimpleBinaryEncodable for u16 {
         2
     }
 
+    fn fixed_byte_len() -> Option<usize> {
+        Some(2)
+    }
+
     fn encode<S: Write + ?Sized>(&self, stream: &mut S) -> EncodingResult<()> {
         write_u16(stream, *self)
     }
@@ -126,6 +146,10 @@ impl SimpleBinaryDecodable for u16 {
 impl SimpleBinaryEncodable for i32 {
     fn byte_len(&self) -> usize {
         4
+    }
+
+    fn fixed_byte_len() -> Option<usize> {
+        Some(4)
     }
 
     fn encode<S: Write + ?Sized>(&self, stream: &mut S) -> EncodingResult<()> {
@@ -148,6 +172,10 @@ impl SimpleBinaryEncodable for u32 {
         4
     }
 
+    fn fixed_byte_len() -> Option<usize> {
+        Some(4)
+    }
+
     fn encode<S: Write + ?Sized>(&self, stream: &mut S) -> EncodingResult<()> {
         write_u32(stream, *self)
     }
@@ -165,6 +193,10 @@ impl SimpleBinaryDecodable for u32 {
 impl SimpleBinaryEncodable for i64 {
     fn byte_len(&self) -> usize {
         8
+    }
+
+    fn fixed_byte_len() -> Option<usize> {
+        Some(8)
     }
 
     fn encode<S: Write + ?Sized>(&self, stream: &mut S) -> EncodingResult<()> {
@@ -187,6 +219,10 @@ impl SimpleBinaryEncodable for u64 {
         8
     }
 
+    fn fixed_byte_len() -> Option<usize> {
+        Some(8)
+    }
+
     fn encode<S: Write + ?Sized>(&self, stream: &mut S) -> EncodingResult<()> {
         write_u64(stream, *self)
     }
@@ -207,6 +243,10 @@ impl SimpleBinaryEncodable for f32 {
         4
     }
 
+    fn fixed_byte_len() -> Option<usize> {
+        Some(4)
+    }
+
     fn encode<S: Write + ?Sized>(&self, stream: &mut S) -> EncodingResult<()> {
         write_f32(stream, *self)
     }
@@ -225,6 +265,10 @@ impl SimpleBinaryDecodable for f32 {
 impl SimpleBinaryEncodable for f64 {
     fn byte_len(&self) -> usize {
         8
+    }
+
+    fn fixed_byte_len() -> Option<usize> {
+        Some(8)
     }
 
     fn encode<S: Write + ?Sized>(&self, stream: &mut S) -> EncodingResult<()> {

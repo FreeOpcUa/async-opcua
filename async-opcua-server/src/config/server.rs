@@ -34,10 +34,59 @@ pub const ANONYMOUS_USER_TOKEN_ID: &str = "ANONYMOUS";
 pub struct TcpConfig {
     /// Timeout for hello on a session in seconds
     pub hello_timeout: u32,
+    /// TCP keep-alive settings for long-lived connections.
+    #[serde(default)]
+    pub tcp_keepalive: TcpKeepaliveConfig,
     /// The hostname to supply in the endpoints
     pub host: String,
     /// The port number of the service
     pub port: u16,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
+/// TCP keep-alive settings.
+pub struct TcpKeepaliveConfig {
+    /// Whether TCP keep-alive is enabled.
+    #[serde(default = "tcp_keepalive_defaults::enabled")]
+    pub enabled: bool,
+    /// Idle time before keep-alive probes are sent.
+    #[serde(default = "tcp_keepalive_defaults::idle_secs")]
+    pub idle_secs: u64,
+    /// Interval between keep-alive probes.
+    #[serde(default = "tcp_keepalive_defaults::interval_secs")]
+    pub interval_secs: u64,
+    /// Number of failed keep-alive probes before the peer is considered dead.
+    #[serde(default = "tcp_keepalive_defaults::retries")]
+    pub retries: u32,
+}
+
+impl Default for TcpKeepaliveConfig {
+    fn default() -> Self {
+        Self {
+            enabled: tcp_keepalive_defaults::enabled(),
+            idle_secs: tcp_keepalive_defaults::idle_secs(),
+            interval_secs: tcp_keepalive_defaults::interval_secs(),
+            retries: tcp_keepalive_defaults::retries(),
+        }
+    }
+}
+
+mod tcp_keepalive_defaults {
+    pub(super) fn enabled() -> bool {
+        true
+    }
+
+    pub(super) fn idle_secs() -> u64 {
+        60
+    }
+
+    pub(super) fn interval_secs() -> u64 {
+        15
+    }
+
+    pub(super) fn retries() -> u32 {
+        4
+    }
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Default)]
@@ -480,6 +529,7 @@ impl Default for ServerConfig {
                 host: "127.0.0.1".to_string(),
                 port: constants::DEFAULT_RUST_OPC_UA_SERVER_PORT,
                 hello_timeout: constants::DEFAULT_HELLO_TIMEOUT_SECONDS,
+                tcp_keepalive: TcpKeepaliveConfig::default(),
             },
             max_connections: defaults::max_connections(),
             max_connections_per_ip: defaults::max_connections_per_ip(),
@@ -545,6 +595,7 @@ impl ServerConfig {
                 host,
                 port,
                 hello_timeout: constants::DEFAULT_HELLO_TIMEOUT_SECONDS,
+                tcp_keepalive: TcpKeepaliveConfig::default(),
             },
             locale_ids,
             user_tokens,

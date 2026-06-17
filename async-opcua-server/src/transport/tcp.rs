@@ -30,6 +30,7 @@ use tokio::{
 use tokio_util::{codec::FramedRead, sync::CancellationToken};
 
 use super::connect::Connector;
+use crate::config::TcpKeepaliveConfig;
 
 /// Transport implementation for opc.tcp.
 pub(crate) struct TcpTransport {
@@ -56,6 +57,7 @@ pub(crate) struct TransportConfig {
     pub max_message_size: usize,
     pub max_chunk_count: usize,
     pub hello_timeout: Duration,
+    pub tcp_keepalive: TcpKeepaliveConfig,
 }
 
 #[derive(Debug)]

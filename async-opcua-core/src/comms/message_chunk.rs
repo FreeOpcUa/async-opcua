@@ -207,6 +207,50 @@ impl SimpleBinaryDecodable for MessageChunk {
 pub struct MessageChunkTooSmall;
 
 impl MessageChunk {
+    /// Decode a complete message chunk by slicing it out of the source buffer without copying.
+    pub fn decode_zero_copy(
+        src: &mut bytes::Bytes,
+        decoding_options: &DecodingOptions,
+    ) -> EncodingResult<MessageChunk> {
+        if src.len() < MESSAGE_SIZE_OFFSET + std::mem::size_of::<u32>() {
+            return Err(Error::decoding("Cannot decode chunk header"));
+        }
+
+        let message_size = u32::from_le_bytes([
+            src[MESSAGE_SIZE_OFFSET],
+            src[MESSAGE_SIZE_OFFSET + 1],
+            src[MESSAGE_SIZE_OFFSET + 2],
+            src[MESSAGE_SIZE_OFFSET + 3],
+        ]) as usize;
+        if decoding_options.max_message_size > 0 && message_size > decoding_options.max_message_size
+        {
+            return Err(Error::new(
+                StatusCode::BadTcpMessageTooLarge,
+                format!(
+                    "Message size {} exceeds maximum message size {}",
+                    message_size, decoding_options.max_message_size
+                ),
+            ));
+        }
+        if message_size < MESSAGE_CHUNK_HEADER_SIZE {
+            return Err(Error::decoding(format!(
+                "Message size {} is smaller than message chunk header size {}",
+                message_size, MESSAGE_CHUNK_HEADER_SIZE
+            )));
+        }
+        if message_size > src.len() {
+            return Err(Error::decoding(format!(
+                "Message size {} exceeds available bytes {}",
+                message_size,
+                src.len()
+            )));
+        }
+
+        Ok(MessageChunk {
+            data: src.split_to(message_size),
+        })
+    }
+
     /// Create a new message chunk.
     pub fn new(
         sequence_number: u32,

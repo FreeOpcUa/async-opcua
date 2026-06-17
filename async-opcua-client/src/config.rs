@@ -273,6 +273,9 @@ pub struct ClientConfig {
     /// Timeout for opening outbound TCP connections.
     #[serde(default = "defaults::connect_timeout")]
     pub(crate) connect_timeout: Duration,
+    /// TCP keep-alive settings for long-lived connections.
+    #[serde(default)]
+    pub(crate) tcp_keepalive: TcpKeepaliveConfig,
     /// Interval between each keep-alive request sent to the server.
     #[serde(default = "defaults::keep_alive_interval")]
     pub(crate) keep_alive_interval: Duration,
@@ -597,6 +600,52 @@ mod defaults {
     }
 }
 
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Copy)]
+/// TCP keep-alive settings.
+pub struct TcpKeepaliveConfig {
+    /// Whether TCP keep-alive is enabled.
+    #[serde(default = "tcp_keepalive_defaults::enabled")]
+    pub enabled: bool,
+    /// Idle time before keep-alive probes are sent.
+    #[serde(default = "tcp_keepalive_defaults::idle_secs")]
+    pub idle_secs: u64,
+    /// Interval between keep-alive probes.
+    #[serde(default = "tcp_keepalive_defaults::interval_secs")]
+    pub interval_secs: u64,
+    /// Number of failed keep-alive probes before the peer is considered dead.
+    #[serde(default = "tcp_keepalive_defaults::retries")]
+    pub retries: u32,
+}
+
+impl Default for TcpKeepaliveConfig {
+    fn default() -> Self {
+        Self {
+            enabled: tcp_keepalive_defaults::enabled(),
+            idle_secs: tcp_keepalive_defaults::idle_secs(),
+            interval_secs: tcp_keepalive_defaults::interval_secs(),
+            retries: tcp_keepalive_defaults::retries(),
+        }
+    }
+}
+
+mod tcp_keepalive_defaults {
+    pub(super) fn enabled() -> bool {
+        true
+    }
+
+    pub(super) fn idle_secs() -> u64 {
+        60
+    }
+
+    pub(super) fn interval_secs() -> u64 {
+        15
+    }
+
+    pub(super) fn retries() -> u32 {
+        4
+    }
+}
+
 impl ClientConfig {
     /// The default PKI directory
     pub const PKI_DIR: &'static str = "pki";
@@ -626,6 +675,7 @@ impl ClientConfig {
             session_retry_initial: defaults::session_retry_initial(),
             session_retry_max: defaults::session_retry_max(),
             connect_timeout: defaults::connect_timeout(),
+            tcp_keepalive: TcpKeepaliveConfig::default(),
             keep_alive_interval: defaults::keep_alive_interval(),
             max_failed_keep_alive_count: defaults::max_failed_keep_alive_count(),
             request_timeout: defaults::request_timeout(),

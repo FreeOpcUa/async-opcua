@@ -130,6 +130,8 @@ pub struct Subscription {
     max_queued_notifications: usize,
     /// Maximum number of notifications per publish.
     max_notifications_per_publish: usize,
+    /// Number of notification messages discarded because the queue limit was reached.
+    discarded_message_count: u32,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -171,6 +173,7 @@ impl Subscription {
             notifications: VecDeque::new(),
             max_queued_notifications,
             max_notifications_per_publish: max_notifications_per_publish as usize,
+            discarded_message_count: 0,
         }
     }
 
@@ -546,6 +549,7 @@ impl Subscription {
                     DateTime::from(*now),
                 );
                 self.enqueue_notification(notification);
+                self.enforce_queued_notification_limit();
                 TickResult::Enqueued
             }
             UpdateStateAction::ReturnNotifications => {
@@ -555,6 +559,7 @@ impl Subscription {
                 for msg in messages {
                     self.enqueue_notification(msg);
                 }
+                self.enforce_queued_notification_limit();
                 // Every notification has been moved into an enqueued message
                 // at this point, so the scratch buffer can safely be reused
                 // by the next subscription tick.
@@ -571,19 +576,33 @@ impl Subscription {
                     StatusCode::BadTimeout,
                 );
                 self.enqueue_notification(notification);
+                self.enforce_queued_notification_limit();
                 TickResult::Expired
             }
         }
     }
 
     fn enqueue_notification(&mut self, notification: NotificationMessage) {
-        if self.notifications.len() >= self.max_queued_notifications {
-            warn!("Maximum number of queued notifications exceeded, dropping oldest. Subscription ID: {}", self.id);
-            self.notifications.pop_front();
-        }
-
         // debug!("Enqueuing notification {:?}", notification);
         self.notifications.push_back(notification);
+    }
+
+    fn enforce_queued_notification_limit(&mut self) {
+        if self.max_queued_notifications == 0
+            || self.notifications.len() <= self.max_queued_notifications
+        {
+            return;
+        }
+
+        let dropped = self.notifications.len() - self.max_queued_notifications;
+        warn!(
+            "Maximum number of queued notifications exceeded, dropping {} oldest. Subscription ID: {}",
+            dropped, self.id
+        );
+        for _ in 0..dropped {
+            self.notifications.pop_front();
+        }
+        self.discarded_message_count = self.discarded_message_count.saturating_add(dropped as u32);
     }
 
     pub(crate) fn take_notification(&mut self) -> Option<NotificationMessage> {
@@ -829,6 +848,11 @@ impl Subscription {
         self.max_notifications_per_publish
     }
 
+    /// The number of notification messages discarded because the queue limit was reached.
+    pub fn discarded_message_count(&self) -> u32 {
+        self.discarded_message_count
+    }
+
     /// The current state of the subscription.
     pub fn state(&self) -> SubscriptionState {
         self.state
@@ -946,12 +970,24 @@ mod tests {
 
         // Subscription is creating, handle the first tick.
         assert_eq!(sub.state, SubscriptionState::Creating);
-        sub.tick(&start_dt, start, TickReason::TickTimerFired, true, &mut buffer);
+        sub.tick(
+            &start_dt,
+            start,
+            TickReason::TickTimerFired,
+            true,
+            &mut buffer,
+        );
         assert_eq!(sub.state, SubscriptionState::Normal);
         assert!(!sub.first_message_sent);
 
         // Tick again before the publishing interval has elapsed, should change nothing.
-        sub.tick(&start_dt, start, TickReason::TickTimerFired, true, &mut buffer);
+        sub.tick(
+            &start_dt,
+            start,
+            TickReason::TickTimerFired,
+            true,
+            &mut buffer,
+        );
         assert_eq!(sub.state, SubscriptionState::Normal);
         assert!(!sub.first_message_sent);
 
@@ -974,7 +1010,13 @@ mod tests {
         );
         // New tick at next publishing interval should produce something
         let (time, time_inst) = offset(start_dt, start, 100);
-        sub.tick(&time, time_inst, TickReason::TickTimerFired, true, &mut buffer);
+        sub.tick(
+            &time,
+            time_inst,
+            TickReason::TickTimerFired,
+            true,
+            &mut buffer,
+        );
         assert_eq!(sub.state, SubscriptionState::Normal);
         assert!(sub.first_message_sent);
         let notif = sub.take_notification().unwrap();
@@ -989,7 +1031,13 @@ mod tests {
         // Next tick produces nothing
         let (time, time_inst) = offset(start_dt, start, 200);
 
-        sub.tick(&time, time_inst, TickReason::TickTimerFired, true, &mut buffer);
+        sub.tick(
+            &time,
+            time_inst,
+            TickReason::TickTimerFired,
+            true,
+            &mut buffer,
+        );
         // State transitions to keep alive due to empty publish.
         assert_eq!(sub.state, SubscriptionState::KeepAlive);
         assert_eq!(sub.lifetime_counter, 98);
@@ -1006,7 +1054,13 @@ mod tests {
             &DateTime::now(),
         );
         let (time, time_inst) = offset(start_dt, start, 300);
-        sub.tick(&time, time_inst, TickReason::TickTimerFired, true, &mut buffer);
+        sub.tick(
+            &time,
+            time_inst,
+            TickReason::TickTimerFired,
+            true,
+            &mut buffer,
+        );
         // State transitions back to normal.
         assert_eq!(sub.state, SubscriptionState::Normal);
         assert!(sub.first_message_sent);
@@ -1022,7 +1076,13 @@ mod tests {
 
         for i in 0..20 {
             let (time, time_inst) = offset(start_dt, start, 1000 + i * 100);
-            sub.tick(&time, time_inst, TickReason::TickTimerFired, true, &mut buffer);
+            sub.tick(
+                &time,
+                time_inst,
+                TickReason::TickTimerFired,
+                true,
+                &mut buffer,
+            );
             assert_eq!(sub.state, SubscriptionState::KeepAlive);
             assert_eq!(sub.lifetime_counter, (99 - i - 1) as u32);
             assert_eq!(sub.keep_alive_counter, (20 - i) as u32);
@@ -1033,7 +1093,13 @@ mod tests {
 
         // Tick one more time to get a keep alive
         let (time, time_inst) = offset(start_dt, start, 3000);
-        sub.tick(&time, time_inst, TickReason::TickTimerFired, true, &mut buffer);
+        sub.tick(
+            &time,
+            time_inst,
+            TickReason::TickTimerFired,
+            true,
+            &mut buffer,
+        );
         assert_eq!(sub.state, SubscriptionState::KeepAlive);
         assert_eq!(sub.lifetime_counter, 78);
         assert_eq!(sub.keep_alive_counter, 20);
@@ -1046,7 +1112,13 @@ mod tests {
         // Tick another 20 times to become late
         for i in 0..19 {
             let (time, time_inst) = offset(start_dt, start, 3100 + i * 100);
-            sub.tick(&time, time_inst, TickReason::TickTimerFired, false, &mut buffer);
+            sub.tick(
+                &time,
+                time_inst,
+                TickReason::TickTimerFired,
+                false,
+                &mut buffer,
+            );
             assert_eq!(sub.state, SubscriptionState::KeepAlive);
             assert_eq!(sub.lifetime_counter, (78 - i - 1) as u32);
         }
@@ -1054,14 +1126,26 @@ mod tests {
         // Tick another 58 times to expire
         for i in 0..58 {
             let (time, time_inst) = offset(start_dt, start, 5100 + i * 100);
-            sub.tick(&time, time_inst, TickReason::TickTimerFired, false, &mut buffer);
+            sub.tick(
+                &time,
+                time_inst,
+                TickReason::TickTimerFired,
+                false,
+                &mut buffer,
+            );
             assert_eq!(sub.state, SubscriptionState::Late);
             assert_eq!(sub.lifetime_counter, (58 - i) as u32);
         }
         assert_eq!(sub.lifetime_counter, 1);
 
         let (time, time_inst) = offset(start_dt, start, 20000);
-        sub.tick(&time, time_inst, TickReason::TickTimerFired, false, &mut buffer);
+        sub.tick(
+            &time,
+            time_inst,
+            TickReason::TickTimerFired,
+            false,
+            &mut buffer,
+        );
         assert_eq!(sub.state, SubscriptionState::Closed);
         let notif = sub.take_notification().unwrap();
         assert_eq!(notif.sequence_number, 3);
@@ -1113,13 +1197,25 @@ mod tests {
         sub.notify_data_value(&4, DataValue::new_at(1, time), &time);
 
         // Should not cause a notification
-        sub.tick(&otime, time_inst, TickReason::TickTimerFired, true, &mut buffer);
+        sub.tick(
+            &otime,
+            time_inst,
+            TickReason::TickTimerFired,
+            true,
+            &mut buffer,
+        );
         assert!(sub.take_notification().is_none());
 
         // Notify the first item
         sub.notify_data_value(&1, DataValue::new_at(1, time), &time);
         let (time, time_inst) = offset(start_dt, start, 200);
-        sub.tick(&time, time_inst, TickReason::TickTimerFired, true, &mut buffer);
+        sub.tick(
+            &time,
+            time_inst,
+            TickReason::TickTimerFired,
+            true,
+            &mut buffer,
+        );
         let notif = sub.take_notification().unwrap();
         let its = get_notifications(&notif);
         assert_eq!(its.len(), 6);

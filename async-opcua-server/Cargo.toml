@@ -53,6 +53,7 @@ postcard = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+socket2 = { version = "0.6", features = ["all"] }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }

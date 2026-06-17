@@ -31,6 +31,11 @@ use super::{
     security_header::{AsymmetricSecurityHeader, SecurityHeader, SymmetricSecurityHeader},
 };
 
+thread_local! {
+    static PADDING_AND_SIGNATURE_SCRATCH: std::cell::RefCell<Vec<u8>> = const { std::cell::RefCell::new(Vec::new()) };
+    static SYMMETRIC_DECRYPT_SCRATCH: std::cell::RefCell<Vec<u8>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
 #[derive(Debug, PartialEq)]
 /// Role of an application in OPC-UA communication.
 pub enum Role {
@@ -574,12 +579,13 @@ impl SecureChannel {
 
     // Takes an unpadded message chunk and adds padding as well as space to the end to accomodate a signature.
     // Also modifies the message size to include the new padding/signature
-    fn add_space_for_padding_and_signature(
+    fn add_space_for_padding_and_signature_into(
         &self,
         message_chunk: &MessageChunk,
-    ) -> Result<Vec<u8>, Error> {
+        data: &mut Vec<u8>,
+    ) -> Result<usize, Error> {
         let chunk_info = message_chunk.chunk_info(self)?;
-        let data = &message_chunk.data[..];
+        let message_data = &message_chunk.data[..];
 
         let security_header = chunk_info.security_header;
 
@@ -596,11 +602,12 @@ impl SecureChannel {
             chunk_info.message_header.message_type,
         )?;
 
-        let buffer = Vec::with_capacity(message_chunk.data.len() + padding_size + signature_size);
-        let mut stream = Cursor::new(buffer);
+        let message_size = message_data.len() + padding_size + signature_size;
+        data.clear();
+        data.reserve(message_size);
 
         // First off just write out the src to the buffer. The message header, security header, sequence header and payload
-        stream.write_all(data)?;
+        data.write_all(message_data)?;
 
         if padding_size > 0 {
             // A number of bytes are written out equal to the padding size.
@@ -608,7 +615,7 @@ impl SecureChannel {
             // there will be 15 bytes all with the value 15
             if minimum_padding == 1 {
                 let padding_byte = ((padding_size - 1) & 0xff) as u8;
-                let _ = write_bytes(&mut stream, padding_byte, padding_size)?;
+                let _ = write_bytes(data, padding_byte, padding_size)?;
             } else if minimum_padding == 2 {
                 // Padding and then extra padding
                 let padding_byte = ((padding_size - 2) & 0xff) as u8;
@@ -618,17 +625,17 @@ impl SecureChannel {
                     padding_byte,
                     extra_padding_byte
                 );
-                let _ = write_bytes(&mut stream, padding_byte, padding_size - 1)?;
-                write_u8(&mut stream, extra_padding_byte)?;
+                let _ = write_bytes(data, padding_byte, padding_size - 1)?;
+                write_u8(data, extra_padding_byte)?;
             }
         }
 
         // Write zeros for the signature
-        let _ = write_bytes(&mut stream, 0u8, signature_size)?;
+        let _ = write_bytes(data, 0u8, signature_size)?;
 
         // Update message header to reflect size with padding + signature
-        let message_size = data.len() + padding_size + signature_size;
-        Self::update_message_size_and_truncate(stream.into_inner(), message_size)
+        Self::update_message_size(&mut data[..], message_size)?;
+        Ok(message_size)
     }
 
     fn update_message_size(data: &mut [u8], message_size: usize) -> Result<(), Error> {
@@ -673,27 +680,32 @@ impl SecureChannel {
             // S - Padding         - E
             //     Signature       - E
 
-            let mut data = self.add_space_for_padding_and_signature(message_chunk)?;
-            Self::log_crypto_data("Chunk before padding", &message_chunk.data[..]);
-            Self::log_crypto_data("Chunk after padding", &data[..]);
+            let encrypted_size = PADDING_AND_SIGNATURE_SCRATCH.with(|scratch| {
+                let mut data = scratch.borrow_mut();
+                let message_size =
+                    self.add_space_for_padding_and_signature_into(message_chunk, &mut data)?;
+                data.truncate(message_size);
+                Self::log_crypto_data("Chunk before padding", &message_chunk.data[..]);
+                Self::log_crypto_data("Chunk after padding", &data[..]);
 
-            // Encrypted range is from the sequence header to the end
-            let encrypted_range = encrypted_data_offset..data.len();
+                // Encrypted range is from the sequence header to the end
+                let encrypted_range = encrypted_data_offset..data.len();
 
-            // Encrypt and sign - open secure channel
-            let encrypted_size = if message_chunk.is_open_secure_channel(&self.decoding_options()) {
-                self.asymmetric_sign_and_encrypt(
-                    self.security_policy,
-                    &mut data,
-                    encrypted_range,
-                    dst,
-                )?
-            } else {
-                // Symmetric encrypt and sign
-                let signed_range =
-                    0..(data.len() - self.security_policy.symmetric_signature_size());
-                self.symmetric_sign_and_encrypt(&mut data, signed_range, encrypted_range, dst)?
-            };
+                // Encrypt and sign - open secure channel
+                if message_chunk.is_open_secure_channel(&self.decoding_options()) {
+                    self.asymmetric_sign_and_encrypt(
+                        self.security_policy,
+                        &mut data,
+                        encrypted_range,
+                        dst,
+                    )
+                } else {
+                    // Symmetric encrypt and sign
+                    let signed_range =
+                        0..(data.len() - self.security_policy.symmetric_signature_size());
+                    self.symmetric_sign_and_encrypt(&mut data, signed_range, encrypted_range, dst)
+                }
+            })?;
 
             Self::log_crypto_data("Chunk after encryption", &dst[..encrypted_size]);
 
@@ -1438,8 +1450,6 @@ impl SecureChannel {
                 // Copy security header
                 dst[..encrypted_range.start].copy_from_slice(&src[..encrypted_range.start]);
 
-                // Decrypt encrypted portion
-                let mut decrypted_tmp = vec![0u8; ciphertext_size + 16]; // tmp includes +16 for blocksize
                 let keys = self.get_remote_keys(token_id).ok_or_else(|| {
                     Error::new(
                         StatusCode::BadSecureChannelClosed,
@@ -1451,16 +1461,25 @@ impl SecureChannel {
                     "Secure decrypt called with encrypted range {:?}",
                     encrypted_range
                 );
-                let decrypted_size = self.security_policy.symmetric_decrypt(
-                    keys,
-                    &src[encrypted_range.clone()],
-                    &mut decrypted_tmp[..],
-                )?;
+                let decrypted_size = SYMMETRIC_DECRYPT_SCRATCH.with(|scratch| {
+                    let mut decrypted_tmp = scratch.borrow_mut();
+                    decrypted_tmp.clear();
+                    decrypted_tmp.resize(ciphertext_size + 16, 0);
+                    let decrypted_size = self.security_policy.symmetric_decrypt(
+                        keys,
+                        &src[encrypted_range.clone()],
+                        &mut decrypted_tmp[..],
+                    )?;
 
-                // Self::log_crypto_data("Encrypted buffer", &src[..encrypted_range.end]);
+                    // Self::log_crypto_data("Encrypted buffer", &src[..encrypted_range.end]);
+                    let decrypted_range =
+                        encrypted_range.start..(encrypted_range.start + decrypted_size);
+                    dst[decrypted_range].copy_from_slice(&decrypted_tmp[..decrypted_size]);
+                    Ok::<usize, Error>(decrypted_size)
+                })?;
+
                 let encrypted_range =
                     encrypted_range.start..(encrypted_range.start + decrypted_size);
-                dst[encrypted_range.clone()].copy_from_slice(&decrypted_tmp[..decrypted_size]);
                 Self::log_crypto_data("Decrypted buffer", &dst[..encrypted_range.end]);
 
                 // Verify signature (after encrypted portion)

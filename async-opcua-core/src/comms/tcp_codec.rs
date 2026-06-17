@@ -250,9 +250,8 @@ impl TcpCodec {
                 decoding_options,
             )?)),
             MessageType::Chunk => {
-                let mut stream = std::io::Cursor::new(bytes_mut.as_ref());
-                let chunk = MessageChunk::decode(&mut stream, decoding_options)?;
-                bytes::Buf::advance(bytes_mut, stream.position() as usize);
+                let mut bytes = bytes_mut.split_to(bytes_mut.len()).freeze();
+                let chunk = MessageChunk::decode_zero_copy(&mut bytes, decoding_options)?;
                 Ok(Message::Chunk(chunk))
             }
             MessageType::ReverseHello => Ok(Message::ReverseHello(ReverseHelloMessage::decode(

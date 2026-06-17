@@ -11,6 +11,7 @@ dependencies = [
  "cfg-if",
  "cipher",
  "cpufeatures",
+ "zeroize",
 ]
 
 [[package]]
@@ -397,6 +398,7 @@ dependencies = [
  "parking_lot",
  "rsa",
  "serde",
+ "socket2 0.6.2",
  "tokio",
  "tokio-util",
  "tracing",
@@ -656,6 +658,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "socket2 0.6.2",
  "tokio",
  "tokio-util",
  "tracing",

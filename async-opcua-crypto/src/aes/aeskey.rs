@@ -8,7 +8,9 @@ use std::fmt::{Debug, Formatter};
 use std::result::Result;
 
 use aes::cipher::generic_array::GenericArray;
-use aes::cipher::{block_padding::NoPadding, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
+use aes::cipher::{
+    block_padding::NoPadding, BlockDecryptMut, BlockEncryptMut, InnerIvInit, KeyInit,
+};
 
 use opcua_types::status_code::StatusCode;
 use opcua_types::Error;
@@ -24,9 +26,16 @@ type AesArray256 = GenericArray<u8, <aes::Aes256 as aes::cipher::KeySizeUser>::K
 
 type EncryptResult = Result<usize, Error>;
 
+enum AesKeySchedule {
+    Aes128(aes::Aes128),
+    Aes256(aes::Aes256),
+    Invalid,
+}
+
 /// Wrapper around an AES key.
 pub struct AesKey {
     value: Zeroizing<Vec<u8>>,
+    schedule: AesKeySchedule,
 }
 
 impl Debug for AesKey {
@@ -38,8 +47,14 @@ impl Debug for AesKey {
 impl AesKey {
     /// Create a new AES key with the given security policy and raw value.
     pub fn new(value: Vec<u8>) -> AesKey {
+        let schedule = match value.len() {
+            16 => AesKeySchedule::Aes128(aes::Aes128::new(AesArray128::from_slice(&value))),
+            32 => AesKeySchedule::Aes256(aes::Aes256::new(AesArray256::from_slice(&value))),
+            _ => AesKeySchedule::Invalid,
+        };
         AesKey {
             value: Zeroizing::new(value),
+            schedule,
         }
     }
 
@@ -54,12 +69,13 @@ impl AesKey {
         iv: &[u8],
         dst: &mut [u8],
     ) -> EncryptResult {
-        Aes128CbcEnc::new(
-            AesArray128::from_slice(&self.value),
-            AesArray128::from_slice(iv),
-        )
-        .encrypt_padded_b2b_mut::<NoPadding>(src, dst)
-        .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e.to_string()))?;
+        if let AesKeySchedule::Aes128(cipher) = &self.schedule {
+            Aes128CbcEnc::inner_iv_init(cipher.clone(), AesArray128::from_slice(iv))
+                .encrypt_padded_b2b_mut::<NoPadding>(src, dst)
+                .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e.to_string()))?;
+        } else {
+            AesArray128::from_slice(&self.value);
+        }
         Ok(src.len())
     }
 
@@ -69,12 +85,13 @@ impl AesKey {
         iv: &[u8],
         dst: &mut [u8],
     ) -> EncryptResult {
-        Aes256CbcEnc::new(
-            AesArray256::from_slice(&self.value),
-            AesArray128::from_slice(iv),
-        )
-        .encrypt_padded_b2b_mut::<NoPadding>(src, dst)
-        .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e.to_string()))?;
+        if let AesKeySchedule::Aes256(cipher) = &self.schedule {
+            Aes256CbcEnc::inner_iv_init(cipher.clone(), AesArray128::from_slice(iv))
+                .encrypt_padded_b2b_mut::<NoPadding>(src, dst)
+                .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e.to_string()))?;
+        } else {
+            AesArray256::from_slice(&self.value);
+        }
         Ok(src.len())
     }
 
@@ -84,12 +101,13 @@ impl AesKey {
         iv: &[u8],
         dst: &mut [u8],
     ) -> EncryptResult {
-        Aes128CbcDec::new(
-            AesArray128::from_slice(&self.value),
-            AesArray128::from_slice(iv),
-        )
-        .decrypt_padded_b2b_mut::<NoPadding>(src, dst)
-        .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e.to_string()))?;
+        if let AesKeySchedule::Aes128(cipher) = &self.schedule {
+            Aes128CbcDec::inner_iv_init(cipher.clone(), AesArray128::from_slice(iv))
+                .decrypt_padded_b2b_mut::<NoPadding>(src, dst)
+                .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e.to_string()))?;
+        } else {
+            AesArray128::from_slice(&self.value);
+        }
         Ok(src.len())
     }
 
@@ -99,12 +117,13 @@ impl AesKey {
         iv: &[u8],
         dst: &mut [u8],
     ) -> EncryptResult {
-        Aes256CbcDec::new(
-            AesArray256::from_slice(&self.value),
-            AesArray128::from_slice(iv),
-        )
-        .decrypt_padded_b2b_mut::<NoPadding>(src, dst)
-        .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e.to_string()))?;
+        if let AesKeySchedule::Aes256(cipher) = &self.schedule {
+            Aes256CbcDec::inner_iv_init(cipher.clone(), AesArray128::from_slice(iv))
+                .decrypt_padded_b2b_mut::<NoPadding>(src, dst)
+                .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e.to_string()))?;
+        } else {
+            AesArray256::from_slice(&self.value);
+        }
         Ok(src.len())
     }
 }

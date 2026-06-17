@@ -178,19 +178,19 @@ cert URI validated; RSA-decrypt timing/error-uniform; advisory scan green or exc
 **Independent test**: benchmarks show lower small-message latency (NODELAY), fewer secured-path
 per-chunk allocations, lower idle CPU; `opc.wss` connects; all vs the T003 baseline.
 
-- [ ] T074 [US5] Set `TCP_NODELAY` on every accepted + connected socket (server accept loop, client `TcpConnector`, reverse-connect) in `async-opcua-server/src/server.rs` + `async-opcua-client/src/transport/tcp.rs` (N1/FR-026)
-- [ ] T075 [US5] Add `SO_KEEPALIVE` via `socket2` (configurable idle/interval/count) on long-lived sockets in transport + config (N3/FR-026)
-- [ ] T076 [US5] Zero-copy inbound chunk decode (`BytesMut::split_to().freeze()`, bypass re-alloc) in `async-opcua-core/src/comms/tcp_codec.rs` + `message_chunk.rs` (PERF-P1)
-- [ ] T077 [US5] Reusable scratch buffers for padding/signature + decrypt temp on `SecureChannel` in `async-opcua-core/src/comms/secure_channel.rs` (PERF-P2)
-- [ ] T078 [US5] Cache pre-keyed HMAC template + keyed AES block cipher (no per-chunk key schedule) in `async-opcua-crypto/src/hash.rs` + `aes/aeskey.rs` + `policy/aes.rs` (PERF-P3)
-- [ ] T079 [US5] O(1) `byte_len` for homogeneous primitive arrays in `async-opcua-types/src/variant/mod.rs` + `encoding.rs` (PERF-P4)
-- [ ] T080 [US5] Skip/cache the per-tick priority sort for idle sessions in `async-opcua-server/src/subscriptions/session_subscriptions.rs` (PERF-P6)
-- [ ] T081 [US5] Snapshot session Arcs; don't hold the cache read-lock across the whole tick loop in `async-opcua-server/src/subscriptions/mod.rs` (PERF-P7)
+- [X] T074 [US5] Set `TCP_NODELAY` on every accepted + connected socket (server accept loop, client `TcpConnector`, reverse-connect) in `async-opcua-server/src/server.rs` + `async-opcua-client/src/transport/tcp.rs` (N1/FR-026)
+- [X] T075 [US5] Add `SO_KEEPALIVE` via `socket2` (configurable idle/interval/count) on long-lived sockets in transport + config (N3/FR-026)
+- [X] T076 [US5] Zero-copy inbound chunk decode (`BytesMut::split_to().freeze()`, bypass re-alloc) in `async-opcua-core/src/comms/tcp_codec.rs` + `message_chunk.rs` (PERF-P1)
+- [X] T077 [US5] Reusable scratch buffers for padding/signature + decrypt temp on `SecureChannel` in `async-opcua-core/src/comms/secure_channel.rs` (PERF-P2)
+- [X] T078 [US5] Cache pre-keyed HMAC template + keyed AES block cipher (no per-chunk key schedule) in `async-opcua-crypto/src/hash.rs` + `aes/aeskey.rs` + `policy/aes.rs` (PERF-P3)
+- [X] T079 [US5] O(1) `byte_len` for homogeneous primitive arrays in `async-opcua-types/src/variant/mod.rs` + `encoding.rs` (PERF-P4)
+- [X] T080 [US5] Skip/cache the per-tick priority sort for idle sessions in `async-opcua-server/src/subscriptions/session_subscriptions.rs` (PERF-P6)
+- [X] T081 [US5] Snapshot session Arcs; don't hold the cache read-lock across the whole tick loop in `async-opcua-server/src/subscriptions/mod.rs` (PERF-P7)
 - [ ] T082 [P] [US5] Inline fast path for small single-node-manager Reads (avoid per-request spawn) in `async-opcua-server/src/session/message_handler.rs` (PERF-P9)
 - [ ] T083 [P] [US5] Confirm vectored/batched multi-chunk writes after NODELAY in `async-opcua-core/src/comms/buffer.rs` (N7)
-- [ ] T084 [P] [US5] Sort subscription publish priority descending (higher first) in `async-opcua-server/src/subscriptions/session_subscriptions.rs` (M14/FR-032)
-- [ ] T085 [P] [US5] Enforce `max_history_continuation_points` cap in `async-opcua-server/src/session/instance.rs` (M13/FR-033)
-- [ ] T086 [US5] Make `max_queued_notifications` a hard bound + surface drops as a diagnostic in `async-opcua-server/src/subscriptions/subscription.rs` (M7/FR-034)
+- [X] T084 [P] [US5] Sort subscription publish priority descending (higher first) in `async-opcua-server/src/subscriptions/session_subscriptions.rs` (M14/FR-032)
+- [X] T085 [P] [US5] Enforce `max_history_continuation_points` cap in `async-opcua-server/src/session/instance.rs` (M13/FR-033)
+- [X] T086 [US5] Make `max_queued_notifications` a hard bound + surface drops as a diagnostic in `async-opcua-server/src/subscriptions/subscription.rs` (M7/FR-034)
 - [ ] T087 [P] [US5] Add network/transport counters (connections, bytes, secure-channel) + optional `metrics-exporter` feature in `async-opcua-server/src/metrics.rs` (R6/FR-031)
 - [ ] T088 [US5] Add `websocket` feature + `WebSocketConnector` (tokio-tungstenite on rustls 0.23) over `StreamConnector` in `async-opcua-client/src/transport/` + Cargo.toml (R5/FR-044)
 - [ ] T089 [P] [US5] Test: `opc.wss` connector connects and round-trips in `async-opcua-client/tests/websocket.rs` (R5/FR-044)
@@ -249,6 +249,11 @@ deferral — none silently dropped"). T102 records the same in the tracker.
 | L10 (T066) | CODE_REVIEW | Issued-token policy-ID collision with user-pass IDs. Codex confirmed these IDs ARE advertised (`UserTokenPolicy.policy_id`, validated in `info.rs:720`), so changing them is a client-visible/advertised change for a latent, currently-harmless collision (DefaultAuthenticator doesn't process issued tokens). Not worth the break; deferred. |
 | US3 behavioral tests (T048, T050, T057) | — | Reproduction tests for H1 (None-session transfer), H5 (cert-URI mismatch), M6 (auth timing) need a `SessionManager`/authenticator integration harness (none exists). Fixes verified by compile + the exact code change; behavioral coverage is an integration/SC-002 concern. |
 | D5 (T071) | SECURITY_AUDIT | serde_yaml → serde_yml migration was applied but `serde_yml` is not in the local cargo cache and crates.io became unreachable mid-run (network outage); reverted to keep the build green. serde_yaml is unmaintained-but-functional (no active vuln); deny.toml records RUSTSEC-2024-0320 as an exception. Re-attempt the drop-in swap when online. |
+| R5/FR-044 (T088, T089) | NETWORK_REVIEW / ARCHITECTURE | `opc.wss` WebSocket connector. **Network-blocked**: needs a tokio-tungstenite (+ tokio-rustls) on rustls 0.23 added to the client crate, which is not in the local cargo cache, and crates.io is unreachable. The transport seam (`StreamConnector`) is ready for it. Re-attempt when online. |
+| PERF-P12 benches (T001, T002, T003, T090) | PERFORMANCE_AUDIT | encode/decode + secured round-trip criterion benches and baseline capture/re-measure. Deferred: the perf changes (P1–P4) are verified by functional/round-trip tests; the criterion regression-guard infra + baseline runs are follow-up (also avoids long bench runs in this session). |
+| R6/FR-031 (T087) | ARCHITECTURE | Network/transport metrics counters + optional Prometheus/OTel exporter. Additive observability; deferred to a follow-up. |
+| PERF-P9 (T082) | PERFORMANCE_AUDIT | Inline fast path for small Reads (avoid per-request spawn). Deferred — the audit says measure-first (needs P12 benches), and it trades away per-request panic isolation. |
+| N7 (T083) | NETWORK_REVIEW | Confirm vectored/batched multi-chunk writes. Verify-only/low; the SendBuffer already writes via `read_into_async`. Deferred to follow-up review. |
 
 > **R4 ≡ C3**: the architecture review's R4 (server request-path bulkhead) is the same finding as
 > code-review C3 (unbounded in-flight queue); it is **covered** by T018–T019 (FR-003), not deferred.

@@ -222,20 +222,21 @@ impl SubscriptionCache {
             let now = Utc::now();
             let now_instant = Instant::now();
             let mut buffer = pool::NotificationBuffer::new();
-            let lck = trace_read_lock!(self.inner);
-            for (session_id, sub) in lck.session_subscriptions.iter() {
+            let session_subscriptions = {
+                let lck = trace_read_lock!(self.inner);
+                lck.session_subscriptions
+                    .iter()
+                    .map(|(session_id, sub)| (*session_id, Arc::clone(sub)))
+                    .collect::<Vec<_>>()
+            };
+            for (session_id, sub) in session_subscriptions {
                 let mut sub_lck = sub.lock();
                 items_to_delete.push((
                     sub_lck.session().clone(),
-                    sub_lck.tick(
-                        &now,
-                        now_instant,
-                        TickReason::TickTimerFired,
-                        &mut buffer,
-                    ),
+                    sub_lck.tick(&now, now_instant, TickReason::TickTimerFired, &mut buffer),
                 ));
                 if sub_lck.is_ready_to_delete() {
-                    to_delete.push(*session_id);
+                    to_delete.push(session_id);
                 }
             }
         }

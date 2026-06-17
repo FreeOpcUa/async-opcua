@@ -61,7 +61,7 @@ tracing-futures = "0.2.5"
 url = "^2"
 uuid = { version = "^1", features = ["v4"] }
 
-aes = "^0.8"
+aes = { version = "^0.8", features = ["zeroize"] }
 cbc = "^0.1"
 const-oid = { version = "^0.9", features = ["db"] }
 hmac = "^0.12"

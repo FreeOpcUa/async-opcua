@@ -20,7 +20,7 @@ use rsa::{RsaPrivateKey, RsaPublicKey};
 
 use x509_cert::spki::SubjectPublicKeyInfoOwned;
 
-use opcua_types::{Error, status_code::StatusCode};
+use opcua_types::{status_code::StatusCode, Error};
 
 use crate::policy::aes::{AesAsymmetricEncryptionAlgorithm, RsaPrivateDecryptPadding};
 

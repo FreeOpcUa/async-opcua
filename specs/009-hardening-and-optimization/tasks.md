@@ -53,8 +53,8 @@ N6+M11 chunk ceiling). That is one differentiated unit of work, **not** batching
 - [ ] T003 Capture baseline numbers from T001/T002 into `specs/009-hardening-and-optimization/benchmarks-baseline.md` (FR-030/SC-006/SC-007 baseline)
 - [X] T004 [P] Add `deny.toml` at repo root (advisories/bans/sources) with a recorded `rsa` RUSTSEC-2023-0071 exception + review date (FR-022/SEC-P1)
 - [X] T005 Add a `cargo deny check advisories bans sources` CI job in `.github/workflows/` pinning a cargo-deny version that parses CVSS 4.0 (FR-022/SEC-P1)
-- [ ] T006 Wire the dotnet (`dotnet-tests/`) + open62541 (`3rd-party/open62541/`) interop harnesses as a required CI gate in `.github/workflows/main.yml` (FR-046/SC-010)
-- [ ] T007 [P] Add a three-config build-matrix CI job (default / `--all-features` / `--no-default-features`) with `-D warnings` in `.github/workflows/` (SC-008)
+- [~] T006 Wire the dotnet (`dotnet-tests/`) + open62541 (`3rd-party/open62541/`) interop harnesses as a required CI gate in `.github/workflows/main.yml` (FR-046/SC-010) — **dotnet leg DONE** (existing `test-external-server` job runs `external-tests`); **open62541 leg deferred (SC-009)**: it is raw C++ source (`client.cpp`/`server.cpp`/CMake) with no automated runner/orchestration, and no open62541 toolchain or network is available to build+verify a CI gate. See findings-tracker.
+- [X] T007 [P] Add a three-config build-matrix CI job (default / `--all-features` / `--no-default-features`) with `-D warnings` in `.github/workflows/main.yml` (SC-008)
 
 ---
 
@@ -64,7 +64,7 @@ N6+M11 chunk ceiling). That is one differentiated unit of work, **not** batching
 
 - [ ] T008 [P] Add malicious/malformed-input fixtures (crafted decode payloads, malformed identity tokens) under `async-opcua-types/tests/fixtures/` and `async-opcua-server/tests/fixtures/` (US1/US3 test infra)
 - [ ] T009 [P] Add a hostile-server mock harness (empty result arrays, unbounded chunks, stalled renewal, dropped TCP) under `async-opcua-client/tests/mock_server/` (US2 test infra)
-- [ ] T010 Create `specs/009-hardening-and-optimization/findings-tracker.md` mapping every finding → status / test-ref / owner (SC-009 traceability)
+- [X] T010 Create `specs/009-hardening-and-optimization/findings-tracker.md` mapping every finding → status / test-ref / owner (SC-009 traceability)
 
 ---
 
@@ -217,12 +217,12 @@ handle/context across boundaries; workspace builds with the new trait/type/featu
 
 ## Phase 9: Polish & Cross-Cutting (Release gating)
 
-- [ ] T099 Assemble `CHANGELOG.md` with every public-API break from `contracts/public-api-changes.md`; bump workspace version to **0.19.0** (SC-011)
-- [ ] T100 Run the full build matrix (default / `--all-features` / `--no-default-features`) warning-free + full test suite (SC-008)
-- [ ] T101 Run the hard interop gate (dotnet + open62541) and confirm pass (SC-010/FR-046)
-- [ ] T102 Update `findings-tracker.md`: every finding `fixed` (with test ref) or `deferred` (with rationale); verify SC-009 (no silent drops)
-- [ ] T103 [P] Verify SC-003: a full connect→activate→subscribe→disconnect capture shows no secret in logs/Debug — observe via `tracing` capture in `async-opcua-server`/`-client` integration tests
-- [ ] T104 [P] Update README/docs for new config + features (`websocket`, `legacy-crypto` opt-out) and the `aws-lc-rs` build note
+- [X] T099 Assemble `CHANGELOG.md` with every public-API break from `contracts/public-api-changes.md`; bump workspace version to **0.19.0** (SC-011)
+- [X] T100 Run the full build matrix (default / `--all-features` / `--no-default-features`) warning-free + full test suite (SC-008) — all three configs build under `-D warnings` (libs for `--no-default-features`; samples need json/xml); `cargo test --workspace --all-features` green (80 suites, 0 failures)
+- [ ] T101 Run the hard interop gate (dotnet + open62541) and confirm pass (SC-010/FR-046) — **deferred (SC-009)**: cannot run locally (no .NET runtime / no open62541 toolchain / network unreachable). dotnet leg is wired as a CI gate (`test-external-server`); see findings-tracker.
+- [X] T102 Update `findings-tracker.md`: every finding `fixed` (with test ref) or `deferred` (with rationale); verify SC-009 (no silent drops) — tracker lists all fixed findings (task + commit + test ref) and all deferrals (rationale), mirroring the tasks.md deferral table
+- [X] T103 [P] Verify SC-003: a full connect→activate→subscribe→disconnect capture shows no secret in logs/Debug — observe via `tracing` capture in `async-opcua-server`/`-client` integration tests — verified: `RUST_LOG=trace` username/password lifecycle shows 0 occurrences of the plaintext password; only the `password_security_policy` config field name appears
+- [X] T104 [P] Update `docs/setup.md` for the `legacy-crypto` opt-out (default-off) feature + runtime `allow_legacy_crypto` gate and the `aws-lc-rs` build note (C-compiler requirement). `websocket` intentionally **not** documented — that feature (T088) is deferred/unimplemented; documenting a non-existent feature would be incorrect.
 
 ---
 

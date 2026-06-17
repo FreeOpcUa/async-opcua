@@ -463,3 +463,28 @@ fn encrypt_decrypt_password() {
         String::from_utf8(password2.value.unwrap().to_vec()).unwrap()
     );
 }
+
+#[test]
+fn private_decrypt_rejects_non_block_aligned_ciphertext() {
+    // Regression (CRITICAL panic audit): a crafted OpenSecureChannel chunk whose
+    // RSA-encrypted span is not a whole multiple of the cipher block size must be
+    // rejected with an error, not slice out of bounds and panic. Empty input is a
+    // multiple of the block size and is a harmless no-op (returns 0).
+    let (_, private_key) = make_test_cert_2048();
+    let mut dst = vec![0u8; 1024];
+
+    // 1 byte and block+1 byte are never whole multiples of the (256-byte) block.
+    assert!(private_key
+        .private_decrypt::<Pkcs1v15>(&[0u8; 1], &mut dst)
+        .is_err());
+    assert!(private_key
+        .private_decrypt::<OaepSha256>(&[0u8; 257], &mut dst)
+        .is_err());
+    // Empty ciphertext stays allowed and decrypts to nothing.
+    assert_eq!(
+        private_key
+            .private_decrypt::<Pkcs1v15>(&[], &mut dst)
+            .unwrap(),
+        0
+    );
+}

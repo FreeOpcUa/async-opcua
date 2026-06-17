@@ -31,7 +31,7 @@ use crate::{
 // This is an arbitrary limit which should never be reached in practice,
 // it's just a safety net to prevent the client from consuming too much
 // memory if it gets into an unexpected (bad) state.
-const MAX_INFLIGHT_MESSAGES: usize = 1_000_000;
+const MAX_INFLIGHT_MESSAGES: usize = 1_024;
 
 /// Wrapper around an open secure channel
 pub struct AsyncSecureChannel {

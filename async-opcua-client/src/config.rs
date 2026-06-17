@@ -713,14 +713,23 @@ mod tests {
     #[test]
     fn us2_client_hardening_defaults() {
         let c = ClientConfig::default();
-        assert_eq!(c.max_failed_keep_alive_count, 3, "N8: keep-alive detection must be on by default");
+        assert_eq!(
+            c.max_failed_keep_alive_count, 3,
+            "N8: keep-alive detection must be on by default"
+        );
         assert_eq!(
             c.connect_timeout,
             std::time::Duration::from_secs(10),
             "N2: a TCP connect timeout must be set"
         );
-        assert_eq!(c.channel_lifetime, 600_000, "M10/N9: channel lifetime should be 10 min");
-        assert!(!c.trust_server_certs, "M9: server certs must not be auto-trusted by default");
+        assert_eq!(
+            c.channel_lifetime, 600_000,
+            "M10/N9: channel lifetime should be 10 min"
+        );
+        assert!(
+            !c.trust_server_certs,
+            "M9: server certs must not be auto-trusted by default"
+        );
     }
 
     fn sample_builder() -> ClientBuilder {

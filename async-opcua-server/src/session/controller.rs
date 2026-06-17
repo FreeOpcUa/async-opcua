@@ -4,8 +4,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-use futures::{future::Either, stream::FuturesUnordered, Future, StreamExt};
-use opcua_core::{trace_read_lock, trace_write_lock, Message, RequestMessage, ResponseMessage};
+use futures::{Future, StreamExt, future::Either, stream::FuturesUnordered};
+use opcua_core::{Message, RequestMessage, ResponseMessage, trace_read_lock, trace_write_lock};
 use tracing::{debug, debug_span, error, trace, warn};
 
 use opcua_core::{
@@ -30,17 +30,17 @@ use crate::{
     info::ServerInfo,
     node_manager::NodeManagers,
     subscriptions::SubscriptionCache,
-    transport::tcp::{Request, TcpTransport, TransportPollResult},
     transport::Connector,
+    transport::tcp::{ConnectionTransport, Request, TransportPollResult},
 };
 
 use super::{
     audit::{
-        dispatch_activate_session_failure, dispatch_response_failure, dispatch_service_failure,
-        AuditEventContext,
+        AuditEventContext, dispatch_activate_session_failure, dispatch_response_failure,
+        dispatch_service_failure,
     },
     instance::Session,
-    manager::{activate_session, close_session, SessionManager},
+    manager::{SessionManager, activate_session, close_session},
     message_handler::MessageHandler,
 };
 
@@ -75,9 +75,9 @@ pub(crate) enum ControllerCommand {
 type PendingMessageResponse = dyn Future<Output = Result<Response, String>> + Send + Sync + 'static;
 
 /// Master type managing a single connection.
-pub(crate) struct SessionController {
+pub(crate) struct SessionController<T: ConnectionTransport> {
     channel: SecureChannel,
-    transport: TcpTransport,
+    transport: T,
     secure_channel_state: SecureChannelState,
     session_manager: Arc<RwLock<SessionManager>>,
     certificate_store: Arc<RwLock<CertificateStore>>,
@@ -114,7 +114,11 @@ pub(crate) struct SessionStarter<T> {
     subscriptions: Arc<SubscriptionCache>,
 }
 
-impl<T: Connector> SessionStarter<T> {
+impl<T> SessionStarter<T>
+where
+    T: Connector,
+    T::Transport: ConnectionTransport,
+{
     pub(crate) fn new(
         connector: T,
         info: Arc<ServerInfo>,
@@ -181,9 +185,9 @@ impl<T: Connector> SessionStarter<T> {
     }
 }
 
-impl SessionController {
+impl<T: ConnectionTransport> SessionController<T> {
     fn new(
-        transport: TcpTransport,
+        transport: T,
         session_manager: Arc<RwLock<SessionManager>>,
         certificate_store: Arc<RwLock<CertificateStore>>,
         info: Arc<ServerInfo>,
@@ -336,7 +340,7 @@ impl SessionController {
                 let _h = span.enter();
                 let res = self.open_secure_channel(
                     &req.chunk_info.security_header,
-                    self.transport.client_protocol_version,
+                    self.transport.client_protocol_version(),
                     &r,
                 );
                 if res.is_ok() {

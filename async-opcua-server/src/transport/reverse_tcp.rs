@@ -14,8 +14,8 @@ use tracing::{debug, warn};
 use tracing_futures::Instrument;
 
 use crate::transport::{
-    tcp::{TcpConnector, TransportConfig},
     Connector,
+    tcp::{TcpConnector, TransportConfig},
 };
 
 pub(crate) struct ReverseTcpConnector {
@@ -96,11 +96,13 @@ impl ReverseTcpConnector {
 }
 
 impl Connector for ReverseTcpConnector {
+    type Transport = super::tcp::TcpTransport;
+
     async fn connect(
         mut self,
         info: std::sync::Arc<crate::ServerInfo>,
         token: tokio_util::sync::CancellationToken,
-    ) -> Result<super::tcp::TcpTransport, opcua_types::StatusCode> {
+    ) -> Result<Self::Transport, opcua_types::StatusCode> {
         tokio::select! {
             _ = tokio::time::sleep_until(self.deadline.into()) => {
                 debug!("Timeout sending REVERSE HELLO to {}", self.target);

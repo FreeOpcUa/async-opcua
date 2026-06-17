@@ -1076,14 +1076,12 @@ impl SecureChannel {
             let extra_padding_byte = src[padding_end - 1];
             let padding_size = ((extra_padding_byte as usize) << 8) + (padding_byte as usize);
             let padding_range_start =
-                padding_end
-                    .checked_sub(padding_size + 2)
-                    .ok_or_else(|| {
-                        Error::new(
-                            StatusCode::BadSecurityChecksFailed,
-                            "padding size exceeds chunk",
-                        )
-                    })?;
+                padding_end.checked_sub(padding_size + 2).ok_or_else(|| {
+                    Error::new(
+                        StatusCode::BadSecurityChecksFailed,
+                        "padding size exceeds chunk",
+                    )
+                })?;
             let padding_range = padding_range_start..padding_end;
 
             trace!("Extra padding - extra_padding_byte = {}, padding_byte = {}, padding_end = {}, padding_size = {}", extra_padding_byte, padding_byte, padding_end, padding_size);
@@ -1114,14 +1112,12 @@ impl SecureChannel {
             let padding_byte = src[padding_end - 1];
             let padding_size = padding_byte as usize;
             let padding_range_start =
-                padding_end
-                    .checked_sub(padding_size + 1)
-                    .ok_or_else(|| {
-                        Error::new(
-                            StatusCode::BadSecurityChecksFailed,
-                            "padding size exceeds chunk",
-                        )
-                    })?;
+                padding_end.checked_sub(padding_size + 1).ok_or_else(|| {
+                    Error::new(
+                        StatusCode::BadSecurityChecksFailed,
+                        "padding size exceeds chunk",
+                    )
+                })?;
             let padding_range = padding_range_start..padding_end;
             // Check padding bytes
             Self::check_padding_bytes(

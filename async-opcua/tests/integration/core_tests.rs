@@ -496,8 +496,8 @@ impl AuthManager for IssuedTokenAuthenticator {
         _endpoint: &ServerEndpoint,
         token: &ByteString,
     ) -> Result<UserToken, Error> {
-        let token_str =
-            String::from_utf8(token.value.clone().unwrap_or_default().to_vec()).map_err(Error::decoding)?;
+        let token_str = String::from_utf8(token.value.clone().unwrap_or_default().to_vec())
+            .map_err(Error::decoding)?;
         if token_str == valid_issued_jwt() {
             Ok(UserToken("valid".into()))
         } else {

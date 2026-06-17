@@ -48,9 +48,9 @@ N6+M11 chunk ceiling). That is one differentiated unit of work, **not** batching
 
 **Purpose**: establish the validation harness every later task is measured against.
 
-- [ ] T001 [P] Add criterion benches to `async-opcua-types/benches/encoding.rs` (encode/decode of small ReadRequest, large array DataValue, big ByteString) (FR-030/PERF-P12)
-- [ ] T002 [P] Add criterion bench to `async-opcua-core/benches/secure_channel.rs` for `encode_into → apply_security → verify` round-trip across None/Sign/SignAndEncrypt (FR-030/PERF-P12)
-- [ ] T003 Capture baseline numbers from T001/T002 into `specs/009-hardening-and-optimization/benchmarks-baseline.md` (FR-030/SC-006/SC-007 baseline)
+- [X] T001 [P] Add criterion benches to `async-opcua-types/benches/encoding.rs` (encode/decode of small ReadRequest, large array DataValue, big ByteString) (FR-030/PERF-P12) — compiles + runs; produces numbers for all 6 cases
+- [X] T002 [P] Add criterion bench to `async-opcua-core/benches/secure_channel.rs` for `encode → apply_security → verify` round-trip across None/Sign/SignAndEncrypt (Basic256Sha256) (FR-030/PERF-P12) — runs green
+- [X] T003 Capture baseline numbers from T001/T002 into `specs/009-hardening-and-optimization/benchmarks-baseline.md` (FR-030/SC-006/SC-007 baseline)
 - [X] T004 [P] Add `deny.toml` at repo root (advisories/bans/sources) with a recorded `rsa` RUSTSEC-2023-0071 exception + review date (FR-022/SEC-P1)
 - [X] T005 Add a `cargo deny check advisories bans sources` CI job in `.github/workflows/` pinning a cargo-deny version that parses CVSS 4.0 (FR-022/SEC-P1)
 - [~] T006 Wire the dotnet (`dotnet-tests/`) + open62541 (`3rd-party/open62541/`) interop harnesses as a required CI gate in `.github/workflows/main.yml` (FR-046/SC-010) — **dotnet leg DONE** (existing `test-external-server` job runs `external-tests`); **open62541 leg deferred (SC-009)**: it is raw C++ source (`client.cpp`/`server.cpp`/CMake) with no automated runner/orchestration, and no open62541 toolchain or network is available to build+verify a CI gate. See findings-tracker.
@@ -194,7 +194,7 @@ per-chunk allocations, lower idle CPU; `opc.wss` connects; all vs the T003 basel
 - [ ] T087 [P] [US5] Add network/transport counters (connections, bytes, secure-channel) + optional `metrics-exporter` feature in `async-opcua-server/src/metrics.rs` (R6/FR-031)
 - [ ] T088 [US5] Add `websocket` feature + `WebSocketConnector` (tokio-tungstenite on rustls 0.23) over `StreamConnector` in `async-opcua-client/src/transport/` + Cargo.toml (R5/FR-044)
 - [ ] T089 [P] [US5] Test: `opc.wss` connector connects and round-trips in `async-opcua-client/tests/websocket.rs` (R5/FR-044)
-- [ ] T090 [US5] Re-run benches; verify SC-006/SC-007 improvements vs the T003 baseline; record in `benchmarks-baseline.md` (PERF-P12/SC-006/SC-007)
+- [~] T090 [US5] Re-run benches; verify SC-006/SC-007 improvements vs the T003 baseline; record in `benchmarks-baseline.md` (PERF-P12/SC-006/SC-007) — benches exist + run; the P1–P10 work landed (US5/US6) *before* the benches, so they capture the optimized state as the going-forward baseline. A strict pre-009-vs-post-009 delta needs the pre-009 commit re-benched (recorded in benchmarks-baseline.md "SC-006/SC-007 status")
 
 ---
 
@@ -211,7 +211,7 @@ handle/context across boundaries; workspace builds with the new trait/type/featu
 - [X] T095 [P] [US6] Surface `byte_len`/`encode` mismatch as error/assertion (not silent zero-pad corruption) in `async-opcua-core/src/comms/chunker.rs` (M2/FR-038)
 - [X] T096 [US6] Make `ByteString` `Bytes`-backed (zero-copy decode) + update consumers in `async-opcua-types/src/byte_string.rs` (PERF-P5/FR-045)
 - [X] T097 [US6] `Arc`-back large `Variant` array payloads + share retransmission `NotificationMessage` via `Arc` in `async-opcua-types/src/variant/mod.rs` + `async-opcua-server/src/subscriptions/` (PERF-P10/FR-045)
-- [ ] T098 [P] [US6] Bench re-measure PERF-P5/PERF-P10 (ByteString decode, notify fan-out) vs baseline in benches (PERF-P5/PERF-P10)
+- [~] T098 [P] [US6] Bench re-measure PERF-P5/PERF-P10 (ByteString decode, notify fan-out) vs baseline in benches (PERF-P5/PERF-P10) — the `encoding` bench covers the PERF-P5 `Bytes`-backed ByteString decode + large-array paths (baseline captured); strict before/after delta carries the same caveat as T090
 
 ---
 
@@ -249,7 +249,6 @@ deferral — none silently dropped"). T102 records the same in the tracker.
 | L10 (T066) | CODE_REVIEW | Issued-token policy-ID collision with user-pass IDs. Codex confirmed these IDs ARE advertised (`UserTokenPolicy.policy_id`, validated in `info.rs:720`), so changing them is a client-visible/advertised change for a latent, currently-harmless collision (DefaultAuthenticator doesn't process issued tokens). Not worth the break; deferred. |
 | US3 behavioral tests (T048, T050, T057) | — | Reproduction tests for H1 (None-session transfer), H5 (cert-URI mismatch), M6 (auth timing) need a `SessionManager`/authenticator integration harness (none exists). Fixes verified by compile + the exact code change; behavioral coverage is an integration/SC-002 concern. |
 | R5/FR-044 (T088, T089) | NETWORK_REVIEW / ARCHITECTURE | `opc.wss` WebSocket connector. **Network-blocked**: needs a tokio-tungstenite (+ tokio-rustls) on rustls 0.23 added to the client crate, which is not in the local cargo cache, and crates.io is unreachable. The transport seam (`StreamConnector`) is ready for it. Re-attempt when online. |
-| PERF-P12 benches (T001, T002, T003, T090) | PERFORMANCE_AUDIT | encode/decode + secured round-trip criterion benches and baseline capture/re-measure. Deferred: the perf changes (P1–P4) are verified by functional/round-trip tests; the criterion regression-guard infra + baseline runs are follow-up (also avoids long bench runs in this session). |
 | R6/FR-031 (T087) | ARCHITECTURE | Network/transport metrics counters + optional Prometheus/OTel exporter. Additive observability; deferred to a follow-up. |
 | PERF-P9 (T082) | PERFORMANCE_AUDIT | Inline fast path for small Reads (avoid per-request spawn). Deferred — the audit says measure-first (needs P12 benches), and it trades away per-request panic isolation. |
 

@@ -43,6 +43,11 @@ async-opcua-xml = { path = "../async-opcua-xml", optional = true, version = "0.1
 [dev-dependencies]
 async-opcua-types = { path = ".", features = ["xml", "json"] }
 serde_json = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name = "encoding"
+harness = false
 
 [package.metadata.docs.rs]
 all-features = true

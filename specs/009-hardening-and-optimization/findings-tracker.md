@@ -68,6 +68,7 @@ one leg done, remainder deferred.
 | PERF-P6, P7 | — | T080–T081 | `a903156f` | core tests |
 | N7 vectored multi-chunk writes | — | T083 | `a903156f` | `test_buffer_read_uses_vectored_write` (scalar=0, vectored=1) |
 | PERF-P10 Arc-shared retransmission (FR-045) | — | T097 | `6ea75c21` | server subscription tests |
+| PERF-P12 encode/decode + secure-channel benches | — | T001/T002/T003 | (US5 follow-up) | criterion benches run; baseline in benchmarks-baseline.md (T090/T098 caveat: benches added post-optimization) |
 | R2 `Error` at service boundaries (FR-037) | — | T094 | `6ea75c21` | client/server compile + tests |
 | R3 NodeManager capability traits (FR-043) | — | T093 | `6ea75c21` | server compile + tests |
 | D1 aws-lc-rs constant-time RSA (FR-042) | — | T054–T055 | `547cbfbd` | crypto tests; documented in `docs/setup.md` |

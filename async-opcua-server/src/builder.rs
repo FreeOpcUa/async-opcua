@@ -1,7 +1,7 @@
-#[cfg(feature = "wss")]
-use std::{fs::File, io::BufReader};
 use std::{path::PathBuf, sync::Arc};
 
+#[cfg(feature = "wss")]
+use rustls_pki_types::{pem::PemObject, CertificateDer, PrivateKeyDer};
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
@@ -581,14 +581,13 @@ fn build_wss_rustls_config(
     cert_path: PathBuf,
     key_path: PathBuf,
 ) -> Result<rustls::ServerConfig, String> {
-    let cert_file = File::open(&cert_path).map_err(|err| {
-        format!(
-            "Failed to open WSS TLS certificate {}: {err}",
-            cert_path.display()
-        )
-    })?;
-    let mut cert_reader = BufReader::new(cert_file);
-    let certs = rustls_pemfile::certs(&mut cert_reader)
+    let certs = CertificateDer::pem_file_iter(&cert_path)
+        .map_err(|err| {
+            format!(
+                "Failed to open WSS TLS certificate {}: {err}",
+                cert_path.display()
+            )
+        })?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|err| {
             format!(
@@ -603,26 +602,19 @@ fn build_wss_rustls_config(
         ));
     }
 
-    let key_file = File::open(&key_path).map_err(|err| {
-        format!(
-            "Failed to open WSS TLS private key {}: {err}",
-            key_path.display()
-        )
-    })?;
-    let mut key_reader = BufReader::new(key_file);
-    let key = rustls_pemfile::private_key(&mut key_reader)
-        .map_err(|err| {
-            format!(
-                "Failed to read WSS TLS private key {}: {err}",
-                key_path.display()
-            )
-        })?
-        .ok_or_else(|| {
+    let key = PrivateKeyDer::from_pem_file(&key_path).map_err(|err| {
+        if matches!(err, rustls_pki_types::pem::Error::NoItemsFound) {
             format!(
                 "WSS TLS private key file {} contains no private key",
                 key_path.display()
             )
-        })?;
+        } else {
+            format!(
+                "Failed to read WSS TLS private key {}: {err}",
+                key_path.display()
+            )
+        }
+    })?;
 
     rustls::ServerConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
         .with_safe_default_protocol_versions()

@@ -18,6 +18,28 @@ ignore = [
     # as a transitive dependency of `log4rs`, used by the demo-server sample — not by any
     # published async-opcua crate. Exception retained until log4rs drops/replaces serde_yaml.
     { id = "RUSTSEC-2024-0320", reason = "serde_yaml removed from all library crates (migrated to serde_norway, T071); remaining use is transitive via log4rs in the demo-server sample only" },
+
+    # The advisories below are NOT introduced by async-opcua's own code. They are newly
+    # published advisories against dependencies pulled transitively by the OPTIONAL MQTT
+    # pubsub path (`rumqttc`, latest 0.25.1 — no newer release to bump to) and by `log4rs`
+    # (sample/demo-server logging). They are present on `master`/upstream identically
+    # (rumqttc has shipped these versions for a long time). The core OPC UA transports
+    # (opc.tcp, and opc.wss which uses rustls 0.23 -> rustls-webpki 0.103.x) do NOT use the
+    # affected `rustls-webpki 0.102.8`. tempdir/remove_dir_all advisories were eliminated by
+    # migrating dev tests to `tempfile`. Re-evaluate when rumqttc/log4rs update.
+    #
+    # rustls-webpki 0.102.8 (via rumqttc's TLS stack — MQTT broker connection only):
+    { id = "RUSTSEC-2026-0049", reason = "rustls-webpki 0.102.8 via rumqttc (optional MQTT path); no rumqttc update; core opc.tcp/opc.wss use webpki 0.103.x. Affects master/upstream too." },
+    { id = "RUSTSEC-2026-0098", reason = "rustls-webpki 0.102.8 via rumqttc (optional MQTT path); no rumqttc update; core opc.tcp/opc.wss use webpki 0.103.x. Affects master/upstream too." },
+    { id = "RUSTSEC-2026-0099", reason = "rustls-webpki 0.102.8 via rumqttc (optional MQTT path); no rumqttc update; core opc.tcp/opc.wss use webpki 0.103.x. Affects master/upstream too." },
+    { id = "RUSTSEC-2026-0104", reason = "rustls-webpki 0.102.8 via rumqttc (optional MQTT path); no rumqttc update; core opc.tcp/opc.wss use webpki 0.103.x. Affects master/upstream too." },
+    # rustls-pemfile unmaintained — removed from async-opcua's own crates (migrated to
+    # rustls-pki-types); remaining use is transitive via rumqttc (optional MQTT path).
+    { id = "RUSTSEC-2025-0134", reason = "rustls-pemfile unmaintained; removed from async-opcua crates (now rustls-pki-types); remaining use is transitive via rumqttc (optional MQTT path), no upstream fix" },
+    # atomic-polyfill unmaintained — transitive via heapless <- rumqttc (optional MQTT path).
+    { id = "RUSTSEC-2023-0089", reason = "atomic-polyfill unmaintained; transitive via heapless <- rumqttc (optional MQTT path); no upstream fix" },
+    # instant unmaintained — transitive via fastrand / log4rs (sample logging).
+    { id = "RUSTSEC-2024-0384", reason = "instant unmaintained; transitive via fastrand/log4rs (sample/demo logging); no upstream fix" },
 ]
 
 [bans]

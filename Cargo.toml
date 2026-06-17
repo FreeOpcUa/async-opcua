@@ -67,7 +67,9 @@ uuid = { version = "^1", features = ["v4"] }
 tokio-tungstenite = { version = "0.26", default-features = false, features = ["handshake"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
-rustls-pemfile = "2"
+# PEM cert/key loading via the maintained rustls-pki-types (rustls-pemfile is unmaintained,
+# RUSTSEC-2025-0134; its functionality was folded into rustls-pki-types).
+rustls-pki-types = { version = "1", features = ["std"] }
 rustls-native-certs = "0.8"
 webpki-roots = "0.26"
 

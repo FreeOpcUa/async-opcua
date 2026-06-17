@@ -4,7 +4,7 @@
 
 //! Client connector for OPC UA over secure WebSockets.
 
-use std::{fmt::Debug, fs::File, io::BufReader, net::SocketAddr, sync::Arc, time::Duration};
+use std::{fmt::Debug, net::SocketAddr, sync::Arc, time::Duration};
 
 use opcua_core::comms::{
     tcp_codec::TcpCodec,
@@ -17,6 +17,7 @@ use rustls::{
     pki_types::{CertificateDer, ServerName, UnixTime},
     ClientConfig, DigitallySignedStruct, RootCertStore, SignatureScheme,
 };
+use rustls_pki_types::pem::PemObject;
 use tokio::{
     io::{ReadHalf, WriteHalf},
     net::TcpStream,
@@ -193,22 +194,26 @@ fn default_rustls_config(
         .extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
 
     if let Some(path) = extra_ca_pem {
-        let file = File::open(&path).map_err(|err| {
+        let certs = CertificateDer::pem_file_iter(&path).map_err(|err| {
             Error::new(
                 StatusCode::BadConfigurationError,
                 format!("Failed to open WSS CA PEM file {}: {err}", path.display()),
             )
         })?;
-        let mut reader = BufReader::new(file);
-        let certs = rustls_pemfile::certs(&mut reader)
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|err| {
+        for cert in certs {
+            let cert = cert.map_err(|err| {
                 Error::new(
                     StatusCode::BadConfigurationError,
                     format!("Failed to read WSS CA PEM file {}: {err}", path.display()),
                 )
             })?;
-        roots.add_parsable_certificates(certs);
+            roots.add(cert).map_err(|err| {
+                Error::new(
+                    StatusCode::BadConfigurationError,
+                    format!("Failed to add WSS CA certificate {}: {err}", path.display()),
+                )
+            })?;
+        }
     }
 
     let mut config =

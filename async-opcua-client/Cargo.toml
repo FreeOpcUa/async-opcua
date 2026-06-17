@@ -31,7 +31,7 @@ wss = [
   "dep:tokio-tungstenite",
   "dep:tokio-rustls",
   "dep:rustls",
-  "dep:rustls-pemfile",
+  "dep:rustls-pki-types",
   "dep:rustls-native-certs",
   "dep:webpki-roots",
 ]
@@ -55,7 +55,7 @@ tracing = { workspace = true }
 tokio-tungstenite = { workspace = true, optional = true }
 tokio-rustls = { workspace = true, optional = true }
 rustls = { workspace = true, optional = true }
-rustls-pemfile = { workspace = true, optional = true }
+rustls-pki-types = { workspace = true, optional = true }
 rustls-native-certs = { workspace = true, optional = true }
 webpki-roots = { workspace = true, optional = true }
 

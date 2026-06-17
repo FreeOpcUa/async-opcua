@@ -41,7 +41,10 @@ fn der_to_cert_pem(der: &[u8]) -> String {
 async fn wss_round_trip_none_policy() {
     let _ = env_logger::try_init();
 
-    let dir = tempdir::TempDir::new("wss-test").unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("wss-test")
+        .tempdir()
+        .unwrap();
     let tls_cert_der = dir.path().join("tls_cert.der");
     let tls_cert_pem = dir.path().join("tls_cert.pem");
     let tls_key_pem = dir.path().join("tls_key.pem");

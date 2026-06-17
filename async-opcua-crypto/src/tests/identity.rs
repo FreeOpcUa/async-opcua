@@ -64,7 +64,7 @@ fn create_signed_jwt(payload: serde_json::Value, private_key: &PrivateKey) -> St
     format!("{signing_input}.{encoded_signature}")
 }
 
-fn create_trusted_validator() -> (tempdir::TempDir, LocalOAuth2Validator, PrivateKey) {
+fn create_trusted_validator() -> (tempfile::TempDir, LocalOAuth2Validator, PrivateKey) {
     let (tmp_dir, cert_store) = make_certificate_store();
     let (cert, private_key) = make_test_cert_2048();
     let mut cert_path = cert_store.trusted_certs_dir();

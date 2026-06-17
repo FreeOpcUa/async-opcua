@@ -202,6 +202,6 @@ fn map_tungstenite_error(err: TungsteniteError) -> io::Error {
         TungsteniteError::ConnectionClosed | TungsteniteError::AlreadyClosed => {
             io::Error::new(ErrorKind::BrokenPipe, err)
         }
-        _ => io::Error::new(ErrorKind::Other, err),
+        _ => io::Error::other(err),
     }
 }

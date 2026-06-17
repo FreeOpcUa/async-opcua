@@ -115,6 +115,10 @@ impl Connector for WebSocketConnector {
     }
 }
 
+#[allow(
+    clippy::result_large_err,
+    reason = "tokio-tungstenite Callback requires ErrorResponse; this callback never returns Err"
+)]
 fn negotiate_subprotocol(
     request: &Request,
     mut response: Response,

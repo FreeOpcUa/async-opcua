@@ -47,9 +47,10 @@ pub struct ClientUserToken {
 
 /// TLS configuration used for `opc.wss` WebSocket connections.
 #[cfg(feature = "wss")]
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub enum WssTlsConfig {
     /// Use system and bundled WebPKI roots with hostname verification.
+    #[default]
     Default,
     /// Use system and bundled WebPKI roots, plus the certificates in this PEM file.
     CaPem(PathBuf),
@@ -81,13 +82,6 @@ impl PartialEq for WssTlsConfig {
             (Self::DangerouslyAcceptInvalid, Self::DangerouslyAcceptInvalid) => true,
             _ => false,
         }
-    }
-}
-
-#[cfg(feature = "wss")]
-impl Default for WssTlsConfig {
-    fn default() -> Self {
-        Self::Default
     }
 }
 

@@ -56,6 +56,11 @@ struct ConnectionInfo {
     ip: IpAddr,
 }
 
+struct ConnectionSlots<'a> {
+    connections: &'a mut FuturesUnordered<JoinHandle<u32>>,
+    connection_map: &'a mut HashMap<u32, ConnectionInfo>,
+}
+
 struct TcpConnectionDeps {
     max_connections: usize,
     max_connections_per_ip: usize,
@@ -92,15 +97,14 @@ fn configure_tcp_stream(stream: &TcpStream, addr: SocketAddr, tcp_keepalive: &Tc
 impl TcpConnectionDeps {
     fn accept<T: Send + 'static>(
         &self,
-        connections: &mut FuturesUnordered<JoinHandle<u32>>,
-        connection_map: &mut HashMap<u32, ConnectionInfo>,
+        slots: &mut ConnectionSlots<'_>,
         socket: TcpStream,
         addr: SocketAddr,
         token: Option<T>,
         connection_counter: u32,
         transport: AcceptedTransport,
     ) -> bool {
-        if connection_map.len() >= self.max_connections {
+        if slots.connection_map.len() >= self.max_connections {
             warn!(
                 "Closing connection from {addr}: max_connections ({}) reached",
                 self.max_connections
@@ -111,7 +115,8 @@ impl TcpConnectionDeps {
         }
         let ip = addr.ip();
         if self.max_connections_per_ip > 0 {
-            let connections_from_ip = connection_map
+            let connections_from_ip = slots
+                .connection_map
                 .values()
                 .filter(|connection| connection.ip == ip)
                 .count();
@@ -161,8 +166,8 @@ impl TcpConnectionDeps {
                 spawn_connection(conn, recv, token, connection_counter)
             }
         };
-        connections.push(handle);
-        connection_map.insert(
+        slots.connections.push(handle);
+        slots.connection_map.insert(
             connection_counter,
             ConnectionInfo {
                 command_send: send,
@@ -580,9 +585,12 @@ impl Server {
                     match rs {
                         Some(Ok((socket, addr, token))) => {
                             let deps = self.tcp_connection_deps();
+                            let mut slots = ConnectionSlots {
+                                connections: &mut self.connections,
+                                connection_map: &mut self.connection_map,
+                            };
                             let accepted = deps.accept(
-                                &mut self.connections,
-                                &mut self.connection_map,
+                                &mut slots,
                                 socket,
                                 addr,
                                 token,

@@ -27,8 +27,8 @@ type AesArray256 = GenericArray<u8, <aes::Aes256 as aes::cipher::KeySizeUser>::K
 type EncryptResult = Result<usize, Error>;
 
 enum AesKeySchedule {
-    Aes128(aes::Aes128),
-    Aes256(aes::Aes256),
+    Aes128(Box<aes::Aes128>),
+    Aes256(Box<aes::Aes256>),
     Invalid,
 }
 
@@ -48,8 +48,12 @@ impl AesKey {
     /// Create a new AES key with the given security policy and raw value.
     pub fn new(value: Vec<u8>) -> AesKey {
         let schedule = match value.len() {
-            16 => AesKeySchedule::Aes128(aes::Aes128::new(AesArray128::from_slice(&value))),
-            32 => AesKeySchedule::Aes256(aes::Aes256::new(AesArray256::from_slice(&value))),
+            16 => {
+                AesKeySchedule::Aes128(Box::new(aes::Aes128::new(AesArray128::from_slice(&value))))
+            }
+            32 => {
+                AesKeySchedule::Aes256(Box::new(aes::Aes256::new(AesArray256::from_slice(&value))))
+            }
             _ => AesKeySchedule::Invalid,
         };
         AesKey {
@@ -70,7 +74,7 @@ impl AesKey {
         dst: &mut [u8],
     ) -> EncryptResult {
         if let AesKeySchedule::Aes128(cipher) = &self.schedule {
-            Aes128CbcEnc::inner_iv_init(cipher.clone(), AesArray128::from_slice(iv))
+            Aes128CbcEnc::inner_iv_init(cipher.as_ref().clone(), AesArray128::from_slice(iv))
                 .encrypt_padded_b2b_mut::<NoPadding>(src, dst)
                 .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e.to_string()))?;
         } else {
@@ -86,7 +90,7 @@ impl AesKey {
         dst: &mut [u8],
     ) -> EncryptResult {
         if let AesKeySchedule::Aes256(cipher) = &self.schedule {
-            Aes256CbcEnc::inner_iv_init(cipher.clone(), AesArray128::from_slice(iv))
+            Aes256CbcEnc::inner_iv_init(cipher.as_ref().clone(), AesArray128::from_slice(iv))
                 .encrypt_padded_b2b_mut::<NoPadding>(src, dst)
                 .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e.to_string()))?;
         } else {
@@ -102,7 +106,7 @@ impl AesKey {
         dst: &mut [u8],
     ) -> EncryptResult {
         if let AesKeySchedule::Aes128(cipher) = &self.schedule {
-            Aes128CbcDec::inner_iv_init(cipher.clone(), AesArray128::from_slice(iv))
+            Aes128CbcDec::inner_iv_init(cipher.as_ref().clone(), AesArray128::from_slice(iv))
                 .decrypt_padded_b2b_mut::<NoPadding>(src, dst)
                 .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e.to_string()))?;
         } else {
@@ -118,7 +122,7 @@ impl AesKey {
         dst: &mut [u8],
     ) -> EncryptResult {
         if let AesKeySchedule::Aes256(cipher) = &self.schedule {
-            Aes256CbcDec::inner_iv_init(cipher.clone(), AesArray128::from_slice(iv))
+            Aes256CbcDec::inner_iv_init(cipher.as_ref().clone(), AesArray128::from_slice(iv))
                 .decrypt_padded_b2b_mut::<NoPadding>(src, dst)
                 .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e.to_string()))?;
         } else {

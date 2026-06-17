@@ -36,7 +36,7 @@ impl TaprioDriver {
     /// Apply the taprio configuration to the network interface by shelling out to `tc`.
     pub fn apply(&self) -> io::Result<()> {
         let mut cmd = Command::new("tc");
-        cmd.args(&[
+        cmd.args([
             "qdisc",
             "replace",
             "dev",
@@ -79,10 +79,10 @@ impl TaprioDriver {
         let output = cmd.output()?;
         if !output.status.success() {
             let err_msg = String::from_utf8_lossy(&output.stderr);
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("tc taprio command failed: {}", err_msg),
-            ));
+            return Err(io::Error::other(format!(
+                "tc taprio command failed: {}",
+                err_msg
+            )));
         }
 
         Ok(())
@@ -91,15 +91,15 @@ impl TaprioDriver {
     /// Query the current qdisc configuration for the interface.
     pub fn query(&self) -> io::Result<String> {
         let output = Command::new("tc")
-            .args(&["qdisc", "show", "dev", &self.config.interface])
+            .args(["qdisc", "show", "dev", &self.config.interface])
             .output()?;
 
         if !output.status.success() {
             let err_msg = String::from_utf8_lossy(&output.stderr);
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("tc qdisc query failed: {}", err_msg),
-            ));
+            return Err(io::Error::other(format!(
+                "tc qdisc query failed: {}",
+                err_msg
+            )));
         }
 
         Ok(String::from_utf8_lossy(&output.stdout).into_owned())
@@ -108,7 +108,7 @@ impl TaprioDriver {
     /// Clear the taprio qdisc configuration from the interface.
     pub fn clear(&self) -> io::Result<()> {
         let output = Command::new("tc")
-            .args(&["qdisc", "del", "dev", &self.config.interface, "root"])
+            .args(["qdisc", "del", "dev", &self.config.interface, "root"])
             .output()?;
 
         // If it's already deleted or doesn't exist, ignore the error.
@@ -117,10 +117,10 @@ impl TaprioDriver {
             if !err_msg.contains("No such file or directory")
                 && !err_msg.contains("Invalid argument")
             {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("tc qdisc delete failed: {}", err_msg),
-                ));
+                return Err(io::Error::other(format!(
+                    "tc qdisc delete failed: {}",
+                    err_msg
+                )));
             }
         }
 

@@ -12,8 +12,8 @@ use std::{
 };
 
 use argon2::{
+    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, SaltString},
     Argon2,
-    password_hash::{PasswordHash, PasswordHasher, SaltString, rand_core::OsRng},
 };
 use serde::{Deserialize, Serialize};
 use tracing::{trace, warn};

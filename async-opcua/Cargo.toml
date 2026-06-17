@@ -83,7 +83,7 @@ env_logger = { workspace = true }
 log = { workspace = true }
 
 # Include json when building tests
-async-opcua = { path = ".", features = ["all", "json", "xml", "legacy-crypto"] }
+async-opcua = { path = ".", features = ["all", "json", "xml", "legacy-crypto", "wss"] }
 
 [package.metadata.docs.rs]
 all-features = true

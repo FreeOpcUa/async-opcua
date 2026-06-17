@@ -13,5 +13,7 @@ mod read;
 mod reverse_connect;
 mod subscriptions;
 mod write;
+#[cfg(feature = "wss")]
+mod wss;
 
 pub use super::utils;

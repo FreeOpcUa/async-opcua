@@ -6,6 +6,7 @@
 
 use std::{
     cmp,
+    io::IoSlice,
     io::{self, ErrorKind},
     pin::Pin,
     task::{Context, Poll},
@@ -28,6 +29,8 @@ use tokio_tungstenite::{
 pub struct WsByteStream<S> {
     ws: WebSocketStream<S>,
     read_buf: BytesMut,
+    pending_flush: bool,
+    last_write_len: usize,
 }
 
 impl<S> WsByteStream<S> {
@@ -36,6 +39,8 @@ impl<S> WsByteStream<S> {
         Self {
             ws,
             read_buf: BytesMut::new(),
+            pending_flush: false,
+            last_write_len: 0,
         }
     }
 }
@@ -92,6 +97,12 @@ where
     ) -> Poll<io::Result<usize>> {
         let this = self.get_mut();
 
+        if this.pending_flush {
+            ready!(Pin::new(&mut this.ws).poll_flush(cx)).map_err(map_tungstenite_error)?;
+            this.pending_flush = false;
+            return Poll::Ready(Ok(this.last_write_len));
+        }
+
         if buf.is_empty() {
             return Poll::Ready(Ok(0));
         }
@@ -100,7 +111,60 @@ where
         Pin::new(&mut this.ws)
             .start_send(Message::Binary(Bytes::copy_from_slice(buf)))
             .map_err(map_tungstenite_error)?;
-        Poll::Ready(Ok(buf.len()))
+        this.last_write_len = buf.len();
+        match Pin::new(&mut this.ws).poll_flush(cx) {
+            Poll::Ready(Ok(())) => Poll::Ready(Ok(buf.len())),
+            Poll::Ready(Err(err)) => Poll::Ready(Err(map_tungstenite_error(err))),
+            Poll::Pending => {
+                this.pending_flush = true;
+                Poll::Pending
+            }
+        }
+    }
+
+    fn is_write_vectored(&self) -> bool {
+        true
+    }
+
+    fn poll_write_vectored(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &[IoSlice<'_>],
+    ) -> Poll<io::Result<usize>> {
+        let this = self.get_mut();
+
+        if this.pending_flush {
+            ready!(Pin::new(&mut this.ws).poll_flush(cx)).map_err(map_tungstenite_error)?;
+            this.pending_flush = false;
+            return Poll::Ready(Ok(this.last_write_len));
+        }
+
+        let total: usize = bufs.iter().map(|buf| buf.len()).sum();
+
+        if total == 0 {
+            return Poll::Ready(Ok(0));
+        }
+
+        ready!(Pin::new(&mut this.ws).poll_ready(cx)).map_err(map_tungstenite_error)?;
+
+        let mut data = Vec::with_capacity(total);
+        for buf in bufs {
+            if !buf.is_empty() {
+                data.extend_from_slice(buf);
+            }
+        }
+        Pin::new(&mut this.ws)
+            .start_send(Message::Binary(Bytes::from(data)))
+            .map_err(map_tungstenite_error)?;
+        this.last_write_len = total;
+        match Pin::new(&mut this.ws).poll_flush(cx) {
+            Poll::Ready(Ok(())) => Poll::Ready(Ok(total)),
+            Poll::Ready(Err(err)) => Poll::Ready(Err(map_tungstenite_error(err))),
+            Poll::Pending => {
+                this.pending_flush = true;
+                Poll::Pending
+            }
+        }
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {

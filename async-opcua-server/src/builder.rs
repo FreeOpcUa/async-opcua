@@ -13,8 +13,8 @@ use opcua_types::{BuildInfo, MessageSecurityMode, TypeLoader, TypeLoaderCollecti
 #[cfg(feature = "wss")]
 use super::WssServerConfig;
 use super::{
-    ANONYMOUS_USER_TOKEN_ID, Limits, Server, ServerConfig, ServerEndpoint, ServerHandle,
-    ServerUserToken, authenticator::AuthManager, node_manager::NodeManagerBuilder,
+    authenticator::AuthManager, node_manager::NodeManagerBuilder, Limits, Server, ServerConfig,
+    ServerEndpoint, ServerHandle, ServerUserToken, ANONYMOUS_USER_TOKEN_ID,
 };
 
 #[cfg(feature = "wss")]
@@ -624,7 +624,9 @@ fn build_wss_rustls_config(
             )
         })?;
 
-    rustls::ServerConfig::builder()
+    rustls::ServerConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
+        .with_safe_default_protocol_versions()
+        .map_err(|err| format!("WSS TLS: {err}"))?
         .with_no_client_auth()
         .with_single_cert(certs, key)
         .map_err(|err| format!("Failed to build WSS TLS server configuration: {err}"))

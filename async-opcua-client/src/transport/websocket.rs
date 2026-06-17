@@ -164,10 +164,14 @@ impl WssTlsConfigExt for WssTlsConfig {
             WssTlsConfig::Custom(config) => Ok(config),
             WssTlsConfig::DangerouslyAcceptInvalid => {
                 warn!("WSS TLS certificate verification disabled -- do NOT use in production");
-                let mut config = ClientConfig::builder()
-                    .dangerous()
-                    .with_custom_certificate_verifier(Arc::new(AcceptAnyServerCert))
-                    .with_no_client_auth();
+                let mut config = ClientConfig::builder_with_provider(Arc::new(
+                    rustls::crypto::ring::default_provider(),
+                ))
+                .with_safe_default_protocol_versions()
+                .expect("ring provider supports safe default protocol versions")
+                .dangerous()
+                .with_custom_certificate_verifier(Arc::new(AcceptAnyServerCert))
+                .with_no_client_auth();
                 config.alpn_protocols = vec![OPC_WSS_SUBPROTOCOL.as_bytes().to_vec()];
                 Ok(Arc::new(config))
             }
@@ -207,9 +211,12 @@ fn default_rustls_config(
         roots.add_parsable_certificates(certs);
     }
 
-    let mut config = ClientConfig::builder()
-        .with_root_certificates(roots)
-        .with_no_client_auth();
+    let mut config =
+        ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
+            .with_safe_default_protocol_versions()
+            .expect("ring provider supports safe default protocol versions")
+            .with_root_certificates(roots)
+            .with_no_client_auth();
     config.alpn_protocols = vec![OPC_WSS_SUBPROTOCOL.as_bytes().to_vec()];
     Ok(Arc::new(config))
 }

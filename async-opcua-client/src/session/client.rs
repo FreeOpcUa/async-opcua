@@ -219,8 +219,10 @@ impl Client {
                 recv_buffer_size: self.config.decoding_options.max_incoming_chunk_size,
                 max_message_size: self.config.decoding_options.max_message_size,
                 max_chunk_count: self.config.decoding_options.max_chunk_count,
+                connect_timeout: self.config.connect_timeout,
             },
             channel_lifetime,
+            self.config.request_timeout,
             // We should only ever need the default decoding context for temporary connections.
             Arc::new(RwLock::new(ContextOwned::new_default(
                 NamespaceMap::new(),

@@ -468,8 +468,10 @@ where
                 recv_buffer_size: config.decoding_options.max_incoming_chunk_size,
                 max_message_size: config.decoding_options.max_message_size,
                 max_chunk_count: config.decoding_options.max_chunk_count,
+                connect_timeout: config.connect_timeout,
             },
             config.channel_lifetime,
+            config.request_timeout,
             Arc::new(RwLock::new(ctx)),
         )
     }

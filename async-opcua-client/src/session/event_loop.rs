@@ -216,6 +216,7 @@ impl<T: Connector + Send + Sync + 'static> SessionEventLoop<T> {
                             _ = &mut state.disconnect_fut => {
                                 // Do nothing, if this terminates we will very soon be transitioning
                                 // to a disconnected state.
+                                state.disconnect_fut = futures::future::pending().boxed();
                                 Ok((
                                     SessionPollResult::FinishedDisconnect,
                                     SessionEventLoopState::Connected(state)

@@ -1,5 +1,4 @@
-use std::net::SocketAddr;
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use crate::transport::state::SecureChannelState;
 use crate::transport::stream::{wait_for_reverse_hello, StreamConnection};
@@ -30,6 +29,8 @@ pub struct TransportConfiguration {
     pub max_message_size: usize,
     /// Maximum number of chunks in a message.
     pub max_chunk_count: usize,
+    /// Timeout for opening outbound TCP connections.
+    pub connect_timeout: Duration,
 }
 /// Connector for `opc.tcp` transport.
 pub struct TcpConnector {
@@ -54,6 +55,7 @@ impl TcpConnector {
     async fn connect_tcp(
         endpoint_url: String,
         decoding_options: DecodingOptions,
+        connect_timeout: Duration,
     ) -> Result<StreamConnection<ReadHalf<TcpStream>, WriteHalf<TcpStream>>, Error> {
         let (host, port) = hostname_port_from_url(
             &endpoint_url,
@@ -93,13 +95,28 @@ impl TcpConnector {
 
         debug!("Connecting to {} with url {}", addr, endpoint_url);
 
-        let socket = TcpStream::connect(addr).await.map_err(|err| {
-            error!("Could not connect to host {}, {:?}", addr, err);
-            Error::new(
-                StatusCode::BadCommunicationError,
-                format!("Could not connect to host {}, {:?}", addr, err),
-            )
-        })?;
+        let socket = tokio::time::timeout(connect_timeout, TcpStream::connect(addr))
+            .await
+            .map_err(|_| {
+                error!(
+                    "Timed out connecting to host {} after {:?}",
+                    addr, connect_timeout
+                );
+                Error::new(
+                    StatusCode::BadTimeout,
+                    format!(
+                        "Timed out connecting to host {} after {:?}",
+                        addr, connect_timeout
+                    ),
+                )
+            })?
+            .map_err(|err| {
+                error!("Could not connect to host {}, {:?}", addr, err);
+                Error::new(
+                    StatusCode::BadCommunicationError,
+                    format!("Could not connect to host {}, {:?}", addr, err),
+                )
+            })?;
 
         let (reader, writer) = tokio::io::split(socket);
         Ok(StreamConnection::new(
@@ -119,7 +136,13 @@ impl Connector for TcpConnector {
         outgoing_recv: tokio::sync::mpsc::Receiver<OutgoingMessage>,
         config: TransportConfiguration,
     ) -> Result<TcpTransport, Error> {
-        let inner = StreamConnector::new(Self::connect_tcp, self.endpoint_url.clone());
+        let connect_timeout = config.connect_timeout;
+        let inner = StreamConnector::new(
+            move |endpoint_url: String, decoding_options: DecodingOptions| {
+                Self::connect_tcp(endpoint_url, decoding_options, connect_timeout)
+            },
+            self.endpoint_url.clone(),
+        );
         inner.connect(channel, outgoing_recv, config).await
     }
 

@@ -110,17 +110,17 @@ request/session/connection floods; server errors cleanly and keeps serving other
 detects the dead peer, reconnects — no panic, no hang.
 
 - [ ] T035 [P] [US2] Test: Good DeleteSubscriptions with empty results panics client in `async-opcua-client/tests/malformed_response.rs` (H7, SC-001)
-- [ ] T036 [US2] Guard `result[0]` + add result-length check in `DeleteSubscriptions::send` in `async-opcua-client/src/session/services/subscriptions/service.rs` (H7/L12 — L12 is the defense-in-depth half of H7, same change)
-- [ ] T037 [US2] Replace completed `disconnect_fut` with `pending()` sentinel after the disconnect arm fires in `async-opcua-client/src/session/event_loop.rs` (H7)
+- [X] T036 [US2] Guard `result[0]` + add result-length check in `DeleteSubscriptions::send` in `async-opcua-client/src/session/services/subscriptions/service.rs` (H7/L12 — L12 is the defense-in-depth half of H7, same change)
+- [X] T037 [US2] Replace completed `disconnect_fut` with `pending()` sentinel after the disconnect arm fires in `async-opcua-client/src/session/event_loop.rs` (H7)
 - [ ] T038 [P] [US2] Test: connect to black-holed address hangs without a timeout in `async-opcua-client/tests/connect_timeout.rs` (N2)
-- [ ] T039 [US2] Wrap `TcpStream::connect` in a configurable `connect_timeout` in `async-opcua-client/src/transport/tcp.rs` + `config.rs` (N2)
-- [ ] T040 [P] [US2] Test: dead peer not detected with `max_failed_keep_alive_count = 0` in `async-opcua-client/tests/keep_alive.rs` (N8)
-- [ ] T041 [US2] Default `max_failed_keep_alive_count` to 3 (keep 0 as documented opt-out) in `async-opcua-client/src/config.rs` (N8)
+- [X] T039 [US2] Wrap `TcpStream::connect` in a configurable `connect_timeout` in `async-opcua-client/src/transport/tcp.rs` + `config.rs` (N2)
+- [X] T040 [P] [US2] Test: dead peer not detected with `max_failed_keep_alive_count = 0` in `async-opcua-client/tests/keep_alive.rs` (N8)
+- [X] T041 [US2] Default `max_failed_keep_alive_count` to 3 (keep 0 as documented opt-out) in `async-opcua-client/src/config.rs` (N8)
 - [ ] T042 [P] [US2] Test: stalled secure-channel renewal wedges the client in `async-opcua-client/tests/renewal.rs` (M10)
-- [ ] T043 [US2] Derive renewal timeout from config; raise `channel_lifetime` default 60s→600s; tear down + reconnect on renewal failure in `async-opcua-client/src/transport/channel.rs` + `config.rs` (M10/N9)
+- [X] T043 [US2] Derive renewal timeout from config; raise `channel_lifetime` default 60s→600s; tear down + reconnect on renewal failure in `async-opcua-client/src/transport/channel.rs` + `config.rs` (M10/N9)
 - [ ] T044 [P] [US2] Test: malicious server streams unbounded chunks; sequence overflow in `async-opcua-client/tests/chunk_flood.rs` (M11)
-- [ ] T045 [US2] Enforce hard chunk ceiling + `checked/wrapping` sequence increment in `async-opcua-client/src/transport/core.rs` (M11)
-- [ ] T046 [US2] Default `trust_server_certs` false + `warn!` when enabled; remove from samples/docs in `async-opcua-client/src/config.rs` + `samples/` (M9)
+- [X] T045 [US2] Enforce hard chunk ceiling + `checked/wrapping` sequence increment in `async-opcua-client/src/transport/core.rs` (M11)
+- [X] T046 [US2] Default `trust_server_certs` false + `warn!` when enabled; remove from samples/docs in `async-opcua-client/src/config.rs` + `samples/` (M9)
 - [ ] T047 [US2] Add optional server cert/thumbprint pinning API for discovery endpoints in `async-opcua-client/src/session/client.rs` (M8)
 
 **Checkpoint**: client is robust against a hostile/unreliable server.
@@ -244,6 +244,8 @@ deferral — none silently dropped"). T102 records the same in the tracker.
 | R7b | ARCHITECTURE_REVIEW | Merge the two tiny crates (`async-opcua-safety`, `async-opcua-history-sqlite`) into `async-opcua-server` — a packaging refactor outside the clarified scope (the 4 large items + findings). Optional tidy, not a defect. |
 | R7c | ARCHITECTURE_REVIEW | Make the server's `nodes/xml` dependency track the server `xml` feature — minor build hygiene; defer to a follow-up. |
 | R8 | ARCHITECTURE_REVIEW | Relocate `ServerInfo` identity-token/JWT logic; mark `src/generated/**` `linguist-generated` in `.gitattributes`; document the hard tokio coupling. Low-impact polish/docs; defer. |
+| M8 (T047) | NETWORK_REVIEW / CODE_REVIEW | Server-cert/thumbprint **pinning** API for discovery. Additive defense-in-depth: the by-default MITM protection (trust store rejects unknown certs when `trust_server_certs=false`) is already in place, so this is opt-in hardening. Deferred to a focused follow-up so the security-sensitive API is designed carefully ("do it right once") rather than rushed. |
+| US2 behavioral tests (T035, T038, T042, T044) | — | Reproduction tests for H7 (empty-results panic), N2 (connect-hang), M10 (renewal-stall), M11 (chunk-flood) require the hostile-server mock harness (Phase-2 T009, not yet built). The fixes are verified by compile + config-default guards; behavioral coverage lands with the T009 harness. |
 
 > **R4 ≡ C3**: the architecture review's R4 (server request-path bulkhead) is the same finding as
 > code-review C3 (unbounded in-flight queue); it is **covered** by T018–T019 (FR-003), not deferred.

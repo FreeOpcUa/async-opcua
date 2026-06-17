@@ -210,6 +210,7 @@ where
                 channel,
                 outgoing_recv,
                 config.max_chunk_count,
+                config.max_message_size,
                 ack.send_buffer_size.min(config.recv_buffer_size as u32) as usize,
             ),
             read: connection.reader,

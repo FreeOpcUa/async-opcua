@@ -831,6 +831,22 @@ impl UARequest for DeleteSubscriptions {
         let _h = span.enter();
         if let ResponseMessage::DeleteSubscriptions(response) = response {
             process_service_result(&response.response_header)?;
+            let num_results = response
+                .results
+                .as_ref()
+                .map(|l| l.len())
+                .unwrap_or_default();
+
+            if num_results != self.subscription_ids.len() {
+                builder_error!(
+                    self,
+                    "DeleteSubscriptions: server returned wrong number of results"
+                );
+                return Err(Error::new(
+                    StatusCode::BadUnknownResponse,
+                    "DeleteSubscriptions: server returned wrong number of results",
+                ));
+            }
 
             builder_debug!(self, "delete_subscriptions success");
             Ok(*response)
@@ -1929,7 +1945,12 @@ impl Session {
             ))
         } else {
             let result = self.delete_subscriptions(&[subscription_id]).await?;
-            Ok(result[0])
+            result.into_iter().next().ok_or_else(|| {
+                Error::new(
+                    StatusCode::BadUnexpectedError,
+                    "delete_subscription: server returned no results",
+                )
+            })
         }
     }
 

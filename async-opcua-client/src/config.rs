@@ -234,8 +234,8 @@ pub struct ClientConfig {
     pub(crate) certificate_path: Option<PathBuf>,
     /// Custom private key path, to be used instead of the default private key path
     pub(crate) private_key_path: Option<PathBuf>,
-    /// Auto trusts server certificates. For testing/samples only unless you're sure what you're
-    /// doing.
+    /// Auto trusts server certificates. This trusts any unknown server certificate,
+    /// defeating MITM protection. For testing/samples only; do not use in production.
     pub(crate) trust_server_certs: bool,
     /// Verify server certificates. For testing/samples only unless you're sure what you're
     /// doing.
@@ -253,7 +253,7 @@ pub struct ClientConfig {
     /// Length of the nonce generated for CreateSession requests.
     #[serde(default = "defaults::session_nonce_length")]
     pub(crate) session_nonce_length: usize,
-    /// Requested channel lifetime in milliseconds.
+    /// Requested secure channel token lifetime in milliseconds. Default is 10 minutes.
     #[serde(default = "defaults::channel_lifetime")]
     pub(crate) channel_lifetime: u32,
     /// Decoding options used for serialization / deserialization
@@ -270,10 +270,14 @@ pub struct ClientConfig {
     /// Max delay between retry attempts.
     #[serde(default = "defaults::session_retry_max")]
     pub(crate) session_retry_max: Duration,
+    /// Timeout for opening outbound TCP connections.
+    #[serde(default = "defaults::connect_timeout")]
+    pub(crate) connect_timeout: Duration,
     /// Interval between each keep-alive request sent to the server.
     #[serde(default = "defaults::keep_alive_interval")]
     pub(crate) keep_alive_interval: Duration,
     /// Maximum number of failed keep alives before the client will be closed.
+    /// Defaults to 3. Set to 0 to explicitly disable keep-alive disconnects.
     /// Note that this should not actually needed if the server is compliant,
     /// only if the connection ends up in a bad state and needs to be
     /// forcibly reset.
@@ -509,7 +513,7 @@ mod defaults {
     }
 
     pub(super) fn channel_lifetime() -> u32 {
-        60_000
+        600_000
     }
 
     pub(super) fn session_retry_limit() -> i32 {
@@ -522,6 +526,10 @@ mod defaults {
 
     pub(super) fn session_retry_max() -> Duration {
         Duration::from_secs(30)
+    }
+
+    pub(super) fn connect_timeout() -> Duration {
+        Duration::from_secs(10)
     }
 
     pub(super) fn keep_alive_interval() -> Duration {
@@ -545,7 +553,7 @@ mod defaults {
     }
 
     pub(super) fn max_failed_keep_alive_count() -> u64 {
-        0
+        3
     }
 
     pub(super) fn max_incoming_chunk_size() -> usize {
@@ -617,6 +625,7 @@ impl ClientConfig {
             session_retry_limit: defaults::session_retry_limit(),
             session_retry_initial: defaults::session_retry_initial(),
             session_retry_max: defaults::session_retry_max(),
+            connect_timeout: defaults::connect_timeout(),
             keep_alive_interval: defaults::keep_alive_interval(),
             max_failed_keep_alive_count: defaults::max_failed_keep_alive_count(),
             request_timeout: defaults::request_timeout(),
@@ -647,6 +656,21 @@ mod tests {
         let mut path = std::env::temp_dir();
         path.push(filename);
         path
+    }
+
+    /// US2 hardening defaults: dead-peer detection on (N8), a TCP connect timeout (N2),
+    /// and a non-trivially-short secure-channel lifetime (M10/N9).
+    #[test]
+    fn us2_client_hardening_defaults() {
+        let c = ClientConfig::default();
+        assert_eq!(c.max_failed_keep_alive_count, 3, "N8: keep-alive detection must be on by default");
+        assert_eq!(
+            c.connect_timeout,
+            std::time::Duration::from_secs(10),
+            "N2: a TCP connect timeout must be set"
+        );
+        assert_eq!(c.channel_lifetime, 600_000, "M10/N9: channel lifetime should be 10 min");
+        assert!(!c.trust_server_certs, "M9: server certs must not be auto-trusted by default");
     }
 
     fn sample_builder() -> ClientBuilder {

@@ -1,7 +1,7 @@
 use std::{path::PathBuf, time::Duration};
 
 use opcua_core::config::{Config, ConfigError};
-use tracing::error;
+use tracing::{error, warn};
 
 use super::{Client, ClientConfig, ClientEndpoint, ClientUserToken, ANONYMOUS_USER_TOKEN_ID};
 
@@ -112,7 +112,15 @@ impl ClientBuilder {
     /// the client will reject the server upon first connect and the server's certificate
     /// must be manually moved from pki's `/rejected` folder to the `/trusted` folder. If it is
     /// set, then the server cert will automatically be stored in the `/trusted` folder.
+    ///
+    /// Enabling this auto-trusts any unknown server certificate and defeats
+    /// MITM protection. Do not use in production.
     pub fn trust_server_certs(mut self, trust_server_certs: bool) -> Self {
+        if trust_server_certs {
+            warn!(
+                "trust_server_certs is enabled: the client will auto-trust ANY server certificate, defeating MITM protection. Do not use in production."
+            );
+        }
         self.config.trust_server_certs = trust_server_certs;
         self
     }
@@ -204,6 +212,12 @@ impl ClientBuilder {
     /// Maximum time between retries when backing off on session reconnects.
     pub fn session_retry_max(mut self, session_retry_max: Duration) -> Self {
         self.config.session_retry_max = session_retry_max;
+        self
+    }
+
+    /// Timeout for opening outbound TCP connections.
+    pub fn connect_timeout(mut self, connect_timeout: Duration) -> Self {
+        self.config.connect_timeout = connect_timeout;
         self
     }
 

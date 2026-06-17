@@ -2,6 +2,7 @@ mod alarms;
 mod browse;
 mod core_tests;
 mod custom_types;
+mod hardening;
 mod hda;
 mod legacy_crypto;
 mod methods;

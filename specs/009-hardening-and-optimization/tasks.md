@@ -112,7 +112,7 @@ detects the dead peer, reconnects — no panic, no hang.
 - [ ] T035 [P] [US2] Test: Good DeleteSubscriptions with empty results panics client in `async-opcua-client/tests/malformed_response.rs` (H7, SC-001)
 - [X] T036 [US2] Guard `result[0]` + add result-length check in `DeleteSubscriptions::send` in `async-opcua-client/src/session/services/subscriptions/service.rs` (H7/L12 — L12 is the defense-in-depth half of H7, same change)
 - [X] T037 [US2] Replace completed `disconnect_fut` with `pending()` sentinel after the disconnect arm fires in `async-opcua-client/src/session/event_loop.rs` (H7)
-- [ ] T038 [P] [US2] Test: connect to black-holed address hangs without a timeout in `async-opcua-client/tests/connect_timeout.rs` (N2)
+- [X] T038 [P] [US2] Test: connect to black-holed address honors connect_timeout (N2) — `async-opcua/tests/integration/hardening.rs::connect_to_black_holed_address_times_out` (placed in the integration harness, which has the working client setup; passes)
 - [X] T039 [US2] Wrap `TcpStream::connect` in a configurable `connect_timeout` in `async-opcua-client/src/transport/tcp.rs` + `config.rs` (N2)
 - [X] T040 [P] [US2] Test: dead peer not detected with `max_failed_keep_alive_count = 0` in `async-opcua-client/tests/keep_alive.rs` (N8)
 - [X] T041 [US2] Default `max_failed_keep_alive_count` to 3 (keep 0 as documented opt-out) in `async-opcua-client/src/config.rs` (N8)
@@ -135,7 +135,7 @@ cert URI validated; RSA-decrypt timing/error-uniform; advisory scan green or exc
 
 - [ ] T048 [P] [US3] Test: activated None-policy session transferable across channels in `async-opcua-server/tests/none_session_transfer.rs` (H1)
 - [X] T049 [US3] Refuse cross-channel transfer of an activated None-policy session in `async-opcua-server/src/session/manager.rs` (H1)
-- [ ] T050 [P] [US3] Test: client cert with mismatched application URI accepted in `async-opcua-server/tests/cert_uri_binding.rs` (H5)
+- [X] T050 [P] [US3] Test: client cert with mismatched application URI is rejected (H5) — `async-opcua/tests/integration/hardening.rs::cert_application_uri_mismatch_is_rejected` (asserts BadCertificateUriInvalid against the real server; passes)
 - [X] T051 [US3] Pass client `application_uri`/hostname into `validate_or_reject_application_instance_cert` in `async-opcua-server/src/session/manager.rs` (H5)
 - [X] T052 [US3] Uniform error + timing on ALL RSA-decrypt failure paths (fold distinguishable errors) in `async-opcua-crypto/src/policy/aes.rs` + `user_identity.rs` (H6 — D1 phase-0 stopgap, lands first)
 - [X] T053 [US3] Constant-time decrypted-nonce comparison (`subtle::ct_eq`) in `async-opcua-crypto/src/user_identity.rs` (H8)

@@ -10,6 +10,17 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Dependency-advisory gate (feature 009 / FR-022 / SEC-P1). cargo-deny-action v2
+  # bundles a cargo-deny new enough to parse CVSS 4.0 advisories. Policy + recorded
+  # exceptions live in deny.toml.
+  cargo-deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories bans sources
+
   build-linux:
     strategy:
       matrix:

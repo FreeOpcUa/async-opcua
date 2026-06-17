@@ -1,0 +1,30 @@
+# cargo-deny configuration (feature 009 / FR-022 / SEC-P1).
+# Run: cargo deny check advisories bans sources
+# Requires a cargo-deny new enough to parse CVSS 4.0 advisories.
+
+[advisories]
+version = 2
+yanked = "deny"
+ignore = [
+    # RUSTSEC-2023-0071 — "Marvin" RSA timing attack in the `rsa` crate. No fixed
+    # release exists. The network-reachable, Marvin-vulnerable RSA *decrypt* paths
+    # (OpenSecureChannel + identity-token decrypt) were migrated to the constant-time
+    # `aws-lc-rs` backend (feature 009, finding D1/FR-042); `rsa` is retained only for
+    # signing/verification/public-key-encrypt/keygen and X509 integration, which are
+    # not affected by the decryption timing oracle. Re-evaluate when `rsa` ships a fix.
+    { id = "RUSTSEC-2023-0071", reason = "rsa decrypt path migrated to aws-lc-rs (D1); rsa kept for sign/verify/encrypt/keygen only; no upstream fix" },
+    # RUSTSEC-2024-0320 — serde_yaml is unmaintained (not a vulnerability). Migration to a
+    # maintained fork (serde_yml/serde_norway) is deferred (D5/T071) — it was network-blocked
+    # at implementation time. serde_yaml remains functional; re-attempt the swap when online.
+    { id = "RUSTSEC-2024-0320", reason = "serde_yaml unmaintained; functional, no active vuln; migration deferred (T071, network-blocked)" },
+]
+
+[bans]
+# Surface accidental duplicate/EOL stacks (e.g. two rustls majors). Warn, don't fail,
+# so a transitive duplicate doesn't block CI; revisit periodically.
+multiple-versions = "warn"
+wildcards = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

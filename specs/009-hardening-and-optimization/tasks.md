@@ -51,8 +51,8 @@ N6+M11 chunk ceiling). That is one differentiated unit of work, **not** batching
 - [ ] T001 [P] Add criterion benches to `async-opcua-types/benches/encoding.rs` (encode/decode of small ReadRequest, large array DataValue, big ByteString) (FR-030/PERF-P12)
 - [ ] T002 [P] Add criterion bench to `async-opcua-core/benches/secure_channel.rs` for `encode_into → apply_security → verify` round-trip across None/Sign/SignAndEncrypt (FR-030/PERF-P12)
 - [ ] T003 Capture baseline numbers from T001/T002 into `specs/009-hardening-and-optimization/benchmarks-baseline.md` (FR-030/SC-006/SC-007 baseline)
-- [ ] T004 [P] Add `deny.toml` at repo root (advisories/bans/sources) with a recorded `rsa` RUSTSEC-2023-0071 exception + review date (FR-022/SEC-P1)
-- [ ] T005 Add a `cargo deny check advisories bans sources` CI job in `.github/workflows/` pinning a cargo-deny version that parses CVSS 4.0 (FR-022/SEC-P1)
+- [X] T004 [P] Add `deny.toml` at repo root (advisories/bans/sources) with a recorded `rsa` RUSTSEC-2023-0071 exception + review date (FR-022/SEC-P1)
+- [X] T005 Add a `cargo deny check advisories bans sources` CI job in `.github/workflows/` pinning a cargo-deny version that parses CVSS 4.0 (FR-022/SEC-P1)
 - [ ] T006 Wire the dotnet (`dotnet-tests/`) + open62541 (`3rd-party/open62541/`) interop harnesses as a required CI gate in `.github/workflows/main.yml` (FR-046/SC-010)
 - [ ] T007 [P] Add a three-config build-matrix CI job (default / `--all-features` / `--no-default-features`) with `-D warnings` in `.github/workflows/` (SC-008)
 
@@ -163,12 +163,12 @@ cert URI validated; RSA-decrypt timing/error-uniform; advisory scan green or exc
 **Goal**: no debris/secrets/infra disclosure; deps current & monitored; private disclosure channel.
 **Independent test**: repo has zero debris files; advisory gate green; MQTT off the EOL TLS stack; SECURITY.md offers a private channel.
 
-- [ ] T068 [P] [US4] `git rm` the 12 debris files (fix_*.py, *.sh, client/server.py, pr231.diff, pr_*.{json,txt}) + add ignore rules to `.gitignore` (SEC-P3/FR-021)
-- [ ] T069 [US4] Upgrade `rumqttc` to a rustls-0.23 release (or feature-gate MQTT off-by-default) in `async-opcua-pubsub/Cargo.toml` (D2/FR-023)
-- [ ] T070 [P] [US4] Bump `time` ≥ 0.3.47 and `rand` ≥ 0.8.6 / 0.9.3 in `Cargo.toml`/`Cargo.lock` (D3/D4 — cohesive pair: trivial advisory bumps)
+- [X] T068 [P] [US4] `git rm` the 12 debris files (fix_*.py, *.sh, client/server.py, pr231.diff, pr_*.{json,txt}) + add ignore rules to `.gitignore` (SEC-P3/FR-021)
+- [X] T069 [US4] Upgrade `rumqttc` to a rustls-0.23 release (or feature-gate MQTT off-by-default) in `async-opcua-pubsub/Cargo.toml` (D2/FR-023)
+- [X] T070 [P] [US4] Bump `time` ≥ 0.3.47 and `rand` ≥ 0.8.6 / 0.9.3 in `Cargo.toml`/`Cargo.lock` (D3/D4 — cohesive pair: trivial advisory bumps)
 - [ ] T071 [US4] Migrate `serde_yaml` → a maintained YAML crate (serde_yml/serde_norway) or drop YAML config (D5)
-- [ ] T072 [P] [US4] Evaluate/upgrade `thiserror` v2 and `env_logger` in `Cargo.toml` (D5)
-- [ ] T073 [P] [US4] Add a private coordinated-disclosure channel to `SECURITY.md` (SEC-P2/FR-025)
+- [X] T072 [P] [US4] Evaluate/upgrade `thiserror` v2 and `env_logger` in `Cargo.toml` (D5)
+- [X] T073 [P] [US4] Add a private coordinated-disclosure channel to `SECURITY.md` (SEC-P2/FR-025)
 
 ---
 
@@ -248,6 +248,7 @@ deferral — none silently dropped"). T102 records the same in the tracker.
 | US2 behavioral tests (T035, T038, T042, T044) | — | Reproduction tests for H7 (empty-results panic), N2 (connect-hang), M10 (renewal-stall), M11 (chunk-flood) require the hostile-server mock harness (Phase-2 T009, not yet built). The fixes are verified by compile + config-default guards; behavioral coverage lands with the T009 harness. |
 | L10 (T066) | CODE_REVIEW | Issued-token policy-ID collision with user-pass IDs. Codex confirmed these IDs ARE advertised (`UserTokenPolicy.policy_id`, validated in `info.rs:720`), so changing them is a client-visible/advertised change for a latent, currently-harmless collision (DefaultAuthenticator doesn't process issued tokens). Not worth the break; deferred. |
 | US3 behavioral tests (T048, T050, T057) | — | Reproduction tests for H1 (None-session transfer), H5 (cert-URI mismatch), M6 (auth timing) need a `SessionManager`/authenticator integration harness (none exists). Fixes verified by compile + the exact code change; behavioral coverage is an integration/SC-002 concern. |
+| D5 (T071) | SECURITY_AUDIT | serde_yaml → serde_yml migration was applied but `serde_yml` is not in the local cargo cache and crates.io became unreachable mid-run (network outage); reverted to keep the build green. serde_yaml is unmaintained-but-functional (no active vuln); deny.toml records RUSTSEC-2024-0320 as an exception. Re-attempt the drop-in swap when online. |
 
 > **R4 ≡ C3**: the architecture review's R4 (server request-path bulkhead) is the same finding as
 > code-review C3 (unbounded in-flight queue); it is **covered** by T018–T019 (FR-003), not deferred.

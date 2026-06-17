@@ -2,10 +2,15 @@
   "version": "0.8.8",
   "integration_state_schema": 1,
   "installed_integrations": [
-    "agy"
+    "agy",
+    "claude"
   ],
   "integration_settings": {
     "agy": {
+      "script": "sh",
+      "invoke_separator": "-"
+    },
+    "claude": {
       "script": "sh",
       "invoke_separator": "-"
     }

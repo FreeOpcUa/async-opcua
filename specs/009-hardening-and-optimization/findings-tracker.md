@@ -71,6 +71,7 @@ one leg done, remainder deferred.
 | PERF-P12 encode/decode + secure-channel benches | — | T001/T002/T003 | (US5 follow-up) | criterion benches run; baseline in benchmarks-baseline.md (T090/T098 caveat: benches added post-optimization) |
 | R2 `Error` at service boundaries (FR-037) | — | T094 | `6ea75c21` | client/server compile + tests |
 | R3 NodeManager capability traits (FR-043) | — | T093 | `6ea75c21` | server compile + tests |
+| R5 opc.wss WebSocket transport (FR-044) | — | T088/T089 | (US5 follow-up) | client+server `wss` feature; `wss_round_trip_none_policy` (TLS1.3 + ALPN opcua+uacp + full handshake + Read) passes; secure-by-default TLS per security review |
 | D1 aws-lc-rs constant-time RSA (FR-042) | — | T054–T055 | `547cbfbd` | crypto tests; documented in `docs/setup.md` |
 | D2 EOL TLS stack removed (FR-023) | — | T069 | `55dd35e1` | dependency tree clean; build green |
 | D5 serde_yaml → serde_norway | — | T071 | (US4 follow-up) | library crates migrated; `cargo build --all-features` + core/server YAML round-trip tests green; serde_yaml now only transitive via log4rs (demo-server sample) |
@@ -99,7 +100,6 @@ Full rationales live in `tasks.md` → "Consciously deferred findings". Summary:
 | PERF-P9 inline fast path for small Reads | T082 | Measure-first (needs P12 benches); trades away per-request panic isolation. |
 | PERF-P11 retransmission-queue O(n) scan | — | Audit judged acceptable for the short, bounded queue. |
 | PERF-P12 benches + baseline | T001/T002/T003/T090/T098 | Perf changes verified functionally; criterion regression-guard infra is follow-up. |
-| R5/FR-044 `opc.wss` WebSocket connector | T088/T089 | Network-blocked (tokio-tungstenite/tokio-rustls not cached). `StreamConnector` seam is ready. Re-attempt online. |
 | R6/FR-031 transport metrics + exporter | T087 | Additive observability. |
 | R7b/R7c/R8 | — | Packaging/build-hygiene/docs polish outside the clarified scope. |
 | US2 behavioral tests | T035/T038/T042/T044 | Need the hostile-server mock harness (T009, not built); fixes verified by compile + config-default guards. |
@@ -112,8 +112,8 @@ Full rationales live in `tasks.md` → "Consciously deferred findings". Summary:
 
 ## Verification gate (final)
 
-- `cargo test --workspace --all-features --offline` (CI config): **80 suites, 0 failures**.
-- `async-opcua` integration suite: **95 passed, 0 failed**.
-- `-D warnings` clean: default, `--all-features` (full workspace), `--no-default-features` (library crates).
+- `cargo test --workspace --all-features --offline` (CI config): all suites green, 0 failures.
+- `async-opcua` integration suite: **98 passed, 0 failed** (97 opc.tcp + 1 opc.wss round-trip).
+- `-D warnings` clean: default, `--all-features` (full workspace, includes `wss`), `--no-default-features` (library crates), and the `wss` feature on core/client/server.
 
 > **R4 ≡ C3**: architecture R4 (request-path bulkhead) is the same finding as code-review C3; covered by T018–T019, not deferred.

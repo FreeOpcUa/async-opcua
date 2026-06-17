@@ -7,7 +7,7 @@ homepage = "https://github.com/freeopcua/async-opcua"
 repository = "https://github.com/freeopcua/async-opcua"
 license = "MPL-2.0"
 keywords = ["opcua", "opc", "ua"]
-categories = ["embedded", "network-programming"]
+categories = ["network-programming"]
 readme = "README.md"
 documentation = "https://docs.rs/async-opcua/"
 edition = "2021"
@@ -17,8 +17,14 @@ publish = true
 name = "opcua"
 
 [features]
-default = []
+default = ["aws-lc-rs"]
 all = ["server", "client"]
+aws-lc-rs = [
+  "async-opcua-client?/aws-lc-rs",
+  "async-opcua-core/aws-lc-rs",
+  "async-opcua-crypto/aws-lc-rs",
+  "async-opcua-server?/aws-lc-rs",
+]
 # Forwards to the crypto crate's support for legacy (deprecated) security
 # policies: Basic128Rsa15 and Basic256.
 legacy-crypto = [

@@ -9,6 +9,7 @@ use std::{
     result::Result,
 };
 
+#[cfg(feature = "aws-lc-rs")]
 use aws_lc_rs::rsa as aws_rsa;
 use rsa::pkcs1;
 use rsa::pkcs1v15;
@@ -244,6 +245,7 @@ impl PrivateKey {
         dst: &mut [u8],
     ) -> Result<usize, PKeyError> {
         let cipher_text_block_size = self.cipher_text_block_size();
+        #[cfg(feature = "aws-lc-rs")]
         let decrypting_key = self.aws_lc_private_decrypting_key()?;
         let padding = T::get_private_decrypt_padding();
         // Decrypt the data
@@ -259,19 +261,25 @@ impl PrivateKey {
                 let src = &src[src_idx..src_end_index];
                 let dst = &mut dst[dst_idx..(dst_idx + cipher_text_block_size)];
 
-                aws_lc_private_decrypt(&decrypting_key, padding, src, dst)?
+                #[cfg(feature = "aws-lc-rs")]
+                let block_len = aws_lc_private_decrypt(&decrypting_key, padding, src, dst)?;
+                #[cfg(not(feature = "aws-lc-rs"))]
+                let block_len = rsa_private_decrypt(&self.value, padding, src, dst)?;
+                block_len
             };
             src_idx = src_end_index;
         }
         Ok(dst_idx)
     }
 
+    #[cfg(feature = "aws-lc-rs")]
     fn aws_lc_private_decrypting_key(&self) -> Result<aws_rsa::PrivateDecryptingKey, PKeyError> {
         let der = self.to_der().map_err(|_| PKeyError)?;
         aws_rsa::PrivateDecryptingKey::from_pkcs8(der.as_bytes()).map_err(|_| PKeyError)
     }
 }
 
+#[cfg(feature = "aws-lc-rs")]
 fn aws_lc_private_decrypt(
     private_key: &aws_rsa::PrivateDecryptingKey,
     padding: RsaPrivateDecryptPadding,
@@ -301,6 +309,26 @@ fn aws_lc_private_decrypt(
                 .map_err(|_| PKeyError)
         }
     }
+}
+
+#[cfg(not(feature = "aws-lc-rs"))]
+fn rsa_private_decrypt(
+    private_key: &RsaPrivateKey,
+    padding: RsaPrivateDecryptPadding,
+    src: &[u8],
+    dst: &mut [u8],
+) -> Result<usize, PKeyError> {
+    let plaintext = match padding {
+        RsaPrivateDecryptPadding::Pkcs1v15 => private_key.decrypt(rsa::Pkcs1v15Encrypt, src)?,
+        RsaPrivateDecryptPadding::OaepSha1 => {
+            private_key.decrypt(rsa::Oaep::new::<sha1::Sha1>(), src)?
+        }
+        RsaPrivateDecryptPadding::OaepSha256 => {
+            private_key.decrypt(rsa::Oaep::new::<sha2::Sha256>(), src)?
+        }
+    };
+    dst[..plaintext.len()].copy_from_slice(&plaintext);
+    Ok(plaintext.len())
 }
 
 impl KeySize for PublicKey {

@@ -71,7 +71,7 @@ pub mod handle;
 pub mod messages;
 use std::sync::atomic::AtomicBool;
 
-pub use messages::{Message, MessageType, RequestMessage, ResponseMessage};
+pub use messages::{Message, MessageType, PublishResponseShared, RequestMessage, ResponseMessage};
 
 /// Check for the environment variable OPCUA_TRACE_LOCKS. If it is set to 1 or true, then
 /// tracing will be enabled for locks. This is useful for debugging deadlocks.

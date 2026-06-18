@@ -53,7 +53,7 @@ no unbounded recursion, deterministic error handling, no panics on untrusted inp
 | Guideline | Status | Notes |
 |-----------|--------|-------|
 | Minimize flash/code size | ◐ Partial | `default-features=false` + feature gating helps; no dedicated size profile documented. |
-| Minimize RAM / bounded buffers | ✅ Improved | Footprint defaults reduced (§4.1). Buffers are bounded by decoding limits. |
+| Minimize RAM / bounded buffers | ◐ Improved | Footprint defaults reduced (§4.1) and hot-path buffers are pre-allocated/reused. But the TCP frame decoder does not enforce `max_message_size` (§5.4), and the GDS registries are unbounded (§5.5). |
 | Bounded dynamic allocation | ◐ Improved | Per-chunk RX alloc eliminated (§4.3); per-request `Box`+`spawn` and decode copies remain (§5.3). |
 | No unbounded recursion | ◐ Partial | Decode recursion is limited by message-size/decoding limits, not an explicit depth counter (§5.2). |
 | No panics on untrusted input | ◐ **Targeted, not complete** | The 4 discovered remote-reachable panics are fixed; the surface as a whole has not been exhaustively swept (§5.1). |
@@ -137,6 +137,45 @@ Two larger allocation sources remain on the hot path, both bigger/architectural 
   work-stealing entirely, which is the single biggest reduction in cross-core frees for a
   jitter-sensitive SBC. Worth documenting as the recommended embedded runtime config.
 
+### 5.4 TCP frame decoder does not enforce `max_message_size` — ◐ OPEN (hostile-peer memory)
+*(Added 2026-06-18 from the memory-stability follow-up; verified at source.)*
+
+`TcpCodec::decode` (`async-opcua-core/src/comms/tcp_codec.rs:93`) reads the 8-byte message header,
+takes `message_size = message_header.message_size` (an attacker-controlled `u32`, up to 4 GB), and then
+only checks `buf.len() >= message_size` before splitting the frame out. It **never rejects an
+over-limit `message_size`**, and `MessageHeader::decode` (`tcp_types.rs:98`) is handed
+`DecodingOptions` but **ignores it** (`_:`). The negotiated `max_message_size` / `max_chunk_size` from
+the Hello/Ack handshake is therefore not enforced at this layer.
+
+**Correction to an earlier characterization:** the decoder does **not** `reserve(message_size)` on the
+header, so a header alone cannot make `FramedRead` pre-allocate gigabytes. The buffer only grows as
+fast as the peer actually transmits bytes. The real (milder) exposure is that a peer *willing to stream
+data* can drive a single connection's read buffer toward its declared `message_size` before any frame
+or error is produced. Existing mitigations (per-message `max_chunk_count`, request timeouts) bound chunk
+*count* and stall duration but not single-frame *size*.
+
+**Fix (small, localized):** in `TcpCodec::decode`, once the header is read, return
+`BadTcpMessageTooLarge` immediately if `message_size > max_message_size` (when nonzero), and have
+`MessageHeader::decode` actually use the `DecodingOptions` it receives. Drops the connection before any
+oversized buffering.
+
+### 5.5 GDS certificate-management registries are unbounded — ◐ OPEN (soak leak, privileged)
+*(Added 2026-06-18; explorer-reported, not exhaustively re-verified.)*
+
+The optional GlobalDiscoveryServer push/pull method handlers accumulate state with no cap or cleanup:
+- `gds/push_methods.rs:57` — `signing_requests: HashMap<NodeId, …>` and `created_requests: Vec<…>`.
+- `gds/pull_methods.rs:45` — `rejected_certificates`, `updated_certificates`,
+  `finished_signing_requests` (three unbounded `Vec`s).
+
+A long-lived server with active GDS traffic grows without bound. **Lower priority:** these paths
+require the GDS feature and authenticated/privileged calls, so they are not anonymous-remote-reachable.
+Fix: cap each registry (oldest-evict or reject-when-full) and/or attach a TTL, mirroring how the
+subscription queues and the history continuation-point LRU are already bounded.
+
+> For contrast, the rest of the long-running state **is** properly bounded: subscription notification
+> queues, per-monitored-item queues, the retransmission/republish queue, pending-publish queue,
+> continuation points (history via LRU+TTL), and the client inflight-request map (1024).
+
 ---
 
 ## 6. Recommendations summary
@@ -144,11 +183,13 @@ Two larger allocation sources remain on the hot path, both bigger/architectural 
 | # | Action | Effort | Priority |
 |---|--------|--------|----------|
 | 1 | Complete the panic-surface sweep via clippy lints + fuzzing on `-types`/`-core`/`-crypto` (§5.1) | Medium | **High** |
-| 2 | Add explicit decode-recursion depth bound to `DecodingOptions` (§5.2) | Low | Medium |
-| 3 | Document `current_thread` runtime as the recommended embedded config (§5.3) | Low | Medium |
-| 4 | Zero-copy `ByteString`/`String` decode — M4 (§5.3) | High | Low–Medium |
-| 5 | Per-request dispatch without per-request `Box`+spawn — M2 (§5.3) | High | Low |
-| 6 | Publish a documented size-optimized build profile (LTO, `opt-level="z"`, feature-minimal) | Low | Low |
+| 2 | Enforce `max_message_size` in `TcpCodec::decode`; make `MessageHeader::decode` use `DecodingOptions` (§5.4) | Low | **High** |
+| 3 | Add explicit decode-recursion depth bound to `DecodingOptions` (§5.2) | Low | Medium |
+| 4 | Cap / TTL the GDS signing-request & certificate registries (§5.5) | Low | Medium |
+| 5 | Document `current_thread` runtime as the recommended embedded config (§5.3) | Low | Medium |
+| 6 | Zero-copy `ByteString`/`String` decode — M4 (§5.3) | High | Low–Medium |
+| 7 | Per-request dispatch without per-request `Box`+spawn — M2 (§5.3) | High | Low |
+| 8 | Publish a documented size-optimized build profile (LTO, `opt-level="z"`, feature-minimal) | Low | Low |
 
 **Not recommended:** pursuing `no_std`/bare-metal (RP2040 etc.). The `std`/`tokio`/heap coupling is
 foundational; target embedded Linux instead.

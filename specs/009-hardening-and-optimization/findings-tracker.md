@@ -38,20 +38,20 @@ one leg done, remainder deferred.
 | C2 legacy identity-token ciphertext not validated | Crit | T016–T017 | `55eed1c0` | crypto unit tests (`authentication.rs`) |
 | C3 unbounded in-flight request queue (≡ R4 bulkhead) | Crit | T018–T019 | `14da7d9d` | `controller.rs` in-flight cap test; integration suite |
 | C4 unactivated-session exhaustion | Crit | T020–T021 | `14da7d9d` | `session/manager.rs` cap; config-default tests |
-| H1 None-policy session cross-channel transfer | High | T049 | `547cbfbd` | code change (behavioral test deferred → T048) |
+| H1 None-policy session cross-channel transfer | High | T049 | `547cbfbd` | code change + behavioral test (T048, done) |
 | H2 oversized message pre-allocation | High | T022–T023 | `14da7d9d` | limits tests |
 | H3/N10 per-IP connection cap | High | T024–T025 | `14da7d9d` | `transport/tcp.rs` per-IP cap test |
 | H4 monitored-items-per-subscription cap | High | T026–T027 | `14da7d9d` | `limits.rs` default test |
 | H5 client cert / applicationUri binding | High | T051 | `547cbfbd` | enforced in CreateSession; surfaced + fixed integration harness (`71779af4`) |
-| H7 empty-results client panic | High | T037 | `9366edb0` | code change (behavioral test deferred → T035) |
+| H7 empty-results client panic | High | T037 | `9366edb0` | code change + behavioral test (T035, done) |
 | H8 (auth/cert hardening) | High | T053 | `547cbfbd` | crypto/server tests |
 | M1 decode allocation guards | Med | T030–T031 | `14da7d9d` | types tests |
 | M2 byte_len/encode mismatch silent corruption | Med | T095 | `6ea75c21` | `chunker.rs` returns `BadEncodingError` (core tests) |
-| M6 username-auth timing oracle | Med | T058 | `547cbfbd` | argon2 decoy verification (behavioral test deferred → T057) |
+| M6 username-auth timing oracle | Med | T058 | `547cbfbd` | argon2 decoy verification + error-uniformity test (T057, done) |
 | M7 idle-cost / dead-peer detection | Med | T086 | `a903156f` | client default re-enabled; core/server tests |
 | M9 client-side response validation | Med | T046 | `9366edb0` | client tests |
-| M10/N9 stalled secure-channel renewal | Med | T043 | `9366edb0` | code change (behavioral test deferred → T042) |
-| M11 unbounded chunk stream / sequence overflow | Med | T045 | `9366edb0` | code change (behavioral test deferred → T044) |
+| M10/N9 stalled secure-channel renewal | Med | T043 | `9366edb0` | code change + behavioral test (T042, done) |
+| M11 unbounded chunk stream / sequence overflow | Med | T045 | `9366edb0` | code change + tests (T044 ceiling + sequence_number.rs overflow, done) |
 | M12 legacy crypto default-off (FR-019) | Med | T059 + verify | `547cbfbd`/`71779af4` | `legacy_crypto.rs` integration tests; server+client runtime gate wired |
 | M13 | Med | T085 | `a903156f` | core/server tests |
 | M14 | Med | T084 | `a903156f` | core/server tests |
@@ -90,8 +90,8 @@ Full rationales live in `tasks.md` → "Consciously deferred findings". Summary:
 
 | Finding | Task | Why deferred |
 |---------|------|--------------|
-| M8 cert/thumbprint pinning API | T047 | Additive defense-in-depth; default MITM protection already present. Design carefully in a focused follow-up. |
-| L10 issued-token policy-ID collision | T066 | IDs are advertised; changing them is client-visible for a latent, currently-harmless collision. |
+| M8 cert/thumbprint pinning API | T047 | **DONE (2026-06-18)** — opt-in discovery-endpoint cert pinning on ClientBuilder, fail-closed. |
+| L10 issued-token policy-ID collision | T066 | **DONE (2026-06-18)** — distinct `issued_*` policy ids. |
 | L11 unchecked array-dim `checked_mul` | — | Debug-panic/release-undersized only; primary untrusted path already hardened. |
 | L13 keep-alive `*3` overflow | — | Operator-misconfig only, not client-controllable. |
 | N4 SO_SNDBUF/RCVBUF sizing | — | OS auto-tuning adequate on modern Linux. |
@@ -100,11 +100,11 @@ Full rationales live in `tasks.md` → "Consciously deferred findings". Summary:
 | PERF-P9 inline fast path for small Reads | T082 | Measure-first (needs P12 benches); trades away per-request panic isolation. |
 | PERF-P11 retransmission-queue O(n) scan | — | Audit judged acceptable for the short, bounded queue. |
 | PERF-P12 benches + baseline | T001/T002/T003/T090/T098 | Perf changes verified functionally; criterion regression-guard infra is follow-up. |
-| R6/FR-031 transport metrics + exporter | T087 | Additive observability. |
+| R6/FR-031 transport metrics + exporter | T087 | **DONE (2026-06-18)** — relaxed AtomicU64 counters + snapshot accessor + default-off `metrics-exporter`. |
 | R7b/R7c/R8 | — | Packaging/build-hygiene/docs polish outside the clarified scope. |
-| US2 behavioral tests | T035/T038/T042/T044 | Need the hostile-server mock harness (T009, not built); fixes verified by compile + config-default guards. |
-| US3 behavioral tests | T048/T050/T057 | Need a SessionManager/authenticator integration harness; fixes verified by compile + the exact code change. |
-| Test infra | T008/T009 | Fixture + mock-server harnesses; their dependent behavioral tests are deferred with them. |
+| US2 behavioral tests | T035/T042/T044 | **DONE (2026-06-18)** — written on the T009 hostile-server harness (T035/T042) + a transport unit test (T044). T038 already done earlier. |
+| US3 behavioral tests | T048/T057 | **DONE (2026-06-18)** — T048 via extracted-guard truth-table unit test, T057 via auth error-uniformity unit test. T050 already done earlier. |
+| Test infra | T009 (done) / T008 (subsumed) | **T009 DONE** (evil-proxy harness). **T008 subsumed** — crafted payloads already inline in consuming tests + the harness. |
 | SC-010/FR-046 interop gate (run) | T101 | Cannot run locally: no .NET runtime / no open62541 toolchain / network unreachable. |
 | Interop CI gate — open62541 leg | T006 (partial) | Raw C++ source with no automated runner/orchestration; no toolchain/network to build+verify a gate. **dotnet leg is wired** (`test-external-server`). |
 

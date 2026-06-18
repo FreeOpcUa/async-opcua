@@ -62,8 +62,8 @@ N6+M11 chunk ceiling). That is one differentiated unit of work, **not** batching
 
 **⚠️ Shared test infrastructure used by multiple user stories. Complete before US tests.**
 
-- [ ] T008 [P] Add malicious/malformed-input fixtures (crafted decode payloads, malformed identity tokens) under `async-opcua-types/tests/fixtures/` and `async-opcua-server/tests/fixtures/` (US1/US3 test infra)
-- [ ] T009 [P] Add a hostile-server mock harness (empty result arrays, unbounded chunks, stalled renewal, dropped TCP) under `async-opcua-client/tests/mock_server/` (US2 test infra)
+- [~] T008 [P] Add malicious/malformed-input fixtures (crafted decode payloads, malformed identity tokens) under `async-opcua-types/tests/fixtures/` and `async-opcua-server/tests/fixtures/` (US1/US3 test infra) — **subsumed**: the crafted payloads already live inline in their consuming tests (`async-opcua-types/tests/recursion_dos.rs` T011, `async-opcua-crypto/tests/legacy_decrypt.rs` T016) and the new hostile-server harness (T009); a standalone fixtures directory would be redundant scaffolding, not added coverage.
+- [X] T009 [P] Add a hostile-server mock harness under `async-opcua-client/tests/common/hostile_server.rs` (US2 test infra) — implemented as a transparent TCP "evil proxy" (real in-process server behind a parsing proxy under SecurityPolicy::None) with `EmptyDeleteSubscriptionsResults` / `StallChannelRenewal` hooks; rewrites the discovery GetEndpoints endpoint_url so the client stays on the proxy.
 - [X] T010 Create `specs/009-hardening-and-optimization/findings-tracker.md` mapping every finding → status / test-ref / owner (SC-009 traceability)
 
 ---
@@ -109,19 +109,19 @@ request/session/connection floods; server errors cleanly and keeps serving other
 **Independent test**: drive the client against the T009 hostile-server mock; client errors gracefully,
 detects the dead peer, reconnects — no panic, no hang.
 
-- [ ] T035 [P] [US2] Test: Good DeleteSubscriptions with empty results panics client in `async-opcua-client/tests/malformed_response.rs` (H7, SC-001)
+- [X] T035 [P] [US2] Test: empty-results DeleteSubscriptions response is rejected (not panicked) in `async-opcua-client/tests/hostile_server.rs::empty_delete_subscriptions_results_do_not_panic_client` (H7, SC-001)
 - [X] T036 [US2] Guard `result[0]` + add result-length check in `DeleteSubscriptions::send` in `async-opcua-client/src/session/services/subscriptions/service.rs` (H7/L12 — L12 is the defense-in-depth half of H7, same change)
 - [X] T037 [US2] Replace completed `disconnect_fut` with `pending()` sentinel after the disconnect arm fires in `async-opcua-client/src/session/event_loop.rs` (H7)
 - [X] T038 [P] [US2] Test: connect to black-holed address honors connect_timeout (N2) — `async-opcua/tests/integration/hardening.rs::connect_to_black_holed_address_times_out` (placed in the integration harness, which has the working client setup; passes)
 - [X] T039 [US2] Wrap `TcpStream::connect` in a configurable `connect_timeout` in `async-opcua-client/src/transport/tcp.rs` + `config.rs` (N2)
 - [X] T040 [P] [US2] Test: dead peer not detected with `max_failed_keep_alive_count = 0` in `async-opcua-client/tests/keep_alive.rs` (N8)
 - [X] T041 [US2] Default `max_failed_keep_alive_count` to 3 (keep 0 as documented opt-out) in `async-opcua-client/src/config.rs` (N8)
-- [ ] T042 [P] [US2] Test: stalled secure-channel renewal wedges the client in `async-opcua-client/tests/renewal.rs` (M10)
+- [X] T042 [P] [US2] Test: stalled secure-channel renewal is detected → channel torn down → client reconnects (no wedge) in `async-opcua-client/tests/hostile_server.rs::stalled_channel_renewal_does_not_wedge_client` (M10)
 - [X] T043 [US2] Derive renewal timeout from config; raise `channel_lifetime` default 60s→600s; tear down + reconnect on renewal failure in `async-opcua-client/src/transport/channel.rs` + `config.rs` (M10/N9)
-- [ ] T044 [P] [US2] Test: malicious server streams unbounded chunks; sequence overflow in `async-opcua-client/tests/chunk_flood.rs` (M11)
+- [X] T044 [P] [US2] Test: unbounded-chunk ceiling is finite even when `max_chunk_count==0` (unit test in `async-opcua-client/src/transport/core.rs`); sequence-overflow half already covered by `async-opcua-core/src/comms/sequence_number.rs` tests (M11)
 - [X] T045 [US2] Enforce hard chunk ceiling + `checked/wrapping` sequence increment in `async-opcua-client/src/transport/core.rs` (M11)
 - [X] T046 [US2] Default `trust_server_certs` false + `warn!` when enabled; remove from samples/docs in `async-opcua-client/src/config.rs` + `samples/` (M9)
-- [ ] T047 [US2] Add optional server cert/thumbprint pinning API for discovery endpoints in `async-opcua-client/src/session/client.rs` (M8)
+- [X] T047 [US2] Add optional server cert/thumbprint pinning API for discovery endpoints in `async-opcua-client/src/session/client.rs` + `builder.rs` (M8) — opt-in `discovery_server_certificate_thumbprint[/_bytes/_hex/_der]`; empty-by-default `Vec<Thumbprint>`; fail-closed enforcement on GetEndpoints/FindServers cert + returned endpoint certs.
 
 **Checkpoint**: client is robust against a hostile/unreliable server.
 
@@ -133,7 +133,7 @@ detects the dead peer, reconnects — no panic, no hang.
 **Independent test**: audit each crypto/auth path (no secret in logs; None-session non-transferable;
 cert URI validated; RSA-decrypt timing/error-uniform; advisory scan green or exception recorded).
 
-- [ ] T048 [P] [US3] Test: activated None-policy session transferable across channels in `async-opcua-server/tests/none_session_transfer.rs` (H1)
+- [X] T048 [P] [US3] Test: activated None-policy session must not transfer across channels (H1) — guard extracted to pure `is_cross_channel_transfer_forbidden(..)` + truth-table unit test in `async-opcua-server/src/session/manager.rs` (activated None session refused, secured session may transfer).
 - [X] T049 [US3] Refuse cross-channel transfer of an activated None-policy session in `async-opcua-server/src/session/manager.rs` (H1)
 - [X] T050 [P] [US3] Test: client cert with mismatched application URI is rejected (H5) — `async-opcua/tests/integration/hardening.rs::cert_application_uri_mismatch_is_rejected` (asserts BadCertificateUriInvalid against the real server; passes)
 - [X] T051 [US3] Pass client `application_uri`/hostname into `validate_or_reject_application_instance_cert` in `async-opcua-server/src/session/manager.rs` (H5)
@@ -142,7 +142,7 @@ cert URI validated; RSA-decrypt timing/error-uniform; advisory scan green or exc
 - [X] T054 [P] [US3] Test: cross-backend RSA round-trip (`rsa` encrypt → `aws-lc-rs` decrypt), all 3 paddings, 2048/4096-bit, MGF1==OAEP hash in `async-opcua-crypto/tests/rsa_backend.rs` (D1/FR-042)
 - [X] T055 [US3] Add `RsaDecryptor` trait + `aws-lc-rs` backend for the 3 decrypt paddings; route `private_decrypt` through it in `async-opcua-crypto/src/aes/rsa_private_key.rs` + Cargo.toml (D1/FR-042)
 - [X] T056 [US3] Redacting `Debug` for `AesKey` + `Zeroizing`/`ZeroizeOnDrop` for key/IV/decrypted-password buffers in `async-opcua-crypto/src/aes/aeskey.rs` + `policy/aes.rs` + `user_identity.rs` (M3/M4 — cohesive pair: one secret-hygiene change, one verification)
-- [ ] T057 [P] [US3] Test: username-auth timing reveals valid usernames in `async-opcua-server/tests/auth_timing.rs` (M6)
+- [X] T057 [P] [US3] Test: unknown-user and known-user-wrong-password are rejected with the same status (no enumeration) in `async-opcua-server/src/authenticator.rs::tests::unknown_user_and_wrong_password_are_indistinguishable` (M6) — placed with its sibling auth tests; asserts the observable (error-uniformity) half of the decoy-hash timing fix.
 - [X] T058 [US3] Dummy Argon2 verification on the not-found path (uniform timing) in `async-opcua-server/src/authenticator.rs` (M6)
 - [X] T059 [US3] `legacy-crypto` `default = []` in `-crypto`; add `legacy-crypto` feature to `-client` with `default-features = false`; umbrella opt-in; warn on enable — in the Cargo.tomls + crypto policy (M12/FR-019)
 - [X] T060 [US3] Default `SecureChannel.allow_deprecated` to false (fail-closed) in `async-opcua-core/src/comms/secure_channel.rs` (L2)
@@ -151,7 +151,7 @@ cert URI validated; RSA-decrypt timing/error-uniform; advisory scan green or exc
 - [X] T063 [P] [US3] Validate JWT `nbf` in `async-opcua-crypto/src/identity/jwt_validator.rs` (L6)
 - [X] T064 [US3] Make empty-password accounts explicit/gated + documented in `async-opcua-server/src/authenticator.rs` (L7)
 - [X] T065 [US3] Fail closed on server-signature generation failure (no null-signature degrade) in `async-opcua-server/src/session/manager.rs` (L9)
-- [ ] T066 [P] [US3] Give issued-token policy IDs distinct values in `async-opcua-server/src/identity_token.rs` (L10)
+- [X] T066 [P] [US3] Give issued-token policy IDs distinct values (`issued_*`, no longer colliding with `userpass_*`) in `async-opcua-server/src/identity_token.rs` (L10)
 - [X] T067 [P] [US3] Return `Result` from `Thumbprint::new` (remove latent panic) in `async-opcua-crypto/src/thumbprint.rs` (L14)
 
 **Checkpoint**: all three P1 user stories complete — security baseline met.
@@ -186,12 +186,12 @@ per-chunk allocations, lower idle CPU; `opc.wss` connects; all vs the T003 basel
 - [X] T079 [US5] O(1) `byte_len` for homogeneous primitive arrays in `async-opcua-types/src/variant/mod.rs` + `encoding.rs` (PERF-P4)
 - [X] T080 [US5] Skip/cache the per-tick priority sort for idle sessions in `async-opcua-server/src/subscriptions/session_subscriptions.rs` (PERF-P6)
 - [X] T081 [US5] Snapshot session Arcs; don't hold the cache read-lock across the whole tick loop in `async-opcua-server/src/subscriptions/mod.rs` (PERF-P7)
-- [ ] T082 [P] [US5] Inline fast path for small single-node-manager Reads (avoid per-request spawn) in `async-opcua-server/src/session/message_handler.rs` (PERF-P9)
+- [~] T082 [P] [US5] Inline fast path for small single-node-manager Reads (avoid per-request spawn) in `async-opcua-server/src/session/message_handler.rs` (PERF-P9) — **deferred (SC-009)**: measure-first item (needs P12 benches, T090) that trades away per-request panic isolation; doing it un-measured conflicts with the correctness/security-paramount constitution. Tracked as an allocation/architecture follow-up (embedded-audit §5.3, M2 class).
 - [X] T083 [P] [US5] Confirm vectored/batched multi-chunk writes after NODELAY in `async-opcua-core/src/comms/buffer.rs` (N7) — confirmed: `SendBuffer::read_into_async` writes via `TcpCodec::write_frame_vectored`; regression test `test_buffer_read_uses_vectored_write` asserts scalar_writes==0 / vectored_writes==1 (passes)
 - [X] T084 [P] [US5] Sort subscription publish priority descending (higher first) in `async-opcua-server/src/subscriptions/session_subscriptions.rs` (M14/FR-032)
 - [X] T085 [P] [US5] Enforce `max_history_continuation_points` cap in `async-opcua-server/src/session/instance.rs` (M13/FR-033)
 - [X] T086 [US5] Make `max_queued_notifications` a hard bound + surface drops as a diagnostic in `async-opcua-server/src/subscriptions/subscription.rs` (M7/FR-034)
-- [ ] T087 [P] [US5] Add network/transport counters (connections, bytes, secure-channel) + optional `metrics-exporter` feature in `async-opcua-server/src/metrics.rs` (R6/FR-031)
+- [X] T087 [P] [US5] Add network/transport counters (connections, bytes, secure-channel) + optional `metrics-exporter` feature in `async-opcua-server/src/metrics.rs` (R6/FR-031) — relaxed AtomicU64 counters (no hot-path heap/locks), `ServerMetricsSnapshot` accessor on Server/ServerHandle, default-off `metrics-exporter` feature gating an exporter hook.
 - [X] T088 [US5] Add `wss` feature + opc.wss transport (R5/FR-044): WsByteStream adapter (core), client `WebSocketConnector` + DefaultConnector scheme routing + secure-by-default TLS builder API, server WS listener + `websocket_rustls_config`/`websocket_tls` + `run_with_wss`; tokio-tungstenite over tokio-rustls on the in-tree rustls 0.23. Server transport generalized over `AsyncRead+AsyncWrite` to carry it.
 - [X] T089 [P] [US5] Test: `opc.wss` connector connects and round-trips — `async-opcua/tests/integration/wss.rs::wss_round_trip_none_policy` (TLS1.3 + ALPN opcua+uacp + full OPC UA handshake + Read; passes)
 - [~] T090 [US5] Re-run benches; verify SC-006/SC-007 improvements vs the T003 baseline; record in `benchmarks-baseline.md` (PERF-P12/SC-006/SC-007) — benches exist + run; the P1–P10 work landed (US5/US6) *before* the benches, so they capture the optimized state as the going-forward baseline. A strict pre-009-vs-post-009 delta needs the pre-009 commit re-benched (recorded in benchmarks-baseline.md "SC-006/SC-007 status")
@@ -219,7 +219,7 @@ handle/context across boundaries; workspace builds with the new trait/type/featu
 
 - [X] T099 Assemble `CHANGELOG.md` with every public-API break from `contracts/public-api-changes.md`; bump workspace version to **0.19.0** (SC-011)
 - [X] T100 Run the full build matrix (default / `--all-features` / `--no-default-features`) warning-free + full test suite (SC-008) — all three configs build under `-D warnings` (libs for `--no-default-features`; samples need json/xml); `cargo test --workspace --all-features` green (80 suites, 0 failures)
-- [ ] T101 Run the hard interop gate (dotnet + open62541) and confirm pass (SC-010/FR-046) — **deferred (SC-009)**: cannot run locally (no .NET runtime / no open62541 toolchain / network unreachable). dotnet leg is wired as a CI gate (`test-external-server`); see findings-tracker.
+- [~] T101 Run the hard interop gate (dotnet + open62541) and confirm pass (SC-010/FR-046) — **deferred (SC-009)**: cannot run locally (no .NET runtime / no open62541 toolchain / network unreachable). dotnet leg is wired as a CI gate (`test-external-server`); see findings-tracker.
 - [X] T102 Update `findings-tracker.md`: every finding `fixed` (with test ref) or `deferred` (with rationale); verify SC-009 (no silent drops) — tracker lists all fixed findings (task + commit + test ref) and all deferrals (rationale), mirroring the tasks.md deferral table
 - [X] T103 [P] Verify SC-003: a full connect→activate→subscribe→disconnect capture shows no secret in logs/Debug — observe via `tracing` capture in `async-opcua-server`/`-client` integration tests — verified: `RUST_LOG=trace` username/password lifecycle shows 0 occurrences of the plaintext password; only the `password_security_policy` config field name appears
 - [X] T104 [P] Update `docs/setup.md` for the `legacy-crypto` opt-out (default-off) feature + runtime `allow_legacy_crypto` gate and the `aws-lc-rs` build note (C-compiler requirement). `websocket` intentionally **not** documented — that feature (T088) is deferred/unimplemented; documenting a non-existent feature would be incorrect.

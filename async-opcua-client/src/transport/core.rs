@@ -459,3 +459,66 @@ impl TransportState {
         status
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{path::Path, sync::Arc};
+
+    use arc_swap::ArcSwap;
+    use opcua_core::{
+        comms::secure_channel::{Role, SecureChannel},
+        sync::RwLock,
+    };
+    use opcua_crypto::CertificateStore;
+    use opcua_types::{ContextOwned, NodeId};
+
+    use super::TransportState;
+    use crate::transport::state::SecureChannelState;
+
+    fn test_transport_state(max_chunk_count: usize, max_message_size: usize) -> TransportState {
+        // CertificateStore::new is pure (just records the path); None-policy channels
+        // never touch the PKI dir, so an unused path is fine for this unit test.
+        let cert_store = Arc::new(RwLock::new(CertificateStore::new(Path::new(
+            "./target/_unused_test_pki",
+        ))));
+        let encoding_context = Arc::new(RwLock::new(ContextOwned::default()));
+        let secure_channel = Arc::new(RwLock::new(SecureChannel::new(
+            cert_store,
+            Role::Client,
+            encoding_context,
+        )));
+        let auth_token = Arc::new(ArcSwap::new(Arc::new(NodeId::null())));
+        let channel_state = Arc::new(SecureChannelState::new(false, secure_channel, auth_token));
+        let (_tx, rx) = tokio::sync::mpsc::channel(1);
+        TransportState::new(
+            channel_state,
+            rx,
+            max_chunk_count,
+            max_message_size,
+            max_message_size,
+        )
+    }
+
+    /// T044 / M11: a configured "unlimited" incoming chunk count (`max_chunk_count == 0`)
+    /// must NOT mean unbounded accumulation. The client derives a hard, finite ceiling
+    /// from `max_message_size / MIN_CHUNK_SIZE` (MIN_CHUNK_SIZE = 8192), floored at 1.
+    #[test]
+    fn unlimited_chunk_count_derives_a_finite_ceiling() {
+        assert_eq!(
+            test_transport_state(0, 8192 * 10).effective_max_chunk_count(),
+            10
+        );
+        // Never 0/unbounded: a tiny or zero max message size still floors at 1.
+        assert_eq!(test_transport_state(0, 0).effective_max_chunk_count(), 1);
+        assert_eq!(test_transport_state(0, 100).effective_max_chunk_count(), 1);
+    }
+
+    /// An explicit positive `max_chunk_count` is honored verbatim.
+    #[test]
+    fn explicit_chunk_count_is_honored() {
+        assert_eq!(
+            test_transport_state(5, 8192 * 100).effective_max_chunk_count(),
+            5
+        );
+    }
+}

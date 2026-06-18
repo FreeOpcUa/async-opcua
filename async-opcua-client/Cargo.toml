@@ -65,3 +65,6 @@ async-opcua-core = { path = "../async-opcua-core", version = "0.19.0", default-f
 async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.19.0", default-features = false }
 async-opcua-nodes = { path = "../async-opcua-nodes", version = "0.19.0" }
 async-opcua-types = { path = "../async-opcua-types", version = "0.19.0" }
+
+[dev-dependencies]
+async-opcua-server = { path = "../async-opcua-server" }

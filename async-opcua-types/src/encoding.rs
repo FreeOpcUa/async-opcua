@@ -505,6 +505,19 @@ where
     }
 }
 
+impl<T> BinaryEncodable for std::sync::Arc<T>
+where
+    T: BinaryEncodable,
+{
+    fn byte_len(&self, ctx: &crate::Context<'_>) -> usize {
+        (**self).byte_len(ctx)
+    }
+
+    fn encode<S: Write + ?Sized>(&self, stream: &mut S, ctx: &Context<'_>) -> EncodingResult<()> {
+        (**self).encode(stream, ctx)
+    }
+}
+
 /// Trait for decoding a type that cannot contain any custom types
 /// from OPC UA binary. Used in some core modules to decode raw binary messages.
 pub trait SimpleBinaryDecodable: Sized {

@@ -22,14 +22,14 @@ use crate::{
     session::instance::Session,
     SubscriptionLimits,
 };
-use opcua_core::{sync::RwLock, PublishResponseShared};
+use opcua_core::{sync::RwLock, PublishResponseShared, RepublishResponseShared};
 use opcua_types::{
     AttributeId, CreateSubscriptionRequest, CreateSubscriptionResponse, DataValue, DateTime,
     DateTimeUtc, ExtensionObject, ModifySubscriptionRequest, ModifySubscriptionResponse,
     MonitoredItemCreateResult, MonitoredItemModifyRequest, MonitoredItemModifyResult,
-    MonitoringMode, NodeId, NotificationMessage, PublishRequest, RepublishRequest,
-    RepublishResponse, ResponseHeader, ServiceFault, SetPublishingModeRequest,
-    SetPublishingModeResponse, StatusCode, TimestampsToReturn,
+    MonitoringMode, NodeId, NotificationMessage, PublishRequest, RepublishRequest, ResponseHeader,
+    ServiceFault, SetPublishingModeRequest, SetPublishingModeResponse, StatusCode,
+    TimestampsToReturn,
 };
 
 /// Subscriptions belonging to a single session. Note that they are technically _owned_ by
@@ -274,12 +274,12 @@ impl SessionSubscriptions {
     pub(super) fn republish(
         &self,
         request: &RepublishRequest,
-    ) -> Result<RepublishResponse, StatusCode> {
+    ) -> Result<RepublishResponseShared, StatusCode> {
         let msg = self.find_notification_message(
             request.subscription_id,
             request.retransmit_sequence_number,
         )?;
-        Ok(RepublishResponse {
+        Ok(RepublishResponseShared {
             response_header: ResponseHeader::new_good(&request.request_header),
             notification_message: msg,
         })
@@ -831,7 +831,7 @@ impl SessionSubscriptions {
         &self,
         subscription_id: u32,
         sequence_number: u32,
-    ) -> Result<NotificationMessage, StatusCode> {
+    ) -> Result<Arc<NotificationMessage>, StatusCode> {
         if !self.subscriptions.contains_key(&subscription_id) {
             return Err(StatusCode::BadSubscriptionIdInvalid);
         }
@@ -840,7 +840,7 @@ impl SessionSubscriptions {
         }) else {
             return Err(StatusCode::BadMessageNotAvailable);
         };
-        Ok((*notification.message).clone())
+        Ok(Arc::clone(&notification.message))
     }
 
     fn remove_expired_publish_requests(&mut self, now: Instant) {

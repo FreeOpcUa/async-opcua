@@ -654,8 +654,19 @@ impl Subscription {
         notifications: &mut Vec<Notification>,
         now: &DateTimeUtc,
     ) -> NotificationMessage {
-        let mut data_change_notifications = Vec::with_capacity(notifications.len());
-        let mut event_notifications = Vec::new();
+        // Pre-size each output vector to its exact count in a single counting pass,
+        // so neither grows via reallocation while draining and neither reserves
+        // unused capacity. (Sizing data-change to notifications.len() would waste a
+        // large allocation on event-only/alarm publishes while events grew from zero.)
+        let (data_change_count, event_count) =
+            notifications
+                .iter()
+                .fold((0usize, 0usize), |(dc, ev), notif| match notif {
+                    Notification::MonitoredItemNotification(_) => (dc + 1, ev),
+                    Notification::Event(_) => (dc, ev + 1),
+                });
+        let mut data_change_notifications = Vec::with_capacity(data_change_count);
+        let mut event_notifications = Vec::with_capacity(event_count);
 
         for notif in notifications.drain(..) {
             match notif {

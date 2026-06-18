@@ -161,6 +161,7 @@ dependencies = [
  "async-opcua-nodes",
  "async-opcua-types",
  "async-trait",
+ "bytes",
  "chrono",
  "futures",
  "hashbrown 0.15.5",

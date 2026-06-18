@@ -728,7 +728,7 @@ impl SecureChannel {
 
     fn decrypt_open_secure_channel(
         &self,
-        src: Vec<u8>,
+        src: bytes::Bytes,
         security_header: SecurityHeader,
         encrypted_range: Range<usize>,
     ) -> Result<(MessageChunk, SecurityPolicy), Error> {
@@ -809,12 +809,12 @@ impl SecureChannel {
 
         let msg = Self::update_message_size_and_truncate(decrypted_data, decrypted_size)?;
 
-        Ok((MessageChunk { data: msg }, security_policy))
+        Ok((MessageChunk { data: msg.into() }, security_policy))
     }
 
     fn decrypt_chunk(
         &self,
-        src: Vec<u8>,
+        src: bytes::Bytes,
         security_header: SecurityHeader,
         signed_range: Range<usize>,
         encrypted_range: Range<usize>,
@@ -844,7 +844,7 @@ impl SecureChannel {
 
         // Value returned from symmetric_decrypt_and_verify is the end of the actual decrypted data.
         Ok(MessageChunk {
-            data: Self::update_message_size_and_truncate(decrypted_data, decrypted_size)?,
+            data: Self::update_message_size_and_truncate(decrypted_data, decrypted_size)?.into(),
         })
     }
 
@@ -857,7 +857,7 @@ impl SecureChannel {
     }
 
     /// Decrypts and verifies the body data if the mode / policy requires it
-    pub fn verify_and_remove_security(&self, src: Vec<u8>) -> Result<MessageChunk, Error> {
+    pub fn verify_and_remove_security(&self, src: bytes::Bytes) -> Result<MessageChunk, Error> {
         // Get message & security header from data
         let (message_header, security_header, encrypted_data_offset) =
             self.decode_message_header(&src)?;
@@ -889,7 +889,7 @@ impl SecureChannel {
     /// if the message is an OpenSecureChannel request.
     pub fn verify_and_remove_security_server(
         &mut self,
-        src: Vec<u8>,
+        src: bytes::Bytes,
     ) -> Result<MessageChunk, Error> {
         // Get message & security header from data
         let (message_header, security_header, encrypted_data_offset) =

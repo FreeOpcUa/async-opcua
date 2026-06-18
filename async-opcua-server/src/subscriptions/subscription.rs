@@ -654,8 +654,19 @@ impl Subscription {
         notifications: &mut Vec<Notification>,
         now: &DateTimeUtc,
     ) -> NotificationMessage {
-        let mut data_change_notifications = Vec::new();
-        let mut event_notifications = Vec::new();
+        // Pre-size each output vector to its exact count in a single counting pass,
+        // so neither grows via reallocation while draining and neither reserves
+        // unused capacity. (Sizing data-change to notifications.len() would waste a
+        // large allocation on event-only/alarm publishes while events grew from zero.)
+        let (data_change_count, event_count) =
+            notifications
+                .iter()
+                .fold((0usize, 0usize), |(dc, ev), notif| match notif {
+                    Notification::MonitoredItemNotification(_) => (dc + 1, ev),
+                    Notification::Event(_) => (dc, ev + 1),
+                });
+        let mut data_change_notifications = Vec::with_capacity(data_change_count);
+        let mut event_notifications = Vec::with_capacity(event_count);
 
         for notif in notifications.drain(..) {
             match notif {
@@ -861,7 +872,15 @@ impl Subscription {
 
 #[cfg(test)]
 mod tests {
-    use std::time::{Duration, Instant};
+    use std::{
+        alloc::{GlobalAlloc, Layout, System},
+        hint::black_box,
+        sync::{
+            atomic::{AtomicU64, AtomicUsize, Ordering},
+            Arc,
+        },
+        time::{Duration, Instant},
+    };
 
     use chrono::{TimeDelta, Utc};
 
@@ -873,11 +892,82 @@ mod tests {
     };
     use opcua_types::{
         match_extension_object_owned, AttributeId, DataChangeNotification, DataValue, DateTime,
-        DateTimeUtc, EventNotificationList, MonitoringMode, NodeId, NotificationMessage,
-        ReadValueId, StatusChangeNotification, StatusCode, Variant,
+        DateTimeUtc, EventNotificationList, MonitoredItemNotification, MonitoringMode, NodeId,
+        NotificationMessage, PublishResponse, ReadValueId, StatusChangeNotification, StatusCode,
+        Variant,
     };
 
     use super::{Subscription, TickReason};
+
+    #[global_allocator]
+    static COUNTING_ALLOCATOR: CountingAllocator = CountingAllocator::new();
+
+    struct CountingAllocator {
+        allocation_count: AtomicUsize,
+        allocated_bytes: AtomicU64,
+    }
+
+    #[derive(Debug, Copy, Clone, Default)]
+    struct AllocationSnapshot {
+        count: usize,
+        bytes: u64,
+    }
+
+    impl CountingAllocator {
+        const fn new() -> Self {
+            Self {
+                allocation_count: AtomicUsize::new(0),
+                allocated_bytes: AtomicU64::new(0),
+            }
+        }
+
+        fn reset(&self) {
+            self.allocation_count.store(0, Ordering::Relaxed);
+            self.allocated_bytes.store(0, Ordering::Relaxed);
+        }
+
+        fn snapshot(&self) -> AllocationSnapshot {
+            AllocationSnapshot {
+                count: self.allocation_count.load(Ordering::Relaxed),
+                bytes: self.allocated_bytes.load(Ordering::Relaxed),
+            }
+        }
+
+        fn record_allocation(&self, bytes: usize) {
+            self.allocation_count.fetch_add(1, Ordering::Relaxed);
+            self.allocated_bytes
+                .fetch_add(bytes as u64, Ordering::Relaxed);
+        }
+    }
+
+    unsafe impl GlobalAlloc for CountingAllocator {
+        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+            self.record_allocation(layout.size());
+            // SAFETY: This allocator only observes allocation metadata, then delegates the
+            // allocation request unchanged to the standard system allocator.
+            unsafe { System.alloc(layout) }
+        }
+
+        unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+            self.record_allocation(layout.size());
+            // SAFETY: This allocator only observes allocation metadata, then delegates the
+            // zeroed allocation request unchanged to the standard system allocator.
+            unsafe { System.alloc_zeroed(layout) }
+        }
+
+        unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+            // SAFETY: Pointers returned by the delegated system allocator are deallocated
+            // through the same allocator with the original layout.
+            unsafe { System.dealloc(ptr, layout) };
+        }
+
+        unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+            self.record_allocation(new_size);
+            // SAFETY: This allocator only observes reallocation metadata, then delegates the
+            // reallocation request unchanged to the standard system allocator.
+            unsafe { System.realloc(ptr, layout, new_size) }
+        }
+    }
 
     fn get_notifications(message: &NotificationMessage) -> Vec<Notification> {
         let mut res = Vec::new();
@@ -905,6 +995,82 @@ mod tests {
             time + chrono::Duration::try_milliseconds(ms as i64).unwrap(),
             time_inst + Duration::from_millis(ms),
         )
+    }
+
+    fn make_publish_baseline_notifications(count: usize) -> Vec<Notification> {
+        (0..count)
+            .map(|idx| {
+                Notification::MonitoredItemNotification(MonitoredItemNotification {
+                    client_handle: idx as u32,
+                    value: DataValue::new_now(idx as i32),
+                })
+            })
+            .collect()
+    }
+
+    fn measure_publish_baseline_once(
+        notification_count: usize,
+        sequence_number: u32,
+        now: &DateTimeUtc,
+    ) -> (AllocationSnapshot, AllocationSnapshot) {
+        let mut notifications = make_publish_baseline_notifications(notification_count);
+
+        COUNTING_ALLOCATOR.reset();
+        let message =
+            Subscription::make_notification_message(sequence_number, &mut notifications, now);
+        let construction = COUNTING_ALLOCATOR.snapshot();
+        black_box(&message);
+
+        let notification = Arc::new(message);
+        COUNTING_ALLOCATOR.reset();
+        let response = PublishResponse {
+            notification_message: (*notification).clone(),
+            ..PublishResponse::default()
+        };
+        let publish_clone = COUNTING_ALLOCATOR.snapshot();
+        black_box(response);
+
+        (construction, publish_clone)
+    }
+
+    #[test]
+    #[ignore = "allocation baseline harness; run explicitly with --ignored --nocapture"]
+    fn publish_allocation_baseline_reports_construction_and_clone() {
+        const WARMUP_RUNS: u32 = 3;
+        const MEASURED_RUNS: u32 = 5;
+        const NOTIFICATION_COUNTS: [usize; 2] = [1000, 5000];
+
+        let now = Utc::now();
+
+        for notification_count in NOTIFICATION_COUNTS {
+            for sequence_number in 0..WARMUP_RUNS {
+                let (construction, publish_clone) =
+                    measure_publish_baseline_once(notification_count, sequence_number + 1, &now);
+                black_box((construction, publish_clone));
+            }
+
+            let mut construction_total = AllocationSnapshot::default();
+            let mut clone_total = AllocationSnapshot::default();
+
+            for run in 0..MEASURED_RUNS {
+                let (construction, publish_clone) =
+                    measure_publish_baseline_once(notification_count, WARMUP_RUNS + run + 1, &now);
+                construction_total.count += construction.count;
+                construction_total.bytes += construction.bytes;
+                clone_total.count += publish_clone.count;
+                clone_total.bytes += publish_clone.bytes;
+            }
+
+            println!(
+                "publish_alloc_baseline monitored_items={} runs={} construction_allocs_avg={} construction_bytes_avg={} publish_clone_allocs_avg={} publish_clone_bytes_avg={}",
+                notification_count,
+                MEASURED_RUNS,
+                construction_total.count / MEASURED_RUNS as usize,
+                construction_total.bytes / u64::from(MEASURED_RUNS),
+                clone_total.count / MEASURED_RUNS as usize,
+                clone_total.bytes / u64::from(MEASURED_RUNS),
+            );
+        }
     }
 
     #[test]

@@ -10,6 +10,6 @@ mod xml;
 
 pub use custom_struct::{DynamicStructure, DynamicTypeLoader};
 pub use type_tree::{
-    DataTypeTree, DataTypeVariant, EncodingIds, EnumTypeInfo, ParentIds, ParsedStructureField,
-    StructTypeInfo, TypeInfo, TypeInfoRef,
+    DataTypeTree, DataTypeVariant, EncodingIds, EnumTypeInfo, GenericTypeInfo, ParentIds,
+    ParsedStructureField, StructTypeInfo, TypeInfo, TypeInfoRef,
 };

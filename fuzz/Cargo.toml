@@ -32,3 +32,10 @@ path = "fuzz_targets/fuzz_deserialize.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "fuzz_dynamic_struct"
+path = "fuzz_targets/fuzz_dynamic_struct.rs"
+test = false
+doc = false
+bench = false

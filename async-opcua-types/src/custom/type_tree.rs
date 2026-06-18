@@ -139,11 +139,14 @@ pub struct EncodingIds {
 }
 
 #[derive(Debug)]
+/// Description of a generic or primitive data type.
 pub struct GenericTypeInfo {
+    /// True if the type is abstract.
     pub is_abstract: bool,
 }
 
 impl GenericTypeInfo {
+    /// Creates a new `GenericTypeInfo`.
     pub fn new(is_abstract: bool) -> Self {
         Self { is_abstract }
     }

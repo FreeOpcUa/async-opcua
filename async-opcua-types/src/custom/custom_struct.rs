@@ -285,11 +285,10 @@ impl BinaryEncodable for DynamicStructure {
                     size += self.field_variant_len(value, field, ctx);
                 }
             }
-            StructureType::StructureWithSubtypedValues => {
-                todo!("StructureWithSubtypedValues is unsupported")
-            }
-            StructureType::UnionWithSubtypedValues => {
-                todo!("UnionWithSubtypedValues is unsupported")
+            // Unsupported; encode returns an error for these before any
+            // bytes are written, so the length is never used.
+            StructureType::StructureWithSubtypedValues | StructureType::UnionWithSubtypedValues => {
+                return 0
             }
         }
 
@@ -342,11 +341,10 @@ impl BinaryEncodable for DynamicStructure {
                     self.encode_field(stream, value, field, ctx)?;
                 }
             }
-            StructureType::StructureWithSubtypedValues => {
-                todo!("StructureWithSubtypedValues is unsupported")
-            }
-            StructureType::UnionWithSubtypedValues => {
-                todo!("UnionWithSubtypedValues is unsupported")
+            StructureType::StructureWithSubtypedValues | StructureType::UnionWithSubtypedValues => {
+                return Err(Error::encoding(
+                    "Structures and unions with subtyped values are unsupported",
+                ));
             }
         }
 
@@ -592,11 +590,10 @@ impl DynamicTypeLoader {
                     data: values,
                 }))
             }
-            StructureType::StructureWithSubtypedValues => {
-                todo!("StructureWithSubtypedValues is unsupported")
-            }
-            StructureType::UnionWithSubtypedValues => {
-                todo!("UnionWithSubtypedValues is unsupported")
+            StructureType::StructureWithSubtypedValues | StructureType::UnionWithSubtypedValues => {
+                Err(Error::decoding(
+                    "Structures and unions with subtyped values are unsupported",
+                ))
             }
         }
     }

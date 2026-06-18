@@ -5,13 +5,75 @@ use std::{
 
 use opcua_core::handle::Handle;
 use opcua_nodes::{Event, TypeTree};
-use opcua_types::{DataValue, DateTime, DateTimeUtc, NotificationMessage, StatusCode};
+use opcua_types::{
+    DataChangeNotification, DataValue, DateTime, DateTimeUtc, MonitoredItemNotification,
+    NotificationMessage, StatusCode,
+};
 use tracing::{debug, trace, warn};
 
 use crate::node_manager::MonitoredItemRef;
 
 use super::monitored_item::{MonitoredItem, Notification};
 use super::pool::NotificationBuffer;
+
+const DATA_CHANGE_NOTIFICATION_VEC_POOL_LIMIT: usize = 4;
+
+pub(super) struct DataChangeNotificationVecPool {
+    free: Vec<Vec<MonitoredItemNotification>>,
+    max_retained: usize,
+}
+
+impl DataChangeNotificationVecPool {
+    fn new(max_retained: usize) -> Self {
+        Self {
+            free: Vec::with_capacity(max_retained),
+            max_retained,
+        }
+    }
+
+    fn draw(&mut self, capacity: usize) -> Vec<MonitoredItemNotification> {
+        while let Some(mut notifications) = self.free.pop() {
+            notifications.clear();
+            if notifications.capacity() >= capacity {
+                return notifications;
+            }
+        }
+
+        Vec::with_capacity(capacity)
+    }
+
+    pub(super) fn reclaim(&mut self, mut notifications: Vec<MonitoredItemNotification>) {
+        notifications.clear();
+        if self.free.len() < self.max_retained {
+            self.free.push(notifications);
+        }
+    }
+}
+
+impl Default for DataChangeNotificationVecPool {
+    fn default() -> Self {
+        Self::new(DATA_CHANGE_NOTIFICATION_VEC_POOL_LIMIT)
+    }
+}
+
+pub(super) fn reclaim_data_change_notification_vecs(
+    mut message: NotificationMessage,
+    pool: &mut DataChangeNotificationVecPool,
+) {
+    let Some(notification_data) = message.notification_data.take() else {
+        return;
+    };
+
+    for notification in notification_data {
+        let Some(mut data_change) = notification.into_inner_as::<DataChangeNotification>() else {
+            continue;
+        };
+        let Some(monitored_items) = data_change.monitored_items.take() else {
+            continue;
+        };
+        pool.reclaim(monitored_items);
+    }
+}
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 /// Current internal state of the subscription.
@@ -510,6 +572,7 @@ impl Subscription {
         tick_reason: TickReason,
         publishing_req_queued: bool,
         buffer: &mut NotificationBuffer,
+        data_change_notification_pool: &mut DataChangeNotificationVecPool,
     ) -> TickResult {
         let publishing_interval_elapsed = match tick_reason {
             TickReason::ReceivePublishRequest => false,
@@ -555,7 +618,12 @@ impl Subscription {
             UpdateStateAction::ReturnNotifications => {
                 let resend_data = std::mem::take(&mut self.resend_data);
                 buffer.reset();
-                let messages = self.tick_monitored_items(now, resend_data, buffer);
+                let messages = self.tick_monitored_items(
+                    now,
+                    resend_data,
+                    buffer,
+                    data_change_notification_pool,
+                );
                 for msg in messages {
                     self.enqueue_notification(msg);
                 }
@@ -623,6 +691,7 @@ impl Subscription {
         triggers: &mut Vec<(u32, u32)>,
         notifications: &mut Vec<Notification>,
         messages: &mut Vec<NotificationMessage>,
+        data_change_notification_pool: &mut DataChangeNotificationVecPool,
     ) {
         for (triggering_item, item_id) in triggers.drain(..) {
             let Some(item) = self.monitored_items.get_mut(&item_id) else {
@@ -641,6 +710,7 @@ impl Subscription {
                         self.sequence_number.next(),
                         notifications,
                         now,
+                        data_change_notification_pool,
                     ));
                 }
             }
@@ -653,6 +723,7 @@ impl Subscription {
         next_sequence_number: u32,
         notifications: &mut Vec<Notification>,
         now: &DateTimeUtc,
+        data_change_notification_pool: &mut DataChangeNotificationVecPool,
     ) -> NotificationMessage {
         // Pre-size each output vector to its exact count in a single counting pass,
         // so neither grows via reallocation while draining and neither reserves
@@ -665,7 +736,7 @@ impl Subscription {
                     Notification::MonitoredItemNotification(_) => (dc + 1, ev),
                     Notification::Event(_) => (dc, ev + 1),
                 });
-        let mut data_change_notifications = Vec::with_capacity(data_change_count);
+        let mut data_change_notifications = data_change_notification_pool.draw(data_change_count);
         let mut event_notifications = Vec::with_capacity(event_count);
 
         for notif in notifications.drain(..) {
@@ -693,6 +764,7 @@ impl Subscription {
         notifications: &mut Vec<Notification>,
         messages: &mut Vec<NotificationMessage>,
         sequence_numbers: &mut Handle,
+        data_change_notification_pool: &mut DataChangeNotificationVecPool,
     ) {
         monitored_item.maybe_enqueue_skipped_value(&(*now).into());
 
@@ -718,6 +790,7 @@ impl Subscription {
                             sequence_numbers.next(),
                             notifications,
                             now,
+                            data_change_notification_pool,
                         ));
                     }
                 }
@@ -732,6 +805,7 @@ impl Subscription {
         now: &DateTimeUtc,
         resend_data: bool,
         buffer: &mut NotificationBuffer,
+        data_change_notification_pool: &mut DataChangeNotificationVecPool,
     ) -> Vec<NotificationMessage> {
         let mut messages = Vec::new();
         let NotificationBuffer {
@@ -751,6 +825,7 @@ impl Subscription {
                     notifications,
                     &mut messages,
                     &mut self.sequence_number,
+                    data_change_notification_pool,
                 );
             }
         } else {
@@ -767,17 +842,25 @@ impl Subscription {
                     notifications,
                     &mut messages,
                     &mut self.sequence_number,
+                    data_change_notification_pool,
                 );
             }
         }
 
-        self.handle_triggers(now, triggers, notifications, &mut messages);
+        self.handle_triggers(
+            now,
+            triggers,
+            notifications,
+            &mut messages,
+            data_change_notification_pool,
+        );
 
         if !notifications.is_empty() {
             messages.push(Self::make_notification_message(
                 self.sequence_number.next(),
                 notifications,
                 now,
+                data_change_notification_pool,
             ));
         }
 
@@ -897,7 +980,10 @@ mod tests {
         NotificationMessage, ReadValueId, StatusChangeNotification, StatusCode, Variant,
     };
 
-    use super::{Subscription, TickReason};
+    use super::{
+        reclaim_data_change_notification_vecs, DataChangeNotificationVecPool, Subscription,
+        TickReason,
+    };
 
     #[global_allocator]
     static COUNTING_ALLOCATOR: CountingAllocator = CountingAllocator::new();
@@ -1012,12 +1098,17 @@ mod tests {
         notification_count: usize,
         sequence_number: u32,
         now: &DateTimeUtc,
+        data_change_notification_pool: &mut DataChangeNotificationVecPool,
     ) -> (AllocationSnapshot, AllocationSnapshot) {
         let mut notifications = make_publish_baseline_notifications(notification_count);
 
         COUNTING_ALLOCATOR.reset();
-        let message =
-            Subscription::make_notification_message(sequence_number, &mut notifications, now);
+        let message = Subscription::make_notification_message(
+            sequence_number,
+            &mut notifications,
+            now,
+            data_change_notification_pool,
+        );
         let construction = COUNTING_ALLOCATOR.snapshot();
         black_box(&message);
 
@@ -1033,7 +1124,11 @@ mod tests {
             diagnostic_infos: None,
         };
         let publish_clone = COUNTING_ALLOCATOR.snapshot();
-        black_box(response);
+        black_box(&response);
+        drop(response);
+        if let Some(message) = Arc::into_inner(notification) {
+            reclaim_data_change_notification_vecs(message, data_change_notification_pool);
+        }
 
         (construction, publish_clone)
     }
@@ -1048,9 +1143,14 @@ mod tests {
         let now = Utc::now();
 
         for notification_count in NOTIFICATION_COUNTS {
+            let mut data_change_notification_pool = DataChangeNotificationVecPool::default();
             for sequence_number in 0..WARMUP_RUNS {
-                let (construction, publish_clone) =
-                    measure_publish_baseline_once(notification_count, sequence_number + 1, &now);
+                let (construction, publish_clone) = measure_publish_baseline_once(
+                    notification_count,
+                    sequence_number + 1,
+                    &now,
+                    &mut data_change_notification_pool,
+                );
                 black_box((construction, publish_clone));
             }
 
@@ -1058,8 +1158,12 @@ mod tests {
             let mut clone_total = AllocationSnapshot::default();
 
             for run in 0..MEASURED_RUNS {
-                let (construction, publish_clone) =
-                    measure_publish_baseline_once(notification_count, WARMUP_RUNS + run + 1, &now);
+                let (construction, publish_clone) = measure_publish_baseline_once(
+                    notification_count,
+                    WARMUP_RUNS + run + 1,
+                    &now,
+                    &mut data_change_notification_pool,
+                );
                 construction_total.count += construction.count;
                 construction_total.bytes += construction.bytes;
                 clone_total.count += publish_clone.count;
@@ -1075,6 +1179,50 @@ mod tests {
                 clone_total.count / MEASURED_RUNS as usize,
                 clone_total.bytes / u64::from(MEASURED_RUNS),
             );
+        }
+    }
+
+    #[test]
+    fn reclaimed_data_change_notification_vec_does_not_reuse_stale_items() {
+        let now = Utc::now();
+        let mut data_change_notification_pool = DataChangeNotificationVecPool::default();
+
+        let test_cases = [
+            vec![10_u32, 11, 12, 13],
+            vec![20_u32],
+            vec![30_u32, 31],
+            vec![40_u32],
+        ];
+
+        for (sequence_number, expected_handles) in test_cases.into_iter().enumerate() {
+            let mut notifications = expected_handles
+                .iter()
+                .map(|handle| {
+                    Notification::MonitoredItemNotification(MonitoredItemNotification {
+                        client_handle: *handle,
+                        value: DataValue::new_now(*handle as i32),
+                    })
+                })
+                .collect();
+
+            let message = Subscription::make_notification_message(
+                sequence_number as u32 + 1,
+                &mut notifications,
+                &now,
+                &mut data_change_notification_pool,
+            );
+            let actual_handles = get_notifications(&message)
+                .into_iter()
+                .map(|notification| {
+                    let Notification::MonitoredItemNotification(notification) = notification else {
+                        panic!("wrong notification type");
+                    };
+                    notification.client_handle
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(actual_handles, expected_handles);
+
+            reclaim_data_change_notification_vecs(message, &mut data_change_notification_pool);
         }
     }
 
@@ -1133,6 +1281,7 @@ mod tests {
     #[test]
     fn tick() {
         let mut buffer = super::NotificationBuffer::new();
+        let mut data_change_notification_pool = DataChangeNotificationVecPool::default();
         let mut sub = Subscription::new(1, true, Duration::from_millis(100), 100, 20, 1, 100, 1000);
         let start = Instant::now();
         let start_dt = Utc::now();
@@ -1147,6 +1296,7 @@ mod tests {
             TickReason::TickTimerFired,
             true,
             &mut buffer,
+            &mut data_change_notification_pool,
         );
         assert_eq!(sub.state, SubscriptionState::Normal);
         assert!(!sub.first_message_sent);
@@ -1158,6 +1308,7 @@ mod tests {
             TickReason::TickTimerFired,
             true,
             &mut buffer,
+            &mut data_change_notification_pool,
         );
         assert_eq!(sub.state, SubscriptionState::Normal);
         assert!(!sub.first_message_sent);
@@ -1187,6 +1338,7 @@ mod tests {
             TickReason::TickTimerFired,
             true,
             &mut buffer,
+            &mut data_change_notification_pool,
         );
         assert_eq!(sub.state, SubscriptionState::Normal);
         assert!(sub.first_message_sent);
@@ -1208,6 +1360,7 @@ mod tests {
             TickReason::TickTimerFired,
             true,
             &mut buffer,
+            &mut data_change_notification_pool,
         );
         // State transitions to keep alive due to empty publish.
         assert_eq!(sub.state, SubscriptionState::KeepAlive);
@@ -1231,6 +1384,7 @@ mod tests {
             TickReason::TickTimerFired,
             true,
             &mut buffer,
+            &mut data_change_notification_pool,
         );
         // State transitions back to normal.
         assert_eq!(sub.state, SubscriptionState::Normal);
@@ -1253,6 +1407,7 @@ mod tests {
                 TickReason::TickTimerFired,
                 true,
                 &mut buffer,
+                &mut data_change_notification_pool,
             );
             assert_eq!(sub.state, SubscriptionState::KeepAlive);
             assert_eq!(sub.lifetime_counter, (99 - i - 1) as u32);
@@ -1270,6 +1425,7 @@ mod tests {
             TickReason::TickTimerFired,
             true,
             &mut buffer,
+            &mut data_change_notification_pool,
         );
         assert_eq!(sub.state, SubscriptionState::KeepAlive);
         assert_eq!(sub.lifetime_counter, 78);
@@ -1289,6 +1445,7 @@ mod tests {
                 TickReason::TickTimerFired,
                 false,
                 &mut buffer,
+                &mut data_change_notification_pool,
             );
             assert_eq!(sub.state, SubscriptionState::KeepAlive);
             assert_eq!(sub.lifetime_counter, (78 - i - 1) as u32);
@@ -1303,6 +1460,7 @@ mod tests {
                 TickReason::TickTimerFired,
                 false,
                 &mut buffer,
+                &mut data_change_notification_pool,
             );
             assert_eq!(sub.state, SubscriptionState::Late);
             assert_eq!(sub.lifetime_counter, (58 - i) as u32);
@@ -1316,6 +1474,7 @@ mod tests {
             TickReason::TickTimerFired,
             false,
             &mut buffer,
+            &mut data_change_notification_pool,
         );
         assert_eq!(sub.state, SubscriptionState::Closed);
         let notif = sub.take_notification().unwrap();
@@ -1330,6 +1489,7 @@ mod tests {
     #[test]
     fn monitored_item_triggers() {
         let mut buffer = super::NotificationBuffer::new();
+        let mut data_change_notification_pool = DataChangeNotificationVecPool::default();
         let mut sub = Subscription::new(1, true, Duration::from_millis(100), 100, 20, 1, 100, 1000);
         let start = Instant::now();
         let start_dt = Utc::now();
@@ -1374,6 +1534,7 @@ mod tests {
             TickReason::TickTimerFired,
             true,
             &mut buffer,
+            &mut data_change_notification_pool,
         );
         assert!(sub.take_notification().is_none());
 
@@ -1386,6 +1547,7 @@ mod tests {
             TickReason::TickTimerFired,
             true,
             &mut buffer,
+            &mut data_change_notification_pool,
         );
         let notif = sub.take_notification().unwrap();
         let its = get_notifications(&notif);

@@ -7,7 +7,10 @@ use std::{
 use super::{
     monitored_item::MonitoredItem,
     pool::NotificationBuffer,
-    subscription::{MonitoredItemHandle, Subscription, TickReason, TickResult},
+    subscription::{
+        reclaim_data_change_notification_vecs, DataChangeNotificationVecPool, MonitoredItemHandle,
+        Subscription, TickReason, TickResult,
+    },
     CreateMonitoredItem, NonAckedPublish, PendingPublish, PersistentSessionKey,
 };
 use hashbrown::{HashMap, HashSet};
@@ -40,6 +43,8 @@ pub struct SessionSubscriptions {
     publish_request_queue: VecDeque<PendingPublish>,
     /// Notifications that have been sent but have yet to be acknowledged (retransmission queue).
     retransmission_queue: VecDeque<NonAckedPublish>,
+    /// Reusable storage for data-change notifications reclaimed from acknowledged publishes.
+    data_change_notification_pool: DataChangeNotificationVecPool,
     /// Configured limits on subscriptions.
     limits: SubscriptionLimits,
 
@@ -61,6 +66,7 @@ impl SessionSubscriptions {
             subscriptions: HashMap::new(),
             publish_request_queue: VecDeque::new(),
             retransmission_queue: VecDeque::new(),
+            data_change_notification_pool: DataChangeNotificationVecPool::default(),
             limits,
             session,
             type_tree_for_user,
@@ -520,8 +526,7 @@ impl SessionSubscriptions {
             result.push((StatusCode::Good, items))
         }
 
-        self.retransmission_queue
-            .retain(|r| !id_set.contains(&r.subscription_id));
+        self.remove_retransmission_notifications(|r| id_set.contains(&r.subscription_id));
 
         result
     }
@@ -575,6 +580,7 @@ impl SessionSubscriptions {
 
     fn enqueue_retransmission_notification(
         retransmission_queue: &mut VecDeque<NonAckedPublish>,
+        data_change_notification_pool: &mut DataChangeNotificationVecPool,
         max_retransmission_queue_len: usize,
         subscription_id: u32,
         notification: Arc<NotificationMessage>,
@@ -586,12 +592,42 @@ impl SessionSubscriptions {
         }
 
         if retransmission_queue.len() >= max_retransmission_queue_len {
-            retransmission_queue.pop_front();
+            if let Some(notification) = retransmission_queue.pop_front() {
+                Self::reclaim_non_acked_publish(data_change_notification_pool, notification);
+            }
         }
         retransmission_queue.push_back(NonAckedPublish {
             message: notification,
             subscription_id,
         });
+    }
+
+    fn reclaim_non_acked_publish(
+        data_change_notification_pool: &mut DataChangeNotificationVecPool,
+        notification: NonAckedPublish,
+    ) {
+        let Some(message) = Arc::into_inner(notification.message) else {
+            return;
+        };
+        reclaim_data_change_notification_vecs(message, data_change_notification_pool);
+    }
+
+    fn remove_retransmission_notifications(
+        &mut self,
+        mut should_remove: impl FnMut(&NonAckedPublish) -> bool,
+    ) {
+        let mut idx = 0;
+        while idx < self.retransmission_queue.len() {
+            if should_remove(&self.retransmission_queue[idx]) {
+                let notification = self.retransmission_queue.remove(idx).unwrap();
+                Self::reclaim_non_acked_publish(
+                    &mut self.data_change_notification_pool,
+                    notification,
+                );
+            } else {
+                idx += 1;
+            }
+        }
     }
 
     pub(crate) fn enqueue_publish_request(
@@ -659,7 +695,14 @@ impl SessionSubscriptions {
             let mut to_remove = Vec::new();
             for (sub_id, subscription) in &mut self.subscriptions {
                 buffer.reset();
-                let res = subscription.tick(now, now_instant, tick_reason, false, &mut *buffer);
+                let res = subscription.tick(
+                    now,
+                    now_instant,
+                    tick_reason,
+                    false,
+                    &mut *buffer,
+                    &mut self.data_change_notification_pool,
+                );
                 if matches!(res, TickResult::Expired) {
                     to_delete.extend(subscription.drain().map(|item| {
                         MonitoredItemRef::new(
@@ -679,8 +722,7 @@ impl SessionSubscriptions {
             }
             for sub_id in to_remove {
                 self.subscriptions.remove(&sub_id);
-                self.retransmission_queue
-                    .retain(|f| f.subscription_id != sub_id);
+                self.remove_retransmission_notifications(|f| f.subscription_id == sub_id);
             }
             return to_delete;
         }
@@ -708,6 +750,7 @@ impl SessionSubscriptions {
                 tick_reason,
                 !self.publish_request_queue.is_empty(),
                 &mut *buffer,
+                &mut self.data_change_notification_pool,
             );
             // Get notifications and publish request pairs while there are any of either left.
             while !self.publish_request_queue.is_empty() {
@@ -739,8 +782,7 @@ impl SessionSubscriptions {
 
             if subscription.ready_to_remove() {
                 self.subscriptions.remove(&sub_id);
-                self.retransmission_queue
-                    .retain(|f| f.subscription_id != sub_id);
+                self.remove_retransmission_notifications(|f| f.subscription_id == sub_id);
             }
         }
 
@@ -753,6 +795,7 @@ impl SessionSubscriptions {
 
             Self::enqueue_retransmission_notification(
                 &mut self.retransmission_queue,
+                &mut self.data_change_notification_pool,
                 max_retransmission_queue_len,
                 subscription_id,
                 Arc::clone(&notification),
@@ -836,7 +879,11 @@ impl SessionSubscriptions {
                         //    with this anyway.
                         //  - The queue is likely to be short, and the element to be removed is likely to be the
                         //    first.
-                        self.retransmission_queue.remove(idx);
+                        let notification = self.retransmission_queue.remove(idx).unwrap();
+                        Self::reclaim_non_acked_publish(
+                            &mut self.data_change_notification_pool,
+                            notification,
+                        );
                         StatusCode::Good
                     } else {
                         StatusCode::BadSequenceNumberUnknown
@@ -908,14 +955,16 @@ mod tests {
 
     use opcua_types::{DateTime, NotificationMessage, StatusCode};
 
-    use super::{NonAckedPublish, SessionSubscriptions};
+    use super::{DataChangeNotificationVecPool, NonAckedPublish, SessionSubscriptions};
 
     #[test]
     fn keep_alive_messages_are_not_queued_for_retransmission() {
         let mut retransmission_queue = VecDeque::<NonAckedPublish>::new();
+        let mut data_change_notification_pool = DataChangeNotificationVecPool::default();
 
         SessionSubscriptions::enqueue_retransmission_notification(
             &mut retransmission_queue,
+            &mut data_change_notification_pool,
             2,
             1,
             Arc::new(NotificationMessage::keep_alive(7, DateTime::now())),
@@ -927,9 +976,11 @@ mod tests {
     #[test]
     fn status_change_messages_are_queued_for_retransmission() {
         let mut retransmission_queue = VecDeque::<NonAckedPublish>::new();
+        let mut data_change_notification_pool = DataChangeNotificationVecPool::default();
 
         SessionSubscriptions::enqueue_retransmission_notification(
             &mut retransmission_queue,
+            &mut data_change_notification_pool,
             2,
             1,
             Arc::new(NotificationMessage::status_change(

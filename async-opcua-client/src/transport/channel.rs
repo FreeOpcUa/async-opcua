@@ -130,6 +130,11 @@ impl AsyncSecureChannel {
         cert_store.read_own_cert().ok()
     }
 
+    pub(crate) fn remote_certificate(&self) -> Option<X509> {
+        let secure_channel = trace_read_lock!(self.secure_channel);
+        secure_channel.remote_cert()
+    }
+
     pub(crate) fn certificate_store(&self) -> &RwLock<CertificateStore> {
         &self.certificate_store
     }

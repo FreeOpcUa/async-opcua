@@ -889,6 +889,10 @@ impl<T: ConnectionTransport> SessionController<T> {
             },
             server_nonce: self.channel.local_nonce_as_byte_string(),
         };
+        match request.request_type {
+            SecurityTokenRequestType::Issue => self.info.metrics.record_secure_channel_opened(),
+            SecurityTokenRequestType::Renew => self.info.metrics.record_secure_channel_renewed(),
+        }
         Ok(response.into())
     }
 }

@@ -35,6 +35,7 @@ json = ["async-opcua-nodes/json", "async-opcua-types/json"]
 # becoming a client to the LDS, which brings in a dependency to async-opcua-client.
 # Omitting the feature saves some memory.
 discovery-server-registration = ["async-opcua-client"]
+metrics-exporter = []
 test-utils = []
 legacy-crypto = [
   "async-opcua-client/legacy-crypto",

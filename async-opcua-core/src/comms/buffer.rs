@@ -192,7 +192,7 @@ impl SendBuffer {
     pub async fn read_into_async(
         &mut self,
         write: &mut (impl tokio::io::AsyncWrite + Unpin),
-    ) -> Result<(), tokio::io::Error> {
+    ) -> Result<usize, tokio::io::Error> {
         // Set the state to writing, or get the current end point
         let end = match self.state {
             SendBufferState::Writing => {
@@ -218,7 +218,7 @@ impl SendBuffer {
             self.buffer.set_position(0);
         }
 
-        Ok(())
+        Ok(written)
     }
 
     /// Return `true` if we should encode a new chunk.

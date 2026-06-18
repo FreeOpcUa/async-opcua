@@ -24,6 +24,7 @@ use tracing::{debug, error, info, warn};
 use opcua_core::{config::Config, handle::AtomicHandle};
 use opcua_crypto::CertificateStore;
 
+use crate::metrics::ServerMetricsSnapshot;
 #[cfg(feature = "wss")]
 use crate::transport::WebSocketConnector;
 use crate::{
@@ -132,6 +133,7 @@ impl TcpConnectionDeps {
 
         let (send, recv) = tokio::sync::mpsc::channel(5);
         info!("Accept new connection from {addr} ({connection_counter})");
+        self.info.metrics.record_connection_accepted();
         let handle = match transport {
             AcceptedTransport::Tcp => {
                 let conn = SessionStarter::new(
@@ -444,6 +446,11 @@ impl Server {
         self.subscriptions.clone()
     }
 
+    /// Returns a point-in-time copy of this server's metrics.
+    pub fn metrics_snapshot(&self) -> ServerMetricsSnapshot {
+        self.info.metrics.snapshot()
+    }
+
     #[allow(clippy::await_holding_lock)]
     async fn initialize_node_managers(&self, context: &ServerContext) -> Result<(), String> {
         info!("Initializing node managers");
@@ -574,6 +581,7 @@ impl Server {
                         Ok(id) => {
                             info!("Connection {} terminated", id);
                             self.connection_map.remove(&id);
+                            self.info.metrics.record_connection_closed();
                         },
                         Err(e) => error!("Connection panic! {e}")
                     }
@@ -632,6 +640,7 @@ impl Server {
                     // back to the reverse connect manager.
                     let (send, recv) = tokio::sync::mpsc::channel(5);
                     let rev_handle = rev_connect.handle;
+                    self.info.metrics.record_connection_accepted();
                     let handle = tokio::spawn(async move {
                         let run = conn.run(recv, |status| {
                             rev_handle.set_result(status);

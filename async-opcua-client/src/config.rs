@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use tracing::warn;
 
 use opcua_core::config::Config;
-use opcua_crypto::SecurityPolicy;
+use opcua_crypto::{SecurityPolicy, Thumbprint};
 use opcua_types::{
     ApplicationType, EndpointDescription, Error, MessageSecurityMode, StatusCode, UAString,
 };
@@ -361,6 +361,10 @@ pub struct ClientConfig {
     /// policies such as Basic128Rsa15 and Basic256. Disabled by default.
     #[serde(default)]
     pub(crate) allow_legacy_crypto: bool,
+    /// Optional SHA-1 thumbprints for server application-instance certificates
+    /// accepted during discovery endpoint connections.
+    #[serde(default)]
+    pub(crate) discovery_server_certificate_pins: Vec<Thumbprint>,
 }
 
 impl Config for ClientConfig {
@@ -735,6 +739,7 @@ impl ClientConfig {
             session_timeout: defaults::session_timeout(),
             allow_legacy_crypto: false,
             session_nonce_length: defaults::session_nonce_length(),
+            discovery_server_certificate_pins: Vec::new(),
         }
     }
 }

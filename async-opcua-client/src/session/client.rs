@@ -20,7 +20,7 @@ use opcua_core::{
     sync::RwLock,
     ResponseMessage,
 };
-use opcua_crypto::{CertificateStore, SecurityPolicy};
+use opcua_crypto::{CertificateStore, SecurityPolicy, Thumbprint, X509};
 use opcua_types::{
     ApplicationDescription, ContextOwned, DecodingOptions, EndpointDescription, Error,
     FindServersOnNetworkRequest, FindServersOnNetworkResponse, FindServersRequest,
@@ -376,6 +376,7 @@ impl Client {
         let channel = self.channel_from_endpoint_info(endpoint_info, self.config.channel_lifetime);
 
         let mut evt_loop = channel.connect(&server).await?;
+        self.validate_discovery_channel_certificate_pin(&channel, false)?;
 
         let send_fut = self.get_server_endpoints_inner(
             &endpoint,
@@ -412,7 +413,9 @@ impl Client {
             }
         }
 
-        res
+        let endpoints = res?;
+        self.validate_discovery_endpoint_certificate_pins(&endpoints)?;
+        Ok(endpoints)
     }
 
     async fn find_servers_inner(
@@ -467,6 +470,7 @@ impl Client {
         let channel = self.channel_from_endpoint_info(session_info, self.config.channel_lifetime);
 
         let mut evt_loop = channel.connect(&discovery_endpoint).await?;
+        self.validate_discovery_channel_certificate_pin(&channel, true)?;
 
         let send_fut = self.find_servers_inner(
             evt_loop.connected_url().to_owned(),
@@ -556,6 +560,7 @@ impl Client {
         let channel = self.channel_from_endpoint_info(session_info, self.config.channel_lifetime);
 
         let mut evt_loop = channel.connect(&discovery_endpoint).await?;
+        self.validate_discovery_channel_certificate_pin(&channel, true)?;
 
         let send_fut = self.find_servers_on_network_inner(
             starting_record_id,
@@ -767,5 +772,112 @@ impl Client {
     /// Get the certificate store.
     pub fn certificate_store(&self) -> &Arc<RwLock<CertificateStore>> {
         &self.certificate_store
+    }
+
+    fn validate_discovery_channel_certificate_pin(
+        &self,
+        channel: &AsyncSecureChannel,
+        require_presented_certificate: bool,
+    ) -> Result<(), Error> {
+        if self.config.discovery_server_certificate_pins.is_empty() {
+            return Ok(());
+        }
+
+        let Some(certificate) = channel.remote_certificate() else {
+            return if require_presented_certificate {
+                Err(discovery_certificate_pin_error(
+                    "Discovery server did not present an application-instance certificate",
+                ))
+            } else {
+                Ok(())
+            };
+        };
+
+        self.validate_discovery_certificate_pin(&certificate)
+    }
+
+    fn validate_discovery_endpoint_certificate_pins(
+        &self,
+        endpoints: &[EndpointDescription],
+    ) -> Result<(), Error> {
+        if self.config.discovery_server_certificate_pins.is_empty() {
+            return Ok(());
+        }
+
+        let mut certificate_seen = false;
+        for endpoint in endpoints {
+            if endpoint.server_certificate.is_null_or_empty() {
+                continue;
+            }
+            certificate_seen = true;
+            let certificate =
+                X509::from_byte_string(&endpoint.server_certificate).map_err(|_| {
+                    Error::new(
+                        StatusCode::BadCertificateInvalid,
+                        "Discovery endpoint returned an invalid server certificate",
+                    )
+                })?;
+            self.validate_discovery_certificate_pin(&certificate)?;
+        }
+
+        if certificate_seen {
+            Ok(())
+        } else {
+            Err(discovery_certificate_pin_error(
+                "Discovery endpoint returned no server certificates to compare with configured pins",
+            ))
+        }
+    }
+
+    fn validate_discovery_certificate_pin(&self, certificate: &X509) -> Result<(), Error> {
+        let thumbprint = certificate.thumbprint();
+        if discovery_certificate_pin_matches(
+            &self.config.discovery_server_certificate_pins,
+            &thumbprint,
+        ) {
+            Ok(())
+        } else {
+            Err(discovery_certificate_pin_error(
+                "Discovery server certificate thumbprint does not match configured pins",
+            ))
+        }
+    }
+}
+
+fn discovery_certificate_pin_matches(pins: &[Thumbprint], presented: &Thumbprint) -> bool {
+    pins.is_empty() || pins.iter().any(|pin| pin == presented)
+}
+
+fn discovery_certificate_pin_error(message: &str) -> Error {
+    error!("{message}");
+    Error::new(StatusCode::BadCertificateUntrusted, message)
+}
+
+#[cfg(test)]
+mod tests {
+    use opcua_crypto::Thumbprint;
+
+    #[test]
+    fn discovery_certificate_pin_matches_when_no_pins_are_configured() {
+        let thumbprint = Thumbprint::new(&[1; Thumbprint::THUMBPRINT_SIZE]).unwrap();
+
+        assert!(super::discovery_certificate_pin_matches(&[], &thumbprint));
+    }
+
+    #[test]
+    fn discovery_certificate_pin_matches_configured_thumbprint() {
+        let thumbprint = Thumbprint::new(&[1; Thumbprint::THUMBPRINT_SIZE]).unwrap();
+        let pins = vec![thumbprint.clone()];
+
+        assert!(super::discovery_certificate_pin_matches(&pins, &thumbprint));
+    }
+
+    #[test]
+    fn discovery_certificate_pin_rejects_unconfigured_thumbprint() {
+        let expected = Thumbprint::new(&[1; Thumbprint::THUMBPRINT_SIZE]).unwrap();
+        let presented = Thumbprint::new(&[2; Thumbprint::THUMBPRINT_SIZE]).unwrap();
+        let pins = vec![expected];
+
+        assert!(!super::discovery_certificate_pin_matches(&pins, &presented));
     }
 }

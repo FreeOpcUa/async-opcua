@@ -45,6 +45,20 @@ pub(super) fn next_session_id() -> (NodeId, u32) {
     (NodeId::new(1, session_id), session_id)
 }
 
+/// Returns true if activating a session on `request_channel_id` must be refused
+/// because it differs from the channel the session belongs to and the session
+/// either is not yet activated or uses SecurityPolicy::None (which has no
+/// cryptographic channel binding, so cross-channel transfer would be a hijack).
+pub(crate) fn is_cross_channel_transfer_forbidden(
+    session_channel_id: u32,
+    request_channel_id: u32,
+    session_activated: bool,
+    security_policy: SecurityPolicy,
+) -> bool {
+    session_channel_id != request_channel_id
+        && (!session_activated || security_policy == SecurityPolicy::None)
+}
+
 /// Manages all sessions on the server.
 pub struct SessionManager {
     sessions: HashMap<NodeId, Arc<RwLock<Session>>>,
@@ -563,9 +577,12 @@ pub(crate) async fn activate_session(
     let (server_nonce, session_id, user_changed) = {
         let mut session = trace_write_lock!(session_lck);
 
-        if session.secure_channel_id() != secure_channel_id
-            && (!session.is_activated() || security_policy == SecurityPolicy::None)
-        {
+        if is_cross_channel_transfer_forbidden(
+            session.secure_channel_id(),
+            secure_channel_id,
+            session.is_activated(),
+            security_policy,
+        ) {
             error!(
                 "activate session, rejected secure channel id {} does not match session channel {} (transfer not permitted for SecurityPolicy::None)",
                 secure_channel_id,
@@ -615,4 +632,62 @@ pub(crate) async fn activate_session(
         results: None,
         diagnostic_infos: None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_cross_channel_transfer_forbidden;
+    use opcua_crypto::SecurityPolicy;
+
+    /// T048 / H1: an activated session under SecurityPolicy::None must not be
+    /// transferable to a different secure channel (there is no cryptographic
+    /// channel binding, so a transfer would be a session hijack). Sessions that
+    /// are not yet activated can never move channels; activated sessions on a
+    /// *secured* policy may legitimately move (e.g. reconnect).
+    #[test]
+    fn cross_channel_transfer_rules() {
+        // Same channel is always permitted, regardless of state/policy.
+        assert!(!is_cross_channel_transfer_forbidden(
+            1,
+            1,
+            true,
+            SecurityPolicy::None
+        ));
+        assert!(!is_cross_channel_transfer_forbidden(
+            1,
+            1,
+            false,
+            SecurityPolicy::Basic256Sha256
+        ));
+
+        // Different channel + not yet activated → always refused (any policy).
+        assert!(is_cross_channel_transfer_forbidden(
+            1,
+            2,
+            false,
+            SecurityPolicy::None
+        ));
+        assert!(is_cross_channel_transfer_forbidden(
+            1,
+            2,
+            false,
+            SecurityPolicy::Basic256Sha256
+        ));
+
+        // H1 core: activated None-policy session cannot move channels.
+        assert!(is_cross_channel_transfer_forbidden(
+            1,
+            2,
+            true,
+            SecurityPolicy::None
+        ));
+
+        // Activated session on a secured policy MAY transfer channels.
+        assert!(!is_cross_channel_transfer_forbidden(
+            1,
+            2,
+            true,
+            SecurityPolicy::Basic256Sha256
+        ));
+    }
 }

@@ -32,6 +32,7 @@ use tokio_util::{codec::FramedRead, sync::CancellationToken};
 
 use super::connect::Connector;
 use crate::config::TcpKeepaliveConfig;
+use crate::metrics::ServerMetrics;
 
 pub(crate) trait ConnectionTransport: Send + 'static {
     fn set_closing(&mut self);
@@ -54,6 +55,7 @@ pub(crate) trait ConnectionTransport: Send + 'static {
 pub(crate) struct Transport<R, W> {
     read: FramedRead<R, TcpCodec>,
     write: W,
+    metrics: Arc<ServerMetrics>,
     send_buffer: SendBuffer,
     decrypted_chunk_storage: DecryptedChunkStorage,
     state: TransportState,
@@ -168,11 +170,17 @@ where
 
     async fn connect_inner(&mut self, info: Arc<ServerInfo>) -> Result<SendBuffer, ErrorMessage> {
         let hello = match self.read.next().await {
-            Some(Ok(Message::Hello(hello))) => Ok(hello),
-            Some(Ok(bad_msg)) => Err(ErrorMessage::new(
-                StatusCode::BadCommunicationError,
-                &format!("Expected a hello message, got {bad_msg:?} instead"),
-            )),
+            Some(Ok(message)) => {
+                info.metrics
+                    .record_bytes_received(message_wire_len(&message));
+                match message {
+                    Message::Hello(hello) => Ok(hello),
+                    bad_msg => Err(ErrorMessage::new(
+                        StatusCode::BadCommunicationError,
+                        &format!("Expected a hello message, got {bad_msg:?} instead"),
+                    )),
+                }
+            }
             Some(Err(communication_err)) => Err(ErrorMessage::new(
                 StatusCode::BadCommunicationError,
                 &format!(
@@ -245,6 +253,7 @@ where
 
         TcpCodec::write_all_frame_vectored(&mut self.write, &buf)
             .await
+            .map(|()| info.metrics.record_bytes_sent(buf.len() as u64))
             .map_err(|e| {
                 ErrorMessage::new(
                     StatusCode::BadCommunicationError,
@@ -275,9 +284,9 @@ where
             _ = token.cancelled() => {
                 ErrorMessage::new(StatusCode::BadServerHalted, "Server closed")
             }
-            r = self.connect_inner(info).instrument(tracing::info_span!("OPC-UA TCP handshake")) => {
+            r = self.connect_inner(info.clone()).instrument(tracing::info_span!("OPC-UA TCP handshake")) => {
                 match r {
-                    Ok(r) => return Ok(Transport::new(self.read, self.write, r)),
+                    Ok(r) => return Ok(Transport::new(self.read, self.write, info.metrics.clone(), r)),
                     Err(e) => e,
                 }
             }
@@ -286,8 +295,12 @@ where
         // We want to send an error if connection failed for whatever reason, but
         // there's a good chance the channel is closed, so just ignore any errors.
         let mut buf = Vec::with_capacity(opcua_types::SimpleBinaryEncodable::byte_len(&err));
-        if opcua_types::SimpleBinaryEncodable::encode(&err, &mut buf).is_ok() {
-            let _ = TcpCodec::write_all_frame_vectored(&mut self.write, &buf).await;
+        if opcua_types::SimpleBinaryEncodable::encode(&err, &mut buf).is_ok()
+            && TcpCodec::write_all_frame_vectored(&mut self.write, &buf)
+                .await
+                .is_ok()
+        {
+            info.metrics.record_bytes_sent(buf.len() as u64);
         }
 
         Err(err.error)
@@ -299,10 +312,16 @@ where
     R: AsyncRead + Unpin + Send + Sync + 'static,
     W: AsyncWrite + Unpin + Send + Sync + 'static,
 {
-    fn new(read: FramedRead<R, TcpCodec>, write: W, send_buffer: SendBuffer) -> Self {
+    fn new(
+        read: FramedRead<R, TcpCodec>,
+        write: W,
+        metrics: Arc<ServerMetrics>,
+        send_buffer: SendBuffer,
+    ) -> Self {
         Self {
             read,
             write,
+            metrics,
             state: TransportState::Running,
             pending_chunks: Vec::new(),
             sequence_numbers: SequenceNumberHandle::new(true),
@@ -373,9 +392,14 @@ where
         if self.send_buffer.can_read() {
             tokio::select! {
                 r = self.send_buffer.read_into_async(&mut self.write) => {
-                    if let Err(e) = r {
-                        error!("write bytes task failed: {}", e);
-                        return TransportPollResult::Closed;
+                    match r {
+                        Ok(bytes_written) => {
+                            self.metrics.record_bytes_sent(bytes_written as u64);
+                        }
+                        Err(e) => {
+                            error!("write bytes task failed: {}", e);
+                            return TransportPollResult::Closed;
+                        }
                     }
                     TransportPollResult::OutgoingMessageSent
                 }
@@ -401,21 +425,25 @@ where
             return TransportPollResult::Closed;
         };
         match incoming {
-            Ok(message) => match self.process_message(message, channel) {
-                Ok(None) => TransportPollResult::IncomingChunk,
-                Ok(Some(message)) => {
-                    self.pending_chunks.clear();
-                    TransportPollResult::IncomingMessage(message)
-                }
-                Err(e) => {
-                    self.pending_chunks.clear();
-                    if let Some((id, handle)) = e.full_context() {
-                        TransportPollResult::RecoverableError(e.status(), id, handle)
-                    } else {
-                        TransportPollResult::Error(e.status())
+            Ok(message) => {
+                self.metrics
+                    .record_bytes_received(message_wire_len(&message));
+                match self.process_message(message, channel) {
+                    Ok(None) => TransportPollResult::IncomingChunk,
+                    Ok(Some(message)) => {
+                        self.pending_chunks.clear();
+                        TransportPollResult::IncomingMessage(message)
+                    }
+                    Err(e) => {
+                        self.pending_chunks.clear();
+                        if let Some((id, handle)) = e.full_context() {
+                            TransportPollResult::RecoverableError(e.status(), id, handle)
+                        } else {
+                            TransportPollResult::Error(e.status())
+                        }
                     }
                 }
-            },
+            }
             Err(err) => {
                 error!("Error reading from stream {:?}", err);
                 TransportPollResult::Error(StatusCode::BadConnectionClosed)
@@ -476,6 +504,20 @@ where
                 StatusCode::BadUnexpectedError,
                 format!("Received unexpected message: {unexpected:?}"),
             )),
+        }
+    }
+}
+
+fn message_wire_len(message: &Message) -> u64 {
+    match message {
+        Message::Hello(message) => opcua_types::SimpleBinaryEncodable::byte_len(message) as u64,
+        Message::Acknowledge(message) => {
+            opcua_types::SimpleBinaryEncodable::byte_len(message) as u64
+        }
+        Message::Error(message) => opcua_types::SimpleBinaryEncodable::byte_len(message) as u64,
+        Message::Chunk(message) => message.data.len() as u64,
+        Message::ReverseHello(message) => {
+            opcua_types::SimpleBinaryEncodable::byte_len(message) as u64
         }
     }
 }

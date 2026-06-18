@@ -890,11 +890,11 @@ mod tests {
         },
         SubscriptionState,
     };
+    use opcua_core::PublishResponseShared;
     use opcua_types::{
         match_extension_object_owned, AttributeId, DataChangeNotification, DataValue, DateTime,
         DateTimeUtc, EventNotificationList, MonitoredItemNotification, MonitoringMode, NodeId,
-        NotificationMessage, PublishResponse, ReadValueId, StatusChangeNotification, StatusCode,
-        Variant,
+        NotificationMessage, ReadValueId, StatusChangeNotification, StatusCode, Variant,
     };
 
     use super::{Subscription, TickReason};
@@ -1023,9 +1023,14 @@ mod tests {
 
         let notification = Arc::new(message);
         COUNTING_ALLOCATOR.reset();
-        let response = PublishResponse {
-            notification_message: (*notification).clone(),
-            ..PublishResponse::default()
+        let response = PublishResponseShared {
+            response_header: Default::default(),
+            subscription_id: 0,
+            available_sequence_numbers: None,
+            more_notifications: false,
+            notification_message: Arc::clone(&notification),
+            results: None,
+            diagnostic_infos: None,
         };
         let publish_clone = COUNTING_ALLOCATOR.snapshot();
         black_box(response);

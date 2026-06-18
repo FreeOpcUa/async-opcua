@@ -19,12 +19,12 @@ use crate::{
     session::instance::Session,
     SubscriptionLimits,
 };
-use opcua_core::sync::RwLock;
+use opcua_core::{sync::RwLock, PublishResponseShared};
 use opcua_types::{
     AttributeId, CreateSubscriptionRequest, CreateSubscriptionResponse, DataValue, DateTime,
     DateTimeUtc, ExtensionObject, ModifySubscriptionRequest, ModifySubscriptionResponse,
     MonitoredItemCreateResult, MonitoredItemModifyRequest, MonitoredItemModifyResult,
-    MonitoringMode, NodeId, NotificationMessage, PublishRequest, PublishResponse, RepublishRequest,
+    MonitoringMode, NodeId, NotificationMessage, PublishRequest, RepublishRequest,
     RepublishResponse, ResponseHeader, ServiceFault, SetPublishingModeRequest,
     SetPublishingModeResponse, StatusCode, TimestampsToReturn,
 };
@@ -763,7 +763,7 @@ impl SessionSubscriptions {
             // the NonAckedPublish we just added.
             let available_sequence_numbers = self.available_sequence_numbers(subscription_id);
             let _ = publish_request.response.send(
-                PublishResponse {
+                PublishResponseShared {
                     response_header: ResponseHeader::new_timestamped_service_result(
                         DateTime::from(*now),
                         &publish_request.request.request_header,
@@ -773,7 +773,7 @@ impl SessionSubscriptions {
                     available_sequence_numbers,
                     // Only set more_notifications on the last publish response.
                     more_notifications: is_last && more_notifications,
-                    notification_message: (*notification).clone(),
+                    notification_message: Arc::clone(&notification),
                     results: publish_request.ack_results,
                     diagnostic_infos: None,
                 }

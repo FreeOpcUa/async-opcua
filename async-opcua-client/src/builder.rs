@@ -3,6 +3,8 @@ use std::sync::Arc;
 use std::{path::PathBuf, time::Duration};
 
 use opcua_core::config::{Config, ConfigError};
+use opcua_crypto::{Thumbprint, X509};
+use opcua_types::{Error, StatusCode};
 use tracing::{error, warn};
 
 #[cfg(feature = "wss")]
@@ -136,6 +138,68 @@ impl ClientBuilder {
     pub fn verify_server_certs(mut self, verify_server_certs: bool) -> Self {
         self.config.verify_server_certs = verify_server_certs;
         self
+    }
+
+    /// Adds an expected server application-instance certificate SHA-1 thumbprint for
+    /// discovery endpoint connections.
+    ///
+    /// This is an opt-in mitigation for discovery-time MITM attacks. Calls such
+    /// as [`Client::get_endpoints`], [`Client::get_server_endpoints_from_url`],
+    /// and [`Client::find_servers`] may connect to a discovery endpoint before
+    /// normal server trust has been established. When one or more discovery
+    /// certificate pins are configured, the client rejects a discovery server
+    /// whose presented application-instance certificate does not match a pin.
+    ///
+    /// OPC UA thumbprints are SHA-1 digests of the DER certificate bytes.
+    pub fn discovery_server_certificate_thumbprint(mut self, thumbprint: Thumbprint) -> Self {
+        self.config
+            .discovery_server_certificate_pins
+            .push(thumbprint);
+        self
+    }
+
+    /// Adds an expected server application-instance certificate SHA-1 thumbprint
+    /// from raw digest bytes for discovery endpoint connections.
+    ///
+    /// See [`Self::discovery_server_certificate_thumbprint`] for the MITM
+    /// rationale and discovery scope.
+    pub fn discovery_server_certificate_thumbprint_bytes(
+        mut self,
+        thumbprint: &[u8],
+    ) -> Result<Self, Error> {
+        self.config
+            .discovery_server_certificate_pins
+            .push(Thumbprint::new(thumbprint)?);
+        Ok(self)
+    }
+
+    /// Adds an expected server application-instance certificate SHA-1 thumbprint
+    /// from a hexadecimal digest string for discovery endpoint connections.
+    ///
+    /// Whitespace and `:` separators are ignored. See
+    /// [`Self::discovery_server_certificate_thumbprint`] for the MITM rationale
+    /// and discovery scope.
+    pub fn discovery_server_certificate_thumbprint_hex(
+        self,
+        thumbprint_hex: &str,
+    ) -> Result<Self, Error> {
+        let thumbprint = parse_thumbprint_hex(thumbprint_hex)?;
+        self.discovery_server_certificate_thumbprint_bytes(&thumbprint)
+    }
+
+    /// Pins the expected discovery server application-instance certificate by
+    /// deriving its SHA-1 thumbprint from DER certificate bytes.
+    ///
+    /// See [`Self::discovery_server_certificate_thumbprint`] for the MITM
+    /// rationale and discovery scope.
+    pub fn discovery_server_certificate_der(self, certificate_der: &[u8]) -> Result<Self, Error> {
+        let certificate = X509::from_der(certificate_der).map_err(|_| {
+            Error::new(
+                StatusCode::BadCertificateInvalid,
+                "Discovery server certificate DER is invalid",
+            )
+        })?;
+        Ok(self.discovery_server_certificate_thumbprint(certificate.thumbprint()))
     }
 
     /// Sets a custom rustls client configuration for `opc.wss` connections.
@@ -380,4 +444,32 @@ impl ClientBuilder {
         self.config.session_nonce_length = session_nonce_length;
         self
     }
+}
+
+fn parse_thumbprint_hex(thumbprint_hex: &str) -> Result<Vec<u8>, Error> {
+    let hex: String = thumbprint_hex
+        .chars()
+        .filter(|c| !c.is_ascii_whitespace() && *c != ':')
+        .collect();
+    if hex.len() != Thumbprint::THUMBPRINT_SIZE * 2 {
+        return Err(Error::new(
+            StatusCode::BadInvalidArgument,
+            format!(
+                "Discovery server certificate thumbprint must contain {} hex characters",
+                Thumbprint::THUMBPRINT_SIZE * 2
+            ),
+        ));
+    }
+
+    (0..hex.len())
+        .step_by(2)
+        .map(|i| {
+            u8::from_str_radix(&hex[i..i + 2], 16).map_err(|_| {
+                Error::new(
+                    StatusCode::BadInvalidArgument,
+                    "Discovery server certificate thumbprint contains invalid hex",
+                )
+            })
+        })
+        .collect()
 }

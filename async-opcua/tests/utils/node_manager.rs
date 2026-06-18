@@ -894,7 +894,7 @@ impl TestNodeManagerImpl {
                 results[idx] = StatusCode::BadInvalidTimestamp;
             }
         }
-        to_update.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+        to_update.sort_by_key(|a| a.timestamp);
 
         let now = DateTime::now();
         let mut index = 0;

@@ -224,7 +224,7 @@ fn validate_chunk_sequence_numbers(
     sequence_numbers: &mut SequenceNumberHandle,
 ) -> Result<(), StatusCode> {
     for chunk in chunks {
-        let chunk_info = chunk.chunk_info(&secure_channel)?;
+        let chunk_info = chunk.chunk_info(secure_channel)?;
         sequence_numbers.validate_and_increment(chunk_info.sequence_header.sequence_number)?;
     }
     Ok(())
@@ -255,7 +255,7 @@ fn validate_chunks_secure_channel_id() {
     validate_chunk_sequence_numbers(&secure_channel, &chunks, &mut sequence_number.clone())
         .unwrap();
     // Expect this to work
-    let _ = Chunker::validate_chunks(&secure_channel, &chunks).unwrap();
+    Chunker::validate_chunks(&secure_channel, &chunks).unwrap();
 
     // Test secure channel id mismatch
     let old_secure_channel_id = secure_channel.secure_channel_id();
@@ -350,7 +350,7 @@ fn validate_chunks_request_id() {
     assert!(chunks.len() > 1);
 
     // Expect this to work
-    let _ = Chunker::validate_chunks(&secure_channel, &chunks).unwrap();
+    Chunker::validate_chunks(&secure_channel, &chunks).unwrap();
 
     // Hack the request id so first chunk request id says 101 while the rest say 100
     let _ = set_chunk_request_id(&mut chunks[0], &secure_channel, 101);
@@ -441,8 +441,8 @@ fn open_secure_channel_response() {
     let chunks = vec![chunk];
 
     let decoded: Result<ResponseMessage, _> = Chunker::decode(&chunks, &secure_channel, None);
-    if decoded.is_err() {
-        panic!("Got error {:?}", decoded.unwrap_err());
+    if let Err(e) = decoded {
+        panic!("Got error {:?}", e);
     }
     let message = Chunker::decode(&chunks, &secure_channel, None).unwrap();
     //debug!("message = {:#?}", message);

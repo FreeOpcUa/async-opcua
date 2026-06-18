@@ -654,7 +654,7 @@ impl Subscription {
         notifications: &mut Vec<Notification>,
         now: &DateTimeUtc,
     ) -> NotificationMessage {
-        let mut data_change_notifications = Vec::new();
+        let mut data_change_notifications = Vec::with_capacity(notifications.len());
         let mut event_notifications = Vec::new();
 
         for notif in notifications.drain(..) {

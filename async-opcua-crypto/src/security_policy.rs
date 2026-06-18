@@ -207,9 +207,13 @@ impl SecurityPolicy {
 
     /// Get a string representation of this policy.
     ///
-    /// This will panic if the security policy is `Unknown`.
+    /// `Unknown` returns `"Unknown"` rather than panicking, so this method and
+    /// the `Display` impl that calls it are safe to use on any policy value —
+    /// including while formatting a rejection error for an unrecognized policy
+    /// (see `ensure_supported`).
     pub fn to_str(&self) -> &'static str {
         match self {
+            SecurityPolicy::Unknown => "Unknown",
             SecurityPolicy::Basic128Rsa15 => constants::SECURITY_POLICY_BASIC_128_RSA_15,
             SecurityPolicy::Basic256 => constants::SECURITY_POLICY_BASIC_256,
             _ => call_with_policy!(self, |T| T::as_str()),
@@ -456,5 +460,32 @@ impl SecurityPolicy {
     /// Get the key length used for symmetric encryption.
     pub fn encrypting_key_length(&self) -> usize {
         call_with_policy!(self, |T| T::encrypting_key_length())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SecurityPolicy;
+    use opcua_types::StatusCode;
+
+    /// Issue #18: `to_str()` / `Display` must not panic on `Unknown`, and the
+    /// `ensure_supported()` rejection path (which `format!`s the policy via
+    /// `Display`) must return a clean `Err` rather than aborting the process.
+    #[test]
+    fn unknown_policy_is_rejected_not_panicked() {
+        // from_uri maps an unrecognized URI to Unknown (the documented error variant).
+        let policy = SecurityPolicy::from_uri("not-a-real-policy-uri");
+        assert_eq!(policy, SecurityPolicy::Unknown);
+
+        // to_str + Display must yield a fallback string, not panic.
+        assert_eq!(SecurityPolicy::Unknown.to_str(), "Unknown");
+        assert_eq!(format!("{}", SecurityPolicy::Unknown), "Unknown");
+
+        // ensure_supported must return a recoverable error (it formats the policy
+        // via Display while building the message — previously the abort site).
+        let err = SecurityPolicy::Unknown
+            .ensure_supported()
+            .expect_err("Unknown policy must be rejected, not supported");
+        assert_eq!(err.status(), StatusCode::BadSecurityPolicyRejected);
     }
 }

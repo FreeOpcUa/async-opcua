@@ -204,6 +204,7 @@ pub struct Session {
     pub(super) trigger_publish_tx: tokio::sync::watch::Sender<Instant>,
     pub(super) session_nonce_length: usize,
     decoding_options: DecodingOptions,
+    pub(crate) close_tx: tokio::sync::watch::Sender<bool>,
 }
 
 impl Session {
@@ -223,6 +224,7 @@ impl Session {
         let (state_watch_tx, state_watch_rx) =
             tokio::sync::watch::channel(SessionState::Disconnected);
         let (trigger_publish_tx, trigger_publish_rx) = tokio::sync::watch::channel(Instant::now());
+        let (close_tx, close_rx) = tokio::sync::watch::channel(false);
 
         let session = Arc::new(Session {
             channel,
@@ -248,6 +250,7 @@ impl Session {
             trigger_publish_tx,
             session_nonce_length: config.session_nonce_length,
             decoding_options,
+            close_tx,
         });
 
         (
@@ -256,6 +259,7 @@ impl Session {
                 session,
                 session_retry_policy,
                 trigger_publish_rx,
+                close_rx,
                 config.keep_alive_interval,
                 config.max_failed_keep_alive_count,
                 connector,
@@ -311,6 +315,14 @@ impl Session {
     /// You should also monitor the session event loop. If it ends, this method will never return.
     pub async fn wait_for_connection(&self) -> bool {
         self.wait_for_state(true).await
+    }
+
+    /// Returns a [`SessionDropGuard`] that will initiate a graceful disconnect
+    /// when dropped. Useful for RAII-style session lifetimes.
+    pub fn close_on_drop(self: &Arc<Self>) -> SessionDropGuard {
+        SessionDropGuard {
+            session: self.clone(),
+        }
     }
 
     /// Disable automatic reconnects.
@@ -475,5 +487,34 @@ impl Session {
             )
         })?;
         Ok(idx)
+    }
+}
+
+/// RAII guard that initiates a graceful disconnect when dropped.
+///
+/// Obtained via [`Session::close_on_drop`]. Implements [`std::ops::Deref`] to `Session`
+/// so all session methods are accessible directly.
+#[must_use = "SessionDropGuard disconnects on drop; assign it to a variable to control lifetime"]
+pub struct SessionDropGuard {
+    session: Arc<Session>,
+}
+
+impl SessionDropGuard {
+    /// Returns a clone of the underlying `Arc<Session>`.
+    pub fn arc(&self) -> Arc<Session> {
+        self.session.clone()
+    }
+}
+
+impl std::ops::Deref for SessionDropGuard {
+    type Target = Session;
+    fn deref(&self) -> &Session {
+        &self.session
+    }
+}
+
+impl Drop for SessionDropGuard {
+    fn drop(&mut self) {
+        let _ = self.session.close_tx.send(true);
     }
 }

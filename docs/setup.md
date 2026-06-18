@@ -60,6 +60,34 @@ async-opcua = { version = "0.19", default-features = false, features = ["client"
 
 The choice is a feature on every crate that pulls crypto (`async-opcua`, `-core`, `-client`, `-server`): `aws-lc-rs` is in their `default`, so omitting `default-features` keeps the constant-time backend; `default-features = false` selects the pure-Rust path.
 
+### Cross-compiling to musl (e.g. `aarch64-unknown-linux-musl`) — keeping constant-time crypto
+
+You do **not** have to give up the constant-time `aws-lc-rs` backend to cross-compile to a musl target (a common need for a stripped-down SoftPLC/embedded-Linux image). The blocker is only that `aws-lc-sys` builds C/assembly and so wants a C **cross**-toolchain. [`cargo-zigbuild`](https://github.com/rust-cross/cargo-zigbuild) supplies that toolchain from Zig's bundled `clang`, so no `gcc-aarch64-linux-gnu`-style cross-toolchain is needed:
+
+```bash
+# one-time
+rustup target add aarch64-unknown-linux-musl
+cargo install cargo-zigbuild      # the cargo-zigbuild wrapper
+# install Zig (https://ziglang.org/download/) and put `zig` on PATH; also install `cmake`
+#   (aws-lc-sys uses cmake; Zig provides the C compiler/linker)
+
+# build — DEFAULT features, i.e. the constant-time aws-lc-rs backend, over musl:
+cargo zigbuild --target aarch64-unknown-linux-musl -p async-opcua --features client,server
+```
+
+Verified with `zig` 0.16 + `cargo-zigbuild` 0.19 + `cmake` 3.28: `aws-lc-sys`/`aws-lc-rs`
+compile and link cleanly for `aarch64-unknown-linux-musl` with **no** `CC`/`AR`/`CMAKE_*`
+env overrides and **no** in-repo `.cargo/config.toml`. This is the recommended path for a
+**secured** deployment on an untrusted network: it keeps the audited, constant-time crypto and
+only changes the *build pipeline* (Zig as the C cross-compiler), not the dependency set.
+
+**Choosing between the two C-toolchain-free routes:**
+
+| Goal | Route |
+|------|-------|
+| Secured endpoint, untrusted network, but no C cross-toolchain on the build host | **`cargo-zigbuild` + default `aws-lc-rs`** (above) — proven constant-time, Zig provides the C compiler |
+| `SecurityPolicy::None` / trusted network, want zero C in the build | `default-features = false` → pure-Rust `rsa` (not constant-time; fine when the decrypt path isn't exercised) |
+
 ## Workspace Layout
 
 OPC UA for Rust follows the normal Rust conventions. There is a `Cargo.toml` per module that you may use to build the module and all dependencies. e.g.

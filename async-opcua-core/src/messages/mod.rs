@@ -8,7 +8,7 @@ mod request;
 mod response;
 
 pub use request::RequestMessage;
-pub use response::{PublishResponseShared, ResponseMessage};
+pub use response::{PublishResponseShared, RepublishResponseShared, ResponseMessage};
 
 use crate::comms::message_chunk::MessageChunkType;
 

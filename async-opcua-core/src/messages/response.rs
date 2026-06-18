@@ -71,6 +71,52 @@ impl BinaryEncodable for PublishResponseShared {
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
+/// Republish response body that shares the notification message allocation.
+pub struct RepublishResponseShared {
+    /// Common response header.
+    pub response_header: ResponseHeader,
+    /// Shared notification message.
+    pub notification_message: Arc<NotificationMessage>,
+}
+
+impl MessageInfo for RepublishResponseShared {
+    fn type_id(&self) -> ObjectId {
+        ObjectId::RepublishResponse_Encoding_DefaultBinary
+    }
+
+    fn json_type_id(&self) -> ObjectId {
+        ObjectId::RepublishResponse_Encoding_DefaultJson
+    }
+
+    fn xml_type_id(&self) -> ObjectId {
+        ObjectId::RepublishResponse_Encoding_DefaultXml
+    }
+
+    fn data_type_id(&self) -> DataTypeId {
+        DataTypeId::RepublishResponse
+    }
+}
+
+impl BinaryEncodable for RepublishResponseShared {
+    fn byte_len(&self, ctx: &opcua_types::Context<'_>) -> usize {
+        let mut size = 0usize;
+        size += BinaryEncodable::byte_len(&self.response_header, ctx);
+        size += BinaryEncodable::byte_len(&self.notification_message, ctx);
+        size
+    }
+
+    fn encode<S: Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua_types::Context<'_>,
+    ) -> EncodingResult<()> {
+        BinaryEncodable::encode(&self.response_header, stream, ctx)?;
+        BinaryEncodable::encode(&self.notification_message, stream, ctx)?;
+        Ok(())
+    }
+}
+
 macro_rules! response_enum {
     (
         decodable {
@@ -225,16 +271,17 @@ response_enum! {
     }
     encode_only {
         PublishShared: PublishResponseShared,
+        RepublishShared: RepublishResponseShared,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{PublishResponseShared, ResponseMessage};
+    use super::{PublishResponseShared, RepublishResponseShared, ResponseMessage};
     use crate::messages::Message;
     use opcua_types::{
         BinaryEncodable, ContextOwned, DataValue, DateTime, MessageInfo, MonitoredItemNotification,
-        NotificationMessage, PublishResponse, ResponseHeader, StatusCode,
+        NotificationMessage, PublishResponse, RepublishResponse, ResponseHeader, StatusCode,
     };
     use std::sync::Arc;
 
@@ -284,6 +331,24 @@ mod tests {
         }
     }
 
+    fn republish_response() -> RepublishResponse {
+        RepublishResponse {
+            response_header: ResponseHeader::new_timestamped_service_result(
+                DateTime::from((2026, 6, 18, 12, 36, 0)),
+                43,
+                StatusCode::Good,
+            ),
+            notification_message: notification_message(),
+        }
+    }
+
+    fn shared_republish_response(response: &RepublishResponse) -> RepublishResponseShared {
+        RepublishResponseShared {
+            response_header: response.response_header.clone(),
+            notification_message: Arc::new(response.notification_message.clone()),
+        }
+    }
+
     fn encode_response_message(response: &ResponseMessage) -> Vec<u8> {
         let ctx_owner = ContextOwned::default();
         let ctx = ctx_owner.context();
@@ -300,6 +365,31 @@ mod tests {
         let ctx = ctx_owner.context();
         let generated = publish_response();
         let shared = shared_publish_response(&generated);
+
+        assert_eq!(generated.type_id(), shared.type_id());
+        assert_eq!(generated.byte_len(&ctx), shared.byte_len(&ctx));
+        assert_eq!(generated.encode_to_vec(&ctx), shared.encode_to_vec(&ctx));
+
+        let generated_message = ResponseMessage::from(generated);
+        let shared_message = ResponseMessage::from(shared);
+
+        assert_eq!(generated_message.type_id(), shared_message.type_id());
+        assert_eq!(
+            generated_message.byte_len(&ctx),
+            shared_message.byte_len(&ctx)
+        );
+        assert_eq!(
+            encode_response_message(&generated_message),
+            encode_response_message(&shared_message)
+        );
+    }
+
+    #[test]
+    fn shared_republish_response_encodes_like_generated_republish_response() {
+        let ctx_owner = ContextOwned::default();
+        let ctx = ctx_owner.context();
+        let generated = republish_response();
+        let shared = shared_republish_response(&generated);
 
         assert_eq!(generated.type_id(), shared.type_id());
         assert_eq!(generated.byte_len(&ctx), shared.byte_len(&ctx));

@@ -9,7 +9,7 @@ use std::{hash::Hash, sync::Arc, time::Instant};
 use chrono::Utc;
 use hashbrown::{Equivalent, HashMap};
 pub use monitored_item::{CreateMonitoredItem, MonitoredItem};
-use opcua_core::{trace_read_lock, trace_write_lock, ResponseMessage};
+use opcua_core::{trace_read_lock, trace_write_lock, RepublishResponseShared, ResponseMessage};
 use opcua_nodes::{Event, TypeTree};
 pub use session_subscriptions::SessionSubscriptions;
 use subscription::TickReason;
@@ -28,10 +28,9 @@ use opcua_types::{
     AttributeId, CreateSubscriptionRequest, CreateSubscriptionResponse, DataEncoding, DataValue,
     DateTimeUtc, MessageSecurityMode, ModifySubscriptionRequest, ModifySubscriptionResponse,
     MonitoredItemCreateResult, MonitoredItemModifyRequest, MonitoringMode, NodeId,
-    NotificationMessage, NumericRange, PublishRequest, RepublishRequest, RepublishResponse,
-    ResponseHeader, SetPublishingModeRequest, SetPublishingModeResponse, StatusCode,
-    TimestampsToReturn, TransferResult, TransferSubscriptionsRequest,
-    TransferSubscriptionsResponse,
+    NotificationMessage, NumericRange, PublishRequest, RepublishRequest, ResponseHeader,
+    SetPublishingModeRequest, SetPublishingModeResponse, StatusCode, TimestampsToReturn,
+    TransferResult, TransferSubscriptionsRequest, TransferSubscriptionsResponse,
 };
 
 use crate::node_manager::RequestContextInner;
@@ -379,7 +378,7 @@ impl SubscriptionCache {
         &self,
         session_id: u32,
         request: &RepublishRequest,
-    ) -> Result<RepublishResponse, StatusCode> {
+    ) -> Result<RepublishResponseShared, StatusCode> {
         let Some(cache) = ({
             let lck = trace_read_lock!(self.inner);
             lck.session_subscriptions.get(&session_id).cloned()

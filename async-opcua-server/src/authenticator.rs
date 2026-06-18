@@ -472,4 +472,40 @@ mod tests {
 
         assert_eq!(err.status(), StatusCode::BadIdentityTokenRejected);
     }
+
+    /// T057 / M6: an unknown username must be rejected with the *same* error as a
+    /// known username with a wrong password. Distinct errors (or only the known-user
+    /// path running password verification) would let an attacker enumerate valid
+    /// usernames. The not-found path runs a decoy `verify_decoy_password_hash` for
+    /// timing uniformity; this asserts the observable half — error-code uniformity.
+    #[tokio::test]
+    async fn unknown_user_and_wrong_password_are_indistinguishable() {
+        let authenticator = password_authenticator();
+        let endpoint = password_endpoint();
+
+        let unknown_user = authenticator
+            .authenticate_username_identity_token(
+                &endpoint,
+                "no-such-user",
+                &Password::new("whatever".to_string()),
+            )
+            .await
+            .expect_err("unknown user must not authenticate");
+
+        let wrong_password = authenticator
+            .authenticate_username_identity_token(
+                &endpoint,
+                "brew-operator",
+                &Password::new("wrong-password".to_string()),
+            )
+            .await
+            .expect_err("wrong password must not authenticate");
+
+        assert_eq!(
+            unknown_user.status(),
+            wrong_password.status(),
+            "unknown-user and wrong-password must fail identically (no username enumeration)"
+        );
+        assert_eq!(unknown_user.status(), StatusCode::BadIdentityTokenRejected);
+    }
 }

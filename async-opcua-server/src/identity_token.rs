@@ -12,10 +12,10 @@ pub(crate) const POLICY_ID_USER_PASS_NONE: &str = "userpass_none";
 pub(crate) const POLICY_ID_USER_PASS_RSA_15: &str = "userpass_rsa_15";
 pub(crate) const POLICY_ID_USER_PASS_RSA_OAEP: &str = "userpass_rsa_oaep";
 pub(crate) const POLICY_ID_USER_PASS_RSA_OAEP_SHA256: &str = "userpass_rsa_oaep_sha256";
-pub(crate) const POLICY_ID_ISSUED_TOKEN_NONE: &str = "userpass_none";
-pub(crate) const POLICY_ID_ISSUED_TOKEN_RSA_15: &str = "userpass_rsa_15";
-pub(crate) const POLICY_ID_ISSUED_TOKEN_RSA_OAEP: &str = "userpass_rsa_oaep";
-pub(crate) const POLICY_ID_ISSUED_TOKEN_RSA_OAEP_SHA256: &str = "userpass_rsa_oaep_sha256";
+pub(crate) const POLICY_ID_ISSUED_TOKEN_NONE: &str = "issued_none";
+pub(crate) const POLICY_ID_ISSUED_TOKEN_RSA_15: &str = "issued_rsa_15";
+pub(crate) const POLICY_ID_ISSUED_TOKEN_RSA_OAEP: &str = "issued_rsa_oaep";
+pub(crate) const POLICY_ID_ISSUED_TOKEN_RSA_OAEP_SHA256: &str = "issued_rsa_oaep_sha256";
 pub(crate) const POLICY_ID_X509: &str = "x509";
 
 /// Identity token representation on the server, decoded from the client.

@@ -16,6 +16,7 @@ use super::{
     info::ServerInfo, node_manager::NodeManagers, session::manager::SessionManager,
     SubscriptionCache,
 };
+use crate::metrics::ServerMetricsSnapshot;
 
 /// Reference to a server instance containing tools to modify the server
 /// while it is running.
@@ -64,6 +65,11 @@ impl ServerHandle {
     /// Get a reference to the ServerInfo, containing configuration and other shared server data.
     pub fn info(&self) -> &Arc<ServerInfo> {
         &self.info
+    }
+
+    /// Returns a point-in-time copy of this server's metrics.
+    pub fn metrics_snapshot(&self) -> ServerMetricsSnapshot {
+        self.info.metrics.snapshot()
     }
 
     /// Get a reference to the certificate store.

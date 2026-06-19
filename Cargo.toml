@@ -109,3 +109,20 @@ opt-level = 3
 opt-level = 3
 [profile.dev.package.rand_core]
 opt-level = 3
+
+# Opt-in size-optimized profile for embedded-Linux deployments (Raspberry Pi class).
+# Build with `cargo build --profile embedded ...`. Optimizes for binary size and a small
+# resident footprint. See docs/setup.md ("Embedded-Linux deployment") for the full rationale
+# and the recommended feature-minimal build line.
+#
+# NOTE: `panic` is intentionally left as the default `unwind` (NOT `abort`). This crate is a
+# connection-oriented network server: a bad chunk must drop the one offending connection, not
+# kill the whole process. `panic = "abort"` would convert a recoverable per-connection drop
+# into a process-wide DoS — the opposite of the hardening goal.
+[profile.embedded]
+inherits = "release"
+opt-level = "z"   # optimize for size; use "s" if you need more throughput headroom
+lto = true        # whole-program optimization shrinks the binary substantially
+codegen-units = 1 # better size/inlining at the cost of build time
+strip = true      # drop symbols from the shipped binary
+panic = "unwind"  # keep per-connection recovery (do NOT set to "abort")

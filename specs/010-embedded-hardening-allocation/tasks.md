@@ -77,12 +77,12 @@
 
 ### Tests for User Story 3
 
-- [ ] T020 [P] [US3] Test: string/byte-string/array decode from a shareable `Bytes` source yields identical values with fewer allocations (counting-allocator assertion) in `async-opcua-types/` tests (FR-007, SC-006).
+- [~] T020 [P] [US3] **DEFERRED with T022** (the test asserts behavior of the zero-copy decode that is being staged). See T022 / research.md R7 (FR-007, SC-006).
 
 ### Implementation for User Story 3
 
-- [ ] T021 [US3] Document the `current_thread` tokio runtime as the recommended low-jitter embedded config + a size-optimized release profile (LTO, `opt-level="z"`, feature-minimal) in `docs/setup.md` and the workspace `Cargo.toml` profile (FR-008, SC-007).
-- [ ] T022 [US3] Zero-copy decode: thread the source `Bytes` so `ByteString`/`String`/array decode slice/`split` from the shared buffer (covers the per-array-field decode `Vec`), identical values, copy fallback where no `Bytes` source — in `async-opcua-types/src/` — **measure-first**; stage/defer with recorded rationale if the trait-surface change outweighs the measured benefit (FR-007, SC-006).
+- [X] T021 [US3] Document the `current_thread` tokio runtime as the recommended low-jitter embedded config + a size-optimized release profile (LTO, `opt-level="z"`, feature-minimal) in `docs/setup.md` and the workspace `Cargo.toml` profile (FR-008, SC-007). *(Added "Embedded-Linux deployment" section + opt-in `[profile.embedded]`; profile validated via `cargo check --profile embedded`.)*
+- [~] T022 [US3] **DEFERRED (measure-first, recorded rationale).** Zero-copy `ByteString`/`String`/array decode. The decode traits (`BinaryDecodable`/`SimpleBinaryDecodable`) are generic over `S: std::io::Read` across hundreds of generated + hand impls and downstream implementors; there is no shared `Bytes` handle at the decode site to slice from. Threading `Bytes` through would be a **breaking trait-surface change workspace-wide**, and OPC UA messages are **chunked** — the decode stream is a multi-`MessageChunk` reassembly, so a single contiguous `Bytes` is not even available for multi-chunk messages, making the benefit narrow (single-chunk only). The real decode-path DoS (unbounded `value_rank` resize) was already fixed in US1. Deferred per Constitution I/II; SC-006 is **staged, not met this feature**. See research.md R7 (FR-007, SC-006).
 
 **Checkpoint**: embedded guidance shipped; decode leaner. **Commit US3.**
 

@@ -1,0 +1,25 @@
+---
+# Codacy repository configuration.
+#
+# The bulk of this workspace is machine-generated OPC UA wire types
+# (~375 files / ~345k LOC under */src/generated/, generated from the
+# OPC UA NodeSet XML schemas by async-opcua-codegen). Every generated
+# type emits structurally identical BinaryEncodable/BinaryDecodable/
+# MessageInfo (+ JSON/XML) impls that differ only in field names, so
+# Codacy's clone detector reports them as massive "duplication". That
+# is a false signal: the generator is the source of truth and the
+# output is never hand-edited or hand-deduplicated. Excluding it (and
+# the test/fuzz harnesses) keeps Codacy's findings focused on the
+# hand-written, maintained source.
+exclude_paths:
+  # Auto-generated OPC UA types — the dominant source of false-positive
+  # duplication. Never hand-edited (verify-clean-codegen CI enforces this).
+  - "**/generated/**"
+  # Test harnesses: large, intentionally repetitive setup (e.g. the
+  # security-policy × mode matrix, integration-test scaffolding).
+  - "**/tests/**"
+  # Fuzz targets and external/codegen test crates — boilerplate, not
+  # production code.
+  - "fuzz/**"
+  - "codegen-tests/**"
+  - "dotnet-tests/**"

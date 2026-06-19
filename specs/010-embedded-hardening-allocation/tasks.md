@@ -90,8 +90,8 @@
 
 ## Phase N: Polish & Cross-Cutting Concerns
 
-- [ ] T023 Final gate: `cargo fmt --all --check`, `cargo clippy --locked -D warnings`, full `cargo test --workspace` zero failures; `verify-clean-codegen` unaffected (no generated edits).
-- [ ] T024 Record before/after allocation numbers (event path, dispatch, decode) in the PR body (FR-010) and reconcile `docs/EMBEDDED_AUDIT_2026-06-18.md` §5/§6 — mark the addressed items, note anything staged/deferred with rationale.
+- [X] T023 Final gate: `cargo fmt --all --check` clean; `cargo clippy --locked -- -D warnings` + the 3 feature variants (`async-opcua --no-default-features`, `--features json`, `--features xml`) all clean; full `cargo test --workspace` zero failures; no generated code edited (`verify-clean-codegen` unaffected). *(Pre-existing `--all-targets` clippy debt in benches/test-modules is unrelated to 010 and noted in the PR as a separate follow-up.)*
+- [X] T024 Recorded before/after allocation numbers (event path) and reconciled `docs/EMBEDDED_AUDIT_2026-06-18.md` §5/§6 — each finding marked resolved/partial/deferred with rationale; §6 table annotated with 010 status.
 
 ---
 

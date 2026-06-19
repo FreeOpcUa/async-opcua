@@ -94,7 +94,24 @@ open-secure-channel path still allocates — accepted, it is not on the steady-s
 
 ## 5. Findings — STILL OPEN
 
-### 5.1 Panic surface is *targeted-fixed*, not *completely* swept — ◐ OPEN (highest priority)
+> **Reconciliation — feature 010 (Embedded Hardening & Allocation), 2026-06-19.** All five
+> §5 findings have been worked through SpecKit feature `010-embedded-hardening-allocation`.
+> §5.1, §5.2, §5.4, §5.5 are **RESOLVED**; §5.3 is **partially resolved** (the deployment/profile
+> levers shipped; the two architectural allocation rewrites M2/M4 are **deferred measure-first**
+> with recorded rationale). Per-item status is noted inline below; see
+> `specs/010-embedded-hardening-allocation/` (tasks.md, research.md R6/R7) for detail.
+
+### 5.1 Panic surface is *targeted-fixed*, not *completely* swept — ✅ RESOLVED in 010
+**Status (010):** Panic-surface `#![deny(clippy::unwrap_used, expect_used, indexing_slicing, panic)]`
+gates added to `-types`/`-core`/`-crypto` (crate-level) and to the decode/transport modules of
+`-server`/`-client`, driven to zero with `Result`/checked replacements (justified `#[allow]` only).
+A panic-hunting fuzz pass over `fuzz_comms`/`fuzz_deserialize`/`fuzz_dynamic_struct` ran clean **and
+found a previously-unknown remote allocation DoS** (a crafted `Argument.value_rank` ≈ 2.1e9 drove an
+8.45 GB `resize` from a 30-byte message) — now fixed (bound `value_rank` by `max_array_length`) with a
+regression test and re-verified (45 s / 3M fuzz runs, peak RSS ~436 MB). Not `panic = "abort"` (a bad
+chunk drops one connection, never the process).
+
+*(Original finding, retained for context:)*
 **This is the honest answer to "do we still need to fix the panic surface completely?": yes.**
 
 What was done: a panic-safety audit found and fixed **4 remote-reachable** panics — 2 CRITICAL
@@ -120,13 +137,33 @@ Recommended follow-up (in priority order):
 3. Extend the existing fuzz targets (`fuzz_comms`, `fuzz_deserialize`, `fuzz_dynamic_struct`) with a
    panic-hunting harness run under ASAN/`-C panic=abort` to flush out reachable panics empirically.
 
-### 5.2 Recursion depth not explicitly bounded — ◐ OPEN
+### 5.2 Recursion depth not explicitly bounded — ✅ RESOLVED in 010
+**Status (010):** `max_decode_depth` added to `DecodingOptions` (safe default) with a `DepthGauge`/
+`DepthLock` counter applied at the recursive nesting points; exceeding it returns a clean decode error
+(regression test: at-limit succeeds, one beyond fails — no stack overflow).
+
 Nested decode (ExtensionObject → Variant → Array → ExtensionObject …) recurses with depth limited only
 indirectly by message-size/decoding limits. On a Pi-class device with small per-task stacks this is a
 thinner margin than on a server. Recommend an explicit decode-depth counter in `DecodingOptions`
 (cheap, deterministic) rather than relying on the size limit as a proxy.
 
-### 5.3 Remaining dynamic-allocation churn — ◐ OPEN (architectural)
+### 5.3 Remaining dynamic-allocation churn — ◐ PARTIALLY RESOLVED in 010
+**Status (010):**
+- **Event-notification publish path — ✅ FIXED.** The per-publish-tick `Vec<EventFieldList>`
+  allocation was eliminated by extending the `DataChangeNotificationVecPool` to the event path
+  (clear-on-draw, capacity-checked reuse, bounded free-list, reclaim via the `Arc::into_inner`
+  unique-ownership gate). Measured: per-tick event-path construction is **constant — 2 allocs / 56 B
+  at both 1000 and 5000 events** (was proportional). Wire output byte-identical (98 integration tests).
+- **`current_thread` runtime + size-optimized profile — ✅ DONE** (see §5.3 "Deployment lever" and rec
+  #5/#8; now documented in `docs/setup.md` + opt-in `[profile.embedded]`).
+- **M2 (per-request `Box`+`tokio::spawn`) — ⏸ DEFERRED measure-first.** The spawn is the request-level
+  panic-isolation boundary; an inline fast-path would remove it (tension with the §5.1 hardening) for a
+  narrow, data-dependent saving. Rationale: `specs/.../research.md` R6.
+- **M4 (zero-copy decode) — ⏸ DEFERRED measure-first.** The decode traits are `std::io::Read`-generic
+  workspace-wide and messages are chunked (no contiguous `Bytes` to slice for multi-chunk messages); a
+  zero-copy path is a breaking trait change with single-chunk-only benefit. The real decode-path DoS was
+  fixed in §5.1. Rationale: `specs/.../research.md` R7.
+
 Two larger allocation sources remain on the hot path, both bigger/architectural than §4.3:
 - **Per-request `Box` + `tokio::spawn` dispatch (M2).** Each inbound request is boxed and spawned.
   Eliminating this changes the request-dispatch/panic-isolation model — not a drop-in win.
@@ -137,7 +174,11 @@ Two larger allocation sources remain on the hot path, both bigger/architectural 
   work-stealing entirely, which is the single biggest reduction in cross-core frees for a
   jitter-sensitive SBC. Worth documenting as the recommended embedded runtime config.
 
-### 5.4 TCP frame decoder does not enforce `max_message_size` — ◐ OPEN (hostile-peer memory)
+### 5.4 TCP frame decoder does not enforce `max_message_size` — ✅ RESOLVED in 010
+**Status (010):** `TcpCodec::decode` now rejects a declared `message_size > max_message_size` with
+`BadTcpMessageTooLarge` before buffering toward it, and `MessageHeader::decode` honors the
+`DecodingOptions` it is passed (no longer `_:`). Regression test added.
+
 *(Added 2026-06-18 from the memory-stability follow-up; verified at source.)*
 
 `TcpCodec::decode` (`async-opcua-core/src/comms/tcp_codec.rs:93`) reads the 8-byte message header,
@@ -159,7 +200,12 @@ or error is produced. Existing mitigations (per-message `max_chunk_count`, reque
 `MessageHeader::decode` actually use the `DecodingOptions` it receives. Drops the connection before any
 oversized buffering.
 
-### 5.5 GDS certificate-management registries are unbounded — ◐ OPEN (soak leak, privileged)
+### 5.5 GDS certificate-management registries are unbounded — ✅ RESOLVED in 010
+**Status (010):** Each GDS push/pull registry is now bounded with a defined FIFO-evict-oldest overflow
+(cap `GDS_REGISTRY_CAPACITY = 1024`): `signing_requests` (HashMap + insertion-order companion queue),
+`created_requests`/`rejected`/`updated`/`finished` (VecDeque, pop_front before push_back). Eviction
+tests added; getters still return `Vec`.
+
 *(Added 2026-06-18; explorer-reported, not exhaustively re-verified.)*
 
 The optional GlobalDiscoveryServer push/pull method handlers accumulate state with no cap or cleanup:
@@ -180,16 +226,18 @@ subscription queues and the history continuation-point LRU are already bounded.
 
 ## 6. Recommendations summary
 
-| # | Action | Effort | Priority |
-|---|--------|--------|----------|
-| 1 | Complete the panic-surface sweep via clippy lints + fuzzing on `-types`/`-core`/`-crypto` (§5.1) | Medium | **High** |
-| 2 | Enforce `max_message_size` in `TcpCodec::decode`; make `MessageHeader::decode` use `DecodingOptions` (§5.4) | Low | **High** |
-| 3 | Add explicit decode-recursion depth bound to `DecodingOptions` (§5.2) | Low | Medium |
-| 4 | Cap / TTL the GDS signing-request & certificate registries (§5.5) | Low | Medium |
-| 5 | Document `current_thread` runtime as the recommended embedded config (§5.3) | Low | Medium |
-| 6 | Zero-copy `ByteString`/`String` decode — M4 (§5.3) | High | Low–Medium |
-| 7 | Per-request dispatch without per-request `Box`+spawn — M2 (§5.3) | High | Low |
-| 8 | Publish a documented size-optimized build profile (LTO, `opt-level="z"`, feature-minimal) | Low | Low |
+All eight were taken into feature `010-embedded-hardening-allocation`. Status as of 2026-06-19:
+
+| # | Action | Effort | Priority | Status (010) |
+|---|--------|--------|----------|--------------|
+| 1 | Complete the panic-surface sweep via clippy lints + fuzzing on `-types`/`-core`/`-crypto` (§5.1) | Medium | **High** | ✅ Done (+ fuzz found & fixed an 8.45 GB `value_rank` DoS) |
+| 2 | Enforce `max_message_size` in `TcpCodec::decode`; make `MessageHeader::decode` use `DecodingOptions` (§5.4) | Low | **High** | ✅ Done |
+| 3 | Add explicit decode-recursion depth bound to `DecodingOptions` (§5.2) | Low | Medium | ✅ Done |
+| 4 | Cap / TTL the GDS signing-request & certificate registries (§5.5) | Low | Medium | ✅ Done (FIFO-evict, cap 1024) |
+| 5 | Document `current_thread` runtime as the recommended embedded config (§5.3) | Low | Medium | ✅ Done |
+| 6 | Zero-copy `ByteString`/`String` decode — M4 (§5.3) | High | Low–Medium | ⏸ Deferred measure-first (research.md R7) |
+| 7 | Per-request dispatch without per-request `Box`+spawn — M2 (§5.3) | High | Low | ⏸ Deferred measure-first (research.md R6) |
+| 8 | Publish a documented size-optimized build profile (LTO, `opt-level="z"`, feature-minimal) | Low | Low | ✅ Done (`[profile.embedded]`) |
 
 **Not recommended:** pursuing `no_std`/bare-metal (RP2040 etc.). The `std`/`tokio`/heap coupling is
 foundational; target embedded Linux instead.

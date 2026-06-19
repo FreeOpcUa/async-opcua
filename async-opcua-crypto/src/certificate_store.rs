@@ -181,10 +181,12 @@ impl CertificateStore {
         // Write the private key
         use rsa::pkcs8;
         use x509_cert::der::pem::PemLabel;
-        let doc = pkey.to_der().unwrap();
+        let doc = pkey
+            .to_der()
+            .map_err(|e| format!("Failed to convert private key to DER: {e:?}"))?;
         let pem = doc
             .to_pem(rsa::pkcs8::PrivateKeyInfo::PEM_LABEL, pkcs8::LineEnding::CR)
-            .unwrap();
+            .map_err(|e| format!("Failed to convert private key to PEM: {e:?}"))?;
         let _ = CertificateStore::write_private_key_to_file(pem.as_bytes(), pkey_path, overwrite)?;
         Ok((cert, pkey))
     }
@@ -542,7 +544,9 @@ impl CertificateStore {
     /// A string description of any failure
     ///
     fn store_cert(cert: &X509, path: &Path, overwrite: bool) -> Result<usize, String> {
-        let der = cert.to_der().unwrap();
+        let der = cert
+            .to_der()
+            .map_err(|e| format!("Could not encode X509 cert as DER: {e:?}"))?;
         info!("Writing X509 cert to {}", path.display());
         CertificateStore::write_to_file(&der, path, overwrite)
     }
@@ -559,7 +563,8 @@ impl CertificateStore {
             return Err(format!("Could not open cert file {}", path.display()));
         }
 
-        let mut file: File = file.unwrap();
+        let mut file: File =
+            file.map_err(|_| format!("Could not open cert file {}", path.display()))?;
         let mut cert = Vec::new();
         let bytes_read = file.read_to_end(&mut cert);
         if bytes_read.is_err() {

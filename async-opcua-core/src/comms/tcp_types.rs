@@ -81,10 +81,12 @@ impl SimpleBinaryEncodable for MessageHeader {
             MessageType::Error => stream.write_all(ERROR_MESSAGE),
             MessageType::ReverseHello => stream.write_all(REVERSE_HELLO_MESSAGE),
             MessageType::Chunk => {
-                panic!("Don't write chunks to stream with this call, use Chunk and Chunker");
+                return Err(opcua_types::Error::encoding(
+                    "Don't write chunks to stream with this call, use Chunk and Chunker",
+                ));
             }
             _ => {
-                panic!("Unrecognized type");
+                return Err(opcua_types::Error::encoding("Unrecognized type"));
             }
         };
         process_encode_io_result(result)?;
@@ -95,10 +97,24 @@ impl SimpleBinaryEncodable for MessageHeader {
 }
 
 impl SimpleBinaryDecodable for MessageHeader {
-    fn decode<S: Read + ?Sized>(stream: &mut S, _: &DecodingOptions) -> EncodingResult<Self> {
+    fn decode<S: Read + ?Sized>(
+        stream: &mut S,
+        decoding_options: &DecodingOptions,
+    ) -> EncodingResult<Self> {
         let mut message_type = [0u8; 4];
         process_decode_io_result(stream.read_exact(&mut message_type))?;
         let message_size = read_u32(stream)?;
+        if decoding_options.max_message_size > 0
+            && message_size as usize > decoding_options.max_message_size
+        {
+            return Err(opcua_types::Error::new(
+                StatusCode::BadTcpMessageTooLarge,
+                format!(
+                    "Message size {} exceeds maximum message size {}",
+                    message_size, decoding_options.max_message_size
+                ),
+            ));
+        }
         Ok(MessageHeader {
             message_type: MessageHeader::message_type(&message_type),
             message_size,
@@ -129,11 +145,8 @@ impl MessageHeader {
                 "Message type is not recognized, cannot read bytes",
             ));
         }
-        let message_size = u32::decode(stream, decoding_options);
-        if message_size.is_err() {
-            return Err(Error::other("Cannot decode message_size"));
-        }
-        let message_size = message_size.unwrap();
+        let message_size = u32::decode(stream, decoding_options)
+            .map_err(|_| Error::other("Cannot decode message_size"))?;
 
         // Write header to stream
         let mut out = Cursor::new(Vec::with_capacity(message_size as usize));
@@ -151,7 +164,10 @@ impl MessageHeader {
         // Read remaining bytes straight into the vec
         let mut result = out.into_inner();
         result.resize(message_size as usize, 0u8);
-        stream.read_exact(&mut result[pos..])?;
+        let remaining = result
+            .get_mut(pos..)
+            .ok_or_else(|| Error::other("Invalid message buffer range"))?;
+        stream.read_exact(remaining)?;
 
         Ok(result)
     }
@@ -161,7 +177,11 @@ impl MessageHeader {
         if t.len() != 4 {
             MessageType::Invalid
         } else {
-            let message_type = match &t[0..3] {
+            let message_type_bytes = match t.get(..3) {
+                Some(message_type_bytes) => message_type_bytes,
+                None => return MessageType::Invalid,
+            };
+            let message_type = match message_type_bytes {
                 HELLO_MESSAGE => MessageType::Hello,
                 ACKNOWLEDGE_MESSAGE => MessageType::Acknowledge,
                 ERROR_MESSAGE => MessageType::Error,
@@ -177,9 +197,9 @@ impl MessageHeader {
 
             // Check the 4th byte which should be F for messages or F, C or A for chunks. If its
             // not one of those, the message is invalid
-            match t[3] {
-                CHUNK_FINAL => message_type,
-                CHUNK_INTERMEDIATE | CHUNK_FINAL_ERROR => {
+            match t.get(3) {
+                Some(&CHUNK_FINAL) => message_type,
+                Some(&CHUNK_INTERMEDIATE) | Some(&CHUNK_FINAL_ERROR) => {
                     if message_type == MessageType::Chunk {
                         message_type
                     } else {

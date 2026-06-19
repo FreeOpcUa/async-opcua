@@ -88,6 +88,71 @@ only changes the *build pipeline* (Zig as the C cross-compiler), not the depende
 | Secured endpoint, untrusted network, but no C cross-toolchain on the build host | **`cargo-zigbuild` + default `aws-lc-rs`** (above) — proven constant-time, Zig provides the C compiler |
 | `SecurityPolicy::None` / trusted network, want zero C in the build | `default-features = false` → pure-Rust `rsa` (not constant-time; fine when the decrypt path isn't exercised) |
 
+## Embedded-Linux deployment (low-jitter runtime + size-optimized build)
+
+For long-lived deployments on resource-constrained embedded-Linux devices (Raspberry Pi /
+Pi Zero class, including musl images), two configuration choices matter beyond the crypto
+backend above: the async runtime flavor and the build profile.
+
+### Recommended runtime: single-threaded (`current_thread`)
+
+The biggest lever for **low latency jitter** on a multi-core SBC is to run the Tokio runtime
+in its `current_thread` (single-threaded) flavor rather than the default multi-threaded
+work-stealing scheduler:
+
+```rust
+#[tokio::main(flavor = "current_thread")]
+async fn main() {
+    // build and run the async-opcua server/client as usual
+}
+
+// or, building the runtime explicitly:
+let rt = tokio::runtime::Builder::new_current_thread()
+    .enable_all()
+    .build()
+    .unwrap();
+rt.block_on(async { /* ... */ });
+```
+
+Why it helps on an SBC:
+
+- **No cross-core work-stealing.** The multi-threaded scheduler can allocate a task's data on
+  one core and free it on another; those cross-core frees, plus scheduler synchronization, are
+  a source of latency jitter that is especially visible on a 2–4 core SBC. A single-threaded
+  runtime keeps each connection's work (and its allocator activity) on one core.
+- **Lower memory and code footprint.** One worker thread instead of one-per-core means fewer
+  stacks and less scheduler state.
+
+**Trade-off:** a single-threaded runtime serializes CPU-bound work across all connections, so
+peak multi-connection throughput is lower. For a typical embedded SoftPLC/gateway role
+(a handful of sessions, periodic publishes, modest request rates) the jitter and footprint win
+outweighs the throughput ceiling. If you are CPU-bound across many concurrent sessions, keep
+the default multi-threaded runtime.
+
+This pairs with the steady-state allocation work in the library itself (pooled notification
+buffers on the publish path), which keeps per-publish-tick allocation constant rather than
+proportional to the notification count — so the single-threaded runtime sees a near-flat
+allocation rate at steady state.
+
+### Size-optimized build profile
+
+The workspace defines an opt-in `embedded` profile (see the root `Cargo.toml`) tuned for a
+small binary and resident footprint:
+
+```bash
+# size-optimized, feature-minimal build over musl (constant-time crypto kept):
+cargo zigbuild --profile embedded --target aarch64-unknown-linux-musl \
+    -p async-opcua --no-default-features --features server,aws-lc-rs
+```
+
+The profile sets `opt-level = "z"` (size), `lto = true`, `codegen-units = 1`, and
+`strip = true`. It deliberately keeps `panic = "unwind"` — **do not** switch this server to
+`panic = "abort"`: a malformed chunk must drop only the offending connection, and `abort`
+would turn that recoverable drop into a whole-process exit (a denial of service for every
+other client). Trim the dependency surface with `--no-default-features` plus only the features
+you use (e.g. `server`; add `json`/`xml` only if you need those encodings). Use `opt-level =
+"s"` instead of `"z"` if profiling shows you need more throughput headroom.
+
 ## Workspace Layout
 
 OPC UA for Rust follows the normal Rust conventions. There is a `Cargo.toml` per module that you may use to build the module and all dependencies. e.g.

@@ -181,13 +181,10 @@ impl PrivateKey {
     /// Get the public key info for this private key.
     pub fn public_key_to_info(&self) -> x509_cert::spki::Result<SubjectPublicKeyInfoOwned> {
         use rsa::pkcs8::EncodePublicKey;
-        SubjectPublicKeyInfoOwned::try_from(
-            self.value
-                .to_public_key()
-                .to_public_key_der()
-                .unwrap()
-                .as_bytes(),
-        )
+        // Public-key DER encoding from an in-memory RSA key is an internal invariant here.
+        #[allow(clippy::unwrap_used)]
+        let public_key_der = self.value.to_public_key().to_public_key_der().unwrap();
+        SubjectPublicKeyInfoOwned::try_from(public_key_der.as_bytes())
     }
 
     /// Create a public key based on this private key.
@@ -266,12 +263,12 @@ impl PrivateKey {
 
             // Decrypt and advance
             dst_idx += {
-                let src = &src[src_idx..src_end_index];
+                let src = src.get(src_idx..src_end_index).ok_or(PKeyError)?;
                 let dst_end_index = dst_idx
                     .checked_add(cipher_text_block_size)
                     .filter(|end| *end <= dst.len())
                     .ok_or(PKeyError)?;
-                let dst = &mut dst[dst_idx..dst_end_index];
+                let dst = dst.get_mut(dst_idx..dst_end_index).ok_or(PKeyError)?;
 
                 #[cfg(feature = "aws-lc-rs")]
                 let block_len = aws_lc_private_decrypt(&decrypting_key, padding, src, dst)?;
@@ -339,7 +336,9 @@ fn rsa_private_decrypt(
             private_key.decrypt(rsa::Oaep::new::<sha2::Sha256>(), src)?
         }
     };
-    dst[..plaintext.len()].copy_from_slice(&plaintext);
+    dst.get_mut(..plaintext.len())
+        .ok_or(PKeyError)?
+        .copy_from_slice(&plaintext);
     Ok(plaintext.len())
 }
 
@@ -404,7 +403,7 @@ impl PublicKey {
         let mut rng = rand::thread_rng();
 
         let mut src_idx = 0;
-        let mut dst_idx = 0;
+        let mut dst_idx: usize = 0;
 
         let src_len = src.len();
         while src_idx < src_len {
@@ -420,11 +419,20 @@ impl PublicKey {
 
             // Encrypt data, advance dst index by number of bytes after encrypted
             dst_idx += {
-                let src = &src[src_idx..src_end_index];
+                let src = src.get(src_idx..src_end_index).ok_or(PKeyError)?;
 
                 let padding = T::get_padding();
                 let encrypted = self.value.encrypt(&mut rng, padding, src)?;
-                dst[dst_idx..(dst_idx + cipher_text_block_size)].copy_from_slice(&encrypted);
+                if encrypted.len() != cipher_text_block_size {
+                    return Err(PKeyError);
+                }
+                let dst_end_index = dst_idx
+                    .checked_add(cipher_text_block_size)
+                    .filter(|end| *end <= dst.len())
+                    .ok_or(PKeyError)?;
+                dst.get_mut(dst_idx..dst_end_index)
+                    .ok_or(PKeyError)?
+                    .copy_from_slice(&encrypted);
                 encrypted.len()
             };
 

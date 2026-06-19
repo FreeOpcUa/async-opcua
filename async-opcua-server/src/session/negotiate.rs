@@ -1,3 +1,10 @@
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic
+)]
+
 use std::time::Duration;
 
 use opcua_crypto::{

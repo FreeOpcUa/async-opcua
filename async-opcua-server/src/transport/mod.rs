@@ -1,3 +1,10 @@
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic
+)]
+
 mod connect;
 mod reverse_tcp;
 pub(crate) mod tcp;

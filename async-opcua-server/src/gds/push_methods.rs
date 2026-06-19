@@ -1,7 +1,7 @@
 //! GDS push model method callbacks.
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     sync::{
         atomic::{AtomicU32, Ordering},
         Arc,
@@ -12,6 +12,8 @@ use opcua_core::sync::RwLock;
 use opcua_types::{ByteString, NodeId, StatusCode, Variant};
 
 use crate::node_manager::memory::SimpleNodeManager;
+
+use super::GDS_REGISTRY_CAPACITY;
 
 const CERTIFICATE_MANAGER_OBJECT_ID: u32 = 22388;
 const START_SIGNING_REQUEST_METHOD_ID: u32 = 22400;
@@ -55,7 +57,8 @@ pub struct GdsCreatedSigningRequest {
 pub struct GdsSigningRequestRegistry {
     next_request_id: AtomicU32,
     signing_requests: RwLock<HashMap<NodeId, GdsSigningRequest>>,
-    created_requests: RwLock<Vec<GdsCreatedSigningRequest>>,
+    signing_request_order: RwLock<VecDeque<NodeId>>,
+    created_requests: RwLock<VecDeque<GdsCreatedSigningRequest>>,
 }
 
 impl GdsSigningRequestRegistry {
@@ -66,21 +69,37 @@ impl GdsSigningRequestRegistry {
 
     /// Returns the locally generated CSRs created by `CreateSigningRequest`.
     pub fn created_signing_requests(&self) -> Vec<GdsCreatedSigningRequest> {
-        self.created_requests.read().clone()
+        self.created_requests.read().iter().cloned().collect()
     }
 
     fn insert_signing_request(&self, request: GdsSigningRequest) -> NodeId {
         let id = self.next_request_id.fetch_add(1, Ordering::Relaxed) + 1;
         let request_id = NodeId::new(REQUEST_ID_NAMESPACE, format!("signing-request-{id}"));
-        self.signing_requests
-            .write()
-            .insert(request_id.clone(), request);
+        let mut signing_requests = self.signing_requests.write();
+        let mut signing_request_order = self.signing_request_order.write();
+
+        while signing_requests.len() >= GDS_REGISTRY_CAPACITY {
+            let Some(oldest_request_id) = signing_request_order.pop_front() else {
+                break;
+            };
+            signing_requests.remove(&oldest_request_id);
+        }
+
+        signing_requests.insert(request_id.clone(), request);
+        signing_request_order.push_back(request_id.clone());
         request_id
     }
 
     fn record_created_signing_request(&self, request: GdsCreatedSigningRequest) {
-        self.created_requests.write().push(request);
+        push_bounded_fifo(&mut self.created_requests.write(), request);
     }
+}
+
+fn push_bounded_fifo<T>(items: &mut VecDeque<T>, item: T) {
+    if items.len() >= GDS_REGISTRY_CAPACITY {
+        items.pop_front();
+    }
+    items.push_back(item);
 }
 
 /// Handler for GDS push model method calls.
@@ -263,7 +282,30 @@ mod tests {
 
     use opcua_types::{ByteString, NodeId, StatusCode, Variant};
 
+    use crate::gds::GDS_REGISTRY_CAPACITY;
+
     use super::*;
+
+    fn signing_request(index: usize) -> GdsSigningRequest {
+        GdsSigningRequest {
+            application_id: NodeId::new(0, index as u32),
+            certificate_group_id: NodeId::new(0, 6000 + index as u32),
+            certificate_type_id: NodeId::new(0, 7000 + index as u32),
+            csr_der: ByteString::from(format!("csr-{index}").into_bytes()),
+            regenerate_private_key: false,
+        }
+    }
+
+    fn created_signing_request(index: usize) -> GdsCreatedSigningRequest {
+        GdsCreatedSigningRequest {
+            certificate_group_id: NodeId::new(0, 8000 + index as u32),
+            certificate_type_id: NodeId::new(0, 9000 + index as u32),
+            subject_name: format!("subject-{index}"),
+            regenerate_private_key: false,
+            nonce: ByteString::from(format!("nonce-{index}").into_bytes()),
+            csr_der: ByteString::from(format!("created-csr-{index}").into_bytes()),
+        }
+    }
 
     fn start_args() -> Vec<Variant> {
         vec![
@@ -339,5 +381,44 @@ mod tests {
     fn push_method_ids_match_task_contract() {
         assert_eq!(start_signing_request_method_id(), NodeId::new(0, 22400));
         assert_eq!(create_signing_request_method_id(), NodeId::new(0, 22403));
+    }
+
+    #[test]
+    fn signing_request_registry_evicts_oldest_entries_when_full() {
+        let registry = GdsSigningRequestRegistry::default();
+        let ids = (0..GDS_REGISTRY_CAPACITY + 2)
+            .map(|index| registry.insert_signing_request(signing_request(index)))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            registry.signing_requests.read().len(),
+            GDS_REGISTRY_CAPACITY
+        );
+        assert_eq!(
+            registry.signing_request_order.read().len(),
+            GDS_REGISTRY_CAPACITY
+        );
+        assert!(registry.get_signing_request(&ids[0]).is_none());
+        assert!(registry.get_signing_request(&ids[1]).is_none());
+        assert!(registry.get_signing_request(&ids[2]).is_some());
+        assert!(registry.get_signing_request(ids.last().unwrap()).is_some());
+        assert_eq!(registry.signing_request_order.read().front(), Some(&ids[2]));
+        assert_eq!(registry.signing_request_order.read().back(), ids.last());
+    }
+
+    #[test]
+    fn created_signing_request_registry_evicts_oldest_entries_when_full() {
+        let registry = GdsSigningRequestRegistry::default();
+        for index in 0..GDS_REGISTRY_CAPACITY + 2 {
+            registry.record_created_signing_request(created_signing_request(index));
+        }
+
+        let requests = registry.created_signing_requests();
+        assert_eq!(requests.len(), GDS_REGISTRY_CAPACITY);
+        assert_eq!(requests.first().unwrap().subject_name, "subject-2");
+        assert_eq!(
+            requests.last().unwrap().subject_name,
+            format!("subject-{}", GDS_REGISTRY_CAPACITY + 1)
+        );
     }
 }

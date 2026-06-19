@@ -2,6 +2,15 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (C) 2017-2024 Adam Lock
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::indexing_slicing,
+        clippy::panic
+    )
+)]
 #![warn(missing_docs)]
 
 //! The OPC UA Core module holds functionality that is common to server and clients that make use of OPC UA.

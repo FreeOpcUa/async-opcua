@@ -153,7 +153,9 @@ pub fn hostname_port_from_url(url: &str, default_port: u16) -> Result<(String, u
     if url.scheme() != OPC_TCP_SCHEME || !url.has_host() {
         Err(StatusCode::BadTcpEndpointUrlInvalid)
     } else {
-        let host = url.host_str().unwrap();
+        let Some(host) = url.host_str() else {
+            return Err(StatusCode::BadTcpEndpointUrlInvalid);
+        };
         let port = url.port().unwrap_or(default_port);
         Ok((host.to_string(), port))
     }
@@ -169,7 +171,9 @@ pub fn hostname_port_from_wss_url(
     if url.scheme() != OPC_WSS_SCHEME || !url.has_host() {
         Err(StatusCode::BadTcpEndpointUrlInvalid)
     } else {
-        let host = url.host_str().unwrap();
+        let Some(host) = url.host_str() else {
+            return Err(StatusCode::BadTcpEndpointUrlInvalid);
+        };
         let port = url.port().unwrap_or(default_port);
         Ok((host.to_string(), port))
     }

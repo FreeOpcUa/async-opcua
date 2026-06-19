@@ -123,7 +123,16 @@ pub fn legacy_encrypt_secret(
     let token_security_policy = if user_token_policy.security_policy_uri.is_empty() {
         None
     } else {
-        Some(SecurityPolicy::from_str(user_token_policy.security_policy_uri.as_ref()).unwrap())
+        Some(
+            SecurityPolicy::from_str(user_token_policy.security_policy_uri.as_ref()).map_err(
+                |_| {
+                    Error::new(
+                        StatusCode::BadSecurityPolicyRejected,
+                        "Invalid user token security policy URI",
+                    )
+                },
+            )?,
+        )
     };
 
     // This is an implementation of Table 193 in OPC-UA Part 4, 7.41
@@ -192,7 +201,12 @@ pub fn legacy_encrypt_secret(
             let password = legacy_secret_encrypt(
                 secret_to_encrypt,
                 nonce,
-                cert.as_ref().unwrap(),
+                cert.as_ref().ok_or_else(|| {
+                    Error::new(
+                        StatusCode::BadCertificateInvalid,
+                        "Missing certificate for user identity encryption",
+                    )
+                })?,
                 security_policy,
             )?;
 
@@ -263,7 +277,9 @@ pub(crate) fn legacy_secret_decrypt<T: AesAsymmetricEncryptionAlgorithm>(
         Err(invalid_secret())
     } else {
         // Decrypt the message
-        let src = secret.value.as_ref().unwrap();
+        let Some(src) = secret.value.as_ref() else {
+            return Err(invalid_secret());
+        };
         let block_size = server_key.cipher_text_block_size();
         if !src.len().is_multiple_of(block_size) {
             return Err(invalid_secret());
@@ -290,7 +306,7 @@ pub(crate) fn legacy_secret_decrypt<T: AesAsymmetricEncryptionAlgorithm>(
          *
          */
         if actual_size > expected_size {
-            let padding_bytes = &dst[expected_size..];
+            let padding_bytes = dst.get(expected_size..).ok_or_else(&invalid_secret)?;
             /*
              * If the Encrypted Token Secret contains padding, the padding must be
              * zeroes according to the 1.04.1 specification errata, chapter 3.
@@ -312,11 +328,13 @@ pub(crate) fn legacy_secret_decrypt<T: AesAsymmetricEncryptionAlgorithm>(
                 return Err(invalid_secret());
             }
             let nonce_begin = actual_size - nonce_len;
-            let nonce = &dst[nonce_begin..(nonce_begin + nonce_len)];
+            let nonce = dst
+                .get(nonce_begin..(nonce_begin + nonce_len))
+                .ok_or_else(&invalid_secret)?;
             if nonce.len() != server_nonce.len() || nonce.ct_eq(server_nonce).unwrap_u8() != 1 {
                 Err(invalid_secret())
             } else {
-                let password = &dst[4..nonce_begin];
+                let password = dst.get(4..nonce_begin).ok_or_else(&invalid_secret)?;
                 Ok(ByteString::from(password))
             }
         }

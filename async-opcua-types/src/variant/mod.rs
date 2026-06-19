@@ -892,7 +892,7 @@ impl Variant {
             }
             scalar => {
                 if let Some(dims) = dims {
-                    if dims.len() != 1 || dims[0] != 1 {
+                    if dims != [1] {
                         return Variant::Empty;
                     }
                 }
@@ -1181,7 +1181,9 @@ impl Variant {
                 if s.values.len() != 1 {
                     return Variant::Empty;
                 }
-                let val = &s.values[0];
+                let Some(val) = s.values.first() else {
+                    return Variant::Empty;
+                };
                 val.convert(target_type)
             }
             // XmlElement everything is X
@@ -1214,7 +1216,7 @@ impl Variant {
             }
             scalar => {
                 if let Some(dims) = dims {
-                    if dims.len() != 1 || dims[0] != 1 {
+                    if dims != [1] {
                         return Variant::Empty;
                     }
                 }
@@ -1405,7 +1407,7 @@ impl Variant {
                 if array.values.is_empty() {
                     return None;
                 }
-                array.values[0].data_type()
+                array.values.first().and_then(Variant::data_type)
             }
             Variant::Empty => None,
         }
@@ -1455,7 +1457,7 @@ impl Variant {
                     Array::new(VariantScalarTypeId::Byte, values)?
                 }
             },
-            _ => panic!(),
+            _ => return Err(ArrayError::ContentMismatch),
         };
         Ok(Variant::from(array))
     }
@@ -1471,7 +1473,7 @@ impl Variant {
                 .substring(min, max)
                 .map(Variant::from)
                 .map_err(|_| StatusCode::BadIndexRangeNoData),
-            _ => panic!("Should not be calling substring on other types"),
+            _ => Err(StatusCode::BadIndexRangeDataMismatch),
         }
     }
     /// Set a range of values in this variant using a different variant.
@@ -1503,9 +1505,13 @@ impl Variant {
                         let idx = (*idx) as usize;
                         if idx >= values.len() || other_values.is_empty() {
                             Err(StatusCode::BadIndexRangeNoData)
-                        } else {
-                            values[idx] = other_values[0].clone();
+                        } else if let (Some(value), Some(other_value)) =
+                            (values.get_mut(idx), other_values.first())
+                        {
+                            *value = other_value.clone();
                             Ok(())
+                        } else {
+                            Err(StatusCode::BadIndexRangeNoData)
                         }
                     }
                     NumericRange::Range(min, max) => {
@@ -1518,7 +1524,13 @@ impl Variant {
                             let mut idx = min;
                             while idx < values.len() && idx <= max && idx - min < other_values.len()
                             {
-                                values[idx] = other_values[idx - min].clone();
+                                let Some(value) = values.get_mut(idx) else {
+                                    return Err(StatusCode::BadIndexRangeNoData);
+                                };
+                                let Some(other_value) = other_values.get(idx - min) else {
+                                    return Err(StatusCode::BadIndexRangeNoData);
+                                };
+                                *value = other_value.clone();
                                 idx += 1;
                             }
                             Ok(())
@@ -1584,7 +1596,9 @@ impl Variant {
                             } else {
                                 max
                             };
-                            let values = &values[min..=max];
+                            let values = values
+                                .get(min..=max)
+                                .ok_or(StatusCode::BadIndexRangeNoData)?;
                             let values: Vec<Variant> = values.to_vec();
                             Ok(Variant::from((array.value_type, values)))
                         }
@@ -1604,7 +1618,10 @@ impl Variant {
                     }
                 }
                 let type_id = if !res.is_empty() {
-                    let VariantTypeId::Scalar(s) = res[0].type_id() else {
+                    let Some(first) = res.first() else {
+                        return Err(StatusCode::BadIndexRangeNoData);
+                    };
+                    let VariantTypeId::Scalar(s) = first.type_id() else {
                         return Err(StatusCode::BadIndexRangeNoData);
                     };
                     s

@@ -9,6 +9,12 @@ use self::{
     push_methods::{register_gds_push_methods, GdsSigningRequestRegistry},
 };
 
+/// Maximum entries retained by each in-memory GDS certificate-management registry.
+///
+/// On overflow, registries evict their oldest entry before inserting the new one. This keeps
+/// sustained authorized GDS traffic from growing registry memory without bound.
+pub(crate) const GDS_REGISTRY_CAPACITY: usize = 1024;
+
 /// Filesystem cache for GDS certificate credentials.
 pub mod cache;
 /// Pull model method callbacks for certificate management.

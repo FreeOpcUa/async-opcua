@@ -134,19 +134,15 @@ impl AlternateNames {
             GeneralName::IpAddress(val) => {
                 let bytes = val.as_bytes();
                 match bytes.len() {
-                    4 => Some(Ipv4Addr::new(bytes[0], bytes[1], bytes[2], bytes[3]).to_string()),
+                    4 => bytes
+                        .try_into()
+                        .ok()
+                        .map(|addr: [u8; 4]| Ipv4Addr::from(addr).to_string()),
 
-                    16 => {
-                        let a = ((bytes[0] as u16) << 8) | bytes[1] as u16;
-                        let b = ((bytes[2] as u16) << 8) | bytes[3] as u16;
-                        let c = ((bytes[4] as u16) << 8) | bytes[5] as u16;
-                        let d = ((bytes[6] as u16) << 8) | bytes[7] as u16;
-                        let e = ((bytes[8] as u16) << 8) | bytes[9] as u16;
-                        let f = ((bytes[10] as u16) << 8) | bytes[11] as u16;
-                        let g = ((bytes[12] as u16) << 8) | bytes[13] as u16;
-                        let h = ((bytes[14] as u16) << 8) | bytes[15] as u16;
-                        Some(Ipv6Addr::new(a, b, c, d, e, f, g, h).to_string())
-                    }
+                    16 => bytes
+                        .try_into()
+                        .ok()
+                        .map(|addr: [u8; 16]| Ipv6Addr::from(addr).to_string()),
                     _ => None,
                 }
             }
@@ -174,7 +170,10 @@ impl Iterator for AlternateNamesStringIterator<'_> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < self.source.len() {
-            let converted = AlternateNames::convert_name(&self.source[self.index]);
+            let converted = self
+                .source
+                .get(self.index)
+                .and_then(AlternateNames::convert_name);
             self.index += 1;
 
             match converted {
@@ -508,6 +507,8 @@ impl X509 {
             }
         }
 
+        // Validity is built from a non-negative duration in whole days.
+        #[allow(clippy::unwrap_used)]
         let validity = Validity::from_now(Duration::new(
             86400 * x509_data.certificate_duration_days as u64,
             0,
@@ -541,6 +542,8 @@ impl X509 {
         // Generation is as suggested in RFC3280, 4.2.1.2. A 160-bit SHA-1 hash of the public key bitstring.
         use sha1::Digest;
         let mut hasher = sha1::Sha1::new();
+        // Public key info was produced from a valid in-memory RSA key above.
+        #[allow(clippy::expect_used)]
         hasher.update(
             pub_key
                 .subject_public_key
@@ -558,11 +561,15 @@ impl X509 {
             &signing_key,
         )?;
 
+        // SHA-1 output is a valid ASN.1 octet string.
+        #[allow(clippy::unwrap_used)]
         builder.add_extension(&x509::ext::pkix::SubjectKeyIdentifier(
             OctetString::new(ski.as_slice()).unwrap(),
         ))?;
         builder.add_extension(&x509::ext::pkix::AuthorityKeyIdentifier {
             authority_cert_issuer: Some(vec![GeneralName::DirectoryName(subject)]),
+            // SHA-1 output is a valid ASN.1 octet string.
+            #[allow(clippy::unwrap_used)]
             key_identifier: Some(OctetString::new(ski.as_slice()).unwrap()),
             authority_cert_serial_number: Some(serial_number),
         })?;
@@ -612,7 +619,13 @@ impl X509 {
                 "Cannot make certificate from null bytestring",
             ))
         } else {
-            let r = Self::from_der(data.value.as_ref().unwrap());
+            let Some(value) = data.value.as_ref() else {
+                return Err(Error::new(
+                    StatusCode::BadCertificateInvalid,
+                    "Cannot make certificate from null bytestring",
+                ));
+            };
+            let r = Self::from_der(value);
             match r {
                 Err(e) => Err(Error::new(StatusCode::BadCertificateInvalid, e)),
                 Ok(cert) => Ok(cert),
@@ -622,6 +635,8 @@ impl X509 {
 
     /// Returns a ByteString representation of the cert which is DER encoded form of X509v3
     pub fn as_byte_string(&self) -> ByteString {
+        // Encoding an already parsed/generated certificate is an internal invariant.
+        #[allow(clippy::unwrap_used)]
         let der = self.to_der().unwrap();
         ByteString::from(&der)
     }
@@ -780,7 +795,14 @@ impl X509 {
         // application uri
         if let Some(alt_names) = self.get_alternate_names() {
             if !alt_names.is_empty() {
-                match AlternateNames::convert_name(&alt_names[0]) {
+                let Some(first_alt_name) = alt_names.first() else {
+                    error!("Cert has zero subject alt names");
+                    return Err(Error::new(
+                        StatusCode::BadCertificateUriInvalid,
+                        "Certificate has no subject alt names",
+                    ));
+                };
+                match AlternateNames::convert_name(first_alt_name) {
                     Some(val) => {
                         if val == application_uri {
                             Ok(())
@@ -794,12 +816,12 @@ impl X509 {
                     }
 
                     _ => {
-                        error!("Alternate name {:?} cannot be converted", alt_names[0]);
+                        error!("Alternate name {:?} cannot be converted", first_alt_name);
                         Err(Error::new(
                             StatusCode::BadCertificateUriInvalid,
                             format!(
                                 "Failed to convert certificate alt name {:?} to string",
-                                alt_names[0]
+                                first_alt_name
                             ),
                         ))
                     }
@@ -831,11 +853,15 @@ impl X509 {
         use sha1::Digest;
         use x509_cert::der::Encode;
 
+        // Encoding an already parsed/generated certificate is an internal invariant.
+        #[allow(clippy::unwrap_used)]
         let der = self.value.to_der().unwrap();
 
         let mut hasher = sha1::Sha1::new();
         hasher.update(&der);
         let digest = hasher.finalize();
+        // SHA-1 always returns exactly the 20 bytes required for an OPC UA thumbprint.
+        #[allow(clippy::expect_used)]
         Thumbprint::new(&digest).expect("SHA-1 digest is 20 bytes")
     }
 

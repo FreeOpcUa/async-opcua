@@ -275,16 +275,23 @@ impl RelativePathElement {
     where
         CB: Fn(u16, &str) -> Option<NodeId>,
     {
+        #[allow(clippy::unwrap_used)]
         static RE: LazyLock<Regex> = LazyLock::new(|| {
+            // Constant regex is validated by tests and cannot fail due to runtime input.
             Regex::new(r"(?P<reftype>/|\.|(<(?P<flags>#|!|#!)?((?P<nsidx>[0-9]+):)?(?P<name>[^#!].*)>))(?P<target>.*)").unwrap()
         });
 
         // NOTE: This could be more safely done with a parser library, e.g. nom.
 
         if let Some(captures) = RE.captures(path) {
-            let target_name = target_name(captures.name("target").unwrap().as_str())?;
+            let target_name = target_name(
+                captures
+                    .name("target")
+                    .ok_or(RelativePathError::NoMatch)?
+                    .as_str(),
+            )?;
 
-            let reference_type = captures.name("reftype").unwrap();
+            let reference_type = captures.name("reftype").ok_or(RelativePathError::NoMatch)?;
             let (reference_type_id, include_subtypes, is_inverse) = match reference_type.as_str() {
                 "/" => (ReferenceTypeId::HierarchicalReferences.into(), true, false),
                 "." => (ReferenceTypeId::Aggregates.into(), true, false),
@@ -295,13 +302,16 @@ impl RelativePathElement {
                             "#" => (false, false),
                             "!" => (true, true),
                             "#!" => (false, true),
-                            _ => panic!("Error in regular expression for flags"),
+                            _ => return Err(RelativePathError::NoMatch),
                         }
                     } else {
                         (true, false)
                     };
 
-                    let browse_name = captures.name("name").unwrap().as_str();
+                    let browse_name = captures
+                        .name("name")
+                        .ok_or(RelativePathError::NoMatch)?
+                        .as_str();
 
                     // Process the token as a reference type
                     let reference_type_id = if let Some(namespace) = captures.name("nsidx") {
@@ -324,7 +334,11 @@ impl RelativePathElement {
                         );
                         return Err(RelativePathError::UnresolvedReferenceType);
                     }
-                    (reference_type_id.unwrap(), include_subtypes, is_inverse)
+                    (
+                        reference_type_id.ok_or(RelativePathError::UnresolvedReferenceType)?,
+                        include_subtypes,
+                        is_inverse,
+                    )
                 }
             };
             Ok(RelativePathElement {
@@ -346,6 +360,8 @@ impl RelativePathElement {
     where
         CB: Fn(&NodeId) -> Option<String>,
     {
+        #[allow(clippy::unwrap_used)]
+        // Existing callers only pass resolvers for reference type ids they already know.
         let browse_name = browse_name_resolver(&self.reference_type_id).unwrap();
         let mut result = String::with_capacity(1024);
         // Common references will come out as '/' or '.'
@@ -442,8 +458,11 @@ fn unescape_browse_name(name: &str) -> String {
 /// * bar
 ///
 fn target_name(target_name: &str) -> Result<QualifiedName, RelativePathError> {
-    static RE: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"((?P<nsidx>[0-9+]):)?(?P<name>.*)").unwrap());
+    #[allow(clippy::unwrap_used)]
+    static RE: LazyLock<Regex> = LazyLock::new(|| {
+        // Constant regex is validated by tests and cannot fail due to runtime input.
+        Regex::new(r"((?P<nsidx>[0-9+]):)?(?P<name>.*)").unwrap()
+    });
     if let Some(captures) = RE.captures(target_name) {
         let namespace = if let Some(namespace) = captures.name("nsidx") {
             if let Ok(namespace) = namespace.as_str().parse::<u16>() {

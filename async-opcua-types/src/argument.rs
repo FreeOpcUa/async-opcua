@@ -112,6 +112,12 @@ impl BinaryDecodable for Argument {
         if value_rank > 0 {
             if let Some(array_dimensions) = array_dimensions.as_mut() {
                 let expected_rank = value_rank as usize;
+                if expected_rank > ctx.options().max_array_length {
+                    return Err(Error::decoding(format!(
+                        "Argument value_rank {value_rank} exceeds array length limit {}",
+                        ctx.options().max_array_length
+                    )));
+                }
                 match array_dimensions.len().cmp(&expected_rank) {
                     Ordering::Less => {
                         // If fewer dimensions are provided than rank, pad with 0 to reach rank length

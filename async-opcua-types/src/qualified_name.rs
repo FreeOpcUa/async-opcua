@@ -223,8 +223,11 @@ impl Display for QualifiedName {
     }
 }
 
-static NUMERIC_QNAME_REGEX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r#"^(\d+):(.*)$"#).unwrap());
+#[allow(clippy::unwrap_used)]
+static NUMERIC_QNAME_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    // Constant regex is validated by tests and cannot fail due to runtime input.
+    Regex::new(r#"^(\d+):(.*)$"#).unwrap()
+});
 
 impl QualifiedName {
     /// Create a new qualified name from namespace index and name.
@@ -258,14 +261,16 @@ impl QualifiedName {
         // First, try parsing the string as a numeric QualifiedName.
         if let Some(caps) = NUMERIC_QNAME_REGEX.captures(raw) {
             // Ignore errors here, if we fail we fall back on other options.
-            if let Ok(namespace_index) = caps.get(1).unwrap().as_str().parse::<u16>() {
-                let name = caps.get(2).unwrap().as_str();
-                if namespaces
-                    .known_namespaces()
-                    .iter()
-                    .any(|n| n.1 == &namespace_index)
-                {
-                    return QualifiedName::new(namespace_index, name);
+            if let (Some(namespace_match), Some(name_match)) = (caps.get(1), caps.get(2)) {
+                if let Ok(namespace_index) = namespace_match.as_str().parse::<u16>() {
+                    if namespaces
+                        .known_namespaces()
+                        .iter()
+                        .any(|n| n.1 == &namespace_index)
+                    {
+                        let name = name_match.as_str();
+                        return QualifiedName::new(namespace_index, name);
+                    }
                 }
             }
         }

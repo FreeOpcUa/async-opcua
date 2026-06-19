@@ -487,7 +487,11 @@ where
                         return Ok(None);
                     }
 
-                    let chunk_info = self.pending_chunks[0].chunk_info(channel)?;
+                    let first_chunk = self
+                        .pending_chunks
+                        .first()
+                        .ok_or_else(|| Error::decoding("Message contained no chunks"))?;
+                    let chunk_info = first_chunk.chunk_info(channel)?;
 
                     Chunker::validate_chunks(channel, &self.pending_chunks)?;
 

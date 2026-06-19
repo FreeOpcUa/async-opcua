@@ -161,22 +161,28 @@ where
 }
 
 impl<'a, 'b> From<(VariantScalarTypeId, &'a [&'b str])> for Variant {
+    #[allow(clippy::unwrap_used)]
     fn from(v: (VariantScalarTypeId, &'a [&'b str])) -> Self {
         let values: Vec<Variant> = v.1.iter().map(|v| Variant::from(*v)).collect();
+        // Preserve infallible conversion contract; caller-supplied type must match values.
         let value = Array::new(v.0, values).unwrap();
         Variant::from(value)
     }
 }
 
 impl<T: Into<Variant>> From<(VariantScalarTypeId, Vec<T>)> for Variant {
+    #[allow(clippy::unwrap_used)]
     fn from(v: (VariantScalarTypeId, Vec<T>)) -> Self {
+        // Preserve infallible conversion contract; caller-supplied type must match values.
         let value = Array::new(v.0, v.1.into_iter().map(|v| v.into()).collect::<Vec<_>>()).unwrap();
         Variant::from(value)
     }
 }
 
 impl<T: Into<Variant>> From<(VariantScalarTypeId, Vec<T>, Vec<u32>)> for Variant {
+    #[allow(clippy::unwrap_used)]
     fn from(v: (VariantScalarTypeId, Vec<T>, Vec<u32>)) -> Self {
+        // Preserve infallible conversion contract; caller-supplied type/dimensions must match values.
         let value = Array::new_multi(
             v.0,
             v.1.into_iter().map(|v| v.into()).collect::<Vec<_>>(),

@@ -39,6 +39,30 @@ thread_local! {
     static SYMMETRIC_DECRYPT_SCRATCH: std::cell::RefCell<Vec<u8>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
+fn security_slice(buf: &[u8], range: Range<usize>) -> Result<&[u8], StatusCode> {
+    buf.get(range).ok_or(StatusCode::BadSecurityChecksFailed)
+}
+
+fn security_slice_to(buf: &[u8], end: usize) -> Result<&[u8], StatusCode> {
+    buf.get(..end).ok_or(StatusCode::BadSecurityChecksFailed)
+}
+
+fn security_mut_slice(buf: &mut [u8], range: Range<usize>) -> Result<&mut [u8], StatusCode> {
+    buf.get_mut(range)
+        .ok_or(StatusCode::BadSecurityChecksFailed)
+}
+
+fn security_mut_slice_from(buf: &mut [u8], start: usize) -> Result<&mut [u8], StatusCode> {
+    buf.get_mut(start..)
+        .ok_or(StatusCode::BadSecurityChecksFailed)
+}
+
+fn security_byte(buf: &[u8], index: usize) -> Result<u8, Error> {
+    buf.get(index)
+        .copied()
+        .ok_or_else(|| Error::new(StatusCode::BadSecurityChecksFailed, "invalid byte index"))
+}
+
 #[derive(Debug, PartialEq)]
 /// Role of an application in OPC-UA communication.
 pub enum Role {
@@ -335,9 +359,12 @@ impl SecureChannel {
                         } else {
                             ByteString::null()
                         };
+                    // Non-None policies require a configured local certificate.
+                    #[allow(clippy::unwrap_used)]
+                    let cert = self.cert.as_ref().unwrap();
                     AsymmetricSecurityHeader::new(
                         self.security_policy,
-                        self.cert.as_ref().unwrap(),
+                        cert,
                         receiver_certificate_thumbprint,
                     )
                 };
@@ -497,8 +524,10 @@ impl SecureChannel {
         match security_header {
             SecurityHeader::Asymmetric(security_header) => {
                 if !security_header.sender_certificate.is_null() {
-                    let x509 = X509::from_byte_string(&security_header.sender_certificate).unwrap();
-                    x509.public_key().unwrap().size()
+                    X509::from_byte_string(&security_header.sender_certificate)
+                        .and_then(|x509| x509.public_key())
+                        .map(|key| key.size())
+                        .unwrap_or(0)
                 } else {
                     trace!(
                         "No certificate / public key was supplied in the asymmetric security header"
@@ -722,7 +751,10 @@ impl SecureChannel {
                 }
             })?;
 
-            Self::log_crypto_data("Chunk after encryption", &dst[..encrypted_size]);
+            Self::log_crypto_data(
+                "Chunk after encryption",
+                security_slice_to(dst, encrypted_size)?,
+            );
 
             encrypted_size
         } else {
@@ -735,7 +767,8 @@ impl SecureChannel {
                 );
                 return Err(StatusCode::BadEncodingLimitsExceeded);
             }
-            dst[..size].copy_from_slice(&message_chunk.data[..]);
+            security_mut_slice(dst, 0..size)?
+                .copy_from_slice(security_slice_to(&message_chunk.data, size)?);
             size
         };
         Ok(size)
@@ -853,7 +886,12 @@ impl SecureChannel {
             .sender_certificate
             .value
             .as_ref()
-            .unwrap()
+            .ok_or_else(|| {
+                Error::new(
+                    StatusCode::BadCertificateInvalid,
+                    "Sender certificate is null",
+                )
+            })?
             .len();
         trace!(
             "Sender certificate byte length = {}",
@@ -1047,7 +1085,10 @@ impl SecureChannel {
     ) -> Result<usize, StatusCode> {
         let header_size = encrypted_range.start;
 
-        let signing_key = self.private_key.as_ref().unwrap();
+        let signing_key = self
+            .private_key
+            .as_ref()
+            .ok_or(StatusCode::BadSecurityChecksFailed)?;
         let signing_key_size = signing_key.size();
 
         let signed_range = 0..(encrypted_range.end - signing_key_size);
@@ -1058,7 +1099,11 @@ impl SecureChannel {
             header_size, encrypted_range, signed_range, signature_range, signing_key_size
         );
 
-        let encryption_key = self.remote_cert.as_ref().unwrap().public_key()?;
+        let encryption_key = self
+            .remote_cert
+            .as_ref()
+            .ok_or(StatusCode::BadSecurityChecksFailed)?
+            .public_key()?;
 
         // Encryption will change the size of the chunk. Since we sign before encrypting, we need to
         // compute that size and change the message header to be that new size
@@ -1074,29 +1119,35 @@ impl SecureChannel {
             cipher_text_size
         };
         Self::update_message_size(src, header_size + cipher_text_size)?;
-        dst[0..encrypted_range.start].copy_from_slice(&src[0..encrypted_range.start]);
+        security_mut_slice(dst, 0..encrypted_range.start)?
+            .copy_from_slice(security_slice(src, 0..encrypted_range.start)?);
 
         // Sign the message header, security header, sequence header, body, padding
         let (l, r) = src.split_at_mut(signed_range.end);
-        security_policy.asymmetric_sign(signing_key, l, &mut r[0..signing_key_size])?;
+        let signature = r
+            .get_mut(..signing_key_size)
+            .ok_or(StatusCode::BadSecurityChecksFailed)?;
+        security_policy.asymmetric_sign(signing_key, l, signature)?;
 
-        // tmp[signature_range.clone()].copy_from_slice(&signature);
-        assert_eq!(encrypted_range.end, signature_range.end);
+        if encrypted_range.end != signature_range.end {
+            return Err(StatusCode::BadSecurityChecksFailed);
+        }
 
-        Self::log_crypto_data("Chunk after signing", &dst[..signature_range.end]);
+        Self::log_crypto_data(
+            "Chunk after signing",
+            security_slice_to(dst, signature_range.end)?,
+        );
 
         // Encrypt the sequence header, payload, signature portion into dst
         let encrypted_size = security_policy.asymmetric_encrypt(
             &encryption_key,
-            &src[encrypted_range.clone()],
-            &mut dst[encrypted_range.start..],
+            security_slice(src, encrypted_range.clone())?,
+            security_mut_slice_from(dst, encrypted_range.start)?,
         )?;
 
         // Validate encrypted size is right
         if encrypted_size != cipher_text_size {
-            panic!(
-                "Encrypted block size {encrypted_size} is not the same as calculated cipher text size {cipher_text_size}"
-            );
+            return Err(StatusCode::BadSecurityChecksFailed);
         }
 
         //{
@@ -1145,8 +1196,8 @@ impl SecureChannel {
                     "invalid padding",
                 ));
             }
-            let padding_byte = src[padding_end - 2];
-            let extra_padding_byte = src[padding_end - 1];
+            let padding_byte = security_byte(src, padding_end - 2)?;
+            let extra_padding_byte = security_byte(src, padding_end - 1)?;
             let padding_size = ((extra_padding_byte as usize) << 8) + (padding_byte as usize);
             let padding_range_start =
                 padding_end.checked_sub(padding_size + 2).ok_or_else(|| {
@@ -1164,11 +1215,14 @@ impl SecureChannel {
 
             // Check padding bytes and extra padding byte
             Self::check_padding_bytes(
-                &src[padding_range.start..(padding_range.end - 1)],
+                src.get(padding_range.start..(padding_range.end - 1))
+                    .ok_or_else(|| {
+                        Error::new(StatusCode::BadSecurityChecksFailed, "invalid padding range")
+                    })?,
                 padding_byte,
                 padding_range.start,
             )?;
-            if src[padding_range.end - 1] != extra_padding_byte {
+            if security_byte(src, padding_range.end - 1)? != extra_padding_byte {
                 return Err(Error::new(
                     StatusCode::BadSecurityChecksFailed,
                     format!(
@@ -1185,7 +1239,7 @@ impl SecureChannel {
                     "invalid padding",
                 ));
             }
-            let padding_byte = src[padding_end - 1];
+            let padding_byte = security_byte(src, padding_end - 1)?;
             let padding_size = padding_byte as usize;
             let padding_range_start =
                 padding_end.checked_sub(padding_size + 1).ok_or_else(|| {
@@ -1197,7 +1251,9 @@ impl SecureChannel {
             let padding_range = padding_range_start..padding_end;
             // Check padding bytes
             Self::check_padding_bytes(
-                &src[padding_range.clone()],
+                src.get(padding_range.clone()).ok_or_else(|| {
+                    Error::new(StatusCode::BadSecurityChecksFailed, "invalid padding range")
+                })?,
                 padding_byte,
                 padding_range.start,
             )?;
@@ -1236,7 +1292,12 @@ impl SecureChannel {
         // The receiver certificate thumbprint identifies which of our certs was used by the client
         // to encrypt the message. We have to work out from the thumbprint which cert to use
 
-        let our_cert = self.cert.as_ref().unwrap();
+        let our_cert = self.cert.as_ref().ok_or_else(|| {
+            Error::new(
+                StatusCode::BadCertificateInvalid,
+                "Missing local application certificate",
+            )
+        })?;
         let our_thumbprint = our_cert.thumbprint();
         if our_thumbprint.value() != receiver_thumbprint.as_ref() {
             Err(Error::new(
@@ -1245,7 +1306,19 @@ impl SecureChannel {
             ))
         } else {
             // Copy message, security header
-            dst[..encrypted_range.start].copy_from_slice(&src[..encrypted_range.start]);
+            dst.get_mut(..encrypted_range.start)
+                .ok_or_else(|| {
+                    Error::new(
+                        StatusCode::BadSecurityChecksFailed,
+                        "invalid encrypted range",
+                    )
+                })?
+                .copy_from_slice(src.get(..encrypted_range.start).ok_or_else(|| {
+                    Error::new(
+                        StatusCode::BadSecurityChecksFailed,
+                        "invalid encrypted range",
+                    )
+                })?);
 
             // Decrypt and copy encrypted block
             // Note that the unencrypted size can be less than the encrypted size due to removal
@@ -1254,10 +1327,17 @@ impl SecureChannel {
             trace!("Decrypting message range {:?}", encrypted_range);
             let mut decrypted_tmp = vec![0u8; encrypted_size];
 
-            let private_key = self.private_key.as_ref().unwrap();
+            let private_key = self.private_key.as_ref().ok_or_else(|| {
+                Error::new(StatusCode::BadSecurityChecksFailed, "Missing private key")
+            })?;
             let decrypted_size = security_policy.asymmetric_decrypt(
                 private_key,
-                &src[encrypted_range.clone()],
+                src.get(encrypted_range.clone()).ok_or_else(|| {
+                    Error::new(
+                        StatusCode::BadSecurityChecksFailed,
+                        "invalid encrypted range",
+                    )
+                })?,
                 &mut decrypted_tmp,
             )?;
             trace!(
@@ -1285,8 +1365,19 @@ impl SecureChannel {
                 })?;
 
             // Copy the bytes to dst
-            dst[encrypted_range.start..decrypted_end]
-                .copy_from_slice(&decrypted_tmp[..decrypted_size]);
+            dst.get_mut(encrypted_range.start..decrypted_end)
+                .ok_or_else(|| {
+                    Error::new(
+                        StatusCode::BadSecurityChecksFailed,
+                        "invalid decrypted range",
+                    )
+                })?
+                .copy_from_slice(decrypted_tmp.get(..decrypted_size).ok_or_else(|| {
+                    Error::new(
+                        StatusCode::BadSecurityChecksFailed,
+                        "invalid decrypted range",
+                    )
+                })?);
 
             // The signature range is at the end of the decrypted block for the verification key's signature
             let signature_dst_offset = decrypted_end
@@ -1322,8 +1413,15 @@ impl SecureChannel {
             };
             security_policy.asymmetric_verify_signature(
                 verification_key,
-                &dst[signed_range_dst],
-                &dst[signature_range_dst.clone()],
+                dst.get(signed_range_dst).ok_or_else(|| {
+                    Error::new(StatusCode::BadSecurityChecksFailed, "invalid signed range")
+                })?,
+                dst.get(signature_range_dst.clone()).ok_or_else(|| {
+                    Error::new(
+                        StatusCode::BadSecurityChecksFailed,
+                        "invalid signature range",
+                    )
+                })?,
             )?;
 
             // Verify that the padding is correct
@@ -1374,8 +1472,10 @@ impl SecureChannel {
         }
     }
 
-    fn local_keys(&self) -> &AesDerivedKeys {
-        self.local_keys.as_ref().unwrap()
+    fn local_keys(&self) -> Result<&AesDerivedKeys, StatusCode> {
+        self.local_keys
+            .as_ref()
+            .ok_or(StatusCode::BadSecurityChecksFailed)
     }
 
     fn insert_remote_keys(&mut self, keys: AesDerivedKeys) {
@@ -1429,9 +1529,11 @@ impl SecureChannel {
             }
             MessageSecurityMode::Sign => {
                 trace!("encrypt_and_sign security mode == Sign");
-                self.expect_supported_security_policy();
+                self.expect_supported_security_policy().map_err(|code| {
+                    Error::new(code, "Unsupported security policy for symmetric verify")
+                })?;
                 let size = self.symmetric_sign_in_place(src, signed_range)?;
-                dst[0..size].copy_from_slice(&src[0..size]);
+                security_mut_slice(dst, 0..size)?.copy_from_slice(security_slice(src, 0..size)?);
                 size
             }
             MessageSecurityMode::SignAndEncrypt => {
@@ -1439,25 +1541,28 @@ impl SecureChannel {
                     "encrypt_and_sign security mode == SignAndEncrypt, signed_range = {:?}, encrypted_range = {:?}",
                     signed_range, encrypted_range
                 );
-                self.expect_supported_security_policy();
+                self.expect_supported_security_policy().map_err(|code| {
+                    Error::new(code, "Unsupported security policy for symmetric decrypt")
+                })?;
 
                 // Sign the block
                 self.symmetric_sign_in_place(src, signed_range)?;
 
                 // Encrypt the sequence header, payload, signature
-                let keys = self.local_keys();
+                let keys = self.local_keys()?;
                 let encrypted_size = self.security_policy.symmetric_encrypt(
                     keys,
-                    &src[encrypted_range.clone()],
-                    &mut dst[encrypted_range.start..],
+                    security_slice(src, encrypted_range.clone())?,
+                    security_mut_slice_from(dst, encrypted_range.start)?,
                 )?;
                 // Copy the message header / security header
-                dst[..encrypted_range.start].copy_from_slice(&src[..encrypted_range.start]);
+                security_mut_slice(dst, 0..encrypted_range.start)?
+                    .copy_from_slice(security_slice(src, 0..encrypted_range.start)?);
 
                 encrypted_range.start + encrypted_size
             }
             MessageSecurityMode::Invalid => {
-                panic!("Message security mode is invalid");
+                return Err(StatusCode::BadSecurityModeRejected);
             }
         };
         Ok(encrypted_size)
@@ -1476,9 +1581,15 @@ impl SecureChannel {
         );
 
         // Sign the message header, security header, sequence header, body, padding
+        if signed_range.end > buf.len() {
+            return Err(StatusCode::BadSecurityChecksFailed);
+        }
         let (l, r) = buf.split_at_mut(signed_range.end);
+        let signature = r
+            .get_mut(..signature_size)
+            .ok_or(StatusCode::BadSecurityChecksFailed)?;
         self.security_policy
-            .symmetric_sign(self.local_keys(), l, &mut r[0..signature_size])?;
+            .symmetric_sign(self.local_keys()?, l, signature)?;
 
         Ok(signed_range.end + signature_size)
     }
@@ -1508,7 +1619,9 @@ impl SecureChannel {
                 Ok(src.len())
             }
             MessageSecurityMode::Sign => {
-                self.expect_supported_security_policy();
+                self.expect_supported_security_policy().map_err(|code| {
+                    Error::new(code, "Unsupported security policy for symmetric verify")
+                })?;
                 dst.copy_from_slice(src);
                 // Copy everything
                 let signature_range = signed_range.end..src.len();
@@ -1525,14 +1638,23 @@ impl SecureChannel {
                 })?;
                 self.security_policy.symmetric_verify_signature(
                     verification_key,
-                    &dst[signed_range.clone()],
-                    &dst[signature_range],
+                    dst.get(signed_range.clone()).ok_or_else(|| {
+                        Error::new(StatusCode::BadSecurityChecksFailed, "invalid signed range")
+                    })?,
+                    dst.get(signature_range).ok_or_else(|| {
+                        Error::new(
+                            StatusCode::BadSecurityChecksFailed,
+                            "invalid signature range",
+                        )
+                    })?,
                 )?;
 
                 Ok(signed_range.end)
             }
             MessageSecurityMode::SignAndEncrypt => {
-                self.expect_supported_security_policy();
+                self.expect_supported_security_policy().map_err(|code| {
+                    Error::new(code, "Unsupported security policy for symmetric decrypt")
+                })?;
 
                 // There is an expectation that the block is padded so, this is a quick test
                 let ciphertext_size = encrypted_range.end - encrypted_range.start;
@@ -1542,7 +1664,19 @@ impl SecureChannel {
                 //                }
 
                 // Copy security header
-                dst[..encrypted_range.start].copy_from_slice(&src[..encrypted_range.start]);
+                dst.get_mut(..encrypted_range.start)
+                    .ok_or_else(|| {
+                        Error::new(
+                            StatusCode::BadSecurityChecksFailed,
+                            "invalid encrypted range",
+                        )
+                    })?
+                    .copy_from_slice(src.get(..encrypted_range.start).ok_or_else(|| {
+                        Error::new(
+                            StatusCode::BadSecurityChecksFailed,
+                            "invalid encrypted range",
+                        )
+                    })?);
 
                 let keys = self.get_remote_keys(token_id).ok_or_else(|| {
                     Error::new(
@@ -1561,8 +1695,13 @@ impl SecureChannel {
                     decrypted_tmp.resize(ciphertext_size + 16, 0);
                     let decrypted_size = self.security_policy.symmetric_decrypt(
                         keys,
-                        &src[encrypted_range.clone()],
-                        &mut decrypted_tmp[..],
+                        src.get(encrypted_range.clone()).ok_or_else(|| {
+                            Error::new(
+                                StatusCode::BadSecurityChecksFailed,
+                                "invalid encrypted range",
+                            )
+                        })?,
+                        decrypted_tmp.as_mut_slice(),
                     )?;
 
                     // Self::log_crypto_data("Encrypted buffer", &src[..encrypted_range.end]);
@@ -1577,7 +1716,19 @@ impl SecureChannel {
                             )
                         })?;
                     let decrypted_range = encrypted_range.start..decrypted_end;
-                    dst[decrypted_range].copy_from_slice(&decrypted_tmp[..decrypted_size]);
+                    dst.get_mut(decrypted_range)
+                        .ok_or_else(|| {
+                            Error::new(
+                                StatusCode::BadSecurityChecksFailed,
+                                "invalid decrypted range",
+                            )
+                        })?
+                        .copy_from_slice(decrypted_tmp.get(..decrypted_size).ok_or_else(|| {
+                            Error::new(
+                                StatusCode::BadSecurityChecksFailed,
+                                "invalid decrypted range",
+                            )
+                        })?);
                     Ok::<usize, Error>(decrypted_size)
                 })?;
 
@@ -1592,7 +1743,15 @@ impl SecureChannel {
                         )
                     })?;
                 let encrypted_range = encrypted_range.start..decrypted_end;
-                Self::log_crypto_data("Decrypted buffer", &dst[..encrypted_range.end]);
+                Self::log_crypto_data(
+                    "Decrypted buffer",
+                    dst.get(..encrypted_range.end).ok_or_else(|| {
+                        Error::new(
+                            StatusCode::BadSecurityChecksFailed,
+                            "invalid decrypted range",
+                        )
+                    })?,
+                );
 
                 // Verify signature (after encrypted portion)
                 let signature_start = encrypted_range
@@ -1612,8 +1771,15 @@ impl SecureChannel {
                 );
                 self.security_policy.symmetric_verify_signature(
                     keys,
-                    &dst[signed_range],
-                    &dst[signature_range],
+                    dst.get(signed_range).ok_or_else(|| {
+                        Error::new(StatusCode::BadSecurityChecksFailed, "invalid signed range")
+                    })?,
+                    dst.get(signature_range).ok_or_else(|| {
+                        Error::new(
+                            StatusCode::BadSecurityChecksFailed,
+                            "invalid signature range",
+                        )
+                    })?,
                 )?;
 
                 let key_size = self.security_policy.encrypting_key_length();
@@ -1626,22 +1792,22 @@ impl SecureChannel {
             }
             MessageSecurityMode::Invalid => {
                 // Use the security policy to decrypt the block using the token
-                panic!("Message security mode is invalid");
+                Err(Error::new(
+                    StatusCode::BadSecurityModeRejected,
+                    "Message security mode is invalid",
+                ))
             }
         }
     }
 
-    // Panic code which requires a policy
-    fn expect_supported_security_policy(&self) {
+    fn expect_supported_security_policy(&self) -> Result<(), StatusCode> {
         match self.security_policy {
             SecurityPolicy::Basic128Rsa15
             | SecurityPolicy::Basic256
             | SecurityPolicy::Basic256Sha256
             | SecurityPolicy::Aes128Sha256RsaOaep
-            | SecurityPolicy::Aes256Sha256RsaPss => {}
-            _ => {
-                panic!("Unsupported security policy");
-            }
+            | SecurityPolicy::Aes256Sha256RsaPss => Ok(()),
+            _ => Err(StatusCode::BadSecurityPolicyRejected),
         }
     }
 

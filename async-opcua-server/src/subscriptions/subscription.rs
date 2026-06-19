@@ -6,8 +6,8 @@ use std::{
 use opcua_core::handle::Handle;
 use opcua_nodes::{Event, TypeTree};
 use opcua_types::{
-    DataChangeNotification, DataValue, DateTime, DateTimeUtc, MonitoredItemNotification,
-    NotificationMessage, StatusCode,
+    DataChangeNotification, DataValue, DateTime, DateTimeUtc, EventFieldList,
+    EventNotificationList, MonitoredItemNotification, NotificationMessage, StatusCode,
 };
 use tracing::{debug, trace, warn};
 
@@ -20,6 +20,7 @@ const DATA_CHANGE_NOTIFICATION_VEC_POOL_LIMIT: usize = 4;
 
 pub(super) struct DataChangeNotificationVecPool {
     free: Vec<Vec<MonitoredItemNotification>>,
+    free_events: Vec<Vec<EventFieldList>>,
     max_retained: usize,
 }
 
@@ -27,6 +28,7 @@ impl DataChangeNotificationVecPool {
     fn new(max_retained: usize) -> Self {
         Self {
             free: Vec::with_capacity(max_retained),
+            free_events: Vec::with_capacity(max_retained),
             max_retained,
         }
     }
@@ -42,10 +44,28 @@ impl DataChangeNotificationVecPool {
         Vec::with_capacity(capacity)
     }
 
+    fn draw_events(&mut self, capacity: usize) -> Vec<EventFieldList> {
+        while let Some(mut events) = self.free_events.pop() {
+            events.clear();
+            if events.capacity() >= capacity {
+                return events;
+            }
+        }
+
+        Vec::with_capacity(capacity)
+    }
+
     pub(super) fn reclaim(&mut self, mut notifications: Vec<MonitoredItemNotification>) {
         notifications.clear();
         if self.free.len() < self.max_retained {
             self.free.push(notifications);
+        }
+    }
+
+    pub(super) fn reclaim_events(&mut self, mut events: Vec<EventFieldList>) {
+        events.clear();
+        if self.free_events.len() < self.max_retained {
+            self.free_events.push(events);
         }
     }
 }
@@ -65,13 +85,24 @@ pub(super) fn reclaim_data_change_notification_vecs(
     };
 
     for notification in notification_data {
-        let Some(mut data_change) = notification.into_inner_as::<DataChangeNotification>() else {
-            continue;
-        };
-        let Some(monitored_items) = data_change.monitored_items.take() else {
-            continue;
-        };
-        pool.reclaim(monitored_items);
+        if notification.inner_is::<DataChangeNotification>() {
+            let Some(mut data_change) = notification.into_inner_as::<DataChangeNotification>()
+            else {
+                continue;
+            };
+            let Some(monitored_items) = data_change.monitored_items.take() else {
+                continue;
+            };
+            pool.reclaim(monitored_items);
+        } else if notification.inner_is::<EventNotificationList>() {
+            let Some(mut events) = notification.into_inner_as::<EventNotificationList>() else {
+                continue;
+            };
+            let Some(events) = events.events.take() else {
+                continue;
+            };
+            pool.reclaim_events(events);
+        }
     }
 }
 
@@ -737,7 +768,7 @@ impl Subscription {
                     Notification::Event(_) => (dc, ev + 1),
                 });
         let mut data_change_notifications = data_change_notification_pool.draw(data_change_count);
-        let mut event_notifications = Vec::with_capacity(event_count);
+        let mut event_notifications = data_change_notification_pool.draw_events(event_count);
 
         for notif in notifications.drain(..) {
             match notif {
@@ -976,8 +1007,9 @@ mod tests {
     use opcua_core::PublishResponseShared;
     use opcua_types::{
         match_extension_object_owned, AttributeId, DataChangeNotification, DataValue, DateTime,
-        DateTimeUtc, EventNotificationList, MonitoredItemNotification, MonitoringMode, NodeId,
-        NotificationMessage, ReadValueId, StatusChangeNotification, StatusCode, Variant,
+        DateTimeUtc, EventFieldList, EventNotificationList, MonitoredItemNotification,
+        MonitoringMode, NodeId, NotificationMessage, ReadValueId, StatusChangeNotification,
+        StatusCode, Variant,
     };
 
     use super::{
@@ -1133,6 +1165,99 @@ mod tests {
         (construction, publish_clone)
     }
 
+    fn make_event_baseline_notifications(count: usize) -> Vec<Notification> {
+        (0..count)
+            .map(|idx| {
+                Notification::Event(EventFieldList {
+                    client_handle: idx as u32,
+                    event_fields: Some(vec![Variant::from(idx as i32)]),
+                })
+            })
+            .collect()
+    }
+
+    fn measure_event_publish_baseline_once(
+        notification_count: usize,
+        sequence_number: u32,
+        now: &DateTimeUtc,
+        data_change_notification_pool: &mut DataChangeNotificationVecPool,
+    ) -> AllocationSnapshot {
+        let mut notifications = make_event_baseline_notifications(notification_count);
+
+        COUNTING_ALLOCATOR.reset();
+        let message = Subscription::make_notification_message(
+            sequence_number,
+            &mut notifications,
+            now,
+            data_change_notification_pool,
+        );
+        let construction = COUNTING_ALLOCATOR.snapshot();
+        black_box(&message);
+
+        // Reclaim through the same unique-ownership gate the live path uses, so the
+        // event Vec returns to the pool and the next tick draws it instead of allocating.
+        let notification = Arc::new(message);
+        if let Some(message) = Arc::into_inner(notification) {
+            reclaim_data_change_notification_vecs(message, data_change_notification_pool);
+        }
+
+        construction
+    }
+
+    #[test]
+    #[ignore = "allocation baseline harness; run explicitly with --ignored --nocapture"]
+    fn event_publish_allocation_baseline_is_constant_after_pool_primes() {
+        // Proves SC-003: once the event Vec pool has primed, per-tick event-path
+        // construction allocation is constant (independent of event count), because the
+        // backing Vec is reclaimed and redrawn rather than freshly allocated each tick.
+        const WARMUP_RUNS: u32 = 3;
+        const MEASURED_RUNS: u32 = 5;
+        const NOTIFICATION_COUNTS: [usize; 2] = [1000, 5000];
+
+        let now = Utc::now();
+
+        for notification_count in NOTIFICATION_COUNTS {
+            let mut data_change_notification_pool = DataChangeNotificationVecPool::default();
+            for sequence_number in 0..WARMUP_RUNS {
+                let construction = measure_event_publish_baseline_once(
+                    notification_count,
+                    sequence_number + 1,
+                    &now,
+                    &mut data_change_notification_pool,
+                );
+                black_box(construction);
+            }
+
+            let mut construction_total = AllocationSnapshot::default();
+            for run in 0..MEASURED_RUNS {
+                let construction = measure_event_publish_baseline_once(
+                    notification_count,
+                    WARMUP_RUNS + run + 1,
+                    &now,
+                    &mut data_change_notification_pool,
+                );
+                construction_total.count += construction.count;
+                construction_total.bytes += construction.bytes;
+            }
+
+            let avg_count = construction_total.count / MEASURED_RUNS as usize;
+            let avg_bytes = construction_total.bytes / u64::from(MEASURED_RUNS);
+            println!(
+                "event_publish_alloc_baseline events={} runs={} construction_allocs_avg={} construction_bytes_avg={}",
+                notification_count, MEASURED_RUNS, avg_count, avg_bytes,
+            );
+
+            // After priming, per-tick allocation must not scale with event_count: the event
+            // Vec is reused. A handful of small per-message allocations (ExtensionObject /
+            // notification_data) remain, but nothing proportional to the 1000/5000 events.
+            assert!(
+                avg_count <= 8,
+                "event-path per-tick allocation count {avg_count} (events={notification_count}) \
+                 is not constant — pool not reused?",
+            );
+        }
+    }
+
     #[test]
     #[ignore = "allocation baseline harness; run explicitly with --ignored --nocapture"]
     fn publish_allocation_baseline_reports_construction_and_clone() {
@@ -1218,6 +1343,52 @@ mod tests {
                         panic!("wrong notification type");
                     };
                     notification.client_handle
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(actual_handles, expected_handles);
+
+            reclaim_data_change_notification_vecs(message, &mut data_change_notification_pool);
+        }
+    }
+
+    #[test]
+    fn reclaimed_event_notification_vec_does_not_reuse_stale_events() {
+        let now = Utc::now();
+        let mut data_change_notification_pool = DataChangeNotificationVecPool::default();
+
+        // Decreasing-then-varying batch sizes: a pooled event Vec drawn for a smaller
+        // batch after a larger one must not leak the prior batch's events.
+        let test_cases = [
+            vec![10_u32, 11, 12, 13],
+            vec![20_u32],
+            vec![30_u32, 31],
+            vec![40_u32],
+        ];
+
+        for (sequence_number, expected_handles) in test_cases.into_iter().enumerate() {
+            let mut notifications = expected_handles
+                .iter()
+                .map(|handle| {
+                    Notification::Event(EventFieldList {
+                        client_handle: *handle,
+                        event_fields: Some(vec![Variant::from(*handle as i32)]),
+                    })
+                })
+                .collect();
+
+            let message = Subscription::make_notification_message(
+                sequence_number as u32 + 1,
+                &mut notifications,
+                &now,
+                &mut data_change_notification_pool,
+            );
+            let actual_handles = get_notifications(&message)
+                .into_iter()
+                .map(|notification| {
+                    let Notification::Event(event) = notification else {
+                        panic!("wrong notification type");
+                    };
+                    event.client_handle
                 })
                 .collect::<Vec<_>>();
             assert_eq!(actual_handles, expected_handles);

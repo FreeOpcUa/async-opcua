@@ -1,5 +1,12 @@
 //! Types for low-level OPC-UA transport implementations.
 
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic
+)]
+
 mod channel;
 mod connect;
 mod core;

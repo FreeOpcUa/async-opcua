@@ -68,8 +68,7 @@ where
         loop {
             match ready!(Pin::new(&mut this.ws).poll_next(cx)) {
                 Some(Ok(Message::Binary(data))) => {
-                    copy_binary_to_read_buf(data, &mut this.read_buf, dst);
-                    return Poll::Ready(Ok(()));
+                    return Poll::Ready(copy_binary_to_read_buf(data, &mut this.read_buf, dst));
                 }
                 Some(Ok(Message::Text(_))) => {
                     return Poll::Ready(Err(io::Error::new(
@@ -182,12 +181,29 @@ where
     }
 }
 
-fn copy_binary_to_read_buf(data: Bytes, leftover: &mut BytesMut, dst: &mut ReadBuf<'_>) {
+fn copy_binary_to_read_buf(
+    data: Bytes,
+    leftover: &mut BytesMut,
+    dst: &mut ReadBuf<'_>,
+) -> io::Result<()> {
     let len = cmp::min(data.len(), dst.remaining());
-    dst.put_slice(&data[..len]);
+    let chunk = data.get(..len).ok_or_else(|| {
+        io::Error::new(
+            ErrorKind::InvalidData,
+            "opc.wss binary frame split exceeded frame length",
+        )
+    })?;
+    dst.put_slice(chunk);
     if len < data.len() {
-        leftover.extend_from_slice(&data[len..]);
+        let remaining = data.get(len..).ok_or_else(|| {
+            io::Error::new(
+                ErrorKind::InvalidData,
+                "opc.wss binary frame remainder exceeded frame length",
+            )
+        })?;
+        leftover.extend_from_slice(remaining);
     }
+    Ok(())
 }
 
 fn copy_to_read_buf(src: &mut BytesMut, dst: &mut ReadBuf<'_>) {

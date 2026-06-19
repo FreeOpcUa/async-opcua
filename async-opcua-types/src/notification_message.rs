@@ -21,7 +21,9 @@ impl NotificationMessage {
         data_change_notifications: Vec<MonitoredItemNotification>,
         event_notifications: Vec<EventFieldList>,
     ) -> NotificationMessage {
+        #[allow(clippy::panic)]
         if data_change_notifications.is_empty() && event_notifications.is_empty() {
+            // Preserve documented programmer-error contract for empty notification messages.
             panic!("No notifications supplied to data_change()");
         }
 

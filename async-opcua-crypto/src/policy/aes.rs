@@ -59,6 +59,8 @@ impl AesDerivedKeys {
 impl<T: AesSecurityPolicy> AesPolicy<T> {
     fn prf(secret: &[u8], seed: &[u8], length: usize, offset: usize) -> Vec<u8> {
         let r = T::AsymmetricSignature::prf(secret, seed, length + offset);
+        // The PRF result is requested with exactly length + offset bytes above.
+        #[allow(clippy::indexing_slicing)]
         r[offset..(offset + length)].to_vec()
     }
 }

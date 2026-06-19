@@ -205,7 +205,11 @@ impl SendBuffer {
         };
 
         let pos = self.buffer.position() as usize;
-        let buf = &self.buffer.get_ref()[pos..end];
+        let buf = self
+            .buffer
+            .get_ref()
+            .get(pos..end)
+            .ok_or_else(|| tokio::io::Error::other("invalid send buffer range"))?;
         // Write to the stream, note that we do not actually advance the stream before
         // after we have written. This means that since `write` is cancellation safe, our stream is
         // cancellation safe, which is essential.

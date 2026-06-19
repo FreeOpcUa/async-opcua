@@ -27,14 +27,16 @@ async fn test_zero_downtime_certificate_rotation() {
     let client_pki_dir = test_dir.join("client_pki");
 
     // 2. Build Server
-    let mut server_config = ServerConfig::default();
-    server_config.pki_dir = server_pki_dir.clone();
-    server_config.create_sample_keypair = true;
-    server_config.certificate_path = Some(server_pki_dir.join("own/cert.der"));
-    server_config.private_key_path = Some(server_pki_dir.join("private/private.pem"));
+    let mut server_config = ServerConfig {
+        pki_dir: server_pki_dir.clone(),
+        create_sample_keypair: true,
+        certificate_path: Some(server_pki_dir.join("own/cert.der")),
+        private_key_path: Some(server_pki_dir.join("private/private.pem")),
+        discovery_urls: vec!["opc.tcp://127.0.0.1:0/".to_string()],
+        ..Default::default()
+    };
     server_config.tcp_config.host = "127.0.0.1".to_string();
     server_config.tcp_config.port = 0; // auto-assign
-    server_config.discovery_urls = vec!["opc.tcp://127.0.0.1:0/".to_string()];
 
     // Add endpoint so connection works
     server_config.add_endpoint(

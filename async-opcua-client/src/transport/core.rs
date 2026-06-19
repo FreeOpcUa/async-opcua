@@ -281,7 +281,13 @@ impl TransportState {
                     error!("Message has more than {max_chunks} chunks, exceeding limits");
                     drop(_h);
                     // Removing the message state means that we ignore any further chunks.
-                    let message_state = self.message_states.remove(&req_id).unwrap();
+                    let message_state = self.message_states.remove(&req_id).ok_or_else(|| {
+                        Error::new(
+                            StatusCode::BadUnexpectedError,
+                            "Missing request state for oversized response",
+                        )
+                        .with_request_id(req_id)
+                    })?;
                     message_state.span.in_scope(|| {
                         error!("Message {} exceeded max chunk count", req_id);
                         let _ = message_state.callback.send(Err(Error::new(
@@ -305,7 +311,13 @@ impl TransportState {
                         reason: UAString::null(),
                     },
                 };
-                let message_state = self.message_states.remove(&req_id).unwrap();
+                let message_state = self.message_states.remove(&req_id).ok_or_else(|| {
+                    Error::new(
+                        StatusCode::BadUnexpectedError,
+                        "Missing request state for final error response",
+                    )
+                    .with_request_id(req_id)
+                })?;
                 message_state.span.in_scope(|| {
                     warn!(
                         "Message marked as final error, request_id = {req_id}, status = {}, reason = {}", err.status, err.reason
@@ -324,7 +336,13 @@ impl TransportState {
                 if message_state.chunks.len() >= max_chunks {
                     error!("Message has more than {max_chunks} chunks, exceeding limits");
                     drop(_h);
-                    let message_state = self.message_states.remove(&req_id).unwrap();
+                    let message_state = self.message_states.remove(&req_id).ok_or_else(|| {
+                        Error::new(
+                            StatusCode::BadUnexpectedError,
+                            "Missing request state for oversized response",
+                        )
+                        .with_request_id(req_id)
+                    })?;
                     message_state.span.in_scope(|| {
                         error!("Message {} exceeded max chunk count", req_id);
                         let _ = message_state.callback.send(Err(Error::new(
@@ -340,7 +358,13 @@ impl TransportState {
                     data_with_header: chunk.data,
                 });
                 drop(_h);
-                let message_state = self.message_states.remove(&req_id).unwrap();
+                let message_state = self.message_states.remove(&req_id).ok_or_else(|| {
+                    Error::new(
+                        StatusCode::BadUnexpectedError,
+                        "Missing request state for response",
+                    )
+                    .with_request_id(req_id)
+                })?;
                 let _h = message_state.span.enter();
                 let in_chunks = Self::merge_chunks(message_state.chunks).inspect_err(|e| {
                     error!("Failed to merge chunks for message, request_id = {req_id}: {e}");
@@ -391,8 +415,11 @@ impl TransportState {
         mut chunks: Vec<MessageChunkWithChunkInfo>,
     ) -> Result<Vec<MessageChunk>, Error> {
         if chunks.len() == 1 {
+            let chunk = chunks
+                .pop()
+                .ok_or_else(|| Error::decoding("Message contained no chunks"))?;
             return Ok(vec![MessageChunk {
-                data: chunks.pop().unwrap().data_with_header,
+                data: chunk.data_with_header,
             }]);
         }
         chunks.sort_by(|a, b| {
@@ -404,7 +431,7 @@ impl TransportState {
         let mut ret = Vec::with_capacity(chunks.len());
         let mut expect_sequence_number = chunks
             .first()
-            .unwrap()
+            .ok_or_else(|| Error::decoding("Message contained no chunks"))?
             .header
             .sequence_header
             .sequence_number;

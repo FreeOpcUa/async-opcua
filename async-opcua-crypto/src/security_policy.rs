@@ -20,6 +20,21 @@ use super::random;
 
 use crate::policy::{aes::*, AesDerivedKeys, AesPolicy, NonePolicy};
 
+// Policy dispatch is only entered after callers reject Unknown.
+#[allow(clippy::panic)]
+fn panic_unknown_security_policy() -> ! {
+    panic!("Unknown security policy")
+}
+
+#[cfg(not(feature = "legacy-crypto"))]
+// Entry points must reject unsupported legacy policies before dispatch.
+#[allow(clippy::panic)]
+fn panic_unsupported_legacy_policy() -> ! {
+    panic!(
+        "BUG: a cryptographic operation was invoked for a legacy security policy in a build without the 'legacy-crypto' feature. Entry points must reject unsupported policies (SecurityPolicy::ensure_supported) before any crypto call."
+    );
+}
+
 macro_rules! call_with_policy {
     (_inner $r:expr, $($p:ident: $ty:ty,)+ |$x:ident| $t:expr) => {
         match $r {
@@ -30,7 +45,7 @@ macro_rules! call_with_policy {
                     $t
                 }
             )*
-            Self::Unknown => panic!("Unknown security policy"),
+            Self::Unknown => panic_unknown_security_policy(),
         }
     };
 
@@ -64,11 +79,9 @@ macro_rules! call_with_policy {
             }
             #[cfg(not(feature = "legacy-crypto"))]
             Self::Basic128Rsa15 | Self::Basic256 => {
-                panic!(
-                    "BUG: a cryptographic operation was invoked for a legacy security policy in a build without the 'legacy-crypto' feature. Entry points must reject unsupported policies (SecurityPolicy::ensure_supported) before any crypto call."
-                );
+                panic_unsupported_legacy_policy();
             }
-            Self::Unknown => panic!("Unknown security policy"),
+            Self::Unknown => panic_unknown_security_policy(),
         }
     };
 }

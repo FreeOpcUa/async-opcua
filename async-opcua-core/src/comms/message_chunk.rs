@@ -192,7 +192,10 @@ impl SimpleBinaryDecodable for MessageChunk {
             let mut data = stream.into_inner();
 
             // Read remainder of stream into slice after the header
-            in_stream.read_exact(&mut data[chunk_header_size..])?;
+            let body = data
+                .get_mut(chunk_header_size..)
+                .ok_or_else(|| Error::decoding("Invalid chunk header size"))?;
+            in_stream.read_exact(body)?;
 
             Ok(MessageChunk {
                 data: bytes::Bytes::from(data),
@@ -216,12 +219,14 @@ impl MessageChunk {
             return Err(Error::decoding("Cannot decode chunk header"));
         }
 
-        let message_size = u32::from_le_bytes([
-            src[MESSAGE_SIZE_OFFSET],
-            src[MESSAGE_SIZE_OFFSET + 1],
-            src[MESSAGE_SIZE_OFFSET + 2],
-            src[MESSAGE_SIZE_OFFSET + 3],
-        ]) as usize;
+        let message_size_bytes = src
+            .get(MESSAGE_SIZE_OFFSET..MESSAGE_SIZE_OFFSET + std::mem::size_of::<u32>())
+            .ok_or_else(|| Error::decoding("Cannot decode chunk header message size"))?;
+        let message_size = u32::from_le_bytes(
+            message_size_bytes
+                .try_into()
+                .map_err(|_| Error::decoding("Cannot decode chunk header message size"))?,
+        ) as usize;
         if decoding_options.max_message_size > 0 && message_size > decoding_options.max_message_size
         {
             return Err(Error::new(

@@ -315,8 +315,9 @@ impl ByteString {
                 Err(OutOfRange)
             } else {
                 let max = if max >= v.len() { v.len() - 1 } else { max };
-                let v = v[min..=max].to_vec();
-                Ok(ByteString::from(v))
+                v.get(min..=max)
+                    .map(|v| ByteString::from(v.to_vec()))
+                    .ok_or(OutOfRange)
             }
         } else {
             Err(OutOfRange)

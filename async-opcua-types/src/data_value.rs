@@ -150,23 +150,22 @@ mod xml {
 impl BinaryEncodable for DataValue {
     fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
         let mut size = 1;
-        let encoding_mask = self.encoding_mask();
-        if encoding_mask.contains(DataValueFlags::HAS_VALUE) {
-            size += self.value.as_ref().unwrap().byte_len(ctx);
+        if let Some(value) = &self.value {
+            size += value.byte_len(ctx);
         }
-        if encoding_mask.contains(DataValueFlags::HAS_STATUS) {
-            size += self.status.as_ref().unwrap().byte_len(ctx);
+        if let Some(status) = &self.status {
+            size += status.byte_len(ctx);
         }
-        if encoding_mask.contains(DataValueFlags::HAS_SOURCE_TIMESTAMP) {
-            size += self.source_timestamp.as_ref().unwrap().byte_len(ctx);
-            if encoding_mask.contains(DataValueFlags::HAS_SOURCE_PICOSECONDS) {
-                size += self.source_picoseconds.as_ref().unwrap().byte_len(ctx);
+        if let Some(source_timestamp) = &self.source_timestamp {
+            size += source_timestamp.byte_len(ctx);
+            if let Some(source_picoseconds) = &self.source_picoseconds {
+                size += source_picoseconds.byte_len(ctx);
             }
         }
-        if encoding_mask.contains(DataValueFlags::HAS_SERVER_TIMESTAMP) {
-            size += self.server_timestamp.as_ref().unwrap().byte_len(ctx);
-            if encoding_mask.contains(DataValueFlags::HAS_SERVER_PICOSECONDS) {
-                size += self.server_picoseconds.as_ref().unwrap().byte_len(ctx);
+        if let Some(server_timestamp) = &self.server_timestamp {
+            size += server_timestamp.byte_len(ctx);
+            if let Some(server_picoseconds) = &self.server_picoseconds {
+                size += server_picoseconds.byte_len(ctx);
             }
         }
         size
@@ -176,34 +175,22 @@ impl BinaryEncodable for DataValue {
         let encoding_mask = self.encoding_mask();
         encoding_mask.bits().encode(stream, ctx)?;
 
-        if encoding_mask.contains(DataValueFlags::HAS_VALUE) {
-            self.value.as_ref().unwrap().encode(stream, ctx)?;
+        if let Some(value) = &self.value {
+            value.encode(stream, ctx)?;
         }
-        if encoding_mask.contains(DataValueFlags::HAS_STATUS) {
-            self.status.as_ref().unwrap().bits().encode(stream, ctx)?;
+        if let Some(status) = &self.status {
+            status.bits().encode(stream, ctx)?;
         }
-        if encoding_mask.contains(DataValueFlags::HAS_SOURCE_TIMESTAMP) {
-            self.source_timestamp
-                .as_ref()
-                .unwrap()
-                .encode(stream, ctx)?;
-            if encoding_mask.contains(DataValueFlags::HAS_SOURCE_PICOSECONDS) {
-                self.source_picoseconds
-                    .as_ref()
-                    .unwrap()
-                    .encode(stream, ctx)?;
+        if let Some(source_timestamp) = &self.source_timestamp {
+            source_timestamp.encode(stream, ctx)?;
+            if let Some(source_picoseconds) = &self.source_picoseconds {
+                source_picoseconds.encode(stream, ctx)?;
             }
         }
-        if encoding_mask.contains(DataValueFlags::HAS_SERVER_TIMESTAMP) {
-            self.server_timestamp
-                .as_ref()
-                .unwrap()
-                .encode(stream, ctx)?;
-            if encoding_mask.contains(DataValueFlags::HAS_SERVER_PICOSECONDS) {
-                self.server_picoseconds
-                    .as_ref()
-                    .unwrap()
-                    .encode(stream, ctx)?;
+        if let Some(server_timestamp) = &self.server_timestamp {
+            server_timestamp.encode(stream, ctx)?;
+            if let Some(server_picoseconds) = &self.server_picoseconds {
+                server_picoseconds.encode(stream, ctx)?;
             }
         }
         Ok(())

@@ -480,7 +480,9 @@ impl FromStr for ExpandedNodeId {
         // or
         // svr=<serverindex>;nsu=<uri>;<type>=<value>
 
+        #[allow(clippy::unwrap_used)]
         static RE: LazyLock<Regex> = LazyLock::new(|| {
+            // Constant regex is validated by tests and cannot fail due to runtime input.
             Regex::new(
                 r"^svr=(?P<svr>[0-9]+);(ns=(?P<ns>[0-9]+)|nsu=(?P<nsu>[^;]+));(?P<t>[isgb]=.+)$",
             )
@@ -520,7 +522,7 @@ impl FromStr for ExpandedNodeId {
         };
 
         // Type identifier
-        let t = captures.name("t").unwrap();
+        let t = captures.name("t").ok_or(StatusCode::BadNodeIdInvalid)?;
         Identifier::from_str(t.as_str())
             .map(|t| ExpandedNodeId {
                 server_index,

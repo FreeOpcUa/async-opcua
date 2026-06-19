@@ -61,7 +61,12 @@ impl<'a, T: Iterator<Item = &'a MessageChunk>> ReceiveStream<'a, T> {
 
         let body_start = chunk_info.body_offset;
         let body_end = body_start + chunk_info.body_length;
-        let body_data = &chunk.data[body_start..body_end];
+        let body_data = chunk.data.get(body_start..body_end).ok_or_else(|| {
+            Error::new(
+                StatusCode::BadDecodingError,
+                "Chunk body range exceeds chunk data",
+            )
+        })?;
         Ok(Self {
             buffer: body_data,
             channel,
@@ -92,11 +97,22 @@ impl<'a, T: Iterator<Item = &'a MessageChunk>> Read for ReceiveStream<'a, T> {
 
             let body_start = chunk_info.body_offset;
             let body_end = body_start + chunk_info.body_length;
-            let body_data = &chunk.data[body_start..body_end];
+            let body_data = chunk.data.get(body_start..body_end).ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Chunk body range exceeds chunk data",
+                )
+            })?;
             self.buffer = body_data;
             self.pos = 0;
         }
-        let written = buf.write(&self.buffer[self.pos..])?;
+        let Some(remaining) = self.buffer.get(self.pos..) else {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Receive stream position exceeds chunk body",
+            ));
+        };
+        let written = buf.write(remaining)?;
         self.pos += written;
         Ok(written)
     }
@@ -270,7 +286,13 @@ impl Write for ChunkingStream<'_, '_> {
         }
 
         let to_read = buf.len().min(self.current_body_target - self.body_written);
-        self.storage.extend_from_slice(&buf[..to_read]);
+        let data = buf.get(..to_read).ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Chunking stream read range exceeds source buffer",
+            )
+        })?;
+        self.storage.extend_from_slice(data);
         self.body_written += to_read;
         if self.body_written == self.current_body_target {
             self.emit_chunk();
@@ -312,7 +334,10 @@ impl Chunker {
         chunks: &[MessageChunk],
     ) -> Result<(), Error> {
         let first_sequence_number = {
-            let chunk_info = chunks[0].chunk_info(secure_channel)?;
+            let chunk = chunks
+                .first()
+                .ok_or_else(|| Error::new(StatusCode::BadUnexpectedError, "No chunks supplied"))?;
+            let chunk_info = chunk.chunk_info(secure_channel)?;
             chunk_info.sequence_header.sequence_number
         };
         trace!(
@@ -409,7 +434,10 @@ impl Chunker {
     ) -> std::result::Result<usize, Error> {
         let security_policy = secure_channel.security_policy();
         if security_policy == SecurityPolicy::Unknown {
-            panic!("Security policy cannot be unknown");
+            return Err(Error::new(
+                StatusCode::BadSecurityPolicyRejected,
+                "Security policy cannot be unknown",
+            ));
         }
 
         let ctx_id = Some(request_id);

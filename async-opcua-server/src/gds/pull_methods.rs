@@ -1,11 +1,13 @@
 //! GDS pull model method callbacks.
 
-use std::sync::Arc;
+use std::{collections::VecDeque, sync::Arc};
 
 use opcua_core::sync::RwLock;
 use opcua_types::{Array, ByteString, NodeId, StatusCode, Variant, VariantScalarTypeId};
 
 use crate::node_manager::memory::SimpleNodeManager;
+
+use super::GDS_REGISTRY_CAPACITY;
 
 const GET_REJECTED_LIST_METHOD_ID: u32 = 22407;
 const UPDATE_CERTIFICATE_METHOD_ID: u32 = 22402;
@@ -42,9 +44,9 @@ pub struct GdsFinishedSigningRequest {
 
 #[derive(Default)]
 struct GdsPullMethodRegistryInner {
-    rejected_certificates: RwLock<Vec<ByteString>>,
-    updated_certificates: RwLock<Vec<GdsCertificateUpdate>>,
-    finished_signing_requests: RwLock<Vec<GdsFinishedSigningRequest>>,
+    rejected_certificates: RwLock<VecDeque<ByteString>>,
+    updated_certificates: RwLock<VecDeque<GdsCertificateUpdate>>,
+    finished_signing_requests: RwLock<VecDeque<GdsFinishedSigningRequest>>,
 }
 
 /// In-memory registry for GDS pull certificate management state.
@@ -56,17 +58,27 @@ pub struct GdsPullMethodRegistry {
 impl GdsPullMethodRegistry {
     /// Records a certificate that should be returned by `GetRejectedList`.
     pub fn record_rejected_certificate(&self, certificate: ByteString) {
-        self.inner.rejected_certificates.write().push(certificate);
+        push_bounded_fifo(&mut self.inner.rejected_certificates.write(), certificate);
     }
 
     /// Returns rejected certificates recorded for `GetRejectedList`.
     pub fn rejected_certificates(&self) -> Vec<ByteString> {
-        self.inner.rejected_certificates.read().clone()
+        self.inner
+            .rejected_certificates
+            .read()
+            .iter()
+            .cloned()
+            .collect()
     }
 
     /// Returns certificate updates received through `UpdateCertificate`.
     pub fn updated_certificates(&self) -> Vec<GdsCertificateUpdate> {
-        self.inner.updated_certificates.read().clone()
+        self.inner
+            .updated_certificates
+            .read()
+            .iter()
+            .cloned()
+            .collect()
     }
 
     /// Records certificate material to return from `FinishSigningRequest`.
@@ -77,19 +89,20 @@ impl GdsPullMethodRegistry {
         certificate: ByteString,
         private_key: ByteString,
     ) {
-        self.inner
-            .finished_signing_requests
-            .write()
-            .push(GdsFinishedSigningRequest {
+        let mut requests = self.inner.finished_signing_requests.write();
+        push_bounded_fifo(
+            &mut requests,
+            GdsFinishedSigningRequest {
                 application_id,
                 request_id,
                 certificate,
                 private_key,
-            });
+            },
+        );
     }
 
     fn record_certificate_update(&self, update: GdsCertificateUpdate) {
-        self.inner.updated_certificates.write().push(update);
+        push_bounded_fifo(&mut self.inner.updated_certificates.write(), update);
     }
 
     fn finished_signing_request(
@@ -106,6 +119,13 @@ impl GdsPullMethodRegistry {
             })
             .cloned()
     }
+}
+
+fn push_bounded_fifo<T>(items: &mut VecDeque<T>, item: T) {
+    if items.len() >= GDS_REGISTRY_CAPACITY {
+        items.pop_front();
+    }
+    items.push_back(item);
 }
 
 /// Handler for GDS pull model method calls.

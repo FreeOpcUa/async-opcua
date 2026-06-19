@@ -91,12 +91,15 @@ impl Decoder for TcpCodec {
     type Error = io::Error;
 
     fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        if buf.len() > MESSAGE_HEADER_LEN {
+        if buf.len() >= MESSAGE_HEADER_LEN {
             // Every OPC UA message has at least 8 bytes of header to be read to see what follows
 
             // Get the message header
             let message_header = {
-                let mut buf = io::Cursor::new(&buf[0..MESSAGE_HEADER_LEN]);
+                let header = buf
+                    .get(..MESSAGE_HEADER_LEN)
+                    .ok_or_else(|| io::Error::other("Cannot decode TCP message header"))?;
+                let mut buf = io::Cursor::new(header);
                 MessageHeader::decode(&mut buf, &self.decoding_options)?
             };
 
@@ -197,7 +200,9 @@ impl TcpCodec {
                     "failed to write OPC UA frame",
                 ));
             }
-            frame = &frame[written..];
+            frame = frame
+                .get(written..)
+                .ok_or_else(|| io::Error::other("invalid TCP frame write range"))?;
         }
         Ok(())
     }
@@ -263,5 +268,69 @@ impl TcpCodec {
                 Err(StatusCode::BadCommunicationError)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use bytes::{BufMut, BytesMut};
+    use opcua_types::{
+        encoding::{DecodingOptions, SimpleBinaryEncodable},
+        StatusCode,
+    };
+    use tokio_util::codec::Decoder;
+
+    use super::{ErrorMessage, Message, TcpCodec};
+
+    fn error_frame(reason: &str) -> BytesMut {
+        let message = ErrorMessage::new(StatusCode::BadUnexpectedError, reason);
+        let mut frame = BytesMut::with_capacity(message.byte_len());
+        message.encode(&mut (&mut frame).writer()).unwrap();
+        frame
+    }
+
+    fn oversized_header_frame(message_size: u32) -> BytesMut {
+        let mut frame = BytesMut::from(&b"ERRF"[..]);
+        frame.extend_from_slice(&message_size.to_le_bytes());
+        frame
+    }
+
+    #[test]
+    fn decode_rejects_declared_message_size_above_configured_max() {
+        let mut codec = TcpCodec::new(DecodingOptions {
+            max_message_size: 16,
+            ..DecodingOptions::default()
+        });
+        let mut frame = oversized_header_frame(17);
+
+        let err = codec.decode(&mut frame).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::Other);
+        assert!(err.to_string().contains("BadTcpMessageTooLarge"));
+    }
+
+    #[test]
+    fn decode_accepts_declared_message_size_equal_to_configured_max() {
+        let mut frame = error_frame("fits exactly");
+        let mut codec = TcpCodec::new(DecodingOptions {
+            max_message_size: frame.len(),
+            ..DecodingOptions::default()
+        });
+
+        let decoded = codec.decode(&mut frame).unwrap();
+
+        assert!(matches!(decoded, Some(Message::Error(_))));
+    }
+
+    #[test]
+    fn decode_accepts_large_declared_message_size_when_max_is_unlimited() {
+        let mut frame = error_frame(&"large but unlimited ".repeat(32));
+        let mut codec = TcpCodec::new(DecodingOptions {
+            max_message_size: 0,
+            ..DecodingOptions::default()
+        });
+
+        let decoded = codec.decode(&mut frame).unwrap();
+
+        assert!(matches!(decoded, Some(Message::Error(_))));
     }
 }

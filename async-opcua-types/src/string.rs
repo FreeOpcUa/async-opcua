@@ -181,11 +181,7 @@ impl From<UAString> for String {
 
 impl AsRef<str> for UAString {
     fn as_ref(&self) -> &str {
-        if self.is_null() {
-            ""
-        } else {
-            self.value.as_ref().unwrap()
-        }
+        self.value.as_deref().unwrap_or("")
     }
 }
 

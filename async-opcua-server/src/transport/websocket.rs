@@ -18,7 +18,7 @@ use tokio_tungstenite::{
     tungstenite::{
         handshake::server::ErrorResponse,
         handshake::server::{Request, Response},
-        http::header::SEC_WEBSOCKET_PROTOCOL,
+        http::{header::SEC_WEBSOCKET_PROTOCOL, HeaderValue},
     },
 };
 use tokio_util::{codec::FramedRead, sync::CancellationToken};
@@ -136,9 +136,7 @@ fn negotiate_subprotocol(
     if supports_opcua {
         response.headers_mut().insert(
             SEC_WEBSOCKET_PROTOCOL,
-            OPC_WSS_SUBPROTOCOL
-                .parse()
-                .expect("static WSS subprotocol should be a valid header value"),
+            HeaderValue::from_static(OPC_WSS_SUBPROTOCOL),
         );
     }
 

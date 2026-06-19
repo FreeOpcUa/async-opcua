@@ -192,8 +192,11 @@ impl FromStr for NodeId {
         //
         // If namespace == 0, the ns=0; will be omitted
 
-        static RE: LazyLock<Regex> =
-            LazyLock::new(|| Regex::new(r"^(ns=(?P<ns>[0-9]+);)?(?P<t>[isgb]=.+)$").unwrap());
+        #[allow(clippy::unwrap_used)]
+        static RE: LazyLock<Regex> = LazyLock::new(|| {
+            // Constant regex is validated by tests and cannot fail due to runtime input.
+            Regex::new(r"^(ns=(?P<ns>[0-9]+);)?(?P<t>[isgb]=.+)$").unwrap()
+        });
 
         let captures = RE.captures(s).ok_or(StatusCode::BadNodeIdInvalid)?;
 
@@ -207,7 +210,7 @@ impl FromStr for NodeId {
         };
 
         // Type identifier
-        let t = captures.name("t").unwrap();
+        let t = captures.name("t").ok_or(StatusCode::BadNodeIdInvalid)?;
         Identifier::from_str(t.as_str())
             .map(|t| NodeId::new(namespace, t))
             .map_err(|_| StatusCode::BadNodeIdInvalid)

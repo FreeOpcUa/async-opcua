@@ -235,7 +235,7 @@ impl FromStr for NumericRange {
             // Split the string on the comma
             let parts: Vec<_> = s.split(',').collect();
             match parts.len() {
-                1 => Self::parse_range(parts[0]),
+                1 => Self::parse_range(parts.first().ok_or(NumericRangeError)?),
                 2..=MAX_INDICES => {
                     // Multi dimensions
                     let mut ranges = Vec::with_capacity(parts.len());
@@ -293,7 +293,9 @@ impl NumericRange {
             //
             // To stop insane values, a number must be 10 digits (sufficient for any permissible
             // 32-bit value) or less regardless of leading zeroes.
+            #[allow(clippy::unwrap_used)]
             static RE: LazyLock<Regex> = LazyLock::new(|| {
+                // Constant regex is validated by tests and cannot fail due to runtime input.
                 Regex::new("^(?P<min>[0-9]{1,10})(:(?P<max>[0-9]{1,10}))?$").unwrap()
             });
             if let Some(captures) = RE.captures(s) {

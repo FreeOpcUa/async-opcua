@@ -11,8 +11,8 @@
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-- [ ] T001 Record pre-feature baselines: full `cargo test --workspace` pass count, the publish-allocation baseline (`publish_allocation_baseline_reports_construction_and_clone --ignored`), and `cargo fmt --all --check` / `cargo clippy --locked -D warnings` clean — capture numbers in `specs/010-embedded-hardening-allocation/research.md` (Cross-cutting section).
-- [ ] T002 [P] Inventory the existing fuzz targets and decode entry points under `fuzz/` (and their corpora) so the US1 panic-hunt extends them rather than duplicating.
+- [X] T001 Record pre-feature baselines: full `cargo test --workspace` pass count, the publish-allocation baseline (`publish_allocation_baseline_reports_construction_and_clone --ignored`), and `cargo fmt --all --check` / `cargo clippy --locked -D warnings` clean — capture numbers in `specs/010-embedded-hardening-allocation/research.md` (Cross-cutting section).
+- [X] T002 [P] Inventory the existing fuzz targets and decode entry points under `fuzz/` (and their corpora) so the US1 panic-hunt extends them rather than duplicating.
 
 ---
 
@@ -29,22 +29,22 @@
 
 ### Tests for User Story 1
 
-- [ ] T003 [P] [US1] Reproduction/regression test: a chunk declaring `message_size > max_message_size` is rejected before buffering, in `async-opcua-core/tests/` (or inline `tcp_codec` test) (FR-002).
-- [ ] T004 [P] [US1] Regression test: structure nested past `max_decode_depth` returns a decode error; at-limit succeeds, in `async-opcua-types/` tests (FR-003).
-- [ ] T005 [P] [US1] Test: GDS registry stays bounded + defined FIFO-evict on overflow, in `async-opcua-server/tests/` (FR-004).
+- [X] T003 [P] [US1] Reproduction/regression test: a chunk declaring `message_size > max_message_size` is rejected before buffering, in `async-opcua-core/tests/` (or inline `tcp_codec` test) (FR-002).
+- [X] T004 [P] [US1] Regression test: structure nested past `max_decode_depth` returns a decode error; at-limit succeeds, in `async-opcua-types/` tests (FR-003).
+- [X] T005 [P] [US1] Test: GDS registry stays bounded + defined FIFO-evict on overflow, in `async-opcua-server/tests/` (FR-004).
 
 ### Implementation for User Story 1
 
-- [ ] T006 [US1] Enforce `max_message_size` in `TcpCodec::decode` and make `MessageHeader::decode` honor its `DecodingOptions` (reject over-limit declared size before buffering → `BadTcpMessageTooLarge`) in `async-opcua-core/src/comms/tcp_codec.rs` + `async-opcua-core/src/comms/tcp_types.rs` (FR-002).
-- [ ] T007 [US1] Add `max_decode_depth` to `DecodingOptions` (safe default) + a depth counter at the recursive nesting points (ExtensionObject/Variant/Array/custom-struct) in `async-opcua-types/src/` (FR-003).
-- [ ] T008 [US1] Cap/TTL the GDS push registries (`signing_requests`, `created_requests`) with FIFO-evict + config in `async-opcua-server/src/.../gds/push_methods.rs` (FR-004).
-- [ ] T009 [US1] Cap/TTL the GDS pull registries (`rejected`/`updated`/`finished`) with FIFO-evict + config in `async-opcua-server/src/.../gds/pull_methods.rs` (FR-004).
-- [ ] T010 [US1] Panic-surface: add scoped `#![deny(clippy::unwrap_used, expect_used, indexing_slicing, panic)]` to `async-opcua-types` and drive to zero (Result/checked replacements; justified `#[allow]` only) (FR-001).
-- [ ] T011 [US1] Panic-surface sweep on `async-opcua-core` (same lints, fix to zero) (FR-001).
-- [ ] T012 [US1] Panic-surface sweep on `async-opcua-crypto` (same lints, fix to zero) (FR-001).
-- [ ] T013 [US1] Panic-surface sweep on the decode/transport paths of `async-opcua-server` (lints scoped to those modules, fix to zero) (FR-001).
-- [ ] T013b [P] [US1] Panic-surface sweep on the decode/transport paths of `async-opcua-client` (lints scoped to those modules, fix to zero) (FR-001).
-- [ ] T014 [US1] Panic-hunting fuzz pass: extend/run the `fuzz/` decode targets under a constrained stack; confirm zero panic/abort over the corpus (FR-001, SC-001).
+- [X] T006 [US1] Enforce `max_message_size` in `TcpCodec::decode` and make `MessageHeader::decode` honor its `DecodingOptions` (reject over-limit declared size before buffering → `BadTcpMessageTooLarge`) in `async-opcua-core/src/comms/tcp_codec.rs` + `async-opcua-core/src/comms/tcp_types.rs` (FR-002).
+- [X] T007 [US1] Add `max_decode_depth` to `DecodingOptions` (safe default) + a depth counter at the recursive nesting points (ExtensionObject/Variant/Array/custom-struct) in `async-opcua-types/src/` (FR-003).
+- [X] T008 [US1] Cap/TTL the GDS push registries (`signing_requests`, `created_requests`) with FIFO-evict + config in `async-opcua-server/src/.../gds/push_methods.rs` (FR-004).
+- [X] T009 [US1] Cap/TTL the GDS pull registries (`rejected`/`updated`/`finished`) with FIFO-evict + config in `async-opcua-server/src/.../gds/pull_methods.rs` (FR-004).
+- [X] T010 [US1] Panic-surface: add scoped `#![deny(clippy::unwrap_used, expect_used, indexing_slicing, panic)]` to `async-opcua-types` and drive to zero (Result/checked replacements; justified `#[allow]` only) (FR-001).
+- [X] T011 [US1] Panic-surface sweep on `async-opcua-core` (same lints, fix to zero) (FR-001).
+- [X] T012 [US1] Panic-surface sweep on `async-opcua-crypto` (same lints, fix to zero) (FR-001).
+- [X] T013 [US1] Panic-surface sweep on the decode/transport paths of `async-opcua-server` (lints scoped to those modules, fix to zero) (FR-001).
+- [X] T013b [P] [US1] Panic-surface sweep on the decode/transport paths of `async-opcua-client` (lints scoped to those modules, fix to zero) (FR-001).
+- [~] T014 [US1] Panic-hunting fuzz pass: extend/run the `fuzz/` decode targets under a constrained stack; confirm zero panic/abort over the corpus (FR-001, SC-001).
 
 **Checkpoint**: server is panic-free + bounded against hostile input — releasable security baseline. **Commit US1.**
 

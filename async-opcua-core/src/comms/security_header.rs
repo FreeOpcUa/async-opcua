@@ -171,11 +171,7 @@ impl SimpleBinaryDecodable for AsymmetricSecurityHeader {
             if thumbprint_len > 0 && thumbprint_len != Thumbprint::THUMBPRINT_SIZE {
                 Err(Error::decoding(format!(
                     "Receiver certificate thumbprint is not 20 bytes long, {} bytes",
-                    receiver_certificate_thumbprint
-                        .value
-                        .as_ref()
-                        .unwrap()
-                        .len(),
+                    thumbprint_len,
                 )))
             } else {
                 Ok(AsymmetricSecurityHeader {

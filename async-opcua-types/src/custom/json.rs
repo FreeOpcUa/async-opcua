@@ -24,7 +24,10 @@ impl DynamicStructure {
     ) -> EncodingResult<()> {
         if remaining_dims.len() == 1 {
             stream.begin_array()?;
-            for _ in 0..remaining_dims[0] {
+            let dim = remaining_dims
+                .first()
+                .ok_or_else(|| Error::encoding("Missing array dimension"))?;
+            for _ in 0..*dim {
                 self.json_encode_field(
                     stream,
                     items.get(*index).unwrap_or(&Variant::Empty),
@@ -36,8 +39,14 @@ impl DynamicStructure {
             stream.end_array()?;
         } else {
             stream.begin_array()?;
-            for _ in 0..remaining_dims[0] {
-                self.json_encode_array(stream, field, ctx, items, &remaining_dims[1..], index)?;
+            let dim = remaining_dims
+                .first()
+                .ok_or_else(|| Error::encoding("Missing array dimension"))?;
+            let remaining_dims = remaining_dims
+                .get(1..)
+                .ok_or_else(|| Error::encoding("Missing nested array dimensions"))?;
+            for _ in 0..*dim {
+                self.json_encode_array(stream, field, ctx, items, remaining_dims, index)?;
             }
             stream.end_array()?;
         }
@@ -225,14 +234,22 @@ impl DynamicTypeLoader {
                 values.push(self.json_decode_field_value(field, stream, ctx)?);
             }
         }
-        let old_dim = dims[depth as usize - 1];
+        let dim_idx = usize::try_from(depth)
+            .ok()
+            .and_then(|depth| depth.checked_sub(1))
+            .ok_or_else(|| Error::decoding("Invalid JSON matrix depth"))?;
+        let old_dim = *dims
+            .get(dim_idx)
+            .ok_or_else(|| Error::decoding("JSON matrix depth exceeds declared dimensions"))?;
         if old_dim > 0 && size != old_dim {
             return Err(Error::decoding(format!(
                 "JSON matrix in field {} does not have even dimensions",
                 field.name
             )));
         } else if old_dim == 0 {
-            dims[depth as usize - 1] = size;
+            *dims.get_mut(dim_idx).ok_or_else(|| {
+                Error::decoding("JSON matrix depth exceeds declared dimensions")
+            })? = size;
         }
         stream.end_array()?;
 

@@ -106,12 +106,16 @@ pub(crate) fn p_sha256(secret: &[u8], seed: &[u8], length: usize) -> Vec<u8> {
 
 #[cfg(feature = "legacy-crypto")]
 fn sign_sha1(key: &[u8], data: &[u8]) -> Sha1Output {
+    // HMAC accepts keys of any length; construction cannot fail for caller input.
+    #[allow(clippy::unwrap_used)]
     let mut mac = HmacSha1::new_from_slice(key).unwrap();
     mac.update(data);
     mac.finalize()
 }
 
 fn sign_sha256(key: &[u8], data: &[u8]) -> Sha256Output {
+    // HMAC accepts keys of any length; construction cannot fail for caller input.
+    #[allow(clippy::unwrap_used)]
     let mut mac = HmacSha256::new_from_slice(key).unwrap();
     mac.update(data);
     mac.finalize()
@@ -141,6 +145,8 @@ pub(crate) fn verify_hmac_sha1(key: &[u8], data: &[u8], signature: &[u8]) -> boo
     if signature.len() != SHA1_SIZE {
         false
     } else {
+        // HMAC accepts keys of any length; construction cannot fail for caller input.
+        #[allow(clippy::unwrap_used)]
         let mut mac = HmacSha1::new_from_slice(key).unwrap();
         mac.update(data);
         mac.verify_slice(signature).is_ok()
@@ -169,6 +175,8 @@ pub(crate) fn verify_hmac_sha256(key: &[u8], data: &[u8], signature: &[u8]) -> b
     if signature.len() != SHA256_SIZE {
         false
     } else {
+        // HMAC accepts keys of any length; construction cannot fail for caller input.
+        #[allow(clippy::unwrap_used)]
         let mut mac = HmacSha256::new_from_slice(key).unwrap();
         mac.update(data);
         mac.verify_slice(signature).is_ok()

@@ -196,6 +196,8 @@ impl SecurityPolicyImpl for NonePolicy {
         true
     }
 
+    // This non-Result trait method is unreachable for SecurityPolicy::None callers.
+    #[allow(clippy::panic)]
     fn calculate_cipher_text_size(_plain_text_size: usize, _key: &Self::TPublicKey) -> usize {
         panic!("Cannot encrypt using security policy None")
     }
@@ -244,6 +246,8 @@ impl SecurityPolicyImpl for NonePolicy {
         ))
     }
 
+    // This non-Result trait method is unreachable for SecurityPolicy::None callers.
+    #[allow(clippy::panic)]
     fn derive_secure_channel_keys(_secret: &[u8], _seed: &[u8]) -> Self::TDerivedKey {
         panic!("Cannot derive encryption keys for security policy None")
     }

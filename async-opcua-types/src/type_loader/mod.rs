@@ -331,8 +331,8 @@ impl TypeLoaderCollection {
     /// Add a type loader to the collection.
     pub fn add(&mut self, loader: Arc<dyn TypeLoader>) {
         let priority = loader.priority();
-        for i in 0..self.loaders.len() {
-            if self.loaders[i].priority() > priority {
+        for (i, existing_loader) in self.loaders.iter().enumerate() {
+            if existing_loader.priority() > priority {
                 self.loaders.insert(i, loader);
                 return;
             }

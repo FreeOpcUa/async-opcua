@@ -181,7 +181,9 @@ impl From<(u16, u16, u16, u16, u16, u16)> for DateTime {
 
 // From ymd_hms
 impl From<(u16, u16, u16, u16, u16, u16, u32)> for DateTime {
+    #[allow(clippy::panic, clippy::unwrap_used)]
     fn from(dt: (u16, u16, u16, u16, u16, u16, u32)) -> Self {
+        // Preserve the existing programmer-error panic contract for invalid tuple dates.
         let (year, month, day, hour, minute, second, nanos) = dt;
         if !(1..=12).contains(&month) {
             panic!("Invalid month");
@@ -218,8 +220,10 @@ impl From<(u16, u16, u16, u16, u16, u16, u32)> for DateTime {
 }
 
 impl From<DateTimeUtc> for DateTime {
+    #[allow(clippy::unwrap_used)]
     fn from(date_time: DateTimeUtc) -> Self {
         // OPC UA date time is more granular with nanos, so the value supplied is made granular too
+        // `nanos` is rounded down to a valid nanosecond-of-second value.
         let nanos = (date_time.nanosecond() / NANOS_PER_TICK as u32) * NANOS_PER_TICK as u32;
         let date_time = date_time.with_nanosecond(nanos).unwrap();
         DateTime { date_time }
@@ -227,6 +231,7 @@ impl From<DateTimeUtc> for DateTime {
 }
 
 impl From<i64> for DateTime {
+    #[allow(clippy::unwrap_used)]
     fn from(value: i64) -> Self {
         if value == i64::MAX {
             // Max signifies end times
@@ -234,6 +239,7 @@ impl From<i64> for DateTime {
         } else {
             let secs = value / TICKS_PER_SECOND;
             let nanos = (value - secs * TICKS_PER_SECOND) * NANOS_PER_TICK;
+            // OPC UA tick values fit chrono's TimeDelta seconds range.
             let duration = TimeDelta::try_seconds(secs).unwrap() + Duration::nanoseconds(nanos);
             Self::from(Self::epoch_chrono() + duration)
         }
@@ -400,15 +406,19 @@ impl DateTime {
 
     /// The OPC UA endtimes - Dec 31 9999 23:59:59 i.e. the date after which dates are returned as MAX_INT64 ticks
     /// Spec doesn't say what happens in the last second before midnight...
+    #[allow(clippy::unwrap_used)]
     fn endtimes_chrono() -> DateTimeUtc {
+        // The constant end-times date is a valid UTC date.
         Utc.with_ymd_and_hms(MAX_YEAR as i32, 12, 31, 23, 59, 59)
             .unwrap()
     }
 
     /// Turns a duration to ticks
+    #[allow(clippy::unwrap_used)]
     fn duration_to_ticks(duration: Duration) -> i64 {
         // We can't directly ask for nanos because it will exceed i64,
         // so we have to subtract the total seconds before asking for the nano portion
+        // `num_seconds()` and the remaining subsecond duration fit chrono's constructors.
         let seconds_part = TimeDelta::try_seconds(duration.num_seconds()).unwrap();
         let seconds = seconds_part.num_seconds();
         let nanos = (duration - seconds_part).num_nanoseconds().unwrap();

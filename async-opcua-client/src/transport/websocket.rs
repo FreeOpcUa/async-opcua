@@ -169,7 +169,12 @@ impl WssTlsConfigExt for WssTlsConfig {
                     rustls::crypto::ring::default_provider(),
                 ))
                 .with_safe_default_protocol_versions()
-                .expect("ring provider supports safe default protocol versions")
+                .map_err(|err| {
+                    Error::new(
+                        StatusCode::BadConfigurationError,
+                        format!("Failed to configure WSS TLS protocol versions: {err}"),
+                    )
+                })?
                 .dangerous()
                 .with_custom_certificate_verifier(Arc::new(AcceptAnyServerCert))
                 .with_no_client_auth();
@@ -219,7 +224,12 @@ fn default_rustls_config(
     let mut config =
         ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
             .with_safe_default_protocol_versions()
-            .expect("ring provider supports safe default protocol versions")
+            .map_err(|err| {
+                Error::new(
+                    StatusCode::BadConfigurationError,
+                    format!("Failed to configure WSS TLS protocol versions: {err}"),
+                )
+            })?
             .with_root_certificates(roots)
             .with_no_client_auth();
     config.alpn_protocols = vec![OPC_WSS_SUBPROTOCOL.as_bytes().to_vec()];

@@ -110,7 +110,10 @@ impl Array {
         if values.is_empty() {
             true
         } else {
-            let expected_type_id = values[0].type_id();
+            let Some(first_value) = values.first() else {
+                return true;
+            };
+            let expected_type_id = first_value.type_id();
             match expected_type_id {
                 VariantTypeId::Array(_, _) => {
                     // Nested arrays are explicitly NOT allowed
@@ -123,7 +126,7 @@ impl Array {
                 }
                 VariantTypeId::Scalar(s) => {
                     if values.len() > 1 {
-                        values_are_of_type(&values[1..], s)
+                        values_are_of_type(values.get(1..).unwrap_or(&[]), s)
                     } else {
                         true
                     }

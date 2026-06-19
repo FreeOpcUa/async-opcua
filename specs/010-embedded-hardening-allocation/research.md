@@ -55,3 +55,10 @@ Most approaches are pre-decided by the 009 embedded audit (§5/§6) and the 2026
 ## Cross-cutting: measurement harness
 
 - **Decision**: Reuse and extend the `#[ignore]`d counting-allocator baseline harness from the publish-path work for the event-pool and dispatch measurements; add a fuzz-driven panic check for SC-001. Record before/after numbers in the relevant commit/PR bodies.
+
+## Pre-feature baseline (T001, captured 2026-06-19)
+
+- `cargo fmt --all --check`: clean.
+- `cargo test --workspace`: **672 passed, 0 failed**.
+- Publish-allocation baseline (post-009 floor): construction **2 allocs / 80 bytes**, publish-clone **0 / 0** at both N=1000 and N=5000.
+- Fuzz targets present: `fuzz_comms`, `fuzz_deserialize`, `fuzz_dynamic_struct` (T002).

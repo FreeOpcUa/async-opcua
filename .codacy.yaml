@@ -23,3 +23,15 @@ exclude_paths:
   - "fuzz/**"
   - "codegen-tests/**"
   - "dotnet-tests/**"
+  # Parallel encoding backends. OPC UA mandates three wire encodings
+  # (binary / XML / JSON), so every hand-written codec exists in triplicate
+  # by encoding — e.g. src/custom/{custom_struct(binary),xml,json}.rs,
+  # src/{node_id,variant}/{xml,json}.rs, src/xml/. These per-encoding files
+  # share the same field-walk structure and differ only in the encoder API,
+  # so Codacy reports them as file-level duplicates. It is mandated parallelism,
+  # not copy-paste to deduplicate (the binary/XML/JSON encoder models are
+  # fundamentally different and cannot be unified). The binary "primary"
+  # (e.g. custom_struct.rs) stays analyzed; the XML/JSON parallels are excluded.
+  - "**/json.rs"
+  - "**/xml.rs"
+  - "**/xml/**"

@@ -42,7 +42,8 @@
 - [ ] T010 [US1] Panic-surface: add scoped `#![deny(clippy::unwrap_used, expect_used, indexing_slicing, panic)]` to `async-opcua-types` and drive to zero (Result/checked replacements; justified `#[allow]` only) (FR-001).
 - [ ] T011 [US1] Panic-surface sweep on `async-opcua-core` (same lints, fix to zero) (FR-001).
 - [ ] T012 [US1] Panic-surface sweep on `async-opcua-crypto` (same lints, fix to zero) (FR-001).
-- [ ] T013 [US1] Panic-surface sweep on the decode/transport paths of `async-opcua-server` and `async-opcua-client` (lints scoped to those modules, fix to zero) (FR-001).
+- [ ] T013 [US1] Panic-surface sweep on the decode/transport paths of `async-opcua-server` (lints scoped to those modules, fix to zero) (FR-001).
+- [ ] T013b [P] [US1] Panic-surface sweep on the decode/transport paths of `async-opcua-client` (lints scoped to those modules, fix to zero) (FR-001).
 - [ ] T014 [US1] Panic-hunting fuzz pass: extend/run the `fuzz/` decode targets under a constrained stack; confirm zero panic/abort over the corpus (FR-001, SC-001).
 
 **Checkpoint**: server is panic-free + bounded against hostile input — releasable security baseline. **Commit US1.**

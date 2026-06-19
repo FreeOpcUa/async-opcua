@@ -518,6 +518,62 @@ fn argument_decode_pads_dimensions_when_shorter_than_rank() {
     assert_eq!(decoded.value_rank, 3);
     assert_eq!(decoded.array_dimensions, Some(vec![0, 0, 0]));
 }
+
+fn encode_argument_payload(value_rank: i32, dimensions: Option<Vec<u32>>) -> Vec<u8> {
+    let ctx_f = ContextOwned::default();
+    let ctx = ctx_f.context();
+    let mut stream = Cursor::new(Vec::new());
+    UAString::from("arg").encode(&mut stream, &ctx).unwrap();
+    NodeId::null().encode(&mut stream, &ctx).unwrap();
+    value_rank.encode(&mut stream, &ctx).unwrap();
+    dimensions.encode(&mut stream, &ctx).unwrap();
+    LocalizedText::new("foo", "bar")
+        .encode(&mut stream, &ctx)
+        .unwrap();
+    stream.into_inner()
+}
+
+#[test]
+fn argument_decode_rejects_value_rank_above_array_limit() {
+    let decoding_options = DecodingOptions {
+        max_array_length: 2,
+        ..Default::default()
+    };
+    let ctx_f = ContextOwned::new_default(NamespaceMap::new(), decoding_options);
+    let ctx = ctx_f.context();
+    let mut stream = Cursor::new(encode_argument_payload(3, Some(Vec::new())));
+
+    let err = Argument::decode(&mut stream, &ctx).unwrap_err();
+
+    assert_eq!(err.status(), StatusCode::BadDecodingError);
+}
+
+#[test]
+fn variant_decode_rejects_oversized_argument_value_rank() {
+    let ctx_f = ContextOwned::default();
+    let ctx = ctx_f.context();
+    let mut stream = Cursor::new([
+        0x16, 0x01, 0x00, 0x2a, 0x01, 0x01, 0x84, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x7e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x81, 0x00, 0x00, 0x00, 0x01,
+    ]);
+
+    let err = Variant::decode(&mut stream, &ctx).unwrap_err();
+
+    assert_eq!(err.status(), StatusCode::BadDecodingError);
+}
+
+#[test]
+fn argument_decode_pads_valid_small_value_rank() {
+    let ctx_f = ContextOwned::default();
+    let ctx = ctx_f.context();
+    let mut stream = Cursor::new(encode_argument_payload(2, Some(Vec::new())));
+
+    let decoded = Argument::decode(&mut stream, &ctx).unwrap();
+
+    assert_eq!(decoded.value_rank, 2);
+    assert_eq!(decoded.array_dimensions, Some(vec![0, 0]));
+}
+
 #[test]
 fn argument_decode_errors_when_dimensions_exceed_rank() {
     // sending value_rank=2, array_dimensions=[5, 6, 7]

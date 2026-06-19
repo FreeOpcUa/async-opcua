@@ -57,14 +57,14 @@
 
 ### Tests for User Story 2
 
-- [ ] T015 [P] [US2] No-stale-data regression test for the event pool (decreasing event-batch sizes prove no leftover events leak) in `async-opcua-server/src/subscriptions/subscription.rs` tests (FR-005).
+- [X] T015 [P] [US2] No-stale-data regression test for the event pool (decreasing event-batch sizes prove no leftover events leak) in `async-opcua-server/src/subscriptions/subscription.rs` tests (FR-005).
 
 ### Implementation for User Story 2
 
-- [ ] T016 [US2] Extend the counting-allocator baseline harness to measure the event-notification path (and the small-read dispatch path) in `async-opcua-server/src/subscriptions/subscription.rs` (and a dispatch harness) (FR-010).
-- [ ] T017 [US2] Pool the event-notification `Vec<EventFieldList>` — extend the `DataChangeNotificationVecPool` pattern (draw cleared + capacity-checked; reclaim at `NonAckedPublish` drop via `Arc::into_inner` + `into_inner_as::<EventNotificationList>` + clear; bounded; graceful fallback) in `async-opcua-server/src/subscriptions/` (FR-005, SC-003).
-- [ ] T018 [US2] Inline read fast-path for small single-node-manager Reads avoiding per-request `Box`+`tokio::spawn`, preserving isolation, in `async-opcua-server/src/session/message_handler.rs` — **measure-first**; defer with recorded rationale if no clear win or isolation can't be kept clean (FR-006, SC-004).
-- [ ] T019 [US2] Verify byte-equality + run the full `async-opcua --test integration_tests` (98) green after US2 changes (FR-009, SC-005).
+- [X] T016 [US2] Extend the counting-allocator baseline harness to measure the event-notification path (and the small-read dispatch path) in `async-opcua-server/src/subscriptions/subscription.rs` (and a dispatch harness) (FR-010). *(Event-path harness added: `event_publish_allocation_baseline_is_constant_after_pool_primes`. Dispatch harness folded into the T018 measure-first assessment, which deferred — see below.)*
+- [X] T017 [US2] Pool the event-notification `Vec<EventFieldList>` — extend the `DataChangeNotificationVecPool` pattern (draw cleared + capacity-checked; reclaim at `NonAckedPublish` drop via `Arc::into_inner` + `into_inner_as::<EventNotificationList>` + clear; bounded; graceful fallback) in `async-opcua-server/src/subscriptions/` (FR-005, SC-003).
+- [~] T018 [US2] **DEFERRED (measure-first, recorded rationale).** Inline read fast-path avoiding per-request `Box`+`tokio::spawn`. The per-request `tokio::spawn` is the **panic-isolation boundary** (per-request panic → recoverable `JoinError`, connection survives); an inline poll would move async node-manager Read execution into the connection task and remove that isolation — in direct tension with Constitution IV and the US1 panic-surface baseline. Node-manager Read is genuinely async (may do I/O), so the fast-path is narrow/data-dependent. SC-004 is satisfied by the per-publish event-path reduction alone (see spec SC-004). Deferred per Constitution I/II — see research.md R6 (FR-006, SC-004).
+- [X] T019 [US2] Verify byte-equality + run the full `async-opcua --test integration_tests` (98) green after US2 changes (FR-009, SC-005).
 
 **Checkpoint**: steady-state churn reduced with measured before/after numbers, wire unchanged. **Commit US2.**
 

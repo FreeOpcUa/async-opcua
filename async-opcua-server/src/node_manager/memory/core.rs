@@ -474,6 +474,17 @@ impl CoreNodeManagerImpl {
                 (self.status.state() as i32).into()
             }
 
+            VariableId::Server_ServerArray => {
+                // Per OPC UA Part 5 (OPC 10000-5) 6.3.1, the ServerArray is a Mandatory
+                // String[] whose index 0 "shall be identical to" the server's
+                // ApplicationUri. Serving it from the static node (DataValue::null())
+                // makes spec-conformant clients reject the value with BadTypeMismatch.
+                // `ServerInfo::servers` is seeded with the application URI in
+                // `Server::new_from_builder`, mirroring how `Server_NamespaceArray`
+                // (whose index 1 is the same URI) is served below.
+                context.info.servers.clone().into()
+            }
+
             VariableId::Server_NamespaceArray => {
                 // This actually calls into other node managers to obtain the value, in fact
                 // it calls into _this_ node manager as well.

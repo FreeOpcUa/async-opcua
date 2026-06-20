@@ -34,7 +34,10 @@ tracing = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 lapin = "2.3.1"
-rumqttc = "0.25"
+# default features disabled to drop the unused rustls TLS stack, which pulls a
+# vulnerable rustls-webpki 0.102.8 (GHSA-82j2-j2ch-gfr8, CRL-parse DoS). This
+# transport uses plaintext MQTT only; re-add "use-rustls" if TLS is wired up.
+rumqttc = { version = "0.25", default-features = false }
 uuid = { workspace = true, features = ["v4"] }
 
 [lints]

@@ -8,7 +8,7 @@ publish = false
 [dependencies]
 chrono = { workspace = true }
 log = { workspace = true }
-log4rs = "1.2"
+log4rs = "1.4"
 pico-args = "0.5"
 rand = { workspace = true }
 tokio = { workspace = true }

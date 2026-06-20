@@ -20,8 +20,9 @@ workspace = true
 name = "opcua_client"
 
 [features]
-default = ["aws-lc-rs"]
+default = ["aws-lc-rs", "ecc"]
 aws-lc-rs = ["async-opcua-core/aws-lc-rs", "async-opcua-crypto/aws-lc-rs"]
+ecc = ["async-opcua-core/ecc", "async-opcua-crypto/ecc"]
 legacy-crypto = [
   "async-opcua-core/legacy-crypto",
   "async-opcua-crypto/legacy-crypto",

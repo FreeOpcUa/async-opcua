@@ -35,6 +35,20 @@ fn panic_unsupported_legacy_policy() -> ! {
     );
 }
 
+// Entry points that need real ECC crypto must stay fail-closed until the ECC
+// primitive tasks are implemented.
+#[allow(clippy::panic)]
+fn panic_unimplemented_ecc_policy() -> ! {
+    panic!("ECC security policy crypto is not implemented yet")
+}
+
+fn ecc_not_implemented_error(operation: &str) -> Error {
+    Error::new(
+        StatusCode::BadNotImplemented,
+        format!("{operation} is not implemented for ECC security policies yet"),
+    )
+}
+
 macro_rules! call_with_policy {
     (_inner $r:expr, $($p:ident: $ty:ty,)+ |$x:ident| $t:expr) => {
         match $r {
@@ -81,6 +95,9 @@ macro_rules! call_with_policy {
             Self::Basic128Rsa15 | Self::Basic256 => {
                 panic_unsupported_legacy_policy();
             }
+            Self::EccNistP256 | Self::EccNistP384 => {
+                panic_unimplemented_ecc_policy();
+            }
             Self::Unknown => panic_unknown_security_policy(),
         }
     };
@@ -104,6 +121,10 @@ pub enum SecurityPolicy {
     Basic128Rsa15,
     /// Basic256.
     Basic256,
+    /// ECC NIST P-256.
+    EccNistP256,
+    /// ECC NIST P-384.
+    EccNistP384,
 }
 
 impl fmt::Display for SecurityPolicy {
@@ -128,6 +149,10 @@ impl FromStr for SecurityPolicy {
             constants::SECURITY_POLICY_BASIC_256 | constants::SECURITY_POLICY_BASIC_256_URI => {
                 SecurityPolicy::Basic256
             }
+            constants::SECURITY_POLICY_ECC_NIST_P256
+            | constants::SECURITY_POLICY_ECC_NIST_P256_URI => SecurityPolicy::EccNistP256,
+            constants::SECURITY_POLICY_ECC_NIST_P384
+            | constants::SECURITY_POLICY_ECC_NIST_P384_URI => SecurityPolicy::EccNistP384,
             crate::policy::aes::Basic256Sha256::SECURITY_POLICY
             | crate::policy::aes::Basic256Sha256::SECURITY_POLICY_URI => {
                 SecurityPolicy::Basic256Sha256
@@ -162,33 +187,26 @@ impl SecurityPolicy {
         match self {
             SecurityPolicy::Basic128Rsa15 => constants::SECURITY_POLICY_BASIC_128_RSA_15_URI,
             SecurityPolicy::Basic256 => constants::SECURITY_POLICY_BASIC_256_URI,
+            SecurityPolicy::EccNistP256 => constants::SECURITY_POLICY_ECC_NIST_P256_URI,
+            SecurityPolicy::EccNistP384 => constants::SECURITY_POLICY_ECC_NIST_P384_URI,
             _ => call_with_policy!(self, |T| T::uri()),
         }
     }
 
     /// Returns true if the security policy is supported. It might be recognized but be unsupported by the implementation
     pub fn is_supported(&self) -> bool {
-        #[cfg(feature = "legacy-crypto")]
-        {
-            matches!(
-                self,
-                SecurityPolicy::None
-                    | SecurityPolicy::Basic128Rsa15
-                    | SecurityPolicy::Basic256
-                    | SecurityPolicy::Basic256Sha256
-                    | SecurityPolicy::Aes128Sha256RsaOaep
-                    | SecurityPolicy::Aes256Sha256RsaPss
-            )
-        }
-        #[cfg(not(feature = "legacy-crypto"))]
-        {
-            matches!(
-                self,
-                SecurityPolicy::None
-                    | SecurityPolicy::Basic256Sha256
-                    | SecurityPolicy::Aes128Sha256RsaOaep
-                    | SecurityPolicy::Aes256Sha256RsaPss
-            )
+        match self {
+            SecurityPolicy::None
+            | SecurityPolicy::Basic256Sha256
+            | SecurityPolicy::Aes128Sha256RsaOaep
+            | SecurityPolicy::Aes256Sha256RsaPss => true,
+            SecurityPolicy::Basic128Rsa15 | SecurityPolicy::Basic256 => {
+                cfg!(feature = "legacy-crypto")
+            }
+            SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384 => {
+                cfg!(feature = "ecc")
+            }
+            SecurityPolicy::Unknown => false,
         }
     }
 
@@ -229,6 +247,8 @@ impl SecurityPolicy {
             SecurityPolicy::Unknown => "Unknown",
             SecurityPolicy::Basic128Rsa15 => constants::SECURITY_POLICY_BASIC_128_RSA_15,
             SecurityPolicy::Basic256 => constants::SECURITY_POLICY_BASIC_256,
+            SecurityPolicy::EccNistP256 => constants::SECURITY_POLICY_ECC_NIST_P256,
+            SecurityPolicy::EccNistP384 => constants::SECURITY_POLICY_ECC_NIST_P384,
             _ => call_with_policy!(self, |T| T::as_str()),
         }
     }
@@ -237,33 +257,51 @@ impl SecurityPolicy {
     ///
     /// This will panic if the security policy is `Unknown` or `None`.
     pub fn asymmetric_encryption_algorithm(&self) -> Option<&'static str> {
-        call_with_policy!(self, |T| T::asymmetric_encryption_algorithm())
+        match self {
+            SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384 => None,
+            _ => call_with_policy!(self, |T| T::asymmetric_encryption_algorithm()),
+        }
     }
 
     /// Get the asymmetric signature algorithm for this security policy.
     ///
     /// This will panic if the security policy is `Unknown` or `None`.
     pub fn asymmetric_signature_algorithm(&self) -> &'static str {
-        call_with_policy!(self, |T| T::asymmetric_signature_algorithm())
+        match self {
+            SecurityPolicy::EccNistP256 => crate::algorithms::DSIG_ECDSA_SHA256,
+            SecurityPolicy::EccNistP384 => crate::algorithms::DSIG_ECDSA_SHA384,
+            _ => call_with_policy!(self, |T| T::asymmetric_signature_algorithm()),
+        }
     }
 
     /// Plaintext block size in bytes.
     ///
     /// This will panic if the security policy is `Unknown` or `None`.
     pub fn plain_block_size(&self) -> usize {
-        call_with_policy!(self, |T| T::plain_text_block_size())
+        match self {
+            SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384 => 16,
+            _ => call_with_policy!(self, |T| T::plain_text_block_size()),
+        }
     }
 
     /// Signature size in bytes.
     ///
     /// This will panic if the security policy is `Unknown`.
     pub fn symmetric_signature_size(&self) -> usize {
-        call_with_policy!(self, |T| T::symmetric_signature_size())
+        match self {
+            SecurityPolicy::EccNistP256 => 32,
+            SecurityPolicy::EccNistP384 => 48,
+            _ => call_with_policy!(self, |T| T::symmetric_signature_size()),
+        }
     }
 
     /// Tests if the supplied key length is valid for this policy
     pub fn is_valid_keylength(&self, keylength: usize) -> bool {
-        call_with_policy!(self, |T| T::is_valid_key_length(keylength))
+        match self {
+            SecurityPolicy::EccNistP256 => keylength == 256,
+            SecurityPolicy::EccNistP384 => keylength == 384,
+            _ => call_with_policy!(self, |T| T::is_valid_key_length(keylength)),
+        }
     }
 
     /// Creates a random nonce in a bytestring with a length appropriate for the policy
@@ -281,7 +319,11 @@ impl SecurityPolicy {
             return 32;
         }
 
-        call_with_policy!(self, |T| T::nonce_length())
+        match self {
+            SecurityPolicy::EccNistP256 => 64,
+            SecurityPolicy::EccNistP384 => 96,
+            _ => call_with_policy!(self, |T| T::nonce_length()),
+        }
     }
 
     /// Get the security policy from the given URI. Returns `Unknown`
@@ -292,6 +334,8 @@ impl SecurityPolicy {
             // Always recognizable; see from_str.
             constants::SECURITY_POLICY_BASIC_128_RSA_15_URI => SecurityPolicy::Basic128Rsa15,
             constants::SECURITY_POLICY_BASIC_256_URI => SecurityPolicy::Basic256,
+            constants::SECURITY_POLICY_ECC_NIST_P256_URI => SecurityPolicy::EccNistP256,
+            constants::SECURITY_POLICY_ECC_NIST_P384_URI => SecurityPolicy::EccNistP384,
             crate::policy::aes::Basic256Sha256::SECURITY_POLICY_URI => {
                 SecurityPolicy::Basic256Sha256
             }
@@ -313,7 +357,10 @@ impl SecurityPolicy {
 
     /// Returns whether the security policy uses legacy sequence numbers.
     pub fn legacy_sequence_numbers(&self) -> bool {
-        call_with_policy!(self, |T| T::uses_legacy_sequence_numbers())
+        match self {
+            SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384 => false,
+            _ => call_with_policy!(self, |T| T::uses_legacy_sequence_numbers()),
+        }
     }
 
     /// Part 6
@@ -352,7 +399,12 @@ impl SecurityPolicy {
     /// are used to secure Messages sent by the Server.
     ///
     pub fn make_secure_channel_keys(&self, secret: &[u8], seed: &[u8]) -> AesDerivedKeys {
-        call_with_policy!(self, |T| T::derive_secure_channel_keys(secret, seed))
+        match self {
+            SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384 => {
+                panic_unimplemented_ecc_policy()
+            }
+            _ => call_with_policy!(self, |T| T::derive_secure_channel_keys(secret, seed)),
+        }
     }
 
     /// Produce a signature of the data using an asymmetric key. Stores the signature in the supplied
@@ -363,9 +415,14 @@ impl SecurityPolicy {
         data: &[u8],
         signature: &mut [u8],
     ) -> Result<usize, Error> {
-        call_with_policy!(self, |T| {
-            T::asymmetric_sign(signing_key, data, signature)
-        })
+        match self {
+            SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384 => {
+                Err(ecc_not_implemented_error("ECDSA signing"))
+            }
+            _ => call_with_policy!(self, |T| {
+                T::asymmetric_sign(signing_key, data, signature)
+            }),
+        }
     }
 
     /// Verifies a signature of the data using an asymmetric key. In a debugging scenario, the
@@ -377,27 +434,47 @@ impl SecurityPolicy {
         data: &[u8],
         signature: &[u8],
     ) -> Result<(), Error> {
-        call_with_policy!(self, |T| {
-            T::asymmetric_verify_signature(verification_key, data, signature)
-        })
+        match self {
+            SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384 => {
+                Err(ecc_not_implemented_error("ECDSA signature verification"))
+            }
+            _ => call_with_policy!(self, |T| {
+                T::asymmetric_verify_signature(verification_key, data, signature)
+            }),
+        }
     }
 
     /// Get information about message padding for symmetric encryption using this policy.
     pub fn symmetric_padding_info(&self) -> PaddingInfo {
-        call_with_policy!(self, |T| T::symmetric_padding_info())
+        match self {
+            SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384 => PaddingInfo {
+                block_size: 16,
+                minimum_padding: 1,
+            },
+            _ => call_with_policy!(self, |T| T::symmetric_padding_info()),
+        }
     }
 
     /// Get information about message padding for asymmetric encryption using this policy,
     /// requires the public key of the receiver.
     pub fn asymmetric_padding_info(&self, remote_key: &PublicKey) -> PaddingInfo {
-        call_with_policy!(self, |T| T::asymmetric_padding_info(remote_key))
+        match self {
+            SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384 => PaddingInfo {
+                block_size: 0,
+                minimum_padding: 0,
+            },
+            _ => call_with_policy!(self, |T| T::asymmetric_padding_info(remote_key)),
+        }
     }
 
     /// Calculate the size of the cipher text for asymmetric encryption.
     pub fn calculate_cipher_text_size(&self, plain_text_size: usize, key: &PublicKey) -> usize {
-        call_with_policy!(self, |T| {
-            T::calculate_cipher_text_size(plain_text_size, key)
-        })
+        match self {
+            SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384 => 0,
+            _ => call_with_policy!(self, |T| {
+                T::calculate_cipher_text_size(plain_text_size, key)
+            }),
+        }
     }
 
     /// Encrypts a message using the supplied encryption key, returns the encrypted size. Destination
@@ -408,9 +485,14 @@ impl SecurityPolicy {
         src: &[u8],
         dst: &mut [u8],
     ) -> Result<usize, Error> {
-        call_with_policy!(self, |T| {
-            T::asymmetric_encrypt(encryption_key, src, dst)
-        })
+        match self {
+            SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384 => {
+                Err(ecc_not_implemented_error("ECC asymmetric encryption"))
+            }
+            _ => call_with_policy!(self, |T| {
+                T::asymmetric_encrypt(encryption_key, src, dst)
+            }),
+        }
     }
 
     /// Decrypts a message whose thumbprint matches the x509 cert and private key pair.
@@ -422,9 +504,14 @@ impl SecurityPolicy {
         src: &[u8],
         dst: &mut [u8],
     ) -> Result<usize, Error> {
-        call_with_policy!(self, |T| {
-            T::asymmetric_decrypt(decryption_key, src, dst)
-        })
+        match self {
+            SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384 => {
+                Err(ecc_not_implemented_error("ECC asymmetric decryption"))
+            }
+            _ => call_with_policy!(self, |T| {
+                T::asymmetric_decrypt(decryption_key, src, dst)
+            }),
+        }
     }
 
     /// Produce a signature of some data using the supplied symmetric key. Signing algorithm is determined
@@ -435,7 +522,12 @@ impl SecurityPolicy {
         data: &[u8],
         signature: &mut [u8],
     ) -> Result<(), Error> {
-        call_with_policy!(self, |T| T::symmetric_sign(keys, data, signature))
+        match self {
+            SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384 => {
+                Err(ecc_not_implemented_error("ECC symmetric signing"))
+            }
+            _ => call_with_policy!(self, |T| T::symmetric_sign(keys, data, signature)),
+        }
     }
 
     /// Verify the signature of a data block using the supplied symmetric key.
@@ -445,9 +537,14 @@ impl SecurityPolicy {
         data: &[u8],
         signature: &[u8],
     ) -> Result<(), Error> {
-        call_with_policy!(self, |T| {
-            T::symmetric_verify_signature(keys, data, signature)
-        })
+        match self {
+            SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384 => Err(
+                ecc_not_implemented_error("ECC symmetric signature verification"),
+            ),
+            _ => call_with_policy!(self, |T| {
+                T::symmetric_verify_signature(keys, data, signature)
+            }),
+        }
     }
 
     /// Encrypt the supplied data using the supplied key storing the result in the destination.
@@ -457,7 +554,12 @@ impl SecurityPolicy {
         src: &[u8],
         dst: &mut [u8],
     ) -> Result<usize, Error> {
-        call_with_policy!(self, |T| T::symmetric_encrypt(keys, src, dst))
+        match self {
+            SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384 => {
+                Err(ecc_not_implemented_error("ECC symmetric encryption"))
+            }
+            _ => call_with_policy!(self, |T| T::symmetric_encrypt(keys, src, dst)),
+        }
     }
 
     /// Decrypts the supplied data using the supplied key storing the result in the destination.
@@ -467,12 +569,21 @@ impl SecurityPolicy {
         src: &[u8],
         dst: &mut [u8],
     ) -> Result<usize, Error> {
-        call_with_policy!(self, |T| T::symmetric_decrypt(keys, src, dst))
+        match self {
+            SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384 => {
+                Err(ecc_not_implemented_error("ECC symmetric decryption"))
+            }
+            _ => call_with_policy!(self, |T| T::symmetric_decrypt(keys, src, dst)),
+        }
     }
 
     /// Get the key length used for symmetric encryption.
     pub fn encrypting_key_length(&self) -> usize {
-        call_with_policy!(self, |T| T::encrypting_key_length())
+        match self {
+            SecurityPolicy::EccNistP256 => 16,
+            SecurityPolicy::EccNistP384 => 32,
+            _ => call_with_policy!(self, |T| T::encrypting_key_length()),
+        }
     }
 }
 

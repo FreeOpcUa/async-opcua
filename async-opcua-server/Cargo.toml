@@ -20,11 +20,16 @@ workspace = true
 name = "opcua_server"
 
 [features]
-default = ["aws-lc-rs", "generated-address-space"]
+default = ["aws-lc-rs", "ecc", "generated-address-space"]
 aws-lc-rs = [
   "async-opcua-client?/aws-lc-rs",
   "async-opcua-core/aws-lc-rs",
   "async-opcua-crypto/aws-lc-rs",
+]
+ecc = [
+  "async-opcua-client?/ecc",
+  "async-opcua-core/ecc",
+  "async-opcua-crypto/ecc",
 ]
 # Includes all the code to populate the address space with the default node set
 # . This is something that embedded systems may or may not require.

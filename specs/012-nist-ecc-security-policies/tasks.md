@@ -26,16 +26,16 @@ RFC 5869 Expand Info=salt; key layout Sig|Enc|IV; P256=32/16/16 (SHA256/AES128),
 
 ## Phase 1: Setup
 
-- [ ] T001 Add an `ecc` cargo feature to `async-opcua-crypto`/`-core`/`-client`/`-server` and the
+- [X] T001 Add an `ecc` cargo feature to `async-opcua-crypto`/`-core`/`-client`/`-server` and the
   RustCrypto deps gated under it (`p256`, `p384` with ecdsa+ecdh, `ecdsa`, `hkdf`; reuse aes/cbc/hmac/sha2);
   workspace builds with and without `--features ecc`; capture the baseline gate.
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-- [ ] T002 Add `SecurityPolicy::EccNistP256` / `EccNistP384` variants + policy URIs + `FromStr`/`Display`
+- [X] T002 Add `SecurityPolicy::EccNistP256` / `EccNistP384` variants + policy URIs + `FromStr`/`Display`
   round-trip + `supported()` (true only when `ecc` is built) in `async-opcua-crypto/src/security_policy.rs`;
   RSA/None unchanged; recognized-but-unsupported when feature off (fail-closed).
-- [ ] T003 Scaffold the `async-opcua-crypto/src/ecc/` module: public API stubs per data-model.md
+- [X] T003 Scaffold the `async-opcua-crypto/src/ecc/` module: public API stubs per data-model.md
   (ecdsa sign/verify, ephemeral keygen + `X‖Y` encode/decode, ECDH, HKDF `derive_keys` -> SecurityKeys)
   returning errors/`unimplemented` so US1 tests compile and fail. No logic yet.
 

@@ -140,9 +140,9 @@ async fn test_alarm_trigger_and_acknowledge() {
     println!("Received Event Fields: {:?}", fields);
     let alarm_event = parse_alarm_event(&fields).expect("Failed to parse alarm event");
 
-    assert_eq!(alarm_event.active_state, true);
-    assert_eq!(alarm_event.acked_state, false);
-    assert_eq!(alarm_event.confirmed_state, false);
+    assert!(alarm_event.active_state);
+    assert!(!alarm_event.acked_state);
+    assert!(!alarm_event.confirmed_state);
     assert_eq!(alarm_event.severity, 800);
     assert_eq!(alarm_event.message.text.as_ref(), "High temperature!");
 
@@ -166,9 +166,9 @@ async fn test_alarm_trigger_and_acknowledge() {
     // Verify server address space update
     {
         let space = nm.address_space().read();
-        assert_eq!(state_machine.get_acked(&space), true);
-        assert_eq!(state_machine.get_active(&space), true);
-        assert_eq!(state_machine.get_confirmed(&space), false);
+        assert!(state_machine.get_acked(&space));
+        assert!(state_machine.get_active(&space));
+        assert!(!state_machine.get_confirmed(&space));
     }
 
     // 8. Receive and assert the Acknowledged Event notification
@@ -179,9 +179,9 @@ async fn test_alarm_trigger_and_acknowledge() {
     let fields2 = v2.unwrap();
     let ack_event = parse_alarm_event(&fields2).expect("Failed to parse acknowledgment event");
 
-    assert_eq!(ack_event.active_state, true);
-    assert_eq!(ack_event.acked_state, true);
-    assert_eq!(ack_event.confirmed_state, false);
+    assert!(ack_event.active_state);
+    assert!(ack_event.acked_state);
+    assert!(!ack_event.confirmed_state);
 
     // 9. Confirm the alarm via Method call
     let confirm_method_id = NodeId::new(2, format!("{}_Confirm", base_s));
@@ -202,8 +202,8 @@ async fn test_alarm_trigger_and_acknowledge() {
     // Verify server address space update
     {
         let space = nm.address_space().read();
-        assert_eq!(state_machine.get_confirmed(&space), true);
-        assert_eq!(state_machine.get_acked(&space), true);
+        assert!(state_machine.get_confirmed(&space));
+        assert!(state_machine.get_acked(&space));
     }
 
     // 10. Receive and assert the Confirmed Event notification
@@ -214,9 +214,9 @@ async fn test_alarm_trigger_and_acknowledge() {
     let fields3 = v3.unwrap();
     let confirm_event = parse_alarm_event(&fields3).expect("Failed to parse confirmation event");
 
-    assert_eq!(confirm_event.active_state, true);
-    assert_eq!(confirm_event.acked_state, true);
-    assert_eq!(confirm_event.confirmed_state, true);
+    assert!(confirm_event.active_state);
+    assert!(confirm_event.acked_state);
+    assert!(confirm_event.confirmed_state);
 }
 
 // Helper to access transition triggers in testing

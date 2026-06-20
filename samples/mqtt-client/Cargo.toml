@@ -7,7 +7,9 @@ publish = false
 
 [dependencies]
 pico-args = "0.5"
-rumqttc = "0.25"
+# default features disabled to drop the unused rustls TLS stack (vulnerable
+# rustls-webpki 0.102.8, GHSA-82j2-j2ch-gfr8). This sample uses plaintext MQTT.
+rumqttc = { version = "0.25", default-features = false }
 tokio = { workspace = true }
 env_logger = { workspace = true }
 

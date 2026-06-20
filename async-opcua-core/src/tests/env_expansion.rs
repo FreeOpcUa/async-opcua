@@ -163,10 +163,10 @@ mod tests {
         fixture.write_yaml("value: $BOOLEAN_ENV_VAR");
         fixture.set_var("BOOLEAN_ENV_VAR", "true");
         let config: DummyConfig<bool> = DummyConfig::<bool>::load(fixture.path()).unwrap();
-        assert_eq!(config.value, true);
+        assert!(config.value);
         fixture.set_var("BOOLEAN_ENV_VAR", "false");
         let config: DummyConfig<bool> = DummyConfig::<bool>::load(fixture.path()).unwrap();
-        assert_eq!(config.value, false);
+        assert!(!config.value);
     }
 
     // Only lowercase "true" and "false" are parsed as booleans
@@ -177,16 +177,16 @@ mod tests {
         fixture.write_yaml("value: $BOOLEAN_ENV_VAR_2");
         fixture.set_var("BOOLEAN_ENV_VAR_2", "True");
         let config: DummyConfig<bool> = DummyConfig::<bool>::load(fixture.path()).unwrap();
-        assert_eq!(config.value, true);
+        assert!(config.value);
         fixture.set_var("BOOLEAN_ENV_VAR_2", "TRUE");
         let config: DummyConfig<bool> = DummyConfig::<bool>::load(fixture.path()).unwrap();
-        assert_eq!(config.value, true);
+        assert!(config.value);
         fixture.set_var("BOOLEAN_ENV_VAR_2", "False");
         let config: DummyConfig<bool> = DummyConfig::<bool>::load(fixture.path()).unwrap();
-        assert_eq!(config.value, false);
+        assert!(!config.value);
         fixture.set_var("BOOLEAN_ENV_VAR_2", "FALSE");
         let config: DummyConfig<bool> = DummyConfig::<bool>::load(fixture.path()).unwrap();
-        assert_eq!(config.value, false);
+        assert!(!config.value);
     }
 
     #[test]

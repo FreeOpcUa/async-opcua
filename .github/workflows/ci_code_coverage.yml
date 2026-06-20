@@ -5,19 +5,19 @@ jobs:
   cov:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Provision toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+        uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1
         with:
           toolchain: stable
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
+        uses: taiki-e/install-action@2304e09f414d58bc9b5e0c92801943018e8c3d8d # cargo-llvm-cov
 
       # Crypto tests are excluded because the way rust does coverage makes them take 100x longer.
       - name: Test with profiling data
         run: cargo llvm-cov --workspace --exclude async-opcua-crypto --codecov --output-path codecov.json --locked
 
       - name: Upload lcov to codecov.io
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4
         with:
           files: codecov.json

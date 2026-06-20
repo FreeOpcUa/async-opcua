@@ -1065,13 +1065,13 @@ async fn test_event_subscriptions() {
         ProgressEventType::event_type_id(),
         random::byte_string(6),
         "Hello",
-        &tester.handle.type_tree().read().namespaces(),
+        tester.handle.type_tree().read().namespaces(),
     );
     let miss_evt_2 = AuditSecurityEventType::new_event_now(
         AuditSecurityEventType::event_type_id(),
         random::byte_string(6),
         "Hello 2",
-        &tester.handle.type_tree().read().namespaces(),
+        tester.handle.type_tree().read().namespaces(),
     );
     let mut hit_evt = AuditHistoryBulkInsertEventType::new_event_now(
         AuditHistoryBulkInsertEventType::event_type_id(),

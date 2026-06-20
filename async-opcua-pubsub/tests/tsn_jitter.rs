@@ -37,7 +37,7 @@ async fn tsn_jitter_loopback() {
     // Compute jitter as the maximum absolute deviation from the mean
     let jitter = latencies
         .iter()
-        .map(|d| if *d > mean { *d - mean } else { mean - *d })
+        .map(|d| (*d).abs_diff(mean))
         .max()
         .unwrap_or_else(|| Duration::from_secs(0));
 

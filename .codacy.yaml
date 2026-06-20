@@ -35,3 +35,14 @@ exclude_paths:
   - "**/json.rs"
   - "**/xml.rs"
   - "**/xml/**"
+  # Vendored third-party C/C++ (open62541 interop examples). Not async-opcua
+  # source; carries its own cppcheck/flawfinder findings (usleep, missing
+  # system includes) that we neither own nor maintain.
+  - "3rd-party/**"
+  # Spec-Kit tooling and feature specs. `.specify/` is regenerated framework
+  # scaffolding (bash helpers we don't maintain) and `specs/` is planning
+  # markdown — neither is shipped product code.
+  - ".specify/**"
+  - "specs/**"
+  # Generated/curated release notes — markdown-lint nits, not code quality.
+  - "CHANGELOG.md"

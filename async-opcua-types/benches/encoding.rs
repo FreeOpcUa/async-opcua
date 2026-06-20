@@ -17,10 +17,12 @@ use opcua_types::{
 /// A permissive decode context — real servers raise array/byte-string limits well
 /// above the conservative defaults, so the large fixtures below decode successfully.
 fn permissive_context() -> ContextOwned {
-    let mut options = DecodingOptions::default();
-    options.max_array_length = 1_000_000;
-    options.max_byte_string_length = 8 * 1024 * 1024;
-    options.max_string_length = 8 * 1024 * 1024;
+    let options = DecodingOptions {
+        max_array_length: 1_000_000,
+        max_byte_string_length: 8 * 1024 * 1024,
+        max_string_length: 8 * 1024 * 1024,
+        ..Default::default()
+    };
     ContextOwned::new_default(NamespaceMap::new(), options)
 }
 

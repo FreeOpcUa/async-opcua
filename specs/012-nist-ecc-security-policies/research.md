@@ -29,8 +29,9 @@ during US1 implementation are marked **[verify-on-impl]**.
 | `ECC_nistP384` | secp384r1 (P-384) | ECDSA-SHA384 (`…xmldsig-more#ecdsa-sha384`) | HKDF-SHA384 | AES-256-CBC | HMAC-SHA384 | 48 / 32 / 16 |
 
 These map cleanly to RustCrypto: `p256`/`p384` (+`ecdsa`, `sha256` feature), `hkdf`, existing
-`aes`/`cbc`/`hmac`/`sha2`. The exact constants/URIs are the items to confirm against the profiles DB
-and UA-.NETStandard during US1 (the only remaining unpinned details).
+`aes`/`cbc`/`hmac`/`sha2`. URIs confirmed (UA-.NETStandard `SecurityPolicies.cs`); the Sig/Enc/IV
+lengths are fixed by the algorithms themselves (HMAC-SHA256/384 output = 32/48; AES-128/256 key =
+16/32; AES block IV = 16) — no longer open.
 
 ## Ephemeral key exchange (replaces RSA nonce encryption) [SPEC-PINNED — Part 6 §6.8.1, verbatim 2026-06-20]
 
@@ -85,14 +86,18 @@ and UA-.NETStandard during US1 (the only remaining unpinned details).
   against the peer's EC application certificate). For ECC, OpenSecureChannel messages are **signed but
   NOT asymmetrically encrypted** (no RSA-style nonce encryption; confidentiality comes from the ECDH
   keys). [Part 6 §6.8.1]
-- **Signature/public-key wire encoding**: Part 6 §6.8.1 defers this to "the SecurityPolicy in OPC
-  10000-7." **Finding:** the Part 7 *PDF* is only the Profile/Conformance framework — it explicitly
-  states the actual SecurityPolicy facet algorithm details are maintained in the **online database at
-  profiles.opcfoundation.org**, NOT in the document. So the per-policy algorithm IDs, key lengths, and
-  signature encoding must be pinned from the profiles DB + a reference impl (UA-.NETStandard
-  `EccUtils` / open62541), not from any local PDF. Working assumption: ECDSA signature = raw
-  fixed-length **`r ‖ s`** (xmldsig-more `ecdsa-sha256`/`ecdsa-sha384`, 64 B P-256 / 96 B P-384), i.e.
-  the `ecdsa` crate's fixed `Signature`. **[confirm at US1 vs profiles DB + UA-.NETStandard]**.
+- **Signature/public-key wire encoding [CONFIRMED — UA-.NETStandard source, 2026-06-20]**: ECDSA
+  signature = **raw fixed-length `r ‖ s`** (IEEE P1363 `FixedFieldConcatenation`), **NOT** ASN.1/DER —
+  UA-.NETStandard uses `DSASignatureFormat.IeeeP1363FixedFieldConcatenation` and a `ConvertDerToIeeeP1363`
+  helper; its P-384 test asserts ES384 + P1363. → 64 B (P-256) / 96 B (P-384); use the RustCrypto
+  `ecdsa::Signature` (fixed) form, not the DER form.
+  - **Cross-confirmed against UA-.NETStandard `Nonce.cs`**: ephemeral public key = `X ‖ Y` with **no**
+    prefix (`Array.Copy(Q.X…); Array.Copy(Q.Y…)`); shared secret = **raw ECDH x-coordinate**
+    (`DeriveRawSecretAgreement`); HKDF = HMAC-SHA256/384 Extract + iterative Expand. Policy URIs
+    confirmed in `SecurityPolicies.cs` (`…#ECC_nistP256`/`#ECC_nistP384`).
+  - **Finding:** Part 7's *PDF* is only the Profile/Conformance framework; the per-facet algorithm
+    tables live in the online DB (profiles.opcfoundation.org). All values we needed are now pinned
+    from Part 6 §6.8 (verbatim) + the UA-.NETStandard reference — no remaining `[verify-on-impl]`.
 - **ChannelThumbprint [Part 6 §6.7.5]**: when `SecureChannelEnhancements = TRUE`, the
   OpenSecureChannel **Response** signature is computed over `Response-bytes ‖ Request-signature` (the
   ChannelThumbprint = that response signature); NOT done on renewal. ECC policies set
@@ -125,7 +130,11 @@ and UA-.NETStandard during US1 (the only remaining unpinned details).
   third-party ECC peer, a misread of §6.8 could pass loopback yet fail real interop. Mitigation:
   drive every primitive from published vectors, and cross-check the KDF/handshake bytes against an
   open reference impl (open62541 / UA-.NET) before claiming interop.
-- The `[verify-on-impl]` items above are the concrete spots to confirm during US1/US3.
+- All former `[verify-on-impl]` crypto items are now CLOSED — pinned from Part 6 §6.8 (verbatim) and
+  cross-confirmed against UA-.NETStandard source (signature P1363, ephemeral X‖Y, raw-x IKM, URIs).
+  The **only** residual risk is end-to-end **interop validation** (SC-007): loopback + vectors prove
+  self-consistency and primitive-correctness; a third-party ECC peer (open62541 / UA-.NETStandard
+  running) is still the gold standard and should be used if available before claiming interop.
 
 ## Deferred (out of scope, recorded)
 

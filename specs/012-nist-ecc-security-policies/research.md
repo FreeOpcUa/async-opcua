@@ -21,41 +21,83 @@ during US1 implementation are marked **[verify-on-impl]**.
   Each policy fixes: curve (P-256 / P-384), hash (SHA-256 / SHA-384), symmetric (AES-128 / AES-256),
   KeyDerivation (HKDF with the policy hash).
 
-## Ephemeral key exchange (replaces RSA nonce encryption) [spec-confirmed]
+### Working algorithm set (well-known OPC UA values — confirm vs profiles.opcfoundation.org at US1)
 
-- **Decision**: ephemeral-**ephemeral** ECDH. Client generates `(JC, KC)`, sends public `JC`; server
-  verifies the request signature, generates `(JS, KS)`, returns public `JS`. The `ClientNonce` /
-  `ServerNonce` fields of OpenSecureChannel **carry the ephemeral public keys**.
-- **Encoding**: NIST curve ephemeral public key = `x ‖ y`, each coordinate zero-padded big-endian
-  OctetString → **64 bytes (P-256), 96 bytes (P-384)** (uncompressed point, no `0x04` prefix per the
-  x‖y wording — **[verify-on-impl]** whether a prefix byte is present).
-- **Shared secret** = ECDH(own ephemeral private, peer ephemeral public) → the curve field element x
-  (32 / 48 bytes), used as HKDF IKM.
+| Policy | Curve | AsymmetricSignature | KeyDerivation | SymmetricEncryption | SymmetricSignature | Sig/Enc/IV len |
+|--------|-------|---------------------|---------------|---------------------|--------------------|----------------|
+| `ECC_nistP256` | secp256r1 (P-256) | ECDSA-SHA256 (`…xmldsig-more#ecdsa-sha256`) | HKDF-SHA256 | AES-128-CBC | HMAC-SHA256 | 32 / 16 / 16 |
+| `ECC_nistP384` | secp384r1 (P-384) | ECDSA-SHA384 (`…xmldsig-more#ecdsa-sha384`) | HKDF-SHA384 | AES-256-CBC | HMAC-SHA384 | 48 / 32 / 16 |
 
-## Key derivation (HKDF) [spec-confirmed structure; exact bytes verify-on-impl]
+These map cleanly to RustCrypto: `p256`/`p384` (+`ecdsa`, `sha256` feature), `hkdf`, existing
+`aes`/`cbc`/`hmac`/`sha2`. The exact constants/URIs are the items to confirm against the profiles DB
+and UA-.NETStandard during US1 (the only remaining unpinned details).
 
-- **Salts** (direction-separated):
-  - `ServerSalt = L ‖ UTF8("opcua-server") ‖ ServerNonce ‖ ClientNonce`
-  - `ClientSalt = L ‖ UTF8("opcua-client") ‖ ClientNonce ‖ ServerNonce`
-  - `L` = total derived key-material length as a **16-bit little-endian** integer; Nonces = the
-    ephemeral public keys.
-- **HKDF**: Extract = `HMAC-Hash(Salt, IKM=sharedSecret)`; Expand with `Info = Salt`; Hash per policy.
-- **Output layout** (per direction), sliced from the expanded keystream:
-  | Key | Offset | Length (P-256 / P-384) |
-  |-----|--------|------------------------|
-  | SigningKey | 0 | 32 / 48 |
-  | EncryptingKey | SigLen | 16 / 32 |
-  | IV | SigLen+EncLen | 16 / 16 |
-  - **Client** keys derived from `ClientSalt`; **Server** keys from `ServerSalt`.
-- **[verify-on-impl]**: exact `L` value (sum of both directions vs one), the precise UTF-8 label
-  bytes, and HKDF-Expand counter handling — cross-check against open62541 / UA-.NET ECC.
+## Ephemeral key exchange (replaces RSA nonce encryption) [SPEC-PINNED — Part 6 §6.8.1, verbatim 2026-06-20]
 
-## Asymmetric signatures (ECDSA) [spec-confirmed alg; encoding verify-on-impl]
+- ephemeral-**ephemeral** ECDH. Client generates `(JC, KC)`, sends public `JC`; server verifies the
+  request signature, generates `(JS, KS)`, returns public `JS`. New pairs each channel open
+  ("EphemeralKeys").
+- The `ClientNonce` / `ServerNonce` fields of OpenSecureChannel **ARE** the ephemeral public keys
+  (§6.8.1: "the ClientNonce is the Public Key for the Client's EphemeralKey").
+- **Encoding [CONFIRMED]**: NIST curves → EphemeralKey = `x ‖ y`, each coordinate **zero-padded
+  big-endian OctetString** → **64 B (P-256) / 96 B (P-384)**. No `0x04`/SEC1 prefix — the spec
+  specifies bare x‖y. (Exact public-key + signature encoding is otherwise deferred to the Part 7
+  SecurityPolicy — see signatures below.)
+- **Shared secret (IKM) [CONFIRMED]** = ECDH(own private, peer public) → the **x-coordinate**, encoded
+  as a zero-padded big-endian OctetString (32 B P-256 / 48 B P-384).
+- **Renewal [CONFIRMED]**: if `SecureChannelEnhancements = TRUE`, on renewal the current IKM is
+  **XORed** with the newly-negotiated IKM before deriving the new keys (§6.8.1 Step 2 note).
 
-- **Decision**: ECDSA — P-256 with SHA-256, P-384 with SHA-384 — over the OpenSecureChannel /
-  asymmetric-signed handshake messages, verified against the peer's EC application certificate.
-- **[verify-on-impl]**: OPC UA asymmetric signature wire encoding is the **raw fixed-length `r ‖ s`**
-  concatenation (not ASN.1/DER). Use the `ecdsa` crate's fixed `Signature` form; confirm against spec.
+## Key derivation (HKDF) [SPEC-PINNED — Part 6 §6.8.1 Steps 1–3, verbatim 2026-06-20]
+
+- **Step 1 — Salts** (direction-separated), CONFIRMED verbatim:
+  - `ServerSalt = L | UTF8(opcua-server) | ServerNonce | ClientNonce`
+  - `ClientSalt = L | UTF8(opcua-client) | ClientNonce | ServerNonce`
+  - **`L`** = length of derived key material in bytes, **16-bit little-endian** integer.
+  - **`UTF8(label)`** = UTF-8 of the literal — exactly **`opcua-server`** / **`opcua-client`**
+    (lowercase, hyphen, no NUL).
+  - `ServerNonce`/`ClientNonce` = the ephemeral public keys (x‖y); `|` = byte concatenation.
+- **Step 2 — Extract**: `PRK = HMAC-Hash(Salt, IKM)`; Hash = policy `KeyDerivationAlgorithm`
+  (SHA-256 P-256 / SHA-384 P-384); IKM = ECDH shared secret (x-coord, zero-padded BE); `PRK` = hash size.
+- **Step 3 — Expand** = standard **RFC 5869 HKDF-Expand**, CONFIRMED verbatim:
+  `N = ceil(L/HashLen)`, `T(0)=""`, `T(i)=HMAC-Hash(PRK, T(i-1) | Info | byte(i))` for i=1..N, `OKM = first L octets of T(1)|…|T(N)`; the single-byte counter is `0x01, 0x02, …`. **`Info = Salt`**
+  (Info = ClientSalt for client keys; ServerSalt for server keys).
+- **Output layout** (Tables 67/68), CONFIRMED — client keys from `IKM=sharedSecret, Salt=Info=ClientSalt`;
+  server keys from `…ServerSalt`:
+  | Key | Offset | Length |
+  |-----|--------|--------|
+  | SigningKey | 0 | DerivedSignatureKeyLength |
+  | EncryptingKey | DerivedSignatureKeyLength | EncryptionKeyLength |
+  | IV | DerivedSignatureKeyLength + EncryptionKeyLength | InitializationVectorLength |
+  - The three length constants come from the **SecurityPolicy (Part 7)** — for the standard non-AEAD
+    nistP256/P384 policies: P-256 = (Sig 32, Enc 16, IV 16); P-384 = (Sig 48, Enc 32, IV 16)
+    **[confirm exact constants in Part 7]**.
+  - **AEAD note**: when `AuthenticatedEncryption` is used, `DerivedSignatureKeyLength = 0` in the `L`
+    calc, and the per-message IV is `ClientInitializationVector`/`ServerInitializationVector` XORed
+    with `(TokenId, LastSequenceNumber)` (Table 69). Our scope is **AES-CBC + HMAC (non-AEAD)**, so the
+    derived IV is used directly.
+- Once keys are derived, **"ECC SecureChannels behave the same as RSA SecureChannels"** — the
+  symmetric protect/verify code is reused unchanged.
+
+## Asymmetric signatures (ECDSA) [alg spec-confirmed; encoding deferred to Part 7]
+
+- ECDSA — P-256/SHA-256, P-384/SHA-384 — signs the OpenSecureChannel request/response (and is verified
+  against the peer's EC application certificate). For ECC, OpenSecureChannel messages are **signed but
+  NOT asymmetrically encrypted** (no RSA-style nonce encryption; confidentiality comes from the ECDH
+  keys). [Part 6 §6.8.1]
+- **Signature/public-key wire encoding**: Part 6 §6.8.1 defers this to "the SecurityPolicy in OPC
+  10000-7." **Finding:** the Part 7 *PDF* is only the Profile/Conformance framework — it explicitly
+  states the actual SecurityPolicy facet algorithm details are maintained in the **online database at
+  profiles.opcfoundation.org**, NOT in the document. So the per-policy algorithm IDs, key lengths, and
+  signature encoding must be pinned from the profiles DB + a reference impl (UA-.NETStandard
+  `EccUtils` / open62541), not from any local PDF. Working assumption: ECDSA signature = raw
+  fixed-length **`r ‖ s`** (xmldsig-more `ecdsa-sha256`/`ecdsa-sha384`, 64 B P-256 / 96 B P-384), i.e.
+  the `ecdsa` crate's fixed `Signature`. **[confirm at US1 vs profiles DB + UA-.NETStandard]**.
+- **ChannelThumbprint [Part 6 §6.7.5]**: when `SecureChannelEnhancements = TRUE`, the
+  OpenSecureChannel **Response** signature is computed over `Response-bytes ‖ Request-signature` (the
+  ChannelThumbprint = that response signature); NOT done on renewal. ECC policies set
+  SecureChannelEnhancements — implement this MITM-hardening signature, and the Channel-Bound-Signature
+  use of the thumbprint (Part 4).
 
 ## Symmetric layer [spec-confirmed: reuse]
 

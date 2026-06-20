@@ -16,7 +16,7 @@ use rsa::pkcs1v15;
 use rsa::pkcs8;
 use rsa::pss;
 use rsa::signature::{RandomizedSigner, SignatureEncoding, Verifier};
-use rsa::{RsaPrivateKey, RsaPublicKey};
+use rsa::{RsaPrivateKey, RsaPublicKey as RsaPublicKeyInner};
 
 use x509_cert::spki::SubjectPublicKeyInfoOwned;
 
@@ -62,7 +62,17 @@ pub struct PKey<T> {
 }
 
 /// A public key
-pub type PublicKey = PKey<RsaPublicKey>;
+#[derive(Clone)]
+pub struct PublicKey {
+    pub(crate) value: PublicKeyKind,
+}
+
+#[derive(Clone)]
+pub(crate) enum PublicKeyKind {
+    Rsa(RsaPublicKeyInner),
+    #[cfg(feature = "ecc")]
+    Ecc(crate::ecc::EccPublicKey),
+}
 /// A private key
 pub type PrivateKey = PKey<RsaPrivateKey>;
 
@@ -70,6 +80,12 @@ impl<T> Debug for PKey<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         // This impl will not write out the key, but it exists to keep structs happy
         // that contain a key as a field
+        write!(f, "[pkey]")
+    }
+}
+
+impl Debug for PublicKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "[pkey]")
     }
 }
@@ -190,7 +206,7 @@ impl PrivateKey {
     /// Create a public key based on this private key.
     pub fn to_public_key(&self) -> PublicKey {
         PublicKey {
-            value: self.value.to_public_key(),
+            value: PublicKeyKind::Rsa(self.value.to_public_key()),
         }
     }
 
@@ -346,14 +362,62 @@ impl KeySize for PublicKey {
     /// Length in bits
     fn size(&self) -> usize {
         use rsa::traits::PublicKeyParts;
-        self.value.size()
+        match &self.value {
+            PublicKeyKind::Rsa(key) => key.size(),
+            #[cfg(feature = "ecc")]
+            PublicKeyKind::Ecc(key) => key.curve().scalar_len(),
+        }
     }
 }
 
 impl PublicKey {
+    /// Create a public key wrapper from an RSA key.
+    pub(crate) fn from_rsa(value: RsaPublicKeyInner) -> Self {
+        Self {
+            value: PublicKeyKind::Rsa(value),
+        }
+    }
+
+    /// Create a public key wrapper from an EC key.
+    #[cfg(feature = "ecc")]
+    pub(crate) fn from_ecc(value: crate::ecc::EccPublicKey) -> Self {
+        Self {
+            value: PublicKeyKind::Ecc(value),
+        }
+    }
+
+    /// Returns the EC curve if this is an EC public key.
+    #[cfg(feature = "ecc")]
+    #[must_use]
+    pub fn ecc_curve(&self) -> Option<crate::ecc::EccCurve> {
+        match &self.value {
+            PublicKeyKind::Rsa(_) => None,
+            PublicKeyKind::Ecc(key) => Some(key.curve()),
+        }
+    }
+
+    fn rsa_key(&self) -> Result<&RsaPublicKeyInner, Error> {
+        match &self.value {
+            PublicKeyKind::Rsa(key) => Ok(key),
+            #[cfg(feature = "ecc")]
+            PublicKeyKind::Ecc(_) => Err(Error::new(
+                StatusCode::BadSecurityChecksFailed,
+                "RSA operation requested for an EC public key",
+            )),
+        }
+    }
+
+    fn rsa_key_for_encrypt(&self) -> Result<&RsaPublicKeyInner, PKeyError> {
+        match &self.value {
+            PublicKeyKind::Rsa(key) => Ok(key),
+            #[cfg(feature = "ecc")]
+            PublicKeyKind::Ecc(_) => Err(PKeyError),
+        }
+    }
+
     /// Verifies the data using RSA-SHA1
     pub fn verify_sha1(&self, data: &[u8], signature: &[u8]) -> Result<bool, Error> {
-        let verifying_key = pkcs1v15::VerifyingKey::<sha1::Sha1>::new(self.value.clone());
+        let verifying_key = pkcs1v15::VerifyingKey::<sha1::Sha1>::new(self.rsa_key()?.clone());
         let r = pkcs1v15::Signature::try_from(signature);
         match r {
             Err(e) => Err(Error::new(StatusCode::BadUnexpectedError, e)),
@@ -366,7 +430,7 @@ impl PublicKey {
 
     /// Verifies the data using RSA-SHA256
     pub fn verify_sha256(&self, data: &[u8], signature: &[u8]) -> Result<bool, Error> {
-        let verifying_key = pkcs1v15::VerifyingKey::<sha2::Sha256>::new(self.value.clone());
+        let verifying_key = pkcs1v15::VerifyingKey::<sha2::Sha256>::new(self.rsa_key()?.clone());
         let r = pkcs1v15::Signature::try_from(signature);
         match r {
             Err(e) => Err(Error::new(StatusCode::BadUnexpectedError, e)),
@@ -379,7 +443,7 @@ impl PublicKey {
 
     /// Verifies the data using RSA-SHA256-PSS
     pub fn verify_sha256_pss(&self, data: &[u8], signature: &[u8]) -> Result<bool, Error> {
-        let verifying_key = pss::VerifyingKey::<sha2::Sha256>::new(self.value.clone());
+        let verifying_key = pss::VerifyingKey::<sha2::Sha256>::new(self.rsa_key()?.clone());
         let r = pss::Signature::try_from(signature);
         match r {
             Err(e) => Err(Error::new(StatusCode::BadUnexpectedError, e)),
@@ -399,6 +463,7 @@ impl PublicKey {
     ) -> Result<usize, PKeyError> {
         let cipher_text_block_size = self.cipher_text_block_size();
         let plain_text_block_size = T::get_plaintext_block_size(self.size());
+        let key = self.rsa_key_for_encrypt()?;
 
         let mut rng = rand::thread_rng();
 
@@ -422,7 +487,7 @@ impl PublicKey {
                 let src = src.get(src_idx..src_end_index).ok_or(PKeyError)?;
 
                 let padding = T::get_padding();
-                let encrypted = self.value.encrypt(&mut rng, padding, src)?;
+                let encrypted = key.encrypt(&mut rng, padding, src)?;
                 if encrypted.len() != cipher_text_block_size {
                     return Err(PKeyError);
                 }

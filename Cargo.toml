@@ -82,8 +82,8 @@ const-oid = { version = "^0.9", features = ["db"] }
 ecdsa = { version = "^0.16", default-features = false, features = ["signing", "verifying"] }
 hkdf = "^0.12"
 hmac = "^0.12"
-p256 = { version = "^0.13", default-features = false, features = ["arithmetic", "ecdsa", "ecdh"] }
-p384 = { version = "^0.13", default-features = false, features = ["arithmetic", "ecdsa", "ecdh"] }
+p256 = { version = "^0.13", default-features = false, features = ["alloc", "arithmetic", "ecdsa", "ecdh", "pem"] }
+p384 = { version = "^0.13", default-features = false, features = ["alloc", "arithmetic", "ecdsa", "ecdh", "pem"] }
 rand = "^0.8"
 rsa = { version = "^0.9", features = ["sha2", "sha1", "pem"] }
 sha1 = { version = "^0.10", features = ["oid"] }

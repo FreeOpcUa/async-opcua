@@ -69,13 +69,13 @@ RFC 5869 Expand Info=salt; key layout Sig|Enc|IV; P256=32/16/16 (SHA256/AES128),
 **Goal**: load/validate P-256/P-384 EC application certs; reject curve/policy mismatch.
 **Independent Test**: load EC certs, thumbprint, reject expired/untrusted/wrong-curve.
 
-- [ ] T009 [US2] Generate P-256 and P-384 self-signed EC application-cert + key test fixtures (via
+- [X] T009 [US2] Generate P-256 and P-384 self-signed EC application-cert + key test fixtures (via
   `x509-cert`/RustCrypto in a test helper, or by extending `tools/certificate-creator` if it is
   RSA-only) under the crypto crate's test assets; THEN add failing tests in `async-opcua-crypto` (x509
   tests): load each EC cert, assert curve/public-key parsed + thumbprint; reject expired/untrusted;
   reject curve≠policy. (The fixtures are a prerequisite — the existing test certs are RSA.)
-- [ ] T010 [US2] Implement EC public-key parse/validate in `async-opcua-crypto/src/x509.rs` (reuse thumbprint + chain/trust); add curve↔policy match check. (depends T009)
-- [ ] T011 [US2] Gate; verify T009 passes; **commit US2** (`feat(012 US2): EC application certificate support`).
+- [X] T010 [US2] Implement EC public-key parse/validate in `async-opcua-crypto/src/x509.rs` (reuse thumbprint + chain/trust); add curve↔policy match check. (depends T009)
+- [X] T011 [US2] Gate; verify T009 passes; **commit US2** (`feat(012 US2): EC application certificate support`).
 
 **Checkpoint**: ECC peer authentication possible.
 

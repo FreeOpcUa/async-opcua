@@ -41,8 +41,6 @@ already-rotated nonce can be reused, weakening replay/freshness protection on se
 **Why this priority**: Security correctness in the authentication path. Quiet, hard to detect, and
 defeats an intended replay protection. (Flagged for private upstream disclosure to Einar.)
 
-**Why this priority**: see above.
-
 **Independent Test**: Drive two concurrent `ActivateSession` requests bound to the same session/token
 such that one rotates the nonce before the other commits; assert the late request is rejected with a
 nonce/session error rather than activating against the stale nonce.

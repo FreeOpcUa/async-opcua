@@ -113,6 +113,7 @@ blocking prerequisite. Stories may proceed in priority order or in parallel.
 - [ ] T027 [P] Update `docs/setup.md` embedded section + release notes for the behavior changes (bounded `max_notifications_per_publish` default, both-zero rejection, `read_bytes`).
 - [ ] T028 Record the US2 activation finding in the private upstream-disclosure note for Einar (do NOT open an upstream PR for it yet).
 - [ ] T029 Run full `quickstart.md` validation + final gate (fmt/clippy/`--workspace`/98-test integration/`verify-clean-codegen`); confirm wire byte-identity preserved.
+- [ ] T030 [P] Run the decode fuzz targets (`cargo +nightly fuzz run fuzz_deserialize` and the other decode targets) and confirm zero process aborts across the malformed/oversized/deeply-nested corpus — owns SC-003's fuzz criterion; validates US3 + US5 decode hardening.
 
 ---
 

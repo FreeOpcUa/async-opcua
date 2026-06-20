@@ -13,7 +13,11 @@ jobs:
           toolchain: stable
 
       - name: Run clippy
-        run: cargo clippy --locked -- -D warnings
+        # --all-targets lints tests/benches/examples (not just lib+bins) and
+        # --all-features covers optional code (sqlite, pubsub, mqtt, ...) that
+        # the default-feature build skips. The feature-restricted runs below
+        # still guard the no-default / xml-only / json-only gating paths.
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       
       - name: No default features
         run: cargo clippy --locked -p async-opcua --no-default-features -- -D warnings

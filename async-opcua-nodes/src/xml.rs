@@ -771,6 +771,7 @@ mod tests {
     /// Struct DataType with:
     ///  - inward HasSubtype  → i=22  (OPC UA "Structure" base type)
     ///  - forward HasEncoding → ns=1;i=11 (a "Default Binary" encoding object)
+    ///
     /// Expected: base_data_type = i=22, default_encoding_id = ns=1;i=11
     const TEST_STRUCT_WITH_BASE_AND_BINARY_ENCODING: &str = r#"
 <UANodeSet xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"

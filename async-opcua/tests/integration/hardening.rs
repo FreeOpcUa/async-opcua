@@ -66,7 +66,7 @@ async fn connect_to_black_holed_address_times_out() {
 
     let mut client = ClientBuilder::new()
         .application_name("integration_client")
-        .application_uri(&format!("urn:{}", hostname()))
+        .application_uri(format!("urn:{}", hostname()))
         .trust_server_certs(true)
         .connect_timeout(Duration::from_millis(500))
         .session_retry_limit(0)

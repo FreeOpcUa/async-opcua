@@ -77,7 +77,7 @@ async fn wss_round_trip_none_policy() {
 
     let mut client = ClientBuilder::new()
         .application_name("wss_client")
-        .application_uri(&format!("urn:{}", hostname()))
+        .application_uri(format!("urn:{}", hostname()))
         .trust_server_certs(true)
         // Self-signed test TLS cert: disable WSS/TLS verification (loud, test-only).
         .dangerously_accept_invalid_wss_certs(true)

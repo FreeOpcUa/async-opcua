@@ -166,8 +166,7 @@ fn variant_u32_array() {
         Variant::Array(array) => {
             let values = array.values;
             assert_eq!(values.len(), 3);
-            let mut i = 1u32;
-            for v in values {
+            for (i, v) in (1u32..).zip(values) {
                 assert!(v.is_numeric());
                 match v {
                     Variant::UInt32(v) => {
@@ -175,7 +174,6 @@ fn variant_u32_array() {
                     }
                     _ => panic!("Not the expected type"),
                 }
-                i += 1;
             }
         }
         _ => panic!("Not an array"),
@@ -206,8 +204,7 @@ fn variant_i32_array() {
         Variant::Array(array) => {
             let values = array.values;
             assert_eq!(values.len(), 3);
-            let mut i = 1;
-            for v in values {
+            for (i, v) in (1i32..).zip(values) {
                 assert!(v.is_numeric());
                 match v {
                     Variant::Int32(v) => {
@@ -215,7 +212,6 @@ fn variant_i32_array() {
                     }
                     _ => panic!("Not the expected type"),
                 }
-                i += 1;
             }
         }
         _ => panic!("Not an array"),

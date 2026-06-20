@@ -1,4 +1,7 @@
 //! Benchmarks for the O(1) session token lookup registry (spec 006 SC-001).
+// criterion_group!/criterion_main! generate undocumented public items that
+// trip the workspace-wide `missing_docs` lint under `clippy --all-targets`.
+#![allow(missing_docs)]
 
 use std::sync::Arc;
 

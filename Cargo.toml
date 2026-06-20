@@ -10,6 +10,9 @@ members = [
   "dotnet-tests/external-tests",
   "fuzz", "codegen-tests",
 ]
+# samples/profiles holds deployment config files (*.conf), not a crate; keep the
+# samples/* glob from treating it as a workspace member.
+exclude = ["samples/profiles"]
 
 [workspace.lints.rust]
 missing_docs = "warn"

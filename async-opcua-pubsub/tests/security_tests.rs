@@ -8,8 +8,8 @@ use opcua_pubsub::{
     PublisherId, UadpDataSetMessage, UadpNetworkMessage,
 };
 use opcua_types::{
-    BinaryDecodable, BinaryEncodable, ContextOwned, DateTime, MessageSecurityMode, StatusCode,
-    Variant,
+    BinaryDecodable, BinaryEncodable, ContextOwned, DateTime, DecodingOptions, MessageSecurityMode,
+    NamespaceMap, StatusCode, Variant,
 };
 
 fn sample_message() -> UadpNetworkMessage {
@@ -88,4 +88,56 @@ fn sign_and_encrypt_subscriber_rejects_unsigned_plaintext_uadp() {
         .unwrap_err();
 
     assert_eq!(error.status(), StatusCode::BadSecurityChecksFailed);
+}
+
+#[test]
+fn secured_uadp_payload_limit_rejects_oversized_before_copy_or_decrypt() {
+    let ctx_owned = ContextOwned::default();
+    let ctx = ctx_owned.context();
+    let message = sample_message();
+    let security_group = SecurityGroup::new("brewery-line-a", Duration::from_secs(3600)).unwrap();
+    let group_keys = security_group.current_key_set().clone();
+
+    for security_mode in [
+        MessageSecurityMode::Sign,
+        MessageSecurityMode::SignAndEncrypt,
+    ] {
+        let publisher = UadpSecurityCodec::new(
+            security_mode,
+            SecurityPolicy::Aes256Sha256RsaPss,
+            group_keys.clone(),
+        );
+        let secured = publisher.encode_network_message(&message, &ctx).unwrap();
+
+        let limited_options = DecodingOptions {
+            max_secured_payload_len: 1,
+            ..DecodingOptions::test()
+        };
+        let limited_ctx_owned = ContextOwned::new_default(NamespaceMap::new(), limited_options);
+        let limited_ctx = limited_ctx_owned.context();
+        let subscriber_without_keys =
+            UadpSecurityCodec::without_keys(security_mode, SecurityPolicy::Aes256Sha256RsaPss);
+
+        let error = subscriber_without_keys
+            .decode_network_message(&secured, &limited_ctx)
+            .expect_err("oversized secured UADP payload must be rejected before copy/decrypt");
+
+        assert_eq!(error.status(), StatusCode::BadSecurityChecksFailed);
+        let error = error.to_string();
+        assert!(
+            error.contains("max_secured_payload_len"),
+            "expected secured-payload limit error for {security_mode:?}, got {error}"
+        );
+
+        let subscriber_with_keys = UadpSecurityCodec::new(
+            security_mode,
+            SecurityPolicy::Aes256Sha256RsaPss,
+            group_keys.clone(),
+        );
+        let decoded = subscriber_with_keys
+            .decode_network_message(&secured, &ctx)
+            .expect("in-limit secured UADP payload must still decode");
+
+        assert_eq!(decoded, message);
+    }
 }

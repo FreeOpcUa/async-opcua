@@ -594,6 +594,10 @@ pub(crate) async fn activate_session(
             //  token
         }
 
+        if session.session_nonce() != &session_nonce {
+            return Err(StatusCode::BadNonceInvalid);
+        }
+
         let user_changed = session
             .user_token()
             .is_some_and(|previous| previous != &user_token);
@@ -636,8 +640,31 @@ pub(crate) async fn activate_session(
 
 #[cfg(test)]
 mod tests {
-    use super::is_cross_channel_transfer_forbidden;
-    use opcua_crypto::SecurityPolicy;
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    };
+
+    use async_trait::async_trait;
+    use opcua_core::{comms::secure_channel::SecureChannel, sync::RwLock};
+    use opcua_crypto::{random, SecurityPolicy};
+    use opcua_types::{
+        ActivateSessionRequest, AnonymousIdentityToken, ApplicationDescription, ByteString, Error,
+        ExtensionObject, MessageSecurityMode, NodeId, RequestHeader, SignatureData, StatusCode,
+        UAString, UserTokenPolicy, UserTokenType,
+    };
+    use tokio::sync::Notify;
+
+    use crate::{
+        authenticator::{AuthManager, UserToken},
+        config::ServerEndpoint,
+        identity_token::{IdentityToken, POLICY_ID_ANONYMOUS},
+        node_manager::NodeManagers,
+        session::{instance::Session, manager::SessionManager, message_handler::MessageHandler},
+        ServerBuilder,
+    };
+
+    use super::{activate_session, is_cross_channel_transfer_forbidden};
 
     /// T048 / H1: an activated session under SecurityPolicy::None must not be
     /// transferable to a different secure channel (there is no cryptographic
@@ -689,5 +716,280 @@ mod tests {
             true,
             SecurityPolicy::Basic256Sha256
         ));
+    }
+
+    #[tokio::test]
+    async fn activate_session_rejects_stale_nonce_after_intervening_activation() {
+        let stale_gate = Arc::new(AuthenticationGate::open());
+        let fixture = ActivationFixture::new(stale_gate.clone());
+
+        let baseline = fixture.activate_with(SecurityPolicy::None, 7).await;
+        assert!(
+            baseline.is_ok(),
+            "normal uncontended activation should succeed, got {baseline:?}"
+        );
+
+        let stale_nonce = fixture.session_nonce();
+        stale_gate.pause_next_authentication();
+        let stale_activation = {
+            let fixture = fixture.clone();
+            tokio::spawn(async move { fixture.activate_with(SecurityPolicy::None, 7).await })
+        };
+
+        stale_gate.wait_until_entered().await;
+
+        let intervening_nonce = random::byte_string(fixture.info.config.session_nonce_length);
+        fixture.mutate_session_activation(
+            7,
+            intervening_nonce.clone(),
+            anonymous_identity_with_policy("intervening-anonymous"),
+            UserToken("intervening-user".to_string()),
+        );
+        let intervening_identity = fixture.user_identity();
+        let intervening_channel_id = fixture.secure_channel_id();
+        assert_ne!(
+            stale_nonce, intervening_nonce,
+            "intervening activation must rotate the nonce observed by the stale activation"
+        );
+
+        stale_gate.release();
+        let stale_result = stale_activation
+            .await
+            .expect("stale activation task should not panic");
+
+        assert!(
+            matches!(
+                stale_result,
+                Err(StatusCode::BadNonceInvalid | StatusCode::BadSessionIdInvalid)
+            ),
+            "stale activation should fail closed after nonce rotation, got {stale_result:?}"
+        );
+        assert_eq!(
+            fixture.session_nonce(),
+            intervening_nonce,
+            "stale activation must not overwrite the nonce from the intervening activation"
+        );
+        assert_eq!(
+            fixture.secure_channel_id(),
+            intervening_channel_id,
+            "stale activation must not overwrite the secure channel"
+        );
+        assert_eq!(
+            fixture.user_identity(),
+            intervening_identity,
+            "stale activation must not overwrite session identity"
+        );
+    }
+
+    #[derive(Clone)]
+    struct ActivationFixture {
+        info: Arc<crate::ServerInfo>,
+        manager: Arc<RwLock<SessionManager>>,
+        session: Arc<RwLock<Session>>,
+        token: NodeId,
+        node_managers: NodeManagers,
+        subscriptions: Arc<crate::SubscriptionCache>,
+        certificate_store: Arc<RwLock<opcua_crypto::CertificateStore>>,
+    }
+
+    impl ActivationFixture {
+        fn new(authenticator: Arc<dyn AuthManager>) -> Self {
+            let (_server, handle) = ServerBuilder::new_anonymous("activation nonce replay test")
+                .without_node_managers()
+                .with_authenticator(authenticator)
+                .build()
+                .expect("test server should build");
+            let info = Arc::clone(handle.info());
+            let token = NodeId::new(1, 42);
+            let endpoint_url = UAString::from(handle.info().base_endpoint());
+            let session = Arc::new(RwLock::new(Session::create(
+                &info,
+                token.clone(),
+                7,
+                60_000,
+                0,
+                0,
+                endpoint_url.clone(),
+                SecurityPolicy::None.to_uri().to_string(),
+                anonymous_identity(),
+                None,
+                random::byte_string(info.config.session_nonce_length),
+                UAString::from("activation-nonce-replay-test"),
+                ApplicationDescription::default(),
+                MessageSecurityMode::None,
+            )));
+            let manager = Arc::new(RwLock::new(SessionManager::new(
+                Arc::clone(&info),
+                Arc::new(Notify::new()),
+            )));
+            {
+                let mut manager_lck = manager.write();
+                manager_lck
+                    .sessions
+                    .insert(token.clone(), Arc::clone(&session));
+                manager_lck.register_token(token.clone(), Arc::clone(&session));
+            }
+
+            Self {
+                info,
+                manager,
+                session,
+                token,
+                node_managers: handle.node_managers().clone(),
+                subscriptions: Arc::clone(handle.subscriptions()),
+                certificate_store: Arc::clone(handle.certificate_store()),
+            }
+        }
+
+        async fn activate_with(
+            &self,
+            security_policy: SecurityPolicy,
+            secure_channel_id: u32,
+        ) -> Result<super::ActivateSessionResponse, StatusCode> {
+            let mut channel = SecureChannel::new(
+                Arc::clone(&self.certificate_store),
+                opcua_core::comms::secure_channel::Role::Server,
+                Arc::new(RwLock::new(Default::default())),
+            );
+            channel.set_security_policy(security_policy);
+            channel.set_security_mode(MessageSecurityMode::None);
+            channel.set_secure_channel_id(secure_channel_id);
+
+            let request = activate_request(&self.token);
+            let mut handler = MessageHandler::new(
+                Arc::clone(&self.info),
+                self.node_managers.clone(),
+                Arc::clone(&self.subscriptions),
+            );
+            activate_session(&self.manager, &mut channel, &request, &mut handler).await
+        }
+
+        fn session_nonce(&self) -> ByteString {
+            self.session.read().session_nonce().clone()
+        }
+
+        fn secure_channel_id(&self) -> u32 {
+            self.session.read().secure_channel_id()
+        }
+
+        fn user_identity(&self) -> IdentityTokenSnapshot {
+            IdentityTokenSnapshot::from(self.session.read().user_identity())
+        }
+
+        fn mutate_session_activation(
+            &self,
+            secure_channel_id: u32,
+            server_nonce: ByteString,
+            identity: IdentityToken,
+            user_token: UserToken,
+        ) {
+            self.session.write().activate(
+                secure_channel_id,
+                server_nonce,
+                identity,
+                None,
+                user_token,
+                None,
+            );
+        }
+    }
+
+    struct AuthenticationGate {
+        pause_once: AtomicBool,
+        entered: Notify,
+        release: Notify,
+    }
+
+    impl AuthenticationGate {
+        fn open() -> Self {
+            Self {
+                pause_once: AtomicBool::new(false),
+                entered: Notify::new(),
+                release: Notify::new(),
+            }
+        }
+
+        fn pause_next_authentication(&self) {
+            self.pause_once.store(true, Ordering::Release);
+        }
+
+        async fn maybe_pause(&self) {
+            if self.pause_once.swap(false, Ordering::AcqRel) {
+                self.entered.notify_waiters();
+                self.release.notified().await;
+            }
+        }
+
+        async fn wait_until_entered(&self) {
+            if self.pause_once.load(Ordering::Acquire) {
+                self.entered.notified().await;
+            }
+        }
+
+        fn release(&self) {
+            self.release.notify_waiters();
+        }
+    }
+
+    #[async_trait]
+    impl AuthManager for AuthenticationGate {
+        async fn authenticate_anonymous_token(
+            &self,
+            _endpoint: &ServerEndpoint,
+        ) -> Result<(), Error> {
+            self.maybe_pause().await;
+            Ok(())
+        }
+
+        fn user_token_policies(&self, _endpoint: &ServerEndpoint) -> Vec<UserTokenPolicy> {
+            vec![UserTokenPolicy {
+                policy_id: UAString::from(POLICY_ID_ANONYMOUS),
+                token_type: UserTokenType::Anonymous,
+                issued_token_type: UAString::null(),
+                issuer_endpoint_url: UAString::null(),
+                security_policy_uri: UAString::null(),
+            }]
+        }
+    }
+
+    #[derive(Debug, PartialEq, Eq)]
+    enum IdentityTokenSnapshot {
+        Anonymous(UAString),
+        Other,
+    }
+
+    impl From<&IdentityToken> for IdentityTokenSnapshot {
+        fn from(value: &IdentityToken) -> Self {
+            match value {
+                IdentityToken::Anonymous(token) => Self::Anonymous(token.policy_id.clone()),
+                _ => Self::Other,
+            }
+        }
+    }
+
+    fn activate_request(authentication_token: &NodeId) -> ActivateSessionRequest {
+        ActivateSessionRequest {
+            request_header: RequestHeader {
+                authentication_token: authentication_token.clone(),
+                ..Default::default()
+            },
+            client_signature: SignatureData::null(),
+            client_software_certificates: None,
+            locale_ids: None,
+            user_identity_token: ExtensionObject::from_message(AnonymousIdentityToken {
+                policy_id: UAString::from(POLICY_ID_ANONYMOUS),
+            }),
+            user_token_signature: SignatureData::null(),
+        }
+    }
+
+    fn anonymous_identity() -> IdentityToken {
+        anonymous_identity_with_policy(POLICY_ID_ANONYMOUS)
+    }
+
+    fn anonymous_identity_with_policy(policy_id: &str) -> IdentityToken {
+        IdentityToken::Anonymous(AnonymousIdentityToken {
+            policy_id: UAString::from(policy_id),
+        })
     }
 }

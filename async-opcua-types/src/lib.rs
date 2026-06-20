@@ -40,6 +40,12 @@ pub mod profiles {
 pub mod constants {
     /// Default maximum number of elements in an array
     pub const MAX_ARRAY_LENGTH: usize = 1000;
+    /// Default maximum number of fields in a UADP dataset message.
+    pub const MAX_DATASET_FIELDS: usize = 4096;
+    /// Default maximum number of dataset messages in one UADP network message.
+    pub const MAX_DATASET_MESSAGES: usize = 256;
+    /// Default maximum length in bytes of a secured UADP payload before copy/decrypt.
+    pub const MAX_SECURED_PAYLOAD_LEN: usize = MAX_MESSAGE_SIZE;
     /// Default maximum size of a string in chars
     pub const MAX_STRING_LENGTH: usize = 65535;
     /// Default maximum size of a byte string in bytes
@@ -77,6 +83,18 @@ pub mod constants {
         "http://opcfoundation.org/UA/SecurityPolicy#Basic256";
     /// Shorthand name for the deprecated Basic256 security policy.
     pub const SECURITY_POLICY_BASIC_256: &str = "Basic256";
+
+    pub(crate) fn default_max_dataset_fields() -> usize {
+        MAX_DATASET_FIELDS
+    }
+
+    pub(crate) fn default_max_dataset_messages() -> usize {
+        MAX_DATASET_MESSAGES
+    }
+
+    pub(crate) fn default_max_secured_payload_len() -> usize {
+        MAX_SECURED_PAYLOAD_LEN
+    }
 }
 
 /// Contains constants for known issued token types as defined in the OPC-UA standard.

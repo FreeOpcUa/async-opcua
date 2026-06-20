@@ -1,5 +1,7 @@
 //! SQLite history migration and query behavior tests.
 
+use std::sync::Mutex;
+
 use opcua_history_sqlite::{
     migration::run_migrations,
     query::{fetch_bounds, fetch_interval},
@@ -11,6 +13,15 @@ use opcua_types::{
     PerformUpdateType, StatusCode, Variant,
 };
 use rusqlite::{params, Connection};
+
+static SQL_TRACES: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+fn record_sql_trace(sql: &str) {
+    SQL_TRACES
+        .lock()
+        .expect("sql traces lock")
+        .push(sql.to_string());
+}
 
 fn insert_value(conn: &Connection, node_id: &str, ticks: i64, value: f64) {
     let data_value = DataValue::new_at(Variant::from(value), DateTime::from(ticks));
@@ -75,8 +86,10 @@ fn fetch_interval_uses_half_open_bounds_and_requested_order() {
         insert_value(&conn, node_id, ticks, ticks as f64);
     }
 
-    let forward = fetch_interval(&conn, node_id, 100, 300, true).expect("fetch forward interval");
-    let reverse = fetch_interval(&conn, node_id, 300, 100, false).expect("fetch reverse interval");
+    let forward =
+        fetch_interval(&conn, node_id, 100, 300, true, None, 100).expect("fetch forward interval");
+    let reverse =
+        fetch_interval(&conn, node_id, 300, 100, false, None, 100).expect("fetch reverse interval");
 
     assert_eq!(
         forward.iter().map(source_ticks).collect::<Vec<_>>(),
@@ -144,6 +157,105 @@ async fn sqlite_backend_read_processed_computes_aggregates() {
     assert!(continuation_point.is_none());
     assert_eq!(processed.len(), 1);
     assert_eq!(double_value(&processed[0]), 15.0);
+}
+
+#[tokio::test]
+async fn sqlite_backend_read_raw_modified_bounds_first_page_query_and_continuation_order() {
+    const VALUE_COUNT: usize = 3_000;
+    const PAGE_SIZE: u32 = 10;
+
+    let backend = SqliteHistoryBackend::new_in_memory().expect("history backend");
+    let node_id = NodeId::new(2, "BoundedHistoryValue");
+    let start_time = DateTime::from((2026, 6, 6, 0, 0, 0));
+    let values = (0..VALUE_COUNT)
+        .map(|offset| {
+            DataValue::new_at(
+                Variant::from(offset as f64),
+                DateTime::from(start_time.ticks() + offset as i64),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    let statuses = backend
+        .update_data(&node_id, PerformUpdateType::Insert, values)
+        .await
+        .expect("insert data");
+    assert!(statuses
+        .iter()
+        .all(|status| *status == StatusCode::GoodEntryInserted));
+
+    {
+        SQL_TRACES.lock().expect("sql traces lock").clear();
+        let connection = backend.connection();
+        let mut conn = connection.lock();
+        conn.trace(Some(record_sql_trace));
+    }
+
+    let (first_page, continuation_point) = backend
+        .read_raw_modified(
+            &node_id,
+            start_time,
+            DateTime::from(start_time.ticks() + VALUE_COUNT as i64),
+            PAGE_SIZE,
+            false,
+            None,
+        )
+        .await
+        .expect("read first page");
+
+    assert_eq!(first_page.len(), PAGE_SIZE as usize);
+    assert_eq!(
+        first_page.iter().map(source_ticks).collect::<Vec<_>>(),
+        (0..PAGE_SIZE as i64)
+            .map(|offset| start_time.ticks() + offset)
+            .collect::<Vec<_>>()
+    );
+    let continuation_point = continuation_point.expect("continuation point");
+
+    let (remaining, next_continuation_point) = backend
+        .read_raw_modified(
+            &node_id,
+            start_time,
+            DateTime::from(start_time.ticks() + VALUE_COUNT as i64),
+            VALUE_COUNT as u32,
+            false,
+            Some(continuation_point),
+        )
+        .await
+        .expect("read continuation page");
+
+    assert!(next_continuation_point.is_none());
+    assert_eq!(remaining.len(), VALUE_COUNT - PAGE_SIZE as usize);
+
+    let all_ticks = first_page
+        .iter()
+        .chain(remaining.iter())
+        .map(source_ticks)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        all_ticks,
+        (0..VALUE_COUNT as i64)
+            .map(|offset| start_time.ticks() + offset)
+            .collect::<Vec<_>>()
+    );
+
+    let interval_queries = SQL_TRACES
+        .lock()
+        .expect("sql traces lock")
+        .iter()
+        .filter(|sql| {
+            sql.contains("FROM historical_data")
+                && sql.contains("source_timestamp >=")
+                && sql.contains("ORDER BY source_timestamp ASC")
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    assert!(
+        interval_queries
+            .iter()
+            .any(|sql| sql.to_ascii_uppercase().contains("LIMIT")),
+        "first page interval query must be SQL-bounded with LIMIT; observed queries: {interval_queries:#?}"
+    );
 }
 
 #[tokio::test]

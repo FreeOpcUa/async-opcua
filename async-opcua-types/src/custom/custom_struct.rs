@@ -486,13 +486,22 @@ impl DynamicTypeLoader {
                         "Array has incorrect ArrayDimensions, must match value rank",
                     ));
                 }
-                let mut len = 1;
+                let mut len: u32 = 1;
                 let mut final_dims = Vec::with_capacity(array_dims.len());
                 for dim in &array_dims {
                     if *dim <= 0 {
                         return Err(Error::decoding("Array has incorrect ArrayDimensions, all dimensions must be greater than zero"));
                     }
-                    len *= *dim as u32;
+                    len = len
+                        .checked_mul(*dim as u32)
+                        .ok_or_else(|| Error::decoding("ArrayDimensions product overflows u32"))?;
+                    if len as usize > ctx.options().max_array_length {
+                        return Err(Error::decoding(format!(
+                            "Array length {} exceeds decoding limit {}",
+                            len,
+                            ctx.options().max_array_length
+                        )));
+                    }
                     final_dims.push(*dim as u32);
                 }
                 (len as usize, Some(final_dims))
@@ -674,6 +683,7 @@ impl TypeLoader for DynamicTypeLoader {
 pub(crate) mod tests {
     use std::{
         io::{Cursor, Seek},
+        panic::{catch_unwind, AssertUnwindSafe},
         sync::{Arc, LazyLock},
     };
 
@@ -921,6 +931,62 @@ pub(crate) mod tests {
         let obj2: ExtensionObject = BinaryDecodable::decode(&mut cursor, &ctx.context()).unwrap();
 
         assert_eq!(obj, obj2);
+    }
+
+    #[test]
+    fn dynamic_multidimensional_struct_rejects_overflowing_array_dimensions() {
+        let type_node_id = NodeId::new(1, 50);
+        let mut type_tree = make_type_tree();
+        type_tree
+            .parent_ids_mut()
+            .add_type(type_node_id.clone(), DataTypeId::Structure.into());
+        type_tree.add_type(
+            type_node_id.clone(),
+            TypeInfo::from_type_definition(
+                DataTypeDefinition::Structure(StructureDefinition {
+                    default_encoding_id: NodeId::null(),
+                    base_data_type: DataTypeId::Structure.into(),
+                    structure_type: crate::StructureType::Structure,
+                    fields: Some(vec![StructureField {
+                        name: "PrimitiveArray".into(),
+                        data_type: DataTypeId::Int32.into(),
+                        value_rank: 4,
+                        ..Default::default()
+                    }]),
+                }),
+                "OverflowingArrayDimensions".to_owned(),
+                Some(EncodingIds {
+                    binary_id: NodeId::new(1, 51),
+                    json_id: NodeId::new(1, 52),
+                    xml_id: NodeId::new(1, 53),
+                }),
+                false,
+                &type_node_id,
+                type_tree.parent_ids(),
+            )
+            .unwrap(),
+        );
+
+        let loader = DynamicTypeLoader::new(Arc::new(type_tree));
+        let mut loaders = TypeLoaderCollection::new_empty();
+        loaders.add_type_loader(loader);
+        let ctx_owned = ContextOwned::new(NamespaceMap::new(), loaders, DecodingOptions::test());
+        let ctx = ctx_owned.context();
+
+        let mut payload = Vec::new();
+        Some(vec![65536i32, 65536, 65536, 65536])
+            .encode(&mut payload, &ctx)
+            .unwrap();
+
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            ctx.load_from_binary(&type_node_id, &mut Cursor::new(payload), None)
+        }));
+
+        let decoded = result.expect("overflowing ArrayDimensions must return an error, not panic");
+        assert!(
+            decoded.is_err(),
+            "overflowing ArrayDimensions must be rejected, got {decoded:?}"
+        );
     }
 
     pub(crate) fn get_namespaces() -> NamespaceMap {

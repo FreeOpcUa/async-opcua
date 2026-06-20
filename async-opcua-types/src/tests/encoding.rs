@@ -1,6 +1,8 @@
 use std::{
+    alloc::{GlobalAlloc, Layout, System},
     io::{Cursor, Write},
     str::FromStr,
+    sync::atomic::{AtomicU64, AtomicUsize, Ordering},
 };
 
 use opcua_xml::XmlStreamWriter;
@@ -13,6 +15,78 @@ use crate::{
     EUInformation, EncodingMask, ExpandedNodeId, ExtensionObject, Guid, LocalizedText,
     NamespaceMap, NodeId, ObjectId, QualifiedName, Variant, VariantScalarTypeId, XmlElement,
 };
+
+#[global_allocator]
+static COUNTING_ALLOCATOR: CountingAllocator = CountingAllocator::new();
+
+struct CountingAllocator {
+    allocation_count: AtomicUsize,
+    allocated_bytes: AtomicU64,
+    largest_allocation: AtomicUsize,
+}
+
+impl CountingAllocator {
+    const fn new() -> Self {
+        Self {
+            allocation_count: AtomicUsize::new(0),
+            allocated_bytes: AtomicU64::new(0),
+            largest_allocation: AtomicUsize::new(0),
+        }
+    }
+
+    fn reset(&self) {
+        self.allocation_count.store(0, Ordering::Relaxed);
+        self.allocated_bytes.store(0, Ordering::Relaxed);
+        self.largest_allocation.store(0, Ordering::Relaxed);
+    }
+
+    fn largest_allocation(&self) -> usize {
+        self.largest_allocation.load(Ordering::Relaxed)
+    }
+
+    fn record_allocation(&self, bytes: usize) {
+        self.allocation_count.fetch_add(1, Ordering::Relaxed);
+        self.allocated_bytes
+            .fetch_add(bytes as u64, Ordering::Relaxed);
+        let mut current = self.largest_allocation.load(Ordering::Relaxed);
+        while bytes > current {
+            match self.largest_allocation.compare_exchange_weak(
+                current,
+                bytes,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => break,
+                Err(observed) => current = observed,
+            }
+        }
+    }
+}
+
+unsafe impl GlobalAlloc for CountingAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        self.record_allocation(layout.size());
+        // SAFETY: This allocator only records allocation metadata, then delegates unchanged.
+        unsafe { System.alloc(layout) }
+    }
+
+    unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+        self.record_allocation(layout.size());
+        // SAFETY: This allocator only records allocation metadata, then delegates unchanged.
+        unsafe { System.alloc_zeroed(layout) }
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        // SAFETY: Pointers allocated by the delegated system allocator are freed through it.
+        unsafe { System.dealloc(ptr, layout) };
+    }
+
+    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+        self.record_allocation(new_size);
+        // SAFETY: This allocator only records allocation metadata, then delegates unchanged.
+        unsafe { System.realloc(ptr, layout, new_size) }
+    }
+}
 
 #[test]
 fn encoding_bool() {
@@ -120,6 +194,33 @@ fn decode_string_malformed_utf8() {
             .unwrap_err()
             .status(),
         StatusCode::BadDecodingError
+    );
+}
+
+#[test]
+fn bytestring_decode_short_stream_does_not_preallocate_declared_length() {
+    let declared_len = 1_048_576_i32;
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(&declared_len.to_le_bytes());
+
+    let mut stream = Cursor::new(bytes);
+    let decoding_options = DecodingOptions {
+        max_byte_string_length: declared_len as usize,
+        ..Default::default()
+    };
+
+    COUNTING_ALLOCATOR.reset();
+    let result =
+        <ByteString as crate::SimpleBinaryDecodable>::decode(&mut stream, &decoding_options);
+    let largest_allocation = COUNTING_ALLOCATOR.largest_allocation();
+
+    assert!(
+        result.is_err(),
+        "short ByteString stream must fail to decode"
+    );
+    assert!(
+        largest_allocation < declared_len as usize,
+        "ByteString::decode pre-allocated {largest_allocation} bytes for a declared {declared_len}-byte payload before confirming the stream contained it"
     );
 }
 

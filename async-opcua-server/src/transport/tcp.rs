@@ -118,7 +118,7 @@ fn effective_max_chunk_count(max_chunk_count: usize, max_message_size: usize) ->
     } else if max_message_size > 0 {
         (max_message_size / MIN_CHUNK_SIZE).max(1)
     } else {
-        usize::MAX
+        1
     }
 }
 
@@ -569,14 +569,16 @@ mod tests {
     use super::effective_max_chunk_count;
 
     /// N6/M11: the inbound chunk-count ceiling must be enforced from `max_message_size`
-    /// when only `max_chunk_count` is 0, while preserving documented 0/0 unlimited semantics.
+    /// when only `max_chunk_count` is 0. If validation is bypassed, 0/0 fails closed
+    /// to a hard one-chunk ceiling instead of unlimited buffering.
     #[test]
     fn chunk_count_ceiling_is_bounded_even_when_unlimited() {
         // Explicit cap is honored.
         assert_eq!(effective_max_chunk_count(5, 327_675), 5);
         // 0 == unlimited -> derived ceiling = max_message_size / MIN_CHUNK_SIZE (8192).
         assert_eq!(effective_max_chunk_count(0, 327_675), 327_675 / 8192);
-        // 0/0 means unlimited; do not collapse it to one chunk (P2 regression).
-        assert_eq!(effective_max_chunk_count(0, 0), usize::MAX);
+        // 0/0 is rejected by config validation; this fallback prevents unbounded buffering
+        // if an invalid runtime config bypasses validation.
+        assert_eq!(effective_max_chunk_count(0, 0), 1);
     }
 }

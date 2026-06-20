@@ -171,9 +171,15 @@ impl SimpleBinaryDecodable for ByteString {
                 len, decoding_options.max_byte_string_length
             )))
         } else {
-            // Create a buffer filled with zeroes and read the byte string over the top
-            let mut buf: Vec<u8> = vec![0u8; len as usize];
-            process_decode_io_result(stream.read_exact(&mut buf))?;
+            let expected_len = len as usize;
+            let mut buf = Vec::new();
+            let bytes_read =
+                process_decode_io_result(stream.take(expected_len as u64).read_to_end(&mut buf))?;
+            if bytes_read != expected_len {
+                return Err(Error::decoding(format!(
+                    "ByteString length {expected_len} exceeds available stream bytes {bytes_read}"
+                )));
+            }
             Ok(ByteString {
                 value: Some(Box::new(Bytes::from(buf))),
             })

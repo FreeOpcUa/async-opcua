@@ -51,6 +51,11 @@ impl ProgramEngine {
         *self.progress.read()
     }
 
+    #[cfg(test)]
+    fn task_handle_for_test(&self) -> Arc<RwLock<Option<tokio::task::JoinHandle<()>>>> {
+        Arc::clone(&self.task_handle)
+    }
+
     /// Gets the NodeIds of sub-variables.
     fn sub_node_id(&self, suffix: &str) -> NodeId {
         let parent_str = match &self.parent_id.identifier {
@@ -124,7 +129,14 @@ impl ProgramEngine {
 
                 // If suspended, wait until notified
                 while sm_clone.read().state() == ProgramState::Suspended {
-                    suspend_notify.notified().await;
+                    tokio::select! {
+                        _ = cancel_token.cancelled() => break,
+                        _ = suspend_notify.notified() => {}
+                    }
+                }
+
+                if cancel_token.is_cancelled() {
+                    break;
                 }
 
                 tokio::time::sleep(Duration::from_millis(10)).await;
@@ -247,5 +259,66 @@ impl ProgramEngine {
         *self.progress.write() = 0;
         self.sync_address_space("Reset");
         Ok(())
+    }
+}
+
+impl Drop for ProgramEngine {
+    fn drop(&mut self) {
+        self.cancel_token.read().cancel();
+        self.suspend_notify.notify_waiters();
+
+        if let Some(handle) = self.task_handle.read().as_ref() {
+            handle.abort();
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{sync::Arc, time::Duration};
+
+    use opcua_core::sync::RwLock;
+    use opcua_types::NodeId;
+
+    use crate::address_space::AddressSpace;
+
+    use super::ProgramEngine;
+
+    #[tokio::test]
+    async fn dropping_suspended_engine_aborts_background_task() {
+        let engine = ProgramEngine::new(
+            Arc::new(RwLock::new(AddressSpace::new())),
+            NodeId::new(2, "drop-suspended-engine"),
+        );
+        engine.reset().expect("reset should transition to Ready");
+        engine.start().expect("start should spawn the task");
+        let task_handle = engine.task_handle_for_test();
+
+        engine
+            .suspend()
+            .expect("suspend should transition to Suspended");
+        tokio::time::sleep(Duration::from_millis(30)).await;
+
+        drop(engine);
+
+        let finished = tokio::time::timeout(Duration::from_millis(75), async {
+            loop {
+                if task_handle
+                    .read()
+                    .as_ref()
+                    .is_some_and(tokio::task::JoinHandle::is_finished)
+                {
+                    break true;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap_or(false);
+
+        assert!(
+            finished,
+            "dropping a suspended ProgramEngine should abort its parked background task"
+        );
     }
 }

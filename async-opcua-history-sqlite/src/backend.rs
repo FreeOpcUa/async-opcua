@@ -4,7 +4,7 @@ use crate::{migration::run_migrations, query};
 use async_trait::async_trait;
 use opcua_server::{
     aggregates::engine::{calculate_aggregate, get_value_timestamp, partition_intervals},
-    history::{HistoryCache, HistoryStorageBackend},
+    history::HistoryStorageBackend,
 };
 use opcua_types::{
     BinaryEncodable, ContextOwned, DataValue, DateTime, EventFilter, HistoryEventFieldList, NodeId,
@@ -20,13 +20,39 @@ use std::time::{Duration, Instant};
 pub struct SqliteHistoryBackend {
     connection: Arc<Mutex<Connection>>,
     continuation_points: Arc<Mutex<HashMap<Vec<u8>, CachedContinuationPoint>>>,
-    cache: HistoryCache,
 }
 
 struct CachedContinuationPoint {
-    values: Vec<DataValue>,
+    cursor: HistoryReadCursor,
     created_at: Instant,
 }
+
+#[derive(Clone)]
+struct HistoryReadCursor {
+    node_id: NodeId,
+    start_time: DateTime,
+    end_time: DateTime,
+    chronological: bool,
+    return_bounds: bool,
+    last_source_timestamp: i64,
+}
+
+struct RawModifiedPageRequest {
+    node_id: String,
+    start_ticks: i64,
+    end_ticks: i64,
+    chronological: bool,
+    include_start_bound: bool,
+    include_end_bound: bool,
+    resume_after: Option<i64>,
+    page_size: usize,
+}
+
+const CONTINUATION_POINT_MAX_AGE: Duration = Duration::from_secs(300);
+
+// OPC UA treats num_values_per_node == 0 as "return all". Keep that API
+// behavior paged, but cap each SQL read so one request cannot scan forever.
+const READ_RAW_MODIFIED_UNBOUNDED_HARD_LIMIT: usize = 100_000;
 
 impl SqliteHistoryBackend {
     /// Creates a new SQLite history backend using the database at `path`.
@@ -36,7 +62,6 @@ impl SqliteHistoryBackend {
         Ok(Self {
             connection: Arc::new(Mutex::new(connection)),
             continuation_points: Arc::new(Mutex::new(HashMap::new())),
-            cache: HistoryCache::new(10000),
         })
     }
 
@@ -47,7 +72,6 @@ impl SqliteHistoryBackend {
         Ok(Self {
             connection: Arc::new(Mutex::new(connection)),
             continuation_points: Arc::new(Mutex::new(HashMap::new())),
-            cache: HistoryCache::new(10000),
         })
     }
 
@@ -58,8 +82,158 @@ impl SqliteHistoryBackend {
 
     fn prune_continuation_points(&self) {
         let mut cps = self.continuation_points.lock();
-        let max_age = Duration::from_secs(300);
-        cps.retain(|_, cp| cp.created_at.elapsed() < max_age);
+        cps.retain(|_, cp| cp.created_at.elapsed() < CONTINUATION_POINT_MAX_AGE);
+    }
+
+    fn page_size(num_values_per_node: u32) -> usize {
+        if num_values_per_node == 0 {
+            READ_RAW_MODIFIED_UNBOUNDED_HARD_LIMIT
+        } else {
+            num_values_per_node as usize
+        }
+    }
+
+    fn insert_continuation_point(&self, cursor: HistoryReadCursor) -> Vec<u8> {
+        let token = uuid::Uuid::new_v4().as_bytes().to_vec();
+        self.continuation_points.lock().insert(
+            token.clone(),
+            CachedContinuationPoint {
+                cursor,
+                created_at: Instant::now(),
+            },
+        );
+        token
+    }
+
+    async fn fetch_raw_modified_page(
+        &self,
+        cursor: &HistoryReadCursor,
+        page_size: usize,
+        resume_after: Option<i64>,
+    ) -> Result<(Vec<DataValue>, bool), StatusCode> {
+        let conn = self.connection.clone();
+        let request = Self::raw_modified_page_request(cursor, page_size, resume_after);
+
+        let result: Result<(Vec<DataValue>, bool), SqliteError> =
+            tokio::task::spawn_blocking(move || Self::fetch_raw_modified_values(conn, request))
+                .await
+                .map_err(|_| StatusCode::BadInternalError)?;
+
+        let (mut values, interval_has_more) = result.map_err(|err| {
+            tracing::error!("SQLite error in read_raw_modified: {:?}", err);
+            StatusCode::BadInternalError
+        })?;
+
+        let has_trimmed_values = Self::sort_dedup_and_trim_page(
+            &mut values,
+            cursor.start_time,
+            cursor.end_time,
+            page_size,
+        );
+        Ok((values, interval_has_more || has_trimmed_values))
+    }
+
+    fn raw_modified_page_request(
+        cursor: &HistoryReadCursor,
+        page_size: usize,
+        resume_after: Option<i64>,
+    ) -> RawModifiedPageRequest {
+        RawModifiedPageRequest {
+            node_id: cursor.node_id.to_string(),
+            start_ticks: cursor.start_time.ticks(),
+            end_ticks: cursor.end_time.ticks(),
+            chronological: cursor.chronological,
+            include_start_bound: cursor.return_bounds && resume_after.is_none(),
+            include_end_bound: cursor.return_bounds,
+            resume_after,
+            page_size,
+        }
+    }
+
+    fn fetch_raw_modified_values(
+        conn: Arc<Mutex<Connection>>,
+        request: RawModifiedPageRequest,
+    ) -> Result<(Vec<DataValue>, bool), SqliteError> {
+        let conn = conn.lock();
+        let query_limit = request.page_size.saturating_add(1);
+        let mut values = Vec::with_capacity(query_limit);
+
+        Self::push_start_bound(&conn, &request, &mut values)?;
+        let interval_has_more =
+            Self::push_interval_values(&conn, &request, query_limit, &mut values)?;
+        Self::push_end_bound(&conn, &request, interval_has_more, &mut values)?;
+
+        Ok((values, interval_has_more))
+    }
+
+    fn push_start_bound(
+        conn: &Connection,
+        request: &RawModifiedPageRequest,
+        values: &mut Vec<DataValue>,
+    ) -> Result<(), SqliteError> {
+        if request.include_start_bound {
+            let find_prev = request.chronological;
+            if let Some(value) =
+                query::fetch_bounds(conn, &request.node_id, request.start_ticks, find_prev)?
+            {
+                values.push(value);
+            }
+        }
+        Ok(())
+    }
+
+    fn push_interval_values(
+        conn: &Connection,
+        request: &RawModifiedPageRequest,
+        query_limit: usize,
+        values: &mut Vec<DataValue>,
+    ) -> Result<bool, SqliteError> {
+        let interval_values = query::fetch_interval(
+            conn,
+            &request.node_id,
+            request.start_ticks,
+            request.end_ticks,
+            request.chronological,
+            request.resume_after,
+            query_limit,
+        )?;
+        let interval_has_more = interval_values.len() > request.page_size;
+        values.extend(interval_values);
+        Ok(interval_has_more)
+    }
+
+    fn push_end_bound(
+        conn: &Connection,
+        request: &RawModifiedPageRequest,
+        interval_has_more: bool,
+        values: &mut Vec<DataValue>,
+    ) -> Result<(), SqliteError> {
+        if request.include_end_bound && !interval_has_more {
+            let find_prev = !request.chronological;
+            if let Some(value) =
+                query::fetch_bounds(conn, &request.node_id, request.end_ticks, find_prev)?
+            {
+                values.push(value);
+            }
+        }
+        Ok(())
+    }
+
+    fn sort_dedup_and_trim_page(
+        values: &mut Vec<DataValue>,
+        start_time: DateTime,
+        end_time: DateTime,
+        page_size: usize,
+    ) -> bool {
+        opcua_server::history::sort_historical_values(values, start_time, end_time);
+        values.dedup_by(|a, b| a.source_timestamp == b.source_timestamp);
+
+        let has_trimmed_values = values.len() > page_size;
+        if has_trimmed_values {
+            values.truncate(page_size);
+        }
+
+        has_trimmed_values
     }
 }
 
@@ -75,106 +249,48 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
         continuation_point: Option<Vec<u8>>,
     ) -> Result<(Vec<DataValue>, Option<Vec<u8>>), StatusCode> {
         self.prune_continuation_points();
+        let page_size = Self::page_size(num_values_per_node);
 
-        if let Some(ref token) = continuation_point {
-            let mut cps = self.continuation_points.lock();
-            if let Some(cp) = cps.remove(token) {
-                let mut values = cp.values;
-                if num_values_per_node > 0 && values.len() > num_values_per_node as usize {
-                    let remaining = values.split_off(num_values_per_node as usize);
-                    let new_token = uuid::Uuid::new_v4().as_bytes().to_vec();
-                    cps.insert(
-                        new_token.clone(),
-                        CachedContinuationPoint {
-                            values: remaining,
-                            created_at: Instant::now(),
-                        },
-                    );
-                    return Ok((values, Some(new_token)));
-                }
-                return Ok((values, None));
-            }
-            return Err(StatusCode::BadContinuationPointInvalid);
-        }
-
-        let cache_key = (node_id.clone(), start_time, end_time);
-        if let Some(cached_vals) = self.cache.get(&cache_key).await {
-            let mut values = cached_vals.clone();
-            if num_values_per_node > 0 && values.len() > num_values_per_node as usize {
-                let remaining = values.split_off(num_values_per_node as usize);
-                let token = uuid::Uuid::new_v4().as_bytes().to_vec();
-                self.continuation_points.lock().insert(
-                    token.clone(),
-                    CachedContinuationPoint {
-                        values: remaining,
-                        created_at: Instant::now(),
-                    },
-                );
-                return Ok((values, Some(token)));
-            }
-            return Ok((values, None));
-        }
-
-        let conn = self.connection.clone();
-        let node_id_str = node_id.to_string();
-        let start_ticks = start_time.ticks();
-        let end_ticks = end_time.ticks();
-        let chronological = start_ticks < end_ticks;
-
-        let result: Result<Vec<DataValue>, SqliteError> = tokio::task::spawn_blocking(move || {
-            let conn = conn.lock();
-            let mut all_values = Vec::new();
-
-            if return_bounds {
-                let find_prev = chronological;
-                if let Some(value) =
-                    query::fetch_bounds(&conn, &node_id_str, start_ticks, find_prev)?
-                {
-                    all_values.push(value);
-                }
-            }
-
-            all_values.extend(query::fetch_interval(
-                &conn,
-                &node_id_str,
-                start_ticks,
-                end_ticks,
-                chronological,
-            )?);
-
-            if return_bounds {
-                let find_prev = !chronological;
-                if let Some(value) = query::fetch_bounds(&conn, &node_id_str, end_ticks, find_prev)?
-                {
-                    all_values.push(value);
-                }
-            }
-
-            Ok(all_values)
-        })
-        .await
-        .map_err(|_| StatusCode::BadInternalError)?;
-
-        let mut values = result.map_err(|err| {
-            tracing::error!("SQLite error in read_raw_modified: {:?}", err);
-            StatusCode::BadInternalError
-        })?;
-
-        opcua_server::history::sort_historical_values(&mut values, start_time, end_time);
-        values.dedup_by(|a, b| a.source_timestamp == b.source_timestamp);
-
-        self.cache.insert(cache_key, values.clone()).await;
-
-        if num_values_per_node > 0 && values.len() > num_values_per_node as usize {
-            let remaining = values.split_off(num_values_per_node as usize);
-            let token = uuid::Uuid::new_v4().as_bytes().to_vec();
-            self.continuation_points.lock().insert(
-                token.clone(),
-                CachedContinuationPoint {
-                    values: remaining,
-                    created_at: Instant::now(),
+        let (cursor, resume_after) = if let Some(token) = continuation_point {
+            let cp = self
+                .continuation_points
+                .lock()
+                .remove(&token)
+                .ok_or(StatusCode::BadContinuationPointInvalid)?;
+            let resume_after = Some(cp.cursor.last_source_timestamp);
+            (cp.cursor, resume_after)
+        } else {
+            let chronological = start_time.ticks() < end_time.ticks();
+            (
+                HistoryReadCursor {
+                    node_id: node_id.clone(),
+                    start_time,
+                    end_time,
+                    chronological,
+                    return_bounds,
+                    last_source_timestamp: start_time.ticks(),
                 },
-            );
+                None,
+            )
+        };
+
+        let (values, has_more) = self
+            .fetch_raw_modified_page(&cursor, page_size, resume_after)
+            .await?;
+
+        if has_more {
+            let Some(last_value) = values.last() else {
+                return Ok((values, None));
+            };
+            let Some(last_source_timestamp) = last_value.source_timestamp.map(|ts| ts.ticks())
+            else {
+                return Ok((values, None));
+            };
+
+            let token = self.insert_continuation_point(HistoryReadCursor {
+                last_source_timestamp,
+                ..cursor
+            });
             Ok((values, Some(token)))
         } else {
             Ok((values, None))
@@ -275,7 +391,6 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
         values: Vec<DataValue>,
     ) -> Result<Vec<StatusCode>, StatusCode> {
         self.prune_continuation_points();
-        self.cache.invalidate_all();
 
         let conn = self.connection.clone();
         let node_id_str = node_id.to_string();

@@ -21,5 +21,8 @@ parking_lot = { workspace = true }
 async-trait = { workspace = true }
 uuid = { workspace = true }
 
+[dev-dependencies]
+rusqlite = { version = "0.31.0", features = ["trace"] }
+
 [lints]
 workspace = true

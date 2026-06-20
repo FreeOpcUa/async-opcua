@@ -32,6 +32,13 @@ use opcua_types::{
     TimestampsToReturn,
 };
 
+pub(super) struct RemovedSubscription {
+    pub(super) id: u32,
+    pub(super) monitored_items: Vec<MonitoredItemRef>,
+}
+
+type PendingPublishResponse = (PendingPublish, Arc<NotificationMessage>, u32);
+
 /// Subscriptions belonging to a single session. Note that they are technically _owned_ by
 /// a user token, which means that they can be transfered to a different session.
 pub struct SessionSubscriptions {
@@ -671,121 +678,180 @@ impl SessionSubscriptions {
         );
     }
 
-    pub(crate) fn tick(
+    pub(super) fn tick(
         &mut self,
         now: &DateTimeUtc,
         now_instant: Instant,
         tick_reason: TickReason,
         buffer: &mut NotificationBuffer,
-    ) -> Vec<MonitoredItemRef> {
-        let mut to_delete = Vec::new();
+    ) -> Vec<RemovedSubscription> {
         if self.subscriptions.is_empty() {
-            for pb in self.publish_request_queue.drain(..) {
-                let _ = pb.response.send(
-                    ServiceFault::new(&pb.request.request_header, StatusCode::BadNoSubscription)
-                        .into(),
-                );
-            }
-            return to_delete;
+            self.reject_publish_requests_without_subscriptions();
+            return Vec::new();
         }
 
         self.remove_expired_publish_requests(now_instant);
 
         if self.publish_request_queue.is_empty() {
-            let mut to_remove = Vec::new();
-            for (sub_id, subscription) in &mut self.subscriptions {
-                buffer.reset();
-                let res = subscription.tick(
-                    now,
-                    now_instant,
-                    tick_reason,
-                    false,
-                    &mut *buffer,
-                    &mut self.data_change_notification_pool,
-                );
-                if matches!(res, TickResult::Expired) {
-                    to_delete.extend(subscription.drain().map(|item| {
-                        MonitoredItemRef::new(
-                            MonitoredItemHandle {
-                                subscription_id: *sub_id,
-                                monitored_item_id: item.1.id(),
-                            },
-                            item.1.item_to_monitor().node_id.clone(),
-                            item.1.item_to_monitor().attribute_id,
-                        )
-                    }))
-                }
-
-                if subscription.ready_to_remove() {
-                    to_remove.push(*sub_id);
-                }
-            }
-            for sub_id in to_remove {
-                self.subscriptions.remove(&sub_id);
-                self.remove_retransmission_notifications(|f| f.subscription_id == sub_id);
-            }
-            return to_delete;
+            return self.tick_subscriptions_without_publish_requests(
+                now,
+                now_instant,
+                tick_reason,
+                buffer,
+            );
         }
 
-        let subscription_ids = {
-            // Sort subscriptions by priority
-            let mut subscription_priority: Vec<(u32, u8)> = self
-                .subscriptions
-                .values()
-                .map(|v| (v.id(), v.priority()))
-                .collect();
-            subscription_priority.sort_by_key(|s1| std::cmp::Reverse(s1.1));
-            subscription_priority.into_iter().map(|s| s.0)
-        };
+        let (removed_subscriptions, responses, more_notifications) =
+            self.tick_subscriptions_with_publish_requests(now, now_instant, tick_reason, buffer);
+        self.send_publish_responses(now, responses, more_notifications);
 
-        let mut responses = Vec::new();
-        let mut more_notifications = false;
+        removed_subscriptions
+    }
 
-        for sub_id in subscription_ids {
-            let subscription = self.subscriptions.get_mut(&sub_id).unwrap();
+    fn reject_publish_requests_without_subscriptions(&mut self) {
+        for pb in self.publish_request_queue.drain(..) {
+            let _ = pb.response.send(
+                ServiceFault::new(&pb.request.request_header, StatusCode::BadNoSubscription).into(),
+            );
+        }
+    }
+
+    fn tick_subscriptions_without_publish_requests(
+        &mut self,
+        now: &DateTimeUtc,
+        now_instant: Instant,
+        tick_reason: TickReason,
+        buffer: &mut NotificationBuffer,
+    ) -> Vec<RemovedSubscription> {
+        let mut removed_subscriptions = Vec::new();
+        let mut to_remove = Vec::new();
+
+        for (sub_id, subscription) in &mut self.subscriptions {
             buffer.reset();
+            let monitored_items = subscription.monitored_item_refs();
             let res = subscription.tick(
                 now,
                 now_instant,
                 tick_reason,
-                !self.publish_request_queue.is_empty(),
+                false,
                 &mut *buffer,
                 &mut self.data_change_notification_pool,
             );
-            // Get notifications and publish request pairs while there are any of either left.
-            while !self.publish_request_queue.is_empty() {
-                if let Some(notification_message) = subscription.take_notification() {
-                    tracing::trace!("Sending notification message {:?}", notification_message);
-                    let publish_request = self.publish_request_queue.pop_front().unwrap();
-                    responses.push((publish_request, Arc::new(notification_message), sub_id));
-                } else {
-                    break;
-                }
-            }
-            // Make sure to note if there are more notifications in any subscription.
-            more_notifications |= subscription.more_notifications();
-
-            // If the subscription expired, make sure to collect any deleted monitored items.
-
             if matches!(res, TickResult::Expired) {
-                to_delete.extend(subscription.drain().map(|item| {
-                    MonitoredItemRef::new(
-                        MonitoredItemHandle {
-                            subscription_id: sub_id,
-                            monitored_item_id: item.1.id(),
-                        },
-                        item.1.item_to_monitor().node_id.clone(),
-                        item.1.item_to_monitor().attribute_id,
-                    )
-                }))
+                removed_subscriptions.push(RemovedSubscription {
+                    id: *sub_id,
+                    monitored_items,
+                });
             }
 
             if subscription.ready_to_remove() {
-                self.subscriptions.remove(&sub_id);
-                self.remove_retransmission_notifications(|f| f.subscription_id == sub_id);
+                to_remove.push(*sub_id);
             }
         }
 
+        self.remove_ready_subscriptions(to_remove);
+        removed_subscriptions
+    }
+
+    fn tick_subscriptions_with_publish_requests(
+        &mut self,
+        now: &DateTimeUtc,
+        now_instant: Instant,
+        tick_reason: TickReason,
+        buffer: &mut NotificationBuffer,
+    ) -> (Vec<RemovedSubscription>, Vec<PendingPublishResponse>, bool) {
+        let mut removed_subscriptions = Vec::new();
+        let mut responses = Vec::new();
+        let mut more_notifications = false;
+
+        for sub_id in self.subscription_ids_by_priority() {
+            let (removed_subscription, subscription_has_more_notifications) = self
+                .tick_subscription_with_publish_requests(
+                    sub_id,
+                    now,
+                    now_instant,
+                    tick_reason,
+                    buffer,
+                    &mut responses,
+                );
+            more_notifications |= subscription_has_more_notifications;
+            if let Some(removed_subscription) = removed_subscription {
+                removed_subscriptions.push(removed_subscription);
+            }
+        }
+
+        (removed_subscriptions, responses, more_notifications)
+    }
+
+    fn tick_subscription_with_publish_requests(
+        &mut self,
+        sub_id: u32,
+        now: &DateTimeUtc,
+        now_instant: Instant,
+        tick_reason: TickReason,
+        buffer: &mut NotificationBuffer,
+        responses: &mut Vec<PendingPublishResponse>,
+    ) -> (Option<RemovedSubscription>, bool) {
+        let subscription = self.subscriptions.get_mut(&sub_id).unwrap();
+        buffer.reset();
+        let monitored_items = subscription.monitored_item_refs();
+        let res = subscription.tick(
+            now,
+            now_instant,
+            tick_reason,
+            !self.publish_request_queue.is_empty(),
+            &mut *buffer,
+            &mut self.data_change_notification_pool,
+        );
+
+        while !self.publish_request_queue.is_empty() {
+            let Some(notification_message) = subscription.take_notification() else {
+                break;
+            };
+            tracing::trace!("Sending notification message {:?}", notification_message);
+            let publish_request = self.publish_request_queue.pop_front().unwrap();
+            responses.push((publish_request, Arc::new(notification_message), sub_id));
+        }
+
+        let more_notifications = subscription.more_notifications();
+        let ready_to_remove = subscription.ready_to_remove();
+        let removed_subscription =
+            matches!(res, TickResult::Expired).then_some(RemovedSubscription {
+                id: sub_id,
+                monitored_items,
+            });
+
+        if ready_to_remove {
+            self.subscriptions.remove(&sub_id);
+            self.remove_retransmission_notifications(|f| f.subscription_id == sub_id);
+        }
+
+        (removed_subscription, more_notifications)
+    }
+
+    fn subscription_ids_by_priority(&self) -> Vec<u32> {
+        let mut subscription_priority: Vec<(u32, u8)> = self
+            .subscriptions
+            .values()
+            .map(|v| (v.id(), v.priority()))
+            .collect();
+        subscription_priority.sort_by_key(|s1| std::cmp::Reverse(s1.1));
+        subscription_priority.into_iter().map(|s| s.0).collect()
+    }
+
+    fn remove_ready_subscriptions(&mut self, to_remove: Vec<u32>) {
+        for sub_id in to_remove {
+            self.subscriptions.remove(&sub_id);
+            self.remove_retransmission_notifications(|f| f.subscription_id == sub_id);
+        }
+    }
+
+    fn send_publish_responses(
+        &mut self,
+        now: &DateTimeUtc,
+        responses: Vec<PendingPublishResponse>,
+        more_notifications: bool,
+    ) {
         let num_responses = responses.len();
         for (idx, (publish_request, notification, subscription_id)) in
             responses.into_iter().enumerate()
@@ -823,8 +889,6 @@ impl SessionSubscriptions {
                 .into(),
             );
         }
-
-        to_delete
     }
 
     fn find_notification_message(

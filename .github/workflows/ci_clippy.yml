@@ -12,6 +12,11 @@ jobs:
         with:
           toolchain: stable
 
+      # libelf is needed by libbpf-sys, pulled in by xsk-rs when the pubsub
+      # tsn feature is enabled via --all-features.
+      - name: Install libelf
+        run: sudo apt-get update && sudo apt-get install -y libelf-dev
+
       - name: Run clippy
         # --all-targets lints tests/benches/examples (not just lib+bins) and
         # --all-features covers optional code (sqlite, pubsub, mqtt, ...) that

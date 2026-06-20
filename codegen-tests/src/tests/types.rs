@@ -40,7 +40,7 @@ fn ctx() -> ContextOwned {
     loaders.add_type_loader(crate::generated::ext::GeneratedTypeLoader);
     loaders.add_type_loader(crate::generated::di::GeneratedTypeLoader);
     loaders.add_type_loader(crate::generated::plcopen::GeneratedTypeLoader);
-    
+
     ContextOwned::new(namespaces, loaders, DecodingOptions::default())
 }
 

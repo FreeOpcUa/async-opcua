@@ -341,7 +341,10 @@ async fn browse_release_continuation_point() {
     assert!(!it.continuation_point.is_null());
 
     let cp = it.continuation_point.clone();
-    let r = session.browse_next(true, std::slice::from_ref(&cp)).await.unwrap();
+    let r = session
+        .browse_next(true, std::slice::from_ref(&cp))
+        .await
+        .unwrap();
     assert_eq!(1, r.len());
     let it = &r[0];
     assert_eq!(StatusCode::Good, it.status_code);

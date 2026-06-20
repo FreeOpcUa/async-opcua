@@ -54,6 +54,21 @@ impl AesDerivedKeys {
             initialization_vector: Zeroizing::new(initialization_vector),
         }
     }
+
+    #[cfg(test)]
+    pub(crate) fn signing_key(&self) -> &[u8] {
+        &self.signing_key
+    }
+
+    #[cfg(test)]
+    pub(crate) fn encryption_key(&self) -> &AesKey {
+        &self.encryption_key
+    }
+
+    #[cfg(test)]
+    pub(crate) fn initialization_vector(&self) -> &[u8] {
+        &self.initialization_vector
+    }
 }
 
 impl<T: AesSecurityPolicy> AesPolicy<T> {

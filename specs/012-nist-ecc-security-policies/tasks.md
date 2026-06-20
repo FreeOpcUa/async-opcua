@@ -48,17 +48,17 @@ RFC 5869 Expand Info=salt; key layout Sig|Enc|IV; P256=32/16/16 (SHA256/AES128),
 **Goal**: correct ECDSA / ECDH / HKDF, proven against known-answer vectors.
 **Independent Test**: `cargo test -p async-opcua-crypto` ECC vector tests pass; tampered inputs rejected.
 
-- [ ] T004 [US1] Add failing known-answer tests in `async-opcua-crypto/src/ecc/` (tests): ECDSA
+- [X] T004 [US1] Add failing known-answer tests in `async-opcua-crypto/src/ecc/` (tests): ECDSA
   P-256/SHA-256 & P-384/SHA-384 sign+verify vs NIST/RFC vectors (raw `r‖s`), tampered sig rejected;
   ECDH two-keypair shared-secret vector; HKDF derived Sig/Enc/IV bytes vs the §6.8.1 salts/labels.
-- [ ] T005 [P] [US1] Implement ECDSA sign/verify (raw `r‖s` fixed `Signature`) for P-256/P-384 in `ecc/`. (depends T004)
-- [ ] T006 [P] [US1] Implement ephemeral ECDH in `ecc/`: keygen, `X‖Y` (no prefix) encode/decode, raw-x shared secret. (depends T004)
-- [ ] T007 [US1] Implement HKDF key derivation in `ecc/`: build ClientSalt/ServerSalt (L=16-bit LE, labels), Extract `HMAC-Hash(salt,IKM)`, RFC 5869 Expand (Info=salt), slice `Sig|Enc|IV` per direction -> SecurityKeys. (depends T004)
-- [ ] T007a [US1] Secret hygiene (FR-012, constitution IV): ensure the ephemeral private key, ECDH
+- [X] T005 [P] [US1] Implement ECDSA sign/verify (raw `r‖s` fixed `Signature`) for P-256/P-384 in `ecc/`. (depends T004)
+- [X] T006 [P] [US1] Implement ephemeral ECDH in `ecc/`: keygen, `X‖Y` (no prefix) encode/decode, raw-x shared secret. (depends T004)
+- [X] T007 [US1] Implement HKDF key derivation in `ecc/`: build ClientSalt/ServerSalt (L=16-bit LE, labels), Extract `HMAC-Hash(salt,IKM)`, RFC 5869 Expand (Info=salt), slice `Sig|Enc|IV` per direction -> SecurityKeys. (depends T004)
+- [X] T007a [US1] Secret hygiene (FR-012, constitution IV): ensure the ephemeral private key, ECDH
   shared secret, and derived key material are **zeroized** after use (e.g. `zeroize`) and do **not**
   expose secret bytes via `Debug`/`Display`/logging; add a unit test asserting a secret-bearing type's
   `Debug` output contains no key material. (depends T006/T007)
-- [ ] T008 [US1] Gate; verify T004 passes; **commit US1** (`feat(012 US1): verified ECC primitives (ECDSA/ECDH/HKDF)`).
+- [X] T008 [US1] Gate; verify T004 passes; **commit US1** (`feat(012 US1): verified ECC primitives (ECDSA/ECDH/HKDF)`).
 
 **Checkpoint**: primitives correct and vector-locked.
 

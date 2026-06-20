@@ -52,9 +52,9 @@ blocking prerequisite. Stories may proceed in priority order or in parallel.
 **Goal**: stale-nonce concurrent `ActivateSession` is rejected fail-closed; uncontended path unchanged.
 **Independent Test**: race two activations; the one that observed the rotated-away nonce is rejected (quickstart US2).
 
-- [ ] T006 [US2] Add a failing regression test in `async-opcua-server` (session tests): simulate a stale observed nonce at the commit step; assert rejection (`BadNonceInvalid`/`BadSessionIdInvalid`) with no identity/nonce mutation; assert uncontended activation still succeeds.
-- [ ] T007 [US2] In `async-opcua-server/src/session/manager.rs` `activate_session`, under the write lock that commits `activate()`, re-read `session.session_nonce()` and compare to the observed value; reject if changed; preserve `is_cross_channel_transfer_forbidden` semantics. (depends on T006)
-- [ ] T008 [US2] Run the gate; verify T006 passes; **commit US2** (`fix(011 US2): re-check session nonce under commit lock (replay-safe activation)`). Note in commit body: hold upstream PR pending private disclosure to Einar.
+- [X] T006 [US2] Add a failing regression test in `async-opcua-server` (session tests): simulate a stale observed nonce at the commit step; assert rejection (`BadNonceInvalid`/`BadSessionIdInvalid`) with no identity/nonce mutation; assert uncontended activation still succeeds.
+- [X] T007 [US2] In `async-opcua-server/src/session/manager.rs` `activate_session`, under the write lock that commits `activate()`, re-read `session.session_nonce()` and compare to the observed value; reject if changed; preserve `is_cross_channel_transfer_forbidden` semantics. (depends on T006)
+- [X] T008 [US2] Run the gate; verify T006 passes; **commit US2** (`fix(011 US2): re-check session nonce under commit lock (replay-safe activation)`). Note in commit body: hold upstream PR pending private disclosure to Einar.
 
 **Checkpoint**: US1 + US2 independently functional.
 

@@ -37,6 +37,17 @@ struct HistoryReadCursor {
     last_source_timestamp: i64,
 }
 
+struct RawModifiedPageRequest {
+    node_id: String,
+    start_ticks: i64,
+    end_ticks: i64,
+    chronological: bool,
+    include_start_bound: bool,
+    include_end_bound: bool,
+    resume_after: Option<i64>,
+    page_size: usize,
+}
+
 const CONTINUATION_POINT_MAX_AGE: Duration = Duration::from_secs(300);
 
 // OPC UA treats num_values_per_node == 0 as "return all". Keep that API
@@ -101,64 +112,120 @@ impl SqliteHistoryBackend {
         resume_after: Option<i64>,
     ) -> Result<(Vec<DataValue>, bool), StatusCode> {
         let conn = self.connection.clone();
-        let node_id_str = cursor.node_id.to_string();
-        let start_ticks = cursor.start_time.ticks();
-        let end_ticks = cursor.end_time.ticks();
-        let chronological = cursor.chronological;
-        let include_start_bound = cursor.return_bounds && resume_after.is_none();
-        let include_end_bound = cursor.return_bounds;
+        let request = Self::raw_modified_page_request(cursor, page_size, resume_after);
 
         let result: Result<(Vec<DataValue>, bool), SqliteError> =
-            tokio::task::spawn_blocking(move || {
-                let conn = conn.lock();
-                let query_limit = page_size.saturating_add(1);
-                let mut values = Vec::with_capacity(query_limit);
-
-                if include_start_bound {
-                    let find_prev = chronological;
-                    if let Some(value) =
-                        query::fetch_bounds(&conn, &node_id_str, start_ticks, find_prev)?
-                    {
-                        values.push(value);
-                    }
-                }
-
-                let interval_values = query::fetch_interval(
-                    &conn,
-                    &node_id_str,
-                    start_ticks,
-                    end_ticks,
-                    chronological,
-                    resume_after,
-                    query_limit,
-                )?;
-                let interval_has_more = interval_values.len() > page_size;
-                values.extend(interval_values);
-
-                if include_end_bound && !interval_has_more {
-                    let find_prev = !chronological;
-                    if let Some(value) =
-                        query::fetch_bounds(&conn, &node_id_str, end_ticks, find_prev)?
-                    {
-                        values.push(value);
-                    }
-                }
-
-                Ok((values, interval_has_more))
-            })
-            .await
-            .map_err(|_| StatusCode::BadInternalError)?;
+            tokio::task::spawn_blocking(move || Self::fetch_raw_modified_values(conn, request))
+                .await
+                .map_err(|_| StatusCode::BadInternalError)?;
 
         let (mut values, interval_has_more) = result.map_err(|err| {
             tracing::error!("SQLite error in read_raw_modified: {:?}", err);
             StatusCode::BadInternalError
         })?;
 
-        opcua_server::history::sort_historical_values(
+        let has_trimmed_values = Self::sort_dedup_and_trim_page(
             &mut values,
             cursor.start_time,
             cursor.end_time,
+            page_size,
         );
+        Ok((values, interval_has_more || has_trimmed_values))
+    }
+
+    fn raw_modified_page_request(
+        cursor: &HistoryReadCursor,
+        page_size: usize,
+        resume_after: Option<i64>,
+    ) -> RawModifiedPageRequest {
+        RawModifiedPageRequest {
+            node_id: cursor.node_id.to_string(),
+            start_ticks: cursor.start_time.ticks(),
+            end_ticks: cursor.end_time.ticks(),
+            chronological: cursor.chronological,
+            include_start_bound: cursor.return_bounds && resume_after.is_none(),
+            include_end_bound: cursor.return_bounds,
+            resume_after,
+            page_size,
+        }
+    }
+
+    fn fetch_raw_modified_values(
+        conn: Arc<Mutex<Connection>>,
+        request: RawModifiedPageRequest,
+    ) -> Result<(Vec<DataValue>, bool), SqliteError> {
+        let conn = conn.lock();
+        let query_limit = request.page_size.saturating_add(1);
+        let mut values = Vec::with_capacity(query_limit);
+
+        Self::push_start_bound(&conn, &request, &mut values)?;
+        let interval_has_more =
+            Self::push_interval_values(&conn, &request, query_limit, &mut values)?;
+        Self::push_end_bound(&conn, &request, interval_has_more, &mut values)?;
+
+        Ok((values, interval_has_more))
+    }
+
+    fn push_start_bound(
+        conn: &Connection,
+        request: &RawModifiedPageRequest,
+        values: &mut Vec<DataValue>,
+    ) -> Result<(), SqliteError> {
+        if request.include_start_bound {
+            let find_prev = request.chronological;
+            if let Some(value) =
+                query::fetch_bounds(conn, &request.node_id, request.start_ticks, find_prev)?
+            {
+                values.push(value);
+            }
+        }
+        Ok(())
+    }
+
+    fn push_interval_values(
+        conn: &Connection,
+        request: &RawModifiedPageRequest,
+        query_limit: usize,
+        values: &mut Vec<DataValue>,
+    ) -> Result<bool, SqliteError> {
+        let interval_values = query::fetch_interval(
+            conn,
+            &request.node_id,
+            request.start_ticks,
+            request.end_ticks,
+            request.chronological,
+            request.resume_after,
+            query_limit,
+        )?;
+        let interval_has_more = interval_values.len() > request.page_size;
+        values.extend(interval_values);
+        Ok(interval_has_more)
+    }
+
+    fn push_end_bound(
+        conn: &Connection,
+        request: &RawModifiedPageRequest,
+        interval_has_more: bool,
+        values: &mut Vec<DataValue>,
+    ) -> Result<(), SqliteError> {
+        if request.include_end_bound && !interval_has_more {
+            let find_prev = !request.chronological;
+            if let Some(value) =
+                query::fetch_bounds(conn, &request.node_id, request.end_ticks, find_prev)?
+            {
+                values.push(value);
+            }
+        }
+        Ok(())
+    }
+
+    fn sort_dedup_and_trim_page(
+        values: &mut Vec<DataValue>,
+        start_time: DateTime,
+        end_time: DateTime,
+        page_size: usize,
+    ) -> bool {
+        opcua_server::history::sort_historical_values(values, start_time, end_time);
         values.dedup_by(|a, b| a.source_timestamp == b.source_timestamp);
 
         let has_trimmed_values = values.len() > page_size;
@@ -166,7 +233,7 @@ impl SqliteHistoryBackend {
             values.truncate(page_size);
         }
 
-        Ok((values, interval_has_more || has_trimmed_values))
+        has_trimmed_values
     }
 }
 

@@ -32,6 +32,11 @@ use opcua_types::{
     TimestampsToReturn,
 };
 
+pub(super) struct RemovedSubscription {
+    pub(super) id: u32,
+    pub(super) monitored_items: Vec<MonitoredItemRef>,
+}
+
 /// Subscriptions belonging to a single session. Note that they are technically _owned_ by
 /// a user token, which means that they can be transfered to a different session.
 pub struct SessionSubscriptions {
@@ -671,14 +676,14 @@ impl SessionSubscriptions {
         );
     }
 
-    pub(crate) fn tick(
+    pub(super) fn tick(
         &mut self,
         now: &DateTimeUtc,
         now_instant: Instant,
         tick_reason: TickReason,
         buffer: &mut NotificationBuffer,
-    ) -> Vec<MonitoredItemRef> {
-        let mut to_delete = Vec::new();
+    ) -> Vec<RemovedSubscription> {
+        let mut removed_subscriptions = Vec::new();
         if self.subscriptions.is_empty() {
             for pb in self.publish_request_queue.drain(..) {
                 let _ = pb.response.send(
@@ -686,7 +691,7 @@ impl SessionSubscriptions {
                         .into(),
                 );
             }
-            return to_delete;
+            return removed_subscriptions;
         }
 
         self.remove_expired_publish_requests(now_instant);
@@ -695,6 +700,7 @@ impl SessionSubscriptions {
             let mut to_remove = Vec::new();
             for (sub_id, subscription) in &mut self.subscriptions {
                 buffer.reset();
+                let monitored_items = subscription.monitored_item_refs();
                 let res = subscription.tick(
                     now,
                     now_instant,
@@ -704,16 +710,10 @@ impl SessionSubscriptions {
                     &mut self.data_change_notification_pool,
                 );
                 if matches!(res, TickResult::Expired) {
-                    to_delete.extend(subscription.drain().map(|item| {
-                        MonitoredItemRef::new(
-                            MonitoredItemHandle {
-                                subscription_id: *sub_id,
-                                monitored_item_id: item.1.id(),
-                            },
-                            item.1.item_to_monitor().node_id.clone(),
-                            item.1.item_to_monitor().attribute_id,
-                        )
-                    }))
+                    removed_subscriptions.push(RemovedSubscription {
+                        id: *sub_id,
+                        monitored_items,
+                    });
                 }
 
                 if subscription.ready_to_remove() {
@@ -724,7 +724,7 @@ impl SessionSubscriptions {
                 self.subscriptions.remove(&sub_id);
                 self.remove_retransmission_notifications(|f| f.subscription_id == sub_id);
             }
-            return to_delete;
+            return removed_subscriptions;
         }
 
         let subscription_ids = {
@@ -744,6 +744,7 @@ impl SessionSubscriptions {
         for sub_id in subscription_ids {
             let subscription = self.subscriptions.get_mut(&sub_id).unwrap();
             buffer.reset();
+            let monitored_items = subscription.monitored_item_refs();
             let res = subscription.tick(
                 now,
                 now_instant,
@@ -768,16 +769,10 @@ impl SessionSubscriptions {
             // If the subscription expired, make sure to collect any deleted monitored items.
 
             if matches!(res, TickResult::Expired) {
-                to_delete.extend(subscription.drain().map(|item| {
-                    MonitoredItemRef::new(
-                        MonitoredItemHandle {
-                            subscription_id: sub_id,
-                            monitored_item_id: item.1.id(),
-                        },
-                        item.1.item_to_monitor().node_id.clone(),
-                        item.1.item_to_monitor().attribute_id,
-                    )
-                }))
+                removed_subscriptions.push(RemovedSubscription {
+                    id: sub_id,
+                    monitored_items,
+                });
             }
 
             if subscription.ready_to_remove() {
@@ -824,7 +819,7 @@ impl SessionSubscriptions {
             );
         }
 
-        to_delete
+        removed_subscriptions
     }
 
     fn find_notification_message(

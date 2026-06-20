@@ -81,12 +81,12 @@ blocking prerequisite. Stories may proceed in priority order or in parallel.
 **Goal**: indexes/maps/tasks return to baseline under churn.
 **Independent Test**: churn soak ⇒ `monitored_items`/`subscription_to_session` baseline-stable; abandoned continuations TTL-evicted; suspended `Engine` drop aborts task (quickstart US4).
 
-- [ ] T015 [P] [US4] Add failing tests: (a) create/delete data-change monitored items N× ⇒ `monitored_items` + `subscription_to_session` return to baseline; (b) abandoned browse/query continuation points are TTL-evicted without session close; (c) dropping a suspended `Engine` aborts its task.
-- [ ] T016 [US4] Centralize subscription removal on `SubscriptionCache` in `async-opcua-server/src/subscriptions/mod.rs`: remove **all-attribute** `monitored_items` handles + `subscription_to_session` on `delete_subscriptions` (not just `EventNotifier`). (depends on T015)
-- [ ] T017 [US4] Clean the outer indexes on the expiry path: have `SessionSubscriptions::tick()` in `async-opcua-server/src/subscriptions/session_subscriptions.rs` return removed subscription IDs/refs so the cache holder cleans `monitored_items`/`subscription_to_session`. (depends on T016)
-- [ ] T018 [US4] Convert the browse/query continuation `HashMap`s in `async-opcua-server/src/session/instance.rs` to the moka TTL/LRU pattern (mirror `history/continuation.rs`); stop treating `0` as unlimited. (depends on T015)
-- [ ] T019 [US4] `impl Drop for Engine` in `async-opcua-server/src/programs/engine.rs`: cancel the token / abort the handle and wake `suspend_notify` so a suspended task observes cancellation. (depends on T015)
-- [ ] T020 [US4] Run the gate; verify T015 passes; **commit US4** (`fix(011 US4): eliminate long-uptime growth (index cleanup, continuation TTL, Engine Drop)`).
+- [X] T015 [P] [US4] Add failing tests: (a) create/delete data-change monitored items N× ⇒ `monitored_items` + `subscription_to_session` return to baseline; (b) abandoned browse/query continuation points are TTL-evicted without session close; (c) dropping a suspended `Engine` aborts its task.
+- [X] T016 [US4] Centralize subscription removal on `SubscriptionCache` in `async-opcua-server/src/subscriptions/mod.rs`: remove **all-attribute** `monitored_items` handles + `subscription_to_session` on `delete_subscriptions` (not just `EventNotifier`). (depends on T015)
+- [X] T017 [US4] Clean the outer indexes on the expiry path: have `SessionSubscriptions::tick()` in `async-opcua-server/src/subscriptions/session_subscriptions.rs` return removed subscription IDs/refs so the cache holder cleans `monitored_items`/`subscription_to_session`. (depends on T016)
+- [X] T018 [US4] Convert the browse/query continuation `HashMap`s in `async-opcua-server/src/session/instance.rs` to the moka TTL/LRU pattern (mirror `history/continuation.rs`); stop treating `0` as unlimited. (depends on T015)
+- [X] T019 [US4] `impl Drop for Engine` in `async-opcua-server/src/programs/engine.rs`: cancel the token / abort the handle and wake `suspend_notify` so a suspended task observes cancellation. (depends on T015)
+- [X] T020 [US4] Run the gate; verify T015 passes; **commit US4** (`fix(011 US4): eliminate long-uptime growth (index cleanup, continuation TTL, Engine Drop)`).
 
 **Checkpoint**: US1–US4 independently functional.
 

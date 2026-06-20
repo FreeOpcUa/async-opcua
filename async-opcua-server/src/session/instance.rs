@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -17,7 +16,43 @@ use opcua_types::{
     ApplicationDescription, ByteString, MessageSecurityMode, NodeId, StatusCode, UAString,
 };
 
+#[cfg(not(test))]
+const BROWSE_QUERY_CONTINUATION_POINT_TTL: Duration = Duration::from_secs(300);
+#[cfg(test)]
+const BROWSE_QUERY_CONTINUATION_POINT_TTL: Duration = Duration::from_millis(50);
 const HISTORY_CONTINUATION_POINT_TTL: Duration = Duration::from_secs(300);
+
+struct ContinuationPointCache<T> {
+    cache: moka::sync::Cache<ByteString, Arc<parking_lot::Mutex<Option<T>>>>,
+}
+
+impl<T: Send + 'static> ContinuationPointCache<T> {
+    fn new(max_limit: usize, max_age: Duration) -> Self {
+        Self {
+            cache: moka::sync::Cache::builder()
+                .max_capacity(max_limit as u64)
+                .time_to_live(max_age)
+                .build(),
+        }
+    }
+
+    fn insert(&self, id: ByteString, cp: T) {
+        self.cache
+            .insert(id, Arc::new(parking_lot::Mutex::new(Some(cp))));
+    }
+
+    fn remove(&self, id: &ByteString) -> Option<T> {
+        self.cache.run_pending_tasks();
+        let cp_arc = self.cache.get(id);
+        self.cache.invalidate(id);
+        cp_arc.and_then(|arc| arc.lock().take())
+    }
+
+    fn entry_count(&self) -> u64 {
+        self.cache.run_pending_tasks();
+        self.cache.entry_count()
+    }
+}
 
 /// An instance of an OPC-UA session.
 pub struct Session {
@@ -64,11 +99,11 @@ pub struct Session {
     /// Time of last service request.
     last_service_request: ArcSwap<Instant>,
     /// Continuation points for browse.
-    browse_continuation_points: HashMap<ByteString, BrowseContinuationPoint>,
+    browse_continuation_points: ContinuationPointCache<BrowseContinuationPoint>,
     /// Continuation points for history.
     history_continuation_points: HistoryContinuationPointCache,
     /// Continuation points for querying.
-    query_continuation_points: HashMap<ByteString, QueryContinuationPoint>,
+    query_continuation_points: ContinuationPointCache<QueryContinuationPoint>,
     /// User token.
     user_token: Option<UserToken>,
     /// Claims extracted from an issued JWT identity token.
@@ -100,6 +135,14 @@ impl Session {
     ) -> Self {
         let (session_id, session_id_numeric) = next_session_id();
         let now = Instant::now();
+        let max_browse_continuation_points = bounded_continuation_point_limit(
+            info.config.limits.max_browse_continuation_points,
+            crate::constants::MAX_BROWSE_CONTINUATION_POINTS,
+        );
+        let max_query_continuation_points = bounded_continuation_point_limit(
+            info.config.limits.max_query_continuation_points,
+            crate::constants::MAX_QUERY_CONTINUATION_POINTS,
+        );
         Self {
             session_id,
             session_id_numeric,
@@ -121,15 +164,21 @@ impl Session {
             max_request_message_size,
             max_response_message_size,
             endpoint_url,
-            max_browse_continuation_points: info.config.limits.max_browse_continuation_points,
+            max_browse_continuation_points,
             max_history_continuation_points: info.config.limits.max_history_continuation_points,
-            max_query_continuation_points: info.config.limits.max_query_continuation_points,
-            browse_continuation_points: Default::default(),
+            max_query_continuation_points,
+            browse_continuation_points: ContinuationPointCache::new(
+                max_browse_continuation_points,
+                BROWSE_QUERY_CONTINUATION_POINT_TTL,
+            ),
             history_continuation_points: HistoryContinuationPointCache::new(
                 info.config.limits.max_history_continuation_points,
                 HISTORY_CONTINUATION_POINT_TTL,
             ),
-            query_continuation_points: Default::default(),
+            query_continuation_points: ContinuationPointCache::new(
+                max_query_continuation_points,
+                BROWSE_QUERY_CONTINUATION_POINT_TTL,
+            ),
             user_token: None,
             claims: None,
             auth_profile: None,
@@ -258,8 +307,8 @@ impl Session {
         &mut self,
         cp: BrowseContinuationPoint,
     ) -> Result<(), ()> {
-        if self.max_browse_continuation_points <= self.browse_continuation_points.len()
-            && self.max_browse_continuation_points > 0
+        if self.max_browse_continuation_points
+            <= self.browse_continuation_points.entry_count() as usize
         {
             Err(())
         } else {
@@ -303,8 +352,8 @@ impl Session {
         id: &ByteString,
         cp: QueryContinuationPoint,
     ) -> Result<(), ()> {
-        if self.max_query_continuation_points <= self.query_continuation_points.len()
-            && self.max_query_continuation_points > 0
+        if self.max_query_continuation_points
+            <= self.query_continuation_points.entry_count() as usize
         {
             Err(())
         } else {
@@ -318,6 +367,16 @@ impl Session {
         id: &ByteString,
     ) -> Option<QueryContinuationPoint> {
         self.query_continuation_points.remove(id)
+    }
+
+    #[cfg(test)]
+    fn browse_continuation_point_count_for_test(&self) -> usize {
+        self.browse_continuation_points.entry_count() as usize
+    }
+
+    #[cfg(test)]
+    fn query_continuation_point_count_for_test(&self) -> usize {
+        self.query_continuation_points.entry_count() as usize
     }
 
     /// Get the application description of the client that created this session.
@@ -364,5 +423,104 @@ impl Session {
     /// Get the security policy URI of this session.
     pub fn security_policy_uri(&self) -> &str {
         &self.security_policy_uri
+    }
+}
+
+fn bounded_continuation_point_limit(configured_limit: usize, default_limit: usize) -> usize {
+    if configured_limit == 0 {
+        default_limit
+    } else {
+        configured_limit
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use opcua_crypto::{random, SecurityPolicy};
+    use opcua_nodes::ParsedContentFilter;
+    use opcua_types::{
+        ApplicationDescription, BrowseDescription, BrowseDescriptionResultMask, BrowseDirection,
+        MessageSecurityMode, NodeClassMask, NodeId, ReferenceTypeId, UAString,
+    };
+
+    use crate::{identity_token::IdentityToken, node_manager::QueryRequest, ServerBuilder};
+
+    use super::Session;
+
+    #[tokio::test]
+    async fn abandoned_browse_and_query_continuation_points_are_ttl_evicted_without_session_close()
+    {
+        let mut session = test_session();
+        let baseline_browse = session.browse_continuation_point_count_for_test();
+        let baseline_query = session.query_continuation_point_count_for_test();
+
+        let browse_node = crate::node_manager::BrowseNode::new(
+            BrowseDescription {
+                node_id: NodeId::new(2, "ttl-browse-node"),
+                browse_direction: BrowseDirection::Forward,
+                reference_type_id: NodeId::from(ReferenceTypeId::References),
+                include_subtypes: true,
+                node_class_mask: NodeClassMask::empty().bits(),
+                result_mask: BrowseDescriptionResultMask::all().bits(),
+            },
+            1,
+            0,
+        );
+        let (browse_result, _) = browse_node.into_result(0, 2, &mut session);
+        assert!(!browse_result.continuation_point.is_null());
+
+        let query_request = QueryRequest::new(Vec::new(), ParsedContentFilter::empty(), 1, 1);
+        let (_, query_continuation_point, query_status) =
+            query_request.into_result(0, 2, &mut session);
+        assert!(query_status.is_good());
+        assert!(!query_continuation_point.is_null());
+
+        assert_eq!(
+            session.browse_continuation_point_count_for_test(),
+            baseline_browse + 1
+        );
+        assert_eq!(
+            session.query_continuation_point_count_for_test(),
+            baseline_query + 1
+        );
+
+        tokio::time::sleep(Duration::from_millis(75)).await;
+
+        assert_eq!(
+            session.browse_continuation_point_count_for_test(),
+            baseline_browse,
+            "abandoned browse continuation point should be TTL-evicted without closing the session"
+        );
+        assert_eq!(
+            session.query_continuation_point_count_for_test(),
+            baseline_query,
+            "abandoned query continuation point should be TTL-evicted without closing the session"
+        );
+    }
+
+    fn test_session() -> Session {
+        let (_server, handle) = ServerBuilder::new_anonymous("continuation ttl test")
+            .without_node_managers()
+            .build()
+            .expect("test server should build");
+        let info = handle.info();
+        Session::create(
+            info,
+            NodeId::new(1, "continuation-ttl-token"),
+            1,
+            60_000,
+            0,
+            0,
+            UAString::from(info.base_endpoint()),
+            SecurityPolicy::None.to_uri().to_string(),
+            IdentityToken::None,
+            None,
+            random::byte_string(info.config.session_nonce_length),
+            UAString::from("continuation-ttl-test"),
+            ApplicationDescription::default(),
+            MessageSecurityMode::None,
+        )
     }
 }

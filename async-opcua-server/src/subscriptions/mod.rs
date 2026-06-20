@@ -11,6 +11,7 @@ use hashbrown::{Equivalent, HashMap};
 pub use monitored_item::{CreateMonitoredItem, MonitoredItem};
 use opcua_core::{trace_read_lock, trace_write_lock, RepublishResponseShared, ResponseMessage};
 use opcua_nodes::{Event, TypeTree};
+use session_subscriptions::RemovedSubscription;
 pub use session_subscriptions::SessionSubscriptions;
 use subscription::TickReason;
 pub use subscription::{MonitoredItemHandle, Subscription, SubscriptionState};
@@ -216,7 +217,7 @@ impl SubscriptionCache {
         // always just sleep for the exact time until the next expired publish request, which could
         // be more efficient, and would be more responsive.
         let mut to_delete = Vec::new();
-        let mut items_to_delete = Vec::new();
+        let mut expired_subscriptions = Vec::new();
         {
             let now = Utc::now();
             let now_instant = Instant::now();
@@ -230,17 +231,21 @@ impl SubscriptionCache {
             };
             for (session_id, sub) in session_subscriptions {
                 let mut sub_lck = sub.lock();
-                items_to_delete.push((
-                    sub_lck.session().clone(),
-                    sub_lck.tick(&now, now_instant, TickReason::TickTimerFired, &mut buffer),
-                ));
+                let removed_subscriptions =
+                    sub_lck.tick(&now, now_instant, TickReason::TickTimerFired, &mut buffer);
+                if !removed_subscriptions.is_empty() {
+                    expired_subscriptions.push((sub_lck.session().clone(), removed_subscriptions));
+                }
                 if sub_lck.is_ready_to_delete() {
                     to_delete.push(session_id);
                 }
             }
         }
-        if !to_delete.is_empty() {
+        if !to_delete.is_empty() || !expired_subscriptions.is_empty() {
             let mut lck = trace_write_lock!(self.inner);
+            for (_, removed_subscriptions) in &expired_subscriptions {
+                Self::cleanup_removed_subscriptions(&mut lck, removed_subscriptions);
+            }
             for id in to_delete {
                 lck.session_subscriptions.remove(&id);
             }
@@ -249,16 +254,16 @@ impl SubscriptionCache {
                 .diagnostics
                 .set_current_subscription_count(lck.subscription_to_session.len() as u32);
         }
-        if !items_to_delete.is_empty() {
-            Self::delete_expired_monitored_items(context, items_to_delete).await;
+        if !expired_subscriptions.is_empty() {
+            Self::delete_expired_monitored_items(context, expired_subscriptions).await;
         }
     }
 
     async fn delete_expired_monitored_items(
         context: &ServerContext,
-        items_to_delete: Vec<(Arc<RwLock<Session>>, Vec<MonitoredItemRef>)>,
+        expired_subscriptions: Vec<(Arc<RwLock<Session>>, Vec<RemovedSubscription>)>,
     ) {
-        for (session, items) in items_to_delete {
+        for (session, removed_subscriptions) in expired_subscriptions {
             // Create a local request context, since we need to call delete monitored items.
 
             let (id, token) = {
@@ -285,8 +290,9 @@ impl SubscriptionCache {
             };
 
             for mgr in context.node_managers.iter() {
-                let owned: Vec<_> = items
+                let owned: Vec<&MonitoredItemRef> = removed_subscriptions
                     .iter()
+                    .flat_map(|removed| removed.monitored_items.iter())
                     .filter(|n| mgr.owns_node(n.node_id()))
                     .collect();
 
@@ -295,6 +301,34 @@ impl SubscriptionCache {
                 }
 
                 mgr.delete_monitored_items(&ctx, &owned).await;
+            }
+        }
+    }
+
+    fn cleanup_removed_subscriptions(
+        inner: &mut SubscriptionCacheInner,
+        removed_subscriptions: &[RemovedSubscription],
+    ) {
+        for removed in removed_subscriptions {
+            inner.subscription_to_session.remove(&removed.id);
+            Self::cleanup_monitored_item_refs(inner, &removed.monitored_items);
+        }
+    }
+
+    fn cleanup_monitored_item_refs(inner: &mut SubscriptionCacheInner, items: &[MonitoredItemRef]) {
+        for item in items {
+            let key = MonitoredItemKeyRef {
+                id: item.node_id().into(),
+                attribute_id: item.attribute(),
+            };
+            let remove_key = if let Some(handles) = inner.monitored_items.get_mut(&key) {
+                handles.remove(&item.handle());
+                handles.is_empty()
+            } else {
+                false
+            };
+            if remove_key {
+                inner.monitored_items.remove(&key);
             }
         }
     }
@@ -664,32 +698,19 @@ impl SubscriptionCache {
             return Err(StatusCode::BadNoSubscription);
         };
         let mut cache_lck = cache.lock();
-        for id in ids {
-            if cache_lck.contains(*id) {
-                lck.subscription_to_session.remove(id);
-            }
-        }
+        let result = cache_lck.delete_subscriptions(ids);
+        let removed_subscriptions = result
+            .iter()
+            .zip(ids.iter())
+            .filter(|((status, _), _)| status.is_good())
+            .map(|((_, monitored_items), id)| RemovedSubscription {
+                id: *id,
+                monitored_items: monitored_items.clone(),
+            })
+            .collect::<Vec<_>>();
+        Self::cleanup_removed_subscriptions(&mut lck, &removed_subscriptions);
         info.diagnostics
             .set_current_subscription_count(lck.subscription_to_session.len() as u32);
-        let result = cache_lck.delete_subscriptions(ids);
-
-        for (status, item_res) in &result {
-            if !status.is_good() {
-                continue;
-            }
-
-            for rf in item_res {
-                if rf.attribute() == AttributeId::EventNotifier {
-                    let key = MonitoredItemKeyRef {
-                        id: rf.node_id().into(),
-                        attribute_id: rf.attribute(),
-                    };
-                    if let Some(it) = lck.monitored_items.get_mut(&key) {
-                        it.remove(&rf.handle());
-                    }
-                }
-            }
-        }
 
         Ok(result)
     }
@@ -704,6 +725,18 @@ impl SubscriptionCache {
 
         let cache_lck = cache.lock();
         cache_lck.subscription_ids()
+    }
+
+    #[cfg(test)]
+    fn reverse_index_size_for_test(&self) -> usize {
+        let lck = trace_read_lock!(self.inner);
+        lck.monitored_items.values().map(|items| items.len()).sum()
+    }
+
+    #[cfg(test)]
+    fn subscription_to_session_size_for_test(&self) -> usize {
+        let lck = trace_read_lock!(self.inner);
+        lck.subscription_to_session.len()
     }
 
     pub(crate) fn transfer(
@@ -842,6 +875,268 @@ impl PersistentSessionKey {
                 && self.application_uri == other.application_uri
         } else {
             other.token == self.token
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{sync::Arc, time::Duration};
+
+    use opcua_core::sync::RwLock;
+    use opcua_crypto::{random, SecurityPolicy};
+    use opcua_types::{
+        ApplicationDescription, AttributeId, BuildInfo, ByteString, CreateSubscriptionRequest,
+        ExtensionObject, MessageSecurityMode, MonitoredItemCreateRequest, MonitoringMode,
+        MonitoringParameters, NodeId, ReadValueId, StatusCode, TimestampsToReturn, UAString,
+    };
+
+    use crate::{
+        authenticator::UserToken,
+        identity_token::{IdentityToken, POLICY_ID_ANONYMOUS},
+        node_manager::{RequestContext, RequestContextInner, ServerContext},
+        session::instance::Session,
+        ServerBuilder, ServerStatusWrapper, SubscriptionCache,
+    };
+
+    use super::CreateMonitoredItem;
+
+    #[tokio::test]
+    async fn delete_subscriptions_returns_data_change_reverse_indexes_to_baseline() {
+        const CHURN_CYCLES: usize = 4;
+        const ITEMS_PER_SUBSCRIPTION: usize = 3;
+
+        let fixture = SubscriptionFixture::new();
+        let baseline_monitored_items = fixture.cache.reverse_index_size_for_test();
+        let baseline_subscription_to_session =
+            fixture.cache.subscription_to_session_size_for_test();
+
+        for cycle in 0..CHURN_CYCLES {
+            let subscription_id = fixture
+                .cache
+                .create_subscription(
+                    fixture.context.session_id,
+                    &CreateSubscriptionRequest {
+                        requested_publishing_interval: 100.0,
+                        requested_lifetime_count: 30,
+                        requested_max_keep_alive_count: 10,
+                        publishing_enabled: true,
+                        ..Default::default()
+                    },
+                    &fixture.context,
+                )
+                .expect("subscription should be created")
+                .subscription_id;
+
+            let requests = (0..ITEMS_PER_SUBSCRIPTION)
+                .map(|idx| {
+                    let request = MonitoredItemCreateRequest::new(
+                        ReadValueId::new(
+                            NodeId::new(2, format!("cycle-{cycle}-value-{idx}")),
+                            AttributeId::Value,
+                        ),
+                        MonitoringMode::Reporting,
+                        MonitoringParameters {
+                            client_handle: idx as u32 + 1,
+                            sampling_interval: 0.0,
+                            filter: ExtensionObject::null(),
+                            queue_size: 1,
+                            discard_oldest: true,
+                        },
+                    );
+                    let type_tree = fixture.info.type_tree.read();
+                    let mut item = CreateMonitoredItem::new(
+                        request,
+                        fixture.info.monitored_item_id_handle.next(),
+                        subscription_id,
+                        &fixture.info,
+                        TimestampsToReturn::Both,
+                        &*type_tree,
+                        None,
+                    );
+                    item.set_status(StatusCode::Good);
+                    item
+                })
+                .collect::<Vec<_>>();
+
+            let results = fixture
+                .cache
+                .create_monitored_items(fixture.context.session_id, subscription_id, &requests)
+                .expect("monitored items should be created");
+            assert!(results.iter().all(|r| r.status_code.is_good()));
+
+            let delete_results = fixture
+                .cache
+                .delete_subscriptions(
+                    fixture.context.session_id,
+                    &[subscription_id],
+                    &fixture.info,
+                )
+                .expect("subscription delete should complete");
+            assert_eq!(delete_results.len(), 1);
+            assert!(delete_results[0].0.is_good());
+        }
+
+        assert_eq!(
+            fixture.cache.subscription_to_session_size_for_test(),
+            baseline_subscription_to_session,
+            "subscription_to_session should return to baseline after delete churn"
+        );
+        assert_eq!(
+            fixture.cache.reverse_index_size_for_test(),
+            baseline_monitored_items,
+            "monitored_items reverse index should return to baseline after delete churn"
+        );
+    }
+
+    #[tokio::test]
+    async fn expired_subscriptions_return_reverse_indexes_to_baseline() {
+        const ITEMS_PER_SUBSCRIPTION: usize = 3;
+
+        let fixture = SubscriptionFixture::new();
+        let baseline_monitored_items = fixture.cache.reverse_index_size_for_test();
+        let baseline_subscription_to_session =
+            fixture.cache.subscription_to_session_size_for_test();
+
+        let subscription_id = fixture
+            .cache
+            .create_subscription(
+                fixture.context.session_id,
+                &CreateSubscriptionRequest {
+                    requested_publishing_interval: 100.0,
+                    requested_lifetime_count: 3,
+                    requested_max_keep_alive_count: 1,
+                    publishing_enabled: true,
+                    ..Default::default()
+                },
+                &fixture.context,
+            )
+            .expect("subscription should be created")
+            .subscription_id;
+
+        let requests = (0..ITEMS_PER_SUBSCRIPTION)
+            .map(|idx| {
+                let request = MonitoredItemCreateRequest::new(
+                    ReadValueId::new(
+                        NodeId::new(2, format!("expiry-value-{idx}")),
+                        AttributeId::Value,
+                    ),
+                    MonitoringMode::Reporting,
+                    MonitoringParameters {
+                        client_handle: idx as u32 + 1,
+                        sampling_interval: 0.0,
+                        filter: ExtensionObject::null(),
+                        queue_size: 1,
+                        discard_oldest: true,
+                    },
+                );
+                let type_tree = fixture.info.type_tree.read();
+                let mut item = CreateMonitoredItem::new(
+                    request,
+                    fixture.info.monitored_item_id_handle.next(),
+                    subscription_id,
+                    &fixture.info,
+                    TimestampsToReturn::Both,
+                    &*type_tree,
+                    None,
+                );
+                item.set_status(StatusCode::Good);
+                item
+            })
+            .collect::<Vec<_>>();
+
+        let results = fixture
+            .cache
+            .create_monitored_items(fixture.context.session_id, subscription_id, &requests)
+            .expect("monitored items should be created");
+        assert!(results.iter().all(|r| r.status_code.is_good()));
+
+        for _ in 0..6 {
+            fixture.cache.periodic_tick(&fixture.server_context).await;
+            tokio::time::sleep(Duration::from_millis(110)).await;
+        }
+
+        assert_eq!(
+            fixture.cache.subscription_to_session_size_for_test(),
+            baseline_subscription_to_session,
+            "subscription_to_session should return to baseline after expiry"
+        );
+        assert_eq!(
+            fixture.cache.reverse_index_size_for_test(),
+            baseline_monitored_items,
+            "monitored_items reverse index should return to baseline after expiry"
+        );
+    }
+
+    struct SubscriptionFixture {
+        info: Arc<crate::ServerInfo>,
+        cache: Arc<SubscriptionCache>,
+        context: RequestContext,
+        server_context: ServerContext,
+    }
+
+    impl SubscriptionFixture {
+        fn new() -> Self {
+            let (_server, handle) = ServerBuilder::new_anonymous("subscription index leak test")
+                .without_node_managers()
+                .build()
+                .expect("test server should build");
+            let info = Arc::clone(handle.info());
+            let cache = Arc::new(SubscriptionCache::new(info.config.limits.subscriptions));
+            let session = Arc::new(RwLock::new(Session::create(
+                &info,
+                NodeId::new(1, "subscription-index-leak-token"),
+                1,
+                60_000,
+                0,
+                0,
+                UAString::from(info.base_endpoint()),
+                SecurityPolicy::None.to_uri().to_string(),
+                IdentityToken::None,
+                None,
+                random::byte_string(info.config.session_nonce_length),
+                UAString::from("subscription-index-leak-test"),
+                ApplicationDescription::default(),
+                MessageSecurityMode::None,
+            )));
+            session.write().activate(
+                1,
+                ByteString::null(),
+                IdentityToken::None,
+                None,
+                UserToken(POLICY_ID_ANONYMOUS.to_string()),
+                None,
+            );
+            let session_id = session.read().session_id_numeric();
+            let context = RequestContext::new_test(Arc::new(RequestContextInner {
+                session,
+                session_id,
+                authenticator: info.authenticator.clone(),
+                token: UserToken(POLICY_ID_ANONYMOUS.to_string()),
+                type_tree: info.type_tree.clone(),
+                type_tree_getter: info.type_tree_getter.clone(),
+                subscriptions: Arc::clone(&cache),
+                info: Arc::clone(&info),
+            }));
+            let server_context = ServerContext {
+                node_managers: handle.node_managers().as_weak(),
+                subscriptions: Arc::clone(&cache),
+                info: Arc::clone(&info),
+                authenticator: info.authenticator.clone(),
+                type_tree: info.type_tree.clone(),
+                type_tree_getter: info.type_tree_getter.clone(),
+                status: Arc::new(ServerStatusWrapper::new(
+                    BuildInfo::default(),
+                    Arc::clone(&cache),
+                )),
+            };
+
+            Self {
+                info,
+                cache,
+                context,
+                server_context,
+            }
         }
     }
 }

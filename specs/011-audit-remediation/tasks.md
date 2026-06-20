@@ -97,12 +97,12 @@ blocking prerequisite. Stories may proceed in priority order or in parallel.
 **Goal**: close config footguns + latent allocs; ship safe defaults/profiles.
 **Independent Test**: both-zero rejected; `read_bytes` bounded; no pre-alloc-before-validate; profiles load+start (quickstart US5).
 
-- [ ] T021 [P] [US5] Add failing tests: both-zero `max_chunk_count`+`max_message_size` rejected at config validation; `read_bytes` enforces `max_message_size`; `ByteString` does not pre-allocate before stream-length confirmed; the three profiles parse and start a server.
-- [ ] T022 [US5] Reject (or hard-ceiling) `max_chunk_count == 0 && max_message_size == 0` in config validation / `effective_max_chunk_count` (`async-opcua-server/src/transport/tcp.rs` + `config/limits.rs`).
-- [ ] T023 [P] [US5] Bound `MessageHeader::read_bytes` against `max_message_size` in `async-opcua-core/src/comms/tcp_types.rs` (or remove it if confirmed zero external callers; note in release notes).
-- [ ] T024 [P] [US5] Allocate-after-validate in `async-opcua-types/src/byte_string.rs` `decode` (and the UADP buffer path) — read incrementally / `take`-limited, no `vec![0u8; len]` before the stream is confirmed.
-- [ ] T025 [US5] Give `max_notifications_per_publish` a bounded non-zero default in `async-opcua-server/src/config/limits.rs`; update `samples/server.conf` accordingly; ensure `deploy-profiles.md` profiles (micro/gateway/server) are referenced from docs.
-- [ ] T026 [US5] Run the gate; verify T021 passes; **commit US5** (`fix(011 US5): config + defense-in-depth hardening; bounded defaults & profiles`).
+- [X] T021 [P] [US5] Add failing tests: both-zero `max_chunk_count`+`max_message_size` rejected at config validation; `read_bytes` enforces `max_message_size`; `ByteString` does not pre-allocate before stream-length confirmed; the three profiles parse and start a server.
+- [X] T022 [US5] Reject (or hard-ceiling) `max_chunk_count == 0 && max_message_size == 0` in config validation / `effective_max_chunk_count` (`async-opcua-server/src/transport/tcp.rs` + `config/limits.rs`).
+- [X] T023 [P] [US5] Bound `MessageHeader::read_bytes` against `max_message_size` in `async-opcua-core/src/comms/tcp_types.rs` (or remove it if confirmed zero external callers; note in release notes).
+- [X] T024 [P] [US5] Allocate-after-validate in `async-opcua-types/src/byte_string.rs` `decode` (and the UADP buffer path) — read incrementally / `take`-limited, no `vec![0u8; len]` before the stream is confirmed.
+- [X] T025 [US5] Give `max_notifications_per_publish` a bounded non-zero default in `async-opcua-server/src/config/limits.rs`; update `samples/server.conf` accordingly; ensure `deploy-profiles.md` profiles (micro/gateway/server) are referenced from docs.
+- [X] T026 [US5] Run the gate; verify T021 passes; **commit US5** (`fix(011 US5): config + defense-in-depth hardening; bounded defaults & profiles`).
 
 **Checkpoint**: all stories independently functional.
 

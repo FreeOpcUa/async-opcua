@@ -147,6 +147,17 @@ impl MessageHeader {
         }
         let message_size = u32::decode(stream, decoding_options)
             .map_err(|_| Error::other("Cannot decode message_size"))?;
+        if decoding_options.max_message_size > 0
+            && message_size as usize > decoding_options.max_message_size
+        {
+            return Err(Error::other(opcua_types::Error::new(
+                StatusCode::BadTcpMessageTooLarge,
+                format!(
+                    "Message size {} exceeds maximum message size {}",
+                    message_size, decoding_options.max_message_size
+                ),
+            )));
+        }
 
         // Write header to stream
         let mut out = Cursor::new(Vec::with_capacity(message_size as usize));
@@ -542,6 +553,29 @@ mod tests {
             0x41, 0x43, 0x4b, 0x46, 0x1c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x08, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x01, 0xff, 0xff, 0x00, 0x00,
         ]
+    }
+
+    #[test]
+    fn read_bytes_rejects_message_size_above_decoding_limit() {
+        let declared_size = 1_024_u32;
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"HELF");
+        bytes.extend_from_slice(&declared_size.to_le_bytes());
+        bytes.resize(declared_size as usize, 0);
+
+        let mut stream = Cursor::new(bytes);
+        let decoding_options = DecodingOptions {
+            max_message_size: 64,
+            ..Default::default()
+        };
+
+        let result = MessageHeader::read_bytes(&mut stream, &decoding_options);
+
+        assert!(
+            result.is_err(),
+            "read_bytes must reject declared message_size {declared_size} above max_message_size {}",
+            decoding_options.max_message_size
+        );
     }
 
     #[test]

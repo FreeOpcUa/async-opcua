@@ -296,7 +296,9 @@ mod defaults {
         constants::MAX_KEEP_ALIVE_COUNT * 3
     }
     pub(super) fn max_notifications_per_publish() -> u64 {
-        constants::MAX_NOTIFICATIONS_PER_PUBLISH
+        // Bound the default publish response size; 0 remains available as an
+        // explicit unlimited opt-out in configuration.
+        1_000
     }
     pub(super) fn max_queued_notifications() -> usize {
         constants::MAX_QUEUED_NOTIFICATIONS
@@ -399,7 +401,7 @@ mod tests {
                     max_monitored_items_per_sub: 10_000,
                     max_monitored_item_queue_size: 10,
                     max_lifetime_count: 90_000,
-                    max_notifications_per_publish: 0,
+                    max_notifications_per_publish: 1_000,
                     max_queued_notifications: 20,
                 },
                 operational: OperationalLimits {
@@ -457,5 +459,37 @@ mod tests {
         let limits = Limits::default();
         assert_ne!(limits.subscriptions.max_monitored_items_per_sub, 0);
         assert_eq!(limits.subscriptions.max_monitored_items_per_sub, 10_000);
+    }
+
+    /// max_notifications_per_publish must default to a bounded non-zero value
+    /// so publish responses cannot grow without limit unless explicitly configured.
+    #[test]
+    fn max_notifications_per_publish_has_bounded_default() {
+        let limits = Limits::default();
+        assert_ne!(limits.subscriptions.max_notifications_per_publish, 0);
+        assert_eq!(limits.subscriptions.max_notifications_per_publish, 1_000);
+    }
+
+    #[test]
+    fn deployment_limit_profiles_parse() {
+        for profile in ["micro", "gateway", "server"] {
+            let conf_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../samples/profiles")
+                .join(format!("{profile}.conf"));
+            let content = fs::read_to_string(&conf_path)
+                .unwrap_or_else(|err| panic!("failed to read {}: {err}", conf_path.display()));
+            let full_config: serde_norway::Value = serde_norway::from_str(&content)
+                .unwrap_or_else(|err| panic!("failed to parse {}: {err}", conf_path.display()));
+            let limits_value = full_config
+                .get("limits")
+                .unwrap_or_else(|| panic!("{} must contain a limits section", conf_path.display()))
+                .clone();
+            let _limits: Limits = serde_norway::from_value(limits_value).unwrap_or_else(|err| {
+                panic!(
+                    "{} limits section did not parse as Limits: {err}",
+                    conf_path.display()
+                )
+            });
+        }
     }
 }

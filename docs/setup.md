@@ -153,6 +153,13 @@ other client). Trim the dependency surface with `--no-default-features` plus onl
 you use (e.g. `server`; add `json`/`xml` only if you need those encodings). Use `opt-level =
 "s"` instead of `"z"` if profiling shows you need more throughput headroom.
 
+### Deployment limit profiles
+
+Ready-to-edit server configurations for constrained and standard deployments live under
+`samples/profiles/`: `micro.conf`, `gateway.conf`, and `server.conf`. Their `limits:` blocks
+mirror the tiers described in `deploy-profiles.md`, including bounded non-zero
+`max_notifications_per_publish` values to avoid unlimited publish responses by default.
+
 ## Workspace Layout
 
 OPC UA for Rust follows the normal Rust conventions. There is a `Cargo.toml` per module that you may use to build the module and all dependencies. e.g.

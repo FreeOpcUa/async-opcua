@@ -273,6 +273,26 @@ mod tests {
 
         assert!(errors.iter().any(|error| error.contains("password hash")));
     }
+
+    #[test]
+    fn rejects_both_zero_message_and_chunk_limits() {
+        let mut config = ServerConfig::default();
+        config.limits.max_message_size = 0;
+        config.limits.max_chunk_count = 0;
+
+        let errors = config
+            .validate()
+            .expect_err("both max_message_size=0 and max_chunk_count=0 must be rejected");
+
+        assert!(
+            errors.iter().any(|error| {
+                error.contains("max_message_size")
+                    && error.contains("max_chunk_count")
+                    && error.contains("0")
+            }),
+            "expected validation to reject the unbounded 0/0 message limits, got: {errors:?}"
+        );
+    }
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
@@ -488,6 +508,12 @@ impl Config for ServerConfig {
         if self.limits.max_byte_string_length == 0 {
             errors.push(
                 "Server configuration is invalid. Max byte string length is invalid".to_owned(),
+            );
+        }
+        if self.limits.max_message_size == 0 && self.limits.max_chunk_count == 0 {
+            errors.push(
+                "Server configuration is invalid. max_message_size and max_chunk_count cannot both be 0"
+                    .to_owned(),
             );
         }
         if self.max_connections == 0 {

@@ -38,10 +38,10 @@ blocking prerequisite. Stories may proceed in priority order or in parallel.
 **Goal**: history-sqlite reads only ~`num_values_per_node` rows regardless of range; remainder via a keyset cursor.
 **Independent Test**: wide range + small cap ⇒ rows fetched ≈ cap, continuation returned, `HistoryReadNext` pages in order (quickstart US1).
 
-- [ ] T002 [US1] Add a failing regression test in `async-opcua-history-sqlite` (tests): large populated interval, `read_raw_modified` with wide range + small `num_values_per_node`; assert rows loaded ≈ cap (not range) and a continuation token is returned; `HistoryReadNext` returns the remainder in order with no dup/gap.
-- [ ] T003 [US1] Add a row `LIMIT` parameter (`num_values_per_node + 1`) to `query::fetch_interval` in `async-opcua-history-sqlite/src/query.rs`; keyset-resume support (`after = last_timestamp`).
-- [ ] T004 [US1] Replace the materialized-`Vec` continuation in `async-opcua-history-sqlite/src/backend.rs` (`read_raw_modified` + Next path) with the keyset cursor from data-model.md; apply a server-side hard ceiling when `num_values_per_node == 0`. (depends on T003)
-- [ ] T005 [US1] Run the gate; verify T002 passes; **commit US1** (`fix(011 US1): bound SQLite history reads — LIMIT + keyset cursor`).
+- [X] T002 [US1] Add a failing regression test in `async-opcua-history-sqlite` (tests): large populated interval, `read_raw_modified` with wide range + small `num_values_per_node`; assert rows loaded ≈ cap (not range) and a continuation token is returned; `HistoryReadNext` returns the remainder in order with no dup/gap.
+- [X] T003 [US1] Add a row `LIMIT` parameter (`num_values_per_node + 1`) to `query::fetch_interval` in `async-opcua-history-sqlite/src/query.rs`; keyset-resume support (`after = last_timestamp`).
+- [X] T004 [US1] Replace the materialized-`Vec` continuation in `async-opcua-history-sqlite/src/backend.rs` (`read_raw_modified` + Next path) with the keyset cursor from data-model.md; apply a server-side hard ceiling when `num_values_per_node == 0`. (depends on T003)
+- [X] T005 [US1] Run the gate; verify T002 passes; **commit US1** (`fix(011 US1): bound SQLite history reads — LIMIT + keyset cursor`).
 
 **Checkpoint**: US1 independently functional and testable.
 

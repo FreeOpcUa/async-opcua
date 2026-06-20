@@ -35,21 +35,34 @@ pub fn fetch_interval(
     start_ticks: i64,
     end_ticks: i64,
     chronological: bool,
+    resume_after: Option<i64>,
+    row_limit: usize,
 ) -> Result<Vec<DataValue>, Error> {
     let query = if chronological {
         "SELECT source_timestamp, server_timestamp, value_blob, status_code
          FROM historical_data
-         WHERE node_id = ?1 AND source_timestamp >= ?2 AND source_timestamp < ?3
-         ORDER BY source_timestamp ASC"
+         WHERE node_id = ?1
+           AND source_timestamp >= ?2
+           AND source_timestamp < ?3
+           AND (?4 IS NULL OR source_timestamp > ?4)
+         ORDER BY source_timestamp ASC
+         LIMIT ?5"
     } else {
         "SELECT source_timestamp, server_timestamp, value_blob, status_code
          FROM historical_data
-         WHERE node_id = ?1 AND source_timestamp <= ?2 AND source_timestamp > ?3
-         ORDER BY source_timestamp DESC"
+         WHERE node_id = ?1
+           AND source_timestamp <= ?2
+           AND source_timestamp > ?3
+           AND (?4 IS NULL OR source_timestamp < ?4)
+         ORDER BY source_timestamp DESC
+         LIMIT ?5"
     };
 
     let mut stmt = conn.prepare(query)?;
-    let rows = stmt.query_map(params![node_id, start_ticks, end_ticks], row_to_datavalue)?;
+    let rows = stmt.query_map(
+        params![node_id, start_ticks, end_ticks, resume_after, row_limit],
+        row_to_datavalue,
+    )?;
     rows.collect()
 }
 

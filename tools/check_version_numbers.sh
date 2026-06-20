@@ -15,13 +15,13 @@ done <<< "$packages"
 
 versions=$(cargo metadata --format-version 1 | jq --raw-output '.packages[] | select(.name | IN($items[])) | .version' --argjson items "[$items]")
 
-unique=$(echo $versions | tr ' ' '\n' | sort -u | wc -l)
+unique=$(echo "$versions" | tr ' ' '\n' | sort -u | wc -l)
 
 if [[ "$unique" != "1" ]]; then
     echo "At least one package has the wrong version. Versions:"
     cargo metadata --format-version 1 | jq --raw-output '.packages[] | select(.name | IN($items[])) | "\(.name): \(.version)"' --argjson items "[$items]"
-    echo $version_info
+    echo "$version_info"
     exit 1
 fi
 
-echo $versions | tr ' ' '\n' | sort -u
+echo "$versions" | tr ' ' '\n' | sort -u

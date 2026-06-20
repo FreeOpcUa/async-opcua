@@ -54,6 +54,10 @@ RFC 5869 Expand Info=salt; key layout Sig|Enc|IV; P256=32/16/16 (SHA256/AES128),
 - [ ] T005 [P] [US1] Implement ECDSA sign/verify (raw `r‖s` fixed `Signature`) for P-256/P-384 in `ecc/`. (depends T004)
 - [ ] T006 [P] [US1] Implement ephemeral ECDH in `ecc/`: keygen, `X‖Y` (no prefix) encode/decode, raw-x shared secret. (depends T004)
 - [ ] T007 [US1] Implement HKDF key derivation in `ecc/`: build ClientSalt/ServerSalt (L=16-bit LE, labels), Extract `HMAC-Hash(salt,IKM)`, RFC 5869 Expand (Info=salt), slice `Sig|Enc|IV` per direction -> SecurityKeys. (depends T004)
+- [ ] T007a [US1] Secret hygiene (FR-012, constitution IV): ensure the ephemeral private key, ECDH
+  shared secret, and derived key material are **zeroized** after use (e.g. `zeroize`) and do **not**
+  expose secret bytes via `Debug`/`Display`/logging; add a unit test asserting a secret-bearing type's
+  `Debug` output contains no key material. (depends T006/T007)
 - [ ] T008 [US1] Gate; verify T004 passes; **commit US1** (`feat(012 US1): verified ECC primitives (ECDSA/ECDH/HKDF)`).
 
 **Checkpoint**: primitives correct and vector-locked.
@@ -65,8 +69,11 @@ RFC 5869 Expand Info=salt; key layout Sig|Enc|IV; P256=32/16/16 (SHA256/AES128),
 **Goal**: load/validate P-256/P-384 EC application certs; reject curve/policy mismatch.
 **Independent Test**: load EC certs, thumbprint, reject expired/untrusted/wrong-curve.
 
-- [ ] T009 [US2] Add failing tests in `async-opcua-crypto` (x509 tests): load a P-256 and a P-384 EC
-  application cert (asset fixtures), assert curve/public-key parsed + thumbprint; reject expired/untrusted; reject curve≠policy.
+- [ ] T009 [US2] Generate P-256 and P-384 self-signed EC application-cert + key test fixtures (via
+  `x509-cert`/RustCrypto in a test helper, or by extending `tools/certificate-creator` if it is
+  RSA-only) under the crypto crate's test assets; THEN add failing tests in `async-opcua-crypto` (x509
+  tests): load each EC cert, assert curve/public-key parsed + thumbprint; reject expired/untrusted;
+  reject curve≠policy. (The fixtures are a prerequisite — the existing test certs are RSA.)
 - [ ] T010 [US2] Implement EC public-key parse/validate in `async-opcua-crypto/src/x509.rs` (reuse thumbprint + chain/trust); add curve↔policy match check. (depends T009)
 - [ ] T011 [US2] Gate; verify T009 passes; **commit US2** (`feat(012 US2): EC application certificate support`).
 

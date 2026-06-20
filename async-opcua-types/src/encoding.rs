@@ -15,6 +15,7 @@ use std::{
 
 use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
 use chrono::Duration;
+use serde::{Deserialize, Serialize};
 use tracing::error;
 
 use crate::{constants, status_code::StatusCode, Context, QualifiedName};
@@ -288,7 +289,7 @@ impl DepthGauge {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 /// General decoding options.
 pub struct DecodingOptions {
     /// Time offset between the client and the server, only used by the client when it's configured
@@ -304,7 +305,26 @@ pub struct DecodingOptions {
     pub max_byte_string_length: usize,
     /// Maximum number of array elements. 0 actually means 0, i.e. no array permitted
     pub max_array_length: usize,
+    /// Maximum number of fields in a UADP dataset message.
+    ///
+    /// This is a fail-closed bound: 0 permits no fields, not an unlimited number. The default is
+    /// deliberately above normal conformant traffic so standard PubSub messages continue to decode.
+    #[serde(default = "crate::constants::default_max_dataset_fields")]
+    pub max_dataset_fields: usize,
+    /// Maximum number of dataset messages in one UADP network message.
+    ///
+    /// This is a fail-closed bound: 0 permits no dataset messages, not an unlimited number. The
+    /// default accepts conformant traffic while bounding attacker-controlled allocation counts.
+    #[serde(default = "crate::constants::default_max_dataset_messages")]
+    pub max_dataset_messages: usize,
+    /// Maximum length in bytes of a secured UADP payload before copy/decrypt.
+    ///
+    /// This is a fail-closed bound: 0 permits no secured payload bytes, not an unlimited payload.
+    /// The default matches the existing message-size limit.
+    #[serde(default = "crate::constants::default_max_secured_payload_len")]
+    pub max_secured_payload_len: usize,
     /// Decoding depth gauge is used to check for recursion
+    #[serde(default, skip)]
     pub decoding_depth_gauge: DepthGauge,
 }
 
@@ -317,6 +337,9 @@ impl Default for DecodingOptions {
             max_string_length: constants::MAX_STRING_LENGTH,
             max_byte_string_length: constants::MAX_BYTE_STRING_LENGTH,
             max_array_length: constants::MAX_ARRAY_LENGTH,
+            max_dataset_fields: constants::MAX_DATASET_FIELDS,
+            max_dataset_messages: constants::MAX_DATASET_MESSAGES,
+            max_secured_payload_len: constants::MAX_SECURED_PAYLOAD_LEN,
             decoding_depth_gauge: DepthGauge::default(),
         }
     }

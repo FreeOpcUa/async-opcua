@@ -73,10 +73,13 @@ impl UadpSecurityCodec {
         ctx: &Context<'_>,
     ) -> Result<UadpNetworkMessage, Error> {
         let plaintext = match self.security_mode {
-            MessageSecurityMode::None => payload.to_vec(),
-            MessageSecurityMode::Sign => self.decode_signed_payload(payload)?,
+            MessageSecurityMode::None => {
+                enforce_secured_payload_len(payload.len(), ctx)?;
+                payload.to_vec()
+            }
+            MessageSecurityMode::Sign => self.decode_signed_payload(payload, ctx)?,
             MessageSecurityMode::SignAndEncrypt => {
-                self.decode_signed_and_encrypted_payload(payload)?
+                self.decode_signed_and_encrypted_payload(payload, ctx)?
             }
             MessageSecurityMode::Invalid => {
                 return Err(security_error("invalid message security mode"))
@@ -119,9 +122,9 @@ impl UadpSecurityCodec {
         self.envelope(MessageSecurityMode::SignAndEncrypt, &encrypted)
     }
 
-    fn decode_signed_payload(&self, payload: &[u8]) -> Result<Vec<u8>, Error> {
+    fn decode_signed_payload(&self, payload: &[u8], ctx: &Context<'_>) -> Result<Vec<u8>, Error> {
         self.ensure_secure_policy()?;
-        let body = self.open_envelope(payload, MessageSecurityMode::Sign)?;
+        let body = self.open_envelope(payload, MessageSecurityMode::Sign, ctx)?;
         let signature_size = self.security_policy.symmetric_signature_size();
         if body.len() < signature_size {
             return Err(security_error(
@@ -135,9 +138,13 @@ impl UadpSecurityCodec {
         Ok(plaintext.to_vec())
     }
 
-    fn decode_signed_and_encrypted_payload(&self, payload: &[u8]) -> Result<Vec<u8>, Error> {
+    fn decode_signed_and_encrypted_payload(
+        &self,
+        payload: &[u8],
+        ctx: &Context<'_>,
+    ) -> Result<Vec<u8>, Error> {
         self.ensure_secure_policy()?;
-        let encrypted = self.open_envelope(payload, MessageSecurityMode::SignAndEncrypt)?;
+        let encrypted = self.open_envelope(payload, MessageSecurityMode::SignAndEncrypt, ctx)?;
         let keys = self.keys(true)?;
         let block_size = self.security_policy.symmetric_padding_info().block_size;
         let mut decrypted = vec![0u8; encrypted.len() + block_size];
@@ -189,6 +196,7 @@ impl UadpSecurityCodec {
         &self,
         payload: &'a [u8],
         expected_mode: MessageSecurityMode,
+        ctx: &Context<'_>,
     ) -> Result<&'a [u8], Error> {
         if payload.len() < ENVELOPE_HEADER_LEN
             || &payload[..SECURED_UADP_MAGIC.len()] != SECURED_UADP_MAGIC
@@ -206,6 +214,7 @@ impl UadpSecurityCodec {
         let mut offset = SECURED_UADP_MAGIC.len() + 1;
         let policy_uri_len = read_u16(payload, &mut offset)? as usize;
         let body_len = read_u32(payload, &mut offset)? as usize;
+        enforce_secured_payload_len(body_len, ctx)?;
         let policy_end = offset
             .checked_add(policy_uri_len)
             .ok_or_else(|| security_error("secured UADP envelope length overflow"))?;
@@ -300,6 +309,17 @@ fn read_u32(payload: &[u8], offset: &mut usize) -> Result<u32, Error> {
     Ok(u32::from_be_bytes(bytes.try_into().map_err(|_| {
         security_error("secured UADP envelope length is invalid")
     })?))
+}
+
+fn enforce_secured_payload_len(payload_len: usize, ctx: &Context<'_>) -> Result<(), Error> {
+    let max_payload_len = ctx.options().max_secured_payload_len;
+    if payload_len > max_payload_len {
+        return Err(security_error(
+            "secured UADP payload exceeds max_secured_payload_len",
+        ));
+    }
+
+    Ok(())
 }
 
 fn append_padding(

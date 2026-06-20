@@ -5,9 +5,11 @@ use std::time::Duration;
 
 use opcua_core::sync::RwLock;
 use opcua_pubsub::{
-    MessageEncoding, PubSubConnectionConfig, PubSubEngine, TransportKind, WriterGroupConfig,
+    MessageEncoding, PubSubConnectionConfig, PubSubEngine, TransportKind, UadpNetworkMessage,
+    WriterGroupConfig,
 };
 use opcua_server::address_space::AddressSpace;
+use opcua_types::{BinaryDecodable, ContextOwned, DecodingOptions, NamespaceMap, StatusCode};
 
 fn address_space() -> Arc<RwLock<AddressSpace>> {
     Arc::new(RwLock::new(AddressSpace::new()))
@@ -86,4 +88,36 @@ async fn starts_and_stops_websocket_pubsub_connection() {
         TransportKind::WebSocket,
     )
     .await;
+}
+
+#[test]
+fn uadp_dataset_message_rejects_field_count_above_decoding_limit() {
+    let options = DecodingOptions {
+        max_dataset_fields: 8,
+        ..DecodingOptions::test()
+    };
+    let ctx_owned = ContextOwned::new_default(NamespaceMap::new(), options);
+    let ctx = ctx_owned.context();
+
+    let payload = [
+        0x61, // UADP v1 + GroupHeader + PayloadHeader
+        0x01, 0x00, // writer_group_id
+        0x00, 0x00, 0x00, 0x00, // group_version
+        0x01, // dataset_writer_count
+        0x65, 0x00, // payload header dataset_writer_id
+        0x65, 0x00, // dataset message dataset_writer_id
+        0x09, // valid + sequence number enabled
+        0x01, 0x00, // sequence_number
+        0xff, 0xff, // field_count: 65535
+    ];
+
+    let err = UadpNetworkMessage::decode(&mut &payload[..], &ctx)
+        .expect_err("oversized UADP field_count must be rejected before allocation");
+
+    assert_eq!(err.status(), StatusCode::BadDecodingError);
+    let err = err.to_string();
+    assert!(
+        err.contains("field_count") && err.contains("max_dataset_fields"),
+        "expected field-count limit error, got {err}"
+    );
 }

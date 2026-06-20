@@ -65,12 +65,12 @@ blocking prerequisite. Stories may proceed in priority order or in parallel.
 **Goal**: every decode allocation from untrusted counts is validated before allocating.
 **Independent Test**: oversized UADP field counts + overflowing custom-struct dims are rejected; valid inputs byte-identical (quickstart US3).
 
-- [ ] T009 [US3] Add PubSub decode limit fields (`max_dataset_fields`, `max_dataset_messages`, `max_secured_payload_len`) to `DecodingOptions` in `async-opcua-types` (encoding options), with conformant defaults per data-model.md and `#[serde(default)]`.
-- [ ] T010 [P] [US3] Add failing tests: (a) UADP message with excessive `field_count`/dataset count rejected before allocation (`async-opcua-pubsub` tests); (b) custom multidimensional struct whose dims overflow is rejected with a decode error (`async-opcua-types` tests).
-- [ ] T011 [US3] Enforce `max_dataset_fields`/`max_dataset_messages` in `async-opcua-pubsub/src/codec/uadp.rs` at lines ~172 and ~282 **before** `Vec::with_capacity`. (depends on T009)
-- [ ] T012 [US3] Enforce `max_secured_payload_len` in `async-opcua-pubsub/src/security/codec.rs` before payload copy/decrypt. (depends on T009)
-- [ ] T013 [P] [US3] Replace `len *= *dim as u32` with `checked_mul` in `async-opcua-types/src/custom/custom_struct.rs:495`, erroring on overflow and bounding each running product against `max_array_length`.
-- [ ] T014 [US3] Run the gate; verify T010 passes; **commit US3** (`fix(011 US3): bound decode allocations (PubSub limits + checked array dims)`).
+- [X] T009 [US3] Add PubSub decode limit fields (`max_dataset_fields`, `max_dataset_messages`, `max_secured_payload_len`) to `DecodingOptions` in `async-opcua-types` (encoding options), with conformant defaults per data-model.md and `#[serde(default)]`.
+- [X] T010 [P] [US3] Add failing tests: (a) UADP message with excessive `field_count`/dataset count rejected before allocation (`async-opcua-pubsub` tests); (b) custom multidimensional struct whose dims overflow is rejected with a decode error (`async-opcua-types` tests).
+- [X] T011 [US3] Enforce `max_dataset_fields`/`max_dataset_messages` in `async-opcua-pubsub/src/codec/uadp.rs` at lines ~172 and ~282 **before** `Vec::with_capacity`. (depends on T009)
+- [X] T012 [US3] Enforce `max_secured_payload_len` in `async-opcua-pubsub/src/security/codec.rs` before payload copy/decrypt. (depends on T009)
+- [X] T013 [P] [US3] Replace `len *= *dim as u32` with `checked_mul` in `async-opcua-types/src/custom/custom_struct.rs:495`, erroring on overflow and bounding each running product against `max_array_length`.
+- [X] T014 [US3] Run the gate; verify T010 passes; **commit US3** (`fix(011 US3): bound decode allocations (PubSub limits + checked array dims)`).
 
 **Checkpoint**: all P1 stories independently functional.
 

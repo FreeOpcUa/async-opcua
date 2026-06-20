@@ -170,6 +170,12 @@ impl BinaryDecodable for UadpDataSetMessage {
         };
 
         let field_count = u16::decode(stream, ctx)?;
+        let max_dataset_fields = ctx.options().max_dataset_fields;
+        if field_count as usize > max_dataset_fields {
+            return Err(Error::decoding(format!(
+                "UADP dataset message field_count ({field_count}) exceeds max_dataset_fields ({max_dataset_fields})"
+            )));
+        }
         let mut fields = Vec::with_capacity(field_count as usize);
         for _ in 0..field_count {
             fields.push(Variant::decode(stream, ctx)?);
@@ -271,6 +277,12 @@ impl BinaryDecodable for UadpNetworkMessage {
 
         let count = if (flags & 0x40) != 0 {
             let count = u8::decode(stream, ctx)?;
+            let max_dataset_messages = ctx.options().max_dataset_messages;
+            if count as usize > max_dataset_messages {
+                return Err(Error::decoding(format!(
+                    "UADP network message dataset message count ({count}) exceeds max_dataset_messages ({max_dataset_messages})"
+                )));
+            }
             for _ in 0..count {
                 let _writer_id = u16::decode(stream, ctx)?;
             }

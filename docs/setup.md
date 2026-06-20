@@ -160,6 +160,12 @@ Ready-to-edit server configurations for constrained and standard deployments liv
 mirror the tiers described in `deploy-profiles.md`, including bounded non-zero
 `max_notifications_per_publish` values to avoid unlimited publish responses by default.
 
+**Behavior change (feature 011):** the default `max_notifications_per_publish` is now a bounded
+`1000` (was `0` = unlimited), and a configuration that sets **both** `max_chunk_count` and
+`max_message_size` to `0` is now rejected at validation (that combination previously meant
+"unbounded" and allowed unbounded chunk buffering). Set explicit bounded values if you were relying
+on the old unlimited defaults.
+
 ## Workspace Layout
 
 OPC UA for Rust follows the normal Rust conventions. There is a `Cargo.toml` per module that you may use to build the module and all dependencies. e.g.

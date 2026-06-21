@@ -64,17 +64,24 @@ Trust anchor preserved: self-signed leaf in `trusted/` stays valid. `None` polic
 **Goal**: accept only certs whose signature chains to a trusted CA; reject unknown-issuer / forged
 signature; self-signed-in-`trusted/` still valid.
 **Independent Test**: crafted root→[intermediate→]leaf fixtures; missing link → ChainIncomplete;
-tampered sig → Invalid; chain to untrusted root → Untrusted; self-signed leaf trusted → valid.
+tampered sig / malformed structure → Invalid; chain to untrusted root → Untrusted; expired leaf →
+TimeInvalid, expired issuer → IssuerTimeInvalid; self-signed leaf trusted → valid.
 
 - [ ] T006 [US1] Claude-authored failing tests in `async-opcua-crypto` (cert_chain tests): generate
   in-test PKI fixtures via `x509-cert` builder + in-tree RSA/ECDSA keys (root CA, intermediate CA,
-  leaf, self-signed leaf, tampered-signature leaf); assert chain build + per-cert signature verify
-  and the exact status codes (`Bad_CertificateChainIncomplete`, `Bad_CertificateInvalid`,
-  `Bad_CertificateUntrusted`); self-signed leaf in trusted set validates.
-- [ ] T007 [US1] Implement chain build + signature verification in `cert_chain.rs`: walk leaf→root
-  via issuer/subject (+ AKI/SKI cross-check) over trusted+issuer lists; verify each `tbs.to_der()`
-  against issuer SPKI per alg OID (RSA pkcs1v15/PSS via `rsa`; ECDSA via the new DER verify); bound
-  depth + detect cycles; Trust-List anchor (leaf or a chain CA in trusted). (depends T006)
+  leaf, self-signed leaf, tampered-signature leaf, **expired leaf, expired intermediate/issuer**,
+  truncated/malformed-structure leaf); assert chain build + per-cert signature verify + **per-chain-cert
+  validity period** and the exact status codes (`Bad_CertificateChainIncomplete`, `Bad_CertificateInvalid`
+  incl. malformed-structure, `Bad_CertificateUntrusted`, **`Bad_CertificateTimeInvalid` (leaf) /
+  `Bad_CertificateIssuerTimeInvalid` (chain CA)**); self-signed leaf in trusted set validates.
+  (FR-001/002/003/005/006)
+- [ ] T007 [US1] Implement chain build + signature verification + **validity-period (FR-006)** in
+  `cert_chain.rs`: walk leaf→root via issuer/subject (+ AKI/SKI cross-check) over trusted+issuer lists;
+  verify each `tbs.to_der()` against issuer SPKI per alg OID (RSA pkcs1v15/PSS via `rsa`; ECDSA via the
+  new DER verify); **check each cert's not-before/not-after — leaf failure → `Bad_CertificateTimeInvalid`,
+  any chain-CA failure → `Bad_CertificateIssuerTimeInvalid` (suppressible; honoured by the US4
+  suppression model)**; reject malformed structure → `Bad_CertificateInvalid`; bound depth + detect
+  cycles; Trust-List anchor (leaf or a chain CA in trusted). (depends T006)
 - [ ] T008 [US1] Wire `cert_chain` into `CertificateStore::validate_application_instance_cert`
   (`certificate_store.rs`) behind the validation policy, preserving the existing trusted/rejected/
   time/hostname/URI behavior and the self-signed-in-`trusted/` path; `None` policy byte-identical.
@@ -132,12 +139,16 @@ passes + audit event; critical steps never suppressible.
 - [ ] T016 [US4] Claude-authored failing tests: a cert whose key length/sig-alg violates the
   negotiated policy → `Bad_CertificatePolicyCheckFailed`; with that step suppressed → validation
   passes AND an audit event is recorded; assert critical steps (structure/chain/signature/untrusted/
-  URI) reject regardless of suppression.
+  URI) reject regardless of suppression. **Ordering/precedence (SC-001 "in order"): a fixture that
+  fails two steps at once returns the *earlier* Table-100 step's status code (e.g. untrusted+expired →
+  the chain/untrusted code, not the time code); halt is on the first non-suppressed failure.**
 - [ ] T017 [US4] Implement the Security-Policy Check in `cert_chain.rs` (sig-alg + min/max key-length
-  per policy from T005) and the suppression model (suppressible set vs critical set); on a suppressed
-  failure, continue but emit the corresponding `AuditCertificate*`-class event via the existing
-  server audit surface (`async-opcua-server/src/session/audit.rs`) with the precise status code.
-  (depends T016)
+  per policy from T005) and the suppression model (suppressible set vs critical set); **assemble the
+  full ordered Table-100 pipeline (structure → build-chain → signature → security-policy → trust-list →
+  validity → host-name → URI → usage → find-revocation → revocation), halting on the first
+  non-suppressed failure so its status code wins**; on a suppressed failure, continue but report the
+  step via the existing server audit surface (`async-opcua-server/src/session/audit.rs`) with the
+  precise status code (typed `AuditCertificate*` event types deferred — research Decision 8). (depends T016)
 - [ ] T018 [US4] Gate; verify T016 passes; **commit US4** (`feat(013 US4): security-policy check + suppression/audit`).
 
 **Checkpoint**: full Table 100 step set enforced; suppression+audit per §6.1.3.

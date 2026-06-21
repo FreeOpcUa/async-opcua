@@ -193,8 +193,10 @@ in the chain, halting on the first non-suppressed error.
   §6.3; a revoked certificate → `Bad_CertificateRevoked` / `Bad_CertificateIssuerRevoked`.
 - **FR-012**: The system MUST support administrator **suppression** of the non-critical steps
   (security-policy, validity, host name, certificate usage, find-revocation-list); suppressed failures
-  MUST still raise the corresponding `AuditCertificate*` event. The critical steps (structure,
-  build-chain, signature, untrusted, URI) MUST NOT be suppressible.
+  MUST still raise an audit event carrying the precise step status code. *(Confirmed at plan, research
+  Decision 8: reported via the existing audit surface now; the typed `AuditCertificate*` event types
+  are a deferred follow-up.)* The critical steps (structure, build-chain, signature, untrusted, URI)
+  MUST NOT be suppressible.
 - **FR-013**: The same validation MUST be applied by the **server** (validating client application
   certificates) and the **client** (validating server application certificates).
 - **FR-014**: Existing **trust-list-only** deployments using self-signed application certificates
@@ -232,7 +234,8 @@ in the chain, halting on the first non-suppressed error.
 - **SC-004**: Existing self-signed-in-`trusted/` deployments connect unchanged (regression test), and
   the `None`-policy wire path is byte-identical.
 - **SC-005**: Suppression works — a configured-suppressed non-critical failure passes validation while
-  raising the corresponding audit event; critical steps cannot be suppressed.
+  raising an audit event with the precise step status code (via the existing audit surface; typed
+  `AuditCertificate*` events deferred — research Decision 8); critical steps cannot be suppressed.
 - **SC-006**: `cargo clippy --all-targets --all-features` is clean and the full unit + integration
   suites pass; no new C-toolchain dependency is introduced.
 

@@ -271,27 +271,6 @@ fn split_derived_keys(curve: EccCurve, key_material: &mut [u8]) -> Result<AesDer
 }
 
 #[cfg(feature = "ecc")]
-fn split_direct_hkdf_self_test_keys(
-    curve: EccCurve,
-    key_material: &mut [u8],
-    fallback_secret: &[u8],
-    fallback_salt: &[u8],
-) -> Result<SecurityKeys, Error> {
-    let client = split_derived_keys(curve, key_material)?;
-    let (signing_len, encryption_len, iv_len) = key_lengths(curve);
-    let key_material_len = signing_len + encryption_len + iv_len;
-    let mut server_key_material = match curve {
-        EccCurve::P256 => hkdf_expand_sha256(fallback_secret, fallback_salt, key_material_len)?,
-        EccCurve::P384 => hkdf_expand_sha384(fallback_secret, fallback_salt, key_material_len)?,
-    };
-
-    Ok(SecurityKeys {
-        client,
-        server: split_derived_keys(curve, &mut server_key_material)?,
-    })
-}
-
-#[cfg(feature = "ecc")]
 fn hkdf_expand_sha256(
     shared_secret: &[u8],
     salt: &[u8],
@@ -783,29 +762,16 @@ pub fn derive_keys(
     let (signing_len, encryption_len, iv_len) = key_lengths(curve);
     let key_material_len = signing_len + encryption_len + iv_len;
 
+    // Fail closed: the only valid IKM is the ECDH shared secret, i.e. the curve
+    // field-element x-coordinate (32 B P-256 / 48 B P-384). Reject anything else
+    // rather than deriving keys from a malformed secret.
     if shared_secret.len() != curve.scalar_len() {
-        let mut client_key_material = match curve {
-            EccCurve::P256 => hkdf_expand_sha256(shared_secret, client_nonce, key_material_len)?,
-            EccCurve::P384 => hkdf_expand_sha384(shared_secret, client_nonce, key_material_len)?,
-        };
-        match curve {
-            EccCurve::P256 => {
-                let hkdf = Hkdf::<Sha256>::new(Some(client_nonce), shared_secret);
-                hkdf.expand(server_nonce, &mut client_key_material)
-                    .map_err(|_| invalid_argument("invalid HKDF-SHA256 output length"))?;
-            }
-            EccCurve::P384 => {
-                let hkdf = Hkdf::<Sha384>::new(Some(client_nonce), shared_secret);
-                hkdf.expand(server_nonce, &mut client_key_material)
-                    .map_err(|_| invalid_argument("invalid HKDF-SHA384 output length"))?;
-            }
-        }
-        return split_direct_hkdf_self_test_keys(
+        return Err(invalid_argument(format!(
+            "ECC shared secret must be {} bytes for {:?}, got {}",
+            curve.scalar_len(),
             curve,
-            &mut client_key_material,
-            shared_secret,
-            client_nonce,
-        );
+            shared_secret.len()
+        )));
     }
 
     let client_salt = build_hkdf_salt(curve, b"opcua-client", client_nonce, server_nonce)?;
@@ -1016,26 +982,6 @@ mod tests {
     }
 
     #[test]
-    fn hkdf_sha256_matches_rfc5869_test_case_1_bytes() {
-        // RFC 5869 Appendix A.1.
-        let ikm = hex("0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b");
-        let salt = hex("000102030405060708090a0b0c");
-        let info = hex("f0f1f2f3f4f5f6f7f8f9");
-        let okm = hex("3cb25f25faacd57a90434f64d0362f2a
-             2d2d0a90cf1a5a4c5db02d56ecc4c5bf
-             34007208d5b887185865");
-
-        let keys = derive_keys(SecurityPolicy::EccNistP256, &ikm, &salt, &info)
-            .expect("HKDF-SHA256 derivation should match RFC 5869 test case 1");
-        let mut derived = Vec::new();
-        derived.extend_from_slice(keys.client.signing_key());
-        derived.extend_from_slice(keys.client.encryption_key().value());
-        derived.extend_from_slice(keys.client.initialization_vector());
-
-        assert_eq!(&derived[..okm.len()], okm);
-    }
-
-    #[test]
     fn derive_keys_opcua_client_server_views_agree_and_have_policy_lengths() {
         let shared_secret = hex("00112233445566778899aabbccddeeff
              102132435465768798a9babbdcddedef
@@ -1048,9 +994,12 @@ mod tests {
             (SecurityPolicy::EccNistP256, 32, 16),
             (SecurityPolicy::EccNistP384, 48, 32),
         ] {
-            let client_view = derive_keys(policy, &shared_secret, &client_nonce, &server_nonce)
+            // The shared secret IKM is exactly the curve field-element size.
+            let curve = EccCurve::from_security_policy(policy).unwrap();
+            let secret = &shared_secret[..curve.scalar_len()];
+            let client_view = derive_keys(policy, secret, &client_nonce, &server_nonce)
                 .expect("client-side OPC UA ECC HKDF derivation");
-            let server_view = derive_keys(policy, &shared_secret, &client_nonce, &server_nonce)
+            let server_view = derive_keys(policy, secret, &client_nonce, &server_nonce)
                 .expect("server-side OPC UA ECC HKDF derivation");
 
             assert_eq!(

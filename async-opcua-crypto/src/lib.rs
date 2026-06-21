@@ -54,6 +54,14 @@ mod aes;
 #[cfg(feature = "ecc")]
 pub mod ecc;
 
+// Independent retro-audit of the ECC primitives. These tests are authored
+// separately from the implementation (and from the implementation's own test
+// module) and are anchored to published RFC vectors transcribed from the
+// standards, plus a from-scratch HKDF reimplementation, so the implementation
+// is never validated solely by tests written by its own author.
+#[cfg(all(test, feature = "ecc"))]
+mod ecc_audit;
+
 /// Size of a SHA1 hash value in bytes
 pub const SHA1_SIZE: usize = 20;
 /// Size of a SHA256 hash value bytes

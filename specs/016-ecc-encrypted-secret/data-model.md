@@ -15,7 +15,7 @@ Hand-serialized binary structure (UA Binary encoding). Fields in serialization o
 - **KeyDataLength** — UInt16, byte length of the (unencrypted) KeyData.
 - **KeyData**: { **SenderPublicKey**: ByteString, **ReceiverPublicKey**: ByteString } — ephemeral public
   keys (curve-encoded per policy). Not encrypted for ECC.
-- **Payload** (AES-256-CBC encrypted as one blob): { **Nonce**: ByteString, **Secret**: ByteString,
+- **Payload** (AES-CBC encrypted as one blob — AES-128 P-256 / AES-256 P-384): { **Nonce**: ByteString, **Secret**: ByteString,
   **PayloadPadding**: Byte[*], **PayloadPaddingSize**: UInt16 }.
 - **Signature** — Byte[*], asymmetric ECDSA over all preceding bytes (per Figure 39).
 
@@ -28,9 +28,11 @@ single uniform `BadIdentityTokenRejected`, no panic.
 
 - **Inputs**: ECDH shared secret (x-coord, zero-padded big-endian), SenderPublicKey, ReceiverPublicKey,
   curve (→ hash + lengths).
-- **SecretSalt** = `L(le16) | "opcua-secret" | SenderPublicKey | ReceiverPublicKey`, `L = EncKeyLen + IvLen`.
-- **Outputs (Table 71)**: `EncryptingKey` (EncKeyLen=32 for AES-256), `InitializationVector` (IvLen=16).
-  No SigningKey (integrity is asymmetric). `Zeroizing`.
+- **SecretSalt** = `L(le16) | "opcua-secret" | SenderPublicKey | ReceiverPublicKey`, `L = EncKeyLen + IvLen`
+  (EncKeyLen per curve: 16 P-256 / 32 P-384; IvLen=16).
+- **Outputs (Table 71)**: `EncryptingKey` (EncKeyLen per curve — **16 for P-256/AES-128-CBC, 32 for
+  P-384/AES-256-CBC**), `InitializationVector` (IvLen=16). No SigningKey (integrity is asymmetric).
+  `Zeroizing`. (`L = EncKeyLen + 16`.)
 
 ## Server EphemeralKey consumed-state (closes 015a deferral)
 
@@ -51,5 +53,5 @@ single uniform `BadIdentityTokenRejected`, no panic.
 
 - Consumes 015a: client `Session.retained_server_ephemeral_key` (ReceiverPublicKey on encrypt); server
   `Session.ecdh_ephemeral_key` (its private key on decrypt; the consumed-state lives here).
-- Reuses 012/015a primitives: `ecdh_shared_secret`, `Hkdf::<Sha256/384>`, `AesKey` (AES-256-CBC),
+- Reuses 012/015a primitives: `ecdh_shared_secret`, `Hkdf::<Sha256/384>`, `AesKey` (AES-128/256-CBC per curve),
   `SecurityPolicy::asymmetric_sign`/`asymmetric_verify_signature`.

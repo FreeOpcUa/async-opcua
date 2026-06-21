@@ -16,7 +16,7 @@ Under an ECC `SecurityPolicy` (`ECC_nistP256` / `ECC_nistP384`), a client must e
 (Part 4 §7.40.2.5, Tables 183/186) rather than the legacy RSA-OAEP secret (Table 193). The
 `EccEncryptedSecret` is keyed off the ECC EphemeralKeys exchanged at CreateSession/ActivateSession:
 ECDH between the client and server ephemeral keys → the Part 6 §6.8.3 HKDF → the policy's symmetric
-(AES-256-CBC) + integrity layer, bound to the **current server nonce** so a captured secret cannot be
+(AES-CBC: AES-128 P-256 / AES-256 P-384) + integrity layer, bound to the **current server nonce** so a captured secret cannot be
 replayed.
 
 Feature 015a delivered the exchange (server issues+signs `ECDHKey`, stores its keypair on the session;
@@ -164,7 +164,7 @@ ECC vs None correctly.
 - **FR-001**: The server MUST decrypt an `EccEncryptedSecret` (Part 4 §7.40.2.5, Tables 183/186) carried
   in a `UserNameIdentityToken` password under an ECC policy, deriving the EncryptingKey+IV via the Part 6
   §6.8.3 KDF (ECDH over the exchanged client/server EphemeralKeys → HKDF with the §6.8.3 salt), verifying
-  the asymmetric Signature before decrypting, decrypting with AES-256-CBC, and MUST recover the exact
+  the asymmetric Signature before decrypting, decrypting with AES-CBC (AES-128 P-256 / AES-256 P-384), and MUST recover the exact
   plaintext secret.
 - **FR-002**: The client MUST encrypt a `UserNameIdentityToken` password as an `EccEncryptedSecret` under
   an ECC policy using the retained verified server `ECDHKey`, its own ephemeral key, and the current
@@ -189,7 +189,7 @@ ECC vs None correctly.
 
 - **`EccEncryptedSecret`** (Part 4 §7.40.2.5, Tables 183/186): the ECC-wrapped identity-token secret —
   carries the **unencrypted** sender (client) + receiver (server) ephemeral public keys, the policy/nonce
-  binding, the AES-256-CBC ciphertext, and a trailing **asymmetric (ECDSA) Signature** computed with the
+  binding, the AES-CBC ciphertext (AES-128 P-256 / AES-256 P-384), and a trailing **asymmetric (ECDSA) Signature** computed with the
   signing certificate over the serialized envelope. The `Certificate` field is normally null when the
   signer is the client ApplicationInstance certificate already known to the server over the channel — the
   server then verifies the Signature against that known client certificate (not an attacker-supplied one).
@@ -229,9 +229,11 @@ ECC vs None correctly.
   (Tables 183/186) and the §6.8.3 KDF (salt label `"opcua-secret"`, length-prefix rules, HKDF hash per
   curve, output signing/encrypting key + IV lengths) are re-read from Part 4 §7.40.2.5 + Part 6 §6.8.3 in
   `~/opcua-specs` during `/speckit-plan` — **not guessed**.
-- **Symmetric/integrity layer**: AES-256-CBC plus the policy's signature for integrity (the §7.40.2.5
-  EncryptedSecret signing/encrypting key split). Whether the 012 ECC policies use AES-CBC+signature vs an
-  AEAD path is confirmed against the policy definition at planning.
+- **Symmetric/integrity layer (confirmed at planning, see research.md)**: AES-CBC — **AES-128 for
+  ECC_nistP256, AES-256 for ECC_nistP384** (per-curve, from `policy/aes.rs`) — for the payload, plus an
+  **asymmetric ECDSA Signature** with the signing certificate for integrity (NOT a derived symmetric
+  SigningKey; that is the RSA model). The 012 ECC policies use AES-CBC + asymmetric signature, not an
+  AEAD path.
 - **HKDF**: a RustCrypto `hkdf` crate (already in-tree or added) — no OpenSSL/C; the curve's hash (SHA-256
   for P-256, SHA-384 for P-384) per §6.8.3.
 - **Out of scope / deferred (recorded)**: the modern (non-legacy) **RSA** EncryptedSecret format unless

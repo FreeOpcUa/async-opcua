@@ -9,7 +9,7 @@ Implement the `EccEncryptedSecret` envelope (Part 4 §7.40.2.5, Tables 183/186) 
 key-derivation, then wire it into the client (encrypt) and server (decrypt) identity-token paths so
 `UserNameIdentityToken` passwords and `IssuedIdentityToken` token data can be protected under the ECC
 NIST policies. Phase B of two — consumes the 015a EphemeralKey exchange. The secret is encrypted with
-AES-256-CBC using a key+IV derived from ECDH(sender ephemeral, receiver ephemeral) via RFC 5869 HKDF
+AES-CBC (AES-128 for P-256, AES-256 for P-384) using a key+IV derived from ECDH(sender ephemeral, receiver ephemeral) via RFC 5869 HKDF
 with the `opcua-secret` salt; integrity is an **asymmetric ECDSA signature** over the serialized
 envelope (validated *before* decrypt); the embedded Nonce is bound to the current session server nonce
 (replay protection); and the server marks its EphemeralKey **consumed** after a successful decrypt,
@@ -19,7 +19,7 @@ finally enforcing the §6.8.2 anti-replay that 015a deferred.
 
 **Language/Version**: Rust (workspace edition 2021), `async-opcua-crypto` / `-server` / `-client` v0.19.
 **Primary Dependencies**: in-tree RustCrypto — `p256`/`p384` (`ecdh_shared_secret`), `hkdf` + `sha2`
-(already deps; `Hkdf::<Sha256/384>`), `aes`/`cbc` (`AesKey` AES-256-CBC), the policy
+(already deps; `Hkdf::<Sha256/384>`), `aes`/`cbc` (`AesKey`; AES-128-CBC for P-256, AES-256-CBC for P-384), the policy
 `asymmetric_sign`/`asymmetric_verify_signature` (ECDSA). No new C dependency.
 **Storage**: N/A (per-session in-memory key state; reuses `Session.ecdh_ephemeral_key` /
 `Session.retained_server_ephemeral_key` from 015a).

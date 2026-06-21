@@ -19,13 +19,13 @@ build where back-compat is touched; pre-existing integration-suite flakiness ver
 **Pinned facts (research.md — from Part 4/6 1.05.07):** EccEncryptedSecret = ExtensionObject-prefixed
 envelope (Table 186): common header (TypeId, EncodingMask=1, Length:Int32, SecurityPolicyUri, Certificate
 [null when client app-instance cert known to server], SigningTime, KeyDataLength:UInt16) | **unencrypted**
-KeyData (SenderPublicKey, ReceiverPublicKey) | AES-256-CBC-encrypted payload (Nonce, Secret, PayloadPadding,
+KeyData (SenderPublicKey, ReceiverPublicKey) | AES-CBC-encrypted payload (AES-128 P-256 / AES-256 P-384) (Nonce, Secret, PayloadPadding,
 PayloadPaddingSize:UInt16) | **asymmetric ECDSA Signature** over all preceding bytes. KDF (§6.8.3):
 `SecretSalt = L(le16) | "opcua-secret" | SenderPublicKey | ReceiverPublicKey`; HKDF Extract(salt, IKM=ECDH
-x-coord)+Expand(info=salt); **derive ONLY EncryptingKey(32)+IV(16)** (Table 71 — no SigningKey); SHA-256/
+x-coord)+Expand(info=salt); **derive ONLY EncryptingKey(16 P-256 / 32 P-384)+IV(16)** (Table 71 — no SigningKey); SHA-256/
 P-256, SHA-384/P-384. Padding: `BlockSize=IV.len; Data.len=4+Nonce.len+4+Secret.len+2; pad = (Data.len%BS==0)?0:BS-Data.len%BS; if(pad+Secret.len<BS) pad+=BS`. Decrypt order: verify cert+signature → decrypt →
 verify padding → check Nonce==current server nonce → extract. Reuse `ecdh_shared_secret`,
-`Hkdf::<Sha256/384>`, `AesKey` (AES-256-CBC), `asymmetric_sign`/`asymmetric_verify_signature`. Behind `ecc`.
+`Hkdf::<Sha256/384>`, `AesKey` (AES-128/256-CBC per curve), `asymmetric_sign`/`asymmetric_verify_signature`. Behind `ecc`.
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -34,10 +34,10 @@ verify padding → check Nonce==current server nonce → extract. Reuse `ecdh_sh
 ## Phase 1: Setup
 
 - [ ] T001 Capture the baseline gate; confirm in-tree the `EccEncryptedSecret` DataType NodeId
-  (`async-opcua-types` generated `node_ids.rs`), the `AesKey` AES-256-CBC encrypt/decrypt API, and the
+  (`async-opcua-types` generated `node_ids.rs`), the `AesKey` AES-128/256-CBC encrypt/decrypt API (`encrypt_aes128_cbc`/`encrypt_aes256_cbc`, NoPadding), and the
   exact signatures of `ecdh_shared_secret`, `Hkdf::<Sha256/384>` usage, and
   `SecurityPolicy::asymmetric_sign`/`asymmetric_verify_signature`; **confirm the 012 ECC policies use
-  AES-256-CBC (not an AEAD/AES-GCM path)** so the §6.8.3 non-AuthenticatedEncryption branch applies;
+  AES-CBC per curve (P-256 Aes128Cbc / P-384 Aes256Cbc, not AEAD/AES-GCM)** so the §6.8.3 non-AuthenticatedEncryption branch applies;
   re-confirm the §7.40.2.5 / §6.8.3 facts in research.md against `~/opcua-specs`. No code change.
 
 ## Phase 2: Foundational (Blocking Prerequisites)
@@ -46,7 +46,7 @@ verify padding → check Nonce==current server nonce → extract. Reuse `ecdh_sh
   `async-opcua-crypto/src/tests/ecc_encrypted_secret.rs`: (a) the underlying HKDF Extract+Expand matches
   **RFC 5869 Appendix A** vectors (SHA-256; a SHA-384 known vector); (b) `derive_secret_keys` builds the
   `SecretSalt = L | "opcua-secret" | SenderPublicKey | ReceiverPublicKey` and the Table 71 split
-  (EncryptingKey[0..32], IV[32..48]) reproduces a hand-computed fixture. Register the module in
+  (EncryptingKey[0..EncKeyLen], IV[EncKeyLen..EncKeyLen+16]; EncKeyLen=16 P-256 / 32 P-384) reproduces a hand-computed fixture. Register the module in
   `tests/mod.rs` (ecc-gated).
 - [ ] T003 [P] Claude-authored failing tests for the envelope codec: a crafted `EccEncryptedSecret` byte
   fixture (known fields) parses to the exact Table 186 fields and re-serializes byte-identically;
@@ -77,7 +77,7 @@ stories can proceed.
 - [ ] T008 [US1] Implement `ecc_decrypt_secret(security_policy, encrypted, server_nonce,
   server_ephemeral_private, signer_cert) -> Result<ByteString, Error>` in
   `async-opcua-crypto/src/user_identity.rs`: parse (T005) → validate cert + verify Signature (T006) →
-  ECDH(server private, SenderPublicKey) + `derive_secret_keys` (T004) → AES-256-CBC decrypt → verify
+  ECDH(server private, SenderPublicKey) + `derive_secret_keys` (T004) → AES-CBC decrypt (per curve) → verify
   padding → check Nonce == server_nonce → return Secret. Single uniform error on any failure; panic-free.
   (codex; depends T004–T006, T007)
 - [ ] T009 [US1] Wire the server: add an ECC branch to `decrypt_identity_token_secret` in
@@ -166,7 +166,7 @@ the real consumed state drives the §6.8.2 `decide_ecdh_key_action` (closes the 
 
 **MVP = US1** (server decrypt) + the foundational KDF/codec/sign. US2 makes the round-trip real; US3
 extends to issued tokens; **US4 closes the 015a consumed-key anti-replay deferral**; US5 locks back-compat.
-Reuse the 012/015a ECC primitives; AES-256-CBC + asymmetric ECDSA signature; behind `ecc`.
+Reuse the 012/015a ECC primitives; AES-CBC (per curve) + asymmetric ECDSA signature; behind `ecc`.
 
 ## Notes
 

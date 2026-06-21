@@ -45,7 +45,12 @@ SigningKey** for ECC. RFC 5869 HKDF:
 - **Table 71 split**: `EncryptingKey` = OKM[0 .. EncryptionKeyLength]; `InitializationVector` =
   OKM[EncryptionKeyLength .. EncryptionKeyLength + IVLength]`.
 - **Hash per curve** (KeyDerivationAlgorithm of the policy): **SHA-256 for P-256, SHA-384 for P-384**.
-- **Lengths**: AES-256 ⇒ EncryptionKeyLength = 32, IVLength = 16 (AES block). So `L = 48`.
+- **Lengths (per-curve — confirmed from `policy/aes.rs` at T001, NOT uniform AES-256)**:
+  **ECC_nistP256 ⇒ `SymmetricEncryption = Aes128Cbc`, EncryptionKeyLength = 16 (AES-128-CBC); P-384 ⇒
+  `Aes256Cbc`, EncryptionKeyLength = 32 (AES-256-CBC)**. IVLength = 16 (AES block) for both. So
+  `L = EncryptionKeyLength + 16` (32 for P-256, 48 for P-384). The existing `key_lengths(curve)` returns
+  `(signing, enc, iv)` = P256 `(32,16,16)` / P384 `(48,32,16)` — use its `enc`+`iv` (drop `signing`).
+  `AesKey::new(key)` selects AES-128 vs AES-256 by key length automatically.
 
 **Rationale**: §6.8.3 Step 1 (verbatim salt), §6.8.1 Steps 2–3 (HKDF, referenced by §6.8.3), Table 71.
 **Reuse**: `Hkdf::<Sha256/384>::new(Some(salt), ikm)` then `expand(salt, &mut okm)` — exactly matches
@@ -56,9 +61,11 @@ public keys (not nonces), and only the 2 outputs.
 ## Decision 3 — Integrity = asymmetric ECDSA signature (NOT a symmetric MAC)
 
 **Decision**: the EccEncryptedSecret `Signature` is an **asymmetric** signature computed with the
-SigningCertificate's private key and the policy's `AsymmetricSignatureAlgorithm` (ECDSA), over the
-serialized envelope **after** encryption. Reuse the existing `SecurityPolicy::asymmetric_sign` /
-`asymmetric_verify_signature` (already used by 015a's `sign_ephemeral_public_key`).
+SigningCertificate's private key and the policy's `AsymmetricSignatureAlgorithm` — **ECDSA** (P-256 ⇒
+ECDSA-SHA256, P-384 ⇒ ECDSA-SHA384; raw `r||s`), over the serialized envelope **after** encryption.
+Reuse the existing `SecurityPolicy::asymmetric_sign` / `asymmetric_verify_signature` (already used by
+015a's `sign_ephemeral_public_key`; the runtime dispatch routes ECC policies to `ecc::ecdsa_sign`,
+overriding the `AsymmetricSignature` type param shown in `policy/aes.rs`).
 
 - **Data to sign** (Figure 39): all serialized bytes from the start of the structure up to but **not
   including** the Signature (common header + KeyData + encrypted payload). Pin the exact start boundary

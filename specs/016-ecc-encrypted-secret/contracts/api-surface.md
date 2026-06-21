@@ -6,7 +6,7 @@ uniform decrypt error.
 ## `async-opcua-crypto/src/ecc.rs`
 
 ```rust
-/// §6.8.3 KDF: derive the AES-256-CBC EncryptingKey + InitializationVector for an EccEncryptedSecret.
+/// §6.8.3 KDF: derive the AES-CBC EncryptingKey (16 B P-256 / 32 B P-384) + InitializationVector for an EccEncryptedSecret.
 /// salt = L | "opcua-secret" | sender_public_key | receiver_public_key ; IKM = ECDH shared secret.
 /// Hash per curve (SHA-256/P-256, SHA-384/P-384). No SigningKey (integrity is asymmetric).
 pub fn derive_secret_keys(

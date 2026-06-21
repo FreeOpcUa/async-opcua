@@ -42,7 +42,7 @@ always `null()`) — carry an `AdditionalParametersType` name-value list with `E
   signer_cert, public_key_bytes, signature) -> Result<(), Error>` — sign/verify the EphemeralKey
   `publicKey` bytes with the policy's asymmetric signature algorithm (§7.15), reusing the existing
   asymmetric sign/verify + 012 ephemeral primitives. Panic-free; behind `ecc`.
-- [ ] T003 Header codec helper (`async-opcua-crypto` or a shared server/client util): build + parse an
+- [X] T003 Header codec helper (`async-opcua-crypto` or a shared server/client util): build + parse an
   `AdditionalParametersType` carrying `ECDHPolicyUri` (String) and `ECDHKey` (`EphemeralKeyType` or
   StatusCode) into/from a header `ExtensionObject`. Panic-free on malformed bytes; returns None/empty
   when absent (preserving today's null-header behavior).

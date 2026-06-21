@@ -11,7 +11,7 @@ use crate::ecc::{
     encode_public_key, generate_ephemeral_keypair, sign_ephemeral_public_key,
     verify_ephemeral_public_key, EccCurve,
 };
-use crate::{PrivateKey, SecurityPolicy, X509, X509Data};
+use crate::{PrivateKey, SecurityPolicy, X509Data, X509};
 
 fn ec_cert(curve: EccCurve) -> (X509, PrivateKey) {
     let data = X509Data {
@@ -37,10 +37,11 @@ fn ephemeral_public_key_signature_roundtrips_and_rejects_tamper() {
     ] {
         let (cert, key) = ec_cert(curve);
         let keypair = generate_ephemeral_keypair(curve).expect("ephemeral keypair");
-        let public_key = encode_public_key(keypair.public_key()).expect("encode ephemeral public key");
+        let public_key =
+            encode_public_key(keypair.public_key()).expect("encode ephemeral public key");
 
-        let signature =
-            sign_ephemeral_public_key(policy, &key, &public_key).expect("sign ephemeral public key");
+        let signature = sign_ephemeral_public_key(policy, &key, &public_key)
+            .expect("sign ephemeral public key");
         verify_ephemeral_public_key(policy, &cert, &public_key, &signature)
             .expect("a validly-signed EphemeralKey publicKey must verify against the signer cert");
 

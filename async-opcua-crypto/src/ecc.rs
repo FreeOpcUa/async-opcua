@@ -12,7 +12,10 @@ use ecdsa::signature::{Signer, Verifier};
 #[cfg(feature = "ecc")]
 use hkdf::Hkdf;
 #[cfg(feature = "ecc")]
-use opcua_types::{Error, StatusCode};
+use opcua_types::{
+    AdditionalParametersType, EphemeralKeyType, Error, ExtensionObject, KeyValuePair,
+    QualifiedName, StatusCode, UAString, Variant,
+};
 #[cfg(feature = "ecc")]
 use p256::elliptic_curve::sec1::ToEncodedPoint;
 #[cfg(feature = "ecc")]
@@ -92,6 +95,60 @@ fn invalid_argument(message: impl Into<String>) -> Error {
 #[cfg(feature = "ecc")]
 fn security_check_failed(message: impl Into<String>) -> Error {
     Error::new(StatusCode::BadSecurityChecksFailed, message.into())
+}
+
+/// Build the request-side AdditionalHeader carrying the chosen `ECDHPolicyUri` (Part 6 Table 70).
+#[cfg(feature = "ecc")]
+pub fn build_ecdh_policy_request(ecdh_policy_uri: &str) -> ExtensionObject {
+    ExtensionObject::from_message(AdditionalParametersType {
+        parameters: Some(vec![KeyValuePair {
+            key: QualifiedName::new(0, "ECDHPolicyUri"),
+            value: Variant::from(UAString::from(ecdh_policy_uri)),
+        }]),
+    })
+}
+
+/// Read the requested `ECDHPolicyUri` from a request AdditionalHeader. None if absent/malformed.
+#[cfg(feature = "ecc")]
+pub fn read_ecdh_policy_uri(additional_header: &ExtensionObject) -> Option<String> {
+    let params = additional_header.inner_as::<AdditionalParametersType>()?;
+    let kv = params
+        .parameters
+        .as_ref()?
+        .iter()
+        .find(|kv| kv.key.namespace_index == 0 && kv.key.name == "ECDHPolicyUri")?;
+
+    match &kv.value {
+        Variant::String(s) if !s.is_empty() => Some(s.as_ref().to_string()),
+        _ => None,
+    }
+}
+
+/// Build the response-side AdditionalHeader carrying the issued `ECDHKey` (Part 6 Table 70).
+#[cfg(feature = "ecc")]
+pub fn build_ecdh_key_response(key: EphemeralKeyType) -> ExtensionObject {
+    ExtensionObject::from_message(AdditionalParametersType {
+        parameters: Some(vec![KeyValuePair {
+            key: QualifiedName::new(0, "ECDHKey"),
+            value: Variant::from(ExtensionObject::from_message(key)),
+        }]),
+    })
+}
+
+/// Read the issued `ECDHKey` (`EphemeralKeyType`) from a response AdditionalHeader. None if absent/malformed.
+#[cfg(feature = "ecc")]
+pub fn read_ecdh_key(additional_header: &ExtensionObject) -> Option<EphemeralKeyType> {
+    let params = additional_header.inner_as::<AdditionalParametersType>()?;
+    let kv = params
+        .parameters
+        .as_ref()?
+        .iter()
+        .find(|kv| kv.key.namespace_index == 0 && kv.key.name == "ECDHKey")?;
+
+    match &kv.value {
+        Variant::ExtensionObject(eo) => eo.inner_as::<EphemeralKeyType>().cloned(),
+        _ => None,
+    }
 }
 
 #[cfg(feature = "ecc")]

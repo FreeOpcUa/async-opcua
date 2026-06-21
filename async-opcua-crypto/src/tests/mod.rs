@@ -49,6 +49,8 @@ fn make_test_cert_2048() -> (X509, PrivateKey) {
 
 mod authentication;
 mod cert_chain;
+#[cfg(feature = "ecc")]
+mod ecc_ephemeral_key;
 mod crypto;
 mod identity;
 mod security_policy;

@@ -31,13 +31,13 @@ always `null()`) — carry an `AdditionalParametersType` name-value list with `E
 
 ## Phase 1: Setup
 
-- [ ] T001 Capture the baseline gate; confirm the generated `EphemeralKeyType` and
+- [X] T001 Capture the baseline gate; confirm the generated `EphemeralKeyType` and
   `AdditionalParametersType` field shapes and how a name-value `KeyValuePair` list is represented, and
   re-read Part 4 §7.15 + Part 6 §6.8.1–2 for the exact signed-data / encoding rules. No code change.
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-- [ ] T002 Crypto in `async-opcua-crypto/src/ecc.rs`: `sign_ephemeral_public_key(security_policy,
+- [X] T002 Crypto in `async-opcua-crypto/src/ecc.rs`: `sign_ephemeral_public_key(security_policy,
   signing_key, public_key_bytes) -> signature` and `verify_ephemeral_public_key(security_policy,
   signer_cert, public_key_bytes, signature) -> Result<(), Error>` — sign/verify the EphemeralKey
   `publicKey` bytes with the policy's asymmetric signature algorithm (§7.15), reusing the existing

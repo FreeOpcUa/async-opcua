@@ -26,7 +26,7 @@ use zeroize::Zeroizing;
 use x509_cert::spki::SubjectPublicKeyInfoOwned;
 
 #[cfg(feature = "ecc")]
-use crate::{AesDerivedKeys, AesKey, SecurityPolicy};
+use crate::{AesDerivedKeys, AesKey, PrivateKey, SecurityPolicy, X509};
 
 /// NIST curve selected by an OPC UA Part 6 §6.8 ECC security policy.
 #[cfg(feature = "ecc")]
@@ -672,6 +672,34 @@ pub fn decode_public_key(curve: EccCurve, encoded: &[u8]) -> Result<EphemeralPub
         curve,
         encoded: encoded.to_vec(),
     })
+}
+
+/// Signs an ECC EphemeralKey's encoded `publicKey` bytes with the application-instance key, using the
+/// asymmetric signature algorithm of `security_policy` (OPC UA Part 4 §7.15). Returns the signature.
+#[cfg(feature = "ecc")]
+pub fn sign_ephemeral_public_key(
+    security_policy: SecurityPolicy,
+    signing_key: &PrivateKey,
+    public_key: &[u8],
+) -> Result<Vec<u8>, Error> {
+    let mut signature =
+        vec![0u8; EccCurve::from_security_policy(security_policy)?.raw_signature_len()];
+    let len = security_policy.asymmetric_sign(signing_key, public_key, &mut signature)?;
+    signature.truncate(len);
+    Ok(signature)
+}
+
+/// Verifies the signature over an ECC EphemeralKey's `publicKey` bytes against the signer's
+/// certificate, using the asymmetric signature algorithm of `security_policy` (Part 4 §7.15).
+#[cfg(feature = "ecc")]
+pub fn verify_ephemeral_public_key(
+    security_policy: SecurityPolicy,
+    signer_cert: &X509,
+    public_key: &[u8],
+    signature: &[u8],
+) -> Result<(), Error> {
+    let verification_key = signer_cert.public_key()?;
+    security_policy.asymmetric_verify_signature(&verification_key, public_key, signature)
 }
 
 /// Computes the Part 6 §6.8 ECDH shared secret for an ephemeral key exchange.

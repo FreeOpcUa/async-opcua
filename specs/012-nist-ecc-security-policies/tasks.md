@@ -86,13 +86,14 @@ RFC 5869 Expand Info=salt; key layout Sig|Enc|IV; P256=32/16/16 (SHA256/AES128),
 **Goal**: working ECC_nistP256 channel (Sign + SignAndEncrypt) over loopback.
 **Independent Test**: loopback client↔server ECC_nistP256 in both modes; identical keys; messages round-trip; renewal works; malformed handshakes rejected.
 
-- [~] T012 [US3] Add failing loopback + negative tests in `async-opcua` integration tests: server
+- [X] T012 [US3] Add failing loopback + negative tests in `async-opcua` integration tests: server
   `ECC_nistP256` `Sign` + `SignAndEncrypt` endpoints, client connects, signed/encrypted service calls
   succeed, channel renewal works; reject malformed/short ephemeral key, wrong curve, RSA cert on ECC.
-  — DONE (Claude): happy-path loopback `async-opcua/tests/integration/ecc.rs` — P256/P384 × Sign/SignAndEncrypt
-  connect + signed/encrypted read all pass over real client↔server loopback (EC app certs via
-  `cert_and_pkey_ecc` + EC-PEM PKI loading; new `ecc` feature on the umbrella crate). REMAINING: explicit
-  channel-renewal assertion + negative cases (malformed/short ephemeral key, wrong curve, RSA cert on ECC).
+  — DONE (Claude): `async-opcua/tests/integration/ecc.rs` — P256/P384 × Sign/SignAndEncrypt connect +
+  signed/encrypted read, channel renewal, curve-strict negotiation, all over real loopback (EC app certs via
+  `cert_and_pkey_ecc` + EC-PEM PKI loading; new `ecc` feature on the umbrella crate). Fail-closed negatives
+  (malformed/short ephemeral key, cross-curve ECDH, RSA key on ECC policy, wrong-curve sig length) in
+  `ecc_audit.rs`. 104 integration tests green (98 RSA + 6 ECC).
 - [X] T013 [US3] In `async-opcua-core/src/comms/secure_channel.rs`, add the ECC key-agreement branch: on
   OpenSecureChannel generate ephemeral, run ECDH+HKDF (US1) to populate the existing `SecurityKeys`; reuse symmetric protect/verify. (depends T012)
   — codex impl; verified by Claude-authored channel round-trip tests (RFC 5903 ephemerals, both directions) +
@@ -107,7 +108,10 @@ RFC 5869 Expand Info=salt; key layout Sig|Enc|IV; P256=32/16/16 (SHA256/AES128),
   server hardcoded LEGACY sequence numbers and never synced to the negotiated policy, breaking non-legacy ECC
   (now `SendBuffer::configure_sequence_numbers` once at first OSC). **DEFERRED:** ChannelThumbprint (§6.7.5)
   MITM-hardening response signature — tracked as a follow-up, not required for the loopback MVP.
-- [ ] T016 [US3] Gate; verify T012 passes; **commit US3** (`feat(012 US3): ECC_nistP256 secure channel (Sign + SignAndEncrypt)`).
+- [X] T016 [US3] Gate; verify T012 passes; **commit US3** (`feat(012 US3): ECC_nistP256 secure channel (Sign + SignAndEncrypt)`).
+  — committed `95a7f3cf`; gate green (fmt/clippy --all-features -D warnings/workspace tests). NB: US4 (P-384)
+  is already implemented and tested here too (the channel/primitives are curve-generic), so US4 is largely
+  satisfied — T017-T019 reduce to confirming/closing out.
 
 **Checkpoint**: first working elliptic-curve channel (MVP).
 

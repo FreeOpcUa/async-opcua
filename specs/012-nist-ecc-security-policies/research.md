@@ -154,10 +154,24 @@ lengths are fixed by the algorithms themselves (HMAC-SHA256/384 output = 32/48; 
 - **Mixed RSA+ECC on one server (multi-cert)** — a server holds a single application instance
   certificate (`CertificateStore::read_own_cert`/`read_own_pkey`), and a given cert is either RSA or
   EC. ECDSA handshakes need the EC cert; RSA handshakes need the RSA cert. So a single-cert server is
-  inherently **ECC-only or RSA-only**. Serving both on one server needs a second application cert plus
-  per-policy cert selection at OpenSecureChannel time — a real but bounded follow-up. US5 delivers the
-  feature-gating (ecc-off → recognized-but-unsupported, fail-closed) and curve-strict negotiation;
-  mixed-mode multi-cert is deferred. (Mixed deployments today: run RSA and ECC on separate endpoints/hosts.)
+  inherently **ECC-only or RSA-only**. Serving both on one server requires a second application cert
+  AND **policy-aware cert selection at every site the server uses its instance cert** — this was
+  attempted (2026-06-21) and found to be an architectural change, NOT a bounded patch. The instance
+  cert/key is woven through (at least) SIX touchpoints, each of which must pick RSA-vs-EC by the
+  channel/endpoint policy:
+    1. OpenSecureChannel response signing (channel own cert/key) — `secure_channel.rs`.
+    2. CreateSession `serverCertificate` — `session/manager.rs`.
+    3. CreateSession `serverSignature` (sign with the matching key) — `session/manager.rs`.
+    4. ActivateSession client-signature verification (against the same server cert) — `session/manager.rs`.
+    5. Endpoint descriptions advertised by GetEndpoints (per-endpoint `serverCertificate`) —
+       `info.rs::new_endpoint_description` (the client pins CreateSession's cert against the endpoint's).
+    6. The OSC **receiver-certificate-thumbprint** check at transport DECODE time (before any controller
+       cert switch) — `secure_channel.rs::...validate...thumbprint` → `BadNoValidCertificates` on mismatch.
+  Touchpoints 1–5 are patchable at their use sites (a `ServerInfo` that caches both certs + a policy
+  selector got 1–5 working); #6 needs the channel's own cert to be policy-selected from the FIRST OSC
+  decode (transport layer), i.e. the right design is to choose the server instance cert by policy at
+  channel creation/decode rather than patch each use site. Recommended as a dedicated follow-up.
+  Deferred for now. (Mixed deployments today: run RSA and ECC on separate endpoints/hosts.)
 - **ChannelThumbprint (§6.7.5)** — ✅ IMPLEMENTED (post-US5 hardening, branch `012-ecc-hardening`). The
   ECC OpenSecureChannel *response* is signed over `Response-bytes ‖ first-Request-Signature` on the initial
   Issue only (skipped on renewal, per §6.7.5). The first request signature is captured during the asym

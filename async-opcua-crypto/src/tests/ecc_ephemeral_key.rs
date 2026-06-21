@@ -8,8 +8,8 @@
 //! verified with the signer's certificate.
 
 use crate::ecc::{
-    encode_public_key, generate_ephemeral_keypair, sign_ephemeral_public_key,
-    verify_ephemeral_public_key, EccCurve,
+    decode_public_key, encode_public_key, generate_ephemeral_keypair, issue_server_ephemeral_key,
+    sign_ephemeral_public_key, verify_ephemeral_public_key, EccCurve,
 };
 use crate::{PrivateKey, SecurityPolicy, X509Data, X509};
 
@@ -62,4 +62,42 @@ fn ephemeral_public_key_signature_roundtrips_and_rejects_tamper() {
             "a tampered EphemeralKey signature must be rejected"
         );
     }
+}
+
+/// US1 (FR-001/FR-002): the server issues a signed EphemeralKey for a valid ECC ECDHPolicyUri (the
+/// returned EphemeralKeyType verifies against the server cert and its publicKey is the keypair's
+/// point); a non-ECC / unknown policy is rejected with Bad_SecurityPolicyRejected.
+#[test]
+fn issue_server_ephemeral_key_signs_for_ecc_and_rejects_non_ecc() {
+    for (curve, policy) in [
+        (EccCurve::P256, SecurityPolicy::EccNistP256),
+        (EccCurve::P384, SecurityPolicy::EccNistP384),
+    ] {
+        let (cert, key) = ec_cert(curve);
+        let (keypair, ek) =
+            issue_server_ephemeral_key(policy.to_uri(), &key).expect("issue EphemeralKey for ECC");
+
+        verify_ephemeral_public_key(policy, &cert, ek.public_key.as_ref(), ek.signature.as_ref())
+            .expect("the issued EphemeralKey signature must verify against the server cert");
+        let decoded = decode_public_key(curve, ek.public_key.as_ref())
+            .expect("the issued publicKey must be a valid curve point");
+        assert_eq!(
+            decoded.encoded(),
+            keypair.public_key().encoded(),
+            "the returned EphemeralKeyType.publicKey must match the issued keypair"
+        );
+    }
+
+    // Non-ECC / unknown ECDHPolicyUri -> Bad_SecurityPolicyRejected (the signing key is unused on
+    // this path because the policy is rejected first).
+    let (_cert, key) = ec_cert(EccCurve::P256);
+    let err = issue_server_ephemeral_key(
+        "http://opcfoundation.org/UA/SecurityPolicy#Basic256Sha256",
+        &key,
+    )
+    .expect_err("a non-ECC ECDHPolicyUri must be rejected");
+    assert_eq!(
+        err.status(),
+        opcua_types::StatusCode::BadSecurityPolicyRejected
+    );
 }

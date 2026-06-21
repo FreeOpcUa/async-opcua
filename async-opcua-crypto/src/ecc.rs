@@ -13,7 +13,7 @@ use ecdsa::signature::{Signer, Verifier};
 use hkdf::Hkdf;
 #[cfg(feature = "ecc")]
 use opcua_types::{
-    AdditionalParametersType, EphemeralKeyType, Error, ExtensionObject, KeyValuePair,
+    AdditionalParametersType, ByteString, EphemeralKeyType, Error, ExtensionObject, KeyValuePair,
     QualifiedName, StatusCode, UAString, Variant,
 };
 #[cfg(feature = "ecc")]
@@ -744,6 +744,27 @@ pub fn sign_ephemeral_public_key(
     let len = security_policy.asymmetric_sign(signing_key, public_key, &mut signature)?;
     signature.truncate(len);
     Ok(signature)
+}
+
+/// Generate and sign a server ECC EphemeralKey for the requested `ecdh_policy_uri` (Part 6 §6.8.2).
+/// Returns the keypair (the server retains the private half) and the `EphemeralKeyType` to return to
+/// the client. A non-ECC / unknown policy is rejected (`Bad_SecurityPolicyRejected`, surfaced by
+/// `EccCurve::from_security_policy`).
+#[cfg(feature = "ecc")]
+pub fn issue_server_ephemeral_key(
+    ecdh_policy_uri: &str,
+    server_signing_key: &PrivateKey,
+) -> Result<(EphemeralKeyPair, EphemeralKeyType), Error> {
+    let policy = SecurityPolicy::from_uri(ecdh_policy_uri);
+    let curve = EccCurve::from_security_policy(policy)?;
+    let keypair = generate_ephemeral_keypair(curve)?;
+    let public_key = encode_public_key(keypair.public_key())?;
+    let signature = sign_ephemeral_public_key(policy, server_signing_key, &public_key)?;
+    let ephemeral_key = EphemeralKeyType {
+        public_key: ByteString::from(public_key),
+        signature: ByteString::from(signature),
+    };
+    Ok((keypair, ephemeral_key))
 }
 
 /// Verifies the signature over an ECC EphemeralKey's `publicKey` bytes against the signer's

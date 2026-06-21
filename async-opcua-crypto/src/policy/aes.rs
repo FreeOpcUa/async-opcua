@@ -7,6 +7,8 @@ use zeroize::Zeroizing;
 
 #[cfg(feature = "legacy-crypto")]
 use crate::SHA1_SIZE;
+#[cfg(feature = "ecc")]
+use crate::SHA384_SIZE;
 use crate::{
     aes::calculate_cipher_text_size,
     hash,
@@ -121,6 +123,23 @@ impl AesSymmetricSignatureAlgorithm for DsigHmacSha256 {
 
     fn verify_signature(key: &[u8], data: &[u8], signature: &[u8]) -> bool {
         hash::verify_hmac_sha256(key, data, signature)
+    }
+}
+
+/// HMAC-SHA384 signature algorithm
+#[cfg(feature = "ecc")]
+pub(crate) struct DsigHmacSha384;
+#[cfg(feature = "ecc")]
+impl AesSymmetricSignatureAlgorithm for DsigHmacSha384 {
+    const URI: &'static str = crate::algorithms::DSIG_HMAC_SHA384;
+    const SIZE: usize = SHA384_SIZE;
+
+    fn sign(key: &[u8], data: &[u8], signature: &mut [u8]) -> Result<(), Error> {
+        hash::hmac_sha384(key, data, signature)
+    }
+
+    fn verify_signature(key: &[u8], data: &[u8], signature: &[u8]) -> bool {
+        hash::verify_hmac_sha384(key, data, signature)
     }
 }
 
@@ -632,6 +651,42 @@ impl AesSecurityPolicy for Basic256Sha256 {
     type SymmetricSignature = DsigHmacSha256;
     type SymmetricEncryption = Aes256Cbc;
     type AsymmetricEncryption = OaepSha1;
+}
+
+/// ECC NIST P-256 symmetric channel algorithms.
+#[cfg(feature = "ecc")]
+pub(crate) struct EccNistP256Symmetric;
+#[cfg(feature = "ecc")]
+impl AesSecurityPolicy for EccNistP256Symmetric {
+    const SECURITY_POLICY: &str = "ECC_nistP256";
+    const SECURITY_POLICY_URI: &str = "http://opcfoundation.org/UA/SecurityPolicy#ECC_nistP256";
+    const NONCE_LENGTH: usize = 64;
+
+    const DERIVED_SIGNATURE_KEY_LENGTH: usize = 32;
+    const ASYMMETRIC_KEY_LENGTH: (usize, usize) = (256, 256);
+
+    type AsymmetricSignature = DsigRsaSha256;
+    type SymmetricSignature = DsigHmacSha256;
+    type SymmetricEncryption = Aes128Cbc;
+    type AsymmetricEncryption = OaepSha1;
+}
+
+/// ECC NIST P-384 symmetric channel algorithms.
+#[cfg(feature = "ecc")]
+pub(crate) struct EccNistP384Symmetric;
+#[cfg(feature = "ecc")]
+impl AesSecurityPolicy for EccNistP384Symmetric {
+    const SECURITY_POLICY: &str = "ECC_nistP384";
+    const SECURITY_POLICY_URI: &str = "http://opcfoundation.org/UA/SecurityPolicy#ECC_nistP384";
+    const NONCE_LENGTH: usize = 96;
+
+    const DERIVED_SIGNATURE_KEY_LENGTH: usize = 48;
+    const ASYMMETRIC_KEY_LENGTH: (usize, usize) = (384, 384);
+
+    type AsymmetricSignature = DsigRsaPssSha256;
+    type SymmetricSignature = DsigHmacSha384;
+    type SymmetricEncryption = Aes256Cbc;
+    type AsymmetricEncryption = OaepSha256;
 }
 
 /// Basic128Rsa15 security policy (deprecated in OPC UA 1.04)

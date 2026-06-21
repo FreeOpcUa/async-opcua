@@ -17,7 +17,9 @@ use tracing::{debug, debug_span, error, trace, warn};
 
 use opcua_core::{
     comms::{
-        secure_channel::SecureChannel, security_header::SecurityHeader, tcp_types::ErrorMessage,
+        secure_channel::{Role, SecureChannel},
+        security_header::SecurityHeader,
+        tcp_types::ErrorMessage,
     },
     config::Config,
     handle::AtomicHandle,
@@ -875,7 +877,8 @@ impl<T: ConnectionTransport> SessionController<T> {
             .validate_secure_channel_nonce_length(&request.client_nonce)?;
         self.channel
             .set_remote_nonce_from_byte_string(&request.client_nonce)?;
-        self.channel.create_random_nonce();
+        self.channel.set_role(Role::Server);
+        self.channel.create_local_nonce()?;
 
         let security_policy = self.channel.security_policy();
         if security_policy != SecurityPolicy::None

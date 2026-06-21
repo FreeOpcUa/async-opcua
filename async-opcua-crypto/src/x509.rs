@@ -467,6 +467,59 @@ impl X509 {
         Ok((cert, pkey))
     }
 
+    /// Creates a self-signed EC X509v3 certificate and matching private key.
+    #[cfg(feature = "ecc")]
+    pub fn cert_and_pkey_ecc(
+        curve: crate::ecc::EccCurve,
+        x509_data: &X509Data,
+    ) -> Result<(Self, PrivateKey), String> {
+        match curve {
+            crate::ecc::EccCurve::P256 => {
+                let signer =
+                    p256::ecdsa::SigningKey::random(&mut p256::elliptic_curve::rand_core::OsRng);
+                let scalar = signer.to_bytes();
+                let private_key =
+                    crate::ecc::EccPrivateKey::from_scalar_bytes(curve, scalar.as_slice())
+                        .map(PrivateKey::from_ecc)
+                        .map_err(|e| format!("Failed to generate P-256 private key: {e}"))?;
+                let public_key =
+                    x509_cert::spki::SubjectPublicKeyInfoOwned::from_key(*signer.verifying_key())
+                        .map_err(|e| format!("Failed to encode P-256 public key: {e}"))?;
+                let cert = Self::create_ec_certificate_with_signer::<_, p256::ecdsa::DerSignature>(
+                    x509_data, public_key, &signer,
+                )
+                .map_err(Self::builder_error_to_string)?;
+                Ok((cert, private_key))
+            }
+            crate::ecc::EccCurve::P384 => {
+                let signer =
+                    p384::ecdsa::SigningKey::random(&mut p384::elliptic_curve::rand_core::OsRng);
+                let scalar = signer.to_bytes();
+                let private_key =
+                    crate::ecc::EccPrivateKey::from_scalar_bytes(curve, scalar.as_slice())
+                        .map(PrivateKey::from_ecc)
+                        .map_err(|e| format!("Failed to generate P-384 private key: {e}"))?;
+                let public_key =
+                    x509_cert::spki::SubjectPublicKeyInfoOwned::from_key(*signer.verifying_key())
+                        .map_err(|e| format!("Failed to encode P-384 public key: {e}"))?;
+                let cert = Self::create_ec_certificate_with_signer::<_, p384::ecdsa::DerSignature>(
+                    x509_data, public_key, &signer,
+                )
+                .map_err(Self::builder_error_to_string)?;
+                Ok((cert, private_key))
+            }
+        }
+    }
+
+    fn builder_error_to_string(e: BuilderError) -> String {
+        match e {
+            BuilderError::Asn1(_) => "Invalid der".to_string(),
+            BuilderError::PublicKey(_) => "Invalid public key".to_string(),
+            BuilderError::Signature(_) => "Invalid signature".to_string(),
+            _ => "Invalid".to_string(),
+        }
+    }
+
     fn append_to_name(name: &mut String, param: &str, data: &str) {
         if !data.is_empty() {
             if !name.is_empty() {
@@ -484,13 +537,102 @@ impl X509 {
 
         match result {
             Ok(val) => Ok(val),
-            Err(e) => match e {
-                BuilderError::Asn1(_) => Err("Invalid der".to_string()),
-                BuilderError::PublicKey(_) => Err("Invalid public key".to_string()),
-                BuilderError::Signature(_) => Err("Invalid signature".to_string()),
-                _ => Err("Invalid".to_string()),
-            },
+            Err(e) => Err(Self::builder_error_to_string(e)),
         }
+    }
+
+    #[cfg(feature = "ecc")]
+    fn create_ec_certificate_with_signer<S, Sig>(
+        x509_data: &X509Data,
+        public_key: x509_cert::spki::SubjectPublicKeyInfoOwned,
+        signer: &S,
+    ) -> Result<Self, BuilderError>
+    where
+        S: x509_cert::spki::DynSignatureAlgorithmIdentifier + ecdsa::signature::Keypair,
+        S::VerifyingKey: x509_cert::spki::EncodePublicKey,
+        S: ecdsa::signature::Signer<Sig>,
+        Sig: x509_cert::spki::SignatureBitStringEncoding,
+    {
+        use std::str::FromStr;
+        use std::time::Duration;
+        use x509_cert::builder::{Builder, CertificateBuilder, Profile};
+        use x509_cert::name::Name;
+        use x509_cert::serial_number::SerialNumber;
+        use x509_cert::time::Validity;
+
+        let validity = Validity::from_now(Duration::new(
+            86400 * u64::from(x509_data.certificate_duration_days),
+            0,
+        ))?;
+
+        let serial_number = SerialNumber::from(42u32);
+        let mut issuer = String::new();
+        Self::append_to_name(&mut issuer, "CN", &x509_data.common_name);
+        Self::append_to_name(&mut issuer, "O", &x509_data.organization);
+        Self::append_to_name(&mut issuer, "OU", &x509_data.organizational_unit);
+        Self::append_to_name(&mut issuer, "C", &x509_data.country);
+        Self::append_to_name(&mut issuer, "ST", &x509_data.state);
+        let subject = Name::from_str(&issuer)?;
+
+        let profile = Profile::Manual {
+            issuer: Some(subject.clone()),
+        };
+        let ski = Self::subject_key_identifier(&public_key);
+        let mut builder = CertificateBuilder::new(
+            profile,
+            serial_number.clone(),
+            validity,
+            subject.clone(),
+            public_key,
+            signer,
+        )?;
+
+        builder.add_extension(&x509::ext::pkix::SubjectKeyIdentifier(OctetString::new(
+            ski.as_slice(),
+        )?))?;
+        builder.add_extension(&x509::ext::pkix::AuthorityKeyIdentifier {
+            authority_cert_issuer: Some(vec![GeneralName::DirectoryName(subject)]),
+            key_identifier: Some(OctetString::new(ski.as_slice())?),
+            authority_cert_serial_number: Some(serial_number),
+        })?;
+        builder.add_extension(&x509::ext::pkix::BasicConstraints {
+            ca: false,
+            path_len_constraint: None,
+        })?;
+
+        {
+            use x509::ext::pkix::KeyUsage;
+            use x509::ext::pkix::KeyUsages;
+
+            let key_usage = KeyUsages::DigitalSignature | KeyUsages::NonRepudiation;
+            builder.add_extension(&KeyUsage(key_usage))?;
+        }
+
+        {
+            use x509::ext::pkix::ExtendedKeyUsage;
+            let usage = vec![
+                const_oid::db::rfc5280::ID_KP_CLIENT_AUTH,
+                const_oid::db::rfc5280::ID_KP_SERVER_AUTH,
+            ];
+            builder.add_extension(&ExtendedKeyUsage(usage))?;
+        }
+
+        if !x509_data.alt_host_names.is_empty() {
+            builder.add_extension(&x509_data.alt_host_names.names)?;
+        }
+
+        Ok(X509 {
+            value: builder.build::<Sig>()?,
+        })
+    }
+
+    #[cfg(feature = "ecc")]
+    fn subject_key_identifier(public_key: &x509_cert::spki::SubjectPublicKeyInfoOwned) -> Vec<u8> {
+        use sha1::Digest;
+
+        let mut hasher = sha1::Sha1::new();
+        hasher.update(public_key.subject_public_key.raw_bytes());
+        hasher.finalize().to_vec()
     }
 
     fn create_from_pkey(pkey: &PrivateKey, x509_data: &X509Data) -> Result<Self, BuilderError> {
@@ -517,7 +659,10 @@ impl X509 {
         ))
         .unwrap();
 
-        let signing_key = pkcs1v15::SigningKey::<sha2::Sha256>::new(pkey.value.clone());
+        let rsa_key = pkey
+            .rsa_key_for_x509()
+            .map_err(|_| BuilderError::PublicKey(x509_cert::spki::Error::KeyMalformed))?;
+        let signing_key = pkcs1v15::SigningKey::<sha2::Sha256>::new(rsa_key.clone());
 
         let serial_number = SerialNumber::from(42u32);
 

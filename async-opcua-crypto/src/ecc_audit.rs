@@ -24,10 +24,10 @@ use hmac::{Hmac, Mac};
 use sha2::{Sha256, Sha384};
 
 use crate::ecc::{
-    derive_keys, ecdh_shared_secret, ecdsa_verify, EccCurve, EccPrivateKey, EccPublicKey,
-    EphemeralPrivateKey,
+    decode_public_key, derive_keys, ecdh_shared_secret, ecdsa_verify, generate_ephemeral_keypair,
+    EccCurve, EccPrivateKey, EccPublicKey, EphemeralPrivateKey,
 };
-use crate::SecurityPolicy;
+use crate::{KeySize, PrivateKey, SecurityPolicy, X509Data, X509};
 
 /// Independent hex decoder (whitespace-tolerant), written for this module so
 /// the vectors do not share decoding code with the implementation's tests.
@@ -437,4 +437,112 @@ fn opcua_derive_keys_rejects_wrong_size_shared_secret() {
          silently ran the test-only HKDF branch instead of failing closed",
         bad_secret.len()
     );
+}
+
+// --------------------------------------------------------------------------
+// EC application key PKI round-trip (feature 012, US3 prerequisite).
+//
+// A real ECC deployment loads its EC application key from a PEM file in the PKI
+// directory. This Claude-authored test pins that an EC private key survives a
+// to_pem -> from_pem round-trip and still signs OpenSecureChannel data that
+// verifies against the matching certificate's EC public key.
+// --------------------------------------------------------------------------
+
+#[cfg(feature = "ecc")]
+fn ecc_test_x509_data() -> X509Data {
+    X509Data {
+        key_size: 256,
+        common_name: "ecc-pki".to_string(),
+        organization: "ecc.org".to_string(),
+        organizational_unit: "ecc.org ops".to_string(),
+        country: "EN".to_string(),
+        state: "London".to_string(),
+        alt_host_names: vec!["urn:ecc-pki".to_string(), "ecc-host".to_string()].into(),
+        certificate_duration_days: 60,
+    }
+}
+
+#[test]
+fn ec_application_key_pem_roundtrip_signs_and_verifies() {
+    for (curve, policy) in [
+        (EccCurve::P256, SecurityPolicy::EccNistP256),
+        (EccCurve::P384, SecurityPolicy::EccNistP384),
+    ] {
+        let (cert, key) = X509::cert_and_pkey_ecc(curve, &ecc_test_x509_data())
+            .expect("create self-signed EC cert + key");
+
+        // Round-trip the private key through PEM, as the PKI loader does.
+        let pem = key.to_pem().expect("serialize EC private key to PEM");
+        let reloaded = PrivateKey::from_pem(pem.as_bytes()).expect("load EC private key from PEM");
+        assert_eq!(reloaded.size(), curve.raw_signature_len());
+
+        // The reloaded key must produce a signature that verifies against the
+        // certificate's public key.
+        let data = b"OPC UA ECC OpenSecureChannel PEM round-trip";
+        let mut signature = vec![0u8; reloaded.size()];
+        policy
+            .asymmetric_sign(&reloaded, data, &mut signature)
+            .expect("ECDSA sign with reloaded EC key");
+        let public_key = cert.public_key().expect("certificate EC public key");
+        policy
+            .asymmetric_verify_signature(&public_key, data, &signature)
+            .expect("signature from reloaded key must verify against the cert");
+    }
+}
+
+// --------------------------------------------------------------------------
+// Fail-closed negatives (feature 012, US3 / SC-004).
+//
+// Attacker-controlled handshake inputs must be rejected with an error, never a
+// panic, and a key from the wrong algorithm/curve must not be accepted. These
+// are the security negatives an honest interop peer can never trigger but a
+// hostile one will, authored independently by Claude.
+// --------------------------------------------------------------------------
+
+#[test]
+fn malformed_ephemeral_public_keys_are_rejected_without_panic() {
+    // Wrong length (too short / too long for the curve).
+    assert!(decode_public_key(EccCurve::P256, &[0u8; 10]).is_err());
+    assert!(decode_public_key(EccCurve::P256, &[0u8; 96]).is_err());
+    assert!(decode_public_key(EccCurve::P384, &[0u8; 64]).is_err());
+    // Correct length but not a valid curve point (all-zero X||Y is not on the curve).
+    assert!(decode_public_key(EccCurve::P256, &[0u8; 64]).is_err());
+    assert!(decode_public_key(EccCurve::P384, &[0u8; 96]).is_err());
+}
+
+#[test]
+fn ecdh_across_mismatched_curves_is_rejected() {
+    let p256_private = EphemeralPrivateKey::generate(EccCurve::P256).expect("p256 ephemeral");
+    let p384_public = generate_ephemeral_keypair(EccCurve::P384)
+        .expect("p384 ephemeral")
+        .public_key()
+        .clone();
+    // A P-256 private key must not perform ECDH against a P-384 public key.
+    assert!(ecdh_shared_secret(&p256_private, &p384_public).is_err());
+}
+
+#[test]
+fn rsa_public_key_is_rejected_for_an_ecc_policy() {
+    // An RSA application certificate must not be usable as an EC verifying key
+    // (the "RSA cert on an ECC policy" case).
+    let rsa = PrivateKey::new(2048).expect("generate RSA key");
+    let spki = rsa.public_key_to_info().expect("RSA SubjectPublicKeyInfo");
+    assert!(EccPublicKey::from_subject_public_key_info(EccCurve::P256, &spki).is_err());
+    assert!(EccPublicKey::from_subject_public_key_info(EccCurve::P384, &spki).is_err());
+}
+
+#[test]
+fn ecdsa_verify_rejects_wrong_curve_key_length() {
+    // A P-256 verifying key must reject a P-384-length (96-byte) signature, and
+    // vice versa — no out-of-bounds, no panic, just a clean error.
+    let p256 = EccPrivateKey::generate(EccCurve::P256)
+        .expect("p256 key")
+        .public_key()
+        .expect("p256 public");
+    let p384 = EccPrivateKey::generate(EccCurve::P384)
+        .expect("p384 key")
+        .public_key()
+        .expect("p384 public");
+    assert!(ecdsa_verify(&p256, b"msg", &[0u8; 96]).is_err());
+    assert!(ecdsa_verify(&p384, b"msg", &[0u8; 64]).is_err());
 }

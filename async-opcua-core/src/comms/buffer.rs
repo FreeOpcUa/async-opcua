@@ -122,6 +122,15 @@ impl SendBuffer {
         self.sequence_numbers.set_is_legacy(is_legacy);
     }
 
+    /// Configure the outgoing sequence numbers for the active security policy.
+    ///
+    /// This is intended for initial secure-channel setup before the first
+    /// sequence-numbered chunk is written.
+    pub fn configure_sequence_numbers(&mut self, is_legacy: bool) {
+        self.sequence_numbers.set_is_legacy(is_legacy);
+        self.sequence_numbers.set(self.sequence_numbers.min_value());
+    }
+
     /// Clear the list of pending messages, then
     /// add an error.
     pub fn write_error(&mut self, error: ErrorMessage) {

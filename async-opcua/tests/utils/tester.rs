@@ -470,4 +470,141 @@ impl Tester {
     pub fn endpoint(&self) -> String {
         format!("opc.tcp://{}:{}/", hostname(), self.addr.port())
     }
+
+    /// Stand up an ECC-only loopback: a server presenting `ECC_nistP256`/`P384`
+    /// Sign + SignAndEncrypt endpoints with an EC application certificate, plus a
+    /// client with its own EC application certificate. Mixed RSA+ECC servers are
+    /// out of scope here (a server has a single instance certificate).
+    #[cfg(feature = "ecc")]
+    pub async fn new_ecc(curve: opcua::crypto::ecc::EccCurve) -> Self {
+        // 10 minute channel lifetime (the production default) — no renewal mid-test.
+        Self::new_ecc_with_channel_lifetime(curve, 600_000).await
+    }
+
+    #[cfg(feature = "ecc")]
+    pub async fn new_ecc_with_channel_lifetime(
+        curve: opcua::crypto::ecc::EccCurve,
+        channel_lifetime_ms: u32,
+    ) -> Self {
+        let _ = env_logger::try_init();
+
+        let test_id = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let listener = Self::listener().await;
+        let addr = listener.local_addr().unwrap();
+
+        let server = ecc_server(curve)
+            // Allow the short client channel lifetime so renewal actually fires.
+            .max_secure_channel_token_lifetime_ms(channel_lifetime_ms.max(1000))
+            .pki_dir(format!("./pki-server/{test_id}"))
+            .discovery_urls(vec![format!("opc.tcp://{}:{}", hostname(), addr.port())]);
+
+        // Provision EC application certs for both peers before the server loads its key.
+        provision_ecc_certs(test_id, curve);
+
+        let (server, handle) = server.build().unwrap();
+        tokio::task::spawn(server.run_with(listener));
+
+        let client = ecc_client(test_id, channel_lifetime_ms).client().unwrap();
+
+        Self {
+            _guard: handle.token().clone().drop_guard(),
+            handle,
+            client,
+            addr,
+            test_id,
+        }
+    }
+}
+
+/// Shared applicationUri for the ECC loopback peers; the EC certs carry it as a SAN.
+#[cfg(feature = "ecc")]
+const ECC_APPLICATION_URI: &str = "urn:ecc_integration_server";
+
+#[cfg(feature = "ecc")]
+fn ecc_endpoint_policy(curve: opcua::crypto::ecc::EccCurve) -> SecurityPolicy {
+    match curve {
+        opcua::crypto::ecc::EccCurve::P256 => SecurityPolicy::EccNistP256,
+        opcua::crypto::ecc::EccCurve::P384 => SecurityPolicy::EccNistP384,
+    }
+}
+
+#[cfg(feature = "ecc")]
+pub fn ecc_server(curve: opcua::crypto::ecc::EccCurve) -> ServerBuilder {
+    let endpoint_path = "/";
+    let user_token_ids = vec![ANONYMOUS_USER_TOKEN_ID];
+    let policy = ecc_endpoint_policy(curve);
+    let mut builder = ServerBuilder::new()
+        .application_name("ecc_integration_server")
+        .application_uri(ECC_APPLICATION_URI)
+        .product_uri("urn:ecc_integration_server Testkit")
+        // We provision EC certs ourselves; the sample keypair is RSA.
+        .create_sample_keypair(false)
+        .host(hostname())
+        .trust_client_certs(true)
+        .add_endpoint(
+            "ecc_sign",
+            (
+                endpoint_path,
+                policy,
+                MessageSecurityMode::Sign,
+                &user_token_ids as &[&str],
+            ),
+        )
+        .add_endpoint(
+            "ecc_sign_encrypt",
+            (
+                endpoint_path,
+                policy,
+                MessageSecurityMode::SignAndEncrypt,
+                &user_token_ids as &[&str],
+            ),
+        );
+
+    let limits = builder.limits_mut();
+    limits.max_message_size = 1024 * 1024 * 64;
+    limits.max_array_length = 100_000;
+
+    builder
+}
+
+#[cfg(feature = "ecc")]
+pub fn ecc_client(test_id: u16, channel_lifetime_ms: u32) -> ClientBuilder {
+    ClientBuilder::new()
+        .application_name("ecc_integration_client")
+        // Must match the EC client cert SAN or the server rejects CreateSession.
+        .application_uri(ECC_APPLICATION_URI)
+        .pki_dir(format!("./pki-client/{test_id}"))
+        .create_sample_keypair(false)
+        .trust_server_certs(true)
+        .session_retry_initial(Duration::from_millis(200))
+        .session_retry_limit(3)
+        .channel_lifetime(channel_lifetime_ms)
+        .max_message_size(1024 * 1024 * 64)
+}
+
+/// Write self-signed EC application certs + PKCS#8 EC keys into both peers' PKI dirs.
+#[cfg(feature = "ecc")]
+pub fn provision_ecc_certs(test_id: u16, curve: opcua::crypto::ecc::EccCurve) {
+    use opcua::crypto::{X509Data, X509};
+
+    for side in ["server", "client"] {
+        let data = X509Data {
+            key_size: 256,
+            common_name: format!("ecc-{side}"),
+            organization: "ecc.org".to_string(),
+            organizational_unit: "ecc.org ops".to_string(),
+            country: "EN".to_string(),
+            state: "London".to_string(),
+            alt_host_names: vec![ECC_APPLICATION_URI.to_string(), hostname()].into(),
+            certificate_duration_days: 60,
+        };
+        let (cert, key) = X509::cert_and_pkey_ecc(curve, &data).unwrap();
+
+        let own_dir = format!("pki-{side}/{test_id}/own");
+        let private_dir = format!("pki-{side}/{test_id}/private");
+        std::fs::create_dir_all(&own_dir).unwrap();
+        std::fs::create_dir_all(&private_dir).unwrap();
+        std::fs::write(format!("{own_dir}/cert.der"), cert.to_der().unwrap()).unwrap();
+        std::fs::write(format!("{private_dir}/private.pem"), key.to_pem().unwrap()).unwrap();
+    }
 }

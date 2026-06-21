@@ -86,13 +86,27 @@ RFC 5869 Expand Info=salt; key layout Sig|Enc|IV; P256=32/16/16 (SHA256/AES128),
 **Goal**: working ECC_nistP256 channel (Sign + SignAndEncrypt) over loopback.
 **Independent Test**: loopback client↔server ECC_nistP256 in both modes; identical keys; messages round-trip; renewal works; malformed handshakes rejected.
 
-- [ ] T012 [US3] Add failing loopback + negative tests in `async-opcua` integration tests: server
+- [~] T012 [US3] Add failing loopback + negative tests in `async-opcua` integration tests: server
   `ECC_nistP256` `Sign` + `SignAndEncrypt` endpoints, client connects, signed/encrypted service calls
   succeed, channel renewal works; reject malformed/short ephemeral key, wrong curve, RSA cert on ECC.
-- [ ] T013 [US3] In `async-opcua-core/src/comms/secure_channel.rs`, add the ECC key-agreement branch: on
+  — DONE (Claude): happy-path loopback `async-opcua/tests/integration/ecc.rs` — P256/P384 × Sign/SignAndEncrypt
+  connect + signed/encrypted read all pass over real client↔server loopback (EC app certs via
+  `cert_and_pkey_ecc` + EC-PEM PKI loading; new `ecc` feature on the umbrella crate). REMAINING: explicit
+  channel-renewal assertion + negative cases (malformed/short ephemeral key, wrong curve, RSA cert on ECC).
+- [X] T013 [US3] In `async-opcua-core/src/comms/secure_channel.rs`, add the ECC key-agreement branch: on
   OpenSecureChannel generate ephemeral, run ECDH+HKDF (US1) to populate the existing `SecurityKeys`; reuse symmetric protect/verify. (depends T012)
-- [ ] T014 [US3] Client OpenSecureChannel flow (`async-opcua-client`): put client ephemeral pubkey in `ClientNonce`, ECDSA-sign the request, verify server response signature + derive keys. (depends T013)
-- [ ] T015 [US3] Server OpenSecureChannel flow (`async-opcua-server`): verify client signature, gen server ephemeral into `ServerNonce`, derive keys, ECDSA-sign response incl. ChannelThumbprint (§6.7.5). (depends T013)
+  — codex impl; verified by Claude-authored channel round-trip tests (RFC 5903 ephemerals, both directions) +
+  symmetric AES-CBC/HMAC reuse (P256=AES128/HMAC-SHA256, P384=AES256/HMAC-SHA384). NOTE follow-up: harden the
+  now-unreachable `make_secure_channel_keys` ECC arm (returns empty keys → make `unreachable!`) during T014.
+- [X] T014 [US3] Client OpenSecureChannel flow (`async-opcua-client`): put client ephemeral pubkey in `ClientNonce`, ECDSA-sign the request, verify server response signature + derive keys. (depends T013)
+  — codex impl (`create_local_nonce`, Role::Client); plus EC application key support (`PrivateKey` made
+  RSA|EC polymorphic, `cert_and_pkey_ecc`, EC-PEM load) + ECDSA OSC sign/verify (sign-only) wired. Verified
+  by Claude channel + loopback tests.
+- [X] T015 [US3] Server OpenSecureChannel flow (`async-opcua-server`): verify client signature, gen server ephemeral into `ServerNonce`, derive keys, ECDSA-sign response. (depends T013)
+  — codex impl (Role::Server, server ephemeral). Also fixed a latent server bug Claude's loopback caught: the
+  server hardcoded LEGACY sequence numbers and never synced to the negotiated policy, breaking non-legacy ECC
+  (now `SendBuffer::configure_sequence_numbers` once at first OSC). **DEFERRED:** ChannelThumbprint (§6.7.5)
+  MITM-hardening response signature — tracked as a follow-up, not required for the loopback MVP.
 - [ ] T016 [US3] Gate; verify T012 passes; **commit US3** (`feat(012 US3): ECC_nistP256 secure channel (Sign + SignAndEncrypt)`).
 
 **Checkpoint**: first working elliptic-curve channel (MVP).

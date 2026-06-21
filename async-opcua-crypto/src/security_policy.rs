@@ -13,7 +13,7 @@ use opcua_types::{constants, ByteString, Error, StatusCode};
 
 use crate::{
     policy::{PaddingInfo, SecurityPolicyImpl},
-    PrivateKey, PublicKey,
+    KeySize, PrivateKey, PublicKey,
 };
 
 use super::random;
@@ -35,18 +35,28 @@ fn panic_unsupported_legacy_policy() -> ! {
     );
 }
 
-// Entry points that need real ECC crypto must stay fail-closed until the ECC
-// primitive tasks are implemented.
-#[allow(clippy::panic)]
-fn panic_unimplemented_ecc_policy() -> ! {
-    panic!("ECC security policy crypto is not implemented yet")
-}
-
 fn ecc_not_implemented_error(operation: &str) -> Error {
     Error::new(
         StatusCode::BadNotImplemented,
         format!("{operation} is not implemented for ECC security policies yet"),
     )
+}
+
+#[cfg(feature = "ecc")]
+macro_rules! call_with_ecc_symmetric_policy {
+    ($r:expr, |$x:ident| $t:expr) => {
+        match $r {
+            Self::EccNistP256 => {
+                type $x = AesPolicy<EccNistP256Symmetric>;
+                $t
+            }
+            Self::EccNistP384 => {
+                type $x = AesPolicy<EccNistP384Symmetric>;
+                $t
+            }
+            _ => unreachable!("caller must pass an ECC security policy"),
+        }
+    };
 }
 
 macro_rules! call_with_policy {
@@ -95,9 +105,7 @@ macro_rules! call_with_policy {
             Self::Basic128Rsa15 | Self::Basic256 => {
                 panic_unsupported_legacy_policy();
             }
-            Self::EccNistP256 | Self::EccNistP384 => {
-                panic_unimplemented_ecc_policy();
-            }
+            Self::EccNistP256 | Self::EccNistP384 => panic_unknown_security_policy(),
             Self::Unknown => panic_unknown_security_policy(),
         }
     };
@@ -295,6 +303,15 @@ impl SecurityPolicy {
         }
     }
 
+    /// Asymmetric signature size in bytes for a signing/verification key.
+    pub fn asymmetric_signature_size(&self, key: &PublicKey) -> usize {
+        match self {
+            SecurityPolicy::EccNistP256 => 64,
+            SecurityPolicy::EccNistP384 => 96,
+            _ => key.size(),
+        }
+    }
+
     /// Tests if the supplied key length is valid for this policy
     pub fn is_valid_keylength(&self, keylength: usize) -> bool {
         match self {
@@ -363,6 +380,15 @@ impl SecurityPolicy {
         }
     }
 
+    /// Returns true for ECC NIST secure-channel policies.
+    #[must_use]
+    pub fn is_ecc(&self) -> bool {
+        matches!(
+            self,
+            SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384
+        )
+    }
+
     /// Part 6
     /// 6.7.5
     /// Deriving keys Once the SecureChannel is established the Messages are signed and encrypted with
@@ -401,7 +427,7 @@ impl SecurityPolicy {
     pub fn make_secure_channel_keys(&self, secret: &[u8], seed: &[u8]) -> AesDerivedKeys {
         match self {
             SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384 => {
-                panic_unimplemented_ecc_policy()
+                unreachable!("ECC secure channels derive keys via ECDH/HKDF, not the nonce PRF")
             }
             _ => call_with_policy!(self, |T| T::derive_secure_channel_keys(secret, seed)),
         }
@@ -416,6 +442,25 @@ impl SecurityPolicy {
         signature: &mut [u8],
     ) -> Result<usize, Error> {
         match self {
+            #[cfg(feature = "ecc")]
+            SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384 => {
+                let signing_key = signing_key.ecc_key().ok_or_else(|| {
+                    Error::new(
+                        StatusCode::BadSecurityChecksFailed,
+                        "ECDSA signing requires an EC private key",
+                    )
+                })?;
+                let signed = crate::ecc::ecdsa_sign(signing_key, data)?;
+                let dst = signature.get_mut(..signed.len()).ok_or_else(|| {
+                    Error::new(
+                        StatusCode::BadSecurityChecksFailed,
+                        "ECDSA signature buffer is too small",
+                    )
+                })?;
+                dst.copy_from_slice(&signed);
+                Ok(signed.len())
+            }
+            #[cfg(not(feature = "ecc"))]
             SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384 => {
                 Err(ecc_not_implemented_error("ECDSA signing"))
             }
@@ -435,6 +480,22 @@ impl SecurityPolicy {
         signature: &[u8],
     ) -> Result<(), Error> {
         match self {
+            #[cfg(feature = "ecc")]
+            SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384 => {
+                let verification_key = verification_key.ecc_key().ok_or_else(|| {
+                    Error::new(
+                        StatusCode::BadSecurityChecksFailed,
+                        "ECDSA verification requires an EC public key",
+                    )
+                })?;
+                crate::ecc::ecdsa_verify(verification_key, data, signature).map_err(|err| {
+                    Error::new(
+                        StatusCode::BadSecurityChecksFailed,
+                        format!("ECDSA signature verification failed: {err}"),
+                    )
+                })
+            }
+            #[cfg(not(feature = "ecc"))]
             SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384 => {
                 Err(ecc_not_implemented_error("ECDSA signature verification"))
             }
@@ -523,6 +584,11 @@ impl SecurityPolicy {
         signature: &mut [u8],
     ) -> Result<(), Error> {
         match self {
+            #[cfg(feature = "ecc")]
+            SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384 => {
+                call_with_ecc_symmetric_policy!(self, |T| T::symmetric_sign(keys, data, signature))
+            }
+            #[cfg(not(feature = "ecc"))]
             SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384 => {
                 Err(ecc_not_implemented_error("ECC symmetric signing"))
             }
@@ -538,6 +604,13 @@ impl SecurityPolicy {
         signature: &[u8],
     ) -> Result<(), Error> {
         match self {
+            #[cfg(feature = "ecc")]
+            SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384 => {
+                call_with_ecc_symmetric_policy!(self, |T| {
+                    T::symmetric_verify_signature(keys, data, signature)
+                })
+            }
+            #[cfg(not(feature = "ecc"))]
             SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384 => Err(
                 ecc_not_implemented_error("ECC symmetric signature verification"),
             ),
@@ -555,6 +628,11 @@ impl SecurityPolicy {
         dst: &mut [u8],
     ) -> Result<usize, Error> {
         match self {
+            #[cfg(feature = "ecc")]
+            SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384 => {
+                call_with_ecc_symmetric_policy!(self, |T| T::symmetric_encrypt(keys, src, dst))
+            }
+            #[cfg(not(feature = "ecc"))]
             SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384 => {
                 Err(ecc_not_implemented_error("ECC symmetric encryption"))
             }
@@ -570,6 +648,11 @@ impl SecurityPolicy {
         dst: &mut [u8],
     ) -> Result<usize, Error> {
         match self {
+            #[cfg(feature = "ecc")]
+            SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384 => {
+                call_with_ecc_symmetric_policy!(self, |T| T::symmetric_decrypt(keys, src, dst))
+            }
+            #[cfg(not(feature = "ecc"))]
             SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384 => {
                 Err(ecc_not_implemented_error("ECC symmetric decryption"))
             }

@@ -418,6 +418,7 @@ impl EccPublicKey {
 
 /// EC private key used for ECDSA signing.
 #[cfg(feature = "ecc")]
+#[derive(Clone)]
 pub struct EccPrivateKey {
     curve: EccCurve,
     scalar: Zeroizing<Vec<u8>>,
@@ -482,6 +483,24 @@ impl EccPrivateKey {
         self.scalar.as_slice()
     }
 
+    /// Encodes this EC private key as PKCS#8 DER.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the stored scalar cannot be represented as a curve private key.
+    pub fn to_pkcs8_der(&self) -> rsa::pkcs8::Result<rsa::pkcs8::SecretDocument> {
+        use rsa::pkcs8::EncodePrivateKey;
+
+        match self.curve {
+            EccCurve::P256 => p256::SecretKey::from_slice(self.scalar())
+                .map_err(|_| rsa::pkcs8::Error::KeyMalformed)?
+                .to_pkcs8_der(),
+            EccCurve::P384 => p384::SecretKey::from_slice(self.scalar())
+                .map_err(|_| rsa::pkcs8::Error::KeyMalformed)?
+                .to_pkcs8_der(),
+        }
+    }
+
     /// Computes the ECDSA verifying key corresponding to this private scalar.
     ///
     /// # Errors
@@ -539,6 +558,12 @@ pub struct EphemeralKeyPair {
 
 #[cfg(feature = "ecc")]
 impl EphemeralKeyPair {
+    /// Splits the key pair into its private and public halves.
+    #[must_use]
+    pub fn into_parts(self) -> (EphemeralPrivateKey, EphemeralPublicKey) {
+        (self.private_key, self.public_key)
+    }
+
     /// Returns the private half consumed by ECDH.
     #[must_use]
     pub fn private_key(&self) -> &EphemeralPrivateKey {

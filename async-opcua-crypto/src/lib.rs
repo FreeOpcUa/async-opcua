@@ -66,6 +66,8 @@ mod ecc_audit;
 pub const SHA1_SIZE: usize = 20;
 /// Size of a SHA256 hash value bytes
 pub const SHA256_SIZE: usize = 32;
+/// Size of a SHA384 hash value bytes
+pub const SHA384_SIZE: usize = 48;
 
 /// These are algorithms that are used by various policies or external to this file
 pub(crate) mod algorithms {
@@ -98,6 +100,11 @@ pub(crate) mod algorithms {
     /// SymmetricSignatureAlgorithm – HmacSha256 – (http://www.w3.org/2000/09/xmldsig#hmac-sha256).
     #[allow(unused)]
     pub(crate) const DSIG_HMAC_SHA256: &str = "http://www.w3.org/2000/09/xmldsig#hmac-sha256";
+
+    /// SymmetricSignatureAlgorithm – HmacSha384.
+    #[allow(unused)]
+    #[cfg(feature = "ecc")]
+    pub(crate) const DSIG_HMAC_SHA384: &str = "http://www.w3.org/2001/04/xmldsig-more#hmac-sha384";
 
     /// Asymmetric digital signature algorithm using RSA-SHA1
     #[cfg(feature = "legacy-crypto")]

@@ -73,7 +73,7 @@ activation fields → no panic.
 
 ## Phase 4: Polish
 
-- [ ] T008 Final gate: `cargo fmt --all --check` + `cargo clippy --all-targets --all-features -- -D warnings`
+- [X] T008 Final gate: `cargo fmt --all --check` + `cargo clippy --all-targets --all-features -- -D warnings`
   + `cargo test -p async-opcua-server` + `cargo test -p async-opcua --test integration_tests` (failing
   integration tests confirmed in isolation as pre-existing flakiness). Confirm `None` path unchanged and
   the existing `cross_channel_transfer_rules` / stale-nonce tests still pass.

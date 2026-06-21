@@ -150,12 +150,18 @@ pki/
     ...      - contains certs from client/servers you've connected with and you trust
   rejected/
     ...      - contains certs from client/servers you've connected with and you don't trust
+  issuer/
+    ...      - CA certificates used to build trust chains but not directly trusted
+  trusted_crls/
+    ...      - CRLs for the trusted CA certificates
+  issuer_crls/
+    ...      - CRLs for the issuer CA certificates
 ```
 
 For encrypted connections the following applies:
 
 * The server will reject the first connection from an unrecognized client. It will create a file representing the cert in its the `pki/rejected/` folder and you, the administrator must move the cert to the `trusted/` folder to permit connections from that client in future.
-    * NOTE: Signed certificates are not supported at this time. Potentially a cert signed with a trusted CA could be automatically moved to the `trusted/` folder.
+    * A certificate signed by a CA is now trusted automatically when its chain builds to a trusted anchor: place the CA certificate(s) in `issuer/` (and the trust-anchor CA in `trusted/`). Validation follows OPC UA Part 4 §6.1.3 (chain, signature, usage, revocation) — see `docs/crypto.md`.
 * Likewise, the client shall reject unrecognized servers in the same fashion, and the cert must be moved from the `rejected/` to `trusted/` folder for connection to succeed.
 * Servers that register with a discovery server may find the discovery server rejects their registration attempts if the cert is unrecognized. In that case you must move your server's cert from discovery server's  `rejected` to its ``trusted` folder, wherever that may be. e.g. on Windows it is under `C:\ProgramData\OPC Foundation\UA\Discovery\pki`
 

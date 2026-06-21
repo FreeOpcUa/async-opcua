@@ -50,6 +50,26 @@ boundary) — see "Breaking changes" below.
   EC application certificates are required (a server presents a single instance
   certificate, so it is RSA-only or ECC-only). Third-party interop is not yet
   validated — see `docs/setup.md` and the feature's `research.md`.
+* **Certificate validation conformance (OPC UA Part 4 §6.1.3, Table 100)** — both
+  server (validating client certs) and client (validating server certs) now build
+  and verify the CA trust chain, verify each signature up the chain, check the
+  negotiated security policy's certificate signature algorithm and key length,
+  certificate usage (KeyUsage/ExtendedKeyUsage and CA BasicConstraints), and CRL
+  revocation — each mapped to its exact OPC UA status code. A certificate is
+  trusted when it or a CA in its chain is in the trusted list; CA certificates go
+  in the new `pki/issuer/` directory and CRLs in `pki/trusted_crls/` +
+  `pki/issuer_crls/`. Non-critical steps (security-policy, validity, host name,
+  certificate usage, find-revocation-list) are administrator-suppressible (with a
+  logged audit finding); critical steps (structure, chain, signature, untrusted,
+  URI) are not. Revocation defaults to lenient — set
+  `require_certificate_revocation(true)` on the server/client builder to require a
+  CRL. Pure-Rust (`x509-cert` + the in-tree RSA/ECDSA verifiers; no OpenSSL/C); the
+  validation path is fuzzed (`fuzz_cert_chain`) and panic-free on malformed certs,
+  CRLs, and cyclic/deep chains. **Backward compatible:** existing self-signed-in-
+  `trusted/` deployments connect unchanged and the `None` path is byte-identical.
+  Deferred: OCSP (CRL only for now), typed `AuditCertificate*` event types
+  (suppressed findings are logged), and a `validate_chain=false` legacy
+  trust-list-only mode.
 
 ### Breaking changes
 

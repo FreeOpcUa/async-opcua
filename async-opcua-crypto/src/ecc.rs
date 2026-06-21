@@ -772,6 +772,40 @@ pub fn ecdsa_verify(
     }
 }
 
+/// Verifies a DER `Ecdsa-Sig-Value` signature used by X.509 certificates and CRLs.
+///
+/// Uses the curve-canonical hash for verification. The caller is responsible for
+/// confirming the signature-algorithm OID matches the issuer curve.
+///
+/// # Errors
+///
+#[cfg(feature = "ecc")]
+pub fn ecdsa_verify_der(
+    verification_key: &EccPublicKey,
+    data: &[u8],
+    der_signature: &[u8],
+) -> Result<(), Error> {
+    let sec1 = sec1_from_xy(verification_key.curve, verification_key.encoded())?;
+    match verification_key.curve {
+        EccCurve::P256 => {
+            let key = p256::ecdsa::VerifyingKey::from_sec1_bytes(&sec1)
+                .map_err(|_| invalid_argument("invalid P-256 ECDSA public key"))?;
+            let signature = p256::ecdsa::Signature::from_der(der_signature)
+                .map_err(|_| invalid_argument("invalid P-256 DER ECDSA signature"))?;
+            key.verify(data, &signature)
+                .map_err(|_| security_check_failed("P-256 ECDSA signature verification failed"))
+        }
+        EccCurve::P384 => {
+            let key = p384::ecdsa::VerifyingKey::from_sec1_bytes(&sec1)
+                .map_err(|_| invalid_argument("invalid P-384 ECDSA public key"))?;
+            let signature = p384::ecdsa::Signature::from_der(der_signature)
+                .map_err(|_| invalid_argument("invalid P-384 DER ECDSA signature"))?;
+            key.verify(data, &signature)
+                .map_err(|_| security_check_failed("P-384 ECDSA signature verification failed"))
+        }
+    }
+}
+
 /// Derives Part 6 §6.8 client/server `SecurityKeys` from an ECDH shared secret with HKDF.
 ///
 /// # Errors

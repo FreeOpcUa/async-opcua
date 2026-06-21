@@ -131,6 +131,12 @@ impl ClientBuilder {
         self
     }
 
+    /// Require revocation status for server certificates.
+    pub fn require_certificate_revocation(mut self, require: bool) -> Self {
+        self.config.require_revocation = require;
+        self
+    }
+
     /// Sets whether the client should verify server certificates. Regardless of this setting,
     /// server certificates are always checked to see if they are trusted and have a valid key
     /// length. In addition (if `verify_server_certs` is unset or is set to `true`) it will

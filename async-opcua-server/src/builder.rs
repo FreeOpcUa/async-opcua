@@ -331,6 +331,12 @@ impl ServerBuilder {
         self
     }
 
+    /// Require revocation status for client certificates.
+    pub fn require_certificate_revocation(mut self, require: bool) -> Self {
+        self.config.certificate_validation.require_revocation = require;
+        self
+    }
+
     /// Validate the valid from/to fields of a certificate.
     pub fn check_cert_time(mut self, check_cert_time: bool) -> Self {
         self.config.certificate_validation.check_time = check_cert_time;

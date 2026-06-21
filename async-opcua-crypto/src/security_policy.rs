@@ -321,6 +321,31 @@ impl SecurityPolicy {
         }
     }
 
+    /// Returns true when `oid` is an acceptable X.509 certificate **signature algorithm**
+    /// for this security policy's Part 4 §6.1.3 Security-Policy Check. Used together with
+    /// `is_valid_keylength` to validate a certificate against the negotiated policy.
+    pub fn is_valid_certificate_signature_algorithm(
+        &self,
+        oid: &const_oid::ObjectIdentifier,
+    ) -> bool {
+        match self {
+            SecurityPolicy::EccNistP256 => *oid == const_oid::db::rfc5912::ECDSA_WITH_SHA_256,
+            SecurityPolicy::EccNistP384 => *oid == const_oid::db::rfc5912::ECDSA_WITH_SHA_384,
+            SecurityPolicy::Basic256Sha256
+            | SecurityPolicy::Aes128Sha256RsaOaep
+            | SecurityPolicy::Aes256Sha256RsaPss => {
+                *oid == const_oid::db::rfc5912::SHA_256_WITH_RSA_ENCRYPTION
+                    || *oid == const_oid::db::rfc5912::ID_RSASSA_PSS
+            }
+            SecurityPolicy::Basic128Rsa15 | SecurityPolicy::Basic256 => {
+                *oid == const_oid::db::rfc5912::SHA_1_WITH_RSA_ENCRYPTION
+                    || *oid == const_oid::db::rfc5912::SHA_256_WITH_RSA_ENCRYPTION
+                    || *oid == const_oid::db::rfc5912::ID_RSASSA_PSS
+            }
+            SecurityPolicy::None | SecurityPolicy::Unknown => false,
+        }
+    }
+
     /// Creates a random nonce in a bytestring with a length appropriate for the policy
     pub fn random_nonce(&self) -> ByteString {
         match self {

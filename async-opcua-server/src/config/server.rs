@@ -303,6 +303,9 @@ pub struct CertificateValidation {
     pub trust_client_certs: bool,
     /// Check the valid from/to fields of a certificate
     pub check_time: bool,
+    /// Require certificate revocation status to be available and valid.
+    #[serde(default)]
+    pub require_revocation: bool,
 }
 
 impl Default for CertificateValidation {
@@ -310,6 +313,7 @@ impl Default for CertificateValidation {
         Self {
             trust_client_certs: false,
             check_time: true,
+            require_revocation: false,
         }
     }
 }
@@ -645,6 +649,7 @@ impl ServerConfig {
             certificate_validation: CertificateValidation {
                 trust_client_certs: false,
                 check_time: true,
+                require_revocation: false,
             },
             pki_dir,
             discovery_server_url,

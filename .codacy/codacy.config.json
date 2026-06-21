@@ -1,0 +1,3326 @@
+{
+  "version": 1,
+  "metadata": {
+    "source": "auto",
+    "provider": null,
+    "organization": null,
+    "autoFilters": "Critical,High,Warning,Minor,AllSecurity,ErrorProne,Performance,BestPractice,UnusedCode,Compatibility,Complexity,Comprehensibility,CodeStyle,Documentation",
+    "repositoryId": null,
+    "repositoryName": null,
+    "createdAt": "2026-06-21T12:12:02.063Z",
+    "updatedAt": "2026-06-21T12:12:02.063Z",
+    "languages": [
+      "CPP",
+      "CSharp",
+      "Dockerfile",
+      "JSON",
+      "Javascript",
+      "Markdown",
+      "Powershell",
+      "Rust",
+      "Shell",
+      "TypeScript",
+      "XML",
+      "YAML"
+    ]
+  },
+  "tools": [
+    {
+      "toolId": "markdownlint",
+      "patterns": [
+        {
+          "patternId": "markdownlint_MD001"
+        },
+        {
+          "patternId": "markdownlint_MD003"
+        },
+        {
+          "patternId": "markdownlint_MD010"
+        },
+        {
+          "patternId": "markdownlint_MD011"
+        },
+        {
+          "patternId": "markdownlint_MD018"
+        },
+        {
+          "patternId": "markdownlint_MD019"
+        },
+        {
+          "patternId": "markdownlint_MD020"
+        },
+        {
+          "patternId": "markdownlint_MD021"
+        },
+        {
+          "patternId": "markdownlint_MD023"
+        },
+        {
+          "patternId": "markdownlint_MD024"
+        },
+        {
+          "patternId": "markdownlint_MD025"
+        },
+        {
+          "patternId": "markdownlint_MD026"
+        },
+        {
+          "patternId": "markdownlint_MD027"
+        },
+        {
+          "patternId": "markdownlint_MD028"
+        },
+        {
+          "patternId": "markdownlint_MD034"
+        },
+        {
+          "patternId": "markdownlint_MD036"
+        },
+        {
+          "patternId": "markdownlint_MD037"
+        },
+        {
+          "patternId": "markdownlint_MD038"
+        },
+        {
+          "patternId": "markdownlint_MD039"
+        },
+        {
+          "patternId": "markdownlint_MD042"
+        },
+        {
+          "patternId": "markdownlint_MD044"
+        },
+        {
+          "patternId": "markdownlint_MD045"
+        },
+        {
+          "patternId": "markdownlint_MD046"
+        },
+        {
+          "patternId": "markdownlint_MD048"
+        },
+        {
+          "patternId": "markdownlint_MD050"
+        },
+        {
+          "patternId": "markdownlint_MD051"
+        },
+        {
+          "patternId": "markdownlint_MD052"
+        },
+        {
+          "patternId": "markdownlint_MD053"
+        },
+        {
+          "patternId": "markdownlint_MD054"
+        },
+        {
+          "patternId": "markdownlint_MD055"
+        },
+        {
+          "patternId": "markdownlint_MD056"
+        }
+      ]
+    },
+    {
+      "toolId": "shellcheck",
+      "patterns": [
+        {
+          "patternId": "shellcheck_SC2001"
+        },
+        {
+          "patternId": "shellcheck_SC2002"
+        },
+        {
+          "patternId": "shellcheck_SC2003"
+        },
+        {
+          "patternId": "shellcheck_SC2004"
+        },
+        {
+          "patternId": "shellcheck_SC2006"
+        },
+        {
+          "patternId": "shellcheck_SC2015"
+        },
+        {
+          "patternId": "shellcheck_SC2016"
+        },
+        {
+          "patternId": "shellcheck_SC2020"
+        },
+        {
+          "patternId": "shellcheck_SC2022"
+        },
+        {
+          "patternId": "shellcheck_SC2024"
+        },
+        {
+          "patternId": "shellcheck_SC2025"
+        },
+        {
+          "patternId": "shellcheck_SC2026"
+        },
+        {
+          "patternId": "shellcheck_SC2027"
+        },
+        {
+          "patternId": "shellcheck_SC2028"
+        },
+        {
+          "patternId": "shellcheck_SC2029"
+        },
+        {
+          "patternId": "shellcheck_SC2031"
+        },
+        {
+          "patternId": "shellcheck_SC2033"
+        },
+        {
+          "patternId": "shellcheck_SC2034"
+        },
+        {
+          "patternId": "shellcheck_SC2035"
+        },
+        {
+          "patternId": "shellcheck_SC2036"
+        },
+        {
+          "patternId": "shellcheck_SC2086"
+        },
+        {
+          "patternId": "shellcheck_SC2092"
+        },
+        {
+          "patternId": "shellcheck_SC2115"
+        },
+        {
+          "patternId": "shellcheck_SC2148"
+        },
+        {
+          "patternId": "shellcheck_SC2156"
+        },
+        {
+          "patternId": "shellcheck_SC2154"
+        }
+      ]
+    },
+    {
+      "toolId": "Hadolint",
+      "patterns": [
+        {
+          "patternId": "Hadolint_DL3000"
+        },
+        {
+          "patternId": "Hadolint_DL3001"
+        },
+        {
+          "patternId": "Hadolint_DL3002"
+        },
+        {
+          "patternId": "Hadolint_DL3003"
+        },
+        {
+          "patternId": "Hadolint_DL3004"
+        },
+        {
+          "patternId": "Hadolint_DL3005"
+        },
+        {
+          "patternId": "Hadolint_DL3006"
+        },
+        {
+          "patternId": "Hadolint_DL3007"
+        },
+        {
+          "patternId": "Hadolint_DL3008"
+        },
+        {
+          "patternId": "Hadolint_DL3009"
+        },
+        {
+          "patternId": "Hadolint_DL3010"
+        },
+        {
+          "patternId": "Hadolint_DL3011"
+        },
+        {
+          "patternId": "Hadolint_DL3012"
+        },
+        {
+          "patternId": "Hadolint_DL3013"
+        },
+        {
+          "patternId": "Hadolint_DL3014"
+        },
+        {
+          "patternId": "Hadolint_DL3015"
+        },
+        {
+          "patternId": "Hadolint_DL3020"
+        },
+        {
+          "patternId": "Hadolint_DL3021"
+        },
+        {
+          "patternId": "Hadolint_DL3022"
+        },
+        {
+          "patternId": "Hadolint_DL3023"
+        },
+        {
+          "patternId": "Hadolint_DL3024"
+        },
+        {
+          "patternId": "Hadolint_DL3026"
+        },
+        {
+          "patternId": "Hadolint_DL4000"
+        },
+        {
+          "patternId": "Hadolint_DL4001"
+        },
+        {
+          "patternId": "Hadolint_DL4003"
+        },
+        {
+          "patternId": "Hadolint_DL4004"
+        },
+        {
+          "patternId": "Hadolint_DL4005"
+        },
+        {
+          "patternId": "Hadolint_SC1000"
+        },
+        {
+          "patternId": "Hadolint_SC1001"
+        },
+        {
+          "patternId": "Hadolint_SC1007"
+        },
+        {
+          "patternId": "Hadolint_SC1010"
+        },
+        {
+          "patternId": "Hadolint_SC1018"
+        },
+        {
+          "patternId": "Hadolint_SC1035"
+        },
+        {
+          "patternId": "Hadolint_SC1045"
+        },
+        {
+          "patternId": "Hadolint_SC1065"
+        },
+        {
+          "patternId": "Hadolint_SC1066"
+        },
+        {
+          "patternId": "Hadolint_SC1068"
+        },
+        {
+          "patternId": "Hadolint_SC1077"
+        },
+        {
+          "patternId": "Hadolint_SC1078"
+        },
+        {
+          "patternId": "Hadolint_SC1079"
+        },
+        {
+          "patternId": "Hadolint_SC1081"
+        },
+        {
+          "patternId": "Hadolint_SC1083"
+        },
+        {
+          "patternId": "Hadolint_SC1086"
+        },
+        {
+          "patternId": "Hadolint_SC1087"
+        },
+        {
+          "patternId": "Hadolint_SC1095"
+        },
+        {
+          "patternId": "Hadolint_SC1097"
+        },
+        {
+          "patternId": "Hadolint_SC1098"
+        },
+        {
+          "patternId": "Hadolint_SC1099"
+        },
+        {
+          "patternId": "Hadolint_SC2002"
+        },
+        {
+          "patternId": "Hadolint_SC2015"
+        },
+        {
+          "patternId": "Hadolint_SC2026"
+        },
+        {
+          "patternId": "Hadolint_SC2028"
+        },
+        {
+          "patternId": "Hadolint_SC2035"
+        },
+        {
+          "patternId": "Hadolint_SC2046"
+        },
+        {
+          "patternId": "Hadolint_SC2086"
+        },
+        {
+          "patternId": "Hadolint_SC2140"
+        },
+        {
+          "patternId": "Hadolint_SC2154"
+        },
+        {
+          "patternId": "Hadolint_SC2164"
+        }
+      ]
+    },
+    {
+      "toolId": "Trivy",
+      "patterns": [
+        {
+          "patternId": "Trivy_malicious_packages"
+        },
+        {
+          "patternId": "Trivy_secret"
+        },
+        {
+          "patternId": "Trivy_vulnerability_critical"
+        },
+        {
+          "patternId": "Trivy_vulnerability_high"
+        },
+        {
+          "patternId": "Trivy_vulnerability_medium"
+        },
+        {
+          "patternId": "Trivy_vulnerability_minor"
+        }
+      ]
+    },
+    {
+      "toolId": "Semgrep",
+      "patterns": [
+        {
+          "patternId": "Semgrep_ai.typescript.detect-gemini.detect-gemini"
+        },
+        {
+          "patternId": "Semgrep_bash.curl.security.curl-eval.curl-eval"
+        },
+        {
+          "patternId": "Semgrep_bash.curl.security.curl-pipe-bash.curl-pipe-bash"
+        },
+        {
+          "patternId": "Semgrep_bash.lang.security.ifs-tampering.ifs-tampering"
+        },
+        {
+          "patternId": "Semgrep_c_access_rule-RpcImpersonateClient-ImpersonateLoggedOnUser"
+        },
+        {
+          "patternId": "Semgrep_c_access_rule-umask"
+        },
+        {
+          "patternId": "Semgrep_c_buffer_rule-fscanf-sscanf"
+        },
+        {
+          "patternId": "Semgrep_c_buffer_rule-getenv-curl-getenv"
+        },
+        {
+          "patternId": "Semgrep_c_buffer_rule-gets--getts"
+        },
+        {
+          "patternId": "Semgrep_c_buffer_rule-getwd"
+        },
+        {
+          "patternId": "Semgrep_c_buffer_rule-g-get-home-dir"
+        },
+        {
+          "patternId": "Semgrep_c_buffer_rule-g-get-tmp-dir"
+        },
+        {
+          "patternId": "Semgrep_c_buffer_rule-lstrcatn-wcsncat"
+        },
+        {
+          "patternId": "Semgrep_c_buffer_rule-lstrcat-wcscat"
+        },
+        {
+          "patternId": "Semgrep_c_buffer_rule-lstrcpyn-wcsncpy"
+        },
+        {
+          "patternId": "Semgrep_c_buffer_rule-lstrcpy-wcscpy"
+        },
+        {
+          "patternId": "Semgrep_c_buffer_rule-memcpy-CopyMemory"
+        },
+        {
+          "patternId": "Semgrep_c_buffer_rule-MultiByteToWideChar"
+        },
+        {
+          "patternId": "Semgrep_c_buffer_rule-realpath"
+        },
+        {
+          "patternId": "Semgrep_c_buffer_rule-scanf-vscanf"
+        },
+        {
+          "patternId": "Semgrep_c_buffer_rule-sprintf-vsprintf"
+        },
+        {
+          "patternId": "Semgrep_c_buffer_rule-strcat"
+        },
+        {
+          "patternId": "Semgrep_c_buffer_rule-StrCat-StrCatA"
+        },
+        {
+          "patternId": "Semgrep_c_buffer_rule-strccpy-strcadd"
+        },
+        {
+          "patternId": "Semgrep_c_buffer_rule-strcpy"
+        },
+        {
+          "patternId": "Semgrep_c_buffer_rule-strcpyA-strcpyW"
+        },
+        {
+          "patternId": "Semgrep_c_buffer_rule-strncat"
+        },
+        {
+          "patternId": "Semgrep_c_buffer_rule-strncpy"
+        },
+        {
+          "patternId": "Semgrep_c_crypto_rule-crypt-crypt-r"
+        },
+        {
+          "patternId": "Semgrep_c_crypto_rule-EVP-des-ecb-EVP-des-cbc"
+        },
+        {
+          "patternId": "Semgrep_c_crypto_rule-EVP-rc4-40-EVP-rc2-40-cbc"
+        },
+        {
+          "patternId": "Semgrep_c_format_rule-fprintf-vfprintf"
+        },
+        {
+          "patternId": "Semgrep_c_format_rule-printf-vprintf"
+        },
+        {
+          "patternId": "Semgrep_c_format_rule-snprintf-vsnprintf"
+        },
+        {
+          "patternId": "Semgrep_c_format_rule-syslog"
+        },
+        {
+          "patternId": "Semgrep_c_free_rule-memalign"
+        },
+        {
+          "patternId": "Semgrep_c.lang.security.function-use-after-free.function-use-after-free"
+        },
+        {
+          "patternId": "Semgrep_c.lang.security.info-leak-on-non-formatted-string.info-leak-on-non-formated-string"
+        },
+        {
+          "patternId": "Semgrep_c.lang.security.insecure-use-gets-fn.insecure-use-gets-fn"
+        },
+        {
+          "patternId": "Semgrep_c.lang.security.insecure-use-memset.insecure-use-memset"
+        },
+        {
+          "patternId": "Semgrep_c.lang.security.insecure-use-printf-fn.insecure-use-printf-fn"
+        },
+        {
+          "patternId": "Semgrep_c.lang.security.insecure-use-scanf-fn.insecure-use-scanf-fn"
+        },
+        {
+          "patternId": "Semgrep_c.lang.security.insecure-use-strcat-fn.insecure-use-strcat-fn"
+        },
+        {
+          "patternId": "Semgrep_c.lang.security.insecure-use-string-copy-fn.insecure-use-string-copy-fn"
+        },
+        {
+          "patternId": "Semgrep_c.lang.security.insecure-use-strtok-fn.insecure-use-strtok-fn"
+        },
+        {
+          "patternId": "Semgrep_c.lang.security.random-fd-exhaustion.random-fd-exhaustion"
+        },
+        {
+          "patternId": "Semgrep_c.lang.security.use-after-free.use-after-free"
+        },
+        {
+          "patternId": "Semgrep_c_misc_rule-AddAccessAllowedAce"
+        },
+        {
+          "patternId": "Semgrep_c_misc_rule-fopen-open"
+        },
+        {
+          "patternId": "Semgrep_c_misc_rule-getpass"
+        },
+        {
+          "patternId": "Semgrep_c_misc_rule-LoadLibrary"
+        },
+        {
+          "patternId": "Semgrep_c_misc_rule-LoadLibraryEx"
+        },
+        {
+          "patternId": "Semgrep_c_misc_rule-SetSecurityDescriptorDacl"
+        },
+        {
+          "patternId": "Semgrep_codacy.bash.security.hard-coded-password"
+        },
+        {
+          "patternId": "Semgrep_codacy.csharp.ai.insecure-llm-model-usage"
+        },
+        {
+          "patternId": "Semgrep_codacy.csharp.best-practice.misleading-exception-class-name"
+        },
+        {
+          "patternId": "Semgrep_codacy.csharp.security.hard-coded-password"
+        },
+        {
+          "patternId": "Semgrep_codacy.csharp.security.sql-injection.dynamic-query"
+        },
+        {
+          "patternId": "Semgrep_codacy.generic.security.detect-invisible-unicode"
+        },
+        {
+          "patternId": "Semgrep_codacy.javascript.security.hard-coded-password"
+        },
+        {
+          "patternId": "Semgrep_codacy.k8s.ingress.nginx.retirement.ingress-class"
+        },
+        {
+          "patternId": "Semgrep_codacy.k8s.ingress.nginx.retirement.ingress-resource"
+        },
+        {
+          "patternId": "Semgrep_codacy.k8s.ingress.nginx.retirement.workload"
+        },
+        {
+          "patternId": "Semgrep_c_race_rule-access"
+        },
+        {
+          "patternId": "Semgrep_c_race_rule-chmod"
+        },
+        {
+          "patternId": "Semgrep_c_race_rule-chown"
+        },
+        {
+          "patternId": "Semgrep_c_race_rule-readlink"
+        },
+        {
+          "patternId": "Semgrep_c_race_rule-vfork"
+        },
+        {
+          "patternId": "Semgrep_c_random_rule-drand48-erand48"
+        },
+        {
+          "patternId": "Semgrep_csharp_cookies_rule-CookieWithoutHttpOnlyFlag"
+        },
+        {
+          "patternId": "Semgrep_csharp_cookies_rule-CookieWithoutSSLFlag"
+        },
+        {
+          "patternId": "Semgrep_csharp_crypto_rule-CertificateValidationDisabled"
+        },
+        {
+          "patternId": "Semgrep_csharp_crypto_rule-WeakCipherAlgorithm"
+        },
+        {
+          "patternId": "Semgrep_csharp_crypto_rule-WeakCipherMode"
+        },
+        {
+          "patternId": "Semgrep_csharp_crypto_rule-WeakHashingFunction"
+        },
+        {
+          "patternId": "Semgrep_csharp_crypto_rule-WeakRNG"
+        },
+        {
+          "patternId": "Semgrep_csharp_csrf_rule-Csrf"
+        },
+        {
+          "patternId": "Semgrep_csharp_deserialization_rule-InsecureDeserialization"
+        },
+        {
+          "patternId": "Semgrep_csharp.dotnet.security.audit.ldap-injection.ldap-injection"
+        },
+        {
+          "patternId": "Semgrep_csharp.dotnet.security.audit.mass-assignment.mass-assignment"
+        },
+        {
+          "patternId": "Semgrep_csharp.dotnet.security.audit.misconfigured-lockout-option.misconfigured-lockout-option"
+        },
+        {
+          "patternId": "Semgrep_csharp.dotnet.security.audit.missing-or-broken-authorization.missing-or-broken-authorization"
+        },
+        {
+          "patternId": "Semgrep_csharp.dotnet.security.audit.open-directory-listing.open-directory-listing"
+        },
+        {
+          "patternId": "Semgrep_csharp.dotnet.security.audit.razor-use-of-htmlstring.razor-use-of-htmlstring"
+        },
+        {
+          "patternId": "Semgrep_csharp.dotnet.security.audit.xpath-injection.xpath-injection"
+        },
+        {
+          "patternId": "Semgrep_csharp.dotnet.security.mvc-missing-antiforgery.mvc-missing-antiforgery"
+        },
+        {
+          "patternId": "Semgrep_csharp.dotnet.security.net-webconfig-debug.net-webconfig-debug"
+        },
+        {
+          "patternId": "Semgrep_csharp.dotnet.security.net-webconfig-trace-enabled.net-webconfig-trace-enabled"
+        },
+        {
+          "patternId": "Semgrep_csharp.dotnet.security.razor-template-injection.razor-template-injection"
+        },
+        {
+          "patternId": "Semgrep_csharp.dotnet.security.use_deprecated_cipher_algorithm.use_deprecated_cipher_algorithm"
+        },
+        {
+          "patternId": "Semgrep_csharp.dotnet.security.use_ecb_mode.use_ecb_mode"
+        },
+        {
+          "patternId": "Semgrep_csharp.dotnet.security.use_weak_rng_for_keygeneration.use_weak_rng_for_keygeneration"
+        },
+        {
+          "patternId": "Semgrep_csharp.dotnet.security.use_weak_rsa_encryption_padding.use_weak_rsa_encryption_padding"
+        },
+        {
+          "patternId": "Semgrep_csharp.dotnet.security.web-config-insecure-cookie-settings.web-config-insecure-cookie-settings"
+        },
+        {
+          "patternId": "Semgrep_csharp_endpoint_rule-UnvalidatedRedirect"
+        },
+        {
+          "patternId": "Semgrep_csharp_injection_rule-CommandInjection"
+        },
+        {
+          "patternId": "Semgrep_csharp_injection_rule-LdapInjection"
+        },
+        {
+          "patternId": "Semgrep_csharp_injection_rule-SQLInjection"
+        },
+        {
+          "patternId": "Semgrep_csharp_injection_rule-XmlDocumentXXEInjection"
+        },
+        {
+          "patternId": "Semgrep_csharp_injection_rule-XmlReaderXXEInjection"
+        },
+        {
+          "patternId": "Semgrep_csharp_injection_rule-XPathInjection"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.best-practice.structured-logging.structured-logging"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.correctness.double.double-epsilon-equality.correctness-double-epsilon-equality"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.correctness.regioninfo.regioninfo-interop.correctness-regioninfo-interop"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.correctness.sslcertificatetrust.sslcertificatetrust-handshake-no-trust.correctness-sslcertificatetrust-handshake-no-trust"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.ad.jwt-tokenvalidationparameters-no-expiry-validation.jwt-tokenvalidationparameters-no-expiry-validation"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.cryptography.unsigned-security-token.unsigned-security-token"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.cryptography.x509certificate2-privkey.x509certificate2-privkey"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.cryptography.x509-subject-name-validation.x509-subject-name-validation"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.filesystem.unsafe-path-combine.unsafe-path-combine"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.http.http-listener-wildcard-bindings.http-listener-wildcard-bindings"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.injections.os-command.os-command-injection"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.insecure-deserialization.binary-formatter.insecure-binaryformatter-deserialization"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.insecure-deserialization.data-contract-resolver.data-contract-resolver"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.insecure-deserialization.fast-json.insecure-fastjson-deserialization"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.insecure-deserialization.fs-pickler.insecure-fspickler-deserialization"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.insecure-deserialization.insecure-typefilterlevel-full.insecure-typefilterlevel-full"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.insecure-deserialization.javascript-serializer.insecure-javascriptserializer-deserialization"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.insecure-deserialization.los-formatter.insecure-losformatter-deserialization"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.insecure-deserialization.net-data-contract.insecure-netdatacontract-deserialization"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.insecure-deserialization.newtonsoft.insecure-newtonsoft-deserialization"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.insecure-deserialization.soap-formatter.insecure-soapformatter-deserialization"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.memory.memory-marshal-create-span.memory-marshal-create-span"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.missing-hsts-header.missing-hsts-header"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.open-redirect.open-redirect"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.regular-expression-dos.regular-expression-dos-infinite-timeout.regular-expression-dos-infinite-timeout"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.regular-expression-dos.regular-expression-dos.regular-expression-dos"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.sqli.csharp-sqli.csharp-sqli"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.ssrf.http-client.ssrf"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.ssrf.rest-client.ssrf"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.ssrf.web-client.ssrf"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.ssrf.web-request.ssrf"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.stacktrace-disclosure.stacktrace-disclosure"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.xxe.xmldocument-unsafe-parser-override.xmldocument-unsafe-parser-override"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.xxe.xmlreadersettings-unsafe-parser-override.xmlreadersettings-unsafe-parser-override"
+        },
+        {
+          "patternId": "Semgrep_csharp.lang.security.xxe.xmltextreader-unsafe-defaults.xmltextreader-unsafe-defaults"
+        },
+        {
+          "patternId": "Semgrep_csharp_other_rule-UnsafeXSLTSettingUsed"
+        },
+        {
+          "patternId": "Semgrep_csharp_password_rule-PasswordComplexity"
+        },
+        {
+          "patternId": "Semgrep_csharp_path_rule-PathTraversal"
+        },
+        {
+          "patternId": "Semgrep_csharp.razor.security.html-raw-json.html-raw-json"
+        },
+        {
+          "patternId": "Semgrep_csharp_validation_rule-InputValidation"
+        },
+        {
+          "patternId": "Semgrep_csharp_xss_rule-HtmlElementXss"
+        },
+        {
+          "patternId": "Semgrep_csharp_xss_rule-ScriptXss"
+        },
+        {
+          "patternId": "Semgrep_c_shell_rule-CreateProcess"
+        },
+        {
+          "patternId": "Semgrep_c_shell_rule-CreateProcessAsUser-CreateProcessWithLogon"
+        },
+        {
+          "patternId": "Semgrep_c_shell_rule-execl-execlp"
+        },
+        {
+          "patternId": "Semgrep_c_shell_rule-system"
+        },
+        {
+          "patternId": "Semgrep_c_tmpfile_rule-GetTempFileName"
+        },
+        {
+          "patternId": "Semgrep_c_tmpfile_rule-mkstemp"
+        },
+        {
+          "patternId": "Semgrep_c_tmpfile_rule-mktemp"
+        },
+        {
+          "patternId": "Semgrep_c_tmpfile_rule-tmpfile"
+        },
+        {
+          "patternId": "Semgrep_c_tmpfile_rule-tmpnam-tempnam"
+        },
+        {
+          "patternId": "Semgrep_dockerfile.best-practice.prefer-copy-over-add.prefer-copy-over-add"
+        },
+        {
+          "patternId": "Semgrep_dockerfile.security.dockerd-socket-mount.dockerfile-dockerd-socket-mount"
+        },
+        {
+          "patternId": "Semgrep_dockerfile.security.last-user-is-root.last-user-is-root"
+        },
+        {
+          "patternId": "Semgrep_dockerfile.security.missing-user-entrypoint.missing-user-entrypoint"
+        },
+        {
+          "patternId": "Semgrep_dockerfile.security.missing-user.missing-user"
+        },
+        {
+          "patternId": "Semgrep_dockerfile.security.no-sudo-in-dockerfile.no-sudo-in-dockerfile"
+        },
+        {
+          "patternId": "Semgrep_dockerfile.security.secret-in-build-arg.secret-in-build-arg"
+        },
+        {
+          "patternId": "Semgrep_generic.gradle.security.build-gradle-password-hardcoded.build-gradle-password-hardcoded"
+        },
+        {
+          "patternId": "Semgrep_generic_injection_rule-BiDiTrojanSource"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.adafruit-api-key.adafruit-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.adobe-client-id.adobe-client-id"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.adobe-client-secret.adobe-client-secret"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.age-secret-key.age-secret-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.airtable-api-key.airtable-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.algolia-api-key.algolia-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.alibaba-access-key-id.alibaba-access-key-id"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.alibaba-secret-key.alibaba-secret-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.asana-client-id.asana-client-id"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.asana-client-secret.asana-client-secret"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.atlassian-api-token.atlassian-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.authress-service-client-access-key.authress-service-client-access-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.aws-access-token.aws-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.beamer-api-token.beamer-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.bitbucket-client-id.bitbucket-client-id"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.bitbucket-client-secret.bitbucket-client-secret"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.bittrex-access-key.bittrex-access-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.bittrex-secret-key.bittrex-secret-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.clojars-api-token.clojars-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.cloudflare-api-key.cloudflare-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.cloudflare-global-api-key.cloudflare-global-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.cloudflare-origin-ca-key.cloudflare-origin-ca-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.codecov-access-token.codecov-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.coinbase-access-token.coinbase-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.confluent-access-token.confluent-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.confluent-secret-key.confluent-secret-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.contentful-delivery-api-token.contentful-delivery-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.databricks-api-token.databricks-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.datadog-access-token.datadog-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.defined-networking-api-token.defined-networking-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.digitalocean-access-token.digitalocean-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.digitalocean-pat.digitalocean-pat"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.digitalocean-refresh-token.digitalocean-refresh-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.discord-api-token.discord-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.discord-client-id.discord-client-id"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.discord-client-secret.discord-client-secret"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.doppler-api-token.doppler-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.droneci-access-token.droneci-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.dropbox-api-token.dropbox-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.dropbox-long-lived-api-token.dropbox-long-lived-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.dropbox-short-lived-api-token.dropbox-short-lived-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.duffel-api-token.duffel-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.dynatrace-api-token.dynatrace-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.easypost-api-token.easypost-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.easypost-test-api-token.easypost-test-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.etsy-access-token.etsy-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.facebook-access-token.facebook-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.facebook.facebook"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.facebook-page-access-token.facebook-page-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.facebook-secret.facebook-secret"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.fastly-api-token.fastly-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.finicity-api-token.finicity-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.finicity-client-secret.finicity-client-secret"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.finnhub-access-token.finnhub-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.flickr-access-token.flickr-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.flutterwave-encryption-key.flutterwave-encryption-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.flutterwave-public-key.flutterwave-public-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.flutterwave-secret-key.flutterwave-secret-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.frameio-api-token.frameio-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.freshbooks-access-token.freshbooks-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.gcp-api-key.gcp-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.generic-api-key.generic-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.github-app-token.github-app-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.github-fine-grained-pat.github-fine-grained-pat"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.github-oauth.github-oauth"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.github-pat.github-pat"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.github-refresh-token.github-refresh-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.gitlab-pat.gitlab-pat"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.gitlab-ptt.gitlab-ptt"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.gitlab-rrt.gitlab-rrt"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.gitter-access-token.gitter-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.gocardless-api-token.gocardless-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.grafana-api-key.grafana-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.grafana-cloud-api-token.grafana-cloud-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.grafana-service-account-token.grafana-service-account-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.harness-api-key.harness-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.hashicorp-tf-api-token.hashicorp-tf-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.hashicorp-tf-password.hashicorp-tf-password"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.heroku-api-key.heroku-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.hubspot-api-key.hubspot-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.huggingface-access-token.huggingface-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.huggingface-organization-api-token.huggingface-organization-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.infracost-api-token.infracost-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.intercom-api-key.intercom-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.intra42-client-secret.intra42-client-secret"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.jfrog-api-key.jfrog-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.jfrog-identity-token.jfrog-identity-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.jwt-base64.jwt-base64"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.jwt.jwt"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.kraken-access-token.kraken-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.kucoin-access-token.kucoin-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.kucoin-secret-key.kucoin-secret-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.launchdarkly-access-token.launchdarkly-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.linear-api-key.linear-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.linear-client-secret.linear-client-secret"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.linkedin-client-id.linkedin-client-id"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.linkedin-client-secret.linkedin-client-secret"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.lob-api-key.lob-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.lob-pub-api-key.lob-pub-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.mailchimp-api-key.mailchimp-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.mailgun-private-api-token.mailgun-private-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.mailgun-pub-key.mailgun-pub-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.mailgun-signing-key.mailgun-signing-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.mapbox-api-token.mapbox-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.mattermost-access-token.mattermost-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.messagebird-api-token.messagebird-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.messagebird-client-id.messagebird-client-id"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.microsoft-teams-webhook.microsoft-teams-webhook"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.netlify-access-token.netlify-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.new-relic-browser-api-token.new-relic-browser-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.new-relic-insert-key.new-relic-insert-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.new-relic-user-api-id.new-relic-user-api-id"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.new-relic-user-api-key.new-relic-user-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.npm-access-token.npm-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.nytimes-access-token.nytimes-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.okta-access-token.okta-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.openai-api-key.openai-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.plaid-api-token.plaid-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.plaid-client-id.plaid-client-id"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.plaid-secret-key.plaid-secret-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.planetscale-api-token.planetscale-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.planetscale-oauth-token.planetscale-oauth-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.planetscale-password.planetscale-password"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.postman-api-token.postman-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.prefect-api-token.prefect-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.private-key.private-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.pulumi-api-token.pulumi-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.pypi-upload-token.pypi-upload-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.rapidapi-access-token.rapidapi-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.readme-api-token.readme-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.rubygems-api-token.rubygems-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.scalingo-api-token.scalingo-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.sendbird-access-id.sendbird-access-id"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.sendbird-access-token.sendbird-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.sendgrid-api-token.sendgrid-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.sendinblue-api-token.sendinblue-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.sentry-access-token.sentry-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.shippo-api-token.shippo-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.shopify-access-token.shopify-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.shopify-custom-access-token.shopify-custom-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.shopify-private-app-access-token.shopify-private-app-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.shopify-shared-secret.shopify-shared-secret"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.sidekiq-secret.sidekiq-secret"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.sidekiq-sensitive-url.sidekiq-sensitive-url"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.slack-app-token.slack-app-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.slack-bot-token.slack-bot-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.slack-config-access-token.slack-config-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.slack-config-refresh-token.slack-config-refresh-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.slack-legacy-bot-token.slack-legacy-bot-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.slack-legacy-token.slack-legacy-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.slack-legacy-workspace-token.slack-legacy-workspace-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.slack-user-token.slack-user-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.slack-webhook-url.slack-webhook-url"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.snyk-api-token.snyk-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.square-access-token.square-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.squarespace-access-token.squarespace-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.stripe-access-token.stripe-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.sumologic-access-id.sumologic-access-id"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.sumologic-access-token.sumologic-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.telegram-bot-api-token.telegram-bot-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.travisci-access-token.travisci-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.twilio-api-key.twilio-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.twitch-api-token.twitch-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.twitter-access-secret.twitter-access-secret"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.twitter-access-token.twitter-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.twitter-api-key.twitter-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.twitter-api-secret.twitter-api-secret"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.twitter-bearer-token.twitter-bearer-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.typeform-api-token.typeform-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.vault-batch-token.vault-batch-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.vault-service-token.vault-service-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.yandex-access-token.yandex-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.yandex-api-key.yandex-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.yandex-aws-access-token.yandex-aws-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.gitleaks.zendesk-secret-key.zendesk-secret-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-amazon-mws-auth-token.detected-amazon-mws-auth-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-artifactory-password.detected-artifactory-password"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-artifactory-token.detected-artifactory-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-aws-access-key-id-value.detected-aws-access-key-id-value"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-aws-account-id.detected-aws-account-id"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-aws-appsync-graphql-key.detected-aws-appsync-graphql-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-aws-secret-access-key.detected-aws-secret-access-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-aws-session-token.detected-aws-session-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-bcrypt-hash.detected-bcrypt-hash"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-codeclimate.detected-codeclimate"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-etc-shadow.detected-etc-shadow"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-facebook-access-token.detected-facebook-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-facebook-oauth.detected-facebook-oauth"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-generic-api-key.detected-generic-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-generic-secret.detected-generic-secret"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-github-token.detected-github-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-google-api-key.detected-google-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-google-cloud-api-key.detected-google-cloud-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-google-gcm-service-account.detected-google-gcm-service-account"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-google-oauth-access-token.detected-google-oauth-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-google-oauth.detected-google-oauth-url"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-heroku-api-key.detected-heroku-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-hockeyapp.detected-hockeyapp"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-jwt-token.detected-jwt-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-kolide-api-key.detected-kolide-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-mailchimp-api-key.detected-mailchimp-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-mailgun-api-key.detected-mailgun-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-npm-registry-auth-token.detected-npm-registry-auth-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-onfido-live-api-token.detected-onfido-live-api-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-outlook-team.detected-outlook-team"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-paypal-braintree-access-token.detected-paypal-braintree-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-pgp-private-key-block.detected-pgp-private-key-block"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-picatic-api-key.detected-picatic-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-private-key.detected-private-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-sauce-token.detected-sauce-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-sendgrid-api-key.detected-sendgrid-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-slack-token.detected-slack-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-slack-webhook.detected-slack-webhook"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-snyk-api-key.detected-snyk-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-softlayer-api-key.detected-softlayer-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-sonarqube-docs-api-key.detected-sonarqube-docs-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-square-access-token.detected-square-access-token"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-square-oauth-secret.detected-square-oauth-secret"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-ssh-password.detected-ssh-password"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-stripe-api-key.detected-stripe-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-stripe-restricted-api-key.detected-stripe-restricted-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-telegram-bot-api-key.detected-telegram-bot-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-twilio-api-key.detected-twilio-api-key"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.detected-username-and-password-in-uri.detected-username-and-password-in-uri"
+        },
+        {
+          "patternId": "Semgrep_generic.secrets.security.google-maps-apikeyleak.google-maps-apikeyleak"
+        },
+        {
+          "patternId": "Semgrep_generic.unicode.security.bidi.contains-bidirectional-characters"
+        },
+        {
+          "patternId": "Semgrep_javascript.ajv.security.audit.ajv-allerrors-true.ajv-allerrors-true"
+        },
+        {
+          "patternId": "Semgrep_javascript.apollo.security.apollo-axios-ssrf.apollo-axios-ssrf"
+        },
+        {
+          "patternId": "Semgrep_javascript.argon2.security.unsafe-argon2-config.unsafe-argon2-config"
+        },
+        {
+          "patternId": "Semgrep_javascript.audit.detect-replaceall-sanitization.detect-replaceall-sanitization"
+        },
+        {
+          "patternId": "Semgrep_javascript.aws-lambda.security.detect-child-process.detect-child-process"
+        },
+        {
+          "patternId": "Semgrep_javascript.aws-lambda.security.dynamodb-request-object.dynamodb-request-object"
+        },
+        {
+          "patternId": "Semgrep_javascript.aws-lambda.security.knex-sqli.knex-sqli"
+        },
+        {
+          "patternId": "Semgrep_javascript.aws-lambda.security.mysql-sqli.mysql-sqli"
+        },
+        {
+          "patternId": "Semgrep_javascript.aws-lambda.security.pg-sqli.pg-sqli"
+        },
+        {
+          "patternId": "Semgrep_javascript.aws-lambda.security.sequelize-sqli.sequelize-sqli"
+        },
+        {
+          "patternId": "Semgrep_javascript.aws-lambda.security.tainted-eval.tainted-eval"
+        },
+        {
+          "patternId": "Semgrep_javascript.aws-lambda.security.tainted-html-response.tainted-html-response"
+        },
+        {
+          "patternId": "Semgrep_javascript.aws-lambda.security.tainted-html-string.tainted-html-string"
+        },
+        {
+          "patternId": "Semgrep_javascript.aws-lambda.security.tainted-sql-string.tainted-sql-string"
+        },
+        {
+          "patternId": "Semgrep_javascript.aws-lambda.security.vm-runincontext-injection.vm-runincontext-injection"
+        },
+        {
+          "patternId": "Semgrep_javascript.bluebird.security.audit.tofastproperties-code-execution.tofastproperties-code-execution"
+        },
+        {
+          "patternId": "Semgrep_javascript.browser.security.dom-based-xss.dom-based-xss"
+        },
+        {
+          "patternId": "Semgrep_javascript.browser.security.eval-detected.eval-detected"
+        },
+        {
+          "patternId": "Semgrep_javascript.browser.security.insecure-document-method.insecure-document-method"
+        },
+        {
+          "patternId": "Semgrep_javascript.browser.security.insecure-innerhtml.insecure-innerhtml"
+        },
+        {
+          "patternId": "Semgrep_javascript.browser.security.insufficient-postmessage-origin-validation.insufficient-postmessage-origin-validation"
+        },
+        {
+          "patternId": "Semgrep_javascript.browser.security.open-redirect-from-function.js-open-redirect-from-function"
+        },
+        {
+          "patternId": "Semgrep_javascript.browser.security.open-redirect.js-open-redirect"
+        },
+        {
+          "patternId": "Semgrep_javascript.browser.security.raw-html-concat.raw-html-concat"
+        },
+        {
+          "patternId": "Semgrep_javascript.browser.security.raw-html-join.raw-html-join"
+        },
+        {
+          "patternId": "Semgrep_javascript.browser.security.wildcard-postmessage-configuration.wildcard-postmessage-configuration"
+        },
+        {
+          "patternId": "Semgrep_javascript_buf_rule-buffer-noassert-read"
+        },
+        {
+          "patternId": "Semgrep_javascript_buf_rule-buffer-noassert-write"
+        },
+        {
+          "patternId": "Semgrep_javascript_buf_rule-detect-new-buffer"
+        },
+        {
+          "patternId": "Semgrep_javascript.chrome-remote-interface.security.audit.chrome-remote-interface-compilescript-injection.chrome-remote-interface-compilescript-injection"
+        },
+        {
+          "patternId": "Semgrep_javascript_crypto_rule-NodeLibcurlSSLVerificationDisable"
+        },
+        {
+          "patternId": "Semgrep_javascript.deno.security.audit.deno-dangerous-run.deno-dangerous-run"
+        },
+        {
+          "patternId": "Semgrep_javascript_dos_rule-non-literal-regexp"
+        },
+        {
+          "patternId": "Semgrep_javascript_eval_rule-eval-with-expression"
+        },
+        {
+          "patternId": "Semgrep_javascript_exec_rule-child-process"
+        },
+        {
+          "patternId": "Semgrep_javascript.fbjs.security.audit.insecure-createnodesfrommarkup.insecure-createnodesfrommarkup"
+        },
+        {
+          "patternId": "Semgrep_javascript.grpc.security.grpc-nodejs-insecure-connection.grpc-nodejs-insecure-connection"
+        },
+        {
+          "patternId": "Semgrep_javascript.intercom.security.audit.intercom-settings-user-identifier-without-user-hash.intercom-settings-user-identifier-without-user-hash"
+        },
+        {
+          "patternId": "Semgrep_javascript.jose.security.audit.jose-exposed-data.jose-exposed-data"
+        },
+        {
+          "patternId": "Semgrep_javascript.jose.security.jwt-hardcode.hardcoded-jwt-secret"
+        },
+        {
+          "patternId": "Semgrep_javascript.jose.security.jwt-none-alg.jwt-none-alg"
+        },
+        {
+          "patternId": "Semgrep_javascript.jsonwebtoken.security.audit.jwt-decode-without-verify.jwt-decode-without-verify"
+        },
+        {
+          "patternId": "Semgrep_javascript.jsonwebtoken.security.audit.jwt-exposed-data.jwt-exposed-data"
+        },
+        {
+          "patternId": "Semgrep_javascript.jsonwebtoken.security.jwt-hardcode.hardcoded-jwt-secret"
+        },
+        {
+          "patternId": "Semgrep_javascript.jsonwebtoken.security.jwt-none-alg.jwt-none-alg"
+        },
+        {
+          "patternId": "Semgrep_javascript.jwt-simple.security.jwt-simple-noverify.jwt-simple-noverify"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.audit.code-string-concat.code-string-concat"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.audit.dangerous-spawn-shell.dangerous-spawn-shell"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.audit.detect-non-literal-require.detect-non-literal-require"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.audit.detect-redos.detect-redos"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.audit.hardcoded-hmac-key.hardcoded-hmac-key"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.audit.incomplete-sanitization.incomplete-sanitization"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.audit.md5-used-as-password.md5-used-as-password"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.audit.prototype-pollution.prototype-pollution-assignment.prototype-pollution-assignment"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.audit.prototype-pollution.prototype-pollution-loop.prototype-pollution-loop"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.audit.spawn-shell-true.spawn-shell-true"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.audit.sqli.node-knex-sqli.node-knex-sqli"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.audit.sqli.node-mssql-sqli.node-mssql-sqli"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.audit.sqli.node-mysql-sqli.node-mysql-sqli"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.audit.sqli.node-postgres-sqli.node-postgres-sqli"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.audit.unsafe-dynamic-method.unsafe-dynamic-method"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.detect-buffer-noassert.detect-buffer-noassert"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.detect-child-process.detect-child-process"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.detect-disable-mustache-escape.detect-disable-mustache-escape"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.detect-eval-with-expression.detect-eval-with-expression"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.detect-insecure-websocket.detect-insecure-websocket"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.detect-no-csrf-before-method-override.detect-no-csrf-before-method-override"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.detect-pseudorandombytes.detect-pseudorandombytes"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.html-in-template-string.html-in-template-string"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.insecure-object-assign.insecure-object-assign"
+        },
+        {
+          "patternId": "Semgrep_javascript.lang.security.spawn-git-clone.spawn-git-clone"
+        },
+        {
+          "patternId": "Semgrep_javascript.monaco-editor.security.audit.monaco-hover-htmlsupport.monaco-hover-htmlsupport"
+        },
+        {
+          "patternId": "Semgrep_javascript.node-crypto.security.aead-no-final.aead-no-final"
+        },
+        {
+          "patternId": "Semgrep_javascript.node-crypto.security.create-de-cipher-no-iv.create-de-cipher-no-iv"
+        },
+        {
+          "patternId": "Semgrep_javascript.node-crypto.security.gcm-no-tag-length.gcm-no-tag-length"
+        },
+        {
+          "patternId": "Semgrep_javascript.node-expat.security.audit.expat-xxe.expat-xxe"
+        },
+        {
+          "patternId": "Semgrep_javascript.passport-jwt.security.passport-hardcode.hardcoded-passport-secret"
+        },
+        {
+          "patternId": "Semgrep_javascript_pathtraversal_rule-non-literal-fs-filename"
+        },
+        {
+          "patternId": "Semgrep_javascript.phantom.security.audit.phantom-injection.phantom-injection"
+        },
+        {
+          "patternId": "Semgrep_javascript.puppeteer.security.audit.puppeteer-evaluate-arg-injection.puppeteer-evaluate-arg-injection"
+        },
+        {
+          "patternId": "Semgrep_javascript.puppeteer.security.audit.puppeteer-evaluate-code-injection.puppeteer-evaluate-code-injection"
+        },
+        {
+          "patternId": "Semgrep_javascript.puppeteer.security.audit.puppeteer-exposed-chrome-devtools.puppeteer-exposed-chrome-devtools"
+        },
+        {
+          "patternId": "Semgrep_javascript.puppeteer.security.audit.puppeteer-goto-injection.puppeteer-goto-injection"
+        },
+        {
+          "patternId": "Semgrep_javascript.puppeteer.security.audit.puppeteer-setcontent-injection.puppeteer-setcontent-injection"
+        },
+        {
+          "patternId": "Semgrep_javascript_random_rule-pseudo-random-bytes"
+        },
+        {
+          "patternId": "Semgrep_javascript_react_rule-dangerouslysetinnerhtml"
+        },
+        {
+          "patternId": "Semgrep_javascript_require_rule-non-literal-require"
+        },
+        {
+          "patternId": "Semgrep_javascript.sandbox.security.audit.sandbox-code-injection.sandbox-code-injection"
+        },
+        {
+          "patternId": "Semgrep_javascript.sax.security.audit.sax-xxe.sax-xxe"
+        },
+        {
+          "patternId": "Semgrep_javascript.sequelize.security.audit.sequelize-enforce-tls.sequelize-enforce-tls"
+        },
+        {
+          "patternId": "Semgrep_javascript.sequelize.security.audit.sequelize-injection-express.express-sequelize-injection"
+        },
+        {
+          "patternId": "Semgrep_javascript.sequelize.security.audit.sequelize-raw-query.sequelize-raw-query"
+        },
+        {
+          "patternId": "Semgrep_javascript.sequelize.security.audit.sequelize-tls-disabled-cert-validation.sequelize-tls-disabled-cert-validation"
+        },
+        {
+          "patternId": "Semgrep_javascript.sequelize.security.audit.sequelize-weak-tls-version.sequelize-weak-tls-version"
+        },
+        {
+          "patternId": "Semgrep_javascript.serialize-javascript.security.audit.unsafe-serialize-javascript.unsafe-serialize-javascript"
+        },
+        {
+          "patternId": "Semgrep_javascript.shelljs.security.shelljs-exec-injection.shelljs-exec-injection"
+        },
+        {
+          "patternId": "Semgrep_javascript.thenify.security.audit.multiargs-code-execution.multiargs-code-execution"
+        },
+        {
+          "patternId": "Semgrep_javascript_timing_rule-possible-timing-attacks"
+        },
+        {
+          "patternId": "Semgrep_javascript.vm2.security.audit.vm2-code-injection.vm2-code-injection"
+        },
+        {
+          "patternId": "Semgrep_javascript.vm2.security.audit.vm2-context-injection.vm2-context-injection"
+        },
+        {
+          "patternId": "Semgrep_javascript.wkhtmltoimage.security.audit.wkhtmltoimage-injection.wkhtmltoimage-injection"
+        },
+        {
+          "patternId": "Semgrep_javascript.wkhtmltopdf.security.audit.wkhtmltopdf-injection.wkhtmltopdf-injection"
+        },
+        {
+          "patternId": "Semgrep_javascript.xml2json.security.audit.xml2json-xxe.xml2json-xxe"
+        },
+        {
+          "patternId": "Semgrep_javascript_xss_rule-mustache-escape"
+        },
+        {
+          "patternId": "Semgrep_json.aws.security.public-s3-bucket.public-s3-bucket"
+        },
+        {
+          "patternId": "Semgrep_json.aws.security.public-s3-policy-statement.public-s3-policy-statement"
+        },
+        {
+          "patternId": "Semgrep_json.aws.security.wildcard-assume-role.wildcard-assume-role"
+        },
+        {
+          "patternId": "Semgrep_json.npm.security.package-dependencies-check.package-dependencies-check"
+        },
+        {
+          "patternId": "Semgrep_problem-based-packs.insecure-transport.js-node.bypass-tls-verification.bypass-tls-verification"
+        },
+        {
+          "patternId": "Semgrep_problem-based-packs.insecure-transport.js-node.disallow-old-tls-versions1.disallow-old-tls-versions1"
+        },
+        {
+          "patternId": "Semgrep_problem-based-packs.insecure-transport.js-node.disallow-old-tls-versions2.disallow-old-tls-versions2"
+        },
+        {
+          "patternId": "Semgrep_problem-based-packs.insecure-transport.js-node.ftp-request.ftp-request"
+        },
+        {
+          "patternId": "Semgrep_problem-based-packs.insecure-transport.js-node.http-request.http-request"
+        },
+        {
+          "patternId": "Semgrep_problem-based-packs.insecure-transport.js-node.rest-http-client-support.rest-http-client-support"
+        },
+        {
+          "patternId": "Semgrep_problem-based-packs.insecure-transport.js-node.telnet-request.telnet-request"
+        },
+        {
+          "patternId": "Semgrep_problem-based-packs.insecure-transport.js-node.using-http-server.using-http-server"
+        },
+        {
+          "patternId": "Semgrep_properties_spring_rule-SpringActuatorFullyEnabled"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_crypto_rule-node-aes-ecb"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_crypto_rule-node-aes-noiv"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_crypto_rule-node-insecure-random-generator"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_crypto_rule-node-md5"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_crypto_rule-node-sha1"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_crypto_rule-node-timing-attack"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_crypto_rule-node-tls-reject"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_crypto_rule-node-weak-crypto"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_database_rule-node-knex-sqli-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_database_rule-node-nosqli-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_database_rule-node-nosqli-js-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_database_rule-node-sqli-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_database_rule-sequelize-tls"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_database_rule-sequelize-tls-cert-validation"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_database_rule-sequelize-weak-tls"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_dos_rule-layer7-object-dos"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_dos_rule-regex-dos"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_electronjs_rule-electron-allow-http"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_electronjs_rule-electron-blink-integration"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_electronjs_rule-electron-context-isolation"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_electronjs_rule-electron-disable-websecurity"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_electronjs_rule-electron-nodejs-integration"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_eval_rule-eval-nodejs"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_eval_rule-eval-require"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_eval_rule-grpc-insecure-connection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_eval_rule-node-deserialize"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_eval_rule-sandbox-code-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_eval_rule-serializetojs-deserialize"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_eval_rule-server-side-template-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_eval_rule-vm2-code-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_eval_rule-vm2-context-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_eval_rule-vm-code-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_eval_rule-vm-compilefunction-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_eval_rule-vm-runincontext-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_eval_rule-vm-runinnewcontext-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_eval_rule-yaml-deserialize"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_exec_rule-shelljs-os-command-exec"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_headers_rule-cookie-session-default"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_headers_rule-cookie-session-no-domain"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_headers_rule-cookie-session-no-httponly"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_headers_rule-cookie-session-no-maxage"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_headers_rule-cookie-session-no-path"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_headers_rule-cookie-session-no-samesite"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_headers_rule-cookie-session-no-secure"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_headers_rule-express-cors"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_headers_rule-generic-cors"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_headers_rule-generic-header-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_headers_rule-header-xss-generic"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_headers_rule-header-xss-lusca"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_headers_rule-helmet-feature-disabled"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_headers_rule-host-header-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_jwt_rule-hardcoded-jwt-secret"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_jwt_rule-jwt-exposed-credentials"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_jwt_rule-jwt-exposed-data"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_jwt_rule-jwt-express-hardcoded"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_jwt_rule-jwt-not-revoked"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_jwt_rule-node-jwt-none-algorithm"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_redirect_rule-express-open-redirect"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_redirect_rule-express-open-redirect2"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_ssrf_rule-node-ssrf"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_ssrf_rule-phantom-ssrf"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_ssrf_rule-playwright-ssrf"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_ssrf_rule-puppeteer-ssrf"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_ssrf_rule-wkhtmltoimage-ssrf"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_ssrf_rule-wkhtmltopdf-ssrf"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_traversal_rule-admzip-path-overwrite"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_traversal_rule-express-lfr"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_traversal_rule-express-lfr-warning"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_traversal_rule-generic-path-traversal"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_traversal_rule-join-resolve-path-traversal"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_traversal_rule-tar-path-overwrite"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_traversal_rule-zip-path-overwrite"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_xml_rule-node-entity-expansion"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_xml_rule-node-xpath-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_xml_rule-node-xxe"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_xml_rule-xxe-expat"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_xss_rule-express-xss"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_xss_rule-handlebars-noescape"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_xss_rule-handlebars-safestring"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_xss_rule-squirrelly-autoescape"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_xss_rule-xss-disable-mustache-escape"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_xss_rule-xss-serialize-javascript"
+        },
+        {
+          "patternId": "Semgrep_rust.lang.security.args.args"
+        },
+        {
+          "patternId": "Semgrep_rust.lang.security.args-os.args-os"
+        },
+        {
+          "patternId": "Semgrep_rust.lang.security.current-exe.current-exe"
+        },
+        {
+          "patternId": "Semgrep_rust.lang.security.insecure-hashes.insecure-hashes"
+        },
+        {
+          "patternId": "Semgrep_rust.lang.security.reqwest-accept-invalid.reqwest-accept-invalid"
+        },
+        {
+          "patternId": "Semgrep_rust.lang.security.reqwest-set-sensitive.reqwest-set-sensitive"
+        },
+        {
+          "patternId": "Semgrep_rust.lang.security.rustls-dangerous.rustls-dangerous"
+        },
+        {
+          "patternId": "Semgrep_rust.lang.security.ssl-verify-none.ssl-verify-none"
+        },
+        {
+          "patternId": "Semgrep_rust.lang.security.temp-dir.temp-dir"
+        },
+        {
+          "patternId": "Semgrep_rust.lang.security.unsafe-usage.unsafe-usage"
+        },
+        {
+          "patternId": "Semgrep_typescript.aws-cdk.security.audit.awscdk-bucket-encryption.awscdk-bucket-encryption"
+        },
+        {
+          "patternId": "Semgrep_typescript.aws-cdk.security.audit.awscdk-bucket-enforcessl.aws-cdk-bucket-enforcessl"
+        },
+        {
+          "patternId": "Semgrep_typescript.aws-cdk.security.audit.awscdk-sqs-unencryptedqueue.awscdk-sqs-unencryptedqueue"
+        },
+        {
+          "patternId": "Semgrep_typescript.aws-cdk.security.awscdk-bucket-grantpublicaccessmethod.awscdk-bucket-grantpublicaccessmethod"
+        },
+        {
+          "patternId": "Semgrep_typescript.aws-cdk.security.awscdk-codebuild-project-public.awscdk-codebuild-project-public"
+        },
+        {
+          "patternId": "Semgrep_typescript.lang.security.audit.cors-regex-wildcard.cors-regex-wildcard"
+        },
+        {
+          "patternId": "Semgrep_yaml.argo.security.argo-workflow-parameter-command-injection.argo-workflow-parameter-command-injection"
+        },
+        {
+          "patternId": "Semgrep_yaml.docker-compose.security.exposing-docker-socket-volume.exposing-docker-socket-volume"
+        },
+        {
+          "patternId": "Semgrep_yaml.docker-compose.security.no-new-privileges.no-new-privileges"
+        },
+        {
+          "patternId": "Semgrep_yaml.docker-compose.security.privileged-service.privileged-service"
+        },
+        {
+          "patternId": "Semgrep_yaml.docker-compose.security.seccomp-confinement-disabled.seccomp-confinement-disabled"
+        },
+        {
+          "patternId": "Semgrep_yaml.docker-compose.security.selinux-separation-disabled.selinux-separation-disabled"
+        },
+        {
+          "patternId": "Semgrep_yaml.docker-compose.security.writable-filesystem-service.writable-filesystem-service"
+        },
+        {
+          "patternId": "Semgrep_yaml.github-actions.security.allowed-unsecure-commands.allowed-unsecure-commands"
+        },
+        {
+          "patternId": "Semgrep_yaml.github-actions.security.audit.unsafe-add-mask-workflow-command.unsafe-add-mask-workflow-command"
+        },
+        {
+          "patternId": "Semgrep_yaml.github-actions.security.curl-eval.curl-eval"
+        },
+        {
+          "patternId": "Semgrep_yaml.github-actions.security.github-script-injection.github-script-injection"
+        },
+        {
+          "patternId": "Semgrep_yaml.github-actions.security.pull-request-target-code-checkout.pull-request-target-code-checkout"
+        },
+        {
+          "patternId": "Semgrep_yaml.github-actions.security.run-shell-injection.run-shell-injection"
+        },
+        {
+          "patternId": "Semgrep_yaml.github-actions.security.third-party-action-not-pinned-to-commit-sha.third-party-action-not-pinned-to-commit-sha"
+        },
+        {
+          "patternId": "Semgrep_yaml.github-actions.security.workflow-run-target-code-checkout.workflow-run-target-code-checkout"
+        },
+        {
+          "patternId": "Semgrep_yaml.kubernetes.security.allow-privilege-escalation.allow-privilege-escalation"
+        },
+        {
+          "patternId": "Semgrep_yaml.kubernetes.security.allow-privilege-escalation-no-securitycontext.allow-privilege-escalation-no-securitycontext"
+        },
+        {
+          "patternId": "Semgrep_yaml.kubernetes.security.allow-privilege-escalation-true.allow-privilege-escalation-true"
+        },
+        {
+          "patternId": "Semgrep_yaml.kubernetes.security.env.flask-debugging-enabled.flask-debugging-enabled"
+        },
+        {
+          "patternId": "Semgrep_yaml.kubernetes.security.exposing-docker-socket-hostpath.exposing-docker-socket-hostpath"
+        },
+        {
+          "patternId": "Semgrep_yaml.kubernetes.security.hostipc-pod.hostipc-pod"
+        },
+        {
+          "patternId": "Semgrep_yaml.kubernetes.security.hostnetwork-pod.hostnetwork-pod"
+        },
+        {
+          "patternId": "Semgrep_yaml.kubernetes.security.hostpid-pod.hostpid-pod"
+        },
+        {
+          "patternId": "Semgrep_yaml.kubernetes.security.legacy-api-clusterrole-excessive-permissions.legacy-api-clusterrole-excessive-permissions"
+        },
+        {
+          "patternId": "Semgrep_yaml.kubernetes.security.privileged-container.privileged-container"
+        },
+        {
+          "patternId": "Semgrep_yaml.kubernetes.security.run-as-non-root-container-level-missing-security-context.run-as-non-root-container-level-missing-security-context"
+        },
+        {
+          "patternId": "Semgrep_yaml.kubernetes.security.run-as-non-root-container-level.run-as-non-root-container-level"
+        },
+        {
+          "patternId": "Semgrep_yaml.kubernetes.security.run-as-non-root.run-as-non-root"
+        },
+        {
+          "patternId": "Semgrep_yaml.kubernetes.security.run-as-non-root-security-context-pod-level.run-as-non-root-security-context-pod-level"
+        },
+        {
+          "patternId": "Semgrep_yaml.kubernetes.security.run-as-non-root-unsafe-value.run-as-non-root-unsafe-value"
+        },
+        {
+          "patternId": "Semgrep_yaml.kubernetes.security.seccomp-confinement-disabled.seccomp-confinement-disabled"
+        },
+        {
+          "patternId": "Semgrep_yaml.kubernetes.security.secrets-in-config-file.secrets-in-config-file"
+        },
+        {
+          "patternId": "Semgrep_yaml.kubernetes.security.skip-tls-verify-cluster.skip-tls-verify-cluster"
+        },
+        {
+          "patternId": "Semgrep_yaml.kubernetes.security.skip-tls-verify-service.skip-tls-verify-service"
+        },
+        {
+          "patternId": "Semgrep_yaml.kubernetes.security.writable-filesystem-container.writable-filesystem-container"
+        },
+        {
+          "patternId": "Semgrep_yaml.openapi.security.api-key-in-query-parameter.api-key-in-query-parameter"
+        },
+        {
+          "patternId": "Semgrep_yaml.openapi.security.openai-consequential-action-false.openai-consequential-action-false"
+        },
+        {
+          "patternId": "Semgrep_yaml.openapi.security.use-of-basic-authentication.use-of-basic-authentication"
+        },
+        {
+          "patternId": "Semgrep_yaml_spring_rule-SpringActuatorFullyEnabled"
+        }
+      ]
+    },
+    {
+      "toolId": "Lizard",
+      "patterns": [
+        {
+          "patternId": "Lizard_ccn-medium",
+          "parameters": {
+            "threshold": "40"
+          }
+        },
+        {
+          "patternId": "Lizard_nloc-medium",
+          "parameters": {
+            "threshold": "200"
+          }
+        },
+        {
+          "patternId": "Lizard_file-nloc-medium",
+          "parameters": {
+            "threshold": "1000"
+          }
+        },
+        {
+          "patternId": "Lizard_parameter-count-medium",
+          "parameters": {
+            "threshold": "12"
+          }
+        }
+      ]
+    },
+    {
+      "toolId": "Agentlinter",
+      "patterns": [
+        {
+          "patternId": "Agentlinter_blueprint_constraints-defined"
+        },
+        {
+          "patternId": "Agentlinter_blueprint_coverage"
+        },
+        {
+          "patternId": "Agentlinter_blueprint_identity-defined"
+        },
+        {
+          "patternId": "Agentlinter_clarity_actionable-instructions"
+        },
+        {
+          "patternId": "Agentlinter_clarity_action-without-context"
+        },
+        {
+          "patternId": "Agentlinter_clarity_ambiguous-pronoun"
+        },
+        {
+          "patternId": "Agentlinter_clarity_compound-instruction"
+        },
+        {
+          "patternId": "Agentlinter_clarity_duplicate-content"
+        },
+        {
+          "patternId": "Agentlinter_clarity_english-config-files"
+        },
+        {
+          "patternId": "Agentlinter_clarity_escape-hatch-missing"
+        },
+        {
+          "patternId": "Agentlinter_clarity_has-examples"
+        },
+        {
+          "patternId": "Agentlinter_clarity_instruction-density"
+        },
+        {
+          "patternId": "Agentlinter_clarity_naked-conditional"
+        },
+        {
+          "patternId": "Agentlinter_clarity_no-contradictions"
+        },
+        {
+          "patternId": "Agentlinter_clarity_no-vague-instructions"
+        },
+        {
+          "patternId": "Agentlinter_clarity_obvious-statements"
+        },
+        {
+          "patternId": "Agentlinter_clarity_priority-signal-missing"
+        },
+        {
+          "patternId": "Agentlinter_clarity_sentence-complexity"
+        },
+        {
+          "patternId": "Agentlinter_clarity_token-budget-range"
+        },
+        {
+          "patternId": "Agentlinter_clarity_token-efficiency-score"
+        },
+        {
+          "patternId": "Agentlinter_clarity_undefined-term"
+        },
+        {
+          "patternId": "Agentlinter_claude-code_agent-focus"
+        },
+        {
+          "patternId": "Agentlinter_claude-code_descriptive-ratio"
+        },
+        {
+          "patternId": "Agentlinter_claude-code_hooks-structure"
+        },
+        {
+          "patternId": "Agentlinter_claude-code_instruction-count"
+        },
+        {
+          "patternId": "Agentlinter_claude-code_progressive-disclosure"
+        },
+        {
+          "patternId": "Agentlinter_claude-code_relevance-trap"
+        },
+        {
+          "patternId": "Agentlinter_claude-code_skills-vs-commands"
+        },
+        {
+          "patternId": "Agentlinter_completeness_command-coverage"
+        },
+        {
+          "patternId": "Agentlinter_completeness_freshness-file-paths"
+        },
+        {
+          "patternId": "Agentlinter_completeness_has-boundaries"
+        },
+        {
+          "patternId": "Agentlinter_completeness_has-error-handling"
+        },
+        {
+          "patternId": "Agentlinter_completeness_has-identity"
+        },
+        {
+          "patternId": "Agentlinter_completeness_has-output-format"
+        },
+        {
+          "patternId": "Agentlinter_completeness_has-priorities"
+        },
+        {
+          "patternId": "Agentlinter_completeness_has-tools"
+        },
+        {
+          "patternId": "Agentlinter_completeness_has-user-context"
+        },
+        {
+          "patternId": "Agentlinter_completeness_has-workflow"
+        },
+        {
+          "patternId": "Agentlinter_completeness_session-learning-hooks"
+        },
+        {
+          "patternId": "Agentlinter_completeness_verification-criteria-required"
+        },
+        {
+          "patternId": "Agentlinter_consistency_circular-dependency"
+        },
+        {
+          "patternId": "Agentlinter_consistency_identity-alignment"
+        },
+        {
+          "patternId": "Agentlinter_consistency_language-mixing"
+        },
+        {
+          "patternId": "Agentlinter_consistency_naming-convention"
+        },
+        {
+          "patternId": "Agentlinter_consistency_no-duplicate-instructions"
+        },
+        {
+          "patternId": "Agentlinter_consistency_outdated-cross-references"
+        },
+        {
+          "patternId": "Agentlinter_consistency_permission-conflict"
+        },
+        {
+          "patternId": "Agentlinter_consistency_priority-conflict"
+        },
+        {
+          "patternId": "Agentlinter_consistency_referenced-files-exist"
+        },
+        {
+          "patternId": "Agentlinter_consistency_stale-date"
+        },
+        {
+          "patternId": "Agentlinter_consistency_stale-file-reference"
+        },
+        {
+          "patternId": "Agentlinter_consistency_stale-package-reference"
+        },
+        {
+          "patternId": "Agentlinter_consistency_timezone-locale-drift"
+        },
+        {
+          "patternId": "Agentlinter_consistency_tone-voice-alignment"
+        },
+        {
+          "patternId": "Agentlinter_memory_has-context-window-awareness"
+        },
+        {
+          "patternId": "Agentlinter_memory_has-file-based-notes"
+        },
+        {
+          "patternId": "Agentlinter_memory_has-handoff-protocol"
+        },
+        {
+          "patternId": "Agentlinter_memory_has-learning-loop"
+        },
+        {
+          "patternId": "Agentlinter_memory_has-memory-strategy"
+        },
+        {
+          "patternId": "Agentlinter_memory_has-state-tracking"
+        },
+        {
+          "patternId": "Agentlinter_memory_no-mental-notes"
+        },
+        {
+          "patternId": "Agentlinter_remote-ready_env-vars-documented"
+        },
+        {
+          "patternId": "Agentlinter_remote-ready_model-settings-specified"
+        },
+        {
+          "patternId": "Agentlinter_remote-ready_workspace-path-specified"
+        },
+        {
+          "patternId": "Agentlinter_runtime_auth-mode"
+        },
+        {
+          "patternId": "Agentlinter_runtime_config-exists"
+        },
+        {
+          "patternId": "Agentlinter_runtime_config-secrets"
+        },
+        {
+          "patternId": "Agentlinter_runtime_dm-policy"
+        },
+        {
+          "patternId": "Agentlinter_runtime_gateway-bind"
+        },
+        {
+          "patternId": "Agentlinter_runtime_group-policy"
+        },
+        {
+          "patternId": "Agentlinter_runtime_token-strength"
+        },
+        {
+          "patternId": "Agentlinter_security_api-key-exposure"
+        },
+        {
+          "patternId": "Agentlinter_security_env-var-references"
+        },
+        {
+          "patternId": "Agentlinter_security_has-injection-defense"
+        },
+        {
+          "patternId": "Agentlinter_security_has-permission-boundaries"
+        },
+        {
+          "patternId": "Agentlinter_security_no-injection-defense"
+        },
+        {
+          "patternId": "Agentlinter_security_no-pii-exposure"
+        },
+        {
+          "patternId": "Agentlinter_security_no-secrets"
+        },
+        {
+          "patternId": "Agentlinter_security_prompt-injection-vulnerability"
+        },
+        {
+          "patternId": "Agentlinter_skill-safety_dangerous-commands"
+        },
+        {
+          "patternId": "Agentlinter_skill-safety_data-exfiltration"
+        },
+        {
+          "patternId": "Agentlinter_skill-safety_excessive-permissions"
+        },
+        {
+          "patternId": "Agentlinter_skill-safety_has-metadata"
+        },
+        {
+          "patternId": "Agentlinter_skill-safety_injection-vectors"
+        },
+        {
+          "patternId": "Agentlinter_skill-safety_sensitive-paths"
+        },
+        {
+          "patternId": "Agentlinter_skill-safety_skill-description-when-to-use"
+        },
+        {
+          "patternId": "Agentlinter_skill-safety_skill-name-match-dir"
+        },
+        {
+          "patternId": "Agentlinter_structure_circular-import"
+        },
+        {
+          "patternId": "Agentlinter_structure_dead-import"
+        },
+        {
+          "patternId": "Agentlinter_structure_file-size"
+        },
+        {
+          "patternId": "Agentlinter_structure_has-file-map"
+        },
+        {
+          "patternId": "Agentlinter_structure_has-main-file"
+        },
+        {
+          "patternId": "Agentlinter_structure_has-sections"
+        },
+        {
+          "patternId": "Agentlinter_structure_has-version-or-update-date"
+        },
+        {
+          "patternId": "Agentlinter_structure_heading-hierarchy"
+        },
+        {
+          "patternId": "Agentlinter_structure_modular-files"
+        },
+        {
+          "patternId": "Agentlinter_structure_no-empty-sections"
+        },
+        {
+          "patternId": "Agentlinter_structure_position-risk-warning"
+        },
+        {
+          "patternId": "Agentlinter_token-budget_compressible-padding"
+        },
+        {
+          "patternId": "Agentlinter_token-budget_section-weight"
+        },
+        {
+          "patternId": "Agentlinter_token-budget_total-tokens"
+        },
+        {
+          "patternId": "Agentlinter_token-budget_under-150-tokens"
+        }
+      ]
+    }
+  ],
+  "exclude": [
+    "**/.codacy/**",
+    "**/generated/**",
+    "**/json.rs",
+    "**/tests/**",
+    "**/xml.rs",
+    "**/xml/**",
+    ".codacy/**",
+    ".specify/**",
+    ".specify/extensions.yml",
+    ".specify/extensions/git/README.md",
+    ".specify/extensions/git/commands/speckit.git.commit.md",
+    ".specify/extensions/git/commands/speckit.git.feature.md",
+    ".specify/extensions/git/commands/speckit.git.initialize.md",
+    ".specify/extensions/git/commands/speckit.git.remote.md",
+    ".specify/extensions/git/commands/speckit.git.validate.md",
+    ".specify/extensions/git/config-template.yml",
+    ".specify/extensions/git/extension.yml",
+    ".specify/extensions/git/git-config.yml",
+    ".specify/extensions/git/scripts/bash/auto-commit.sh",
+    ".specify/extensions/git/scripts/bash/create-new-feature.sh",
+    ".specify/extensions/git/scripts/bash/git-common.sh",
+    ".specify/extensions/git/scripts/bash/initialize-repo.sh",
+    ".specify/extensions/git/scripts/powershell/auto-commit.ps1",
+    ".specify/extensions/git/scripts/powershell/create-new-feature.ps1",
+    ".specify/extensions/git/scripts/powershell/git-common.ps1",
+    ".specify/extensions/git/scripts/powershell/initialize-repo.ps1",
+    ".specify/feature.json",
+    ".specify/init-options.json",
+    ".specify/integration.json",
+    ".specify/integrations/agy.manifest.json",
+    ".specify/integrations/claude.manifest.json",
+    ".specify/integrations/codex.manifest.json",
+    ".specify/integrations/gemini.manifest.json",
+    ".specify/integrations/speckit.manifest.json",
+    ".specify/memory/constitution.md",
+    ".specify/scripts/bash/check-prerequisites.sh",
+    ".specify/scripts/bash/common.sh",
+    ".specify/scripts/bash/create-new-feature.sh",
+    ".specify/scripts/bash/setup-plan.sh",
+    ".specify/scripts/bash/setup-tasks.sh",
+    ".specify/templates/checklist-template.md",
+    ".specify/templates/constitution-template.md",
+    ".specify/templates/plan-template.md",
+    ".specify/templates/spec-template.md",
+    ".specify/templates/tasks-template.md",
+    ".specify/workflows/speckit/workflow.yml",
+    ".specify/workflows/workflow-registry.json",
+    "3rd-party/**",
+    "3rd-party/node-opcua/client.js",
+    "3rd-party/node-opcua/npm-shrinkwrap.json",
+    "3rd-party/node-opcua/package.json",
+    "3rd-party/node-opcua/server.js",
+    "3rd-party/open62541/README.md",
+    "3rd-party/open62541/client.cpp",
+    "3rd-party/open62541/server.cpp",
+    "CHANGELOG.md",
+    "async-opcua-client/tests/common/hostile_server.rs",
+    "async-opcua-client/tests/common/mod.rs",
+    "async-opcua-client/tests/hostile_server.rs",
+    "async-opcua-core-namespace/src/generated/mod.rs",
+    "async-opcua-core-namespace/src/generated/nodeset_12.rs",
+    "async-opcua-core-namespace/src/generated/nodeset_13.rs",
+    "async-opcua-core-namespace/src/generated/nodeset_14.rs",
+    "async-opcua-core-namespace/src/generated/nodeset_15.rs",
+    "async-opcua-core-namespace/src/generated/nodeset_19.rs",
+    "async-opcua-core-namespace/src/generated/nodeset_4.rs",
+    "async-opcua-core-namespace/src/generated/nodeset_44.rs",
+    "async-opcua-core-namespace/src/generated/nodeset_52.rs",
+    "async-opcua-core-namespace/src/generated/nodeset_6.rs",
+    "async-opcua-core-namespace/src/generated/nodeset_7.rs",
+    "async-opcua-core/src/tests/chunk.rs",
+    "async-opcua-core/src/tests/comms.rs",
+    "async-opcua-core/src/tests/env_expansion.rs",
+    "async-opcua-core/src/tests/error.rs",
+    "async-opcua-core/src/tests/mod.rs",
+    "async-opcua-core/src/tests/secure_channel.rs",
+    "async-opcua-core/src/tests/services.rs",
+    "async-opcua-core/src/tests/supported_message.rs",
+    "async-opcua-core/src/tests/url.rs",
+    "async-opcua-core/tests/serialization_alloc.rs",
+    "async-opcua-core/tests/zero_copy_alloc.rs",
+    "async-opcua-crypto/src/tests/authentication.rs",
+    "async-opcua-crypto/src/tests/crypto.rs",
+    "async-opcua-crypto/src/tests/identity.rs",
+    "async-opcua-crypto/src/tests/mod.rs",
+    "async-opcua-crypto/src/tests/security_policy.rs",
+    "async-opcua-history-sqlite/tests/query_migration.rs",
+    "async-opcua-macros/src/encoding/json.rs",
+    "async-opcua-macros/src/encoding/xml.rs",
+    "async-opcua-nodes/src/xml.rs",
+    "async-opcua-pubsub/src/codec/json.rs",
+    "async-opcua-pubsub/tests/engine_tests.rs",
+    "async-opcua-pubsub/tests/pubsub_tests.rs",
+    "async-opcua-pubsub/tests/security_tests.rs",
+    "async-opcua-pubsub/tests/tsn_jitter.rs",
+    "async-opcua-safety/tests/fault_injection.rs",
+    "async-opcua-server/tests/address_space_concurrency.rs",
+    "async-opcua-server/tests/aggregates_tests.rs",
+    "async-opcua-server/tests/connection_limit_tests.rs",
+    "async-opcua-server/tests/connection_load.rs",
+    "async-opcua-server/tests/event_filter_tests.rs",
+    "async-opcua-server/tests/fota_integration.rs",
+    "async-opcua-server/tests/gds_cache.rs",
+    "async-opcua-server/tests/gds_integration.rs",
+    "async-opcua-server/tests/gds_pull_methods.rs",
+    "async-opcua-server/tests/history_lru.rs",
+    "async-opcua-server/tests/history_tests.rs",
+    "async-opcua-server/tests/method_call_tests.rs",
+    "async-opcua-server/tests/nodeset_loader_tests.rs",
+    "async-opcua-server/tests/perf_auth.rs",
+    "async-opcua-server/tests/perf_query.rs",
+    "async-opcua-server/tests/query_tests.rs",
+    "async-opcua-server/tests/security_tests.rs",
+    "async-opcua-server/tests/session_actor_load.rs",
+    "async-opcua-server/tests/session_lookup.rs",
+    "async-opcua-server/tests/stateful_tests.rs",
+    "async-opcua-server/tests/stream_handoff_tests.rs",
+    "async-opcua-types/src/custom/json.rs",
+    "async-opcua-types/src/custom/xml.rs",
+    "async-opcua-types/src/generated/mod.rs",
+    "async-opcua-types/src/generated/types/action_method_data_type.rs",
+    "async-opcua-types/src/generated/types/action_target_data_type.rs",
+    "async-opcua-types/src/generated/types/activate_session_request.rs",
+    "async-opcua-types/src/generated/types/activate_session_response.rs",
+    "async-opcua-types/src/generated/types/add_nodes_item.rs",
+    "async-opcua-types/src/generated/types/add_nodes_request.rs",
+    "async-opcua-types/src/generated/types/add_nodes_response.rs",
+    "async-opcua-types/src/generated/types/add_nodes_result.rs",
+    "async-opcua-types/src/generated/types/add_references_item.rs",
+    "async-opcua-types/src/generated/types/add_references_request.rs",
+    "async-opcua-types/src/generated/types/add_references_response.rs",
+    "async-opcua-types/src/generated/types/additional_parameters_type.rs",
+    "async-opcua-types/src/generated/types/aggregate_configuration.rs",
+    "async-opcua-types/src/generated/types/aggregate_filter.rs",
+    "async-opcua-types/src/generated/types/aggregate_filter_result.rs",
+    "async-opcua-types/src/generated/types/alias_name_data_type.rs",
+    "async-opcua-types/src/generated/types/annotation.rs",
+    "async-opcua-types/src/generated/types/annotation_data_type.rs",
+    "async-opcua-types/src/generated/types/anonymous_identity_token.rs",
+    "async-opcua-types/src/generated/types/application_description.rs",
+    "async-opcua-types/src/generated/types/attribute_operand.rs",
+    "async-opcua-types/src/generated/types/axis_information.rs",
+    "async-opcua-types/src/generated/types/bit_field_definition.rs",
+    "async-opcua-types/src/generated/types/broker_connection_transport_data_type.rs",
+    "async-opcua-types/src/generated/types/broker_data_set_reader_transport_data_type.rs",
+    "async-opcua-types/src/generated/types/broker_data_set_writer_transport_data_type.rs",
+    "async-opcua-types/src/generated/types/broker_writer_group_transport_data_type.rs",
+    "async-opcua-types/src/generated/types/browse_description.rs",
+    "async-opcua-types/src/generated/types/browse_next_request.rs",
+    "async-opcua-types/src/generated/types/browse_next_response.rs",
+    "async-opcua-types/src/generated/types/browse_path.rs",
+    "async-opcua-types/src/generated/types/browse_path_result.rs",
+    "async-opcua-types/src/generated/types/browse_path_target.rs",
+    "async-opcua-types/src/generated/types/browse_request.rs",
+    "async-opcua-types/src/generated/types/browse_response.rs",
+    "async-opcua-types/src/generated/types/browse_result.rs",
+    "async-opcua-types/src/generated/types/build_info.rs",
+    "async-opcua-types/src/generated/types/call_method_request.rs",
+    "async-opcua-types/src/generated/types/call_method_result.rs",
+    "async-opcua-types/src/generated/types/call_request.rs",
+    "async-opcua-types/src/generated/types/call_response.rs",
+    "async-opcua-types/src/generated/types/cancel_request.rs",
+    "async-opcua-types/src/generated/types/cancel_response.rs",
+    "async-opcua-types/src/generated/types/channel_security_token.rs",
+    "async-opcua-types/src/generated/types/close_secure_channel_request.rs",
+    "async-opcua-types/src/generated/types/close_secure_channel_response.rs",
+    "async-opcua-types/src/generated/types/close_session_request.rs",
+    "async-opcua-types/src/generated/types/close_session_response.rs",
+    "async-opcua-types/src/generated/types/complex_number_type.rs",
+    "async-opcua-types/src/generated/types/configuration_version_data_type.rs",
+    "async-opcua-types/src/generated/types/content_filter.rs",
+    "async-opcua-types/src/generated/types/content_filter_element.rs",
+    "async-opcua-types/src/generated/types/content_filter_element_result.rs",
+    "async-opcua-types/src/generated/types/content_filter_result.rs",
+    "async-opcua-types/src/generated/types/create_monitored_items_request.rs",
+    "async-opcua-types/src/generated/types/create_monitored_items_response.rs",
+    "async-opcua-types/src/generated/types/create_session_request.rs",
+    "async-opcua-types/src/generated/types/create_session_response.rs",
+    "async-opcua-types/src/generated/types/create_subscription_request.rs",
+    "async-opcua-types/src/generated/types/create_subscription_response.rs",
+    "async-opcua-types/src/generated/types/currency_unit_type.rs",
+    "async-opcua-types/src/generated/types/data_change_filter.rs",
+    "async-opcua-types/src/generated/types/data_change_notification.rs",
+    "async-opcua-types/src/generated/types/data_set_meta_data_type.rs",
+    "async-opcua-types/src/generated/types/data_set_reader_data_type.rs",
+    "async-opcua-types/src/generated/types/data_set_writer_data_type.rs",
+    "async-opcua-types/src/generated/types/data_type_attributes.rs",
+    "async-opcua-types/src/generated/types/datagram_connection_transport_2_data_type.rs",
+    "async-opcua-types/src/generated/types/datagram_connection_transport_data_type.rs",
+    "async-opcua-types/src/generated/types/datagram_data_set_reader_transport_data_type.rs",
+    "async-opcua-types/src/generated/types/datagram_writer_group_transport_2_data_type.rs",
+    "async-opcua-types/src/generated/types/datagram_writer_group_transport_data_type.rs",
+    "async-opcua-types/src/generated/types/decimal_data_type.rs",
+    "async-opcua-types/src/generated/types/delete_at_time_details.rs",
+    "async-opcua-types/src/generated/types/delete_event_details.rs",
+    "async-opcua-types/src/generated/types/delete_monitored_items_request.rs",
+    "async-opcua-types/src/generated/types/delete_monitored_items_response.rs",
+    "async-opcua-types/src/generated/types/delete_nodes_item.rs",
+    "async-opcua-types/src/generated/types/delete_nodes_request.rs",
+    "async-opcua-types/src/generated/types/delete_nodes_response.rs",
+    "async-opcua-types/src/generated/types/delete_raw_modified_details.rs",
+    "async-opcua-types/src/generated/types/delete_references_item.rs",
+    "async-opcua-types/src/generated/types/delete_references_request.rs",
+    "async-opcua-types/src/generated/types/delete_references_response.rs",
+    "async-opcua-types/src/generated/types/delete_subscriptions_request.rs",
+    "async-opcua-types/src/generated/types/delete_subscriptions_response.rs",
+    "async-opcua-types/src/generated/types/discovery_configuration.rs",
+    "async-opcua-types/src/generated/types/double_complex_number_type.rs",
+    "async-opcua-types/src/generated/types/dtls_pub_sub_connection_data_type.rs",
+    "async-opcua-types/src/generated/types/element_operand.rs",
+    "async-opcua-types/src/generated/types/endpoint_configuration.rs",
+    "async-opcua-types/src/generated/types/endpoint_description.rs",
+    "async-opcua-types/src/generated/types/endpoint_type.rs",
+    "async-opcua-types/src/generated/types/endpoint_url_list_data_type.rs",
+    "async-opcua-types/src/generated/types/enum_definition.rs",
+    "async-opcua-types/src/generated/types/enum_description.rs",
+    "async-opcua-types/src/generated/types/enum_field.rs",
+    "async-opcua-types/src/generated/types/enum_value_type.rs",
+    "async-opcua-types/src/generated/types/enums.rs",
+    "async-opcua-types/src/generated/types/ephemeral_key_type.rs",
+    "async-opcua-types/src/generated/types/eu_information.rs",
+    "async-opcua-types/src/generated/types/event_field_list.rs",
+    "async-opcua-types/src/generated/types/event_filter.rs",
+    "async-opcua-types/src/generated/types/event_filter_result.rs",
+    "async-opcua-types/src/generated/types/event_notification_list.rs",
+    "async-opcua-types/src/generated/types/field_meta_data.rs",
+    "async-opcua-types/src/generated/types/field_target_data_type.rs",
+    "async-opcua-types/src/generated/types/find_servers_on_network_request.rs",
+    "async-opcua-types/src/generated/types/find_servers_on_network_response.rs",
+    "async-opcua-types/src/generated/types/find_servers_request.rs",
+    "async-opcua-types/src/generated/types/find_servers_response.rs",
+    "async-opcua-types/src/generated/types/generic_attribute_value.rs",
+    "async-opcua-types/src/generated/types/generic_attributes.rs",
+    "async-opcua-types/src/generated/types/get_endpoints_request.rs",
+    "async-opcua-types/src/generated/types/get_endpoints_response.rs",
+    "async-opcua-types/src/generated/types/history_data.rs",
+    "async-opcua-types/src/generated/types/history_event.rs",
+    "async-opcua-types/src/generated/types/history_event_field_list.rs",
+    "async-opcua-types/src/generated/types/history_modified_data.rs",
+    "async-opcua-types/src/generated/types/history_modified_event.rs",
+    "async-opcua-types/src/generated/types/history_read_request.rs",
+    "async-opcua-types/src/generated/types/history_read_response.rs",
+    "async-opcua-types/src/generated/types/history_read_result.rs",
+    "async-opcua-types/src/generated/types/history_read_value_id.rs",
+    "async-opcua-types/src/generated/types/history_update_request.rs",
+    "async-opcua-types/src/generated/types/history_update_response.rs",
+    "async-opcua-types/src/generated/types/history_update_result.rs",
+    "async-opcua-types/src/generated/types/identity_mapping_rule_type.rs",
+    "async-opcua-types/src/generated/types/issued_identity_token.rs",
+    "async-opcua-types/src/generated/types/json_action_meta_data_message.rs",
+    "async-opcua-types/src/generated/types/json_action_network_message.rs",
+    "async-opcua-types/src/generated/types/json_action_request_message.rs",
+    "async-opcua-types/src/generated/types/json_action_responder_message.rs",
+    "async-opcua-types/src/generated/types/json_action_response_message.rs",
+    "async-opcua-types/src/generated/types/json_application_description_message.rs",
+    "async-opcua-types/src/generated/types/json_data_set_message.rs",
+    "async-opcua-types/src/generated/types/json_data_set_meta_data_message.rs",
+    "async-opcua-types/src/generated/types/json_data_set_reader_message_data_type.rs",
+    "async-opcua-types/src/generated/types/json_data_set_writer_message_data_type.rs",
+    "async-opcua-types/src/generated/types/json_network_message.rs",
+    "async-opcua-types/src/generated/types/json_pub_sub_connection_message.rs",
+    "async-opcua-types/src/generated/types/json_server_endpoints_message.rs",
+    "async-opcua-types/src/generated/types/json_status_message.rs",
+    "async-opcua-types/src/generated/types/json_writer_group_message_data_type.rs",
+    "async-opcua-types/src/generated/types/key_value_pair.rs",
+    "async-opcua-types/src/generated/types/linear_conversion_data_type.rs",
+    "async-opcua-types/src/generated/types/literal_operand.rs",
+    "async-opcua-types/src/generated/types/lldp_management_address_tx_port_type.rs",
+    "async-opcua-types/src/generated/types/lldp_management_address_type.rs",
+    "async-opcua-types/src/generated/types/lldp_tlv_type.rs",
+    "async-opcua-types/src/generated/types/mdns_discovery_configuration.rs",
+    "async-opcua-types/src/generated/types/method_attributes.rs",
+    "async-opcua-types/src/generated/types/model_change_structure_data_type.rs",
+    "async-opcua-types/src/generated/types/modification_info.rs",
+    "async-opcua-types/src/generated/types/modify_monitored_items_request.rs",
+    "async-opcua-types/src/generated/types/modify_monitored_items_response.rs",
+    "async-opcua-types/src/generated/types/modify_subscription_request.rs",
+    "async-opcua-types/src/generated/types/modify_subscription_response.rs",
+    "async-opcua-types/src/generated/types/monitored_item_create_request.rs",
+    "async-opcua-types/src/generated/types/monitored_item_create_result.rs",
+    "async-opcua-types/src/generated/types/monitored_item_modify_request.rs",
+    "async-opcua-types/src/generated/types/monitored_item_modify_result.rs",
+    "async-opcua-types/src/generated/types/monitored_item_notification.rs",
+    "async-opcua-types/src/generated/types/monitoring_filter.rs",
+    "async-opcua-types/src/generated/types/monitoring_filter_result.rs",
+    "async-opcua-types/src/generated/types/monitoring_parameters.rs",
+    "async-opcua-types/src/generated/types/network_address_url_data_type.rs",
+    "async-opcua-types/src/generated/types/network_group_data_type.rs",
+    "async-opcua-types/src/generated/types/node_attributes.rs",
+    "async-opcua-types/src/generated/types/node_reference.rs",
+    "async-opcua-types/src/generated/types/node_type_description.rs",
+    "async-opcua-types/src/generated/types/notification_data.rs",
+    "async-opcua-types/src/generated/types/notification_message.rs",
+    "async-opcua-types/src/generated/types/object_attributes.rs",
+    "async-opcua-types/src/generated/types/object_type_attributes.rs",
+    "async-opcua-types/src/generated/types/open_secure_channel_request.rs",
+    "async-opcua-types/src/generated/types/open_secure_channel_response.rs",
+    "async-opcua-types/src/generated/types/parsing_result.rs",
+    "async-opcua-types/src/generated/types/portable_node_id.rs",
+    "async-opcua-types/src/generated/types/portable_qualified_name.rs",
+    "async-opcua-types/src/generated/types/priority_mapping_entry_type.rs",
+    "async-opcua-types/src/generated/types/program_diagnostic_2_data_type.rs",
+    "async-opcua-types/src/generated/types/program_diagnostic_data_type.rs",
+    "async-opcua-types/src/generated/types/pub_sub_configuration_2_data_type.rs",
+    "async-opcua-types/src/generated/types/pub_sub_configuration_data_type.rs",
+    "async-opcua-types/src/generated/types/pub_sub_configuration_ref_data_type.rs",
+    "async-opcua-types/src/generated/types/pub_sub_configuration_value_data_type.rs",
+    "async-opcua-types/src/generated/types/pub_sub_connection_data_type.rs",
+    "async-opcua-types/src/generated/types/pub_sub_key_push_target_data_type.rs",
+    "async-opcua-types/src/generated/types/publish_request.rs",
+    "async-opcua-types/src/generated/types/publish_response.rs",
+    "async-opcua-types/src/generated/types/published_action_data_type.rs",
+    "async-opcua-types/src/generated/types/published_action_method_data_type.rs",
+    "async-opcua-types/src/generated/types/published_data_items_data_type.rs",
+    "async-opcua-types/src/generated/types/published_data_set_custom_source_data_type.rs",
+    "async-opcua-types/src/generated/types/published_data_set_data_type.rs",
+    "async-opcua-types/src/generated/types/published_events_data_type.rs",
+    "async-opcua-types/src/generated/types/published_variable_data_type.rs",
+    "async-opcua-types/src/generated/types/quantity_dimension.rs",
+    "async-opcua-types/src/generated/types/query_data_description.rs",
+    "async-opcua-types/src/generated/types/query_data_set.rs",
+    "async-opcua-types/src/generated/types/query_first_request.rs",
+    "async-opcua-types/src/generated/types/query_first_response.rs",
+    "async-opcua-types/src/generated/types/query_next_request.rs",
+    "async-opcua-types/src/generated/types/query_next_response.rs",
+    "async-opcua-types/src/generated/types/range.rs",
+    "async-opcua-types/src/generated/types/rational_number.rs",
+    "async-opcua-types/src/generated/types/read_annotation_data_details.rs",
+    "async-opcua-types/src/generated/types/read_at_time_details.rs",
+    "async-opcua-types/src/generated/types/read_event_details.rs",
+    "async-opcua-types/src/generated/types/read_event_details_2.rs",
+    "async-opcua-types/src/generated/types/read_event_details_sorted.rs",
+    "async-opcua-types/src/generated/types/read_processed_details.rs",
+    "async-opcua-types/src/generated/types/read_raw_modified_details.rs",
+    "async-opcua-types/src/generated/types/read_request.rs",
+    "async-opcua-types/src/generated/types/read_response.rs",
+    "async-opcua-types/src/generated/types/read_value_id.rs",
+    "async-opcua-types/src/generated/types/reader_group_data_type.rs",
+    "async-opcua-types/src/generated/types/receive_qos_priority_data_type.rs",
+    "async-opcua-types/src/generated/types/redundant_server_data_type.rs",
+    "async-opcua-types/src/generated/types/reference_description.rs",
+    "async-opcua-types/src/generated/types/reference_description_data_type.rs",
+    "async-opcua-types/src/generated/types/reference_list_entry_data_type.rs",
+    "async-opcua-types/src/generated/types/reference_type_attributes.rs",
+    "async-opcua-types/src/generated/types/register_nodes_request.rs",
+    "async-opcua-types/src/generated/types/register_nodes_response.rs",
+    "async-opcua-types/src/generated/types/register_server_2_request.rs",
+    "async-opcua-types/src/generated/types/register_server_2_response.rs",
+    "async-opcua-types/src/generated/types/register_server_request.rs",
+    "async-opcua-types/src/generated/types/register_server_response.rs",
+    "async-opcua-types/src/generated/types/registered_server.rs",
+    "async-opcua-types/src/generated/types/relative_path.rs",
+    "async-opcua-types/src/generated/types/relative_path_element.rs",
+    "async-opcua-types/src/generated/types/republish_request.rs",
+    "async-opcua-types/src/generated/types/republish_response.rs",
+    "async-opcua-types/src/generated/types/role_permission_type.rs",
+    "async-opcua-types/src/generated/types/sampling_interval_diagnostics_data_type.rs",
+    "async-opcua-types/src/generated/types/security_group_data_type.rs",
+    "async-opcua-types/src/generated/types/semantic_change_structure_data_type.rs",
+    "async-opcua-types/src/generated/types/server_diagnostics_summary_data_type.rs",
+    "async-opcua-types/src/generated/types/server_on_network.rs",
+    "async-opcua-types/src/generated/types/server_status_data_type.rs",
+    "async-opcua-types/src/generated/types/service_counter_data_type.rs",
+    "async-opcua-types/src/generated/types/service_fault.rs",
+    "async-opcua-types/src/generated/types/session_diagnostics_data_type.rs",
+    "async-opcua-types/src/generated/types/session_security_diagnostics_data_type.rs",
+    "async-opcua-types/src/generated/types/sessionless_invoke_request_type.rs",
+    "async-opcua-types/src/generated/types/sessionless_invoke_response_type.rs",
+    "async-opcua-types/src/generated/types/set_monitoring_mode_request.rs",
+    "async-opcua-types/src/generated/types/set_monitoring_mode_response.rs",
+    "async-opcua-types/src/generated/types/set_publishing_mode_request.rs",
+    "async-opcua-types/src/generated/types/set_publishing_mode_response.rs",
+    "async-opcua-types/src/generated/types/set_triggering_request.rs",
+    "async-opcua-types/src/generated/types/set_triggering_response.rs",
+    "async-opcua-types/src/generated/types/signature_data.rs",
+    "async-opcua-types/src/generated/types/signed_software_certificate.rs",
+    "async-opcua-types/src/generated/types/simple_attribute_operand.rs",
+    "async-opcua-types/src/generated/types/simple_type_description.rs",
+    "async-opcua-types/src/generated/types/sort_rule_element.rs",
+    "async-opcua-types/src/generated/types/standalone_subscribed_data_set_data_type.rs",
+    "async-opcua-types/src/generated/types/standalone_subscribed_data_set_ref_data_type.rs",
+    "async-opcua-types/src/generated/types/status_change_notification.rs",
+    "async-opcua-types/src/generated/types/status_result.rs",
+    "async-opcua-types/src/generated/types/structure_definition.rs",
+    "async-opcua-types/src/generated/types/structure_description.rs",
+    "async-opcua-types/src/generated/types/structure_field.rs",
+    "async-opcua-types/src/generated/types/subscribed_data_set_mirror_data_type.rs",
+    "async-opcua-types/src/generated/types/subscription_acknowledgement.rs",
+    "async-opcua-types/src/generated/types/subscription_diagnostics_data_type.rs",
+    "async-opcua-types/src/generated/types/target_variables_data_type.rs",
+    "async-opcua-types/src/generated/types/three_d_cartesian_coordinates.rs",
+    "async-opcua-types/src/generated/types/three_d_frame.rs",
+    "async-opcua-types/src/generated/types/three_d_orientation.rs",
+    "async-opcua-types/src/generated/types/three_d_vector.rs",
+    "async-opcua-types/src/generated/types/time_zone_data_type.rs",
+    "async-opcua-types/src/generated/types/transaction_error_type.rs",
+    "async-opcua-types/src/generated/types/transfer_result.rs",
+    "async-opcua-types/src/generated/types/transfer_subscriptions_request.rs",
+    "async-opcua-types/src/generated/types/transfer_subscriptions_response.rs",
+    "async-opcua-types/src/generated/types/translate_browse_paths_to_node_ids_request.rs",
+    "async-opcua-types/src/generated/types/translate_browse_paths_to_node_ids_response.rs",
+    "async-opcua-types/src/generated/types/transmit_qos_priority_data_type.rs",
+    "async-opcua-types/src/generated/types/trust_list_data_type.rs",
+    "async-opcua-types/src/generated/types/ua_binary_file_data_type.rs",
+    "async-opcua-types/src/generated/types/uadp_data_set_reader_message_data_type.rs",
+    "async-opcua-types/src/generated/types/uadp_data_set_writer_message_data_type.rs",
+    "async-opcua-types/src/generated/types/uadp_writer_group_message_data_type.rs",
+    "async-opcua-types/src/generated/types/unregister_nodes_request.rs",
+    "async-opcua-types/src/generated/types/unregister_nodes_response.rs",
+    "async-opcua-types/src/generated/types/unsigned_rational_number.rs",
+    "async-opcua-types/src/generated/types/update_data_details.rs",
+    "async-opcua-types/src/generated/types/update_event_details.rs",
+    "async-opcua-types/src/generated/types/update_structure_data_details.rs",
+    "async-opcua-types/src/generated/types/user_management_data_type.rs",
+    "async-opcua-types/src/generated/types/user_name_identity_token.rs",
+    "async-opcua-types/src/generated/types/user_token_policy.rs",
+    "async-opcua-types/src/generated/types/variable_attributes.rs",
+    "async-opcua-types/src/generated/types/variable_type_attributes.rs",
+    "async-opcua-types/src/generated/types/view_attributes.rs",
+    "async-opcua-types/src/generated/types/view_description.rs",
+    "async-opcua-types/src/generated/types/write_request.rs",
+    "async-opcua-types/src/generated/types/write_response.rs",
+    "async-opcua-types/src/generated/types/write_value.rs",
+    "async-opcua-types/src/generated/types/writer_group_data_type.rs",
+    "async-opcua-types/src/generated/types/x_509_identity_token.rs",
+    "async-opcua-types/src/generated/types/xv_type.rs",
+    "async-opcua-types/src/json.rs",
+    "async-opcua-types/src/node_id/json.rs",
+    "async-opcua-types/src/node_id/xml.rs",
+    "async-opcua-types/src/tests/date_time.rs",
+    "async-opcua-types/src/tests/encoding.rs",
+    "async-opcua-types/src/tests/fallback.rs",
+    "async-opcua-types/src/tests/json.rs",
+    "async-opcua-types/src/tests/mod.rs",
+    "async-opcua-types/src/tests/node_id.rs",
+    "async-opcua-types/src/tests/recursion_dos.rs",
+    "async-opcua-types/src/tests/serde.rs",
+    "async-opcua-types/src/tests/variant.rs",
+    "async-opcua-types/src/tests/xml.rs",
+    "async-opcua-types/src/variant/json.rs",
+    "async-opcua-types/src/variant/xml.rs",
+    "async-opcua-types/src/xml/builtins.rs",
+    "async-opcua-types/src/xml/encoding.rs",
+    "async-opcua-types/src/xml/mod.rs",
+    "async-opcua-xml/tests/import_tests.rs",
+    "async-opcua/tests/integration/alarms.rs",
+    "async-opcua/tests/integration/browse.rs",
+    "async-opcua/tests/integration/core_tests.rs",
+    "async-opcua/tests/integration/custom_types.rs",
+    "async-opcua/tests/integration/ecc.rs",
+    "async-opcua/tests/integration/hardening.rs",
+    "async-opcua/tests/integration/hda.rs",
+    "async-opcua/tests/integration/legacy_crypto.rs",
+    "async-opcua/tests/integration/methods.rs",
+    "async-opcua/tests/integration/mod.rs",
+    "async-opcua/tests/integration/node_management.rs",
+    "async-opcua/tests/integration/programs.rs",
+    "async-opcua/tests/integration/pubsub.rs",
+    "async-opcua/tests/integration/read.rs",
+    "async-opcua/tests/integration/reverse_connect.rs",
+    "async-opcua/tests/integration/subscriptions.rs",
+    "async-opcua/tests/integration/write.rs",
+    "async-opcua/tests/integration/wss.rs",
+    "async-opcua/tests/integration_tests.rs",
+    "async-opcua/tests/utils/mod.rs",
+    "async-opcua/tests/utils/node_manager.rs",
+    "async-opcua/tests/utils/tester.rs",
+    "codegen-tests/**",
+    "codegen-tests/build.rs",
+    "codegen-tests/schemas/Async.Opcua.Test.Ext.NodeSet2.xml",
+    "codegen-tests/schemas/Async.Opcua.Test.NodeSet2.xml",
+    "codegen-tests/schemas/Opc.Ua.Di.NodeSet2.xml",
+    "codegen-tests/schemas/Opc.Ua.Plc.NodeSet2.xml",
+    "codegen-tests/src/lib.rs",
+    "codegen-tests/src/tests/mod.rs",
+    "codegen-tests/src/tests/types.rs",
+    "dotnet-tests/**",
+    "dotnet-tests/Common/Comms.cs",
+    "dotnet-tests/Common/In.cs",
+    "dotnet-tests/Common/Out.cs",
+    "dotnet-tests/Common/TaggedUnionConverter.cs",
+    "dotnet-tests/TestServer.Config.xml",
+    "dotnet-tests/TestServer/Program.cs",
+    "dotnet-tests/TestServer/Server.cs",
+    "dotnet-tests/TestServer/TestNodeManager.cs",
+    "dotnet-tests/external-tests/src/client/mod.rs",
+    "dotnet-tests/external-tests/src/common/comms.rs",
+    "dotnet-tests/external-tests/src/common/mod.rs",
+    "dotnet-tests/external-tests/src/hda_tests.rs",
+    "dotnet-tests/external-tests/src/main.rs",
+    "dotnet-tests/external-tests/src/pubsub_tests.rs",
+    "dotnet-tests/external-tests/src/tests/client/connect.rs",
+    "dotnet-tests/external-tests/src/tests/client/mod.rs",
+    "dotnet-tests/external-tests/src/tests/client/reverse_connect.rs",
+    "dotnet-tests/external-tests/src/tests/client/services.rs",
+    "dotnet-tests/external-tests/src/tests/mod.rs",
+    "fuzz/**",
+    "fuzz/README.md",
+    "fuzz/fuzz_targets/fuzz_comms.rs",
+    "fuzz/fuzz_targets/fuzz_deserialize.rs",
+    "fuzz/fuzz_targets/fuzz_dynamic_struct.rs",
+    "samples/chess-server/README.md",
+    "samples/chess-server/src/game.rs",
+    "samples/chess-server/src/main.rs",
+    "samples/custom-codegen/code_gen_config.yml",
+    "samples/custom-codegen/src/generated/events/generated.rs",
+    "samples/custom-codegen/src/generated/events/mod.rs",
+    "samples/custom-codegen/src/generated/mod.rs",
+    "samples/custom-codegen/src/generated/node_ids.rs",
+    "samples/custom-codegen/src/generated/nodeset/mod.rs",
+    "samples/custom-codegen/src/generated/types/enums.rs",
+    "samples/custom-codegen/src/generated/types/mod.rs",
+    "samples/custom-codegen/src/generated/types/structs.rs",
+    "samples/custom-codegen/src/main.rs",
+    "samples/custom-structures-client/README.md",
+    "samples/custom-structures-client/src/bin/dynamic_client.rs",
+    "samples/custom-structures-client/src/bin/native_client.rs",
+    "samples/custom-structures-client/src/lib.rs",
+    "samples/demo-server/Dockerfile",
+    "samples/demo-server/README.md",
+    "samples/demo-server/log4rs.yaml",
+    "samples/demo-server/src/control.rs",
+    "samples/demo-server/src/customs.rs",
+    "samples/demo-server/src/machine.rs",
+    "samples/demo-server/src/main.rs",
+    "samples/demo-server/src/methods.rs",
+    "samples/demo-server/src/scalar.rs",
+    "samples/discovery-client/README.md",
+    "samples/discovery-client/src/main.rs",
+    "samples/distributed-test/src/publisher.rs",
+    "samples/distributed-test/src/server.rs",
+    "samples/distributed-test/src/subscriber.rs",
+    "samples/event-client/README.md",
+    "samples/event-client/src/main.rs",
+    "samples/mqtt-client/README.md",
+    "samples/mqtt-client/src/main.rs",
+    "samples/node-managers/src/main.rs",
+    "samples/node-managers/src/node_managers/metadata.rs",
+    "samples/node-managers/src/node_managers/mod.rs",
+    "samples/node-managers/src/node_managers/tags.rs",
+    "samples/node-managers/src/sim/gen.rs",
+    "samples/node-managers/src/sim/mod.rs",
+    "samples/simple-client/README.md",
+    "samples/simple-client/identity/sample-x509.pem",
+    "samples/simple-client/src/main.rs",
+    "samples/simple-server/README.md",
+    "samples/simple-server/src/main.rs",
+    "specs/**",
+    "specs/001-implement-opc-ua-spec/checklists/requirements.md",
+    "specs/001-implement-opc-ua-spec/contracts/public_apis.md",
+    "specs/001-implement-opc-ua-spec/data-model.md",
+    "specs/001-implement-opc-ua-spec/plan.md",
+    "specs/001-implement-opc-ua-spec/quickstart.md",
+    "specs/001-implement-opc-ua-spec/research.md",
+    "specs/001-implement-opc-ua-spec/spec.md",
+    "specs/001-implement-opc-ua-spec/tasks.md",
+    "specs/001-implement-opc-ua-spec/validate-quickstart.sh",
+    "specs/002-complete-opcua-compliance/checklists/requirements.md",
+    "specs/002-complete-opcua-compliance/contracts/api.md",
+    "specs/002-complete-opcua-compliance/data-model.md",
+    "specs/002-complete-opcua-compliance/plan.md",
+    "specs/002-complete-opcua-compliance/quickstart.md",
+    "specs/002-complete-opcua-compliance/research.md",
+    "specs/002-complete-opcua-compliance/spec.md",
+    "specs/002-complete-opcua-compliance/tasks.md",
+    "specs/003-advanced-opcua-compliance/checklists/requirements.md",
+    "specs/003-advanced-opcua-compliance/contracts/api.md",
+    "specs/003-advanced-opcua-compliance/data-model.md",
+    "specs/003-advanced-opcua-compliance/plan.md",
+    "specs/003-advanced-opcua-compliance/quickstart.md",
+    "specs/003-advanced-opcua-compliance/research.md",
+    "specs/003-advanced-opcua-compliance/spec.md",
+    "specs/003-advanced-opcua-compliance/tasks.md",
+    "specs/004-performance-optimizations/checklists/requirements.md",
+    "specs/004-performance-optimizations/data-model.md",
+    "specs/004-performance-optimizations/plan.md",
+    "specs/004-performance-optimizations/quickstart.md",
+    "specs/004-performance-optimizations/research.md",
+    "specs/004-performance-optimizations/spec.md",
+    "specs/004-performance-optimizations/tasks.md",
+    "specs/005-future-performance-optimizations/checklists/requirements.md",
+    "specs/005-future-performance-optimizations/spec.md",
+    "specs/006-implement-future-optimizations/checklists/requirements.md",
+    "specs/006-implement-future-optimizations/contracts/session_messages.md",
+    "specs/006-implement-future-optimizations/data-model.md",
+    "specs/006-implement-future-optimizations/plan.md",
+    "specs/006-implement-future-optimizations/quickstart.md",
+    "specs/006-implement-future-optimizations/research.md",
+    "specs/006-implement-future-optimizations/spec.md",
+    "specs/006-implement-future-optimizations/tasks.md",
+    "specs/008-first-class-legacy/plan.md",
+    "specs/008-first-class-legacy/spec.md",
+    "specs/008-first-class-legacy/tasks.md",
+    "specs/009-hardening-and-optimization/benchmarks-baseline.md",
+    "specs/009-hardening-and-optimization/checklists/requirements.md",
+    "specs/009-hardening-and-optimization/contracts/config-and-features.md",
+    "specs/009-hardening-and-optimization/contracts/node-manager-traits.md",
+    "specs/009-hardening-and-optimization/contracts/public-api-changes.md",
+    "specs/009-hardening-and-optimization/data-model.md",
+    "specs/009-hardening-and-optimization/findings-tracker.md",
+    "specs/009-hardening-and-optimization/plan.md",
+    "specs/009-hardening-and-optimization/quickstart.md",
+    "specs/009-hardening-and-optimization/research.md",
+    "specs/009-hardening-and-optimization/spec.md",
+    "specs/009-hardening-and-optimization/tasks.md",
+    "specs/010-embedded-hardening-allocation/checklists/requirements.md",
+    "specs/010-embedded-hardening-allocation/contracts/api-surface.md",
+    "specs/010-embedded-hardening-allocation/data-model.md",
+    "specs/010-embedded-hardening-allocation/plan.md",
+    "specs/010-embedded-hardening-allocation/quickstart.md",
+    "specs/010-embedded-hardening-allocation/research.md",
+    "specs/010-embedded-hardening-allocation/spec.md",
+    "specs/010-embedded-hardening-allocation/tasks.md",
+    "specs/011-audit-remediation/checklists/requirements.md",
+    "specs/011-audit-remediation/contracts/api-surface.md",
+    "specs/011-audit-remediation/data-model.md",
+    "specs/011-audit-remediation/plan.md",
+    "specs/011-audit-remediation/quickstart.md",
+    "specs/011-audit-remediation/research.md",
+    "specs/011-audit-remediation/spec.md",
+    "specs/011-audit-remediation/tasks.md",
+    "specs/012-nist-ecc-security-policies/checklists/requirements.md",
+    "specs/012-nist-ecc-security-policies/contracts/api-surface.md",
+    "specs/012-nist-ecc-security-policies/data-model.md",
+    "specs/012-nist-ecc-security-policies/plan.md",
+    "specs/012-nist-ecc-security-policies/quickstart.md",
+    "specs/012-nist-ecc-security-policies/research.md",
+    "specs/012-nist-ecc-security-policies/spec.md",
+    "specs/012-nist-ecc-security-policies/tasks.md"
+  ]
+}

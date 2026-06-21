@@ -555,3 +555,99 @@ fn ecc_nistp384_asymmetric_open_secure_channel_sign_and_encrypt() {
         EccCurve::P384,
     );
 }
+
+// ---------------------------------------------------------------------------
+// ChannelThumbprint (Part 6 §6.7.5) binding (feature 012 hardening).
+//
+// For ECC, the OpenSecureChannel RESPONSE is signed over
+// `response_bytes ‖ first_request_signature`. The loopback tests already prove
+// the two sides agree; this Claude-authored test proves the thumbprint is
+// actually *applied* — i.e. the request signature genuinely participates in the
+// response signature — by showing the response does NOT verify once the request
+// signature is excluded. (A no-op "thumbprint" on both sides would pass loopback
+// but fail this test.)
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "ecc")]
+fn ecc_handshake_channel(
+    role: Role,
+    cert: opcua_crypto::X509,
+    private_key: opcua_crypto::PrivateKey,
+    remote_cert: opcua_crypto::X509,
+) -> SecureChannel {
+    let mut secure_channel = SecureChannel::new_no_certificate_store();
+    secure_channel.set_role(role);
+    secure_channel.set_security_mode(MessageSecurityMode::Sign);
+    secure_channel.set_security_policy(SecurityPolicy::EccNistP256);
+    secure_channel.set_cert(Some(cert));
+    secure_channel.set_remote_cert(Some(remote_cert));
+    secure_channel.set_private_key(Some(private_key));
+    secure_channel
+}
+
+#[cfg(feature = "ecc")]
+fn ecc_sign_chunk(channel: &SecureChannel, message: impl crate::Message) -> Vec<u8> {
+    let mut chunks =
+        Chunker::encode(SequenceNumberHandle::new(true), 1, 0, 0, channel, &message).unwrap();
+    assert_eq!(chunks.len(), 1);
+    let chunk = &mut chunks[0];
+    let mut encrypted = vec![0u8; chunk.data.len() + 4096];
+    let n = channel.apply_security(chunk, &mut encrypted[..]).unwrap();
+    encrypted[..n].to_vec()
+}
+
+#[cfg(feature = "ecc")]
+#[test]
+fn ecc_channel_thumbprint_binds_response_to_first_request_signature() {
+    use crate::{RequestMessage, ResponseMessage};
+
+    let _ = Test::setup();
+
+    let (server_cert, server_key) = make_test_ecc_cert(EccCurve::P256);
+    let (client_cert, client_key) = make_test_ecc_cert(EccCurve::P256);
+
+    let client = ecc_handshake_channel(
+        Role::Client,
+        client_cert.clone(),
+        client_key,
+        server_cert.clone(),
+    );
+    let server = ecc_handshake_channel(Role::Server, server_cert, server_key, client_cert);
+
+    // 1. Client signs the OSC request; both sides capture the request signature
+    //    (client on sign, server on verify).
+    let request: RequestMessage = make_open_secure_channel_request();
+    let request_bytes = ecc_sign_chunk(&client, request);
+    let mut req_dec = DecryptedChunkStorage::new();
+    server
+        .verify_and_remove_security(request_bytes.into(), &mut req_dec)
+        .expect("server verifies the OSC request");
+
+    // 2. The OpenSecureChannel flow enables the thumbprint on the initial Issue.
+    let mut client = client;
+    let mut server = server;
+    client.set_apply_channel_thumbprint(true);
+    server.set_apply_channel_thumbprint(true);
+
+    // 3. Server signs the response over `response ‖ first_request_signature`.
+    let response: ResponseMessage = make_open_secure_channel_response().into();
+    let response_bytes = ecc_sign_chunk(&server, response);
+
+    // 4. Client verifies WITH the thumbprint applied — succeeds (request sigs match).
+    let mut ok_dec = DecryptedChunkStorage::new();
+    client
+        .verify_and_remove_security(response_bytes.clone().into(), &mut ok_dec)
+        .expect("ChannelThumbprint response must verify when the request signature is included");
+
+    // 5. Binding proof: with the thumbprint NOT applied, the client verifies over
+    //    `response` alone — which is NOT what the server signed — so it must fail.
+    client.set_apply_channel_thumbprint(false);
+    let mut bad_dec = DecryptedChunkStorage::new();
+    assert!(
+        client
+            .verify_and_remove_security(response_bytes.into(), &mut bad_dec)
+            .is_err(),
+        "a ChannelThumbprint-signed response must NOT verify when the request signature is excluded \
+         — proves the request signature is genuinely bound into the response signature"
+    );
+}

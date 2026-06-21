@@ -114,6 +114,28 @@ fn make_open_secure_channel_response() -> OpenSecureChannelResponse {
     }
 }
 
+#[cfg(feature = "ecc")]
+fn make_open_secure_channel_request() -> RequestMessage {
+    use opcua_types::{OpenSecureChannelRequest, SecurityTokenRequestType};
+    OpenSecureChannelRequest {
+        request_header: RequestHeader {
+            authentication_token: NodeId::new(0, 99),
+            timestamp: DateTime::now(),
+            request_handle: 1,
+            return_diagnostics: DiagnosticBits::empty(),
+            audit_entry_id: UAString::null(),
+            timeout_hint: 123456,
+            additional_header: ExtensionObject::null(),
+        },
+        client_protocol_version: 0,
+        request_type: SecurityTokenRequestType::Issue,
+        security_mode: MessageSecurityMode::Sign,
+        client_nonce: ByteString::null(),
+        requested_lifetime: 3_600_000,
+    }
+    .into()
+}
+
 fn make_sample_message() -> RequestMessage {
     GetEndpointsRequest {
         request_header: RequestHeader {

@@ -4,11 +4,13 @@
 
 //! The secure channel handles security on an OPC-UA connection.
 
+use std::sync::Arc;
+#[cfg(feature = "ecc")]
+use std::sync::Mutex;
 use std::{
     collections::HashMap,
     io::{Cursor, Write},
     ops::{Deref, Range},
-    sync::Arc,
     time::Instant,
 };
 
@@ -115,6 +117,12 @@ pub struct SecureChannel {
     /// Our ephemeral private key for ECC secure-channel ECDH.
     #[cfg(feature = "ecc")]
     local_ephemeral_key: Option<EphemeralPrivateKey>,
+    /// Signature from the first OpenSecureChannel request for ECC channel thumbprints.
+    #[cfg(feature = "ecc")]
+    first_request_signature: Mutex<Vec<u8>>,
+    /// Whether to apply the ECC ChannelThumbprint calculation to the next response.
+    #[cfg(feature = "ecc")]
+    apply_channel_thumbprint: bool,
     /// Client (i.e. other end's set of keys) Symmetric Signing Key, Encrypt Key, IV
     ///
     /// This is a map of channel token ids and their respective keys. We need to keep
@@ -147,6 +155,10 @@ impl SecureChannel {
             remote_nonce: Vec::new(),
             #[cfg(feature = "ecc")]
             local_ephemeral_key: None,
+            #[cfg(feature = "ecc")]
+            first_request_signature: Mutex::new(Vec::new()),
+            #[cfg(feature = "ecc")]
+            apply_channel_thumbprint: false,
             cert: None,
             private_key: None,
             remote_cert: None,
@@ -194,6 +206,10 @@ impl SecureChannel {
             remote_nonce: Vec::new(),
             #[cfg(feature = "ecc")]
             local_ephemeral_key: None,
+            #[cfg(feature = "ecc")]
+            first_request_signature: Mutex::new(Vec::new()),
+            #[cfg(feature = "ecc")]
+            apply_channel_thumbprint: false,
             cert,
             private_key,
             remote_cert: None,
@@ -217,6 +233,12 @@ impl SecureChannel {
     #[cfg(feature = "ecc")]
     pub fn set_local_ephemeral_key(&mut self, key: EphemeralPrivateKey) {
         self.local_ephemeral_key = Some(key);
+    }
+
+    /// Set whether ECC ChannelThumbprint signing/verification is applied.
+    #[cfg(feature = "ecc")]
+    pub fn set_apply_channel_thumbprint(&mut self, value: bool) {
+        self.apply_channel_thumbprint = value;
     }
 
     /// Set the application certificate.
@@ -1237,7 +1259,34 @@ impl SecureChannel {
         let signature = r
             .get_mut(..signing_key_size)
             .ok_or(StatusCode::BadSecurityChecksFailed)?;
-        security_policy.asymmetric_sign(signing_key, l, signature)?;
+        if is_ecc {
+            #[cfg(feature = "ecc")]
+            {
+                if self.is_client_role() {
+                    security_policy.asymmetric_sign(signing_key, l, signature)?;
+                    let mut first_request_signature = self
+                        .first_request_signature
+                        .lock()
+                        .map_err(|_| StatusCode::BadSecurityChecksFailed)?;
+                    first_request_signature.clear();
+                    first_request_signature.extend_from_slice(signature);
+                } else if self.apply_channel_thumbprint {
+                    let first_request_signature = self
+                        .first_request_signature
+                        .lock()
+                        .map_err(|_| StatusCode::BadSecurityChecksFailed)?;
+                    let mut signed_data =
+                        Vec::with_capacity(l.len() + first_request_signature.len());
+                    signed_data.extend_from_slice(l);
+                    signed_data.extend_from_slice(&first_request_signature);
+                    security_policy.asymmetric_sign(signing_key, &signed_data, signature)?;
+                } else {
+                    security_policy.asymmetric_sign(signing_key, l, signature)?;
+                }
+            }
+        } else {
+            security_policy.asymmetric_sign(signing_key, l, signature)?;
+        }
 
         if encrypted_range.end != signature_range.end {
             return Err(StatusCode::BadSecurityChecksFailed);
@@ -1560,18 +1609,61 @@ impl SecureChannel {
             } else {
                 verification_key.size()
             };
-            security_policy.asymmetric_verify_signature(
-                verification_key,
-                dst.get(signed_range_dst).ok_or_else(|| {
-                    Error::new(StatusCode::BadSecurityChecksFailed, "invalid signed range")
-                })?,
-                dst.get(signature_range_dst.clone()).ok_or_else(|| {
-                    Error::new(
-                        StatusCode::BadSecurityChecksFailed,
-                        "invalid signature range",
-                    )
-                })?,
-            )?;
+            let signed_data = dst.get(signed_range_dst).ok_or_else(|| {
+                Error::new(StatusCode::BadSecurityChecksFailed, "invalid signed range")
+            })?;
+            let signature = dst.get(signature_range_dst.clone()).ok_or_else(|| {
+                Error::new(
+                    StatusCode::BadSecurityChecksFailed,
+                    "invalid signature range",
+                )
+            })?;
+            if security_policy.is_ecc() {
+                #[cfg(feature = "ecc")]
+                {
+                    if self.is_client_role() && self.apply_channel_thumbprint {
+                        let first_request_signature =
+                            self.first_request_signature.lock().map_err(|_| {
+                                Error::new(
+                                    StatusCode::BadSecurityChecksFailed,
+                                    "channel thumbprint state is unavailable",
+                                )
+                            })?;
+                        let mut signed_data_with_thumbprint =
+                            Vec::with_capacity(signed_data.len() + first_request_signature.len());
+                        signed_data_with_thumbprint.extend_from_slice(signed_data);
+                        signed_data_with_thumbprint.extend_from_slice(&first_request_signature);
+                        security_policy.asymmetric_verify_signature(
+                            verification_key,
+                            &signed_data_with_thumbprint,
+                            signature,
+                        )?;
+                    } else {
+                        security_policy.asymmetric_verify_signature(
+                            verification_key,
+                            signed_data,
+                            signature,
+                        )?;
+                        if !self.is_client_role() {
+                            let mut first_request_signature =
+                                self.first_request_signature.lock().map_err(|_| {
+                                    Error::new(
+                                        StatusCode::BadSecurityChecksFailed,
+                                        "channel thumbprint state is unavailable",
+                                    )
+                                })?;
+                            first_request_signature.clear();
+                            first_request_signature.extend_from_slice(signature);
+                        }
+                    }
+                }
+            } else {
+                security_policy.asymmetric_verify_signature(
+                    verification_key,
+                    signed_data,
+                    signature,
+                )?;
+            }
 
             if security_policy.is_ecc() {
                 Ok(signature_range_dst.start)

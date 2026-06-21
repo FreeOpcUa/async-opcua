@@ -147,6 +147,10 @@ lengths are fixed by the algorithms themselves (HMAC-SHA256/384 output = 32/48; 
   per-policy cert selection at OpenSecureChannel time — a real but bounded follow-up. US5 delivers the
   feature-gating (ecc-off → recognized-but-unsupported, fail-closed) and curve-strict negotiation;
   mixed-mode multi-cert is deferred. (Mixed deployments today: run RSA and ECC on separate endpoints/hosts.)
-- **ChannelThumbprint (§6.7.5)** — the MITM-hardening OpenSecureChannel *response* signature over
-  `Response-bytes ‖ Request-signature`. Not exercised by loopback (both peers ours). Implement before
-  claiming production/interop completeness.
+- **ChannelThumbprint (§6.7.5)** — ✅ IMPLEMENTED (post-US5 hardening, branch `012-ecc-hardening`). The
+  ECC OpenSecureChannel *response* is signed over `Response-bytes ‖ first-Request-Signature` on the initial
+  Issue only (skipped on renewal, per §6.7.5). The first request signature is captured during the asym
+  sign (client) / verify (server) and applied on the response sign (server) / verify (client), gated by
+  `apply_channel_thumbprint` (set by the OSC flow on Issue). Verified by a Claude-authored binding test
+  proving the response does NOT verify once the request signature is excluded (i.e. it is genuinely bound,
+  not a no-op), plus loopback (consistency) and renewal (correctly skipped).

@@ -142,6 +142,11 @@ impl SecureChannelState {
             secure_channel.set_role(Role::Client);
             secure_channel.create_local_nonce()?;
             let client_nonce = secure_channel.local_nonce_as_byte_string();
+            #[cfg(feature = "ecc")]
+            if secure_channel.security_policy().is_ecc() {
+                secure_channel
+                    .set_apply_channel_thumbprint(request_type == SecurityTokenRequestType::Issue);
+            }
             (
                 secure_channel.security_mode(),
                 secure_channel.security_policy(),

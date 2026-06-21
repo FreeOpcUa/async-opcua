@@ -99,13 +99,13 @@ TimeInvalid, expired issuer → IssuerTimeInvalid; self-signed leaf trusted → 
 **Independent Test**: app cert missing required KeyUsage/EKU → UseNotAllowed; chain CA lacking
 keyCertSign/CA → IssuerUseNotAllowed.
 
-- [ ] T010 [US2] Claude-authored failing tests (cert_chain tests): fixtures with correct, wrong, and
+- [X] T010 [US2] Claude-authored failing tests (cert_chain tests): fixtures with correct, wrong, and
   missing KeyUsage/EKU and CA basicConstraints; assert `Bad_CertificateUseNotAllowed` /
   `Bad_CertificateIssuerUseNotAllowed`.
-- [ ] T011 [US2] Implement the Certificate-Usage step in `cert_chain.rs` (leaf KeyUsage/EKU per
+- [X] T011 [US2] Implement the Certificate-Usage step in `cert_chain.rs` (leaf KeyUsage/EKU per
   application-cert requirements; each chain CA must have `basicConstraints CA` + `keyUsage
   keyCertSign`; honour mandatory-usage), mapped to the status codes. (depends T010)
-- [ ] T012 [US2] Gate; verify T010 passes; **commit US2** (`feat(013 US2): certificate usage (KeyUsage/EKU) checks`).
+- [X] T012 [US2] Gate; verify T010 passes; **commit US2** (`feat(013 US2): certificate usage (KeyUsage/EKU) checks`).
 
 **Checkpoint**: misused / non-CA-issuer certs rejected.
 

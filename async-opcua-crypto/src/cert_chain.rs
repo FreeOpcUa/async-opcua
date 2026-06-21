@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use chrono::{DateTime, Utc};
+use const_oid::db::rfc5280::{ANY_EXTENDED_KEY_USAGE, ID_KP_CLIENT_AUTH, ID_KP_SERVER_AUTH};
 #[cfg(feature = "ecc")]
 use const_oid::db::rfc5912::{ECDSA_WITH_SHA_256, ECDSA_WITH_SHA_384};
 use const_oid::db::rfc5912::{
@@ -8,6 +9,7 @@ use const_oid::db::rfc5912::{
 };
 use opcua_types::{status_code::StatusCode, Error};
 use x509_cert::crl::CertificateList;
+use x509_cert::ext::pkix::KeyUsages;
 
 use crate::{PublicKey, SecurityPolicy, X509};
 
@@ -128,7 +130,7 @@ pub fn validate_certificate_chain<'a>(
         return Ok(Vec::new());
     }
 
-    let _ = (context.crls, context.security_policy, context.purpose); // consumed by US2/US3/US4
+    let _ = (context.crls, context.security_policy); // consumed by US3/US4
 
     let chain = build_chain(cert, context)?;
 
@@ -141,7 +143,10 @@ pub fn validate_certificate_chain<'a>(
         ));
     }
 
-    validate_chain_validity(&chain, context)
+    let mut findings = validate_chain_validity(&chain, context)?;
+    validate_certificate_usage(&chain, context, &mut findings)?;
+
+    Ok(findings)
 }
 
 fn build_chain<'a>(
@@ -383,6 +388,120 @@ fn certificate_is_valid_at(cert: &X509, now: &DateTime<Utc>) -> bool {
     match (cert.not_before(), cert.not_after()) {
         (Ok(not_before), Ok(not_after)) => now >= &not_before && now <= &not_after,
         _ => false,
+    }
+}
+
+fn validate_certificate_usage(
+    chain: &[&X509],
+    context: &ChainValidationContext<'_>,
+    findings: &mut Vec<SuppressedFinding>,
+) -> Result<(), Error> {
+    for (index, cert) in chain.iter().enumerate() {
+        if index == 0 {
+            validate_leaf_certificate_usage(cert, context, findings)?;
+        } else {
+            validate_issuer_certificate_usage(cert, context, findings)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_leaf_certificate_usage(
+    cert: &X509,
+    context: &ChainValidationContext<'_>,
+    findings: &mut Vec<SuppressedFinding>,
+) -> Result<(), Error> {
+    let status = StatusCode::BadCertificateUseNotAllowed;
+
+    if let Some(key_usage) = cert.key_usage() {
+        if !key_usage.0.contains(KeyUsages::DigitalSignature) {
+            handle_certificate_usage_failure(
+                context,
+                findings,
+                status,
+                "leaf certificate key usage does not allow digital signatures",
+            )?;
+        }
+    }
+
+    if let Some(extended_key_usage) = cert.extended_key_usage() {
+        if !extended_key_usage.0.is_empty() {
+            let purpose_oid = purpose_extended_key_usage_oid(context.purpose);
+            if !extended_key_usage.0.contains(&purpose_oid)
+                && !extended_key_usage.0.contains(&ANY_EXTENDED_KEY_USAGE)
+            {
+                handle_certificate_usage_failure(
+                    context,
+                    findings,
+                    status,
+                    "leaf certificate extended key usage does not allow the requested application purpose",
+                )?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_issuer_certificate_usage(
+    cert: &X509,
+    context: &ChainValidationContext<'_>,
+    findings: &mut Vec<SuppressedFinding>,
+) -> Result<(), Error> {
+    let status = StatusCode::BadCertificateIssuerUseNotAllowed;
+
+    if !cert
+        .basic_constraints()
+        .is_some_and(|basic_constraints| basic_constraints.ca)
+    {
+        handle_certificate_usage_failure(
+            context,
+            findings,
+            status,
+            "issuer certificate basic constraints do not identify it as a CA",
+        )?;
+    }
+
+    if let Some(key_usage) = cert.key_usage() {
+        if !key_usage.0.contains(KeyUsages::KeyCertSign) {
+            handle_certificate_usage_failure(
+                context,
+                findings,
+                status,
+                "issuer certificate key usage does not allow certificate signing",
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
+fn handle_certificate_usage_failure(
+    context: &ChainValidationContext<'_>,
+    findings: &mut Vec<SuppressedFinding>,
+    status: StatusCode,
+    message: &str,
+) -> Result<(), Error> {
+    if context
+        .options
+        .is_suppressed(SuppressibleStep::CertificateUsage)
+    {
+        findings.push(SuppressedFinding {
+            step: SuppressibleStep::CertificateUsage,
+            status,
+            message: message.to_string(),
+        });
+        Ok(())
+    } else {
+        Err(validation_error(status, message))
+    }
+}
+
+fn purpose_extended_key_usage_oid(purpose: CertificatePurpose) -> const_oid::ObjectIdentifier {
+    match purpose {
+        CertificatePurpose::ServerApplication => ID_KP_SERVER_AUTH,
+        CertificatePurpose::ClientApplication => ID_KP_CLIENT_AUTH,
     }
 }
 

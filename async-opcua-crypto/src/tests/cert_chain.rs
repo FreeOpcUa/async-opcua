@@ -68,6 +68,19 @@ enum Eku {
     None,
     ServerAuth,
     ClientAuth,
+    /// Both serverAuth and clientAuth, as real OPC UA application instance certs carry.
+    Both,
+}
+
+/// How a fixture sets the KeyUsage extension.
+#[derive(Clone)]
+enum KuChoice {
+    /// digitalSignature+keyEncipherment for leaves, keyCertSign+cRLSign for CAs.
+    Default,
+    /// An explicit KeyUsage extension (for negative tests).
+    Custom(KeyUsage),
+    /// Omit the KeyUsage extension entirely.
+    Omit,
 }
 
 /// Specification for one fixture certificate. `issuer_key` provides the issuer identity (its
@@ -84,6 +97,7 @@ struct CertSpec<'a> {
     not_before: DateTime<Utc>,
     not_after: DateTime<Utc>,
     eku: Eku,
+    key_usage: KuChoice,
     serial: u32,
 }
 
@@ -149,14 +163,21 @@ fn issue(spec: &CertSpec<'_>) -> X509 {
         })
         .expect("add basic constraints");
 
-    let key_usage = if spec.is_ca {
-        KeyUsages::KeyCertSign | KeyUsages::CRLSign
-    } else {
-        KeyUsages::DigitalSignature | KeyUsages::KeyEncipherment
+    let key_usage = match &spec.key_usage {
+        KuChoice::Default if spec.is_ca => {
+            Some(KeyUsage(KeyUsages::KeyCertSign | KeyUsages::CRLSign))
+        }
+        KuChoice::Default => Some(KeyUsage(
+            KeyUsages::DigitalSignature | KeyUsages::KeyEncipherment,
+        )),
+        KuChoice::Custom(ku) => Some(*ku),
+        KuChoice::Omit => None,
     };
-    builder
-        .add_extension(&KeyUsage(key_usage))
-        .expect("add key usage");
+    if let Some(key_usage) = key_usage {
+        builder
+            .add_extension(&key_usage)
+            .expect("add key usage");
+    }
 
     match spec.eku {
         Eku::None => {}
@@ -165,6 +186,9 @@ fn issue(spec: &CertSpec<'_>) -> X509 {
             .expect("add eku"),
         Eku::ClientAuth => builder
             .add_extension(&ExtendedKeyUsage(vec![ID_KP_CLIENT_AUTH]))
+            .expect("add eku"),
+        Eku::Both => builder
+            .add_extension(&ExtendedKeyUsage(vec![ID_KP_SERVER_AUTH, ID_KP_CLIENT_AUTH]))
             .expect("add eku"),
     }
 
@@ -196,6 +220,7 @@ fn root_ca() -> X509 {
         issuer_key: &k.root,
         signer_key: &k.root,
         is_ca: true,
+        key_usage: KuChoice::Default,
         not_before: t(2020, 1, 1),
         not_after: t(2035, 1, 1),
         eku: Eku::None,
@@ -212,6 +237,7 @@ fn intermediate_ca_with(not_after: DateTime<Utc>) -> X509 {
         issuer_key: &k.root,
         signer_key: &k.root,
         is_ca: true,
+        key_usage: KuChoice::Default,
         not_before: t(2020, 1, 1),
         not_after,
         eku: Eku::None,
@@ -233,6 +259,7 @@ fn leaf_via_intermediate(not_after: DateTime<Utc>) -> X509 {
         issuer_key: &k.intermediate,
         signer_key: &k.intermediate,
         is_ca: false,
+        key_usage: KuChoice::Default,
         not_before: t(2020, 1, 1),
         not_after,
         eku: Eku::ServerAuth,
@@ -293,6 +320,7 @@ fn valid_two_level_chain_is_accepted() {
         issuer_key: &k.root,
         signer_key: &k.root,
         is_ca: false,
+        key_usage: KuChoice::Default,
         not_before: t(2020, 1, 1),
         not_after: t(2030, 1, 1),
         eku: Eku::ServerAuth,
@@ -322,6 +350,7 @@ fn self_signed_leaf_in_trusted_is_accepted() {
         issuer_key: &k.leaf,
         signer_key: &k.leaf,
         is_ca: false,
+        key_usage: KuChoice::Default,
         not_before: t(2020, 1, 1),
         not_after: t(2030, 1, 1),
         eku: Eku::ServerAuth,
@@ -371,6 +400,7 @@ fn forged_leaf_signature_is_invalid() {
         issuer_key: &k.intermediate,
         signer_key: &k.rogue,
         is_ca: false,
+        key_usage: KuChoice::Default,
         not_before: t(2020, 1, 1),
         not_after: t(2030, 1, 1),
         eku: Eku::ServerAuth,
@@ -401,6 +431,7 @@ fn chain_to_untrusted_root_is_untrusted() {
         issuer_key: &k.rogue,
         signer_key: &k.rogue,
         is_ca: true,
+        key_usage: KuChoice::Default,
         not_before: t(2020, 1, 1),
         not_after: t(2035, 1, 1),
         eku: Eku::None,
@@ -413,6 +444,7 @@ fn chain_to_untrusted_root_is_untrusted() {
         issuer_key: &k.rogue,
         signer_key: &k.rogue,
         is_ca: false,
+        key_usage: KuChoice::Default,
         not_before: t(2020, 1, 1),
         not_after: t(2030, 1, 1),
         eku: Eku::ServerAuth,
@@ -482,6 +514,7 @@ fn valid_chain_validates_for_client_application_purpose() {
         issuer_key: &k.intermediate,
         signer_key: &k.intermediate,
         is_ca: false,
+        key_usage: KuChoice::Default,
         not_before: t(2020, 1, 1),
         not_after: t(2030, 1, 1),
         eku: Eku::ClientAuth,
@@ -562,9 +595,10 @@ fn store_accepts_self_signed_leaf_in_trusted() {
         issuer_key: &k.leaf,
         signer_key: &k.leaf,
         is_ca: false,
+        key_usage: KuChoice::Default,
         not_before: t(2020, 1, 1),
         not_after: t(2035, 1, 1),
-        eku: Eku::ServerAuth,
+        eku: Eku::Both,
         serial: 100,
     });
     let (_tmp, store) = store_with(&[&leaf], &[]);
@@ -590,6 +624,7 @@ fn store_accepts_ca_signed_leaf_chaining_to_trusted_root() {
         issuer_key: &k.root,
         signer_key: &k.root,
         is_ca: true,
+        key_usage: KuChoice::Default,
         not_before: t(2020, 1, 1),
         not_after: t(2034, 1, 1),
         eku: Eku::None,
@@ -602,9 +637,10 @@ fn store_accepts_ca_signed_leaf_chaining_to_trusted_root() {
         issuer_key: &k.intermediate,
         signer_key: &k.intermediate,
         is_ca: false,
+        key_usage: KuChoice::Default,
         not_before: t(2020, 1, 1),
         not_after: t(2035, 1, 1),
-        eku: Eku::ServerAuth,
+        eku: Eku::Both,
         serial: 102,
     });
     let (_tmp, store) = store_with(&[&root], &[&intermediate]);
@@ -629,6 +665,7 @@ fn store_rejects_ca_signed_leaf_with_missing_intermediate() {
         issuer_key: &k.intermediate,
         signer_key: &k.intermediate,
         is_ca: false,
+        key_usage: KuChoice::Default,
         not_before: t(2020, 1, 1),
         not_after: t(2035, 1, 1),
         eku: Eku::ServerAuth,
@@ -657,6 +694,7 @@ fn store_rejects_untrusted_leaf_and_files_it_under_rejected() {
         issuer_key: &k.leaf,
         signer_key: &k.leaf,
         is_ca: false,
+        key_usage: KuChoice::Default,
         not_before: t(2020, 1, 1),
         not_after: t(2035, 1, 1),
         eku: Eku::ServerAuth,
@@ -694,6 +732,7 @@ fn store_rejects_expired_ca_signed_leaf() {
         issuer_key: &k.root,
         signer_key: &k.root,
         is_ca: true,
+        key_usage: KuChoice::Default,
         not_before: t(2020, 1, 1),
         not_after: t(2034, 1, 1),
         eku: Eku::None,
@@ -706,6 +745,7 @@ fn store_rejects_expired_ca_signed_leaf() {
         issuer_key: &k.intermediate,
         signer_key: &k.intermediate,
         is_ca: false,
+        key_usage: KuChoice::Default,
         not_before: t(2020, 1, 1),
         not_after: t(2021, 1, 1), // expired before now
         eku: Eku::ServerAuth,
@@ -721,4 +761,161 @@ fn store_rejects_expired_ca_signed_leaf() {
         )
         .expect_err("an expired CA-signed leaf must be rejected");
     assert_eq!(err.status(), StatusCode::BadCertificateTimeInvalid);
+}
+
+// --- US2 tests: certificate usage (KeyUsage / ExtendedKeyUsage) ----------------------------
+
+#[test]
+fn leaf_missing_digital_signature_is_use_not_allowed() {
+    // An application leaf whose KeyUsage lacks digitalSignature cannot authenticate the channel.
+    let k = keys();
+    let root = root_ca();
+    let intermediate = intermediate_ca();
+    let leaf = issue(&CertSpec {
+        subject_cn: LEAF_CN,
+        subject_key: &k.leaf,
+        issuer_cn: INT_CN,
+        issuer_key: &k.intermediate,
+        signer_key: &k.intermediate,
+        is_ca: false,
+        not_before: t(2020, 1, 1),
+        not_after: t(2030, 1, 1),
+        eku: Eku::ServerAuth,
+        key_usage: KuChoice::Custom(KeyUsage(
+            KeyUsages::KeyEncipherment | KeyUsages::DataEncipherment,
+        )),
+        serial: 200,
+    });
+    let trusted = [root];
+    let issuers = [intermediate];
+    let crls = empty_crls();
+    let options = ValidationOptions::default();
+    let now = now_valid();
+    let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
+    let err = validate_certificate_chain(&leaf, &ctx)
+        .expect_err("a leaf without digitalSignature KeyUsage must be rejected");
+    assert_eq!(err.status(), StatusCode::BadCertificateUseNotAllowed);
+}
+
+#[test]
+fn leaf_with_wrong_eku_is_use_not_allowed() {
+    // A client-auth-only leaf presented for server-application use must be rejected.
+    let k = keys();
+    let root = root_ca();
+    let intermediate = intermediate_ca();
+    let leaf = issue(&CertSpec {
+        subject_cn: LEAF_CN,
+        subject_key: &k.leaf,
+        issuer_cn: INT_CN,
+        issuer_key: &k.intermediate,
+        signer_key: &k.intermediate,
+        is_ca: false,
+        not_before: t(2020, 1, 1),
+        not_after: t(2030, 1, 1),
+        eku: Eku::ClientAuth,
+        key_usage: KuChoice::Default,
+        serial: 201,
+    });
+    let trusted = [root];
+    let issuers = [intermediate];
+    let crls = empty_crls();
+    let options = ValidationOptions::default();
+    let now = now_valid();
+    // server_ctx validates with CertificatePurpose::ServerApplication.
+    let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
+    let err = validate_certificate_chain(&leaf, &ctx)
+        .expect_err("a client-auth EKU leaf must be rejected for server-application use");
+    assert_eq!(err.status(), StatusCode::BadCertificateUseNotAllowed);
+}
+
+#[test]
+fn non_ca_issuer_is_issuer_use_not_allowed() {
+    // An intermediate that is not marked as a CA cannot issue certificates.
+    let k = keys();
+    let root = root_ca();
+    let non_ca_intermediate = issue(&CertSpec {
+        subject_cn: INT_CN,
+        subject_key: &k.intermediate,
+        issuer_cn: ROOT_CN,
+        issuer_key: &k.root,
+        signer_key: &k.root,
+        is_ca: false, // not a CA
+        not_before: t(2020, 1, 1),
+        not_after: t(2034, 1, 1),
+        eku: Eku::None,
+        key_usage: KuChoice::Default,
+        serial: 202,
+    });
+    let leaf = leaf_via_intermediate(t(2030, 1, 1));
+    let trusted = [root];
+    let issuers = [non_ca_intermediate];
+    let crls = empty_crls();
+    let options = ValidationOptions::default();
+    let now = now_valid();
+    let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
+    let err = validate_certificate_chain(&leaf, &ctx)
+        .expect_err("a non-CA issuer in the chain must be rejected");
+    assert_eq!(err.status(), StatusCode::BadCertificateIssuerUseNotAllowed);
+}
+
+#[test]
+fn ca_without_keycertsign_is_issuer_use_not_allowed() {
+    // A CA whose KeyUsage lacks keyCertSign cannot sign certificates.
+    let k = keys();
+    let root = root_ca();
+    let weak_intermediate = issue(&CertSpec {
+        subject_cn: INT_CN,
+        subject_key: &k.intermediate,
+        issuer_cn: ROOT_CN,
+        issuer_key: &k.root,
+        signer_key: &k.root,
+        is_ca: true,
+        not_before: t(2020, 1, 1),
+        not_after: t(2034, 1, 1),
+        eku: Eku::None,
+        key_usage: KuChoice::Custom(KeyUsage(
+            KeyUsages::DigitalSignature | KeyUsages::CRLSign,
+        )), // CA flag set but no keyCertSign
+        serial: 203,
+    });
+    let leaf = leaf_via_intermediate(t(2030, 1, 1));
+    let trusted = [root];
+    let issuers = [weak_intermediate];
+    let crls = empty_crls();
+    let options = ValidationOptions::default();
+    let now = now_valid();
+    let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
+    let err = validate_certificate_chain(&leaf, &ctx)
+        .expect_err("a CA without keyCertSign must be rejected");
+    assert_eq!(err.status(), StatusCode::BadCertificateIssuerUseNotAllowed);
+}
+
+#[test]
+fn leaf_without_key_usage_extension_is_accepted() {
+    // KeyUsage is optional; when absent the leaf is leniently accepted (only its presence is
+    // constrained). EKU is likewise absent here.
+    let k = keys();
+    let root = root_ca();
+    let intermediate = intermediate_ca();
+    let leaf = issue(&CertSpec {
+        subject_cn: LEAF_CN,
+        subject_key: &k.leaf,
+        issuer_cn: INT_CN,
+        issuer_key: &k.intermediate,
+        signer_key: &k.intermediate,
+        is_ca: false,
+        not_before: t(2020, 1, 1),
+        not_after: t(2030, 1, 1),
+        eku: Eku::None,
+        key_usage: KuChoice::Omit,
+        serial: 204,
+    });
+    let trusted = [root];
+    let issuers = [intermediate];
+    let crls = empty_crls();
+    let options = ValidationOptions::default();
+    let now = now_valid();
+    let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
+    validate_certificate_chain(&leaf, &ctx)
+        .expect("a leaf without KeyUsage/EKU extensions is leniently accepted");
 }

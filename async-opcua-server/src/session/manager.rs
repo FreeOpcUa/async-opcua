@@ -307,6 +307,31 @@ impl SessionManager {
             SignatureData::null()
         };
 
+        #[cfg(feature = "ecc")]
+        let mut issued_ecdh_key: Option<(
+            opcua_crypto::ecc::EphemeralKeyPair,
+            SecurityPolicy,
+        )> = None;
+        #[cfg(feature = "ecc")]
+        let ecdh_response_header = {
+            match opcua_crypto::ecc::read_ecdh_policy_uri(&request.request_header.additional_header)
+            {
+                Some(uri) => match server_pkey.as_ref() {
+                    Some(pkey) => match opcua_crypto::ecc::issue_server_ephemeral_key(&uri, pkey) {
+                        Ok((keypair, ephemeral_key)) => {
+                            issued_ecdh_key = Some((keypair, SecurityPolicy::from_uri(&uri)));
+                            Some(opcua_crypto::ecc::build_ecdh_key_response(ephemeral_key))
+                        }
+                        Err(e) => Some(opcua_crypto::ecc::build_ecdh_key_error(e.status())),
+                    },
+                    None => Some(opcua_crypto::ecc::build_ecdh_key_error(
+                        StatusCode::BadSecurityPolicyRejected,
+                    )),
+                },
+                None => None,
+            }
+        };
+
         let authentication_token = NodeId::new(0, random::byte_string(32));
         let server_nonce = random::byte_string(self.info.config.session_nonce_length);
         let server_certificate = self.info.server_certificate_as_byte_string();
@@ -328,6 +353,12 @@ impl SessionManager {
             request.client_description.clone(),
             channel.security_mode(),
         );
+        #[cfg(feature = "ecc")]
+        let mut session = session;
+        #[cfg(feature = "ecc")]
+        if let Some((keypair, policy)) = issued_ecdh_key {
+            session.set_ecdh_ephemeral_key(keypair, policy);
+        }
         info!("Created new session with ID {}", session.session_id());
 
         let session_id = session.session_id().clone();
@@ -352,7 +383,8 @@ impl SessionManager {
 
         self.notify.notify_waiters();
 
-        Ok(CreateSessionResponse {
+        #[cfg_attr(not(feature = "ecc"), allow(unused_mut))]
+        let mut response = CreateSessionResponse {
             response_header: ResponseHeader::new_good(&request.request_header),
             session_id,
             authentication_token,
@@ -363,7 +395,13 @@ impl SessionManager {
             server_software_certificates: None,
             server_signature,
             max_request_message_size,
-        })
+        };
+        #[cfg(feature = "ecc")]
+        if let Some(header) = ecdh_response_header {
+            response.response_header.additional_header = header;
+        }
+
+        Ok(response)
     }
 
     fn verify_client_signature(
@@ -646,6 +684,46 @@ pub(crate) async fn activate_session(
         )
     };
 
+    #[cfg(feature = "ecc")]
+    let ecdh_response_header = {
+        use opcua_crypto::ecc::EcdhKeyAction;
+        let mut session = trace_write_lock!(session_lck);
+        let requested_uri =
+            opcua_crypto::ecc::read_ecdh_policy_uri(&request.request_header.additional_header);
+        let previous_policy = session.ecdh_ephemeral_key().map(|(_, policy)| *policy);
+        // 015a: no EphemeralKey is consumed yet - secret decryption (which consumes the key) is
+        // feature 016 - so the previous key is never "used". The §6.8.2 consumed-key anti-replay
+        // (never accept the same EphemeralKey twice) is enforced in 016 where the key is consumed.
+        let previous_key_consumed = false;
+        match opcua_crypto::ecc::decide_ecdh_key_action(
+            requested_uri.as_deref(),
+            previous_policy,
+            previous_key_consumed,
+        ) {
+            EcdhKeyAction::Issue(policy) => {
+                let server_pkey = info.server_pkey.read();
+                match server_pkey.as_ref() {
+                    Some(pkey) => {
+                        match opcua_crypto::ecc::issue_server_ephemeral_key(policy.to_uri(), pkey) {
+                            Ok((keypair, ephemeral_key)) => {
+                                session.set_ecdh_ephemeral_key(keypair, policy);
+                                Some(opcua_crypto::ecc::build_ecdh_key_response(ephemeral_key))
+                            }
+                            Err(e) => Some(opcua_crypto::ecc::build_ecdh_key_error(e.status())),
+                        }
+                    }
+                    None => Some(opcua_crypto::ecc::build_ecdh_key_error(
+                        StatusCode::BadSecurityPolicyRejected,
+                    )),
+                }
+            }
+            EcdhKeyAction::Reject => Some(opcua_crypto::ecc::build_ecdh_key_error(
+                StatusCode::BadSecurityPolicyRejected,
+            )),
+            EcdhKeyAction::Retain | EcdhKeyAction::None => None,
+        }
+    };
+
     let namespaces =
         handler.get_namespaces_for_user(session_lck.clone(), session_id, user_token.clone());
     {
@@ -660,12 +738,18 @@ pub(crate) async fn activate_session(
 
     // TODO: Audit
 
-    Ok(ActivateSessionResponse {
+    #[cfg_attr(not(feature = "ecc"), allow(unused_mut))]
+    let mut response = ActivateSessionResponse {
         response_header: ResponseHeader::new_good(&request.request_header),
         server_nonce,
         results: None,
         diagnostic_infos: None,
-    })
+    };
+    #[cfg(feature = "ecc")]
+    if let Some(header) = ecdh_response_header {
+        response.response_header.additional_header = header;
+    }
+    Ok(response)
 }
 
 #[cfg(test)]
@@ -896,6 +980,24 @@ mod tests {
             fixture.user_identity(),
             intervening_identity,
             "stale activation must not overwrite session identity"
+        );
+    }
+
+    /// US4 (FR-002/FR-006): a None-policy ActivateSession that carries no `ECDHPolicyUri` must leave
+    /// the response `AdditionalHeader` null — the ECC EphemeralKey wiring is inert on non-ECDH flows,
+    /// byte-identical to before the feature (and holds identically whether or not `ecc` is compiled
+    /// in). Anchored to §6.8.2: an absent `ECDHPolicyUri` yields no `ECDHKey`.
+    #[tokio::test]
+    async fn activate_session_without_ecdh_policy_leaves_response_header_null() {
+        let fixture = ActivationFixture::new(Arc::new(AuthenticationGate::open()));
+        let response = fixture
+            .activate_with(SecurityPolicy::None, 7)
+            .await
+            .expect("anonymous None-policy activation should succeed");
+        assert_eq!(
+            response.response_header.additional_header,
+            ExtensionObject::null(),
+            "an ActivateSession with no ECDHPolicyUri must not add an ECDHKey to the response header"
         );
     }
 

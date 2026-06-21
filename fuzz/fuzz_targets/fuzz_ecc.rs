@@ -42,4 +42,22 @@ libfuzzer_sys::fuzz_target!(|data: &[u8]| {
             let _ = ecdsa_verify(&verifying_key, body, body);
         }
     }
+
+    // Feature 015 (T015): the ECC token EphemeralKey exchange (Part 6 §6.8.2) carries
+    // `ECDHPolicyUri` / `ECDHKey` in the request/response AdditionalHeader — an attacker-
+    // controlled `ExtensionObject`. Decode arbitrary wire bytes into that ExtensionObject and
+    // run the reader entry points; a malformed / wrong-inner-type / oversized header must
+    // return None/Err, never panic.
+    {
+        use opcua::crypto::ecc::{read_ecdh_key, read_ecdh_policy_uri};
+        use opcua::types::{BinaryDecodable, ContextOwned, ExtensionObject};
+        use std::io::Cursor;
+
+        let mut stream = Cursor::new(body);
+        let ctx = ContextOwned::default();
+        if let Ok(header) = ExtensionObject::decode(&mut stream, &ctx.context()) {
+            let _ = read_ecdh_policy_uri(&header);
+            let _ = read_ecdh_key(&header);
+        }
+    }
 });

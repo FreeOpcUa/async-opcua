@@ -12,7 +12,10 @@ use ecdsa::signature::{Signer, Verifier};
 #[cfg(feature = "ecc")]
 use hkdf::Hkdf;
 #[cfg(feature = "ecc")]
-use opcua_types::{Error, StatusCode};
+use opcua_types::{
+    AdditionalParametersType, ByteString, EphemeralKeyType, Error, ExtensionObject, KeyValuePair,
+    QualifiedName, StatusCode, UAString, Variant,
+};
 #[cfg(feature = "ecc")]
 use p256::elliptic_curve::sec1::ToEncodedPoint;
 #[cfg(feature = "ecc")]
@@ -26,7 +29,7 @@ use zeroize::Zeroizing;
 use x509_cert::spki::SubjectPublicKeyInfoOwned;
 
 #[cfg(feature = "ecc")]
-use crate::{AesDerivedKeys, AesKey, SecurityPolicy};
+use crate::{AesDerivedKeys, AesKey, PrivateKey, SecurityPolicy, X509};
 
 /// NIST curve selected by an OPC UA Part 6 §6.8 ECC security policy.
 #[cfg(feature = "ecc")]
@@ -37,6 +40,23 @@ pub enum EccCurve {
     /// NIST P-384 / secp384r1.
     P384,
 }
+
+/// Part 6 §6.8.2 server EphemeralKey lifecycle decision at Create/ActivateSession.
+#[cfg(feature = "ecc")]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum EcdhKeyAction {
+    /// No `ECDHPolicyUri` requested and no key previously issued — preserve today's null-header flow.
+    None,
+    /// The requested `ECDHPolicyUri` is not a supported ECC policy — `Bad_SecurityPolicyRejected`.
+    Reject,
+    /// Issue a fresh EphemeralKey for this policy (client requested it, or the previous key was consumed).
+    Issue(SecurityPolicy),
+    /// Client sent no `ECDHPolicyUri` and the previously-issued key is unused — keep using it.
+    Retain,
+}
+
+#[cfg(feature = "ecc")]
+impl Eq for EcdhKeyAction {}
 
 #[cfg(feature = "ecc")]
 impl EccCurve {
@@ -92,6 +112,102 @@ fn invalid_argument(message: impl Into<String>) -> Error {
 #[cfg(feature = "ecc")]
 fn security_check_failed(message: impl Into<String>) -> Error {
     Error::new(StatusCode::BadSecurityChecksFailed, message.into())
+}
+
+/// Build the request-side AdditionalHeader carrying the chosen `ECDHPolicyUri` (Part 6 Table 70).
+#[cfg(feature = "ecc")]
+pub fn build_ecdh_policy_request(ecdh_policy_uri: &str) -> ExtensionObject {
+    ExtensionObject::from_message(AdditionalParametersType {
+        parameters: Some(vec![KeyValuePair {
+            key: QualifiedName::new(0, "ECDHPolicyUri"),
+            value: Variant::from(UAString::from(ecdh_policy_uri)),
+        }]),
+    })
+}
+
+/// Read the requested `ECDHPolicyUri` from a request AdditionalHeader. None if absent/malformed.
+#[cfg(feature = "ecc")]
+pub fn read_ecdh_policy_uri(additional_header: &ExtensionObject) -> Option<String> {
+    let params = additional_header.inner_as::<AdditionalParametersType>()?;
+    let kv = params
+        .parameters
+        .as_ref()?
+        .iter()
+        .find(|kv| kv.key.namespace_index == 0 && kv.key.name == "ECDHPolicyUri")?;
+
+    match &kv.value {
+        Variant::String(s) if !s.is_empty() => Some(s.as_ref().to_string()),
+        _ => None,
+    }
+}
+
+/// Build the response-side AdditionalHeader carrying the issued `ECDHKey` (Part 6 Table 70).
+#[cfg(feature = "ecc")]
+pub fn build_ecdh_key_response(key: EphemeralKeyType) -> ExtensionObject {
+    ExtensionObject::from_message(AdditionalParametersType {
+        parameters: Some(vec![KeyValuePair {
+            key: QualifiedName::new(0, "ECDHKey"),
+            value: Variant::from(ExtensionObject::from_message(key)),
+        }]),
+    })
+}
+
+/// Build the response AdditionalHeader conveying a StatusCode for `ECDHKey` when an EphemeralKey
+/// could not be issued (Part 6 §6.8.2: a StatusCode is returned in place of the key).
+#[cfg(feature = "ecc")]
+pub fn build_ecdh_key_error(status: StatusCode) -> ExtensionObject {
+    ExtensionObject::from_message(AdditionalParametersType {
+        parameters: Some(vec![KeyValuePair {
+            key: QualifiedName::new(0, "ECDHKey"),
+            value: Variant::from(status),
+        }]),
+    })
+}
+
+/// Read the issued `ECDHKey` (`EphemeralKeyType`) from a response AdditionalHeader. None if absent/malformed.
+#[cfg(feature = "ecc")]
+pub fn read_ecdh_key(additional_header: &ExtensionObject) -> Option<EphemeralKeyType> {
+    let params = additional_header.inner_as::<AdditionalParametersType>()?;
+    let kv = params
+        .parameters
+        .as_ref()?
+        .iter()
+        .find(|kv| kv.key.namespace_index == 0 && kv.key.name == "ECDHKey")?;
+
+    match &kv.value {
+        Variant::ExtensionObject(eo) => eo.inner_as::<EphemeralKeyType>().cloned(),
+        _ => None,
+    }
+}
+
+/// Decide the §6.8.2 EphemeralKey action from the requested `ECDHPolicyUri`, the policy of any
+/// previously-issued key, and whether that previous key has been consumed (anti-replay).
+///
+/// - `Some(uri)` naming a supported ECC policy → `Issue(policy)` (an explicit request always wins).
+/// - `Some(uri)` that is non-ECC or unparseable → `Reject`.
+/// - `None` + no previous key → `None`.
+/// - `None` + previous key consumed → `Issue(previous_policy)` (never reuse a consumed key).
+/// - `None` + previous key unused → `Retain`.
+#[cfg(feature = "ecc")]
+#[must_use]
+pub fn decide_ecdh_key_action(
+    requested_uri: Option<&str>,
+    previous_policy: Option<SecurityPolicy>,
+    previous_key_consumed: bool,
+) -> EcdhKeyAction {
+    match requested_uri {
+        Some(uri) => match SecurityPolicy::from_uri(uri) {
+            policy @ (SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384) => {
+                EcdhKeyAction::Issue(policy)
+            }
+            _ => EcdhKeyAction::Reject,
+        },
+        None => match previous_policy {
+            None => EcdhKeyAction::None,
+            Some(previous) if previous_key_consumed => EcdhKeyAction::Issue(previous),
+            Some(_) => EcdhKeyAction::Retain,
+        },
+    }
 }
 
 #[cfg(feature = "ecc")]
@@ -672,6 +788,78 @@ pub fn decode_public_key(curve: EccCurve, encoded: &[u8]) -> Result<EphemeralPub
         curve,
         encoded: encoded.to_vec(),
     })
+}
+
+/// Signs an ECC EphemeralKey's encoded `publicKey` bytes with the application-instance key, using the
+/// asymmetric signature algorithm of `security_policy` (OPC UA Part 4 §7.15). Returns the signature.
+#[cfg(feature = "ecc")]
+pub fn sign_ephemeral_public_key(
+    security_policy: SecurityPolicy,
+    signing_key: &PrivateKey,
+    public_key: &[u8],
+) -> Result<Vec<u8>, Error> {
+    let mut signature =
+        vec![0u8; EccCurve::from_security_policy(security_policy)?.raw_signature_len()];
+    let len = security_policy.asymmetric_sign(signing_key, public_key, &mut signature)?;
+    signature.truncate(len);
+    Ok(signature)
+}
+
+/// Generate and sign a server ECC EphemeralKey for the requested `ecdh_policy_uri` (Part 6 §6.8.2).
+/// Returns the keypair (the server retains the private half) and the `EphemeralKeyType` to return to
+/// the client. A non-ECC / unknown policy is rejected (`Bad_SecurityPolicyRejected`, surfaced by
+/// `EccCurve::from_security_policy`).
+#[cfg(feature = "ecc")]
+pub fn issue_server_ephemeral_key(
+    ecdh_policy_uri: &str,
+    server_signing_key: &PrivateKey,
+) -> Result<(EphemeralKeyPair, EphemeralKeyType), Error> {
+    let policy = SecurityPolicy::from_uri(ecdh_policy_uri);
+    let curve = EccCurve::from_security_policy(policy)?;
+    let keypair = generate_ephemeral_keypair(curve)?;
+    let public_key = encode_public_key(keypair.public_key())?;
+    let signature = sign_ephemeral_public_key(policy, server_signing_key, &public_key)?;
+    let ephemeral_key = EphemeralKeyType {
+        public_key: ByteString::from(public_key),
+        signature: ByteString::from(signature),
+    };
+    Ok((keypair, ephemeral_key))
+}
+
+/// Verifies the signature over an ECC EphemeralKey's `publicKey` bytes against the signer's
+/// certificate, using the asymmetric signature algorithm of `security_policy` (Part 4 §7.15).
+#[cfg(feature = "ecc")]
+pub fn verify_ephemeral_public_key(
+    security_policy: SecurityPolicy,
+    signer_cert: &X509,
+    public_key: &[u8],
+    signature: &[u8],
+) -> Result<(), Error> {
+    let verification_key = signer_cert.public_key()?;
+    security_policy.asymmetric_verify_signature(&verification_key, public_key, signature)
+}
+
+/// Read the server's `ECDHKey` from a response AdditionalHeader, verify its signature against the
+/// server certificate (Part 4 §7.15), and return the decoded ephemeral public key. `Ok(None)` if no
+/// `ECDHKey` is present; `Err` if a key is present but its signature or curve point is invalid.
+#[cfg(feature = "ecc")]
+pub fn read_and_verify_server_ephemeral_key(
+    additional_header: &ExtensionObject,
+    security_policy: SecurityPolicy,
+    server_cert: &X509,
+) -> Result<Option<EphemeralPublicKey>, Error> {
+    let Some(ephemeral_key) = read_ecdh_key(additional_header) else {
+        return Ok(None);
+    };
+    verify_ephemeral_public_key(
+        security_policy,
+        server_cert,
+        ephemeral_key.public_key.as_ref(),
+        ephemeral_key.signature.as_ref(),
+    )?;
+    let curve = EccCurve::from_security_policy(security_policy)?;
+    let public_key = decode_public_key(curve, ephemeral_key.public_key.as_ref())?;
+    Ok(Some(public_key))
 }
 
 /// Computes the Part 6 §6.8 ECDH shared secret for an ephemeral key exchange.

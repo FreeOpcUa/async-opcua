@@ -11,6 +11,8 @@ use crate::history::HistoryContinuationPointCache;
 use crate::identity_token::IdentityToken;
 use crate::info::ServerInfo;
 use crate::node_manager::{BrowseContinuationPoint, QueryContinuationPoint};
+#[cfg(feature = "ecc")]
+use opcua_crypto::SecurityPolicy;
 use opcua_crypto::X509;
 use opcua_types::{
     ApplicationDescription, ByteString, MessageSecurityMode, NodeId, StatusCode, UAString,
@@ -70,6 +72,8 @@ pub struct Session {
     pub(super) authentication_token: NodeId,
     /// Session nonce
     session_nonce: ByteString,
+    #[cfg(feature = "ecc")]
+    ecdh_ephemeral_key: Option<(opcua_crypto::ecc::EphemeralKeyPair, SecurityPolicy)>,
     /// Session name (supplied by client)
     session_name: UAString,
     /// Session timeout
@@ -151,6 +155,8 @@ impl Session {
             client_certificate,
             authentication_token,
             session_nonce,
+            #[cfg(feature = "ecc")]
+            ecdh_ephemeral_key: None,
             session_name,
             session_timeout: if session_timeout == 0 {
                 Duration::from_millis(info.config.max_session_timeout_ms)
@@ -291,6 +297,23 @@ impl Session {
     /// Get the session nonce.
     pub fn session_nonce(&self) -> &ByteString {
         &self.session_nonce
+    }
+
+    #[cfg(feature = "ecc")]
+    pub(crate) fn set_ecdh_ephemeral_key(
+        &mut self,
+        key: opcua_crypto::ecc::EphemeralKeyPair,
+        policy: SecurityPolicy,
+    ) {
+        self.ecdh_ephemeral_key = Some((key, policy));
+    }
+
+    #[cfg(feature = "ecc")]
+    #[allow(dead_code)]
+    pub(crate) fn ecdh_ephemeral_key(
+        &self,
+    ) -> Option<&(opcua_crypto::ecc::EphemeralKeyPair, SecurityPolicy)> {
+        self.ecdh_ephemeral_key.as_ref()
     }
 
     /// Whether this session is activated.

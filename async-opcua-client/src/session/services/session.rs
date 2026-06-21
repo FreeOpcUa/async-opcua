@@ -174,9 +174,19 @@ impl UARequest for CreateSession<'_> {
 
         let request = {
             let _h = span.enter();
+            #[cfg_attr(not(feature = "ecc"), allow(unused_mut))]
+            let mut request_header = self.header.header;
+            #[cfg(feature = "ecc")]
+            if matches!(
+                security_policy,
+                SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384
+            ) {
+                request_header.additional_header =
+                    opcua_crypto::ecc::build_ecdh_policy_request(security_policy.to_uri());
+            }
 
             CreateSessionRequest {
-                request_header: self.header.header,
+                request_header,
                 client_description: self.client_description,
                 server_uri: self.server_uri,
                 endpoint_url: self.endpoint_url,
@@ -774,6 +784,26 @@ impl Session {
     ///
     pub(crate) async fn create_session(&self) -> Result<NodeId, Error> {
         let response = CreateSession::new(self).send(&self.channel).await?;
+
+        #[cfg(feature = "ecc")]
+        {
+            let security_policy = self.channel.security_policy();
+            if matches!(
+                security_policy,
+                SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384
+            ) {
+                // The server certificate was already validated inside CreateSession::send;
+                // re-parse it solely to verify the ECDHKey signature (Part 6 §6.8.2 / Part 4 §7.15).
+                let server_cert =
+                    opcua_crypto::X509::from_byte_string(&response.server_certificate)?;
+                let key = opcua_crypto::ecc::read_and_verify_server_ephemeral_key(
+                    &response.response_header.additional_header,
+                    security_policy,
+                    &server_cert,
+                )?;
+                self.set_retained_server_ephemeral_key(key);
+            }
+        }
 
         let session_id = {
             self.session_id.store(Arc::new(response.session_id.clone()));

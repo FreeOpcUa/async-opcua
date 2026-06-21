@@ -64,6 +64,44 @@ Every connection actually established with a deprecated policy logs a
 policies are still recognized by name so they can be rejected with proper
 errors rather than panics.
 
+## ECC (NIST) security policies
+
+Behind the `ecc` feature, `async-opcua-crypto` also implements the elliptic-curve
+security policies (pure Rust, RustCrypto — no OpenSSL/C):
+
+* ECC_nistP256 - ECDH on P-256 / ECDSA / SHA-256 / AES-256
+* ECC_nistP384 - ECDH on P-384 / ECDSA / SHA-384 / AES-256
+
+### Token EphemeralKey exchange (Part 6 §6.8.2)
+
+To encrypt a `UserNameIdentityToken` / `IssuedIdentityToken` secret under an ECC
+policy, the client and server must exchange ECC **EphemeralKeys**. Part 6 §6.8.2
+notes the standard CreateSession/ActivateSession handshake has no field for this,
+so the exchange is carried in the **`AdditionalHeader`** of the request/response
+headers as an `AdditionalParametersType` name-value list (Part 6 Table 70):
+
+* The client places `ECDHPolicyUri` (the chosen ECC policy) in the **request**
+  `AdditionalHeader`.
+* The server generates a fresh ephemeral key pair for that policy, signs the
+  ephemeral public key with its application-instance certificate key (Part 4
+  §7.15: the signature is over the publicKey bytes), and returns it as `ECDHKey`
+  (`EphemeralKeyType`) in the **response** `AdditionalHeader`. An
+  unsupported/invalid `ECDHPolicyUri` yields `Bad_SecurityPolicyRejected` in
+  place of the key; a request with no `ECDHPolicyUri` leaves the header null and
+  behaves exactly as before.
+* The client verifies the `ECDHKey` signature against the server certificate,
+  decodes the curve point, and retains the most-recent authentic server
+  EphemeralKey.
+
+At ActivateSession the server follows the §6.8.2 new-vs-retain rules
+(`decide_ecdh_key_action`): a requested policy → a fresh signed key; absent +
+unused prior key → retain it. The consumed-key anti-replay rule ("never accept
+the same EphemeralKey twice") is enforced where the key is actually consumed to
+decrypt a secret — the `EccEncryptedSecret` identity-token wrapping (Part 4
+§7.40.2.5 / Part 6 §6.8.3), which builds on this exchange and is implemented as a
+follow-on feature. RSA and `None` flows, and builds with the `ecc` feature off,
+are unaffected.
+
 ## Hash
 
 Hashing functions are used to produce message authentication codes and for signing / verification.

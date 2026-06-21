@@ -12,9 +12,11 @@ cargo-fuzz = true
 
 [dependencies]
 bytes = { workspace = true, optional = true }
+chrono = { workspace = true }
 libfuzzer-sys = { version = "0.4", optional = true }
 tokio = { workspace = true, optional = true }
 tokio-util = { workspace = true, optional = true }
+x509-cert = { workspace = true }
 
 [dependencies.async-opcua]
 path = "../async-opcua"
@@ -30,6 +32,13 @@ bench = false
 [[bin]]
 name = "fuzz_ecc"
 path = "fuzz_targets/fuzz_ecc.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_cert_chain"
+path = "fuzz_targets/fuzz_cert_chain.rs"
 test = false
 doc = false
 bench = false

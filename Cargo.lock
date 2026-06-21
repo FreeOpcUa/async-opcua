@@ -542,9 +542,11 @@ version = "0.0.0"
 dependencies = [
  "async-opcua",
  "bytes",
+ "chrono",
  "libfuzzer-sys",
  "tokio",
  "tokio-util",
+ "x509-cert",
 ]
 
 [[package]]

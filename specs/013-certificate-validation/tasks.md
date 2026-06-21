@@ -180,12 +180,12 @@ enforcement; ECC + RSA loopback suites still green; `None` byte-identical.
 
 ## Phase 8: Polish & Cross-Cutting
 
-- [ ] T023 [P] Fuzz the cert/CRL/chain decode + validation path: add `fuzz_cert_chain` (nightly) over
+- [X] T023 [P] Fuzz the cert/CRL/chain decode + validation path: add `fuzz_cert_chain` (nightly) over
   malformed certs, CRLs, and cyclic/deep chains → zero aborts/panics.
-- [ ] T024 [P] Update `docs/compatibility.md` "Current limitations" + release notes (CHANGELOG) for
+- [X] T024 [P] Update `docs/compatibility.md` "Current limitations" + release notes (CHANGELOG) for
   Part 4 §6.1.3 chain/usage/revocation; record the deferred items (OCSP, typed `AuditCertificate*`
   events) and the security-review note (trust-path change).
-- [ ] T025 Final gate: `cargo fmt --all --check` + `cargo clippy --all-targets --all-features -- -D warnings`
+- [X] T025 Final gate: `cargo fmt --all --check` + `cargo clippy --all-targets --all-features -- -D warnings`
   + `cargo test --workspace` + `verify-clean-codegen`; confirm `None`/RSA wire byte-identity and the
   self-signed-in-`trusted/` regression both pass.
 

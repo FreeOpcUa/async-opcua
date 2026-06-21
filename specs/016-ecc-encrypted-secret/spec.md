@@ -148,9 +148,11 @@ ECC vs None correctly.
 
 - A malformed / truncated / oversized `EccEncryptedSecret` (attacker-controlled `tokenData` /
   `password` bytes) MUST be rejected with a protocol error and **never panic** (fuzzable).
-- Decrypt failures (bad padding, bad MAC/signature, wrong nonce, wrong key, malformed length) MUST all
-  return a **single uniform error** with no distinguishable behavior or timing (no padding/validity
-  oracle).
+- Decrypt failures (bad padding, bad signature, wrong nonce, wrong key, malformed length) MUST all
+  return a **single uniform error** via one common code path with no early-return / structural oracle
+  that distinguishes the failure cause (no padding/validity oracle). Note: the guarantee verified is the
+  uniform error value + single failure path; measured constant-time timing is not asserted (timing tests
+  are unreliable) and is out of scope.
 - An `EccEncryptedSecret` presented when no ECC EphemeralKey was exchanged (or the retained key is
   absent/consumed) MUST be rejected, not silently accepted.
 - A secret bound to a server nonce other than the session's current nonce MUST be rejected (replay).
@@ -160,9 +162,10 @@ ECC vs None correctly.
 ## Requirements *(mandatory)*
 
 - **FR-001**: The server MUST decrypt an `EccEncryptedSecret` (Part 4 §7.40.2.5, Tables 183/186) carried
-  in a `UserNameIdentityToken` password under an ECC policy, deriving keys via the Part 6 §6.8.3 KDF
-  (ECDH over the exchanged client/server EphemeralKeys → HKDF with the §6.8.3 salt) and the policy's
-  symmetric+integrity layer, and MUST recover the exact plaintext secret.
+  in a `UserNameIdentityToken` password under an ECC policy, deriving the EncryptingKey+IV via the Part 6
+  §6.8.3 KDF (ECDH over the exchanged client/server EphemeralKeys → HKDF with the §6.8.3 salt), verifying
+  the asymmetric Signature before decrypting, decrypting with AES-256-CBC, and MUST recover the exact
+  plaintext secret.
 - **FR-002**: The client MUST encrypt a `UserNameIdentityToken` password as an `EccEncryptedSecret` under
   an ECC policy using the retained verified server `ECDHKey`, its own ephemeral key, and the current
   server nonce — producing a secret the server (FR-001) decrypts to the original.
@@ -174,9 +177,10 @@ ECC vs None correctly.
   secret; a consumed key (or a replayed/duplicate `EccEncryptedSecret`) MUST be rejected, and the
   §6.8.2 `decide_ecdh_key_action` lifecycle MUST be driven by this **real** consumed state (replacing
   015a's hardwired `false`).
-- **FR-006**: All decrypt failures (malformed, wrong nonce, tampered ciphertext, bad integrity/padding,
-  wrong/absent/consumed key) MUST be **fail-closed** and return a **single uniform error** with no
-  padding/validity oracle and no panic on attacker-supplied bytes.
+- **FR-006**: All decrypt failures (malformed, wrong nonce, tampered ciphertext, bad signature/padding,
+  wrong/absent/consumed key) MUST be **fail-closed** and return a **single uniform error** via one common
+  failure path (no early-return/structural padding/validity oracle) and no panic on attacker-supplied
+  bytes. Measured constant-time timing is out of scope (see Edge Cases).
 - **FR-007**: The implementation MUST be pure-Rust (no OpenSSL/C), reusing the feature-012/015a ECC
   primitives and a RustCrypto HKDF; gated behind the existing `ecc` feature; the legacy RSA secret path
   and the `None` policy MUST remain byte-identical.
@@ -184,12 +188,16 @@ ECC vs None correctly.
 ### Key Entities *(include if feature involves data)*
 
 - **`EccEncryptedSecret`** (Part 4 §7.40.2.5, Tables 183/186): the ECC-wrapped identity-token secret —
-  carries the sender (client) ephemeral public key, the policy/nonce binding, the AES-CBC ciphertext, and
-  the integrity value/signature.
-- **§6.8.3 ECC KDF**: ECDH(client ephemeral, server ephemeral) → HKDF with
-  `SecretSalt = <length-prefixed> "opcua-secret" | SenderPublicKey | ReceiverPublicKey` (exact label
-  bytes / length encoding / output key+IV lengths pinned from Part 6 §6.8.3 at planning) → signing key,
-  encrypting key, IV.
+  carries the **unencrypted** sender (client) + receiver (server) ephemeral public keys, the policy/nonce
+  binding, the AES-256-CBC ciphertext, and a trailing **asymmetric (ECDSA) Signature** computed with the
+  signing certificate over the serialized envelope. The `Certificate` field is normally null when the
+  signer is the client ApplicationInstance certificate already known to the server over the channel — the
+  server then verifies the Signature against that known client certificate (not an attacker-supplied one).
+- **§6.8.3 ECC KDF**: ECDH(client ephemeral, server ephemeral) → RFC 5869 HKDF with
+  `SecretSalt = <length-prefixed> "opcua-secret" | SenderPublicKey | ReceiverPublicKey` → **EncryptingKey
+  + InitializationVector only** (Table 71 — there is **no** derived signing key for ECC; integrity is the
+  asymmetric Signature above). Exact label bytes / length encoding / key+IV lengths pinned from Part 6
+  §6.8.3 at planning (see research.md Decision 2/3).
 - **Server EphemeralKey consumed-state**: per-session flag (issued → consumed) that drives the §6.8.2
   anti-replay; supplies the real `previous_key_consumed` input deferred from 015a.
 - **Identity-token secret**: the `UserNameIdentityToken` password or `IssuedIdentityToken` token data

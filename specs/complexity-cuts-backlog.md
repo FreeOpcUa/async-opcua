@@ -1,5 +1,49 @@
 # Complexity-cuts backlog (Big-O triage)
 
+## Status after running the loop (2026-06-21)
+
+All tiers were taken through the complexity-cuts loop. The disciplined result: **one genuine,
+attacker-amplifiable, asymptotic win — applied; everything else hits a documented stop-condition**
+(bounded input, not-hot, or structural/maintenance risk disproportionate to a bounded payoff). The
+parallel audit over-flagged; per-item code verification corrected it.
+
+- **APPLIED — Tier 1a** (`b6d41637`): the two O(n²) `VecDeque::remove(idx)`-in-a-loop queue cleanups
+  (`remove_retransmission_notifications`, `remove_expired_publish_requests`) → single `mem::take` +
+  partition pass. **O(n²)→O(n)**, semantics preserved (side-effects run in order), server tests green
+  before/after. Asymptotic only (queues capped; no bench harness). This was the real quadratic.
+- **DEFER — Tier 1b** (retransmission key-index): after 1a the lookups are O(n)/O(k·n) over a queue
+  **capped** by `max_retransmission_queue_len`; a `HashMap` synced with VecDeque FIFO-eviction +
+  ordered `AvailableSequenceNumbers` is an unwritten-invariant trap. Bounded payoff < correctness risk.
+- **DEFER — Tier 2a** (`is_subtype_of` memo): the type-tree depth T is a **small, server-defined
+  constant** (not attacker-controlled); the attacker dim R is request-limit-bounded. Memoization needs
+  interior-mutability+locking (contention) or build-time precompute+invalidation (staleness). Bounded
+  small input → stop-condition.
+- **DEFER — Tier 2b** (TranslateBrowsePaths `(parent,BrowseName)` index): M is data-dependent (server
+  address-space shape), request is limit-bounded; a dynamic-address-space index has invalidation risk.
+  No benchmark shows it slow → don't add structural risk without a measured win.
+- **DEFER — Tier 3 #5** (client `next_publish_time` recompute): O(S), but called ~once per publishing
+  interval (≈1 Hz) over a capped, typically-tiny S — **not a hot path**. Stop-condition (bounded + cold).
+- **DEFER — Tier 3 #6** (CreateSession O(sessions) scan): per-handshake, n capped by `max_sessions`
+  AND the rate capped by the per-IP connection limit; an O(1) per-channel counter has a multi-site
+  maintenance invariant (create/activate/close/expiry). Bounded n + bounded rate → marginal; risk > payoff.
+- **DEFER — Tier 3 #7** (priority re-sort per publish tick): O(S log S), S capped, per publishing
+  interval (not per message); caching needs invalidation on every priority/membership change. Bounded + cold.
+- **DEFER — Tier 3 #8** (chunk `chunk_info` parsed in both validate + decode): for the steady-state
+  **symmetric** path this is 2× a cheap header parse; the expensive sender-cert read is only on the rare
+  **asymmetric** OpenSecureChannel path. Marginal constant-factor on a security path + API-threading
+  risk → stop.
+- **VERIFIED NOT PROBLEMS** (audit mis-claims, corrected): secure-channel padding loop bounded by
+  `checked_sub` (not O(65535)); `AddressSpace::find` is O(1) HashMap (PubSub loop not O(address-space));
+  length-validated-before-alloc decode paths.
+
+**Net:** the one true quadratic is fixed; the remainder are bounded by the existing caps/limits/rate
+controls or are small server-defined constants. If you want any *bounded* item done anyway as a
+deliberate choice (e.g. the CreateSession per-channel counter), it can be applied through the same loop.
+
+The original triage detail follows.
+
+---
+
 **Scope:** hand-written hot paths across the core stack (`-types`, `-core`, `-server`, `-client`,
 `-nodes`, `-pubsub`). Generated code (`-core-namespace`, `-types/src/generated/`) excluded. Tests
 excluded.

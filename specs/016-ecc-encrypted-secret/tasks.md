@@ -70,11 +70,11 @@ stories can proceed.
 
 **Goal**: server parses+verifies+decrypts an `EccEncryptedSecret` password under ECC; fail-closed uniform error.
 
-- [ ] T007 [US1] Claude-authored failing tests: a crafted `EccEncryptedSecret` (known P-256/P-384
+- [X] T007 [US1] Claude-authored failing tests: a crafted `EccEncryptedSecret` (known P-256/P-384
   ephemeral keys, §6.8.3 KDF, current server nonce) decrypts via `ecc_decrypt_secret` to the exact
   password; signature verified before decrypt; wrong-nonce, tampered ciphertext/signature/header, and a
   malformed envelope each return the **same** uniform error (`BadIdentityTokenRejected`), never a panic.
-- [ ] T008 [US1] Implement `ecc_decrypt_secret(security_policy, encrypted, server_nonce,
+- [X] T008 [US1] Implement `ecc_decrypt_secret(security_policy, encrypted, server_nonce,
   server_ephemeral_private, signer_cert) -> Result<ByteString, Error>` in
   `async-opcua-crypto/src/user_identity.rs`: parse (T005) → validate cert + verify Signature (T006) →
   ECDH(server private, SenderPublicKey) + `derive_secret_keys` (T004) → AES-CBC decrypt (per curve) → verify

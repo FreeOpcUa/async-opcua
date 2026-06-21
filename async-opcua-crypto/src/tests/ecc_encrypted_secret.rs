@@ -8,8 +8,12 @@
 //! §6.8.3-specific construction (the `opcua-secret` salt + Info=Salt + the Table 71 split) is verified by
 //! hand-building the salt bytes in the test and recomputing the keying material independently.
 
-use crate::ecc::{derive_secret_keys, EccCurve, EccEncryptedSecret};
-use crate::SecurityPolicy;
+use crate::ecc::{
+    derive_secret_keys, ecc_decrypt_secret, ecdh_shared_secret, encode_public_key,
+    generate_ephemeral_keypair, EccCurve, EccEncryptedSecret,
+};
+use crate::x509::{X509Data, X509};
+use crate::{PrivateKey, SecurityPolicy};
 use opcua_types::{ByteString, DateTime};
 
 /// Decode an ASCII hex string (whitespace ignored) to bytes.
@@ -184,4 +188,204 @@ fn ecc_encrypted_secret_decode_rejects_malformed_bytes() {
         .map(|i| i.wrapping_mul(31).wrapping_add(7))
         .collect();
     let _ = EccEncryptedSecret::decode(&garbage);
+}
+
+// ---------------------------------------------------------------------------------------------------
+// US1 — server decrypts an ECC EccEncryptedSecret. The envelope is built INDEPENDENTLY in-test (a
+// second implementation of the encrypt side) from the §6.8.3 KDF + §7.40.2.5 layout, so the production
+// `ecc_decrypt_secret` is verified against a ciphertext it did not produce — not its own inverse.
+// ---------------------------------------------------------------------------------------------------
+
+fn ec_cert(curve: EccCurve) -> (X509, PrivateKey) {
+    let data = X509Data {
+        key_size: 0,
+        common_name: "async-opcua ecc secret test".to_string(),
+        organization: "test".to_string(),
+        organizational_unit: "test".to_string(),
+        country: "IE".to_string(),
+        state: "test".to_string(),
+        alt_host_names: vec!["urn:async-opcua-test".to_string(), "localhost".to_string()].into(),
+        certificate_duration_days: 60,
+    };
+    X509::cert_and_pkey_ecc(curve, &data).expect("generate EC test certificate")
+}
+
+fn encode_bytestring(out: &mut Vec<u8>, bytes: &[u8]) {
+    out.extend_from_slice(&(bytes.len() as i32).to_le_bytes());
+    out.extend_from_slice(bytes);
+}
+
+/// Independently build a valid `EccEncryptedSecret` (P-256 ⇒ AES-128-CBC) carrying `secret`, bound to
+/// `server_nonce`. `client_*` = the sender (who signs); `server_pub` = the receiver ephemeral public.
+/// Returns the serialized envelope bytes.
+#[allow(clippy::too_many_arguments)]
+fn build_envelope(
+    policy: SecurityPolicy,
+    curve: EccCurve,
+    server_pub: &crate::ecc::EphemeralPublicKey,
+    client_priv: &crate::ecc::EphemeralPrivateKey,
+    client_pub: &crate::ecc::EphemeralPublicKey,
+    client_signing_key: &PrivateKey,
+    server_nonce: &[u8],
+    secret: &[u8],
+) -> Vec<u8> {
+    let sender_pub_bytes = encode_public_key(client_pub).expect("encode client pub");
+    let receiver_pub_bytes = encode_public_key(server_pub).expect("encode server pub");
+
+    // §6.8.3 KDF (sender then receiver in the salt).
+    let shared = ecdh_shared_secret(client_priv, server_pub).expect("ecdh");
+    let keys = derive_secret_keys(curve, &shared, &sender_pub_bytes, &receiver_pub_bytes)
+        .expect("derive secret keys");
+
+    // §6.8.3 payload + padding formula.
+    let block = 16usize;
+    let data_len = 4 + server_nonce.len() + 4 + secret.len() + 2;
+    let mut pad = if data_len.is_multiple_of(block) {
+        0
+    } else {
+        block - (data_len % block)
+    };
+    if pad + secret.len() < block {
+        pad += block;
+    }
+    let pad_size = pad as u16;
+
+    let mut plaintext = Vec::new();
+    encode_bytestring(&mut plaintext, server_nonce); // Nonce
+    encode_bytestring(&mut plaintext, secret); // Secret
+    plaintext.extend(std::iter::repeat_n(pad_size as u8, pad)); // PayloadPadding
+    plaintext.extend_from_slice(&pad_size.to_le_bytes()); // PayloadPaddingSize
+    assert!(
+        plaintext.len().is_multiple_of(block),
+        "plaintext must be block-aligned"
+    );
+
+    let mut ciphertext = vec![0u8; plaintext.len()];
+    keys.encrypting_key
+        .encrypt_aes128_cbc(&plaintext, &keys.iv, &mut ciphertext)
+        .expect("aes-128-cbc encrypt");
+
+    let mut env = EccEncryptedSecret {
+        security_policy_uri: policy.to_uri().to_string(),
+        certificate: ByteString::null(),
+        signing_time: DateTime::now(),
+        sender_public_key: ByteString::from(sender_pub_bytes),
+        receiver_public_key: ByteString::from(receiver_pub_bytes),
+        encrypted_payload: ciphertext,
+        signature: Vec::new(),
+    };
+    // Asymmetric (ECDSA) signature over the data-to-sign, with the client signing key.
+    let to_sign = env.encode_data_to_sign().expect("data to sign");
+    let mut sig = vec![0u8; curve.raw_signature_len()];
+    let n = policy
+        .asymmetric_sign(client_signing_key, &to_sign, &mut sig)
+        .expect("ecdsa sign");
+    sig.truncate(n);
+    env.signature = sig;
+    env.encode().expect("encode envelope")
+}
+
+/// US1 (FR-001): a validly-built `EccEncryptedSecret` decrypts to the exact secret on P-256.
+#[test]
+fn server_decrypts_ecc_encrypted_secret_p256() {
+    let policy = SecurityPolicy::EccNistP256;
+    let curve = EccCurve::P256;
+    let (client_cert, client_key) = ec_cert(curve);
+    let server_kp = generate_ephemeral_keypair(curve).expect("server kp");
+    let client_kp = generate_ephemeral_keypair(curve).expect("client kp");
+    let (client_priv, client_pub) = client_kp.into_parts();
+    let server_pub = server_kp.public_key().clone();
+    let (server_priv, _server_pub2) = server_kp.into_parts();
+
+    let server_nonce = vec![0x5Au8; 32];
+    let secret = b"correct horse battery staple";
+
+    let env = build_envelope(
+        policy,
+        curve,
+        &server_pub,
+        &client_priv,
+        &client_pub,
+        &client_key,
+        &server_nonce,
+        secret,
+    );
+
+    let recovered = ecc_decrypt_secret(policy, &env, &server_nonce, &server_priv, &client_cert)
+        .expect("valid EccEncryptedSecret must decrypt");
+    assert_eq!(
+        recovered.as_ref(),
+        &secret[..],
+        "recovered secret must match"
+    );
+}
+
+/// US1 (FR-004/FR-006): wrong server nonce, a signature signed by the wrong cert, tampered ciphertext,
+/// wrong receiver key, and malformed bytes are ALL rejected and never panic.
+#[test]
+fn server_rejects_invalid_ecc_encrypted_secret() {
+    let policy = SecurityPolicy::EccNistP256;
+    let curve = EccCurve::P256;
+    let (client_cert, client_key) = ec_cert(curve);
+    let server_kp = generate_ephemeral_keypair(curve).expect("server kp");
+    let client_kp = generate_ephemeral_keypair(curve).expect("client kp");
+    let (client_priv, client_pub) = client_kp.into_parts();
+    let server_pub = server_kp.public_key().clone();
+    let (server_priv, _p) = server_kp.into_parts();
+    let server_nonce = vec![0x11u8; 32];
+    let secret = b"hunter2";
+
+    let env = build_envelope(
+        policy,
+        curve,
+        &server_pub,
+        &client_priv,
+        &client_pub,
+        &client_key,
+        &server_nonce,
+        secret,
+    );
+
+    // Sanity: it decrypts with the right inputs.
+    assert!(ecc_decrypt_secret(policy, &env, &server_nonce, &server_priv, &client_cert).is_ok());
+
+    // Wrong server nonce -> reject.
+    let wrong_nonce = vec![0x22u8; 32];
+    assert!(ecc_decrypt_secret(policy, &env, &wrong_nonce, &server_priv, &client_cert).is_err());
+
+    // Signature verified against a different cert -> reject.
+    let (other_cert, _other_key) = ec_cert(curve);
+    assert!(ecc_decrypt_secret(policy, &env, &server_nonce, &server_priv, &other_cert).is_err());
+
+    // Tampered ciphertext (flip a byte inside the payload) -> reject.
+    let mut tampered = env.clone();
+    let mid = tampered.len() / 2;
+    tampered[mid] ^= 0x01;
+    assert!(
+        ecc_decrypt_secret(policy, &tampered, &server_nonce, &server_priv, &client_cert).is_err()
+    );
+
+    // Decrypted against the wrong server ephemeral key -> reject (secret not for this receiver).
+    let other_server = generate_ephemeral_keypair(curve).expect("other server kp");
+    let (other_server_priv, _q) = other_server.into_parts();
+    assert!(ecc_decrypt_secret(
+        policy,
+        &env,
+        &server_nonce,
+        &other_server_priv,
+        &client_cert
+    )
+    .is_err());
+
+    // Malformed / truncated bytes -> reject, never panic.
+    assert!(ecc_decrypt_secret(policy, &[], &server_nonce, &server_priv, &client_cert).is_err());
+    for cut in 1..env.len() {
+        let _ = ecc_decrypt_secret(
+            policy,
+            &env[..cut],
+            &server_nonce,
+            &server_priv,
+            &client_cert,
+        );
+    }
 }

@@ -921,11 +921,15 @@ impl EccEncryptedSecret {
     }
 
     fn body_len(&self, key_data_len: usize) -> Result<usize, Error> {
+        let signature_len =
+            EccCurve::from_security_policy(SecurityPolicy::from_uri(&self.security_policy_uri))?
+                .raw_signature_len();
+
         self.security_policy_uri
             .len()
             .checked_add(self.certificate.as_ref().len())
             .and_then(|len| len.checked_add(self.encrypted_payload.len()))
-            .and_then(|len| len.checked_add(self.signature.len()))
+            .and_then(|len| len.checked_add(signature_len))
             .and_then(|len| len.checked_add(key_data_len))
             .and_then(|len| len.checked_add(4 + 4 + 8 + 2))
             .ok_or_else(|| invalid_argument("EccEncryptedSecret body length overflows"))
@@ -1310,6 +1314,211 @@ pub fn derive_secret_keys(
     };
 
     split_secret_keys(encryption_len, iv_len, &key_material)
+}
+
+/// Decrypt an `EccEncryptedSecret` (Part 4 §7.40.2.5) and return the plaintext Secret.
+///
+/// Verifies the asymmetric (ECDSA) signature against `signer_cert` BEFORE decrypting (§6.8.3), derives
+/// the AES key+IV via the §6.8.3 KDF from ECDH(`server_ephemeral_private`, SenderPublicKey), AES-CBC
+/// decrypts the payload, verifies the padding, and checks the embedded Nonce equals `server_nonce`.
+///
+/// FAIL-CLOSED: every failure (malformed bytes, policy mismatch, bad signature, wrong receiver key,
+/// AES/padding error, wrong nonce) returns the SAME uniform error and NEVER panics.
+///
+/// # Errors
+///
+/// Returns `BadIdentityTokenRejected` for every rejection cause.
+#[cfg(feature = "ecc")]
+pub fn ecc_decrypt_secret(
+    security_policy: SecurityPolicy,
+    encrypted: &[u8],
+    server_nonce: &[u8],
+    server_ephemeral_private: &EphemeralPrivateKey,
+    signer_cert: &X509,
+) -> Result<ByteString, Error> {
+    ecc_decrypt_secret_inner(
+        security_policy,
+        encrypted,
+        server_nonce,
+        server_ephemeral_private,
+        signer_cert,
+    )
+    .map_err(|_| {
+        Error::new(
+            StatusCode::BadIdentityTokenRejected,
+            "identity token rejected",
+        )
+    })
+}
+
+#[cfg(feature = "ecc")]
+fn ecc_decrypt_secret_inner(
+    security_policy: SecurityPolicy,
+    encrypted: &[u8],
+    server_nonce: &[u8],
+    server_ephemeral_private: &EphemeralPrivateKey,
+    signer_cert: &X509,
+) -> Result<ByteString, Error> {
+    let env = EccEncryptedSecret::decode(encrypted)?;
+    if SecurityPolicy::from_uri(&env.security_policy_uri) != security_policy {
+        return Err(security_check_failed(
+            "EccEncryptedSecret security policy mismatch",
+        ));
+    }
+    let curve = EccCurve::from_security_policy(security_policy)?;
+
+    let to_sign = env.encode_data_to_sign()?;
+    let verify_key = signer_cert.public_key()?;
+    security_policy.asymmetric_verify_signature(&verify_key, &to_sign, &env.signature)?;
+
+    let server_public_key = server_ephemeral_private.public_key()?;
+    let server_public_key = encode_public_key(&server_public_key)?;
+    if server_public_key.as_slice() != env.receiver_public_key.as_ref() {
+        return Err(security_check_failed(
+            "EccEncryptedSecret receiver public key mismatch",
+        ));
+    }
+
+    let sender_pub = decode_public_key(curve, env.sender_public_key.as_ref())?;
+    let shared = ecdh_shared_secret(server_ephemeral_private, &sender_pub)?;
+    let keys = derive_secret_keys(
+        curve,
+        &shared,
+        env.sender_public_key.as_ref(),
+        env.receiver_public_key.as_ref(),
+    )?;
+
+    let plaintext = decrypt_secret_payload(curve, &keys, &env.encrypted_payload)?;
+    let (nonce, secret) = parse_secret_payload(&plaintext)?;
+    if nonce.as_ref() != server_nonce {
+        return Err(security_check_failed("EccEncryptedSecret nonce mismatch"));
+    }
+
+    Ok(secret)
+}
+
+#[cfg(feature = "ecc")]
+fn decrypt_secret_payload(
+    curve: EccCurve,
+    keys: &EccSecretKeys,
+    encrypted_payload: &[u8],
+) -> Result<Vec<u8>, Error> {
+    const AES_BLOCK_LEN: usize = 16;
+
+    if encrypted_payload.is_empty() || !encrypted_payload.len().is_multiple_of(AES_BLOCK_LEN) {
+        return Err(invalid_argument(
+            "EccEncryptedSecret encrypted payload is not full AES-CBC blocks",
+        ));
+    }
+    if keys.iv.len() != AES_BLOCK_LEN {
+        return Err(invalid_argument(
+            "EccEncryptedSecret initialization vector is not 16 bytes",
+        ));
+    }
+
+    let mut plaintext = vec![0u8; encrypted_payload.len()];
+    match curve {
+        EccCurve::P256 => {
+            if keys.encrypting_key.value().len() != 16 {
+                return Err(invalid_argument(
+                    "EccEncryptedSecret AES-128 key is not 16 bytes",
+                ));
+            }
+            keys.encrypting_key
+                .decrypt_aes128_cbc(encrypted_payload, &keys.iv, &mut plaintext)?;
+        }
+        EccCurve::P384 => {
+            if keys.encrypting_key.value().len() != 32 {
+                return Err(invalid_argument(
+                    "EccEncryptedSecret AES-256 key is not 32 bytes",
+                ));
+            }
+            keys.encrypting_key
+                .decrypt_aes256_cbc(encrypted_payload, &keys.iv, &mut plaintext)?;
+        }
+    }
+
+    Ok(plaintext)
+}
+
+#[cfg(feature = "ecc")]
+fn parse_secret_payload(plaintext: &[u8]) -> Result<(ByteString, ByteString), Error> {
+    let size_offset = plaintext
+        .len()
+        .checked_sub(2)
+        .ok_or_else(|| invalid_argument("EccEncryptedSecret payload is missing padding size"))?;
+    let pad_size_bytes = plaintext
+        .get(size_offset..)
+        .ok_or_else(|| invalid_argument("EccEncryptedSecret payload padding size is missing"))?;
+    let pad_size = u16::from_le_bytes(
+        pad_size_bytes
+            .try_into()
+            .map_err(|_| invalid_argument("EccEncryptedSecret padding size is malformed"))?,
+    );
+    let pad_size = usize::from(pad_size);
+    let payload_end = size_offset
+        .checked_sub(pad_size)
+        .ok_or_else(|| invalid_argument("EccEncryptedSecret padding exceeds payload length"))?;
+    let padding = plaintext
+        .get(payload_end..size_offset)
+        .ok_or_else(|| invalid_argument("EccEncryptedSecret padding is malformed"))?;
+    let expected_padding_byte = (pad_size & 0xff) as u8;
+    if !padding.iter().all(|byte| *byte == expected_padding_byte) {
+        return Err(invalid_argument(
+            "EccEncryptedSecret padding bytes are malformed",
+        ));
+    }
+
+    let payload = plaintext
+        .get(..payload_end)
+        .ok_or_else(|| invalid_argument("EccEncryptedSecret payload is malformed"))?;
+    let mut offset = 0usize;
+    let nonce = parse_payload_byte_string(payload, &mut offset)?;
+    let secret = parse_payload_byte_string(payload, &mut offset)?;
+    if offset != payload.len() {
+        return Err(invalid_argument(
+            "EccEncryptedSecret payload contains trailing bytes",
+        ));
+    }
+
+    Ok((nonce, secret))
+}
+
+#[cfg(feature = "ecc")]
+fn parse_payload_byte_string(payload: &[u8], offset: &mut usize) -> Result<ByteString, Error> {
+    let len_end = offset
+        .checked_add(4)
+        .ok_or_else(|| invalid_argument("EccEncryptedSecret ByteString offset overflows"))?;
+    let len_bytes = payload
+        .get(*offset..len_end)
+        .ok_or_else(|| invalid_argument("EccEncryptedSecret ByteString length is missing"))?;
+    let len = i32::from_le_bytes(
+        len_bytes
+            .try_into()
+            .map_err(|_| invalid_argument("EccEncryptedSecret ByteString length is malformed"))?,
+    );
+    *offset = len_end;
+
+    if len == -1 {
+        return Ok(ByteString::null());
+    }
+    if len < -1 {
+        return Err(invalid_argument(
+            "EccEncryptedSecret ByteString length is negative",
+        ));
+    }
+
+    let len = usize::try_from(len)
+        .map_err(|_| invalid_argument("EccEncryptedSecret ByteString length cannot fit usize"))?;
+    let value_end = offset
+        .checked_add(len)
+        .ok_or_else(|| invalid_argument("EccEncryptedSecret ByteString value overflows"))?;
+    let value = payload
+        .get(*offset..value_end)
+        .ok_or_else(|| invalid_argument("EccEncryptedSecret ByteString value exceeds payload"))?;
+    *offset = value_end;
+
+    Ok(ByteString::from(value))
 }
 
 #[cfg(all(test, feature = "ecc"))]

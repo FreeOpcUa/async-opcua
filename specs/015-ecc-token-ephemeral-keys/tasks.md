@@ -59,7 +59,7 @@ always `null()`) — carry an `AdditionalParametersType` name-value list with `E
   declares `ECDHPolicyUri=ECC_nistP256/384` yields a response `additional_header` with an `ECDHKey`
   whose signature verifies and `publicKey` is a valid curve point; an invalid policy → the response
   conveys `Bad_SecurityPolicyRejected`; absent → null header unchanged.
-- [ ] T005 [US1] Implement in `async-opcua-server/src/session/manager.rs` (`create_session`): read
+- [X] T005 [US1] Implement in `async-opcua-server/src/session/manager.rs` (`create_session`): read
   `ECDHPolicyUri` from `request.request_header.additional_header`; for a supported ECC policy generate
   an ephemeral keypair, sign the public key (T002), and place `ECDHKey` (`EphemeralKeyType`) in the
   response `additional_header`; invalid/unsupported → `Bad_SecurityPolicyRejected` (in place of the

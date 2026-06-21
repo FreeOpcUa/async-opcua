@@ -135,6 +135,18 @@ pub fn build_ecdh_key_response(key: EphemeralKeyType) -> ExtensionObject {
     })
 }
 
+/// Build the response AdditionalHeader conveying a StatusCode for `ECDHKey` when an EphemeralKey
+/// could not be issued (Part 6 §6.8.2: a StatusCode is returned in place of the key).
+#[cfg(feature = "ecc")]
+pub fn build_ecdh_key_error(status: StatusCode) -> ExtensionObject {
+    ExtensionObject::from_message(AdditionalParametersType {
+        parameters: Some(vec![KeyValuePair {
+            key: QualifiedName::new(0, "ECDHKey"),
+            value: Variant::from(status),
+        }]),
+    })
+}
+
 /// Read the issued `ECDHKey` (`EphemeralKeyType`) from a response AdditionalHeader. None if absent/malformed.
 #[cfg(feature = "ecc")]
 pub fn read_ecdh_key(additional_header: &ExtensionObject) -> Option<EphemeralKeyType> {

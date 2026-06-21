@@ -287,6 +287,31 @@ impl SessionManager {
             SignatureData::null()
         };
 
+        #[cfg(feature = "ecc")]
+        let mut issued_ecdh_key: Option<(
+            opcua_crypto::ecc::EphemeralKeyPair,
+            SecurityPolicy,
+        )> = None;
+        #[cfg(feature = "ecc")]
+        let ecdh_response_header = {
+            match opcua_crypto::ecc::read_ecdh_policy_uri(&request.request_header.additional_header)
+            {
+                Some(uri) => match server_pkey.as_ref() {
+                    Some(pkey) => match opcua_crypto::ecc::issue_server_ephemeral_key(&uri, pkey) {
+                        Ok((keypair, ephemeral_key)) => {
+                            issued_ecdh_key = Some((keypair, SecurityPolicy::from_uri(&uri)));
+                            Some(opcua_crypto::ecc::build_ecdh_key_response(ephemeral_key))
+                        }
+                        Err(e) => Some(opcua_crypto::ecc::build_ecdh_key_error(e.status())),
+                    },
+                    None => Some(opcua_crypto::ecc::build_ecdh_key_error(
+                        StatusCode::BadSecurityPolicyRejected,
+                    )),
+                },
+                None => None,
+            }
+        };
+
         let authentication_token = NodeId::new(0, random::byte_string(32));
         let server_nonce = random::byte_string(self.info.config.session_nonce_length);
         let server_certificate = self.info.server_certificate_as_byte_string();
@@ -308,6 +333,12 @@ impl SessionManager {
             request.client_description.clone(),
             channel.security_mode(),
         );
+        #[cfg(feature = "ecc")]
+        let mut session = session;
+        #[cfg(feature = "ecc")]
+        if let Some((keypair, policy)) = issued_ecdh_key {
+            session.set_ecdh_ephemeral_key(keypair, policy);
+        }
         info!("Created new session with ID {}", session.session_id());
 
         let session_id = session.session_id().clone();
@@ -332,7 +363,7 @@ impl SessionManager {
 
         self.notify.notify_waiters();
 
-        Ok(CreateSessionResponse {
+        let mut response = CreateSessionResponse {
             response_header: ResponseHeader::new_good(&request.request_header),
             session_id,
             authentication_token,
@@ -343,7 +374,13 @@ impl SessionManager {
             server_software_certificates: None,
             server_signature,
             max_request_message_size,
-        })
+        };
+        #[cfg(feature = "ecc")]
+        if let Some(header) = ecdh_response_header {
+            response.response_header.additional_header = header;
+        }
+
+        Ok(response)
     }
 
     fn verify_client_signature(

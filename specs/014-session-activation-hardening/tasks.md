@@ -23,7 +23,7 @@ pre-existing integration-suite flakiness — verify failing tests in isolation, 
 
 ## Phase 1: Setup
 
-- [ ] T001 Capture the baseline gate (fmt + clippy --all-targets --all-features + `-p async-opcua-server`
+- [X] T001 Capture the baseline gate (fmt + clippy --all-targets --all-features + `-p async-opcua-server`
   tests) so the US1 red→green and any regression is attributable. Read the existing server test module
   helpers (`async-opcua-server/src/session/manager.rs` tests `cross_channel_transfer_rules`,
   `activate_session_rejects_stale_nonce_after_intervening_activation`) + `SecureChannel::remote_cert()`
@@ -36,20 +36,20 @@ ActivateSession (non-`None`); matching/`None` unchanged.
 **Independent Test**: matching cert → activates; mismatched cert → `Bad_SecurityChecksFailed`; `None` →
 unchanged; missing/malformed cert → no panic.
 
-- [ ] T002 [US1] Claude-authored failing tests in the `async-opcua-server` `session/manager.rs` test
+- [X] T002 [US1] Claude-authored failing tests in the `async-opcua-server` `session/manager.rs` test
   module: construct a session whose stored client certificate differs from the activating
   `SecureChannel`'s peer certificate → ActivateSession rejected with `Bad_SecurityChecksFailed`; a
   matching certificate → activates; `SecurityPolicy::None` → unchanged (no check); a missing/empty
   channel or session certificate on a secured policy → rejected without panic. Anchor to the existing
   test helpers from T001.
-- [ ] T003 [US1] Implement the binding in `async-opcua-server/src/session/manager.rs` `activate_session`
+- [X] T003 [US1] Implement the binding in `async-opcua-server/src/session/manager.rs` `activate_session`
   at the `// TODO additional secure channel validation ...` site (~:593): when `security_policy != None`,
   compare `session.client_certificate()` to the activating channel's peer certificate
   (`channel.remote_cert()`) by DER/thumbprint equality; reject mismatch with
   `Error::new(StatusCode::BadSecurityChecksFailed, ...)`; panic-free on missing/malformed certs. Also
   REMOVE the stale endpoint-URL TODO comment (~:213) since `validate_endpoint_hostname` already performs
   that check. (depends T002)
-- [ ] T004 [US1] Gate; verify T002 passes; **commit US1**
+- [X] T004 [US1] Gate; verify T002 passes; **commit US1**
   (`feat(014 US1): bind client certificate to the secure channel at ActivateSession`).
 
 ## Phase 3: User Story 2 — Conformance lock-in tests (P2)

@@ -35,19 +35,24 @@ aes = { workspace = true }
 aws-lc-rs = { version = "1.17.0", optional = true }
 cbc = { workspace = true }
 const-oid = { workspace = true }
+ecdsa = { workspace = true, optional = true }
+hkdf = { workspace = true, optional = true }
 hmac = { workspace = true }
+p256 = { workspace = true, optional = true }
+p384 = { workspace = true, optional = true }
 rand = { workspace = true }
 rsa = { workspace = true }
 sha1 = { workspace = true }
 sha2 = { workspace = true }
 subtle = "2.6.1"
 x509-cert = { workspace = true }
-zeroize = "1.8.2"
+zeroize = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"
 
 [features]
-default = ["aws-lc-rs"]
+default = ["aws-lc-rs", "ecc"]
 aws-lc-rs = ["dep:aws-lc-rs"]
+ecc = ["dep:ecdsa", "dep:hkdf", "dep:p256", "dep:p384"]
 legacy-crypto = []

@@ -204,7 +204,7 @@ impl AsyncSecureChannel {
                 self.channel_lifetime,
                 self.secure_channel_request_timeout(),
                 send,
-            );
+            )?;
 
             let resp = match request.send().await {
                 Ok(resp) => resp,
@@ -300,7 +300,7 @@ impl AsyncSecureChannel {
             self.channel_lifetime,
             Duration::from_secs(30),
             send.clone(),
-        );
+        )?;
 
         let request_fut = request
             .send()

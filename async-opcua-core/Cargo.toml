@@ -53,8 +53,9 @@ harness = false
 workspace = true
 
 [features]
-default = ["aws-lc-rs"]
+default = ["aws-lc-rs", "ecc"]
 aws-lc-rs = ["async-opcua-crypto/aws-lc-rs"]
+ecc = ["async-opcua-crypto/ecc"]
 env_expansion = ["dep:shellexpand"]
 # Forwards to the crypto crate's legacy policy support; used by tests
 # covering the legacy security policies.

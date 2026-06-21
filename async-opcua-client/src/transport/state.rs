@@ -9,8 +9,10 @@ use tracing::{debug, error, trace, trace_span};
 use crate::transport::OutgoingMessage;
 use arc_swap::ArcSwap;
 use opcua_core::{
-    comms::secure_channel::SecureChannel, handle::AtomicHandle, sync::RwLock, trace_write_lock,
-    RequestMessage, ResponseMessage,
+    comms::secure_channel::{Role, SecureChannel},
+    handle::AtomicHandle,
+    sync::RwLock,
+    trace_write_lock, RequestMessage, ResponseMessage,
 };
 use opcua_crypto::SecurityPolicy;
 use opcua_types::{
@@ -132,13 +134,14 @@ impl SecureChannelState {
         requested_lifetime: u32,
         timeout: Duration,
         sender: RequestSend,
-    ) -> Request {
+    ) -> Result<Request, Error> {
         trace!("issue_or_renew_secure_channel({:?})", request_type);
 
         let (security_mode, security_policy, client_nonce) = {
             let mut secure_channel = trace_write_lock!(self.secure_channel);
-            let client_nonce = secure_channel.security_policy().random_nonce();
-            secure_channel.set_local_nonce(client_nonce.as_ref());
+            secure_channel.set_role(Role::Client);
+            secure_channel.create_local_nonce()?;
+            let client_nonce = secure_channel.local_nonce_as_byte_string();
             (
                 secure_channel.security_mode(),
                 secure_channel.security_policy(),
@@ -159,7 +162,7 @@ impl SecureChannelState {
             requested_lifetime,
         };
 
-        Request::new(request, sender, timeout)
+        Ok(Request::new(request, sender, timeout))
     }
 
     pub(super) fn set_client_offset(&self, offset: chrono::Duration) {

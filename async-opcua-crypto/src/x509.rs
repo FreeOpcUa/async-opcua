@@ -17,7 +17,7 @@ use tracing::{error, info, trace, warn};
 type ChronoUtc = DateTime<Utc>;
 
 use rsa::pkcs1v15;
-use rsa::RsaPublicKey;
+use rsa::RsaPublicKey as RsaPublicKeyInner;
 use x509_cert::{
     self as x509,
     der::asn1::{Ia5String, OctetString},
@@ -29,6 +29,8 @@ use x509::ext::pkix::name as xname;
 
 use opcua_types::{status_code::StatusCode, ApplicationDescription, ByteString, Error};
 
+#[cfg(feature = "ecc")]
+use crate::SecurityPolicy;
 use crate::{KeySize, PrivateKey, PublicKey};
 
 use super::{hostname, thumbprint::Thumbprint};
@@ -465,6 +467,59 @@ impl X509 {
         Ok((cert, pkey))
     }
 
+    /// Creates a self-signed EC X509v3 certificate and matching private key.
+    #[cfg(feature = "ecc")]
+    pub fn cert_and_pkey_ecc(
+        curve: crate::ecc::EccCurve,
+        x509_data: &X509Data,
+    ) -> Result<(Self, PrivateKey), String> {
+        match curve {
+            crate::ecc::EccCurve::P256 => {
+                let signer =
+                    p256::ecdsa::SigningKey::random(&mut p256::elliptic_curve::rand_core::OsRng);
+                let scalar = signer.to_bytes();
+                let private_key =
+                    crate::ecc::EccPrivateKey::from_scalar_bytes(curve, scalar.as_slice())
+                        .map(PrivateKey::from_ecc)
+                        .map_err(|e| format!("Failed to generate P-256 private key: {e}"))?;
+                let public_key =
+                    x509_cert::spki::SubjectPublicKeyInfoOwned::from_key(*signer.verifying_key())
+                        .map_err(|e| format!("Failed to encode P-256 public key: {e}"))?;
+                let cert = Self::create_ec_certificate_with_signer::<_, p256::ecdsa::DerSignature>(
+                    x509_data, public_key, &signer,
+                )
+                .map_err(Self::builder_error_to_string)?;
+                Ok((cert, private_key))
+            }
+            crate::ecc::EccCurve::P384 => {
+                let signer =
+                    p384::ecdsa::SigningKey::random(&mut p384::elliptic_curve::rand_core::OsRng);
+                let scalar = signer.to_bytes();
+                let private_key =
+                    crate::ecc::EccPrivateKey::from_scalar_bytes(curve, scalar.as_slice())
+                        .map(PrivateKey::from_ecc)
+                        .map_err(|e| format!("Failed to generate P-384 private key: {e}"))?;
+                let public_key =
+                    x509_cert::spki::SubjectPublicKeyInfoOwned::from_key(*signer.verifying_key())
+                        .map_err(|e| format!("Failed to encode P-384 public key: {e}"))?;
+                let cert = Self::create_ec_certificate_with_signer::<_, p384::ecdsa::DerSignature>(
+                    x509_data, public_key, &signer,
+                )
+                .map_err(Self::builder_error_to_string)?;
+                Ok((cert, private_key))
+            }
+        }
+    }
+
+    fn builder_error_to_string(e: BuilderError) -> String {
+        match e {
+            BuilderError::Asn1(_) => "Invalid der".to_string(),
+            BuilderError::PublicKey(_) => "Invalid public key".to_string(),
+            BuilderError::Signature(_) => "Invalid signature".to_string(),
+            _ => "Invalid".to_string(),
+        }
+    }
+
     fn append_to_name(name: &mut String, param: &str, data: &str) {
         if !data.is_empty() {
             if !name.is_empty() {
@@ -482,13 +537,102 @@ impl X509 {
 
         match result {
             Ok(val) => Ok(val),
-            Err(e) => match e {
-                BuilderError::Asn1(_) => Err("Invalid der".to_string()),
-                BuilderError::PublicKey(_) => Err("Invalid public key".to_string()),
-                BuilderError::Signature(_) => Err("Invalid signature".to_string()),
-                _ => Err("Invalid".to_string()),
-            },
+            Err(e) => Err(Self::builder_error_to_string(e)),
         }
+    }
+
+    #[cfg(feature = "ecc")]
+    fn create_ec_certificate_with_signer<S, Sig>(
+        x509_data: &X509Data,
+        public_key: x509_cert::spki::SubjectPublicKeyInfoOwned,
+        signer: &S,
+    ) -> Result<Self, BuilderError>
+    where
+        S: x509_cert::spki::DynSignatureAlgorithmIdentifier + ecdsa::signature::Keypair,
+        S::VerifyingKey: x509_cert::spki::EncodePublicKey,
+        S: ecdsa::signature::Signer<Sig>,
+        Sig: x509_cert::spki::SignatureBitStringEncoding,
+    {
+        use std::str::FromStr;
+        use std::time::Duration;
+        use x509_cert::builder::{Builder, CertificateBuilder, Profile};
+        use x509_cert::name::Name;
+        use x509_cert::serial_number::SerialNumber;
+        use x509_cert::time::Validity;
+
+        let validity = Validity::from_now(Duration::new(
+            86400 * u64::from(x509_data.certificate_duration_days),
+            0,
+        ))?;
+
+        let serial_number = SerialNumber::from(42u32);
+        let mut issuer = String::new();
+        Self::append_to_name(&mut issuer, "CN", &x509_data.common_name);
+        Self::append_to_name(&mut issuer, "O", &x509_data.organization);
+        Self::append_to_name(&mut issuer, "OU", &x509_data.organizational_unit);
+        Self::append_to_name(&mut issuer, "C", &x509_data.country);
+        Self::append_to_name(&mut issuer, "ST", &x509_data.state);
+        let subject = Name::from_str(&issuer)?;
+
+        let profile = Profile::Manual {
+            issuer: Some(subject.clone()),
+        };
+        let ski = Self::subject_key_identifier(&public_key);
+        let mut builder = CertificateBuilder::new(
+            profile,
+            serial_number.clone(),
+            validity,
+            subject.clone(),
+            public_key,
+            signer,
+        )?;
+
+        builder.add_extension(&x509::ext::pkix::SubjectKeyIdentifier(OctetString::new(
+            ski.as_slice(),
+        )?))?;
+        builder.add_extension(&x509::ext::pkix::AuthorityKeyIdentifier {
+            authority_cert_issuer: Some(vec![GeneralName::DirectoryName(subject)]),
+            key_identifier: Some(OctetString::new(ski.as_slice())?),
+            authority_cert_serial_number: Some(serial_number),
+        })?;
+        builder.add_extension(&x509::ext::pkix::BasicConstraints {
+            ca: false,
+            path_len_constraint: None,
+        })?;
+
+        {
+            use x509::ext::pkix::KeyUsage;
+            use x509::ext::pkix::KeyUsages;
+
+            let key_usage = KeyUsages::DigitalSignature | KeyUsages::NonRepudiation;
+            builder.add_extension(&KeyUsage(key_usage))?;
+        }
+
+        {
+            use x509::ext::pkix::ExtendedKeyUsage;
+            let usage = vec![
+                const_oid::db::rfc5280::ID_KP_CLIENT_AUTH,
+                const_oid::db::rfc5280::ID_KP_SERVER_AUTH,
+            ];
+            builder.add_extension(&ExtendedKeyUsage(usage))?;
+        }
+
+        if !x509_data.alt_host_names.is_empty() {
+            builder.add_extension(&x509_data.alt_host_names.names)?;
+        }
+
+        Ok(X509 {
+            value: builder.build::<Sig>()?,
+        })
+    }
+
+    #[cfg(feature = "ecc")]
+    fn subject_key_identifier(public_key: &x509_cert::spki::SubjectPublicKeyInfoOwned) -> Vec<u8> {
+        use sha1::Digest;
+
+        let mut hasher = sha1::Sha1::new();
+        hasher.update(public_key.subject_public_key.raw_bytes());
+        hasher.finalize().to_vec()
     }
 
     fn create_from_pkey(pkey: &PrivateKey, x509_data: &X509Data) -> Result<Self, BuilderError> {
@@ -515,7 +659,10 @@ impl X509 {
         ))
         .unwrap();
 
-        let signing_key = pkcs1v15::SigningKey::<sha2::Sha256>::new(pkey.value.clone());
+        let rsa_key = pkey
+            .rsa_key_for_x509()
+            .map_err(|_| BuilderError::PublicKey(x509_cert::spki::Error::KeyMalformed))?;
+        let signing_key = pkcs1v15::SigningKey::<sha2::Sha256>::new(rsa_key.clone());
 
         let serial_number = SerialNumber::from(42u32);
 
@@ -645,16 +792,22 @@ impl X509 {
     pub fn public_key(&self) -> Result<PublicKey, Error> {
         use x509_cert::der::referenced::OwnedToRef;
 
-        let r = RsaPublicKey::try_from(
-            self.value
-                .tbs_certificate
-                .subject_public_key_info
-                .owned_to_ref(),
-        );
-        match r {
-            Err(e) => Err(Error::new(StatusCode::BadCertificateInvalid, e)),
-            Ok(v) => Ok(PublicKey { value: v }),
+        let spki = &self.value.tbs_certificate.subject_public_key_info;
+        let r = RsaPublicKeyInner::try_from(spki.owned_to_ref());
+        if let Ok(v) = r {
+            return Ok(PublicKey::from_rsa(v));
         }
+
+        #[cfg(feature = "ecc")]
+        if let Some(curve) = Self::ec_curve_from_subject_public_key_info(spki)? {
+            let key = crate::ecc::EccPublicKey::from_subject_public_key_info(curve, spki)?;
+            return Ok(PublicKey::from_ecc(key));
+        }
+
+        Err(Error::new(
+            StatusCode::BadCertificateInvalid,
+            "certificate subject public key is not a supported RSA or EC key",
+        ))
     }
 
     /// Returns the key length in bits (if possible)
@@ -663,6 +816,73 @@ impl X509 {
         match r {
             Err(_) => Err(X509Error),
             Ok(v) => Ok(v.bit_length()),
+        }
+    }
+
+    /// Ensures an EC certificate uses the curve required by the negotiated ECC policy.
+    #[cfg(feature = "ecc")]
+    pub fn ensure_curve_matches_policy(
+        &self,
+        security_policy: SecurityPolicy,
+    ) -> Result<(), Error> {
+        let expected_curve = match crate::ecc::EccCurve::from_security_policy(security_policy) {
+            Ok(curve) => curve,
+            Err(_) => return Ok(()),
+        };
+
+        let public_key = self.public_key()?;
+        match public_key.ecc_curve() {
+            Some(actual_curve) if actual_curve == expected_curve => Ok(()),
+            Some(actual_curve) => Err(Error::new(
+                StatusCode::BadSecurityChecksFailed,
+                format!(
+                    "certificate EC curve {actual_curve:?} does not match security policy {security_policy}"
+                ),
+            )),
+            None => Err(Error::new(
+                StatusCode::BadSecurityChecksFailed,
+                format!(
+                    "certificate public key has no EC curve for security policy {security_policy}"
+                ),
+            )),
+        }
+    }
+
+    #[cfg(feature = "ecc")]
+    fn ec_curve_from_subject_public_key_info(
+        spki: &x509_cert::spki::SubjectPublicKeyInfoOwned,
+    ) -> Result<Option<crate::ecc::EccCurve>, Error> {
+        if spki.algorithm.oid != const_oid::db::rfc5912::ID_EC_PUBLIC_KEY {
+            return Ok(None);
+        }
+
+        let Some(parameters) = spki.algorithm.parameters.as_ref() else {
+            return Err(Error::new(
+                StatusCode::BadCertificateInvalid,
+                "EC SubjectPublicKeyInfo is missing named-curve parameters",
+            ));
+        };
+
+        let curve_oid = parameters
+            .decode_as::<const_oid::ObjectIdentifier>()
+            .map_err(|err| {
+                Error::new(
+                    StatusCode::BadCertificateInvalid,
+                    format!("EC SubjectPublicKeyInfo has invalid named-curve parameters: {err}"),
+                )
+            })?;
+
+        match curve_oid {
+            oid if oid == const_oid::db::rfc5912::SECP_256_R_1 => {
+                Ok(Some(crate::ecc::EccCurve::P256))
+            }
+            oid if oid == const_oid::db::rfc5912::SECP_384_R_1 => {
+                Ok(Some(crate::ecc::EccCurve::P384))
+            }
+            _ => Err(Error::new(
+                StatusCode::BadCertificateInvalid,
+                format!("unsupported EC certificate curve {curve_oid}"),
+            )),
         }
     }
 
@@ -899,6 +1119,346 @@ impl X509 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "ecc")]
+    mod ec_fixtures {
+        use std::{
+            fs::File,
+            io::Write,
+            path::Path,
+            str::FromStr,
+            time::{Duration, SystemTime, UNIX_EPOCH},
+        };
+
+        use opcua_types::StatusCode;
+        use rand::rngs::OsRng;
+        use x509_cert::{
+            builder::{Builder, CertificateBuilder, Profile},
+            der::asn1::OctetString,
+            ext::pkix::{
+                AuthorityKeyIdentifier, BasicConstraints, ExtendedKeyUsage, KeyUsage, KeyUsages,
+                SubjectKeyIdentifier,
+            },
+            name::Name,
+            serial_number::SerialNumber,
+            spki::SubjectPublicKeyInfoOwned,
+            time::{Time, Validity},
+        };
+
+        use crate::{certificate_store::CertificateStore, ecc::EccCurve, KeySize, SecurityPolicy};
+
+        use super::{AlternateNames, GeneralName, X509};
+
+        const APPLICATION_URI: &str = "urn:test:ec-application";
+        const APPLICATION_HOSTNAME: &str = "localhost";
+
+        #[derive(Clone, Copy)]
+        enum EcFixtureCurve {
+            P256,
+            P384,
+        }
+
+        impl EcFixtureCurve {
+            fn ecc_curve(self) -> EccCurve {
+                match self {
+                    Self::P256 => EccCurve::P256,
+                    Self::P384 => EccCurve::P384,
+                }
+            }
+
+            fn matching_policy(self) -> SecurityPolicy {
+                match self {
+                    Self::P256 => SecurityPolicy::EccNistP256,
+                    Self::P384 => SecurityPolicy::EccNistP384,
+                }
+            }
+
+            fn mismatched_policy(self) -> SecurityPolicy {
+                match self {
+                    Self::P256 => SecurityPolicy::EccNistP384,
+                    Self::P384 => SecurityPolicy::EccNistP256,
+                }
+            }
+
+            fn name(self) -> &'static str {
+                match self {
+                    Self::P256 => "P-256",
+                    Self::P384 => "P-384",
+                }
+            }
+        }
+
+        struct EcCertificateFixture {
+            cert: X509,
+            curve: EcFixtureCurve,
+        }
+
+        fn valid_ec_certificate(curve: EcFixtureCurve) -> EcCertificateFixture {
+            EcCertificateFixture {
+                cert: build_ec_certificate(curve, validity_from_now(60)),
+                curve,
+            }
+        }
+
+        fn expired_ec_certificate(curve: EcFixtureCurve) -> EcCertificateFixture {
+            let not_before = UNIX_EPOCH + Duration::from_secs(1_000_000);
+            let not_after = UNIX_EPOCH + Duration::from_secs(1_086_400);
+            EcCertificateFixture {
+                cert: build_ec_certificate(curve, validity_between(not_before, not_after)),
+                curve,
+            }
+        }
+
+        fn build_ec_certificate(curve: EcFixtureCurve, validity: Validity) -> X509 {
+            match curve {
+                EcFixtureCurve::P256 => {
+                    let signer = p256::ecdsa::SigningKey::random(&mut OsRng);
+                    let public_key =
+                        SubjectPublicKeyInfoOwned::from_key(*signer.verifying_key()).unwrap();
+                    build_certificate_with_signer::<_, p256::ecdsa::DerSignature>(
+                        curve, validity, public_key, &signer,
+                    )
+                }
+                EcFixtureCurve::P384 => {
+                    let signer = p384::ecdsa::SigningKey::random(&mut OsRng);
+                    let public_key =
+                        SubjectPublicKeyInfoOwned::from_key(*signer.verifying_key()).unwrap();
+                    build_certificate_with_signer::<_, p384::ecdsa::DerSignature>(
+                        curve, validity, public_key, &signer,
+                    )
+                }
+            }
+        }
+
+        fn build_certificate_with_signer<S, Sig>(
+            curve: EcFixtureCurve,
+            validity: Validity,
+            public_key: SubjectPublicKeyInfoOwned,
+            signer: &S,
+        ) -> X509
+        where
+            S: x509_cert::spki::DynSignatureAlgorithmIdentifier + ecdsa::signature::Keypair,
+            S::VerifyingKey: x509_cert::spki::EncodePublicKey,
+            S: ecdsa::signature::Signer<Sig>,
+            Sig: x509_cert::spki::SignatureBitStringEncoding,
+        {
+            let ski = subject_key_identifier(&public_key);
+            let serial_number = match curve {
+                EcFixtureCurve::P256 => SerialNumber::from(256u32),
+                EcFixtureCurve::P384 => SerialNumber::from(384u32),
+            };
+            let subject =
+                Name::from_str(&format!("CN=OPC UA EC {} Test,O=async-opcua", curve.name()))
+                    .unwrap();
+            let profile = Profile::Manual {
+                issuer: Some(subject.clone()),
+            };
+            let mut builder = CertificateBuilder::new(
+                profile,
+                serial_number.clone(),
+                validity,
+                subject.clone(),
+                public_key,
+                signer,
+            )
+            .unwrap();
+
+            builder
+                .add_extension(&SubjectKeyIdentifier(
+                    OctetString::new(ski.as_slice()).unwrap(),
+                ))
+                .unwrap();
+            builder
+                .add_extension(&AuthorityKeyIdentifier {
+                    authority_cert_issuer: Some(vec![GeneralName::DirectoryName(subject)]),
+                    key_identifier: Some(OctetString::new(ski.as_slice()).unwrap()),
+                    authority_cert_serial_number: Some(serial_number),
+                })
+                .unwrap();
+            builder
+                .add_extension(&BasicConstraints {
+                    ca: false,
+                    path_len_constraint: None,
+                })
+                .unwrap();
+            builder
+                .add_extension(&KeyUsage(
+                    KeyUsages::DigitalSignature | KeyUsages::NonRepudiation,
+                ))
+                .unwrap();
+            builder
+                .add_extension(&ExtendedKeyUsage(vec![
+                    const_oid::db::rfc5280::ID_KP_CLIENT_AUTH,
+                    const_oid::db::rfc5280::ID_KP_SERVER_AUTH,
+                ]))
+                .unwrap();
+
+            let mut alt_names = AlternateNames::new();
+            alt_names.add_uri(APPLICATION_URI);
+            alt_names.add_dns(APPLICATION_HOSTNAME);
+            builder.add_extension(&alt_names.names).unwrap();
+
+            X509 {
+                value: builder.build::<Sig>().unwrap(),
+            }
+        }
+
+        fn subject_key_identifier(public_key: &SubjectPublicKeyInfoOwned) -> Vec<u8> {
+            use sha1::Digest;
+
+            let mut hasher = sha1::Sha1::new();
+            hasher.update(public_key.subject_public_key.raw_bytes());
+            hasher.finalize().to_vec()
+        }
+
+        fn validity_from_now(days: u64) -> Validity {
+            Validity::from_now(Duration::from_secs(86_400 * days)).unwrap()
+        }
+
+        fn validity_between(not_before: SystemTime, not_after: SystemTime) -> Validity {
+            Validity {
+                not_before: Time::try_from(not_before).unwrap(),
+                not_after: Time::try_from(not_after).unwrap(),
+            }
+        }
+
+        fn make_certificate_store() -> (tempfile::TempDir, CertificateStore) {
+            let tmp_dir = tempfile::Builder::new().prefix("ec-pki").tempdir().unwrap();
+            let cert_store = CertificateStore::new(tmp_dir.path());
+            cert_store.ensure_pki_path().unwrap();
+            (tmp_dir, cert_store)
+        }
+
+        fn trust_cert(store: &CertificateStore, cert: &X509) {
+            let mut cert_path = store.trusted_certs_dir();
+            cert_path.push(CertificateStore::cert_file_name(cert));
+            write_der(cert, &cert_path);
+        }
+
+        fn write_der(cert: &X509, path: &Path) {
+            let mut file = File::create(path).unwrap();
+            file.write_all(&cert.to_der().unwrap()).unwrap();
+        }
+
+        fn assert_ec_public_key_recognized(fixture: &EcCertificateFixture) {
+            let public_key = fixture.cert.public_key().unwrap_or_else(|err| {
+                panic!("EC {} public key should parse: {err}", fixture.curve.name())
+            });
+            assert_eq!(
+                public_key.bit_length(),
+                fixture.curve.ecc_curve().encoded_public_key_len() * 4
+            );
+            assert_eq!(fixture.cert.key_length().unwrap(), public_key.bit_length());
+            assert_eq!(fixture.cert.thumbprint().value().len(), 20);
+        }
+
+        fn assert_trusted_validates(fixture: &EcCertificateFixture) {
+            let (_tmp_dir, cert_store) = make_certificate_store();
+            trust_cert(&cert_store, &fixture.cert);
+
+            let result = cert_store.validate_or_reject_application_instance_cert(
+                &fixture.cert,
+                fixture.curve.matching_policy(),
+                Some(APPLICATION_HOSTNAME),
+                Some(APPLICATION_URI),
+            );
+            assert!(
+                result.is_ok(),
+                "trusted EC {} cert should validate: {result:?}",
+                fixture.curve.name()
+            );
+        }
+
+        #[test]
+        fn ec_p256_application_certificate_public_key_and_thumbprint_are_recognized() {
+            let fixture = valid_ec_certificate(EcFixtureCurve::P256);
+
+            assert_ec_public_key_recognized(&fixture);
+        }
+
+        #[test]
+        fn ec_p384_application_certificate_public_key_and_thumbprint_are_recognized() {
+            let fixture = valid_ec_certificate(EcFixtureCurve::P384);
+
+            assert_ec_public_key_recognized(&fixture);
+        }
+
+        #[test]
+        fn ec_p256_trusted_application_certificate_validates() {
+            let fixture = valid_ec_certificate(EcFixtureCurve::P256);
+
+            assert_trusted_validates(&fixture);
+        }
+
+        #[test]
+        fn ec_p384_trusted_application_certificate_validates() {
+            let fixture = valid_ec_certificate(EcFixtureCurve::P384);
+
+            assert_trusted_validates(&fixture);
+        }
+
+        #[test]
+        fn ec_application_certificate_untrusted_is_rejected() {
+            let (_tmp_dir, cert_store) = make_certificate_store();
+            let fixture = valid_ec_certificate(EcFixtureCurve::P256);
+
+            let err = cert_store
+                .validate_or_reject_application_instance_cert(
+                    &fixture.cert,
+                    fixture.curve.matching_policy(),
+                    None,
+                    None,
+                )
+                .expect_err("untrusted EC certificate should be rejected");
+            assert_eq!(err.status(), StatusCode::BadCertificateUntrusted);
+        }
+
+        #[test]
+        fn ec_application_certificate_expired_is_rejected() {
+            let (_tmp_dir, cert_store) = make_certificate_store();
+            let fixture = expired_ec_certificate(EcFixtureCurve::P384);
+            trust_cert(&cert_store, &fixture.cert);
+
+            let err = cert_store
+                .validate_or_reject_application_instance_cert(
+                    &fixture.cert,
+                    fixture.curve.matching_policy(),
+                    None,
+                    None,
+                )
+                .expect_err("expired EC certificate should be rejected");
+            assert_eq!(err.status(), StatusCode::BadCertificateTimeInvalid);
+        }
+
+        #[test]
+        fn ec_p256_certificate_rejected_for_ecc_nist_p384_policy() {
+            assert_curve_policy_mismatch_is_rejected(valid_ec_certificate(EcFixtureCurve::P256));
+        }
+
+        #[test]
+        fn ec_p384_certificate_rejected_for_ecc_nist_p256_policy() {
+            assert_curve_policy_mismatch_is_rejected(valid_ec_certificate(EcFixtureCurve::P384));
+        }
+
+        fn assert_curve_policy_mismatch_is_rejected(fixture: EcCertificateFixture) {
+            let (_tmp_dir, cert_store) = make_certificate_store();
+            trust_cert(&cert_store, &fixture.cert);
+
+            let err = cert_store
+                .validate_or_reject_application_instance_cert(
+                    &fixture.cert,
+                    fixture.curve.mismatched_policy(),
+                    None,
+                    None,
+                )
+                .expect_err("EC certificate curve should be rejected for mismatched ECC policy");
+            assert_eq!(err.status(), StatusCode::BadSecurityChecksFailed);
+            assert!(
+                err.to_string().to_ascii_lowercase().contains("curve"),
+                "mismatch should be reported as an EC curve/policy failure, got: {err}"
+            );
+        }
+    }
 
     /*
         #[test]

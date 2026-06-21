@@ -83,6 +83,18 @@ pub mod constants {
         "http://opcfoundation.org/UA/SecurityPolicy#Basic256";
     /// Shorthand name for the deprecated Basic256 security policy.
     pub const SECURITY_POLICY_BASIC_256: &str = "Basic256";
+    /// URI for the ECC_nistP256 security policy. Always recognizable so ECC
+    /// policies can be named and rejected in builds without the `ecc` feature.
+    pub const SECURITY_POLICY_ECC_NIST_P256_URI: &str =
+        "http://opcfoundation.org/UA/SecurityPolicy#ECC_nistP256";
+    /// Shorthand name for the ECC_nistP256 security policy.
+    pub const SECURITY_POLICY_ECC_NIST_P256: &str = "ECC_nistP256";
+    /// URI for the ECC_nistP384 security policy. Always recognizable so ECC
+    /// policies can be named and rejected in builds without the `ecc` feature.
+    pub const SECURITY_POLICY_ECC_NIST_P384_URI: &str =
+        "http://opcfoundation.org/UA/SecurityPolicy#ECC_nistP384";
+    /// Shorthand name for the ECC_nistP384 security policy.
+    pub const SECURITY_POLICY_ECC_NIST_P384: &str = "ECC_nistP384";
 
     pub(crate) fn default_max_dataset_fields() -> usize {
         MAX_DATASET_FIELDS

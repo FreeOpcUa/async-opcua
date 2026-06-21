@@ -10,19 +10,27 @@ use hmac::{digest, Hmac, Mac};
 #[cfg(feature = "legacy-crypto")]
 use sha1::Sha1;
 use sha2::Sha256;
+#[cfg(feature = "ecc")]
+use sha2::Sha384;
 
 use opcua_types::{status_code::StatusCode, Error};
 
 #[cfg(feature = "legacy-crypto")]
 use super::SHA1_SIZE;
 use super::SHA256_SIZE;
+#[cfg(feature = "ecc")]
+use super::SHA384_SIZE;
 
 type HmacSha256 = Hmac<Sha256>;
+#[cfg(feature = "ecc")]
+type HmacSha384 = Hmac<Sha384>;
 #[cfg(feature = "legacy-crypto")]
 type HmacSha1 = Hmac<Sha1>;
 #[cfg(feature = "legacy-crypto")]
 type Sha1Output = digest::CtOutput<HmacSha1>;
 type Sha256Output = digest::CtOutput<HmacSha256>;
+#[cfg(feature = "ecc")]
+type Sha384Output = digest::CtOutput<HmacSha384>;
 
 /// Pseudo random `P_SHA` implementation for creating pseudo random range of bytes from an input
 ///
@@ -121,6 +129,15 @@ fn sign_sha256(key: &[u8], data: &[u8]) -> Sha256Output {
     mac.finalize()
 }
 
+#[cfg(feature = "ecc")]
+fn sign_sha384(key: &[u8], data: &[u8]) -> Sha384Output {
+    // HMAC accepts keys of any length; construction cannot fail for caller input.
+    #[allow(clippy::unwrap_used)]
+    let mut mac = HmacSha384::new_from_slice(key).unwrap();
+    mac.update(data);
+    mac.finalize()
+}
+
 /// Write the SHA1 HMAC signature of `data` using `key` into `signature`.
 #[cfg(feature = "legacy-crypto")]
 pub(crate) fn hmac_sha1(key: &[u8], data: &[u8], signature: &mut [u8]) -> Result<(), Error> {
@@ -178,6 +195,38 @@ pub(crate) fn verify_hmac_sha256(key: &[u8], data: &[u8], signature: &[u8]) -> b
         // HMAC accepts keys of any length; construction cannot fail for caller input.
         #[allow(clippy::unwrap_used)]
         let mut mac = HmacSha256::new_from_slice(key).unwrap();
+        mac.update(data);
+        mac.verify_slice(signature).is_ok()
+    }
+}
+
+/// Write the SHA384 HMAC signature of `data` using `key` into `signature`.
+#[cfg(feature = "ecc")]
+pub(crate) fn hmac_sha384(key: &[u8], data: &[u8], signature: &mut [u8]) -> Result<(), Error> {
+    if signature.len() == SHA384_SIZE {
+        let result = sign_sha384(key, data);
+        signature.copy_from_slice(&result.into_bytes());
+        Ok(())
+    } else {
+        Err(Error::new(
+            StatusCode::BadInvalidArgument,
+            format!(
+                "Signature buffer length must be exactly {} bytes to receive hmac_sha384 signature",
+                SHA384_SIZE
+            ),
+        ))
+    }
+}
+
+/// Verify that the HMAC-SHA384 for the data block matches the supplied signature.
+#[cfg(feature = "ecc")]
+pub(crate) fn verify_hmac_sha384(key: &[u8], data: &[u8], signature: &[u8]) -> bool {
+    if signature.len() != SHA384_SIZE {
+        false
+    } else {
+        // HMAC accepts keys of any length; construction cannot fail for caller input.
+        #[allow(clippy::unwrap_used)]
+        let mut mac = HmacSha384::new_from_slice(key).unwrap();
         mac.update(data);
         mac.verify_slice(signature).is_ok()
     }

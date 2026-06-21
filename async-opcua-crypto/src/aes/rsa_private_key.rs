@@ -16,7 +16,7 @@ use rsa::pkcs1v15;
 use rsa::pkcs8;
 use rsa::pss;
 use rsa::signature::{RandomizedSigner, SignatureEncoding, Verifier};
-use rsa::{RsaPrivateKey, RsaPublicKey};
+use rsa::{RsaPrivateKey, RsaPublicKey as RsaPublicKeyInner};
 
 use x509_cert::spki::SubjectPublicKeyInfoOwned;
 
@@ -57,19 +57,52 @@ impl From<rsa::Error> for PKeyError {
 /// This is a wrapper around an asymmetric key pair. Since the PKey is either
 /// a public or private key so we have to differentiate that as well.
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct PKey<T> {
     pub(crate) value: T,
 }
 
 /// A public key
-pub type PublicKey = PKey<RsaPublicKey>;
+#[derive(Clone)]
+pub struct PublicKey {
+    pub(crate) value: PublicKeyKind,
+}
+
+#[derive(Clone)]
+pub(crate) enum PublicKeyKind {
+    Rsa(RsaPublicKeyInner),
+    #[cfg(feature = "ecc")]
+    Ecc(crate::ecc::EccPublicKey),
+}
 /// A private key
-pub type PrivateKey = PKey<RsaPrivateKey>;
+#[derive(Clone)]
+pub struct PrivateKey {
+    pub(crate) value: PrivateKeyKind,
+}
+
+#[derive(Clone)]
+pub(crate) enum PrivateKeyKind {
+    Rsa(Box<RsaPrivateKey>),
+    #[cfg(feature = "ecc")]
+    Ecc(crate::ecc::EccPrivateKey),
+}
 
 impl<T> Debug for PKey<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         // This impl will not write out the key, but it exists to keep structs happy
         // that contain a key as a field
+        write!(f, "[pkey]")
+    }
+}
+
+impl Debug for PrivateKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[pkey]")
+    }
+}
+
+impl Debug for PublicKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "[pkey]")
     }
 }
@@ -109,7 +142,11 @@ impl KeySize for PrivateKey {
     /// Length in bits
     fn size(&self) -> usize {
         use rsa::traits::PublicKeyParts;
-        self.value.size()
+        match &self.value {
+            PrivateKeyKind::Rsa(key) => key.size(),
+            #[cfg(feature = "ecc")]
+            PrivateKeyKind::Ecc(key) => key.curve().raw_signature_len(),
+        }
     }
 }
 
@@ -119,7 +156,18 @@ impl PrivateKey {
         let mut rng = rand::thread_rng();
 
         let key = RsaPrivateKey::new(&mut rng, bit_length as usize)?;
-        Ok(PKey { value: key })
+        Ok(Self {
+            value: PrivateKeyKind::Rsa(Box::new(key)),
+        })
+    }
+
+    /// Create a private key wrapper from an EC key.
+    #[cfg(feature = "ecc")]
+    #[must_use]
+    pub fn from_ecc(key: crate::ecc::EccPrivateKey) -> PrivateKey {
+        Self {
+            value: PrivateKeyKind::Ecc(key),
+        }
     }
 
     /// Read a private key from the given path.
@@ -129,12 +177,123 @@ impl PrivateKey {
 
         let r = RsaPrivateKey::read_pkcs8_pem_file(path);
         match r {
-            Err(_) => {
-                let val = RsaPrivateKey::read_pkcs1_pem_file(path)?;
-                Ok(PKey { value: val })
-            }
-            Ok(val) => Ok(PKey { value: val }),
+            Err(_) => match RsaPrivateKey::read_pkcs1_pem_file(path) {
+                Err(_) => {
+                    #[cfg(feature = "ecc")]
+                    {
+                        let pem = std::fs::read_to_string(path).map_err(|_| PKeyError)?;
+                        Self::ecc_key_from_pkcs8_pem(&pem)
+                    }
+                    #[cfg(not(feature = "ecc"))]
+                    {
+                        Err(PKeyError)
+                    }
+                }
+                Ok(val) => Ok(Self {
+                    value: PrivateKeyKind::Rsa(Box::new(val)),
+                }),
+            },
+            Ok(val) => Ok(Self {
+                value: PrivateKeyKind::Rsa(Box::new(val)),
+            }),
         }
+    }
+
+    fn rsa_key(&self) -> Result<&RsaPrivateKey, Error> {
+        match &self.value {
+            PrivateKeyKind::Rsa(key) => Ok(key.as_ref()),
+            #[cfg(feature = "ecc")]
+            PrivateKeyKind::Ecc(_) => Err(Error::new(
+                StatusCode::BadSecurityChecksFailed,
+                "RSA operation requested for an EC private key",
+            )),
+        }
+    }
+
+    #[cfg(not(feature = "aws-lc-rs"))]
+    fn rsa_key_for_decrypt(&self) -> Result<&RsaPrivateKey, PKeyError> {
+        match &self.value {
+            PrivateKeyKind::Rsa(key) => Ok(key.as_ref()),
+            #[cfg(feature = "ecc")]
+            PrivateKeyKind::Ecc(_) => Err(PKeyError),
+        }
+    }
+
+    /// Returns the inner EC private key when this key is EC.
+    #[cfg(feature = "ecc")]
+    #[must_use]
+    pub fn ecc_key(&self) -> Option<&crate::ecc::EccPrivateKey> {
+        match &self.value {
+            PrivateKeyKind::Rsa(_) => None,
+            PrivateKeyKind::Ecc(key) => Some(key),
+        }
+    }
+
+    pub(crate) fn rsa_key_for_x509(&self) -> Result<&RsaPrivateKey, PKeyError> {
+        match &self.value {
+            PrivateKeyKind::Rsa(key) => Ok(key.as_ref()),
+            #[cfg(feature = "ecc")]
+            PrivateKeyKind::Ecc(_) => Err(PKeyError),
+        }
+    }
+
+    fn rsa_key_for_pkcs8(&self) -> pkcs8::Result<&RsaPrivateKey> {
+        match &self.value {
+            PrivateKeyKind::Rsa(key) => Ok(key),
+            #[cfg(feature = "ecc")]
+            PrivateKeyKind::Ecc(_) => Err(pkcs8::Error::KeyMalformed),
+        }
+    }
+
+    #[cfg(feature = "ecc")]
+    #[allow(clippy::panic)]
+    fn ecc_public_key_from_validated_private_key(
+        key: &crate::ecc::EccPrivateKey,
+    ) -> crate::ecc::EccPublicKey {
+        let Ok(public_key) = key.public_key() else {
+            unreachable!("validated EC private scalar must derive a public key");
+        };
+        public_key
+    }
+
+    #[cfg(feature = "ecc")]
+    fn ecc_public_key_to_info(
+        key: &crate::ecc::EccPrivateKey,
+    ) -> x509_cert::spki::Result<SubjectPublicKeyInfoOwned> {
+        match key.curve() {
+            crate::ecc::EccCurve::P256 => {
+                let signing_key = p256::ecdsa::SigningKey::from_slice(key.scalar())
+                    .map_err(|_| x509_cert::spki::Error::KeyMalformed)?;
+                SubjectPublicKeyInfoOwned::from_key(*signing_key.verifying_key())
+            }
+            crate::ecc::EccCurve::P384 => {
+                let signing_key = p384::ecdsa::SigningKey::from_slice(key.scalar())
+                    .map_err(|_| x509_cert::spki::Error::KeyMalformed)?;
+                SubjectPublicKeyInfoOwned::from_key(*signing_key.verifying_key())
+            }
+        }
+    }
+
+    #[cfg(feature = "ecc")]
+    fn ecc_key_from_pkcs8_pem(pem: &str) -> Result<PrivateKey, PKeyError> {
+        use pkcs8::DecodePrivateKey;
+
+        if let Ok(secret) = p256::SecretKey::from_pkcs8_pem(pem) {
+            return crate::ecc::EccPrivateKey::from_scalar_bytes(
+                crate::ecc::EccCurve::P256,
+                secret.to_bytes().as_slice(),
+            )
+            .map(Self::from_ecc)
+            .map_err(|_| PKeyError);
+        }
+
+        let secret = p384::SecretKey::from_pkcs8_pem(pem).map_err(|_| PKeyError)?;
+        crate::ecc::EccPrivateKey::from_scalar_bytes(
+            crate::ecc::EccCurve::P384,
+            secret.to_bytes().as_slice(),
+        )
+        .map(Self::from_ecc)
+        .map_err(|_| PKeyError)
     }
 
     /// Create a private key from a pem file loaded into a byte array.
@@ -148,11 +307,24 @@ impl PrivateKey {
             Ok(pem) => {
                 let r = RsaPrivateKey::from_pkcs8_pem(pem);
                 match r {
-                    Err(_) => {
-                        let val = RsaPrivateKey::from_pkcs1_pem(pem)?;
-                        Ok(PKey { value: val })
-                    }
-                    Ok(val) => Ok(PKey { value: val }),
+                    Err(_) => match RsaPrivateKey::from_pkcs1_pem(pem) {
+                        Err(_) => {
+                            #[cfg(feature = "ecc")]
+                            {
+                                Self::ecc_key_from_pkcs8_pem(pem)
+                            }
+                            #[cfg(not(feature = "ecc"))]
+                            {
+                                Err(PKeyError)
+                            }
+                        }
+                        Ok(val) => Ok(Self {
+                            value: PrivateKeyKind::Rsa(Box::new(val)),
+                        }),
+                    },
+                    Ok(val) => Ok(Self {
+                        value: PrivateKeyKind::Rsa(Box::new(val)),
+                    }),
                 }
             }
         }
@@ -162,7 +334,11 @@ impl PrivateKey {
     pub fn to_der(&self) -> pkcs8::Result<pkcs8::SecretDocument> {
         use pkcs8::EncodePrivateKey;
 
-        self.value.to_pkcs8_der()
+        match &self.value {
+            PrivateKeyKind::Rsa(_) => self.rsa_key_for_pkcs8()?.to_pkcs8_der(),
+            #[cfg(feature = "ecc")]
+            PrivateKeyKind::Ecc(key) => key.to_pkcs8_der(),
+        }
     }
 
     /// Serialize the private key to a PEM string.
@@ -183,21 +359,33 @@ impl PrivateKey {
         use rsa::pkcs8::EncodePublicKey;
         // Public-key DER encoding from an in-memory RSA key is an internal invariant here.
         #[allow(clippy::unwrap_used)]
-        let public_key_der = self.value.to_public_key().to_public_key_der().unwrap();
-        SubjectPublicKeyInfoOwned::try_from(public_key_der.as_bytes())
+        match &self.value {
+            PrivateKeyKind::Rsa(key) => {
+                let public_key_der = key.to_public_key().to_public_key_der().unwrap();
+                SubjectPublicKeyInfoOwned::try_from(public_key_der.as_bytes())
+            }
+            #[cfg(feature = "ecc")]
+            PrivateKeyKind::Ecc(key) => Self::ecc_public_key_to_info(key),
+        }
     }
 
     /// Create a public key based on this private key.
     pub fn to_public_key(&self) -> PublicKey {
-        PublicKey {
-            value: self.value.to_public_key(),
+        match &self.value {
+            PrivateKeyKind::Rsa(key) => PublicKey {
+                value: PublicKeyKind::Rsa(key.to_public_key()),
+            },
+            #[cfg(feature = "ecc")]
+            PrivateKeyKind::Ecc(key) => PublicKey {
+                value: PublicKeyKind::Ecc(Self::ecc_public_key_from_validated_private_key(key)),
+            },
         }
     }
 
     /// Signs the data using RSA-SHA1
     pub fn sign_sha1(&self, data: &[u8], signature: &mut [u8]) -> Result<usize, Error> {
         let mut rng = rand::thread_rng();
-        let signing_key = pkcs1v15::SigningKey::<sha1::Sha1>::new(self.value.clone());
+        let signing_key = pkcs1v15::SigningKey::<sha1::Sha1>::new(self.rsa_key()?.clone());
         match signing_key.try_sign_with_rng(&mut rng, data) {
             Err(e) => Err(Error::new(StatusCode::BadUnexpectedError, e)),
             Ok(signed) => {
@@ -211,7 +399,7 @@ impl PrivateKey {
     /// Signs the data using RSA-SHA256
     pub fn sign_sha256(&self, data: &[u8], signature: &mut [u8]) -> Result<usize, Error> {
         let mut rng = rand::thread_rng();
-        let signing_key = pkcs1v15::SigningKey::<sha2::Sha256>::new(self.value.clone());
+        let signing_key = pkcs1v15::SigningKey::<sha2::Sha256>::new(self.rsa_key()?.clone());
         match signing_key.try_sign_with_rng(&mut rng, data) {
             Err(e) => Err(Error::new(StatusCode::BadUnexpectedError, e)),
             Ok(signed) => {
@@ -225,7 +413,7 @@ impl PrivateKey {
     /// Signs the data using RSA-SHA256-PSS
     pub fn sign_sha256_pss(&self, data: &[u8], signature: &mut [u8]) -> Result<usize, Error> {
         let mut rng = rand::thread_rng();
-        let signing_key = pss::BlindedSigningKey::<sha2::Sha256>::new(self.value.clone());
+        let signing_key = pss::BlindedSigningKey::<sha2::Sha256>::new(self.rsa_key()?.clone());
         match signing_key.try_sign_with_rng(&mut rng, data) {
             Err(e) => Err(Error::new(StatusCode::BadUnexpectedError, e)),
             Ok(signed) => {
@@ -241,6 +429,8 @@ impl PrivateKey {
         src: &[u8],
         dst: &mut [u8],
     ) -> Result<usize, PKeyError> {
+        #[cfg(not(feature = "aws-lc-rs"))]
+        let key = self.rsa_key_for_decrypt()?;
         let cipher_text_block_size = self.cipher_text_block_size();
         // Reject non-block-aligned ciphertext: the per-block loop below slices
         // `src[i..i+block]`, which would read out of bounds (panic) on a crafted
@@ -273,7 +463,7 @@ impl PrivateKey {
                 #[cfg(feature = "aws-lc-rs")]
                 let block_len = aws_lc_private_decrypt(&decrypting_key, padding, src, dst)?;
                 #[cfg(not(feature = "aws-lc-rs"))]
-                let block_len = rsa_private_decrypt(&self.value, padding, src, dst)?;
+                let block_len = rsa_private_decrypt(key, padding, src, dst)?;
                 block_len
             };
             src_idx = src_end_index;
@@ -346,14 +536,72 @@ impl KeySize for PublicKey {
     /// Length in bits
     fn size(&self) -> usize {
         use rsa::traits::PublicKeyParts;
-        self.value.size()
+        match &self.value {
+            PublicKeyKind::Rsa(key) => key.size(),
+            #[cfg(feature = "ecc")]
+            PublicKeyKind::Ecc(key) => key.curve().scalar_len(),
+        }
     }
 }
 
 impl PublicKey {
+    /// Create a public key wrapper from an RSA key.
+    pub(crate) fn from_rsa(value: RsaPublicKeyInner) -> Self {
+        Self {
+            value: PublicKeyKind::Rsa(value),
+        }
+    }
+
+    /// Create a public key wrapper from an EC key.
+    #[cfg(feature = "ecc")]
+    pub(crate) fn from_ecc(value: crate::ecc::EccPublicKey) -> Self {
+        Self {
+            value: PublicKeyKind::Ecc(value),
+        }
+    }
+
+    /// Returns the EC curve if this is an EC public key.
+    #[cfg(feature = "ecc")]
+    #[must_use]
+    pub fn ecc_curve(&self) -> Option<crate::ecc::EccCurve> {
+        match &self.value {
+            PublicKeyKind::Rsa(_) => None,
+            PublicKeyKind::Ecc(key) => Some(key.curve()),
+        }
+    }
+
+    /// Returns the inner EC public key when this key is EC.
+    #[cfg(feature = "ecc")]
+    #[must_use]
+    pub fn ecc_key(&self) -> Option<&crate::ecc::EccPublicKey> {
+        match &self.value {
+            PublicKeyKind::Rsa(_) => None,
+            PublicKeyKind::Ecc(key) => Some(key),
+        }
+    }
+
+    fn rsa_key(&self) -> Result<&RsaPublicKeyInner, Error> {
+        match &self.value {
+            PublicKeyKind::Rsa(key) => Ok(key),
+            #[cfg(feature = "ecc")]
+            PublicKeyKind::Ecc(_) => Err(Error::new(
+                StatusCode::BadSecurityChecksFailed,
+                "RSA operation requested for an EC public key",
+            )),
+        }
+    }
+
+    fn rsa_key_for_encrypt(&self) -> Result<&RsaPublicKeyInner, PKeyError> {
+        match &self.value {
+            PublicKeyKind::Rsa(key) => Ok(key),
+            #[cfg(feature = "ecc")]
+            PublicKeyKind::Ecc(_) => Err(PKeyError),
+        }
+    }
+
     /// Verifies the data using RSA-SHA1
     pub fn verify_sha1(&self, data: &[u8], signature: &[u8]) -> Result<bool, Error> {
-        let verifying_key = pkcs1v15::VerifyingKey::<sha1::Sha1>::new(self.value.clone());
+        let verifying_key = pkcs1v15::VerifyingKey::<sha1::Sha1>::new(self.rsa_key()?.clone());
         let r = pkcs1v15::Signature::try_from(signature);
         match r {
             Err(e) => Err(Error::new(StatusCode::BadUnexpectedError, e)),
@@ -366,7 +614,7 @@ impl PublicKey {
 
     /// Verifies the data using RSA-SHA256
     pub fn verify_sha256(&self, data: &[u8], signature: &[u8]) -> Result<bool, Error> {
-        let verifying_key = pkcs1v15::VerifyingKey::<sha2::Sha256>::new(self.value.clone());
+        let verifying_key = pkcs1v15::VerifyingKey::<sha2::Sha256>::new(self.rsa_key()?.clone());
         let r = pkcs1v15::Signature::try_from(signature);
         match r {
             Err(e) => Err(Error::new(StatusCode::BadUnexpectedError, e)),
@@ -379,7 +627,7 @@ impl PublicKey {
 
     /// Verifies the data using RSA-SHA256-PSS
     pub fn verify_sha256_pss(&self, data: &[u8], signature: &[u8]) -> Result<bool, Error> {
-        let verifying_key = pss::VerifyingKey::<sha2::Sha256>::new(self.value.clone());
+        let verifying_key = pss::VerifyingKey::<sha2::Sha256>::new(self.rsa_key()?.clone());
         let r = pss::Signature::try_from(signature);
         match r {
             Err(e) => Err(Error::new(StatusCode::BadUnexpectedError, e)),
@@ -399,6 +647,7 @@ impl PublicKey {
     ) -> Result<usize, PKeyError> {
         let cipher_text_block_size = self.cipher_text_block_size();
         let plain_text_block_size = T::get_plaintext_block_size(self.size());
+        let key = self.rsa_key_for_encrypt()?;
 
         let mut rng = rand::thread_rng();
 
@@ -422,7 +671,7 @@ impl PublicKey {
                 let src = src.get(src_idx..src_end_index).ok_or(PKeyError)?;
 
                 let padding = T::get_padding();
-                let encrypted = self.value.encrypt(&mut rng, padding, src)?;
+                let encrypted = key.encrypt(&mut rng, padding, src)?;
                 if encrypted.len() != cipher_text_block_size {
                     return Err(PKeyError);
                 }

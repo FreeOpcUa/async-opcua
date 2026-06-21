@@ -4,7 +4,7 @@ use opcua_core::{
     comms::url::hostname_from_url, sync::RwLock, trace_read_lock, trace_write_lock, ResponseMessage,
 };
 use opcua_crypto::{
-    self, legacy_encrypt_secret, random, CertificateStore, PKey, SecurityPolicy, X509,
+    self, legacy_encrypt_secret, random, CertificateStore, PrivateKey, SecurityPolicy, X509,
 };
 use opcua_types::{
     ActivateSessionRequest, ActivateSessionResponse, AnonymousIdentityToken,
@@ -14,7 +14,6 @@ use opcua_types::{
     SignedSoftwareCertificate, StatusCode, UAString, UserNameIdentityToken, UserTokenType,
     X509IdentityToken,
 };
-use rsa::RsaPrivateKey;
 use tracing::{debug_span, error, info_span, Instrument};
 
 use crate::{
@@ -294,7 +293,7 @@ impl UARequest for CreateSession<'_> {
 /// is handled automatically as part of connect/reconnect logic.
 pub struct ActivateSession {
     identity_token: IdentityToken,
-    private_key: Option<PKey<RsaPrivateKey>>,
+    private_key: Option<PrivateKey>,
     locale_ids: Vec<UAString>,
     client_software_certificates: Vec<SignedSoftwareCertificate>,
     endpoint: EndpointDescription,
@@ -349,7 +348,7 @@ impl ActivateSession {
     }
 
     /// Set the client private key.
-    pub fn private_key(mut self, private_key: PKey<RsaPrivateKey>) -> Self {
+    pub fn private_key(mut self, private_key: PrivateKey) -> Self {
         self.private_key = Some(private_key);
         self
     }

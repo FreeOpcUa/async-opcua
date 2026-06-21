@@ -79,12 +79,17 @@ webpki-roots = "0.26"
 aes = { version = "^0.8", features = ["zeroize"] }
 cbc = "^0.1"
 const-oid = { version = "^0.9", features = ["db"] }
+ecdsa = { version = "^0.16", default-features = false, features = ["signing", "verifying"] }
+hkdf = "^0.12"
 hmac = "^0.12"
+p256 = { version = "^0.13", default-features = false, features = ["alloc", "arithmetic", "ecdsa", "ecdh", "pem"] }
+p384 = { version = "^0.13", default-features = false, features = ["alloc", "arithmetic", "ecdsa", "ecdh", "pem"] }
 rand = "^0.8"
 rsa = { version = "^0.9", features = ["sha2", "sha1", "pem"] }
 sha1 = { version = "^0.10", features = ["oid"] }
 sha2 = { version = "^0.10", features = ["oid"] }
 x509-cert = { version = "^0.2", features = ["builder", "hazmat"] }
+zeroize = "1.8.2"
 
 # Compile the crypto dependencies in release even in debug, to make test
 # performance tolerable. This makes initial compile times slightly worse,

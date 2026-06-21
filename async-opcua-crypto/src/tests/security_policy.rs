@@ -15,6 +15,8 @@ fn is_deprecated() {
     assert!(!SecurityPolicy::Basic256Sha256.is_deprecated());
     assert!(!SecurityPolicy::Aes128Sha256RsaOaep.is_deprecated());
     assert!(!SecurityPolicy::Aes256Sha256RsaPss.is_deprecated());
+    assert!(!SecurityPolicy::EccNistP256.is_deprecated());
+    assert!(!SecurityPolicy::EccNistP384.is_deprecated());
 }
 
 #[test]
@@ -111,6 +113,24 @@ fn from_str() {
             .unwrap(),
         SecurityPolicy::Aes256Sha256RsaPss
     );
+    assert_eq!(
+        SecurityPolicy::from_str("ECC_nistP256").unwrap(),
+        SecurityPolicy::EccNistP256
+    );
+    assert_eq!(
+        SecurityPolicy::from_str("http://opcfoundation.org/UA/SecurityPolicy#ECC_nistP256")
+            .unwrap(),
+        SecurityPolicy::EccNistP256
+    );
+    assert_eq!(
+        SecurityPolicy::from_str("ECC_nistP384").unwrap(),
+        SecurityPolicy::EccNistP384
+    );
+    assert_eq!(
+        SecurityPolicy::from_str("http://opcfoundation.org/UA/SecurityPolicy#ECC_nistP384")
+            .unwrap(),
+        SecurityPolicy::EccNistP384
+    );
 }
 
 #[test]
@@ -141,6 +161,14 @@ fn to_uri() {
     assert_eq!(
         SecurityPolicy::Aes256Sha256RsaPss.to_uri(),
         "http://opcfoundation.org/UA/SecurityPolicy#Aes256_Sha256_RsaPss"
+    );
+    assert_eq!(
+        SecurityPolicy::EccNistP256.to_uri(),
+        "http://opcfoundation.org/UA/SecurityPolicy#ECC_nistP256"
+    );
+    assert_eq!(
+        SecurityPolicy::EccNistP384.to_uri(),
+        "http://opcfoundation.org/UA/SecurityPolicy#ECC_nistP384"
     );
 }
 
@@ -173,4 +201,39 @@ fn is_valid_keylength() {
     assert!(SecurityPolicy::Aes256Sha256RsaPss.is_valid_keylength(4096));
     assert!(!SecurityPolicy::Aes256Sha256RsaPss.is_valid_keylength(1024));
     assert!(!SecurityPolicy::Aes256Sha256RsaPss.is_valid_keylength(8192));
+
+    assert!(SecurityPolicy::EccNistP256.is_valid_keylength(256));
+    assert!(!SecurityPolicy::EccNistP256.is_valid_keylength(384));
+    assert!(SecurityPolicy::EccNistP384.is_valid_keylength(384));
+    assert!(!SecurityPolicy::EccNistP384.is_valid_keylength(256));
+}
+
+#[test]
+fn ecc_support_is_feature_gated() {
+    assert_eq!(
+        SecurityPolicy::EccNistP256.is_supported(),
+        cfg!(feature = "ecc")
+    );
+    assert_eq!(
+        SecurityPolicy::EccNistP384.is_supported(),
+        cfg!(feature = "ecc")
+    );
+}
+
+#[test]
+fn ecc_policy_metadata() {
+    assert_eq!(SecurityPolicy::EccNistP256.to_str(), "ECC_nistP256");
+    assert_eq!(SecurityPolicy::EccNistP384.to_str(), "ECC_nistP384");
+    assert_eq!(SecurityPolicy::EccNistP256.symmetric_signature_size(), 32);
+    assert_eq!(SecurityPolicy::EccNistP384.symmetric_signature_size(), 48);
+    assert_eq!(SecurityPolicy::EccNistP256.encrypting_key_length(), 16);
+    assert_eq!(SecurityPolicy::EccNistP384.encrypting_key_length(), 32);
+    assert_eq!(
+        SecurityPolicy::EccNistP256.secure_channel_nonce_length(),
+        64
+    );
+    assert_eq!(
+        SecurityPolicy::EccNistP384.secure_channel_nonce_length(),
+        96
+    );
 }

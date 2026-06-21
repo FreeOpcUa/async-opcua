@@ -60,6 +60,7 @@ pub(crate) struct Transport<R, W> {
     decrypted_chunk_storage: DecryptedChunkStorage,
     state: TransportState,
     pending_chunks: Vec<MessageChunk>,
+    outgoing_sequence_numbers_configured: bool,
     /// Client protocol version set during HELLO
     pub(crate) client_protocol_version: u32,
     /// Last decoded sequence number
@@ -325,6 +326,7 @@ where
             state: TransportState::Running,
             pending_chunks: Vec::new(),
             sequence_numbers: SequenceNumberHandle::new(true),
+            outgoing_sequence_numbers_configured: false,
             client_protocol_version: 0,
             send_buffer,
             decrypted_chunk_storage: DecryptedChunkStorage::new(),
@@ -349,6 +351,14 @@ where
         message: ResponseMessage,
         request_id: u32,
     ) -> Result<(), StatusCode> {
+        if !self.outgoing_sequence_numbers_configured
+            && matches!(message, ResponseMessage::OpenSecureChannel(_))
+        {
+            self.send_buffer
+                .configure_sequence_numbers(channel.security_policy().legacy_sequence_numbers());
+            self.outgoing_sequence_numbers_configured = true;
+        }
+
         match self.send_buffer.write(request_id, message, channel) {
             Ok(_) => Ok(()),
             Err(e) => {

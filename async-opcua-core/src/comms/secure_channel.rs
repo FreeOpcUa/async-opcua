@@ -16,6 +16,8 @@ use bytes::Buf;
 use chrono::Duration;
 use tracing::{error, trace};
 
+#[cfg(feature = "ecc")]
+use opcua_crypto::ecc::{self, EphemeralPrivateKey};
 use opcua_crypto::{
     random, AesDerivedKeys, CertificateStore, KeySize, PrivateKey, PublicKey, SecurityPolicy, X509,
 };
@@ -110,6 +112,9 @@ pub struct SecureChannel {
     remote_nonce: Vec<u8>,
     /// Our nonce generated while handling open secure channel
     local_nonce: Vec<u8>,
+    /// Our ephemeral private key for ECC secure-channel ECDH.
+    #[cfg(feature = "ecc")]
+    local_ephemeral_key: Option<EphemeralPrivateKey>,
     /// Client (i.e. other end's set of keys) Symmetric Signing Key, Encrypt Key, IV
     ///
     /// This is a map of channel token ids and their respective keys. We need to keep
@@ -140,6 +145,8 @@ impl SecureChannel {
             token_lifetime: 0,
             local_nonce: Vec::new(),
             remote_nonce: Vec::new(),
+            #[cfg(feature = "ecc")]
+            local_ephemeral_key: None,
             cert: None,
             private_key: None,
             remote_cert: None,
@@ -185,6 +192,8 @@ impl SecureChannel {
             token_lifetime: 0,
             local_nonce: Vec::new(),
             remote_nonce: Vec::new(),
+            #[cfg(feature = "ecc")]
+            local_ephemeral_key: None,
             cert,
             private_key,
             remote_cert: None,
@@ -197,6 +206,17 @@ impl SecureChannel {
     /// Return `true` if this channel is for a client.
     pub fn is_client_role(&self) -> bool {
         self.role == Role::Client
+    }
+
+    /// Set the channel role.
+    pub fn set_role(&mut self, role: Role) {
+        self.role = role;
+    }
+
+    /// Set the local ephemeral private key used for ECC secure-channel ECDH.
+    #[cfg(feature = "ecc")]
+    pub fn set_local_ephemeral_key(&mut self, key: EphemeralPrivateKey) {
+        self.local_ephemeral_key = Some(key);
     }
 
     /// Set the application certificate.
@@ -387,6 +407,32 @@ impl SecureChannel {
         random::bytes(&mut self.local_nonce);
     }
 
+    /// Creates the local nonce for an OpenSecureChannel handshake.
+    ///
+    /// For ECC policies the nonce is the ephemeral EC public key and the matching private key is
+    /// retained for ECDH key derivation. Other policies keep the existing random nonce behavior.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if ECC ephemeral key generation fails.
+    pub fn create_local_nonce(&mut self) -> Result<(), Error> {
+        #[cfg(feature = "ecc")]
+        if matches!(
+            self.security_policy,
+            SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384
+        ) {
+            let curve = ecc::EccCurve::from_security_policy(self.security_policy)?;
+            let keypair = ecc::generate_ephemeral_keypair(curve)?;
+            let (private_key, public_key) = keypair.into_parts();
+            self.local_nonce = public_key.encoded().to_vec();
+            self.set_local_ephemeral_key(private_key);
+            return Ok(());
+        }
+
+        self.create_random_nonce();
+        Ok(())
+    }
+
     /// Sets the remote certificate
     pub fn set_remote_cert_from_byte_string(
         &mut self,
@@ -487,6 +533,15 @@ impl SecureChannel {
     /// are used to secure Messages sent by the Server.
     ///
     pub fn derive_keys(&mut self) {
+        #[cfg(feature = "ecc")]
+        if matches!(
+            self.security_policy,
+            SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384
+        ) {
+            self.derive_ecc_keys();
+            return;
+        }
+
         self.insert_remote_keys(
             self.security_policy
                 .make_secure_channel_keys(&self.local_nonce, &self.remote_nonce),
@@ -502,6 +557,48 @@ impl SecureChannel {
             self.get_remote_keys(self.token_id)
         );
         trace!("Derived local keys = {:?}", self.local_keys);
+    }
+
+    #[cfg(feature = "ecc")]
+    fn derive_ecc_keys(&mut self) {
+        let Some(local_ephemeral_key) = self.local_ephemeral_key.as_ref() else {
+            error!("Cannot derive ECC secure-channel keys without a local ephemeral key");
+            return;
+        };
+
+        let keys = (|| {
+            let curve = ecc::EccCurve::from_security_policy(self.security_policy)?;
+            let remote_public_key = ecc::decode_public_key(curve, &self.remote_nonce)?;
+            let shared_secret = ecc::ecdh_shared_secret(local_ephemeral_key, &remote_public_key)?;
+            let (client_nonce, server_nonce) = if self.is_client_role() {
+                (self.local_nonce.as_slice(), self.remote_nonce.as_slice())
+            } else {
+                (self.remote_nonce.as_slice(), self.local_nonce.as_slice())
+            };
+
+            ecc::derive_keys(
+                self.security_policy,
+                shared_secret.as_ref(),
+                client_nonce,
+                server_nonce,
+            )
+        })();
+
+        match keys {
+            Ok(keys) => {
+                if self.is_client_role() {
+                    self.local_keys = Some(keys.client);
+                    self.insert_remote_keys(keys.server);
+                } else {
+                    self.local_keys = Some(keys.server);
+                    self.insert_remote_keys(keys.client);
+                }
+            }
+            Err(err) => {
+                self.local_keys = None;
+                error!("Failed to derive ECC secure-channel keys: {err}");
+            }
+        }
     }
 
     /// Get the deadline as an [`Instant`] for token renewal, used
@@ -523,6 +620,10 @@ impl SecureChannel {
         // Signature size in bytes
         match security_header {
             SecurityHeader::Asymmetric(security_header) => {
+                if self.security_policy.is_ecc() {
+                    return self.private_key.as_ref().map(KeySize::size).unwrap_or(0);
+                }
+
                 if !security_header.sender_certificate.is_null() {
                     X509::from_byte_string(&security_header.sender_certificate)
                         .and_then(|x509| x509.public_key())
@@ -1090,6 +1191,7 @@ impl SecureChannel {
             .as_ref()
             .ok_or(StatusCode::BadSecurityChecksFailed)?;
         let signing_key_size = signing_key.size();
+        let is_ecc = security_policy.is_ecc();
 
         let signed_range = 0..(encrypted_range.end - signing_key_size);
         let signature_range = signed_range.end..encrypted_range.end;
@@ -1099,18 +1201,26 @@ impl SecureChannel {
             header_size, encrypted_range, signed_range, signature_range, signing_key_size
         );
 
-        let encryption_key = self
-            .remote_cert
-            .as_ref()
-            .ok_or(StatusCode::BadSecurityChecksFailed)?
-            .public_key()?;
+        let encryption_key = if is_ecc {
+            None
+        } else {
+            Some(
+                self.remote_cert
+                    .as_ref()
+                    .ok_or(StatusCode::BadSecurityChecksFailed)?
+                    .public_key()?,
+            )
+        };
 
         // Encryption will change the size of the chunk. Since we sign before encrypting, we need to
         // compute that size and change the message header to be that new size
         let cipher_text_size = {
             let plain_text_size = encrypted_range.end - encrypted_range.start;
-            let cipher_text_size =
-                security_policy.calculate_cipher_text_size(plain_text_size, &encryption_key);
+            let cipher_text_size = if let Some(encryption_key) = &encryption_key {
+                security_policy.calculate_cipher_text_size(plain_text_size, encryption_key)
+            } else {
+                plain_text_size
+            };
             trace!(
                 "plain_text_size = {}, encrypted_text_size = {}",
                 plain_text_size,
@@ -1133,6 +1243,16 @@ impl SecureChannel {
             return Err(StatusCode::BadSecurityChecksFailed);
         }
 
+        if is_ecc {
+            security_mut_slice(dst, encrypted_range.clone())?
+                .copy_from_slice(security_slice(src, encrypted_range.clone())?);
+            Self::log_crypto_data(
+                "Chunk after signing",
+                security_slice_to(dst, signature_range.end)?,
+            );
+            return Ok(signature_range.end);
+        }
+
         Self::log_crypto_data(
             "Chunk after signing",
             security_slice_to(dst, signature_range.end)?,
@@ -1140,7 +1260,9 @@ impl SecureChannel {
 
         // Encrypt the sequence header, payload, signature portion into dst
         let encrypted_size = security_policy.asymmetric_encrypt(
-            &encryption_key,
+            encryption_key
+                .as_ref()
+                .ok_or(StatusCode::BadSecurityChecksFailed)?,
             security_slice(src, encrypted_range.clone())?,
             security_mut_slice_from(dst, encrypted_range.start)?,
         )?;
@@ -1320,26 +1442,67 @@ impl SecureChannel {
                     )
                 })?);
 
-            // Decrypt and copy encrypted block
-            // Note that the unencrypted size can be less than the encrypted size due to removal
-            // of padding, so the ranges that were supplied to this function must be offset to compensate.
             let encrypted_size = encrypted_range.end - encrypted_range.start;
-            trace!("Decrypting message range {:?}", encrypted_range);
-            let mut decrypted_tmp = vec![0u8; encrypted_size];
+            let decrypted_size = if security_policy.is_ecc() {
+                dst.get_mut(encrypted_range.clone())
+                    .ok_or_else(|| {
+                        Error::new(
+                            StatusCode::BadSecurityChecksFailed,
+                            "invalid encrypted range",
+                        )
+                    })?
+                    .copy_from_slice(src.get(encrypted_range.clone()).ok_or_else(|| {
+                        Error::new(
+                            StatusCode::BadSecurityChecksFailed,
+                            "invalid encrypted range",
+                        )
+                    })?);
+                encrypted_size
+            } else {
+                // Note that the unencrypted size can be less than the encrypted size due to removal
+                // of padding, so the ranges that were supplied to this function must be offset to compensate.
+                trace!("Decrypting message range {:?}", encrypted_range);
+                let mut decrypted_tmp = vec![0u8; encrypted_size];
 
-            let private_key = self.private_key.as_ref().ok_or_else(|| {
-                Error::new(StatusCode::BadSecurityChecksFailed, "Missing private key")
-            })?;
-            let decrypted_size = security_policy.asymmetric_decrypt(
-                private_key,
-                src.get(encrypted_range.clone()).ok_or_else(|| {
-                    Error::new(
-                        StatusCode::BadSecurityChecksFailed,
-                        "invalid encrypted range",
-                    )
-                })?,
-                &mut decrypted_tmp,
-            )?;
+                let private_key = self.private_key.as_ref().ok_or_else(|| {
+                    Error::new(StatusCode::BadSecurityChecksFailed, "Missing private key")
+                })?;
+                let decrypted_size = security_policy.asymmetric_decrypt(
+                    private_key,
+                    src.get(encrypted_range.clone()).ok_or_else(|| {
+                        Error::new(
+                            StatusCode::BadSecurityChecksFailed,
+                            "invalid encrypted range",
+                        )
+                    })?,
+                    &mut decrypted_tmp,
+                )?;
+                let decrypted_end = encrypted_range
+                    .start
+                    .checked_add(decrypted_size)
+                    .filter(|end| *end <= dst.len())
+                    .ok_or_else(|| {
+                        Error::new(
+                            StatusCode::BadSecurityChecksFailed,
+                            "decrypted chunk exceeds message buffer",
+                        )
+                    })?;
+
+                dst.get_mut(encrypted_range.start..decrypted_end)
+                    .ok_or_else(|| {
+                        Error::new(
+                            StatusCode::BadSecurityChecksFailed,
+                            "invalid decrypted range",
+                        )
+                    })?
+                    .copy_from_slice(decrypted_tmp.get(..decrypted_size).ok_or_else(|| {
+                        Error::new(
+                            StatusCode::BadSecurityChecksFailed,
+                            "invalid decrypted range",
+                        )
+                    })?);
+                decrypted_size
+            };
             trace!(
                 "Decrypted bytes = {} compared to encrypted range {}",
                 decrypted_size,
@@ -1347,7 +1510,8 @@ impl SecureChannel {
             );
             // Self::log_crypto_data("Decrypted Bytes = ", &decrypted_tmp[..decrypted_size]);
 
-            let verification_key_signature_size = verification_key.size();
+            let verification_key_signature_size =
+                security_policy.asymmetric_signature_size(verification_key);
             trace!(
                 "Verification key size = {}",
                 verification_key_signature_size
@@ -1363,21 +1527,6 @@ impl SecureChannel {
                         "decrypted chunk exceeds message buffer",
                     )
                 })?;
-
-            // Copy the bytes to dst
-            dst.get_mut(encrypted_range.start..decrypted_end)
-                .ok_or_else(|| {
-                    Error::new(
-                        StatusCode::BadSecurityChecksFailed,
-                        "invalid decrypted range",
-                    )
-                })?
-                .copy_from_slice(decrypted_tmp.get(..decrypted_size).ok_or_else(|| {
-                    Error::new(
-                        StatusCode::BadSecurityChecksFailed,
-                        "invalid decrypted range",
-                    )
-                })?);
 
             // The signature range is at the end of the decrypted block for the verification key's signature
             let signature_dst_offset = decrypted_end
@@ -1424,11 +1573,16 @@ impl SecureChannel {
                 })?,
             )?;
 
-            // Verify that the padding is correct
-            let padding_range = self.verify_padding(dst, key_size, signature_range_dst.start)?;
+            if security_policy.is_ecc() {
+                Ok(signature_range_dst.start)
+            } else {
+                // Verify that the padding is correct
+                let padding_range =
+                    self.verify_padding(dst, key_size, signature_range_dst.start)?;
 
-            // Decrypted and verified into dst
-            Ok(padding_range.start)
+                // Decrypted and verified into dst
+                Ok(padding_range.start)
+            }
         }
     }
 
@@ -1806,7 +1960,9 @@ impl SecureChannel {
             | SecurityPolicy::Basic256
             | SecurityPolicy::Basic256Sha256
             | SecurityPolicy::Aes128Sha256RsaOaep
-            | SecurityPolicy::Aes256Sha256RsaPss => Ok(()),
+            | SecurityPolicy::Aes256Sha256RsaPss
+            | SecurityPolicy::EccNistP256
+            | SecurityPolicy::EccNistP384 => Ok(()),
             _ => Err(StatusCode::BadSecurityPolicyRejected),
         }
     }

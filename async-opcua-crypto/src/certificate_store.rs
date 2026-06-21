@@ -364,6 +364,9 @@ impl CertificateStore {
                 return Err(Error::new(StatusCode::BadUnexpectedError, format!("Certificate in memory does not match the one on disk {} so cert will automatically be treated as untrusted", cert_path.display())));
             }
 
+            #[cfg(feature = "ecc")]
+            cert.ensure_curve_matches_policy(security_policy)?;
+
             // Check that the certificate is the right length for the security policy
             match cert.key_length() {
                 Err(_) => {

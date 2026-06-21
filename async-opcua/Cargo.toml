@@ -33,6 +33,14 @@ legacy-crypto = [
   "async-opcua-crypto/legacy-crypto",
   "async-opcua-server/legacy-crypto",
 ]
+# Forwards to the crypto crate's NIST ECC security policies (ECC_nistP256 /
+# ECC_nistP384) — feature 012. Pure-Rust elliptic-curve secure channels.
+ecc = [
+  "async-opcua-client?/ecc",
+  "async-opcua-core/ecc",
+  "async-opcua-crypto/ecc",
+  "async-opcua-server?/ecc",
+]
 # opc.wss (WebSocket) transport (feature 009 / R5 / FR-044). Forwards to whichever of
 # the client/server crates is enabled; TLS is layered on the in-tree rustls 0.23.
 wss = ["async-opcua-client?/wss", "async-opcua-server?/wss"]

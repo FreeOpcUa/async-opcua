@@ -125,8 +125,11 @@ validation + §6.3 CRL); codebase + crate research (2026-06-21). All crate versi
 - `SecurityPolicy::is_valid_keylength` (`security_policy.rs:316`), `asymmetric_signature_algorithm`
   (`:277`).
 
-## Open items to confirm at plan/clarify
+## Open items — RESOLVED (user-confirmed 2026-06-21)
 
-- Default enforcement mode (Decision 9) — confirm ON-by-default for chain/sig/usage, lenient revocation.
-- Audit typed events (Decision 8) — confirm using the existing audit surface now vs adding
-  `AuditCertificate*` types in this feature.
+- Default enforcement mode (Decision 9) — **CONFIRMED: chain/sig/usage ON by default, revocation
+  lenient** (checked only when CRLs present/required). Existing self-signed-in-`trusted/` unaffected;
+  `None` path byte-identical.
+- Audit typed events (Decision 8) — **CONFIRMED: report suppressed cert steps via the existing
+  generic audit surface with the precise status code now; typed `AuditCertificate*` event types are a
+  deferred follow-up** (keeps US4 scoped).

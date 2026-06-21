@@ -695,4 +695,38 @@ mod tests {
             .expect_err("Unknown policy must be rejected, not supported");
         assert_eq!(err.status(), StatusCode::BadSecurityPolicyRejected);
     }
+
+    /// Feature 012 / US5 (SC-005): with the `ecc` feature OFF, the ECC policies
+    /// must still be *recognized* (so they can be named and rejected
+    /// deliberately) but report **unsupported** and fail closed, while RSA/None
+    /// are unaffected.
+    #[cfg(not(feature = "ecc"))]
+    #[test]
+    fn ecc_policies_recognized_but_unsupported_when_feature_off() {
+        // Recognized — not silently downgraded to Unknown.
+        assert_eq!(
+            SecurityPolicy::from_uri(super::constants::SECURITY_POLICY_ECC_NIST_P256_URI),
+            SecurityPolicy::EccNistP256
+        );
+        assert_eq!(
+            SecurityPolicy::from_uri(super::constants::SECURITY_POLICY_ECC_NIST_P384_URI),
+            SecurityPolicy::EccNistP384
+        );
+
+        // Unsupported in this build, and ensure_supported fails closed.
+        assert!(!SecurityPolicy::EccNistP256.is_supported());
+        assert!(!SecurityPolicy::EccNistP384.is_supported());
+        assert_eq!(
+            SecurityPolicy::EccNistP256
+                .ensure_supported()
+                .expect_err("ECC must be unsupported without the feature")
+                .status(),
+            StatusCode::BadSecurityPolicyRejected
+        );
+
+        // RSA/None remain supported.
+        assert!(SecurityPolicy::None.is_supported());
+        assert!(SecurityPolicy::Basic256Sha256.is_supported());
+        assert!(SecurityPolicy::Aes256Sha256RsaPss.is_supported());
+    }
 }

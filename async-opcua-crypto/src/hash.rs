@@ -9,13 +9,17 @@ use std::result::Result;
 use hmac::{digest, Hmac, Mac};
 #[cfg(feature = "legacy-crypto")]
 use sha1::Sha1;
-use sha2::{Sha256, Sha384};
+use sha2::Sha256;
+#[cfg(feature = "ecc")]
+use sha2::Sha384;
 
 use opcua_types::{status_code::StatusCode, Error};
 
 #[cfg(feature = "legacy-crypto")]
 use super::SHA1_SIZE;
-use super::{SHA256_SIZE, SHA384_SIZE};
+use super::SHA256_SIZE;
+#[cfg(feature = "ecc")]
+use super::SHA384_SIZE;
 
 type HmacSha256 = Hmac<Sha256>;
 #[cfg(feature = "ecc")]

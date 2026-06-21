@@ -122,9 +122,13 @@ RFC 5869 Expand Info=salt; key layout Sig|Enc|IV; P256=32/16/16 (SHA256/AES128),
 **Goal**: same channel for P-384 (SHA-384 / AES-256).
 **Independent Test**: repeat the US3 loopback + negative tests with `ECC_nistP384`.
 
-- [ ] T017 [US4] Add failing loopback + negative tests for `ECC_nistP384` (both modes) in `async-opcua` integration tests.
-- [ ] T018 [US4] Generalize the ECC primitives + channel branch (US1/US3) over the curve so P-384/SHA-384/AES-256 dispatches correctly (no P-256 hard-coding). (depends T017)
-- [ ] T019 [US4] Gate; verify T017 passes; **commit US4** (`feat(012 US4): ECC_nistP384 support`).
+- [X] T017 [US4] Add failing loopback + negative tests for `ECC_nistP384` (both modes) in `async-opcua` integration tests.
+  — DONE in US3: `ecc_nistp384_sign` / `ecc_nistp384_sign_and_encrypt` loopback + P-384 channel/crypto/negative tests.
+- [X] T018 [US4] Generalize the ECC primitives + channel branch (US1/US3) over the curve so P-384/SHA-384/AES-256 dispatches correctly (no P-256 hard-coding). (depends T017)
+  — DONE: production code is curve-generic via `EccCurve` throughout (audited: the only `P256` literals are in
+  test code). P-384 loopback exercises AES-256 / SHA-384 / 96-byte ECDSA end to end.
+- [X] T019 [US4] Gate; verify T017 passes. **No separate commit** — US4 shipped within the US3 commit (`95a7f3cf`),
+  since the curve-generic channel made P-384 fall out for free.
 
 **Checkpoint**: both NIST curves working.
 
@@ -135,10 +139,20 @@ RFC 5869 Expand Info=salt; key layout Sig|Enc|IV; P256=32/16/16 (SHA256/AES128),
 **Goal**: configurable ECC endpoints/selection; correct negotiation; safe feature-gating.
 **Independent Test**: mixed RSA+ECC config round-trips; ECC client negotiates ECC, RSA-only client negotiates RSA; feature off → ECC unsupported, RSA/None byte-identical.
 
-- [ ] T020 [US5] Add failing tests: mixed RSA+ECC server config round-trip; ECC-capable client negotiates ECC; RSA-only client still negotiates RSA; `--no-default-features` (ecc off) → ECC policy cleanly rejected, RSA/None byte-identical.
-- [ ] T021 [US5] Wire ECC into server endpoint config + client connect surface and the policy/security-level negotiation (`async-opcua-server`/`-client`). (depends T020)
-- [ ] T022 [US5] Add a sample ECC endpoint (samples/server.conf or a profile) + ensure `ecc`-off builds are clean; docs pointer. (depends T020)
-- [ ] T023 [US5] Gate; verify T020 passes; **commit US5** (`feat(012 US5): ECC endpoint config + negotiation + gating`).
+- [X] T020 [US5] Add failing tests: ECC-capable client negotiates ECC; RSA-only client still negotiates RSA; `--no-default-features` (ecc off) → ECC policy cleanly rejected, RSA/None byte-identical.
+  — DONE: feature-off gating test `security_policy::tests::ecc_policies_recognized_but_unsupported_when_feature_off`
+  (ecc-off → recognized-but-unsupported, fail-closed; RSA/None supported); ECC negotiation + curve-strict
+  rejection covered by the US3 loopback + `ecc_wrong_curve_is_not_negotiated`; RSA negotiation by the existing
+  98-test suite. **Mixed RSA+ECC config round-trip dropped** — needs multi-cert (see research.md Deferred).
+- [X] T021 [US5] Wire ECC into server endpoint config + client connect surface and the policy/security-level negotiation.
+  — DONE in US3 (required to make the channel work): `add_endpoint` accepts ECC policies, client
+  `connect_to_matching_endpoint` selects ECC, negotiation is curve-strict. `is_supported()`/`ensure_supported()`
+  gate on `cfg!(feature="ecc")`.
+- [X] T022 [US5] Ensure `ecc`-off builds are clean; docs pointer. (depends T020)
+  — DONE: gated the SHA-384/test-only items so `clippy --no-default-features --features aws-lc-rs --all-targets
+  -D warnings` is clean; added the `ecc` feature + single-cert limitation to `docs/setup.md`. (Standalone sample
+  endpoint config deferred to Polish/T026.)
+- [X] T023 [US5] Gate; verify T020 passes; **commit US5** (`feat(012 US5): ECC config/negotiation + ecc-off gating`).
 
 **Checkpoint**: ECC usable and safe to ship.
 

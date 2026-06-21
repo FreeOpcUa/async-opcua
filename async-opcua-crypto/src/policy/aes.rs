@@ -57,17 +57,17 @@ impl AesDerivedKeys {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "ecc"))]
     pub(crate) fn signing_key(&self) -> &[u8] {
         &self.signing_key
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "ecc"))]
     pub(crate) fn encryption_key(&self) -> &AesKey {
         &self.encryption_key
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "ecc"))]
     pub(crate) fn initialization_vector(&self) -> &[u8] {
         &self.initialization_vector
     }

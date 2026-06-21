@@ -140,3 +140,13 @@ lengths are fixed by the algorithms themselves (HMAC-SHA256/384 output = 32/48; 
 
 - Brainpool (`ECC_brainpoolP256r1/P384r1`) — pre-release/unaudited Rust arithmetic; PubSub-ECC; ECC
   user-identity-token encryption; any C/OpenSSL backend.
+- **Mixed RSA+ECC on one server (multi-cert)** — a server holds a single application instance
+  certificate (`CertificateStore::read_own_cert`/`read_own_pkey`), and a given cert is either RSA or
+  EC. ECDSA handshakes need the EC cert; RSA handshakes need the RSA cert. So a single-cert server is
+  inherently **ECC-only or RSA-only**. Serving both on one server needs a second application cert plus
+  per-policy cert selection at OpenSecureChannel time — a real but bounded follow-up. US5 delivers the
+  feature-gating (ecc-off → recognized-but-unsupported, fail-closed) and curve-strict negotiation;
+  mixed-mode multi-cert is deferred. (Mixed deployments today: run RSA and ECC on separate endpoints/hosts.)
+- **ChannelThumbprint (§6.7.5)** — the MITM-hardening OpenSecureChannel *response* signature over
+  `Response-bytes ‖ Request-signature`. Not exercised by loopback (both peers ours). Implement before
+  claiming production/interop completeness.

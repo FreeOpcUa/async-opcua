@@ -53,7 +53,7 @@ always `null()`) — carry an `AdditionalParametersType` name-value list with `E
 
 **Goal**: a valid `ECDHPolicyUri` → server returns a signed `ECDHKey`; invalid → `Bad_SecurityPolicyRejected`; absent → unchanged.
 
-- [ ] T004 [US1] Claude-authored failing tests: (a) crypto — sign an ephemeral public key with an EC
+- [X] T004 [US1] Claude-authored failing tests: (a) crypto — sign an ephemeral public key with an EC
   app-cert key and verify it against the cert; a tampered key/signature fails (anchored to §7.15:
   signed data = publicKey bytes). (b) server — a CreateSession whose request `additional_header`
   declares `ECDHPolicyUri=ECC_nistP256/384` yields a response `additional_header` with an `ECDHKey`
@@ -64,20 +64,20 @@ always `null()`) — carry an `AdditionalParametersType` name-value list with `E
   an ephemeral keypair, sign the public key (T002), and place `ECDHKey` (`EphemeralKeyType`) in the
   response `additional_header`; invalid/unsupported → `Bad_SecurityPolicyRejected` (in place of the
   key); absent → unchanged. Store the issued ephemeral key on the session. (depends T004)
-- [ ] T006 [US1] Gate; verify T004 passes; **commit US1** (`feat(015 US1): server issues a signed ECC EphemeralKey at CreateSession`).
+- [X] T006 [US1] Gate; verify T004 passes; **commit US1** (`feat(015 US1): server issues a signed ECC EphemeralKey at CreateSession`).
 
 ## Phase 4: User Story 2 — Client requests + verifies + retains the server EphemeralKey (P1)
 
 **Goal**: client advertises `ECDHPolicyUri`, reads + signature-verifies the server `ECDHKey`, retains the most recent.
 
-- [ ] T007 [US2] Claude-authored tests: client puts `ECDHPolicyUri` in the request header; given a
+- [X] T007 [US2] Claude-authored tests: client puts `ECDHPolicyUri` in the request header; given a
   response carrying a validly-signed `ECDHKey`, the client retains it; a forged/wrong-signature or
   invalid-curve-point `ECDHKey` is rejected (not retained); malformed header bytes → no panic.
-- [ ] T008 [US2] Implement in `async-opcua-client/src/session/services/session.rs`: place the chosen
+- [X] T008 [US2] Implement in `async-opcua-client/src/session/services/session.rs`: place the chosen
   `ECDHPolicyUri` in the CreateSession/ActivateSession request `additional_header`; read `ECDHKey` from
   the response, verify its signature against the server certificate + curve point (T002), and retain
   the most-recent verified server EphemeralKey on the session state. (depends T007)
-- [ ] T009 [US2] Gate; verify T007 passes; **commit US2** (`feat(015 US2): client requests + verifies + retains the server EphemeralKey`).
+- [X] T009 [US2] Gate; verify T007 passes; **commit US2** (`feat(015 US2): client requests + verifies + retains the server EphemeralKey`).
 
 ## Phase 5: User Story 3 — Fresh EphemeralKey + anti-replay at ActivateSession (P2)
 

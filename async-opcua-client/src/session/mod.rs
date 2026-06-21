@@ -203,6 +203,8 @@ pub struct Session {
     pub(super) monitored_item_handle: AtomicHandle,
     pub(super) trigger_publish_tx: tokio::sync::watch::Sender<Instant>,
     pub(super) session_nonce_length: usize,
+    #[cfg(feature = "ecc")]
+    retained_server_ephemeral_key: std::sync::Mutex<Option<opcua_crypto::ecc::EphemeralPublicKey>>,
     decoding_options: DecodingOptions,
     pub(crate) close_tx: tokio::sync::watch::Sender<bool>,
 }
@@ -249,6 +251,8 @@ impl Session {
             publish_limits_watch_tx,
             trigger_publish_tx,
             session_nonce_length: config.session_nonce_length,
+            #[cfg(feature = "ecc")]
+            retained_server_ephemeral_key: std::sync::Mutex::new(None),
             decoding_options,
             close_tx,
         });
@@ -270,6 +274,29 @@ impl Session {
     /// Create a request header with the default timeout.
     pub(super) fn make_request_header(&self) -> RequestHeader {
         self.channel.make_request_header(self.request_timeout)
+    }
+
+    /// The most-recently verified server ECC EphemeralKey retained from CreateSession (Part 6 §6.8.2).
+    #[cfg(feature = "ecc")]
+    #[allow(dead_code)]
+    pub(crate) fn retained_server_ephemeral_key(
+        &self,
+    ) -> Option<opcua_crypto::ecc::EphemeralPublicKey> {
+        self.retained_server_ephemeral_key
+            .lock()
+            .ok()
+            .and_then(|g| g.clone())
+    }
+
+    /// Retain the verified server ECC EphemeralKey (most-recent wins).
+    #[cfg(feature = "ecc")]
+    pub(crate) fn set_retained_server_ephemeral_key(
+        &self,
+        key: Option<opcua_crypto::ecc::EphemeralPublicKey>,
+    ) {
+        if let Ok(mut g) = self.retained_server_ephemeral_key.lock() {
+            *g = key;
+        }
     }
 
     /// Reset the session after a hard disconnect, clearing the session ID and incrementing the internal

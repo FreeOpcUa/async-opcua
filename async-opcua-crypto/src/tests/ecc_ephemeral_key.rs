@@ -101,3 +101,49 @@ fn issue_server_ephemeral_key_signs_for_ecc_and_rejects_non_ecc() {
         opcua_types::StatusCode::BadSecurityPolicyRejected
     );
 }
+
+/// US2 (FR-003): the client reads the server's ECDHKey from a response header, verifies its signature
+/// against the server certificate, and recovers the ephemeral public key; a forged signature is
+/// rejected; an absent key yields None.
+#[test]
+fn client_reads_and_verifies_server_ephemeral_key() {
+    use crate::ecc::{
+        build_ecdh_key_response, issue_server_ephemeral_key, read_and_verify_server_ephemeral_key,
+    };
+    use opcua_types::ExtensionObject;
+
+    for (curve, policy) in [
+        (EccCurve::P256, SecurityPolicy::EccNistP256),
+        (EccCurve::P384, SecurityPolicy::EccNistP384),
+    ] {
+        let (server_cert, server_key) = ec_cert(curve);
+        let (keypair, ek) =
+            issue_server_ephemeral_key(policy.to_uri(), &server_key).expect("issue");
+        let header = build_ecdh_key_response(ek);
+
+        let recovered = read_and_verify_server_ephemeral_key(&header, policy, &server_cert)
+            .expect("a validly-signed ECDHKey must verify")
+            .expect("a key is present");
+        assert_eq!(
+            recovered.encoded(),
+            keypair.public_key().encoded(),
+            "the recovered server ephemeral public key must match what the server issued"
+        );
+
+        // Forged: a different server's cert must fail signature verification.
+        let (other_cert, _other_key) = ec_cert(curve);
+        assert!(
+            read_and_verify_server_ephemeral_key(&header, policy, &other_cert).is_err(),
+            "an ECDHKey signed by a different key must be rejected"
+        );
+
+        // Absent ECDHKey -> Ok(None).
+        assert!(read_and_verify_server_ephemeral_key(
+            &ExtensionObject::null(),
+            policy,
+            &server_cert
+        )
+        .expect("null header is not an error")
+        .is_none());
+    }
+}

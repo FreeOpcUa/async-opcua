@@ -792,6 +792,29 @@ pub fn verify_ephemeral_public_key(
     security_policy.asymmetric_verify_signature(&verification_key, public_key, signature)
 }
 
+/// Read the server's `ECDHKey` from a response AdditionalHeader, verify its signature against the
+/// server certificate (Part 4 §7.15), and return the decoded ephemeral public key. `Ok(None)` if no
+/// `ECDHKey` is present; `Err` if a key is present but its signature or curve point is invalid.
+#[cfg(feature = "ecc")]
+pub fn read_and_verify_server_ephemeral_key(
+    additional_header: &ExtensionObject,
+    security_policy: SecurityPolicy,
+    server_cert: &X509,
+) -> Result<Option<EphemeralPublicKey>, Error> {
+    let Some(ephemeral_key) = read_ecdh_key(additional_header) else {
+        return Ok(None);
+    };
+    verify_ephemeral_public_key(
+        security_policy,
+        server_cert,
+        ephemeral_key.public_key.as_ref(),
+        ephemeral_key.signature.as_ref(),
+    )?;
+    let curve = EccCurve::from_security_policy(security_policy)?;
+    let public_key = decode_public_key(curve, ephemeral_key.public_key.as_ref())?;
+    Ok(Some(public_key))
+}
+
 /// Computes the Part 6 §6.8 ECDH shared secret for an ephemeral key exchange.
 ///
 /// # Errors

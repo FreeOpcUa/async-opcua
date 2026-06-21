@@ -161,18 +161,18 @@ passes + audit event; critical steps never suppressible.
 **Independent Test**: self-signed-in-`trusted/` connects unchanged; toggling policy changes
 enforcement; ECC + RSA loopback suites still green; `None` byte-identical.
 
-- [ ] T019 [US5] Claude-authored failing/integration tests: mixed validation-policy config round-trip;
+- [X] T019 [US5] Claude-authored failing/integration tests: mixed validation-policy config round-trip;
   an existing self-signed loopback (server↔client) still connects; a CA-issued-cert loopback with the
   CA in `issuer/` connects; an untrusted-issuer cert is rejected at CreateSession.
-- [ ] T020 [US5] Wire the validation policy into server `CertificateValidation`
+- [X] T020 [US5] Wire the validation policy into server `CertificateValidation`
   (`async-opcua-server/src/config/server.rs` + `server.rs`) and client `ClientConfig`
   (`async-opcua-client/src/config.rs` + `session/client.rs`), applied to the `CertificateStore`;
   builder methods mirror the existing `trust_*_certs`/`check_time`. Default: chain/usage on, revocation
   lenient. (depends T019)
-- [ ] T021 [US5] Add a sample/docs note (PKI `issuer/` + CRL dirs; the validation-policy toggles) in
+- [X] T021 [US5] Add a sample/docs note (PKI `issuer/` + CRL dirs; the validation-policy toggles) in
   `docs/compatibility.md` / `docs/crypto.md`; ensure `--no-default-features` (pure-Rust) builds clean.
   (depends T019)
-- [ ] T022 [US5] Gate; verify T019 passes; **commit US5** (`feat(013 US5): validation-policy config + rollout`).
+- [X] T022 [US5] Gate; verify T019 passes; **commit US5** (`feat(013 US5): validation-policy config + rollout`).
 
 **Checkpoint**: certificate-validation conformance usable and safe to ship.
 

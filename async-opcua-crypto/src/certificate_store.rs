@@ -66,6 +66,8 @@ pub struct CertificateStore {
     /// validity checks.
     #[allow(dead_code)] // retained for the US5 legacy trust-list path
     trust_unknown_certs: bool,
+    /// Certificate validation options applied to incoming application instance certificates.
+    validation_options: ValidationOptions,
 }
 
 impl CertificateStore {
@@ -80,6 +82,7 @@ impl CertificateStore {
             check_time: true,
             skip_verify_certs: false,
             trust_unknown_certs: false,
+            validation_options: ValidationOptions::default(),
         }
     }
 
@@ -148,6 +151,11 @@ impl CertificateStore {
     /// Check expiration time of incoming certificates.
     pub fn set_check_time(&mut self, check_time: bool) {
         self.check_time = check_time;
+    }
+
+    /// Set certificate validation options for incoming application instance certificates.
+    pub fn set_validation_options(&mut self, options: ValidationOptions) {
+        self.validation_options = options;
     }
 
     /// Reads a private key from a path on disk.
@@ -366,7 +374,7 @@ impl CertificateStore {
             }
         }
 
-        let mut options = ValidationOptions::default();
+        let mut options = self.validation_options.clone();
         if !self.check_time || self.skip_verify_certs {
             options.suppressed_steps.insert(SuppressibleStep::Validity);
         }

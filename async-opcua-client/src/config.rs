@@ -282,6 +282,9 @@ pub struct ClientConfig {
     /// Verify server certificates. For testing/samples only unless you're sure what you're
     /// doing.
     pub(crate) verify_server_certs: bool,
+    /// Require certificate revocation status to be available and valid.
+    #[serde(default)]
+    pub(crate) require_revocation: bool,
     /// PKI folder, either absolute or relative to executable
     pub(crate) pki_dir: PathBuf,
     /// Preferred locales
@@ -714,6 +717,7 @@ impl ClientConfig {
             private_key_path: None,
             trust_server_certs: false,
             verify_server_certs: defaults::verify_server_certs(),
+            require_revocation: false,
             pki_dir,
             preferred_locales: Vec::new(),
             default_endpoint: String::new(),

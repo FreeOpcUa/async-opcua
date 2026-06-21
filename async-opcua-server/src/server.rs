@@ -22,7 +22,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
 use opcua_core::{config::Config, handle::AtomicHandle};
-use opcua_crypto::CertificateStore;
+use opcua_crypto::{CertificateStore, RevocationMode, ValidationOptions};
 
 use crate::metrics::ServerMetricsSnapshot;
 #[cfg(feature = "wss")]
@@ -327,6 +327,14 @@ impl Server {
             certificate_store.set_trust_unknown_certs(true);
         }
         certificate_store.set_check_time(config.certificate_validation.check_time);
+        certificate_store.set_validation_options(ValidationOptions {
+            revocation_mode: if config.certificate_validation.require_revocation {
+                RevocationMode::Required
+            } else {
+                RevocationMode::Lenient
+            },
+            ..Default::default()
+        });
 
         let config = Arc::new(config);
 

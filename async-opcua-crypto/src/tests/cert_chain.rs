@@ -1274,3 +1274,52 @@ fn trust_list_check_precedes_validity_check() {
         "trust-list check must take precedence over the later validity check"
     );
 }
+
+// --- US5 tests: configurable validation policy (store wiring) ------------------------------
+
+#[test]
+fn store_default_options_are_chain_on_lenient() {
+    // The store's default validation policy is the safe, backward-compatible one.
+    let options = ValidationOptions::default();
+    assert!(options.validate_chain);
+    assert_eq!(options.revocation_mode, RevocationMode::Lenient);
+    assert!(options.suppressed_steps.is_empty());
+}
+
+#[test]
+fn store_with_required_revocation_rejects_cert_without_crl() {
+    // Configuring Required revocation through the store changes enforcement: a CA-signed leaf
+    // with no CRL available is rejected as revocation-unknown.
+    let root = root_ca();
+    let leaf = leaf_signed_by_root(500, t(2030, 1, 1));
+    let (_tmp, mut store) = store_with(&[&root], &[]);
+    store.set_validation_options(ValidationOptions {
+        revocation_mode: RevocationMode::Required,
+        ..Default::default()
+    });
+    let err = store
+        .validate_or_reject_application_instance_cert(
+            &leaf,
+            SecurityPolicy::Basic256Sha256,
+            None,
+            None,
+        )
+        .expect_err("Required revocation with no CRL must reject through the store");
+    assert_eq!(err.status(), StatusCode::BadCertificateRevocationUnknown);
+}
+
+#[test]
+fn store_lenient_default_accepts_ca_signed_leaf_without_crl() {
+    // The default (lenient) policy keeps a CA-signed leaf valid even without any CRL configured.
+    let root = root_ca();
+    let leaf = leaf_signed_by_root(501, t(2030, 1, 1));
+    let (_tmp, store) = store_with(&[&root], &[]);
+    store
+        .validate_or_reject_application_instance_cert(
+            &leaf,
+            SecurityPolicy::Basic256Sha256,
+            None,
+            None,
+        )
+        .expect("the default lenient policy accepts a CA-signed leaf with no CRL present");
+}

@@ -20,7 +20,9 @@ use opcua_core::{
     sync::RwLock,
     ResponseMessage,
 };
-use opcua_crypto::{CertificateStore, SecurityPolicy, Thumbprint, X509};
+use opcua_crypto::{
+    CertificateStore, RevocationMode, SecurityPolicy, Thumbprint, ValidationOptions, X509,
+};
 use opcua_types::{
     ApplicationDescription, ContextOwned, DecodingOptions, EndpointDescription, Error,
     FindServersOnNetworkRequest, FindServersOnNetworkResponse, FindServersRequest,
@@ -76,6 +78,14 @@ impl Client {
 
         // Clients may choose to auto trust servers to save some messing around with rejected certs
         certificate_store.set_trust_unknown_certs(config.trust_server_certs);
+        certificate_store.set_validation_options(ValidationOptions {
+            revocation_mode: if config.require_revocation {
+                RevocationMode::Required
+            } else {
+                RevocationMode::Lenient
+            },
+            ..Default::default()
+        });
 
         // The session retry policy dictates how many times to retry if connection to the server goes down
         // and on what interval

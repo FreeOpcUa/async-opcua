@@ -139,11 +139,31 @@ The biggest difficulty with OPC UA is that it needs the ability to:
 * Create self-signed certificates (via the `certificate-creator` tool)
 * Save/read ASCII armoured (PEM) certificate (and private key) from a buffer
 * Verify a certificate's signature and contents (e.g. validity dates)
+* Build and verify the CA signing chain to a trusted anchor, check certificate usage
+  (KeyUsage/ExtendedKeyUsage), the negotiated security policy's signature algorithm and key length,
+  and CRL revocation — per OPC UA Part 4 §6.1.3 (Table 100). See *Certificate validation* below.
 
-Future versions of the crate might also want to:
+### Certificate validation (Part 4 §6.1.3)
 
-* Check the certificate's signing chain.
-* Maintain a trust store or folder where trusted root signing keys can be stored.
+When validating a peer's application instance certificate (server validating the client cert, client
+validating the server cert), the `CertificateStore` runs the Table 100 steps in order, each mapped to
+its OPC UA status code: certificate structure, build chain, signature, security-policy check, trust
+list, validity period, host name (server certs only), URI, certificate usage, find revocation list,
+and revocation check. A certificate is trusted when it — or a CA in its chain — is in the trusted
+list; a self-signed certificate placed directly in `trusted/` is its own anchor and remains valid
+(existing deployments are unaffected). The chain pipeline is always on and is backward compatible.
+
+Configuration:
+
+* Revocation defaults to **lenient** (a CRL is consulted when present but not required). Set
+  `require_certificate_revocation(true)` on the server or client builder to make a missing CRL for a
+  CA fail validation (`Bad_Certificate…RevocationUnknown`).
+* `check_time(false)` (server) / `verify_server_certs(false)` (client) suppress the validity-period
+  step as before; `trust_client_certs` / `trust_server_certs` still auto-trust an unknown peer cert.
+
+Pure-Rust only (no OpenSSL/C): chain and CRL handling are built on `x509-cert` plus the in-tree RSA
+and ECDSA verifiers. OCSP and typed `AuditCertificate*` events are not yet implemented (suppressed
+non-critical findings are currently reported via the log).
 
 ### X509 Fields
 

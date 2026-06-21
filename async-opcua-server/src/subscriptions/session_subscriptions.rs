@@ -623,18 +623,19 @@ impl SessionSubscriptions {
         &mut self,
         mut should_remove: impl FnMut(&NonAckedPublish) -> bool,
     ) {
-        let mut idx = 0;
-        while idx < self.retransmission_queue.len() {
-            if should_remove(&self.retransmission_queue[idx]) {
-                let notification = self.retransmission_queue.remove(idx).unwrap();
+        let queue = std::mem::take(&mut self.retransmission_queue);
+        let mut kept = VecDeque::with_capacity(queue.len());
+        for notification in queue {
+            if should_remove(&notification) {
                 Self::reclaim_non_acked_publish(
                     &mut self.data_change_notification_pool,
                     notification,
                 );
             } else {
-                idx += 1;
+                kept.push_back(notification);
             }
         }
+        self.retransmission_queue = kept;
     }
 
     pub(crate) fn enqueue_publish_request(
@@ -908,17 +909,18 @@ impl SessionSubscriptions {
     }
 
     fn remove_expired_publish_requests(&mut self, now: Instant) {
-        let mut idx = 0;
-        while idx < self.publish_request_queue.len() {
-            if self.publish_request_queue[idx].deadline < now {
-                let req = self.publish_request_queue.remove(idx).unwrap();
+        let queue = std::mem::take(&mut self.publish_request_queue);
+        let mut kept = VecDeque::with_capacity(queue.len());
+        for req in queue {
+            if req.deadline < now {
                 let _ = req.response.send(
                     ServiceFault::new(&req.request.request_header, StatusCode::BadTimeout).into(),
                 );
             } else {
-                idx += 1;
+                kept.push_back(req);
             }
         }
+        self.publish_request_queue = kept;
     }
 
     fn process_subscription_acks(&mut self, request: &PublishRequest) -> Option<Vec<StatusCode>> {

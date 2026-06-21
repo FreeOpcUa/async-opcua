@@ -177,8 +177,7 @@ async fn ecc_interop_external_server() {
         _ => (SecurityPolicy::EccNistP256, EccCurve::P256),
     };
 
-    let test_id =
-        crate::utils::TEST_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let test_id = crate::utils::TEST_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     crate::utils::provision_ecc_certs(test_id, curve);
     let mut client = crate::utils::ecc_client(test_id, 600_000).client().unwrap();
 

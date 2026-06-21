@@ -130,6 +130,17 @@ lengths are fixed by the algorithms themselves (HMAC-SHA256/384 output = 32/48; 
   third-party ECC peer, a misread of §6.8 could pass loopback yet fail real interop. Mitigation:
   drive every primitive from published vectors, and cross-check the KDF/handshake bytes against an
   open reference impl (open62541 / UA-.NET) before claiming interop.
+  - **Status (2026-06-21):** no ECC-capable third-party peer is runnable in this environment —
+    `asyncua` 2.0 (Python) exposes only RSA/None policies (no ECC); no .NET runtime for UA-.NETStandard;
+    the bundled `3rd-party/open62541` submodule is uninitialized and its secure-channel ECC support is
+    unconfirmed. So **end-to-end interop remains UNVALIDATED**. What *is* externally anchored: the ECDSA/
+    ECDH/HKDF primitives (RFC 6979/5903/5869 vectors), the wire-format pins from UA-.NETStandard *source*
+    (P1363 sig, X‖Y ephemeral, raw-x IKM), and the ChannelThumbprint binding. The unvalidated surface is
+    the OPC-UA-specific key schedule (salts/labels) + ChannelThumbprint *on the wire* against another impl.
+  - **Harness provided:** `async-opcua/tests/integration/ecc.rs::ecc_interop_external_server` (`#[ignore]`d)
+    connects our client to an external ECC server given `OPCUA_ECC_INTEROP_URL` (+ optional
+    `OPCUA_ECC_INTEROP_POLICY`), so a real interop run is one command away when a peer is available:
+    `OPCUA_ECC_INTEROP_URL=opc.tcp://host:port cargo test -p async-opcua --features ecc -- --ignored ecc_interop`.
 - All former `[verify-on-impl]` crypto items are now CLOSED — pinned from Part 6 §6.8 (verbatim) and
   cross-confirmed against UA-.NETStandard source (signature P1363, ephemeral X‖Y, raw-x IKM, URIs).
   The **only** residual risk is end-to-end **interop validation** (SC-007): loopback + vectors prove
@@ -143,10 +154,28 @@ lengths are fixed by the algorithms themselves (HMAC-SHA256/384 output = 32/48; 
 - **Mixed RSA+ECC on one server (multi-cert)** — a server holds a single application instance
   certificate (`CertificateStore::read_own_cert`/`read_own_pkey`), and a given cert is either RSA or
   EC. ECDSA handshakes need the EC cert; RSA handshakes need the RSA cert. So a single-cert server is
-  inherently **ECC-only or RSA-only**. Serving both on one server needs a second application cert plus
-  per-policy cert selection at OpenSecureChannel time — a real but bounded follow-up. US5 delivers the
-  feature-gating (ecc-off → recognized-but-unsupported, fail-closed) and curve-strict negotiation;
-  mixed-mode multi-cert is deferred. (Mixed deployments today: run RSA and ECC on separate endpoints/hosts.)
-- **ChannelThumbprint (§6.7.5)** — the MITM-hardening OpenSecureChannel *response* signature over
-  `Response-bytes ‖ Request-signature`. Not exercised by loopback (both peers ours). Implement before
-  claiming production/interop completeness.
+  inherently **ECC-only or RSA-only**. Serving both on one server requires a second application cert
+  AND **policy-aware cert selection at every site the server uses its instance cert** — this was
+  attempted (2026-06-21) and found to be an architectural change, NOT a bounded patch. The instance
+  cert/key is woven through (at least) SIX touchpoints, each of which must pick RSA-vs-EC by the
+  channel/endpoint policy:
+    1. OpenSecureChannel response signing (channel own cert/key) — `secure_channel.rs`.
+    2. CreateSession `serverCertificate` — `session/manager.rs`.
+    3. CreateSession `serverSignature` (sign with the matching key) — `session/manager.rs`.
+    4. ActivateSession client-signature verification (against the same server cert) — `session/manager.rs`.
+    5. Endpoint descriptions advertised by GetEndpoints (per-endpoint `serverCertificate`) —
+       `info.rs::new_endpoint_description` (the client pins CreateSession's cert against the endpoint's).
+    6. The OSC **receiver-certificate-thumbprint** check at transport DECODE time (before any controller
+       cert switch) — `secure_channel.rs::...validate...thumbprint` → `BadNoValidCertificates` on mismatch.
+  Touchpoints 1–5 are patchable at their use sites (a `ServerInfo` that caches both certs + a policy
+  selector got 1–5 working); #6 needs the channel's own cert to be policy-selected from the FIRST OSC
+  decode (transport layer), i.e. the right design is to choose the server instance cert by policy at
+  channel creation/decode rather than patch each use site. Recommended as a dedicated follow-up.
+  Deferred for now. (Mixed deployments today: run RSA and ECC on separate endpoints/hosts.)
+- **ChannelThumbprint (§6.7.5)** — ✅ IMPLEMENTED (post-US5 hardening, branch `012-ecc-hardening`). The
+  ECC OpenSecureChannel *response* is signed over `Response-bytes ‖ first-Request-Signature` on the initial
+  Issue only (skipped on renewal, per §6.7.5). The first request signature is captured during the asym
+  sign (client) / verify (server) and applied on the response sign (server) / verify (client), gated by
+  `apply_channel_thumbprint` (set by the OSC flow on Issue). Verified by a Claude-authored binding test
+  proving the response does NOT verify once the request signature is excluded (i.e. it is genuinely bound,
+  not a no-op), plus loopback (consistency) and renewal (correctly skipped).

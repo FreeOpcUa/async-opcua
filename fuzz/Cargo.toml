@@ -18,10 +18,18 @@ tokio-util = { workspace = true, optional = true }
 
 [dependencies.async-opcua]
 path = "../async-opcua"
+features = ["ecc"]
 
 [[bin]]
 name = "fuzz_comms"
 path = "fuzz_targets/fuzz_comms.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_ecc"
+path = "fuzz_targets/fuzz_ecc.rs"
 test = false
 doc = false
 bench = false

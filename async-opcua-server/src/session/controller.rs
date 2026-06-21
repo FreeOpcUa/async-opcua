@@ -878,6 +878,12 @@ impl<T: ConnectionTransport> SessionController<T> {
         self.channel
             .set_remote_nonce_from_byte_string(&request.client_nonce)?;
         self.channel.set_role(Role::Server);
+        #[cfg(feature = "ecc")]
+        if self.channel.security_policy().is_ecc() {
+            self.channel.set_apply_channel_thumbprint(
+                request.request_type == SecurityTokenRequestType::Issue,
+            );
+        }
         self.channel.create_local_nonce()?;
 
         let security_policy = self.channel.security_policy();

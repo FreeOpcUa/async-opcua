@@ -35,6 +35,22 @@ boundary) — see "Breaking changes" below.
   `time`, `rand`, `thiserror` (v2), `env_logger`; removed tracked developer debris;
   `SECURITY.md` now uses a private coordinated-disclosure channel.
 
+### Features
+
+* **NIST ECC security policies** — `ECC_nistP256` (P-256 / SHA-256 / AES-128) and
+  `ECC_nistP384` (P-384 / SHA-384 / AES-256), for client and server, in both
+  `Sign` and `SignAndEncrypt` modes. Ephemeral-ephemeral ECDH + HKDF session
+  keys, ECDSA-signed `OpenSecureChannel`, with the existing AES-CBC + HMAC
+  symmetric layer; the OSC response is bound to the request via the Part 6 §6.7.5
+  **ChannelThumbprint**. Pure-Rust (RustCrypto `p256`/`p384`/`ecdsa`/`hkdf`; no C
+  toolchain). Behind the `ecc` feature — default-on for `-core`/`-client`/
+  `-server`/`-crypto`, **opt-in on the umbrella `async-opcua` crate**; with it off
+  the ECC policies are recognized but rejected as unsupported, and RSA/None are
+  byte-identical. The primitives are validated against RFC 6979/5903/5869 vectors;
+  EC application certificates are required (a server presents a single instance
+  certificate, so it is RSA-only or ECC-only). Third-party interop is not yet
+  validated — see `docs/setup.md` and the feature's `research.md`.
+
 ### Breaking changes
 
 * `legacy-crypto` is now **off by default** across all crates (was on). Enable the

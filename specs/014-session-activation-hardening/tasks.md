@@ -59,16 +59,16 @@ regress.
 **Independent Test**: cross-channel service request rejected; endpoint-host mismatch rejected; malformed
 activation fields → no panic.
 
-- [ ] T005 [P] [US2] Claude-authored integration test in `async-opcua/tests/` (loopback harness):
+- [X] T005 [P] [US2] Claude-authored integration test in `async-opcua/tests/` (loopback harness):
   activate a secured session on one secure channel, then issue a session-scoped service (e.g. Read) on a
   second channel for the same session → `Bad_SecureChannelIdInvalid` (locks in
   `controller.rs:768` `validate_secure_channel_id`). Use the existing multi-client tester helpers.
-- [ ] T006 [P] [US2] Claude-authored unit tests (`async-opcua-server`): a CreateSession whose
+- [X] T006 [P] [US2] Claude-authored unit tests (`async-opcua-server`): a CreateSession whose
   `endpointUrl` host is neither advertised nor in the server-cert SAN is rejected
   (`Bad_CertificateHostNameInvalid`/`Bad_TcpEndpointUrlInvalid`); malformed/oversized/truncated
   CreateSession & ActivateSession fields (absent client cert, bad nonce length, truncated signature)
   are rejected without panic.
-- [ ] T007 [US2] Gate; verify T005/T006 pass; **commit US2**
+- [X] T007 [US2] Gate; verify T005/T006 pass; **commit US2**
   (`test(014 US2): lock in session channel-binding + endpoint-host regression tests`).
 
 ## Phase 4: Polish

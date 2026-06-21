@@ -756,6 +756,34 @@ mod tests {
         ));
     }
 
+    /// US2 (FR-005 lock-in / SC-002): a session is bound to its secure channel — a request whose
+    /// secure-channel id differs from the session's is rejected with `BadSecureChannelIdInvalid`.
+    /// This is the check `SessionController::validate_request` runs on every session-scoped request.
+    #[tokio::test]
+    async fn session_rejects_request_from_a_different_secure_channel() {
+        let fixture = ActivationFixture::new(Arc::new(AuthenticationGate::open()));
+        let session = fixture.session.read();
+        // The fixture session belongs to secure channel 7.
+        assert!(session.validate_secure_channel_id(7).is_ok());
+        assert_eq!(
+            session.validate_secure_channel_id(8).unwrap_err(),
+            StatusCode::BadSecureChannelIdInvalid,
+            "a session must reject a request arriving on a different secure channel"
+        );
+    }
+
+    /// US2 (FR-002 lock-in): under `SecurityPolicy::None` there is no channel certificate, so the
+    /// new client-cert↔channel binding must be skipped and activation must still succeed.
+    #[tokio::test]
+    async fn none_policy_activation_skips_certificate_binding() {
+        let fixture = ActivationFixture::new(Arc::new(AuthenticationGate::open()));
+        let result = fixture.activate_with(SecurityPolicy::None, 7).await;
+        assert!(
+            result.is_ok(),
+            "None-policy activation must succeed without a channel certificate, got {result:?}"
+        );
+    }
+
     /// T048 / H1: an activated session under SecurityPolicy::None must not be
     /// transferable to a different secure channel (there is no cryptographic
     /// channel binding, so a transfer would be a session hijack). Sessions that

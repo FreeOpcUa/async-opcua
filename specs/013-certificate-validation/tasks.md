@@ -117,14 +117,14 @@ keyCertSign/CA → IssuerUseNotAllowed.
 **Independent Test**: CRL listing leaf serial → Revoked; CA serial on issuer CRL → IssuerRevoked;
 required-but-no-CRL → RevocationUnknown; disabled-per-CA → no error.
 
-- [ ] T013 [US3] Claude-authored failing tests (cert_chain tests): generate CA-signed CRLs via
+- [X] T013 [US3] Claude-authored failing tests (cert_chain tests): generate CA-signed CRLs via
   `x509-cert` crl + builder; assert `Bad_CertificateRevoked`, `Bad_CertificateIssuerRevoked`,
   `Bad_CertificateRevocationUnknown` (required, no CRL), and no-error when revocation disabled.
-- [ ] T014 [US3] Implement Find-Revocation-List + Revocation-Check in `cert_chain.rs`: load CRLs from
+- [X] T014 [US3] Implement Find-Revocation-List + Revocation-Check in `cert_chain.rs`: load CRLs from
   `trusted_crls`/`issuer_crls`, **verify each CRL signature** against its issuing CA SPKI, scan
   `revoked_certificates` by serial (RFC 5280 §6.3); revocation-mode (off/lenient/required) +
   per-CA disable. (depends T013)
-- [ ] T015 [US3] Gate; verify T013 passes; **commit US3** (`feat(013 US3): CRL revocation checking`).
+- [X] T015 [US3] Gate; verify T013 passes; **commit US3** (`feat(013 US3): CRL revocation checking`).
 
 **Checkpoint**: revoked certificates rejected.
 

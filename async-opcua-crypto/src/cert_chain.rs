@@ -8,7 +8,8 @@ use const_oid::db::rfc5912::{
     ID_RSASSA_PSS, SHA_1_WITH_RSA_ENCRYPTION, SHA_256_WITH_RSA_ENCRYPTION,
 };
 use opcua_types::{status_code::StatusCode, Error};
-use x509_cert::crl::CertificateList;
+use x509_cert::crl::{CertificateList, RevokedCert};
+use x509_cert::der::Encode;
 use x509_cert::ext::pkix::KeyUsages;
 
 use crate::{PublicKey, SecurityPolicy, X509};
@@ -130,7 +131,7 @@ pub fn validate_certificate_chain<'a>(
         return Ok(Vec::new());
     }
 
-    let _ = (context.crls, context.security_policy); // consumed by US3/US4
+    let _ = context.security_policy; // consumed by US4
 
     let chain = build_chain(cert, context)?;
 
@@ -145,6 +146,7 @@ pub fn validate_certificate_chain<'a>(
 
     let mut findings = validate_chain_validity(&chain, context)?;
     validate_certificate_usage(&chain, context, &mut findings)?;
+    validate_chain_revocation(&chain, context, &mut findings)?;
 
     Ok(findings)
 }
@@ -502,6 +504,171 @@ fn purpose_extended_key_usage_oid(purpose: CertificatePurpose) -> const_oid::Obj
     match purpose {
         CertificatePurpose::ServerApplication => ID_KP_SERVER_AUTH,
         CertificatePurpose::ClientApplication => ID_KP_CLIENT_AUTH,
+    }
+}
+
+fn validate_chain_revocation(
+    chain: &[&X509],
+    context: &ChainValidationContext<'_>,
+    findings: &mut Vec<SuppressedFinding>,
+) -> Result<(), Error> {
+    if context.options.revocation_mode == RevocationMode::Disabled {
+        return Ok(());
+    }
+
+    for (index, pair) in chain.windows(2).enumerate() {
+        let [cert, issuer_ca] = pair else {
+            continue;
+        };
+
+        let Some(crl) = find_valid_crl(context.crls, issuer_ca, context.now) else {
+            handle_revocation_unknown(context, findings, index)?;
+            continue;
+        };
+
+        if crl_revokes(crl, &cert.serial_number()) {
+            let status = if index == 0 {
+                StatusCode::BadCertificateRevoked
+            } else {
+                StatusCode::BadCertificateIssuerRevoked
+            };
+            return Err(validation_error(
+                status,
+                "certificate serial number is listed in a valid CRL",
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+fn find_valid_crl<'a>(
+    crls: &'a [CertificateList],
+    issuer_ca: &X509,
+    now: &DateTime<Utc>,
+) -> Option<&'a CertificateList> {
+    let ca_public_key = issuer_ca.public_key().ok()?;
+
+    crls.iter().find(|crl| {
+        crl_issuer_matches_ca(crl, issuer_ca)
+            && crl_is_current(crl, now)
+            && crl_signature_verifies(crl, &ca_public_key)
+    })
+}
+
+fn crl_issuer_matches_ca(crl: &CertificateList, issuer_ca: &X509) -> bool {
+    crl.tbs_cert_list.issuer.to_string().replace(';', "/") == issuer_ca.subject_name()
+}
+
+fn crl_is_current(crl: &CertificateList, now: &DateTime<Utc>) -> bool {
+    crl.tbs_cert_list
+        .next_update
+        .is_none_or(|next_update| next_update.to_system_time() >= (*now).into())
+}
+
+fn crl_signature_verifies(crl: &CertificateList, issuer_public_key: &PublicKey) -> bool {
+    let Ok(tbs) = crl.tbs_cert_list.to_der() else {
+        return false;
+    };
+    let Some(signature) = crl.signature.as_bytes() else {
+        return false;
+    };
+
+    if crl.signature_algorithm.oid == SHA_256_WITH_RSA_ENCRYPTION {
+        return issuer_public_key
+            .verify_sha256(&tbs, signature)
+            .is_ok_and(|verified| verified);
+    }
+
+    if crl.signature_algorithm.oid == ID_RSASSA_PSS {
+        return issuer_public_key
+            .verify_sha256_pss(&tbs, signature)
+            .is_ok_and(|verified| verified);
+    }
+
+    if crl.signature_algorithm.oid == SHA_1_WITH_RSA_ENCRYPTION {
+        return issuer_public_key
+            .verify_sha1(&tbs, signature)
+            .is_ok_and(|verified| verified);
+    }
+
+    crl_ec_signature_verifies(
+        issuer_public_key,
+        &tbs,
+        signature,
+        crl.signature_algorithm.oid,
+    )
+}
+
+#[cfg(feature = "ecc")]
+fn crl_ec_signature_verifies(
+    issuer_public_key: &PublicKey,
+    tbs: &[u8],
+    signature: &[u8],
+    algorithm_oid: const_oid::ObjectIdentifier,
+) -> bool {
+    if algorithm_oid != ECDSA_WITH_SHA_256 && algorithm_oid != ECDSA_WITH_SHA_384 {
+        return false;
+    }
+
+    issuer_public_key
+        .ecc_key()
+        .is_some_and(|ecc_key| crate::ecc::ecdsa_verify_der(ecc_key, tbs, signature).is_ok())
+}
+
+#[cfg(not(feature = "ecc"))]
+fn crl_ec_signature_verifies(
+    _issuer_public_key: &PublicKey,
+    _tbs: &[u8],
+    _signature: &[u8],
+    _algorithm_oid: const_oid::ObjectIdentifier,
+) -> bool {
+    false
+}
+
+fn crl_revokes(crl: &CertificateList, serial: &[u8]) -> bool {
+    crl.tbs_cert_list
+        .revoked_certificates
+        .as_deref()
+        .is_some_and(|revoked_certificates| {
+            revoked_certificates
+                .iter()
+                .any(|revoked| revoked_cert_matches_serial(revoked, serial))
+        })
+}
+
+fn revoked_cert_matches_serial(revoked: &RevokedCert, serial: &[u8]) -> bool {
+    revoked.serial_number.as_bytes() == serial
+}
+
+fn handle_revocation_unknown(
+    context: &ChainValidationContext<'_>,
+    findings: &mut Vec<SuppressedFinding>,
+    index: usize,
+) -> Result<(), Error> {
+    if context.options.revocation_mode == RevocationMode::Lenient {
+        return Ok(());
+    }
+
+    let status = if index == 0 {
+        StatusCode::BadCertificateRevocationUnknown
+    } else {
+        StatusCode::BadCertificateIssuerRevocationUnknown
+    };
+    let message = "no valid CRL was found for certificate issuer";
+
+    if context
+        .options
+        .is_suppressed(SuppressibleStep::FindRevocationList)
+    {
+        findings.push(SuppressedFinding {
+            step: SuppressibleStep::FindRevocationList,
+            status,
+            message: message.to_string(),
+        });
+        Ok(())
+    } else {
+        Err(validation_error(status, message))
     }
 }
 

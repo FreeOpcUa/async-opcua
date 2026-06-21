@@ -11,6 +11,7 @@
 
 use chrono::{DateTime, TimeZone, Utc};
 use rsa::pkcs1v15::{Signature, SigningKey};
+use rsa::signature::{SignatureEncoding, Signer};
 use sha1::{Digest, Sha1};
 use sha2::Sha256;
 use std::str::FromStr;
@@ -18,18 +19,20 @@ use std::sync::OnceLock;
 use std::time::{Duration as StdDuration, UNIX_EPOCH};
 
 use const_oid::db::rfc5280::{ID_KP_CLIENT_AUTH, ID_KP_SERVER_AUTH};
+use const_oid::db::rfc5912::SHA_256_WITH_RSA_ENCRYPTION;
 use x509_cert::builder::{Builder, CertificateBuilder, Profile};
-use x509_cert::crl::CertificateList;
-use x509_cert::der::asn1::OctetString;
-use x509_cert::der::{Encode, Decode};
+use x509_cert::crl::{CertificateList, RevokedCert, TbsCertList};
+use x509_cert::der::asn1::{Any, BitString, Null, OctetString};
+use x509_cert::der::{Decode, Encode};
 use x509_cert::ext::pkix::{
     AuthorityKeyIdentifier, BasicConstraints, ExtendedKeyUsage, KeyUsage, KeyUsages,
     SubjectKeyIdentifier,
 };
 use x509_cert::name::Name;
 use x509_cert::serial_number::SerialNumber;
-use x509_cert::spki::SubjectPublicKeyInfoOwned;
+use x509_cert::spki::{AlgorithmIdentifierOwned, SubjectPublicKeyInfoOwned};
 use x509_cert::time::{Time, Validity};
+use x509_cert::Version;
 
 use std::path::Path;
 
@@ -174,9 +177,7 @@ fn issue(spec: &CertSpec<'_>) -> X509 {
         KuChoice::Omit => None,
     };
     if let Some(key_usage) = key_usage {
-        builder
-            .add_extension(&key_usage)
-            .expect("add key usage");
+        builder.add_extension(&key_usage).expect("add key usage");
     }
 
     match spec.eku {
@@ -188,7 +189,10 @@ fn issue(spec: &CertSpec<'_>) -> X509 {
             .add_extension(&ExtendedKeyUsage(vec![ID_KP_CLIENT_AUTH]))
             .expect("add eku"),
         Eku::Both => builder
-            .add_extension(&ExtendedKeyUsage(vec![ID_KP_SERVER_AUTH, ID_KP_CLIENT_AUTH]))
+            .add_extension(&ExtendedKeyUsage(vec![
+                ID_KP_SERVER_AUTH,
+                ID_KP_CLIENT_AUTH,
+            ]))
             .expect("add eku"),
     }
 
@@ -477,8 +481,8 @@ fn expired_leaf_is_time_invalid() {
     let now = now_valid();
 
     let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
-    let err = validate_certificate_chain(&leaf, &ctx)
-        .expect_err("an expired leaf must be rejected");
+    let err =
+        validate_certificate_chain(&leaf, &ctx).expect_err("an expired leaf must be rejected");
     assert_eq!(err.status(), StatusCode::BadCertificateTimeInvalid);
 }
 
@@ -873,9 +877,7 @@ fn ca_without_keycertsign_is_issuer_use_not_allowed() {
         not_before: t(2020, 1, 1),
         not_after: t(2034, 1, 1),
         eku: Eku::None,
-        key_usage: KuChoice::Custom(KeyUsage(
-            KeyUsages::DigitalSignature | KeyUsages::CRLSign,
-        )), // CA flag set but no keyCertSign
+        key_usage: KuChoice::Custom(KeyUsage(KeyUsages::DigitalSignature | KeyUsages::CRLSign)), // CA flag set but no keyCertSign
         serial: 203,
     });
     let leaf = leaf_via_intermediate(t(2030, 1, 1));
@@ -918,4 +920,195 @@ fn leaf_without_key_usage_extension_is_accepted() {
     let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
     validate_certificate_chain(&leaf, &ctx)
         .expect("a leaf without KeyUsage/EKU extensions is leniently accepted");
+}
+
+// --- US3 helpers + tests: CRL revocation ---------------------------------------------------
+
+/// Build a CA-signed CRL listing `revoked_serials`, signed by `issuer_key` (sha256WithRSA).
+fn make_crl(
+    issuer_cn: &str,
+    issuer_key: &PrivateKey,
+    revoked_serials: &[u32],
+    this_update: DateTime<Utc>,
+    next_update: DateTime<Utc>,
+) -> CertificateList {
+    let issuer = Name::from_str(&format!("CN={issuer_cn}")).expect("crl issuer name");
+    let algorithm = AlgorithmIdentifierOwned {
+        oid: SHA_256_WITH_RSA_ENCRYPTION,
+        parameters: Some(Any::from(Null)),
+    };
+    let revoked_certificates = if revoked_serials.is_empty() {
+        None
+    } else {
+        Some(
+            revoked_serials
+                .iter()
+                .map(|s| RevokedCert {
+                    serial_number: SerialNumber::from(*s),
+                    revocation_date: to_time(this_update),
+                    crl_entry_extensions: None,
+                })
+                .collect(),
+        )
+    };
+    let tbs = TbsCertList {
+        version: Version::V2,
+        signature: algorithm.clone(),
+        issuer,
+        this_update: to_time(this_update),
+        next_update: Some(to_time(next_update)),
+        revoked_certificates,
+        crl_extensions: None,
+    };
+    let tbs_der = tbs.to_der().expect("crl tbs der");
+    let signing_key = SigningKey::<Sha256>::new(
+        issuer_key
+            .rsa_key_for_x509()
+            .expect("crl signer key")
+            .clone(),
+    );
+    let signature: Signature = signing_key.sign(&tbs_der);
+    CertificateList {
+        tbs_cert_list: tbs,
+        signature_algorithm: algorithm,
+        signature: BitString::from_bytes(&signature.to_vec()).expect("crl signature bits"),
+    }
+}
+
+/// A leaf signed directly by the root (2-level chain) with the given serial.
+fn leaf_signed_by_root(serial: u32, not_after: DateTime<Utc>) -> X509 {
+    let k = keys();
+    issue(&CertSpec {
+        subject_cn: LEAF_CN,
+        subject_key: &k.leaf,
+        issuer_cn: ROOT_CN,
+        issuer_key: &k.root,
+        signer_key: &k.root,
+        is_ca: false,
+        not_before: t(2020, 1, 1),
+        not_after,
+        eku: Eku::Both,
+        key_usage: KuChoice::Default,
+        serial,
+    })
+}
+
+#[test]
+fn revoked_leaf_is_rejected() {
+    let k = keys();
+    let root = root_ca();
+    let leaf = leaf_signed_by_root(300, t(2030, 1, 1));
+    // CRL signed by the root (the leaf's issuer) listing the leaf's serial.
+    let crl = make_crl(ROOT_CN, &k.root, &[300], t(2024, 1, 1), t(2030, 1, 1));
+
+    let trusted = [root];
+    let issuers: [X509; 0] = [];
+    let crls = [crl];
+    let options = ValidationOptions::default(); // Lenient: a present CRL is checked.
+    let now = now_valid();
+    let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
+    let err = validate_certificate_chain(&leaf, &ctx)
+        .expect_err("a leaf whose serial is on its CA's CRL must be rejected");
+    assert_eq!(err.status(), StatusCode::BadCertificateRevoked);
+}
+
+#[test]
+fn revoked_intermediate_is_issuer_revoked() {
+    let k = keys();
+    let root = root_ca();
+    let intermediate = intermediate_ca(); // serial 2
+    let leaf = leaf_via_intermediate(t(2030, 1, 1));
+    // CRL signed by the root listing the intermediate's serial (2).
+    let crl = make_crl(ROOT_CN, &k.root, &[2], t(2024, 1, 1), t(2030, 1, 1));
+
+    let trusted = [root];
+    let issuers = [intermediate];
+    let crls = [crl];
+    let options = ValidationOptions::default();
+    let now = now_valid();
+    let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
+    let err = validate_certificate_chain(&leaf, &ctx)
+        .expect_err("a revoked intermediate CA must be rejected");
+    assert_eq!(err.status(), StatusCode::BadCertificateIssuerRevoked);
+}
+
+#[test]
+fn required_revocation_without_crl_is_unknown() {
+    let root = root_ca();
+    let leaf = leaf_signed_by_root(301, t(2030, 1, 1));
+
+    let trusted = [root];
+    let issuers: [X509; 0] = [];
+    let crls = empty_crls(); // none provided
+    let options = ValidationOptions {
+        revocation_mode: crate::RevocationMode::Required,
+        ..Default::default()
+    };
+    let now = now_valid();
+    let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
+    let err = validate_certificate_chain(&leaf, &ctx)
+        .expect_err("required revocation with no CRL available must be RevocationUnknown");
+    assert_eq!(err.status(), StatusCode::BadCertificateRevocationUnknown);
+}
+
+#[test]
+fn required_revocation_with_clean_crl_is_accepted() {
+    let k = keys();
+    let root = root_ca();
+    let leaf = leaf_signed_by_root(302, t(2030, 1, 1));
+    // A CRL from the root that does NOT list the leaf satisfies the Required mode.
+    let crl = make_crl(ROOT_CN, &k.root, &[], t(2024, 1, 1), t(2030, 1, 1));
+
+    let trusted = [root];
+    let issuers: [X509; 0] = [];
+    let crls = [crl];
+    let options = ValidationOptions {
+        revocation_mode: crate::RevocationMode::Required,
+        ..Default::default()
+    };
+    let now = now_valid();
+    let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
+    validate_certificate_chain(&leaf, &ctx)
+        .expect("a present CRL that does not revoke the leaf satisfies Required revocation");
+}
+
+#[test]
+fn disabled_revocation_ignores_revoking_crl() {
+    let k = keys();
+    let root = root_ca();
+    let leaf = leaf_signed_by_root(303, t(2030, 1, 1));
+    // Even with a CRL revoking the leaf, Disabled mode skips revocation entirely.
+    let crl = make_crl(ROOT_CN, &k.root, &[303], t(2024, 1, 1), t(2030, 1, 1));
+
+    let trusted = [root];
+    let issuers: [X509; 0] = [];
+    let crls = [crl];
+    let options = ValidationOptions {
+        revocation_mode: crate::RevocationMode::Disabled,
+        ..Default::default()
+    };
+    let now = now_valid();
+    let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
+    validate_certificate_chain(&leaf, &ctx).expect(
+        "Disabled revocation mode must skip revocation even when a revoking CRL is present",
+    );
+}
+
+#[test]
+fn crl_with_forged_signature_is_not_trusted_for_revocation() {
+    // A CRL claiming to be from the root but signed by an unrelated key must not cause a
+    // revocation decision (its signature does not verify), so under Lenient the leaf is accepted.
+    let k = keys();
+    let root = root_ca();
+    let leaf = leaf_signed_by_root(304, t(2030, 1, 1));
+    let forged_crl = make_crl(ROOT_CN, &k.rogue, &[304], t(2024, 1, 1), t(2030, 1, 1));
+
+    let trusted = [root];
+    let issuers: [X509; 0] = [];
+    let crls = [forged_crl];
+    let options = ValidationOptions::default(); // Lenient
+    let now = now_valid();
+    let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
+    validate_certificate_chain(&leaf, &ctx)
+        .expect("a CRL with an invalid signature must be ignored, not used to revoke");
 }

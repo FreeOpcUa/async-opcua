@@ -51,6 +51,8 @@ mod authentication;
 mod cert_chain;
 mod crypto;
 #[cfg(feature = "ecc")]
+mod ecc_encrypted_secret;
+#[cfg(feature = "ecc")]
 mod ecc_ephemeral_key;
 #[cfg(feature = "ecc")]
 mod ecc_token_header;

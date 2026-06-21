@@ -6,6 +6,8 @@
 
 #[cfg(feature = "ecc")]
 use std::fmt::{Debug, Formatter};
+#[cfg(feature = "ecc")]
+use std::io::Cursor;
 
 #[cfg(feature = "ecc")]
 use ecdsa::signature::{Signer, Verifier};
@@ -13,8 +15,9 @@ use ecdsa::signature::{Signer, Verifier};
 use hkdf::Hkdf;
 #[cfg(feature = "ecc")]
 use opcua_types::{
-    AdditionalParametersType, ByteString, EphemeralKeyType, Error, ExtensionObject, KeyValuePair,
-    QualifiedName, StatusCode, UAString, Variant,
+    AdditionalParametersType, BinaryDecodable, BinaryEncodable, ByteString, Context, ContextOwned,
+    DateTime, EphemeralKeyType, Error, ExtensionObject, KeyValuePair, NodeId, QualifiedName,
+    StatusCode, UAString, Variant,
 };
 #[cfg(feature = "ecc")]
 use p256::elliptic_curve::sec1::ToEncodedPoint;
@@ -754,6 +757,198 @@ pub struct SecurityKeys {
     pub server: AesDerivedKeys,
 }
 
+/// Derived symmetric material for an `EccEncryptedSecret` (Part 6 §6.8.3, Table 71).
+/// For ECC there is NO derived signing key — integrity is an asymmetric signature — so only the
+/// AES EncryptingKey and the InitializationVector are derived.
+#[cfg(feature = "ecc")]
+pub struct EccSecretKeys {
+    /// AES key for the payload (AES-128-CBC for P-256, AES-256-CBC for P-384).
+    pub encrypting_key: AesKey,
+    /// AES-CBC initialization vector (16 bytes).
+    pub iv: Vec<u8>,
+}
+
+/// Parsed Part 4 §7.40.2.5 `EccEncryptedSecret` envelope (Table 186). The `encrypted_payload` is the
+/// AES-CBC ciphertext blob (Nonce|Secret|Padding|PaddingSize, encrypted); `signature` is the trailing
+/// asymmetric (ECDSA r||s) signature. Crypto is handled by the encrypt/decrypt callers — this is pure
+/// serialization.
+#[cfg(feature = "ecc")]
+#[allow(dead_code)]
+pub(crate) struct EccEncryptedSecret {
+    pub(crate) security_policy_uri: String,
+    pub(crate) certificate: ByteString,
+    pub(crate) signing_time: DateTime,
+    pub(crate) sender_public_key: ByteString,
+    pub(crate) receiver_public_key: ByteString,
+    pub(crate) encrypted_payload: Vec<u8>,
+    pub(crate) signature: Vec<u8>,
+}
+
+#[cfg(feature = "ecc")]
+#[allow(dead_code)]
+impl EccEncryptedSecret {
+    /// Serialize everything covered by the Signature (Figure 39): the full envelope up to but NOT
+    /// including the trailing Signature bytes. (The `Length` field still counts the Signature.)
+    pub(crate) fn encode_data_to_sign(&self) -> Result<Vec<u8>, Error> {
+        let ctx = ContextOwned::default();
+        let ctx = ctx.context();
+        let key_data = self.encode_key_data(&ctx)?;
+        let body_len = self.body_len(key_data.len())?;
+
+        let envelope_prefix_len = NodeId::new(0, 17546u32).byte_len(&ctx) + 1 + 4;
+        let data_to_sign_len = envelope_prefix_len + body_len - self.signature.len();
+        let mut buf = Vec::with_capacity(data_to_sign_len);
+        NodeId::new(0, 17546u32).encode(&mut buf, &ctx)?;
+        1u8.encode(&mut buf, &ctx)?;
+        i32::try_from(body_len)
+            .map_err(|_| invalid_argument("EccEncryptedSecret body length exceeds i32"))?
+            .encode(&mut buf, &ctx)?;
+        self.encode_body_to_sign(&mut buf, &ctx, &key_data)?;
+        Ok(buf)
+    }
+
+    /// Full serialized envelope = `encode_data_to_sign()` followed by `self.signature`.
+    pub(crate) fn encode(&self) -> Result<Vec<u8>, Error> {
+        let mut buf = self.encode_data_to_sign()?;
+        buf.extend_from_slice(&self.signature);
+        Ok(buf)
+    }
+
+    /// Parse a full envelope from attacker-controlled bytes. Bounds every length; never panics.
+    pub(crate) fn decode(bytes: &[u8]) -> Result<Self, Error> {
+        let ctx = ContextOwned::default();
+        let ctx = ctx.context();
+        let mut cursor = Cursor::new(bytes);
+
+        let _type_id = NodeId::decode(&mut cursor, &ctx)?;
+        let encoding_mask = u8::decode(&mut cursor, &ctx)?;
+        if encoding_mask != 1 {
+            return Err(invalid_argument(format!(
+                "unsupported EccEncryptedSecret encoding mask {encoding_mask}"
+            )));
+        }
+
+        let length = i32::decode(&mut cursor, &ctx)?;
+        if length < 0 {
+            return Err(invalid_argument(format!(
+                "negative EccEncryptedSecret body length {length}"
+            )));
+        }
+        let length = usize::try_from(length)
+            .map_err(|_| invalid_argument("EccEncryptedSecret body length cannot fit usize"))?;
+        let body_start = usize::try_from(cursor.position())
+            .map_err(|_| invalid_argument("EccEncryptedSecret cursor position cannot fit usize"))?;
+        let body_end = body_start
+            .checked_add(length)
+            .ok_or_else(|| invalid_argument("EccEncryptedSecret body length overflows"))?;
+        let body = bytes
+            .get(body_start..body_end)
+            .ok_or_else(|| invalid_argument("EccEncryptedSecret body exceeds input length"))?;
+        let mut body_cursor = Cursor::new(body);
+
+        let security_policy_uri = UAString::decode(&mut body_cursor, &ctx)?;
+        if security_policy_uri.is_null() {
+            return Err(invalid_argument(
+                "EccEncryptedSecret SecurityPolicyUri cannot be null",
+            ));
+        }
+        let security_policy_uri = security_policy_uri.as_ref().to_string();
+        let certificate = ByteString::decode(&mut body_cursor, &ctx)?;
+        let signing_time = DateTime::decode(&mut body_cursor, &ctx)?;
+        let key_data_len = usize::from(u16::decode(&mut body_cursor, &ctx)?);
+
+        let key_data_start = usize::try_from(body_cursor.position())
+            .map_err(|_| invalid_argument("EccEncryptedSecret cursor position cannot fit usize"))?;
+        let key_data_end = key_data_start
+            .checked_add(key_data_len)
+            .ok_or_else(|| invalid_argument("EccEncryptedSecret KeyData length overflows"))?;
+        let key_data = body
+            .get(key_data_start..key_data_end)
+            .ok_or_else(|| invalid_argument("EccEncryptedSecret KeyData exceeds body length"))?;
+        let mut key_cursor = Cursor::new(key_data);
+        let sender_public_key = ByteString::decode(&mut key_cursor, &ctx)?;
+        let receiver_public_key = ByteString::decode(&mut key_cursor, &ctx)?;
+        if usize::try_from(key_cursor.position())
+            .map_err(|_| invalid_argument("EccEncryptedSecret cursor position cannot fit usize"))?
+            != key_data_len
+        {
+            return Err(invalid_argument(
+                "EccEncryptedSecret KeyData contains trailing bytes",
+            ));
+        }
+
+        let remaining = body
+            .get(key_data_end..)
+            .ok_or_else(|| invalid_argument("EccEncryptedSecret payload start exceeds body"))?;
+        let signature_len =
+            EccCurve::from_security_policy(SecurityPolicy::from_uri(&security_policy_uri))?
+                .raw_signature_len();
+        if remaining.len() < signature_len {
+            return Err(invalid_argument(format!(
+                "EccEncryptedSecret payload and signature length {} is shorter than signature length {}",
+                remaining.len(),
+                signature_len
+            )));
+        }
+        let payload_len = remaining.len() - signature_len;
+        let encrypted_payload = remaining
+            .get(..payload_len)
+            .ok_or_else(|| invalid_argument("EccEncryptedSecret encrypted payload is missing"))?
+            .to_vec();
+        let signature = remaining
+            .get(payload_len..)
+            .ok_or_else(|| invalid_argument("EccEncryptedSecret signature is missing"))?
+            .to_vec();
+
+        Ok(Self {
+            security_policy_uri,
+            certificate,
+            signing_time,
+            sender_public_key,
+            receiver_public_key,
+            encrypted_payload,
+            signature,
+        })
+    }
+
+    fn encode_key_data(&self, ctx: &Context<'_>) -> Result<Vec<u8>, Error> {
+        let mut key_data = Vec::with_capacity(
+            self.sender_public_key.byte_len(ctx) + self.receiver_public_key.byte_len(ctx),
+        );
+        self.sender_public_key.encode(&mut key_data, ctx)?;
+        self.receiver_public_key.encode(&mut key_data, ctx)?;
+        Ok(key_data)
+    }
+
+    fn body_len(&self, key_data_len: usize) -> Result<usize, Error> {
+        self.security_policy_uri
+            .len()
+            .checked_add(self.certificate.as_ref().len())
+            .and_then(|len| len.checked_add(self.encrypted_payload.len()))
+            .and_then(|len| len.checked_add(self.signature.len()))
+            .and_then(|len| len.checked_add(key_data_len))
+            .and_then(|len| len.checked_add(4 + 4 + 8 + 2))
+            .ok_or_else(|| invalid_argument("EccEncryptedSecret body length overflows"))
+    }
+
+    fn encode_body_to_sign(
+        &self,
+        buf: &mut Vec<u8>,
+        ctx: &Context<'_>,
+        key_data: &[u8],
+    ) -> Result<(), Error> {
+        UAString::from(self.security_policy_uri.as_str()).encode(buf, ctx)?;
+        self.certificate.encode(buf, ctx)?;
+        self.signing_time.encode(buf, ctx)?;
+        u16::try_from(key_data.len())
+            .map_err(|_| invalid_argument("EccEncryptedSecret KeyData length exceeds u16"))?
+            .encode(buf, ctx)?;
+        buf.extend_from_slice(key_data);
+        buf.extend_from_slice(&self.encrypted_payload);
+        Ok(())
+    }
+}
+
 /// Generates an ephemeral EC key pair for the Part 6 §6.8 secure-channel handshake.
 ///
 /// # Errors
@@ -1037,6 +1232,84 @@ pub fn derive_keys(
         client: split_derived_keys(curve, &mut client_key_material)?,
         server: split_derived_keys(curve, &mut server_key_material)?,
     })
+}
+
+#[cfg(feature = "ecc")]
+fn split_secret_keys(
+    encryption_len: usize,
+    iv_len: usize,
+    key_material: &[u8],
+) -> Result<EccSecretKeys, Error> {
+    let iv_start = encryption_len;
+    let end = iv_start + iv_len;
+
+    let encrypting_key = key_material
+        .get(..encryption_len)
+        .ok_or_else(|| invalid_argument("missing ECC secret encryption key material"))?
+        .to_vec();
+    let iv = key_material
+        .get(iv_start..end)
+        .ok_or_else(|| invalid_argument("missing ECC secret initialization vector material"))?
+        .to_vec();
+
+    Ok(EccSecretKeys {
+        encrypting_key: AesKey::new(encrypting_key),
+        iv,
+    })
+}
+
+/// Part 6 §6.8.3 KDF for an `EccEncryptedSecret`. Derives the EncryptingKey + IV via RFC 5869 HKDF:
+///   SecretSalt = L (u16 little-endian) | UTF8("opcua-secret") | sender_public_key | receiver_public_key
+///   PRK  = HMAC-Hash(SecretSalt, shared_secret)       // Extract; IKM = ECDH shared secret (x-coord)
+///   OKM  = HKDF-Expand(PRK, Info = SecretSalt, L)      // Info equals the Salt
+///   EncryptingKey = OKM[0 .. EncryptionKeyLength]; InitializationVector = OKM[EncryptionKeyLength .. EncryptionKeyLength+IvLength]
+/// where L = EncryptionKeyLength + IvLength. Hash per curve: SHA-256 for P-256, SHA-384 for P-384.
+/// Per-curve lengths come from the existing `key_lengths(curve)` -> (signing, enc, iv): P-256 (32,16,16)
+/// => EncryptionKeyLength=16 (AES-128); P-384 (48,32,16) => EncryptionKeyLength=32 (AES-256); IV=16 both.
+/// The signing length is IGNORED here (no derived signing key for ECC).
+///
+/// Fail closed: reject a `shared_secret` whose length != the curve x-coordinate size
+/// (`curve.scalar_len()`), exactly as `derive_keys` does.
+///
+/// # Errors
+///
+/// Returns `BadInvalidArgument` when the shared secret length is not valid for the curve, when the
+/// requested output length cannot be encoded by the specification, or when HKDF output is invalid.
+#[cfg(feature = "ecc")]
+pub fn derive_secret_keys(
+    curve: EccCurve,
+    shared_secret: &[u8],
+    sender_public_key: &[u8],
+    receiver_public_key: &[u8],
+) -> Result<EccSecretKeys, Error> {
+    let (_, encryption_len, iv_len) = key_lengths(curve);
+    let output_len = encryption_len + iv_len;
+
+    if shared_secret.len() != curve.scalar_len() {
+        return Err(invalid_argument(format!(
+            "ECC shared secret must be {} bytes for {:?}, got {}",
+            curve.scalar_len(),
+            curve,
+            shared_secret.len()
+        )));
+    }
+
+    let output_len_u16 = u16::try_from(output_len)
+        .map_err(|_| invalid_argument("ECC secret key material length exceeds u16"))?;
+    let mut salt = Vec::with_capacity(
+        2 + b"opcua-secret".len() + sender_public_key.len() + receiver_public_key.len(),
+    );
+    salt.extend_from_slice(&output_len_u16.to_le_bytes());
+    salt.extend_from_slice(b"opcua-secret");
+    salt.extend_from_slice(sender_public_key);
+    salt.extend_from_slice(receiver_public_key);
+
+    let key_material = match curve {
+        EccCurve::P256 => hkdf_expand_sha256(shared_secret, &salt, output_len)?,
+        EccCurve::P384 => hkdf_expand_sha384(shared_secret, &salt, output_len)?,
+    };
+
+    split_secret_keys(encryption_len, iv_len, &key_material)
 }
 
 #[cfg(all(test, feature = "ecc"))]

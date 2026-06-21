@@ -33,7 +33,7 @@ verify padding → check Nonce==current server nonce → extract. Reuse `ecdh_sh
 
 ## Phase 1: Setup
 
-- [ ] T001 Capture the baseline gate; confirm in-tree the `EccEncryptedSecret` DataType NodeId
+- [X] T001 Capture the baseline gate; confirm in-tree the `EccEncryptedSecret` DataType NodeId
   (`async-opcua-types` generated `node_ids.rs`), the `AesKey` AES-128/256-CBC encrypt/decrypt API (`encrypt_aes128_cbc`/`encrypt_aes256_cbc`, NoPadding), and the
   exact signatures of `ecdh_shared_secret`, `Hkdf::<Sha256/384>` usage, and
   `SecurityPolicy::asymmetric_sign`/`asymmetric_verify_signature`; **confirm the 012 ECC policies use
@@ -42,20 +42,20 @@ verify padding → check Nonce==current server nonce → extract. Reuse `ecdh_sh
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-- [ ] T002 [P] Claude-authored failing tests for the §6.8.3 KDF in
+- [X] T002 [P] Claude-authored failing tests for the §6.8.3 KDF in
   `async-opcua-crypto/src/tests/ecc_encrypted_secret.rs`: (a) the underlying HKDF Extract+Expand matches
   **RFC 5869 Appendix A** vectors (SHA-256; a SHA-384 known vector); (b) `derive_secret_keys` builds the
   `SecretSalt = L | "opcua-secret" | SenderPublicKey | ReceiverPublicKey` and the Table 71 split
   (EncryptingKey[0..EncKeyLen], IV[EncKeyLen..EncKeyLen+16]; EncKeyLen=16 P-256 / 32 P-384) reproduces a hand-computed fixture. Register the module in
   `tests/mod.rs` (ecc-gated).
-- [ ] T003 [P] Claude-authored failing tests for the envelope codec: a crafted `EccEncryptedSecret` byte
+- [X] T003 [P] Claude-authored failing tests for the envelope codec: a crafted `EccEncryptedSecret` byte
   fixture (known fields) parses to the exact Table 186 fields and re-serializes byte-identically;
   malformed/truncated/oversized `Length`/`KeyDataLength`/ByteString bytes return an error (no panic).
-- [ ] T004 §6.8.3 KDF in `async-opcua-crypto/src/ecc.rs`: `derive_secret_keys(curve, shared_secret,
+- [X] T004 §6.8.3 KDF in `async-opcua-crypto/src/ecc.rs`: `derive_secret_keys(curve, shared_secret,
   sender_public_key, receiver_public_key) -> Result<EccSecretKeys, Error>` (`{ encrypting_key: AesKey,
   iv: Vec<u8> }`, `Zeroizing`), using the `opcua-secret` salt + `L = EncKeyLen + IvLen`, HKDF per curve.
   Panic-free; behind `ecc`. (codex; depends T002)
-- [ ] T005 EccEncryptedSecret envelope codec in `async-opcua-crypto/src/ecc.rs` (or a submodule):
+- [X] T005 EccEncryptedSecret envelope codec in `async-opcua-crypto/src/ecc.rs` (or a submodule):
   build + parse the Table 186 layout (ExtensionObject TypeId/EncodingMask=1/Length prefix, common header,
   unencrypted KeyData, encrypted-payload blob boundary, trailing Signature). Bound every
   attacker-influenced length before allocating; parse is panic-free and fail-closed. (codex; depends T003)

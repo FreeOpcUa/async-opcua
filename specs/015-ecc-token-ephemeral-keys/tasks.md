@@ -99,10 +99,10 @@ always `null()`) — carry an `AdditionalParametersType` name-value list with `E
 
 ## Phase 6: User Story 4 — Rollout & backward compatibility (P3)
 
-- [ ] T013 [P] [US4] Claude-authored regression tests: RSA / `None` / ECC-without-`ECDHPolicyUri`
+- [X] T013 [P] [US4] Claude-authored regression tests: RSA / `None` / ECC-without-`ECDHPolicyUri`
   sessions create/activate exactly as before (null `additional_header` unchanged); confirm the
   `ecc`-off build behaves identically (no ECDH handling compiled).
-- [ ] T014 [US4] Gate (incl. `--no-default-features` build); verify T013 passes; **commit US4**
+- [X] T014 [US4] Gate (incl. `--no-default-features` build); verify T013 passes; **commit US4**
   (`test(015 US4): rollout + backward-compat (RSA/None/no-ECDH unchanged)`).
 
 ## Phase 7: Polish

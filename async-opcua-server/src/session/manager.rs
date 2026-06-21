@@ -864,6 +864,24 @@ mod tests {
         );
     }
 
+    /// US4 (FR-002/FR-006): a None-policy ActivateSession that carries no `ECDHPolicyUri` must leave
+    /// the response `AdditionalHeader` null — the ECC EphemeralKey wiring is inert on non-ECDH flows,
+    /// byte-identical to before the feature (and holds identically whether or not `ecc` is compiled
+    /// in). Anchored to §6.8.2: an absent `ECDHPolicyUri` yields no `ECDHKey`.
+    #[tokio::test]
+    async fn activate_session_without_ecdh_policy_leaves_response_header_null() {
+        let fixture = ActivationFixture::new(Arc::new(AuthenticationGate::open()));
+        let response = fixture
+            .activate_with(SecurityPolicy::None, 7)
+            .await
+            .expect("anonymous None-policy activation should succeed");
+        assert_eq!(
+            response.response_header.additional_header,
+            ExtensionObject::null(),
+            "an ActivateSession with no ECDHPolicyUri must not add an ECDHKey to the response header"
+        );
+    }
+
     #[derive(Clone)]
     struct ActivationFixture {
         info: Arc<crate::ServerInfo>,

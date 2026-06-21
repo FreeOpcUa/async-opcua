@@ -1,0 +1,118 @@
+{
+  "summary": {
+    "enabledPatterns": { "before": 5204, "after": 873 },
+    "enabledTools": { "before": 16, "after": 7 },
+    "issues": { "before": 157, "after": 80 },
+    "analysisRuntime": { "before": 123788, "after": 57327 }
+  },
+  "toolChanges": [
+    { "toolId": "PyLintPython3", "action": "disabled", "reason": "Wrong stack - Python linter; discover found no owned Python files (all .py-adjacent tooling is absent). Also failed to install (python3-venv missing).", "patternsAffected": 223 },
+    { "toolId": "Bandit", "action": "disabled", "reason": "Wrong stack - Python security scanner; no owned Python in the repo.", "patternsAffected": 78 },
+    { "toolId": "Prospector", "action": "disabled", "reason": "Wrong stack - Python; no owned Python. Failed to install (venv).", "patternsAffected": 7 },
+    { "toolId": "PMD", "action": "disabled", "reason": "Wrong stack - Java; zero owned Java files. Exited non-zero locally.", "patternsAffected": 198 },
+    { "toolId": "jackson", "action": "disabled", "reason": "Wrong stack - Java/Jackson JSON; no owned Java.", "patternsAffected": 2 },
+    { "toolId": "cppcheck", "action": "disabled", "reason": "Wrong stack - C/C++; the only C/C++ is vendored 3rd-party/open62541 interop examples, already excluded. Cannot auto-install locally.", "patternsAffected": 384 },
+    { "toolId": "flawfinder", "action": "disabled", "reason": "Wrong stack - C/C++ security; same as cppcheck, no owned C/C++. Failed to install (venv).", "patternsAffected": 222 },
+    { "toolId": "Biome", "action": "disabled", "reason": "Wrong stack - JS/TS; zero owned JS/TS files (all JS is vendored 3rd-party/node-opcua, excluded). Produced 0 issues.", "patternsAffected": 283 },
+    { "toolId": "ESLint8", "action": "disabled", "reason": "Wrong stack - JS/TS; no owned JS/TS. Its only 2 findings were import/unambiguous misrouted onto .yml config files (false positives).", "patternsAffected": 919 }
+  ],
+  "patternChanges": [
+    { "patternId": "Lizard_ccn-medium", "toolId": "Lizard", "action": "updated", "reason": "Raised cyclomatic-complexity threshold 25->40 to match a mature OPC UA protocol library; keeps the genuinely complex functions flagged, drops the 25-39 band of routine protocol handlers.", "delta": -13, "parameters": [ { "id": "threshold", "before": "25", "after": "40" } ] },
+    { "patternId": "Lizard_nloc-medium", "toolId": "Lizard", "action": "updated", "reason": "Raised function-length threshold 100->200; 200+ line functions are the real outliers in this codebase (max ~347).", "delta": -51, "parameters": [ { "id": "threshold", "before": "100", "after": "200" } ] },
+    { "patternId": "Lizard_file-nloc-medium", "toolId": "Lizard", "action": "updated", "reason": "Raised file-size threshold 500->1000; flags only the genuinely giant hand-written files (up to 1910 lines) rather than every 500+ line module.", "delta": -38, "parameters": [ { "id": "threshold", "before": "500", "after": "1000" } ] },
+    { "patternId": "Lizard_parameter-count-medium", "toolId": "Lizard", "action": "updated", "reason": "Raised parameter-count threshold 8->12; OPC UA service calls/structs legitimately take many params (max 14).", "delta": -6, "parameters": [ { "id": "threshold", "before": "8", "after": "12" } ] },
+    { "patternId": "shellcheck_SC2154", "toolId": "shellcheck", "action": "enabled", "reason": "Lost-pattern recovery: this High/ErrorProne pattern found a real referenced-but-unassigned var in tools/check_version_numbers.sh in the baseline but was absent from the broad init --auto set. Restored.", "delta": 1, "parameters": [] },
+    { "patternId": "markdownlint_MD007", "toolId": "markdownlint", "action": "disabled", "reason": "Pure list-indent formatting nit (105 hits); subjective style, not a quality issue, on a Rust library's docs.", "delta": -105, "parameters": [] },
+    { "patternId": "markdownlint_MD022", "toolId": "markdownlint", "action": "disabled", "reason": "Blanks-around-headings formatting nit (87 hits).", "delta": -87, "parameters": [] },
+    { "patternId": "markdownlint_MD032", "toolId": "markdownlint", "action": "disabled", "reason": "Blanks-around-lists formatting nit (84 hits).", "delta": -84, "parameters": [] },
+    { "patternId": "markdownlint_MD030", "toolId": "markdownlint", "action": "disabled", "reason": "List-marker-spacing formatting nit (30 hits).", "delta": -30, "parameters": [] },
+    { "patternId": "markdownlint_MD029", "toolId": "markdownlint", "action": "disabled", "reason": "Ordered-list-prefix style nit (11 hits).", "delta": -11, "parameters": [] },
+    { "patternId": "markdownlint_MD035", "toolId": "markdownlint", "action": "disabled", "reason": "Horizontal-rule-style nit (10 hits).", "delta": -10, "parameters": [] },
+    { "patternId": "markdownlint_MD033", "toolId": "markdownlint", "action": "disabled", "reason": "Inline-HTML nit (9 hits); intentional in these docs.", "delta": -9, "parameters": [] },
+    { "patternId": "markdownlint_MD014", "toolId": "markdownlint", "action": "disabled", "reason": "Dollar-sign-before-commands nit (9 hits).", "delta": -9, "parameters": [] },
+    { "patternId": "markdownlint_MD005", "toolId": "markdownlint", "action": "disabled", "reason": "List-indent-consistency nit (9 hits).", "delta": -9, "parameters": [] },
+    { "patternId": "markdownlint_MD004", "toolId": "markdownlint", "action": "disabled", "reason": "Unordered-list-style nit (7 hits).", "delta": -7, "parameters": [] },
+    { "patternId": "markdownlint_MD049", "toolId": "markdownlint", "action": "disabled", "reason": "Emphasis-style (underscore vs asterisk) nit (6 hits).", "delta": -6, "parameters": [] },
+    { "patternId": "markdownlint_MD012", "toolId": "markdownlint", "action": "disabled", "reason": "Multiple-consecutive-blank-lines nit (4 hits).", "delta": -4, "parameters": [] }
+  ],
+  "fileExclusions": {
+    "global": [
+      ".codacy/**",
+      "samples/simple-client/identity/sample-x509.pem"
+    ],
+    "perTool": {
+      "markdownlint": [
+        "LICENSE.md",
+        "docs/old_changelog.md",
+        "docs/*_AUDIT_*.md",
+        "docs/*_REVIEW_*.md"
+      ]
+    }
+  },
+  "securityCoverage": {
+    "deduplication": [],
+    "newCoverage": [],
+    "noisyButKept": [
+      "Semgrep detect-insecure-websocket (7 hits in async-opcua-pubsub websocket transport) - legitimate ws:// transport code; kept per security guardrail for triage rather than disabled.",
+      "Semgrep gitleaks/detected-jwt-token (2 hits in async-opcua-core/src/logging/redact.rs) - intentional key/JWT redaction patterns in the secret-redaction module; kept for triage.",
+      "Trivy + Semgrep secret patterns - kept active; the sample x509 cert that produced the only false positives was file-excluded instead of disabling any pattern."
+    ]
+  },
+  "keyImprovements": [
+    "Lizard complexity thresholds tuned to a mature OPC UA library (ccn 25->40, nloc 100->200, file-nloc 500->1000, params 8->12): 126 complexity warnings cut to 18 genuine outliers while keeping the truly complex/giant functions flagged.",
+    "Removed 9 wrong-stack tools (Python: PyLint/Bandit/Prospector; Java: PMD/jackson; C/C++: cppcheck/flawfinder; JS/TS: Biome/ESLint8) - zero owned files for any of them; this also eliminated ESLint's false-positive import/unambiguous hits on YAML config files.",
+    "markdownlint trimmed from 397 doc-formatting nits to 26 by disabling 12 pure-whitespace/style patterns and excluding non-source markdown (LICENSE, archived changelog, point-in-time audit/review reports).",
+    "Excluded Codacy's own .codacy/ working directory, which was being self-scanned (its result JSON embeds ws:// URLs and key/JWT fixtures), removing ~24 self-referential false positives.",
+    "Excluded the sample x509 demo cert (false-positive secret) and restored shellcheck_SC2154 (a real High finding dropped by init --auto). All genuine security coverage retained.",
+    "Net: 16->7 tools, 5204->873 patterns, 157->80 issues, analysis runtime 124s->57s, with every security concern still covered."
+  ],
+  "localConfigTools": [],
+  "codacyYaml": ".codacy.yaml updated with new exclusions: global .codacy/** and samples/simple-client/identity/sample-x509.pem; per-engine markdownlint excludes for LICENSE.md, docs/old_changelog.md, docs/*_AUDIT_*.md, docs/*_REVIEW_*.md. NOTE: Codacy Cloud reads .codacy.yaml from the DEFAULT branch only, so these file exclusions take effect on Cloud after .codacy.yaml is committed and pushed to master.",
+  "importResults": {
+    "status": "completed_with_errors",
+    "toolsConfigured": 7,
+    "toolsEnabled": [],
+    "toolsDisabled": [],
+    "errors": [
+      { "toolId": "Biome", "error": "Conflict (409)", "detail": "Cannot disable a tool that is enabled by a standard" },
+      { "toolId": "Pylint", "error": "Conflict (409)", "detail": "Cannot disable a tool that is enabled by a standard" },
+      { "toolId": "Cppcheck", "error": "Conflict (409)", "detail": "Cannot disable a tool that is enabled by a standard" },
+      { "toolId": "PMD", "error": "Conflict (409)", "detail": "Cannot disable a tool that is enabled by a standard" },
+      { "toolId": "Bandit", "error": "Conflict (409)", "detail": "Cannot disable a tool that is enabled by a standard" },
+      { "toolId": "Prospector", "error": "Conflict (409)", "detail": "Cannot disable a tool that is enabled by a standard" },
+      { "toolId": "Jackson Linter", "error": "Conflict (409)", "detail": "Cannot disable a tool that is enabled by a standard" },
+      { "toolId": "Flawfinder", "error": "Conflict (409)", "detail": "Cannot disable a tool that is enabled by a standard" },
+      { "toolId": "ESLint", "error": "Conflict (409)", "detail": "Cannot disable a tool that is enabled by a standard" }
+    ],
+    "warnings": [
+      "2 cloud-only tools left unchanged: SonarC#, PSScriptAnalyzer (not reproducible by the local Analysis CLI).",
+      "9 wrong-stack tool disables blocked by the org 'Default coding standard'; user chose to leave the standard linked (those tools have no owned files, so they produce ~0 Cloud issues regardless).",
+      "Lizard threshold reconfiguration, markdownlint pattern disables, and the shellcheck_SC2154 restore all imported successfully (part of the 7 reconfigured tools)."
+    ],
+    "codingStandards": ["Default coding standard"],
+    "forceUsed": false
+  },
+  "cloudVerification": {
+    "reanalysisCompleted": true,
+    "issuesBefore": 145,
+    "issuesAfter": 71,
+    "net": -74,
+    "patternsDisabled": [],
+    "keyDeltas": {
+      "Lizard_nloc-medium": -51,
+      "Lizard_file-nloc-medium": -38,
+      "Lizard_ccn-medium": -13,
+      "Lizard_parameter-count-medium": -6,
+      "Complexity_category": -108,
+      "Security_category": 0,
+      "markdownlint_MD025": 16,
+      "Agentlinter_clarity_undefined-term": 5,
+      "markdownlint_MD036": 3,
+      "markdownlint_MD034": 3
+    },
+    "warnings": [
+      "Reanalysis reflects the imported PATTERN config only. The new .codacy.yaml file exclusions are not yet on master, so they were NOT applied in this reanalysis; committing .codacy.yaml to master will further reduce markdownlint findings on LICENSE/old_changelog/audit docs.",
+      "BestPractice +22 / Info +36 increase is a side effect of the init --auto reset: the kept tools (Agentlinter 102 patterns, markdownlint 31) carry broader pattern sets than the lean production config (Agentlinter 71, markdownlint 5). All on agent-instruction and doc files; trimmable on request."
+    ]
+  }
+}

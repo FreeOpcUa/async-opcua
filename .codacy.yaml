@@ -12,6 +12,11 @@
 # the test/fuzz harnesses) keeps Codacy's findings focused on the
 # hand-written, maintained source.
 exclude_paths:
+  # Codacy's own working directory (intermediate analysis JSON, logs). These
+  # files embed issue messages containing ws:// URLs, JWT/key fixtures, etc.,
+  # which the secret/websocket scanners then re-flag — a self-referential
+  # false positive. Never analyze the analyzer's scratch space.
+  - ".codacy/**"
   # Auto-generated OPC UA types — the dominant source of false-positive
   # duplication. Never hand-edited (verify-clean-codegen CI enforces this).
   - "**/generated/**"
@@ -46,3 +51,19 @@ exclude_paths:
   - "specs/**"
   # Generated/curated release notes — markdown-lint nits, not code quality.
   - "CHANGELOG.md"
+  # Sample/test X.509 credential shipped for the example client. Trivy and
+  # Semgrep's secret scanners flag its embedded private key, but it is a
+  # throwaway demo cert (not a real secret), so the findings are false
+  # positives. Excluding the file silences them at the source.
+  - "samples/simple-client/identity/sample-x509.pem"
+engines:
+  markdownlint:
+    # markdownlint fires hundreds of pure-formatting nits (MD007/MD022/MD032…)
+    # on non-source markdown. These files are either legal text, an archived
+    # changelog, or point-in-time audit/review reports — none are maintained
+    # product docs, so style-linting them is noise, not signal.
+    exclude_paths:
+      - "LICENSE.md"
+      - "docs/old_changelog.md"
+      - "docs/*_AUDIT_*.md"
+      - "docs/*_REVIEW_*.md"

@@ -107,11 +107,11 @@ always `null()`) — carry an `AdditionalParametersType` name-value list with `E
 
 ## Phase 7: Polish
 
-- [ ] T015 [P] Fuzz the attacker-reachable decode: `fuzz_additional_header_ecdh` (or extend an existing
+- [X] T015 [P] Fuzz the attacker-reachable decode: `fuzz_additional_header_ecdh` (or extend an existing
   target) over malformed `AdditionalParametersType` / `EphemeralKeyType` bytes → zero panics.
-- [ ] T016 [P] Docs: note the ECC token EphemeralKey exchange (request/response `AdditionalHeader`,
+- [X] T016 [P] Docs: note the ECC token EphemeralKey exchange (request/response `AdditionalHeader`,
   `ECDHPolicyUri`/`ECDHKey`) in `docs/crypto.md`; record that 016 (EccEncryptedSecret) builds on it.
-- [ ] T017 Final gate: fmt + clippy --all-targets --all-features + crypto/server/client tests +
+- [X] T017 Final gate: fmt + clippy --all-targets --all-features + crypto/server/client tests +
   integration (failures confirmed in isolation as pre-existing flakiness) + `--no-default-features`
   build; confirm RSA/None byte-identical.
 

@@ -363,6 +363,7 @@ impl SessionManager {
 
         self.notify.notify_waiters();
 
+        #[cfg_attr(not(feature = "ecc"), allow(unused_mut))]
         let mut response = CreateSessionResponse {
             response_header: ResponseHeader::new_good(&request.request_header),
             session_id,

@@ -10,7 +10,7 @@ use std::{
 use dashmap::DashMap;
 use futures::FutureExt;
 use opcua_core::{comms::secure_channel::SecureChannel, trace_read_lock, trace_write_lock};
-use opcua_crypto::{random, CertificateStore, SecurityPolicy};
+use opcua_crypto::{random, CertificateStore, SecurityPolicy, X509};
 use parking_lot::RwLock;
 use tokio::sync::{mpsc, Notify};
 use tracing::{error, info};
@@ -57,6 +57,27 @@ pub(crate) fn is_cross_channel_transfer_forbidden(
 ) -> bool {
     session_channel_id != request_channel_id
         && (!session_activated || security_policy == SecurityPolicy::None)
+}
+
+/// Returns true when the client application certificate bound to the session at CreateSession does
+/// NOT match the certificate that secured the activating channel -- a Part 4 §5.6 binding violation
+/// that must be rejected. For `SecurityPolicy::None` there is no channel certificate, so the binding
+/// is not checked (returns false). Under any secured policy, both certificates must be present and
+/// equal (by thumbprint); a missing certificate on either side is treated as a violation (fail closed).
+pub(crate) fn is_client_certificate_channel_mismatch(
+    session_cert: Option<&X509>,
+    channel_cert: Option<&X509>,
+    security_policy: SecurityPolicy,
+) -> bool {
+    if security_policy == SecurityPolicy::None {
+        return false;
+    }
+    match (session_cert, channel_cert) {
+        (Some(session_cert), Some(channel_cert)) => {
+            session_cert.thumbprint() != channel_cert.thumbprint()
+        }
+        _ => true,
+    }
 }
 
 /// Manages all sessions on the server.
@@ -210,7 +231,6 @@ impl SessionManager {
         let endpoints = self
             .info
             .new_endpoint_descriptions(request.endpoint_url.as_ref());
-        // TODO request.endpoint_url should match hostname of server application certificate
         // Find matching end points for this url
         if request.endpoint_url.is_empty() {
             error!("Create session was passed an null endpoint url");
@@ -589,9 +609,19 @@ pub(crate) async fn activate_session(
                 session.secure_channel_id()
             );
             return Err(StatusCode::BadSecureChannelIdInvalid);
-        } else {
-            // TODO additional secure channel validation here for client certificate and user identity
-            //  token
+        }
+
+        let channel_cert = channel.remote_cert();
+        if is_client_certificate_channel_mismatch(
+            session.client_certificate(),
+            channel_cert.as_ref(),
+            security_policy,
+        ) {
+            error!(
+                "activate session rejected: client certificate presented at CreateSession does not match the certificate securing the channel (secure channel id {})",
+                secure_channel_id
+            );
+            return Err(StatusCode::BadSecurityChecksFailed);
         }
 
         if session.session_nonce() != &session_nonce {
@@ -664,7 +694,95 @@ mod tests {
         ServerBuilder,
     };
 
-    use super::{activate_session, is_cross_channel_transfer_forbidden};
+    use super::{
+        activate_session, is_client_certificate_channel_mismatch,
+        is_cross_channel_transfer_forbidden,
+    };
+
+    /// Mint a self-signed application certificate for binding tests.
+    fn make_cert(common_name: &str) -> opcua_crypto::X509 {
+        let data = opcua_crypto::X509Data {
+            key_size: 2048,
+            common_name: common_name.to_string(),
+            organization: "async-opcua test".to_string(),
+            organizational_unit: "test".to_string(),
+            country: "IE".to_string(),
+            state: "test".to_string(),
+            alt_host_names: vec!["urn:async-opcua-test".to_string(), "localhost".to_string()]
+                .into(),
+            certificate_duration_days: 60,
+        };
+        opcua_crypto::X509::cert_and_pkey(&data)
+            .expect("generate self-signed test certificate")
+            .0
+    }
+
+    /// US1 (FR-001): the client application certificate bound at CreateSession must match the
+    /// certificate that secured the activating channel, under any secured policy. `None` policy has
+    /// no channel certificate, so the binding is not checked.
+    #[test]
+    fn client_certificate_channel_binding_rules() {
+        let c1 = make_cert("client-one");
+        let c2 = make_cert("client-two");
+
+        // Matching certificate under a secured policy: no violation.
+        assert!(!is_client_certificate_channel_mismatch(
+            Some(&c1),
+            Some(&c1),
+            SecurityPolicy::Basic256Sha256
+        ));
+        // Different certificate: a binding violation (must be rejected).
+        assert!(is_client_certificate_channel_mismatch(
+            Some(&c1),
+            Some(&c2),
+            SecurityPolicy::Basic256Sha256
+        ));
+        // Secured policy but the channel presented no peer certificate: fail closed.
+        assert!(is_client_certificate_channel_mismatch(
+            Some(&c1),
+            None,
+            SecurityPolicy::Basic256Sha256
+        ));
+        // None policy: no channel certificate exists, so the binding is not checked.
+        assert!(!is_client_certificate_channel_mismatch(
+            Some(&c1),
+            Some(&c2),
+            SecurityPolicy::None
+        ));
+        assert!(!is_client_certificate_channel_mismatch(
+            None,
+            None,
+            SecurityPolicy::None
+        ));
+    }
+
+    /// US2 (FR-005 lock-in / SC-002): a session is bound to its secure channel — a request whose
+    /// secure-channel id differs from the session's is rejected with `BadSecureChannelIdInvalid`.
+    /// This is the check `SessionController::validate_request` runs on every session-scoped request.
+    #[tokio::test]
+    async fn session_rejects_request_from_a_different_secure_channel() {
+        let fixture = ActivationFixture::new(Arc::new(AuthenticationGate::open()));
+        let session = fixture.session.read();
+        // The fixture session belongs to secure channel 7.
+        assert!(session.validate_secure_channel_id(7).is_ok());
+        assert_eq!(
+            session.validate_secure_channel_id(8).unwrap_err(),
+            StatusCode::BadSecureChannelIdInvalid,
+            "a session must reject a request arriving on a different secure channel"
+        );
+    }
+
+    /// US2 (FR-002 lock-in): under `SecurityPolicy::None` there is no channel certificate, so the
+    /// new client-cert↔channel binding must be skipped and activation must still succeed.
+    #[tokio::test]
+    async fn none_policy_activation_skips_certificate_binding() {
+        let fixture = ActivationFixture::new(Arc::new(AuthenticationGate::open()));
+        let result = fixture.activate_with(SecurityPolicy::None, 7).await;
+        assert!(
+            result.is_ok(),
+            "None-policy activation must succeed without a channel certificate, got {result:?}"
+        );
+    }
 
     /// T048 / H1: an activated session under SecurityPolicy::None must not be
     /// transferable to a different secure channel (there is no cryptographic

@@ -153,3 +153,50 @@ async fn ecc_wrong_curve_is_not_negotiated() {
         }
     }
 }
+
+/// Interop harness (ignored): connect our client to an EXTERNAL ECC OPC UA
+/// server. No ECC-capable third-party peer runs in CI — `asyncua` exposes no
+/// ECC policies, there is no .NET runtime for UA-.NETStandard, and the bundled
+/// open62541 submodule is uninitialized — so end-to-end interop is UNVALIDATED
+/// (SC-007). Run this against a real peer to close the gap:
+///   OPCUA_ECC_INTEROP_URL=opc.tcp://host:port \
+///   [OPCUA_ECC_INTEROP_POLICY=ECC_nistP384] \
+///   cargo test -p async-opcua --features ecc -- --ignored ecc_interop
+/// The external server must trust the client's EC application certificate
+/// (written to ./pki-client/<id>/own/cert.der); our client auto-trusts the
+/// server certificate.
+#[tokio::test]
+#[ignore = "requires an external ECC OPC UA server (set OPCUA_ECC_INTEROP_URL)"]
+async fn ecc_interop_external_server() {
+    let Ok(url) = std::env::var("OPCUA_ECC_INTEROP_URL") else {
+        eprintln!("OPCUA_ECC_INTEROP_URL not set — skipping ECC interop test");
+        return;
+    };
+    let (policy, curve) = match std::env::var("OPCUA_ECC_INTEROP_POLICY").as_deref() {
+        Ok("ECC_nistP384") => (SecurityPolicy::EccNistP384, EccCurve::P384),
+        _ => (SecurityPolicy::EccNistP256, EccCurve::P256),
+    };
+
+    let test_id =
+        crate::utils::TEST_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    crate::utils::provision_ecc_certs(test_id, curve);
+    let mut client = crate::utils::ecc_client(test_id, 600_000).client().unwrap();
+
+    let (session, handle) = client
+        .connect_to_matching_endpoint(
+            (
+                url.as_str(),
+                policy.to_str(),
+                MessageSecurityMode::SignAndEncrypt,
+            ),
+            IdentityToken::Anonymous,
+        )
+        .await
+        .expect("connect to external ECC server");
+    let _h = handle.spawn();
+    tokio::time::timeout(Duration::from_secs(20), session.wait_for_connection())
+        .await
+        .expect("external ECC channel must establish");
+
+    read_service_level(&session).await;
+}

@@ -130,6 +130,17 @@ lengths are fixed by the algorithms themselves (HMAC-SHA256/384 output = 32/48; 
   third-party ECC peer, a misread of §6.8 could pass loopback yet fail real interop. Mitigation:
   drive every primitive from published vectors, and cross-check the KDF/handshake bytes against an
   open reference impl (open62541 / UA-.NET) before claiming interop.
+  - **Status (2026-06-21):** no ECC-capable third-party peer is runnable in this environment —
+    `asyncua` 2.0 (Python) exposes only RSA/None policies (no ECC); no .NET runtime for UA-.NETStandard;
+    the bundled `3rd-party/open62541` submodule is uninitialized and its secure-channel ECC support is
+    unconfirmed. So **end-to-end interop remains UNVALIDATED**. What *is* externally anchored: the ECDSA/
+    ECDH/HKDF primitives (RFC 6979/5903/5869 vectors), the wire-format pins from UA-.NETStandard *source*
+    (P1363 sig, X‖Y ephemeral, raw-x IKM), and the ChannelThumbprint binding. The unvalidated surface is
+    the OPC-UA-specific key schedule (salts/labels) + ChannelThumbprint *on the wire* against another impl.
+  - **Harness provided:** `async-opcua/tests/integration/ecc.rs::ecc_interop_external_server` (`#[ignore]`d)
+    connects our client to an external ECC server given `OPCUA_ECC_INTEROP_URL` (+ optional
+    `OPCUA_ECC_INTEROP_POLICY`), so a real interop run is one command away when a peer is available:
+    `OPCUA_ECC_INTEROP_URL=opc.tcp://host:port cargo test -p async-opcua --features ecc -- --ignored ecc_interop`.
 - All former `[verify-on-impl]` crypto items are now CLOSED — pinned from Part 6 §6.8 (verbatim) and
   cross-confirmed against UA-.NETStandard source (signature P1363, ephemeral X‖Y, raw-x IKM, URIs).
   The **only** residual risk is end-to-end **interop validation** (SC-007): loopback + vectors prove

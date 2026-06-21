@@ -76,3 +76,10 @@ Pure-Rust (reuse 012 RustCrypto ECDH/HKDF/AES; no OpenSSL/C); fail-closed + sing
 error (no oracle); panic-free on attacker bytes; legacy RSA + `None` byte-identical; behind the `ecc`
 feature; `clippy --all-targets --all-features` clean. EphemeralKey anti-replay (§6.8.2) is a hard
 requirement, aligning with the nonce-replay protection from feature 014.
+
+## DECIDED (2026-06-21)
+
+User chose the split. **This feature (015) = phase A: the EphemeralKey exchange (§6.8.2).** The
+`EccEncryptedSecret` structure + KDF + secret encrypt/decrypt + identity-token wiring
+(§7.40.2.5 / §6.8.3) is **feature 016**, which depends on this. The spec/plan/data-model/contracts/
+quickstart in this directory are scoped to phase A.

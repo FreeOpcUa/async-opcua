@@ -1,4 +1,4 @@
-# Specification Quality Checklist: ECC Identity-Token Secrets (OPC UA Part 4 §7.41.2.3)
+# Specification Quality Checklist: ECC Token EphemeralKey Exchange (Part 6 §6.8.2)
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-06-21

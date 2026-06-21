@@ -67,7 +67,7 @@ signature; self-signed-in-`trusted/` still valid.
 tampered sig / malformed structure → Invalid; chain to untrusted root → Untrusted; expired leaf →
 TimeInvalid, expired issuer → IssuerTimeInvalid; self-signed leaf trusted → valid.
 
-- [ ] T006 [US1] Claude-authored failing tests in `async-opcua-crypto` (cert_chain tests): generate
+- [X] T006 [US1] Claude-authored failing tests in `async-opcua-crypto` (cert_chain tests): generate
   in-test PKI fixtures via `x509-cert` builder + in-tree RSA/ECDSA keys (root CA, intermediate CA,
   leaf, self-signed leaf, tampered-signature leaf, **expired leaf, expired intermediate/issuer**,
   truncated/malformed-structure leaf); assert chain build + per-cert signature verify + **per-chain-cert
@@ -75,18 +75,18 @@ TimeInvalid, expired issuer → IssuerTimeInvalid; self-signed leaf trusted → 
   incl. malformed-structure, `Bad_CertificateUntrusted`, **`Bad_CertificateTimeInvalid` (leaf) /
   `Bad_CertificateIssuerTimeInvalid` (chain CA)**); self-signed leaf in trusted set validates.
   (FR-001/002/003/005/006)
-- [ ] T007 [US1] Implement chain build + signature verification + **validity-period (FR-006)** in
+- [X] T007 [US1] Implement chain build + signature verification + **validity-period (FR-006)** in
   `cert_chain.rs`: walk leaf→root via issuer/subject (+ AKI/SKI cross-check) over trusted+issuer lists;
   verify each `tbs.to_der()` against issuer SPKI per alg OID (RSA pkcs1v15/PSS via `rsa`; ECDSA via the
   new DER verify); **check each cert's not-before/not-after — leaf failure → `Bad_CertificateTimeInvalid`,
   any chain-CA failure → `Bad_CertificateIssuerTimeInvalid` (suppressible; honoured by the US4
   suppression model)**; reject malformed structure → `Bad_CertificateInvalid`; bound depth + detect
   cycles; Trust-List anchor (leaf or a chain CA in trusted). (depends T006)
-- [ ] T008 [US1] Wire `cert_chain` into `CertificateStore::validate_application_instance_cert`
+- [X] T008 [US1] Wire `cert_chain` into `CertificateStore::validate_application_instance_cert`
   (`certificate_store.rs`) behind the validation policy, preserving the existing trusted/rejected/
   time/hostname/URI behavior and the self-signed-in-`trusted/` path; `None` policy byte-identical.
   (depends T007)
-- [ ] T009 [US1] Gate; verify T006 passes; **commit US1**
+- [X] T009 [US1] Gate; verify T006 passes; **commit US1**
   (`feat(013 US1): CA chain build + signature verification (Part 4 §6.1.3)`).
 
 **Checkpoint**: certificates are chain-validated; the core trust gap is closed (MVP).

@@ -1,10 +1,17 @@
 use std::collections::HashSet;
 
 use chrono::{DateTime, Utc};
+#[cfg(feature = "ecc")]
+use const_oid::db::rfc5912::{ECDSA_WITH_SHA_256, ECDSA_WITH_SHA_384};
+use const_oid::db::rfc5912::{
+    ID_RSASSA_PSS, SHA_1_WITH_RSA_ENCRYPTION, SHA_256_WITH_RSA_ENCRYPTION,
+};
 use opcua_types::{status_code::StatusCode, Error};
 use x509_cert::crl::CertificateList;
 
-use crate::{SecurityPolicy, X509};
+use crate::{PublicKey, SecurityPolicy, X509};
+
+const MAX_CHAIN_LENGTH: usize = 10;
 
 /// The leaf application-certificate purpose being validated.
 ///
@@ -113,14 +120,303 @@ pub struct ChainValidationContext<'a> {
 /// revocation, in order, halting on the first non-suppressed failure (whose status code is returned
 /// as the `Err`). On success returns the list of suppressed non-critical findings the caller should
 /// emit as audit events. Host-name and application-URI checks remain with the caller.
-pub fn validate_certificate_chain(
-    cert: &X509,
+pub fn validate_certificate_chain<'a>(
+    cert: &'a X509,
+    context: &'a ChainValidationContext<'a>,
+) -> Result<Vec<SuppressedFinding>, Error> {
+    if !context.options.validate_chain {
+        return Ok(Vec::new());
+    }
+
+    let _ = (context.crls, context.security_policy, context.purpose); // consumed by US2/US3/US4
+
+    let chain = build_chain(cert, context)?;
+
+    verify_chain_signatures(&chain)?;
+
+    if !chain_contains_trusted_cert(&chain, context.trusted_certs)? {
+        return Err(validation_error(
+            StatusCode::BadCertificateUntrusted,
+            "certificate chain does not contain a trusted certificate",
+        ));
+    }
+
+    validate_chain_validity(&chain, context)
+}
+
+fn build_chain<'a>(
+    cert: &'a X509,
+    context: &'a ChainValidationContext<'a>,
+) -> Result<Vec<&'a X509>, Error> {
+    let mut chain = Vec::with_capacity(MAX_CHAIN_LENGTH);
+    let mut seen_der = HashSet::new();
+    let mut current = cert;
+
+    loop {
+        if chain.len() >= MAX_CHAIN_LENGTH {
+            return Err(chain_incomplete_error(
+                "certificate chain exceeds maximum validation depth",
+            ));
+        }
+
+        let current_der = cert_der(
+            current,
+            StatusCode::BadCertificateChainIncomplete,
+            "failed to encode certificate while building chain",
+        )?;
+        if !seen_der.insert(current_der.clone()) {
+            return Err(chain_incomplete_error(
+                "certificate chain contains a certificate cycle",
+            ));
+        }
+
+        chain.push(current);
+
+        if current.is_self_signed()
+            || der_in_list(
+                &current_der,
+                context.trusted_certs,
+                StatusCode::BadCertificateChainIncomplete,
+                "failed to encode trusted certificate while building chain",
+            )?
+        {
+            return Ok(chain);
+        }
+
+        let Some(issuer) = find_issuer(current, context) else {
+            return Err(chain_incomplete_error(
+                "certificate issuer was not found in issuer or trusted certificates",
+            ));
+        };
+        current = issuer;
+    }
+}
+
+fn find_issuer<'a>(current: &X509, context: &'a ChainValidationContext<'a>) -> Option<&'a X509> {
+    find_issuer_in(current, context.issuer_certs)
+        .or_else(|| find_issuer_in(current, context.trusted_certs))
+}
+
+fn find_issuer_in<'a>(current: &X509, candidates: &'a [X509]) -> Option<&'a X509> {
+    candidates
+        .iter()
+        .find(|candidate| candidate_matches_issuer(current, candidate))
+}
+
+fn candidate_matches_issuer(current: &X509, candidate: &X509) -> bool {
+    if candidate.subject_name() != current.issuer_name() {
+        return false;
+    }
+
+    match (
+        current.authority_key_identifier(),
+        candidate.subject_key_identifier(),
+    ) {
+        (Some(authority_key), Some(subject_key)) => authority_key == subject_key,
+        _ => true,
+    }
+}
+
+fn verify_chain_signatures(chain: &[&X509]) -> Result<(), Error> {
+    let mut chain_iter = chain.iter().peekable();
+
+    while let Some(child) = chain_iter.next() {
+        let issuer = match chain_iter.peek().copied() {
+            Some(issuer) => *issuer,
+            None if child.is_self_signed() => *child,
+            None => continue,
+        };
+
+        let issuer_public_key = issuer.public_key().map_err(|_| {
+            validation_error(
+                StatusCode::BadCertificateInvalid,
+                "certificate issuer public key could not be read",
+            )
+        })?;
+        verify_certificate_signature(child, &issuer_public_key)?;
+    }
+
+    Ok(())
+}
+
+fn verify_certificate_signature(child: &X509, issuer_public_key: &PublicKey) -> Result<(), Error> {
+    let tbs = child.tbs_der().map_err(|_| {
+        validation_error(
+            StatusCode::BadCertificateInvalid,
+            "certificate TBSCertificate DER could not be read",
+        )
+    })?;
+    let signature = child.signature_and_algorithm().map_err(|_| {
+        validation_error(
+            StatusCode::BadCertificateInvalid,
+            "certificate signature could not be read",
+        )
+    })?;
+
+    if signature.algorithm_oid == SHA_256_WITH_RSA_ENCRYPTION {
+        return verify_rsa_signature(
+            issuer_public_key.verify_sha256(&tbs, &signature.value),
+            "RSA-SHA256 certificate signature verification failed",
+        );
+    }
+
+    if signature.algorithm_oid == ID_RSASSA_PSS {
+        return verify_rsa_signature(
+            issuer_public_key.verify_sha256_pss(&tbs, &signature.value),
+            "RSA-PSS certificate signature verification failed",
+        );
+    }
+
+    if signature.algorithm_oid == SHA_1_WITH_RSA_ENCRYPTION {
+        return verify_rsa_signature(
+            issuer_public_key.verify_sha1(&tbs, &signature.value),
+            "RSA-SHA1 certificate signature verification failed",
+        );
+    }
+
+    verify_ec_signature(
+        issuer_public_key,
+        &tbs,
+        &signature.value,
+        signature.algorithm_oid,
+    )
+}
+
+fn verify_rsa_signature(result: Result<bool, Error>, message: &str) -> Result<(), Error> {
+    match result {
+        Ok(true) => Ok(()),
+        Ok(false) | Err(_) => Err(validation_error(StatusCode::BadCertificateInvalid, message)),
+    }
+}
+
+#[cfg(feature = "ecc")]
+fn verify_ec_signature(
+    issuer_public_key: &PublicKey,
+    tbs: &[u8],
+    signature: &[u8],
+    algorithm_oid: const_oid::ObjectIdentifier,
+) -> Result<(), Error> {
+    if algorithm_oid != ECDSA_WITH_SHA_256 && algorithm_oid != ECDSA_WITH_SHA_384 {
+        return Err(unsupported_signature_algorithm_error());
+    }
+
+    let ecc_key = issuer_public_key.ecc_key().ok_or_else(|| {
+        validation_error(
+            StatusCode::BadCertificateInvalid,
+            "ECDSA certificate signature requires an EC issuer public key",
+        )
+    })?;
+
+    crate::ecc::ecdsa_verify_der(ecc_key, tbs, signature).map_err(|_| {
+        validation_error(
+            StatusCode::BadCertificateInvalid,
+            "ECDSA certificate signature verification failed",
+        )
+    })
+}
+
+#[cfg(not(feature = "ecc"))]
+fn verify_ec_signature(
+    _issuer_public_key: &PublicKey,
+    _tbs: &[u8],
+    _signature: &[u8],
+    _algorithm_oid: const_oid::ObjectIdentifier,
+) -> Result<(), Error> {
+    Err(unsupported_signature_algorithm_error())
+}
+
+fn chain_contains_trusted_cert(chain: &[&X509], trusted_certs: &[X509]) -> Result<bool, Error> {
+    for cert in chain {
+        let der = cert_der(
+            cert,
+            StatusCode::BadCertificateUntrusted,
+            "failed to encode certificate while checking trust list",
+        )?;
+        if der_in_list(
+            &der,
+            trusted_certs,
+            StatusCode::BadCertificateUntrusted,
+            "failed to encode trusted certificate while checking trust list",
+        )? {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
+fn validate_chain_validity(
+    chain: &[&X509],
     context: &ChainValidationContext<'_>,
 ) -> Result<Vec<SuppressedFinding>, Error> {
-    // T007+ implement the ordered Table 100 pipeline here.
-    let _ = (cert, context);
-    Err(Error::new(
+    let mut findings = Vec::new();
+    let mut is_leaf = true;
+
+    for cert in chain {
+        let status = if is_leaf {
+            StatusCode::BadCertificateTimeInvalid
+        } else {
+            StatusCode::BadCertificateIssuerTimeInvalid
+        };
+        is_leaf = false;
+
+        if certificate_is_valid_at(cert, context.now) {
+            continue;
+        }
+
+        let message = "certificate validity period does not include the validation time";
+        if context.options.is_suppressed(SuppressibleStep::Validity) {
+            findings.push(SuppressedFinding {
+                step: SuppressibleStep::Validity,
+                status,
+                message: message.to_string(),
+            });
+        } else {
+            return Err(validation_error(status, message));
+        }
+    }
+
+    Ok(findings)
+}
+
+fn certificate_is_valid_at(cert: &X509, now: &DateTime<Utc>) -> bool {
+    match (cert.not_before(), cert.not_after()) {
+        (Ok(not_before), Ok(not_after)) => now >= &not_before && now <= &not_after,
+        _ => false,
+    }
+}
+
+fn der_in_list(
+    target_der: &[u8],
+    candidates: &[X509],
+    status: StatusCode,
+    message: &str,
+) -> Result<bool, Error> {
+    for candidate in candidates {
+        let candidate_der = cert_der(candidate, status, message)?;
+        if candidate_der == target_der {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
+fn cert_der(cert: &X509, status: StatusCode, message: &str) -> Result<Vec<u8>, Error> {
+    cert.to_der().map_err(|_| validation_error(status, message))
+}
+
+fn chain_incomplete_error(message: &str) -> Error {
+    validation_error(StatusCode::BadCertificateChainIncomplete, message)
+}
+
+fn unsupported_signature_algorithm_error() -> Error {
+    validation_error(
         StatusCode::BadCertificateInvalid,
-        "certificate chain validation is not yet implemented",
-    ))
+        "unsupported certificate signature algorithm",
+    )
+}
+
+fn validation_error(status: StatusCode, message: &str) -> Error {
+    Error::new(status, message)
 }

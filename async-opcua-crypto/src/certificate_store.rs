@@ -12,16 +12,18 @@ use std::path::{Path, PathBuf};
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
 
-use opcua_types::Error;
+use opcua_types::{status_code::StatusCode, Error};
 use tracing::{debug, error, info, trace, warn};
 
-use opcua_types::status_code::StatusCode;
 use x509_cert::{
     crl::CertificateList,
     der::{Decode, Reader},
 };
 
-use crate::PrivateKey;
+use crate::{
+    validate_certificate_chain, CertificatePurpose, ChainValidationContext, PrivateKey,
+    SuppressibleStep, ValidationOptions,
+};
 
 use super::{
     security_policy::SecurityPolicy,
@@ -62,6 +64,7 @@ pub struct CertificateStore {
     /// Ordinarily an unknown cert will be dropped into the rejected folder, but it can be dropped
     /// into the trusted folder if this flag is set. Certs in the trusted folder must still pass
     /// validity checks.
+    #[allow(dead_code)] // retained for the US5 legacy trust-list path
     trust_unknown_certs: bool,
 }
 
@@ -239,6 +242,7 @@ impl CertificateStore {
     /// security check to stop someone from renaming a cert on disk to match another cert and
     /// somehow bypassing or subverting a check. The disk cert must exactly match the memory cert
     /// or the test is assumed to fail.
+    #[allow(dead_code)] // retained for the US5 legacy trust-list path
     fn ensure_cert_and_file_are_the_same(cert: &X509, cert_path: &Path) -> bool {
         if !cert_path.exists() {
             trace!("Cannot find cert on disk");
@@ -297,6 +301,9 @@ impl CertificateStore {
         let cert_file_name = CertificateStore::cert_file_name(cert);
         debug!("Validating cert with name on disk {}", cert_file_name);
 
+        // Reject unsupported / unavailable security policies before any policy-crypto call.
+        security_policy.ensure_supported()?;
+
         // Look for the cert in the rejected folder. If it's rejected there is no purpose going
         // any further
         {
@@ -330,109 +337,104 @@ impl CertificateStore {
             }
         }
 
-        // Check the trusted folder. These checks are more strict to ensure the cert is genuinely
-        // trusted
-        {
-            // Check the trusted folder
-            let mut cert_path = self.trusted_certs_dir();
-            if !cert_path.exists() {
-                error!(
-                    "Path for trusted certificates {} does not exist",
-                    cert_path.display()
-                );
+        #[cfg(feature = "ecc")]
+        cert.ensure_curve_matches_policy(security_policy)?;
+
+        // Check that the certificate is the right length for the security policy
+        match cert.key_length() {
+            Err(_) => {
+                error!("Cannot read key length from certificate {}", cert_file_name);
                 return Err(Error::new(
-                    StatusCode::BadUnexpectedError,
-                    format!(
-                        "Path for trusted certificates {} does not exist",
-                        cert_path.display()
-                    ),
+                    StatusCode::BadSecurityChecksFailed,
+                    format!("Cannot read key length from certificate {}", cert_file_name),
                 ));
             }
-            cert_path.push(&cert_file_name);
-
-            // Check if cert is in the trusted folder
-            if !cert_path.exists() {
-                // ... trust checks based on ca could be added here to add cert straight to trust folder
-                if self.trust_unknown_certs {
-                    // Put the unknown cert into the trusted folder
-                    warn!("Certificate {} is unknown but policy will store it into the trusted directory", cert_file_name);
-                    let _ = self.store_trusted_cert(cert);
-                // Note that we drop through and still check the cert for validity
-                } else {
-                    warn!("Certificate {} is unknown and untrusted so it will be stored in rejected directory", cert_file_name);
-                    let _ = self.store_rejected_cert(cert);
-                    return Err(Error::new(
-                        StatusCode::BadCertificateUntrusted,
-                        format!("Certificate {} is unknown and untrusted", cert_file_name),
-                    ));
-                }
-            }
-
-            // Read the cert from the trusted folder to make sure it matches the one supplied
-            if !CertificateStore::ensure_cert_and_file_are_the_same(cert, &cert_path) {
-                error!("Certificate in memory does not match the one on disk {} so cert will automatically be treated as untrusted", cert_path.display());
-                return Err(Error::new(StatusCode::BadUnexpectedError, format!("Certificate in memory does not match the one on disk {} so cert will automatically be treated as untrusted", cert_path.display())));
-            }
-
-            #[cfg(feature = "ecc")]
-            cert.ensure_curve_matches_policy(security_policy)?;
-
-            // Check that the certificate is the right length for the security policy
-            match cert.key_length() {
-                Err(_) => {
-                    error!("Cannot read key length from certificate {}", cert_file_name);
+            Ok(key_length) => {
+                if !security_policy.is_valid_keylength(key_length) {
+                    warn!(
+                        "Certificate {} has an invalid key length {} for the policy {}",
+                        cert_file_name, key_length, security_policy
+                    );
                     return Err(Error::new(
                         StatusCode::BadSecurityChecksFailed,
-                        format!("Cannot read key length from certificate {}", cert_file_name),
-                    ));
-                }
-                Ok(key_length) => {
-                    if !security_policy.is_valid_keylength(key_length) {
-                        warn!(
+                        format!(
                             "Certificate {} has an invalid key length {} for the policy {}",
                             cert_file_name, key_length, security_policy
-                        );
-                        return Err(Error::new(
-                            StatusCode::BadSecurityChecksFailed,
-                            format!(
-                                "Certificate {} has an invalid key length {} for the policy {}",
-                                cert_file_name, key_length, security_policy
-                            ),
-                        ));
-                    }
+                        ),
+                    ));
                 }
             }
+        }
 
-            if self.skip_verify_certs {
-                debug!(
-                    "Skipping additional verifications for certificate {}",
+        let mut options = ValidationOptions::default();
+        if !self.check_time || self.skip_verify_certs {
+            options.suppressed_steps.insert(SuppressibleStep::Validity);
+        }
+
+        // Server application certificates carry host names; client validation does not.
+        let purpose = if hostname.is_some() {
+            CertificatePurpose::ServerApplication
+        } else {
+            CertificatePurpose::ClientApplication
+        };
+
+        let mut trusted = self.read_trusted_certs();
+        // Honor trust_unknown_certs: auto-trust an unknown presented certificate by persisting it and
+        // making it its own trust anchor. The chain engine still verifies its signature (a self-signed
+        // cert self-verifies; a non-self-signed anchor is trusted as presented) and its validity period.
+        if self.trust_unknown_certs {
+            let already_trusted = trusted.iter().any(|t| t.thumbprint() == cert.thumbprint());
+            if !already_trusted {
+                warn!(
+                    "Certificate {} is unknown but trust_unknown_certs is set, so it will be trusted",
                     cert_file_name
                 );
-                return Ok(());
+                let _ = self.store_trusted_cert(cert);
+                trusted.push(cert.clone());
             }
-
-            // Now inspect the cert not before / after values to ensure its validity
-            if self.check_time {
-                use chrono::Utc;
-                let now = Utc::now();
-                cert.is_time_valid(&now)?;
-            }
-
-            // Compare the hostname of the cert against the cert supplied
-            if let Some(hostname) = hostname {
-                cert.is_hostname_valid(hostname)?;
-            }
-
-            // Compare the application / product uri to the supplied application description
-            if let Some(application_uri) = application_uri {
-                cert.is_application_uri_valid(application_uri)?;
-            }
-
-            // Other tests that we might do with trust lists
-            // ... issuer
-            // ... trust (self-signed, ca etc.)
-            // ... revocation
         }
+        let issuers = self.read_issuer_certs();
+        let mut crls = self.read_trusted_crls();
+        crls.extend(self.read_issuer_crls());
+        let now = chrono::Utc::now();
+        let context = ChainValidationContext {
+            trusted_certs: &trusted,
+            issuer_certs: &issuers,
+            crls: &crls,
+            security_policy,
+            purpose,
+            options: &options,
+            now: &now,
+        };
+        match validate_certificate_chain(cert, &context) {
+            Err(e) => {
+                let _ = self.store_rejected_cert(cert);
+                return Err(e);
+            }
+            Ok(_findings) => {
+                // Suppressed findings are audited by US4.
+                // TODO(013 US4)
+            }
+        }
+
+        if self.skip_verify_certs {
+            debug!(
+                "Skipping additional verifications for certificate {}",
+                cert_file_name
+            );
+            return Ok(());
+        }
+
+        // Compare the hostname of the cert against the cert supplied
+        if let Some(hostname) = hostname {
+            cert.is_hostname_valid(hostname)?;
+        }
+
+        // Compare the application / product uri to the supplied application description
+        if let Some(application_uri) = application_uri {
+            cert.is_application_uri_valid(application_uri)?;
+        }
+
         Ok(())
     }
 
@@ -588,6 +590,7 @@ impl CertificateStore {
     ///
     /// A string description of any failure
     ///
+    #[allow(dead_code)] // retained for the US5 legacy trust-list path
     fn store_trusted_cert(&self, cert: &X509) -> Result<PathBuf, String> {
         // Store the cert in the trusted folder where trusted certs go
         let cert_file_name = CertificateStore::cert_file_name(cert);

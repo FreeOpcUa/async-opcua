@@ -1,0 +1,724 @@
+// OPCUA for Rust
+// SPDX-License-Identifier: MPL-2.0
+
+//! Independent tests for the Part 4 §6.1.3 (Table 100) certificate-chain validation engine.
+//!
+//! These tests are authored separately from the production implementation (verification
+//! division): they build real RSA PKI fixtures (root CA → intermediate CA → leaf) with the
+//! `x509-cert` builder and the in-tree RSA keys, then assert the EXACT OPC UA status code each
+//! Table 100 step must produce. US1 covers: certificate structure, build-chain, signature
+//! verification, trust-list anchoring, and per-certificate validity period.
+
+use chrono::{DateTime, TimeZone, Utc};
+use rsa::pkcs1v15::{Signature, SigningKey};
+use sha1::{Digest, Sha1};
+use sha2::Sha256;
+use std::str::FromStr;
+use std::sync::OnceLock;
+use std::time::{Duration as StdDuration, UNIX_EPOCH};
+
+use const_oid::db::rfc5280::{ID_KP_CLIENT_AUTH, ID_KP_SERVER_AUTH};
+use x509_cert::builder::{Builder, CertificateBuilder, Profile};
+use x509_cert::crl::CertificateList;
+use x509_cert::der::asn1::OctetString;
+use x509_cert::der::{Encode, Decode};
+use x509_cert::ext::pkix::{
+    AuthorityKeyIdentifier, BasicConstraints, ExtendedKeyUsage, KeyUsage, KeyUsages,
+    SubjectKeyIdentifier,
+};
+use x509_cert::name::Name;
+use x509_cert::serial_number::SerialNumber;
+use x509_cert::spki::SubjectPublicKeyInfoOwned;
+use x509_cert::time::{Time, Validity};
+
+use std::path::Path;
+
+use opcua_types::status_code::StatusCode;
+use tempfile::TempDir;
+
+use crate::{
+    validate_certificate_chain, CertificatePurpose, CertificateStore, ChainValidationContext,
+    PrivateKey, SecurityPolicy, ValidationOptions, X509,
+};
+
+// --- shared key pool (RSA-2048 keygen is the slow part; generate once) ---------------------
+
+struct KeyPool {
+    root: PrivateKey,
+    intermediate: PrivateKey,
+    leaf: PrivateKey,
+    // an unrelated CA key used to forge signatures / build untrusted roots
+    rogue: PrivateKey,
+}
+
+fn keys() -> &'static KeyPool {
+    static POOL: OnceLock<KeyPool> = OnceLock::new();
+    POOL.get_or_init(|| KeyPool {
+        root: PrivateKey::new(2048).expect("root key"),
+        intermediate: PrivateKey::new(2048).expect("intermediate key"),
+        leaf: PrivateKey::new(2048).expect("leaf key"),
+        rogue: PrivateKey::new(2048).expect("rogue key"),
+    })
+}
+
+// --- fixture builder -----------------------------------------------------------------------
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Eku {
+    None,
+    ServerAuth,
+    ClientAuth,
+}
+
+/// Specification for one fixture certificate. `issuer_key` provides the issuer identity (its
+/// public key's SHA-1 SKI is written as this cert's AuthorityKeyIdentifier), while `signer_key`
+/// is the key that actually signs the TBS — normally the same as `issuer_key`, but set to a
+/// different key to forge an invalid signature without disturbing chain matching.
+struct CertSpec<'a> {
+    subject_cn: &'a str,
+    subject_key: &'a PrivateKey,
+    issuer_cn: &'a str,
+    issuer_key: &'a PrivateKey,
+    signer_key: &'a PrivateKey,
+    is_ca: bool,
+    not_before: DateTime<Utc>,
+    not_after: DateTime<Utc>,
+    eku: Eku,
+    serial: u32,
+}
+
+fn ski_of(spki: &SubjectPublicKeyInfoOwned) -> Vec<u8> {
+    let mut hasher = Sha1::new();
+    hasher.update(spki.subject_public_key.raw_bytes());
+    hasher.finalize().to_vec()
+}
+
+fn to_time(dt: DateTime<Utc>) -> Time {
+    let secs = u64::try_from(dt.timestamp()).expect("non-negative timestamp");
+    Time::try_from(UNIX_EPOCH + StdDuration::from_secs(secs)).expect("valid x509 time")
+}
+
+fn issue(spec: &CertSpec<'_>) -> X509 {
+    let subject_spki = spec.subject_key.public_key_to_info().expect("subject spki");
+    let issuer_spki = spec.issuer_key.public_key_to_info().expect("issuer spki");
+    let signing_rsa = spec
+        .signer_key
+        .rsa_key_for_x509()
+        .expect("signer rsa key")
+        .clone();
+    let signing_key = SigningKey::<Sha256>::new(signing_rsa);
+
+    let subject = Name::from_str(&format!("CN={}", spec.subject_cn)).expect("subject name");
+    let issuer = Name::from_str(&format!("CN={}", spec.issuer_cn)).expect("issuer name");
+    let validity = Validity {
+        not_before: to_time(spec.not_before),
+        not_after: to_time(spec.not_after),
+    };
+
+    let profile = Profile::Manual {
+        issuer: Some(issuer),
+    };
+    let mut builder = CertificateBuilder::new(
+        profile,
+        SerialNumber::from(spec.serial),
+        validity,
+        subject,
+        subject_spki.clone(),
+        &signing_key,
+    )
+    .expect("certificate builder");
+
+    let ski = ski_of(&subject_spki);
+    builder
+        .add_extension(&SubjectKeyIdentifier(
+            OctetString::new(ski).expect("ski octets"),
+        ))
+        .expect("add ski");
+    let aki = ski_of(&issuer_spki);
+    builder
+        .add_extension(&AuthorityKeyIdentifier {
+            authority_cert_issuer: None,
+            key_identifier: Some(OctetString::new(aki).expect("aki octets")),
+            authority_cert_serial_number: None,
+        })
+        .expect("add aki");
+    builder
+        .add_extension(&BasicConstraints {
+            ca: spec.is_ca,
+            path_len_constraint: None,
+        })
+        .expect("add basic constraints");
+
+    let key_usage = if spec.is_ca {
+        KeyUsages::KeyCertSign | KeyUsages::CRLSign
+    } else {
+        KeyUsages::DigitalSignature | KeyUsages::KeyEncipherment
+    };
+    builder
+        .add_extension(&KeyUsage(key_usage))
+        .expect("add key usage");
+
+    match spec.eku {
+        Eku::None => {}
+        Eku::ServerAuth => builder
+            .add_extension(&ExtendedKeyUsage(vec![ID_KP_SERVER_AUTH]))
+            .expect("add eku"),
+        Eku::ClientAuth => builder
+            .add_extension(&ExtendedKeyUsage(vec![ID_KP_CLIENT_AUTH]))
+            .expect("add eku"),
+    }
+
+    let cert = builder.build::<Signature>().expect("build cert");
+    let der = cert.to_der().expect("cert der");
+    X509::from_der(&der).expect("parse fixture cert")
+}
+
+// --- convenient time helpers ---------------------------------------------------------------
+
+fn t(year: i32, month: u32, day: u32) -> DateTime<Utc> {
+    Utc.with_ymd_and_hms(year, month, day, 0, 0, 0).unwrap()
+}
+
+fn now_valid() -> DateTime<Utc> {
+    t(2025, 6, 1)
+}
+
+const ROOT_CN: &str = "async-opcua test root ca";
+const INT_CN: &str = "async-opcua test intermediate ca";
+const LEAF_CN: &str = "async-opcua test leaf";
+
+fn root_ca() -> X509 {
+    let k = keys();
+    issue(&CertSpec {
+        subject_cn: ROOT_CN,
+        subject_key: &k.root,
+        issuer_cn: ROOT_CN,
+        issuer_key: &k.root,
+        signer_key: &k.root,
+        is_ca: true,
+        not_before: t(2020, 1, 1),
+        not_after: t(2035, 1, 1),
+        eku: Eku::None,
+        serial: 1,
+    })
+}
+
+fn intermediate_ca_with(not_after: DateTime<Utc>) -> X509 {
+    let k = keys();
+    issue(&CertSpec {
+        subject_cn: INT_CN,
+        subject_key: &k.intermediate,
+        issuer_cn: ROOT_CN,
+        issuer_key: &k.root,
+        signer_key: &k.root,
+        is_ca: true,
+        not_before: t(2020, 1, 1),
+        not_after,
+        eku: Eku::None,
+        serial: 2,
+    })
+}
+
+fn intermediate_ca() -> X509 {
+    intermediate_ca_with(t(2034, 1, 1))
+}
+
+/// A leaf signed by the intermediate CA, valid until `not_after`.
+fn leaf_via_intermediate(not_after: DateTime<Utc>) -> X509 {
+    let k = keys();
+    issue(&CertSpec {
+        subject_cn: LEAF_CN,
+        subject_key: &k.leaf,
+        issuer_cn: INT_CN,
+        issuer_key: &k.intermediate,
+        signer_key: &k.intermediate,
+        is_ca: false,
+        not_before: t(2020, 1, 1),
+        not_after,
+        eku: Eku::ServerAuth,
+        serial: 3,
+    })
+}
+
+fn empty_crls() -> Vec<CertificateList> {
+    Vec::new()
+}
+
+fn server_ctx<'a>(
+    trusted: &'a [X509],
+    issuers: &'a [X509],
+    crls: &'a [CertificateList],
+    options: &'a ValidationOptions,
+    now: &'a DateTime<Utc>,
+) -> ChainValidationContext<'a> {
+    ChainValidationContext {
+        trusted_certs: trusted,
+        issuer_certs: issuers,
+        crls,
+        security_policy: SecurityPolicy::Basic256Sha256,
+        purpose: CertificatePurpose::ServerApplication,
+        options,
+        now,
+    }
+}
+
+// --- US1 tests -----------------------------------------------------------------------------
+
+#[test]
+fn valid_three_level_chain_is_accepted() {
+    let root = root_ca();
+    let intermediate = intermediate_ca();
+    let leaf = leaf_via_intermediate(t(2030, 1, 1));
+
+    let trusted = [root];
+    let issuers = [intermediate];
+    let crls = empty_crls();
+    let options = ValidationOptions::default();
+    let now = now_valid();
+
+    let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
+    validate_certificate_chain(&leaf, &ctx)
+        .expect("leaf chaining to a trusted root via a known intermediate must validate");
+}
+
+#[test]
+fn valid_two_level_chain_is_accepted() {
+    // Leaf issued directly by the root, root trusted.
+    let k = keys();
+    let root = root_ca();
+    let leaf = issue(&CertSpec {
+        subject_cn: LEAF_CN,
+        subject_key: &k.leaf,
+        issuer_cn: ROOT_CN,
+        issuer_key: &k.root,
+        signer_key: &k.root,
+        is_ca: false,
+        not_before: t(2020, 1, 1),
+        not_after: t(2030, 1, 1),
+        eku: Eku::ServerAuth,
+        serial: 10,
+    });
+
+    let trusted = [root];
+    let issuers: [X509; 0] = [];
+    let crls = empty_crls();
+    let options = ValidationOptions::default();
+    let now = now_valid();
+
+    let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
+    validate_certificate_chain(&leaf, &ctx)
+        .expect("leaf signed directly by a trusted root must validate");
+}
+
+#[test]
+fn self_signed_leaf_in_trusted_is_accepted() {
+    // Backward compatibility: a self-signed application cert dropped into trusted/ is its own
+    // issuer and must still validate.
+    let k = keys();
+    let leaf = issue(&CertSpec {
+        subject_cn: LEAF_CN,
+        subject_key: &k.leaf,
+        issuer_cn: LEAF_CN,
+        issuer_key: &k.leaf,
+        signer_key: &k.leaf,
+        is_ca: false,
+        not_before: t(2020, 1, 1),
+        not_after: t(2030, 1, 1),
+        eku: Eku::ServerAuth,
+        serial: 11,
+    });
+
+    let trusted = [leaf.clone()];
+    let issuers: [X509; 0] = [];
+    let crls = empty_crls();
+    let options = ValidationOptions::default();
+    let now = now_valid();
+
+    let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
+    validate_certificate_chain(&leaf, &ctx)
+        .expect("a self-signed leaf placed in trusted/ must validate");
+}
+
+#[test]
+fn missing_intermediate_is_chain_incomplete() {
+    let root = root_ca();
+    let leaf = leaf_via_intermediate(t(2030, 1, 1));
+
+    // Intermediate deliberately absent from both trusted and issuer lists.
+    let trusted = [root];
+    let issuers: [X509; 0] = [];
+    let crls = empty_crls();
+    let options = ValidationOptions::default();
+    let now = now_valid();
+
+    let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
+    let err = validate_certificate_chain(&leaf, &ctx)
+        .expect_err("a leaf whose issuing CA is unavailable must be rejected");
+    assert_eq!(err.status(), StatusCode::BadCertificateChainIncomplete);
+}
+
+#[test]
+fn forged_leaf_signature_is_invalid() {
+    // The leaf claims to be issued by the intermediate (matching issuer DN + AKI) but is signed
+    // by an unrelated key, so its signature does not verify against the intermediate's key.
+    let k = keys();
+    let root = root_ca();
+    let intermediate = intermediate_ca();
+    let leaf = issue(&CertSpec {
+        subject_cn: LEAF_CN,
+        subject_key: &k.leaf,
+        issuer_cn: INT_CN,
+        issuer_key: &k.intermediate,
+        signer_key: &k.rogue,
+        is_ca: false,
+        not_before: t(2020, 1, 1),
+        not_after: t(2030, 1, 1),
+        eku: Eku::ServerAuth,
+        serial: 12,
+    });
+
+    let trusted = [root];
+    let issuers = [intermediate];
+    let crls = empty_crls();
+    let options = ValidationOptions::default();
+    let now = now_valid();
+
+    let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
+    let err = validate_certificate_chain(&leaf, &ctx)
+        .expect_err("a leaf with a forged signature must be rejected");
+    assert_eq!(err.status(), StatusCode::BadCertificateInvalid);
+}
+
+#[test]
+fn chain_to_untrusted_root_is_untrusted() {
+    // A complete, cryptographically valid chain whose root is NOT in the trusted list.
+    let k = keys();
+    // Build a self-contained chain anchored on the rogue key as a self-signed root.
+    let rogue_root = issue(&CertSpec {
+        subject_cn: "rogue root",
+        subject_key: &k.rogue,
+        issuer_cn: "rogue root",
+        issuer_key: &k.rogue,
+        signer_key: &k.rogue,
+        is_ca: true,
+        not_before: t(2020, 1, 1),
+        not_after: t(2035, 1, 1),
+        eku: Eku::None,
+        serial: 20,
+    });
+    let rogue_leaf = issue(&CertSpec {
+        subject_cn: LEAF_CN,
+        subject_key: &k.leaf,
+        issuer_cn: "rogue root",
+        issuer_key: &k.rogue,
+        signer_key: &k.rogue,
+        is_ca: false,
+        not_before: t(2020, 1, 1),
+        not_after: t(2030, 1, 1),
+        eku: Eku::ServerAuth,
+        serial: 21,
+    });
+
+    // The genuine root is trusted; the rogue root is only an issuer (available but not trusted).
+    let trusted = [root_ca()];
+    let issuers = [rogue_root];
+    let crls = empty_crls();
+    let options = ValidationOptions::default();
+    let now = now_valid();
+
+    let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
+    let err = validate_certificate_chain(&rogue_leaf, &ctx)
+        .expect_err("a chain that does not reach a trusted anchor must be rejected");
+    assert_eq!(err.status(), StatusCode::BadCertificateUntrusted);
+}
+
+#[test]
+fn expired_leaf_is_time_invalid() {
+    let root = root_ca();
+    let intermediate = intermediate_ca();
+    let leaf = leaf_via_intermediate(t(2021, 1, 1)); // expired well before now (2025)
+
+    let trusted = [root];
+    let issuers = [intermediate];
+    let crls = empty_crls();
+    let options = ValidationOptions::default();
+    let now = now_valid();
+
+    let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
+    let err = validate_certificate_chain(&leaf, &ctx)
+        .expect_err("an expired leaf must be rejected");
+    assert_eq!(err.status(), StatusCode::BadCertificateTimeInvalid);
+}
+
+#[test]
+fn expired_intermediate_is_issuer_time_invalid() {
+    let root = root_ca();
+    let intermediate = intermediate_ca_with(t(2021, 1, 1)); // issuer expired before now
+    let leaf = leaf_via_intermediate(t(2030, 1, 1)); // leaf itself still valid
+
+    let trusted = [root];
+    let issuers = [intermediate];
+    let crls = empty_crls();
+    let options = ValidationOptions::default();
+    let now = now_valid();
+
+    let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
+    let err = validate_certificate_chain(&leaf, &ctx)
+        .expect_err("an expired issuer in the chain must be rejected");
+    assert_eq!(err.status(), StatusCode::BadCertificateIssuerTimeInvalid);
+}
+
+#[test]
+fn valid_chain_validates_for_client_application_purpose() {
+    // The same chain machinery validates a client-auth leaf under the ClientApplication purpose
+    // (purpose only affects the US2 ExtendedKeyUsage check; the chain itself must still validate).
+    let k = keys();
+    let root = root_ca();
+    let intermediate = intermediate_ca();
+    let client_leaf = issue(&CertSpec {
+        subject_cn: LEAF_CN,
+        subject_key: &k.leaf,
+        issuer_cn: INT_CN,
+        issuer_key: &k.intermediate,
+        signer_key: &k.intermediate,
+        is_ca: false,
+        not_before: t(2020, 1, 1),
+        not_after: t(2030, 1, 1),
+        eku: Eku::ClientAuth,
+        serial: 30,
+    });
+
+    let trusted = [root];
+    let issuers = [intermediate];
+    let crls = empty_crls();
+    let options = ValidationOptions::default();
+    let now = now_valid();
+
+    let ctx = ChainValidationContext {
+        trusted_certs: &trusted,
+        issuer_certs: &issuers,
+        crls: &crls,
+        security_policy: SecurityPolicy::Basic256Sha256,
+        purpose: CertificatePurpose::ClientApplication,
+        options: &options,
+        now: &now,
+    };
+    validate_certificate_chain(&client_leaf, &ctx)
+        .expect("a valid client-auth leaf must validate under the ClientApplication purpose");
+}
+
+#[test]
+fn malformed_certificate_der_is_rejected_without_panic() {
+    // Structure step (FR-001): truncated / malformed DER must be rejected at parse time and
+    // must never panic.
+    let leaf = leaf_via_intermediate(t(2030, 1, 1));
+    let mut der = leaf.to_der().expect("leaf der");
+    der.truncate(der.len() / 2);
+    assert!(
+        X509::from_der(&der).is_err(),
+        "a truncated certificate must fail to parse, not panic"
+    );
+
+    // A trailing-garbage CRL must also fail to parse without panicking.
+    assert!(CertificateList::from_der(&[0x30, 0x03, 0x02, 0x01, 0x01, 0xff]).is_err());
+}
+
+// --- store-level wiring tests (T008) -------------------------------------------------------
+//
+// These drive the public `CertificateStore::validate_or_reject_application_instance_cert`, which
+// the server (client-cert) and client (server-cert) call. They use the real wall-clock validity
+// check inside the store, so all non-expired fixtures use 2020..2035 windows that include now.
+
+fn write_cert_to(dir: &Path, cert: &X509) {
+    let mut path = dir.to_path_buf();
+    path.push(CertificateStore::cert_file_name(cert));
+    std::fs::write(path, cert.to_der().expect("cert der")).expect("write fixture cert");
+}
+
+fn store_with(trusted: &[&X509], issuers: &[&X509]) -> (TempDir, CertificateStore) {
+    let tmp = tempfile::Builder::new()
+        .prefix("pki-chain")
+        .tempdir()
+        .expect("temp pki dir");
+    let store = CertificateStore::new(tmp.path());
+    store.ensure_pki_path().expect("ensure pki path");
+    for cert in trusted {
+        write_cert_to(&store.trusted_certs_dir(), cert);
+    }
+    for cert in issuers {
+        write_cert_to(&store.issuer_certs_dir(), cert);
+    }
+    (tmp, store)
+}
+
+#[test]
+fn store_accepts_self_signed_leaf_in_trusted() {
+    // Backward compatibility: existing self-signed-in-trusted/ deployments keep working.
+    let k = keys();
+    let leaf = issue(&CertSpec {
+        subject_cn: LEAF_CN,
+        subject_key: &k.leaf,
+        issuer_cn: LEAF_CN,
+        issuer_key: &k.leaf,
+        signer_key: &k.leaf,
+        is_ca: false,
+        not_before: t(2020, 1, 1),
+        not_after: t(2035, 1, 1),
+        eku: Eku::ServerAuth,
+        serial: 100,
+    });
+    let (_tmp, store) = store_with(&[&leaf], &[]);
+    store
+        .validate_or_reject_application_instance_cert(
+            &leaf,
+            SecurityPolicy::Basic256Sha256,
+            None,
+            None,
+        )
+        .expect("a self-signed leaf in trusted/ must still validate through the store");
+}
+
+#[test]
+fn store_accepts_ca_signed_leaf_chaining_to_trusted_root() {
+    // The new capability: leaf is NOT in trusted/, but chains via issuer/ to a trusted root.
+    let k = keys();
+    let root = root_ca();
+    let intermediate = issue(&CertSpec {
+        subject_cn: INT_CN,
+        subject_key: &k.intermediate,
+        issuer_cn: ROOT_CN,
+        issuer_key: &k.root,
+        signer_key: &k.root,
+        is_ca: true,
+        not_before: t(2020, 1, 1),
+        not_after: t(2034, 1, 1),
+        eku: Eku::None,
+        serial: 101,
+    });
+    let leaf = issue(&CertSpec {
+        subject_cn: LEAF_CN,
+        subject_key: &k.leaf,
+        issuer_cn: INT_CN,
+        issuer_key: &k.intermediate,
+        signer_key: &k.intermediate,
+        is_ca: false,
+        not_before: t(2020, 1, 1),
+        not_after: t(2035, 1, 1),
+        eku: Eku::ServerAuth,
+        serial: 102,
+    });
+    let (_tmp, store) = store_with(&[&root], &[&intermediate]);
+    store
+        .validate_or_reject_application_instance_cert(
+            &leaf,
+            SecurityPolicy::Basic256Sha256,
+            None,
+            None,
+        )
+        .expect("a CA-signed leaf chaining through issuer/ to a trusted root must validate");
+}
+
+#[test]
+fn store_rejects_ca_signed_leaf_with_missing_intermediate() {
+    let k = keys();
+    let root = root_ca();
+    let leaf = issue(&CertSpec {
+        subject_cn: LEAF_CN,
+        subject_key: &k.leaf,
+        issuer_cn: INT_CN,
+        issuer_key: &k.intermediate,
+        signer_key: &k.intermediate,
+        is_ca: false,
+        not_before: t(2020, 1, 1),
+        not_after: t(2035, 1, 1),
+        eku: Eku::ServerAuth,
+        serial: 103,
+    });
+    // intermediate deliberately absent from issuer/
+    let (_tmp, store) = store_with(&[&root], &[]);
+    let err = store
+        .validate_or_reject_application_instance_cert(
+            &leaf,
+            SecurityPolicy::Basic256Sha256,
+            None,
+            None,
+        )
+        .expect_err("a leaf whose intermediate is missing must be rejected");
+    assert_eq!(err.status(), StatusCode::BadCertificateChainIncomplete);
+}
+
+#[test]
+fn store_rejects_untrusted_leaf_and_files_it_under_rejected() {
+    let k = keys();
+    let leaf = issue(&CertSpec {
+        subject_cn: LEAF_CN,
+        subject_key: &k.leaf,
+        issuer_cn: LEAF_CN,
+        issuer_key: &k.leaf,
+        signer_key: &k.leaf,
+        is_ca: false,
+        not_before: t(2020, 1, 1),
+        not_after: t(2035, 1, 1),
+        eku: Eku::ServerAuth,
+        serial: 104,
+    });
+    // Nothing trusted.
+    let (_tmp, store) = store_with(&[], &[]);
+    let err = store
+        .validate_or_reject_application_instance_cert(
+            &leaf,
+            SecurityPolicy::Basic256Sha256,
+            None,
+            None,
+        )
+        .expect_err("an untrusted self-signed leaf must be rejected");
+    assert_eq!(err.status(), StatusCode::BadCertificateUntrusted);
+
+    // It should have been filed in rejected/ so an administrator can inspect/move it.
+    let mut rejected = store.rejected_certs_dir();
+    rejected.push(CertificateStore::cert_file_name(&leaf));
+    assert!(
+        rejected.exists(),
+        "the rejected leaf must be written to the rejected/ directory"
+    );
+}
+
+#[test]
+fn store_rejects_expired_ca_signed_leaf() {
+    let k = keys();
+    let root = root_ca();
+    let intermediate = issue(&CertSpec {
+        subject_cn: INT_CN,
+        subject_key: &k.intermediate,
+        issuer_cn: ROOT_CN,
+        issuer_key: &k.root,
+        signer_key: &k.root,
+        is_ca: true,
+        not_before: t(2020, 1, 1),
+        not_after: t(2034, 1, 1),
+        eku: Eku::None,
+        serial: 105,
+    });
+    let expired_leaf = issue(&CertSpec {
+        subject_cn: LEAF_CN,
+        subject_key: &k.leaf,
+        issuer_cn: INT_CN,
+        issuer_key: &k.intermediate,
+        signer_key: &k.intermediate,
+        is_ca: false,
+        not_before: t(2020, 1, 1),
+        not_after: t(2021, 1, 1), // expired before now
+        eku: Eku::ServerAuth,
+        serial: 106,
+    });
+    let (_tmp, store) = store_with(&[&root], &[&intermediate]);
+    let err = store
+        .validate_or_reject_application_instance_cert(
+            &expired_leaf,
+            SecurityPolicy::Basic256Sha256,
+            None,
+            None,
+        )
+        .expect_err("an expired CA-signed leaf must be rejected");
+    assert_eq!(err.status(), StatusCode::BadCertificateTimeInvalid);
+}

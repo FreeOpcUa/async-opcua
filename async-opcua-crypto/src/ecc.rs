@@ -41,6 +41,23 @@ pub enum EccCurve {
     P384,
 }
 
+/// Part 6 §6.8.2 server EphemeralKey lifecycle decision at Create/ActivateSession.
+#[cfg(feature = "ecc")]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum EcdhKeyAction {
+    /// No `ECDHPolicyUri` requested and no key previously issued — preserve today's null-header flow.
+    None,
+    /// The requested `ECDHPolicyUri` is not a supported ECC policy — `Bad_SecurityPolicyRejected`.
+    Reject,
+    /// Issue a fresh EphemeralKey for this policy (client requested it, or the previous key was consumed).
+    Issue(SecurityPolicy),
+    /// Client sent no `ECDHPolicyUri` and the previously-issued key is unused — keep using it.
+    Retain,
+}
+
+#[cfg(feature = "ecc")]
+impl Eq for EcdhKeyAction {}
+
 #[cfg(feature = "ecc")]
 impl EccCurve {
     /// Maps an OPC UA ECC security policy to the NIST curve specified by Part 6 §6.8.
@@ -160,6 +177,36 @@ pub fn read_ecdh_key(additional_header: &ExtensionObject) -> Option<EphemeralKey
     match &kv.value {
         Variant::ExtensionObject(eo) => eo.inner_as::<EphemeralKeyType>().cloned(),
         _ => None,
+    }
+}
+
+/// Decide the §6.8.2 EphemeralKey action from the requested `ECDHPolicyUri`, the policy of any
+/// previously-issued key, and whether that previous key has been consumed (anti-replay).
+///
+/// - `Some(uri)` naming a supported ECC policy → `Issue(policy)` (an explicit request always wins).
+/// - `Some(uri)` that is non-ECC or unparseable → `Reject`.
+/// - `None` + no previous key → `None`.
+/// - `None` + previous key consumed → `Issue(previous_policy)` (never reuse a consumed key).
+/// - `None` + previous key unused → `Retain`.
+#[cfg(feature = "ecc")]
+#[must_use]
+pub fn decide_ecdh_key_action(
+    requested_uri: Option<&str>,
+    previous_policy: Option<SecurityPolicy>,
+    previous_key_consumed: bool,
+) -> EcdhKeyAction {
+    match requested_uri {
+        Some(uri) => match SecurityPolicy::from_uri(uri) {
+            policy @ (SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384) => {
+                EcdhKeyAction::Issue(policy)
+            }
+            _ => EcdhKeyAction::Reject,
+        },
+        None => match previous_policy {
+            None => EcdhKeyAction::None,
+            Some(previous) if previous_key_consumed => EcdhKeyAction::Issue(previous),
+            Some(_) => EcdhKeyAction::Retain,
+        },
     }
 }
 

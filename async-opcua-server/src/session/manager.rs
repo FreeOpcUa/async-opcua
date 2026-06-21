@@ -653,6 +653,46 @@ pub(crate) async fn activate_session(
         )
     };
 
+    #[cfg(feature = "ecc")]
+    let ecdh_response_header = {
+        use opcua_crypto::ecc::EcdhKeyAction;
+        let mut session = trace_write_lock!(session_lck);
+        let requested_uri =
+            opcua_crypto::ecc::read_ecdh_policy_uri(&request.request_header.additional_header);
+        let previous_policy = session.ecdh_ephemeral_key().map(|(_, policy)| *policy);
+        // 015a: no EphemeralKey is consumed yet - secret decryption (which consumes the key) is
+        // feature 016 - so the previous key is never "used". The §6.8.2 consumed-key anti-replay
+        // (never accept the same EphemeralKey twice) is enforced in 016 where the key is consumed.
+        let previous_key_consumed = false;
+        match opcua_crypto::ecc::decide_ecdh_key_action(
+            requested_uri.as_deref(),
+            previous_policy,
+            previous_key_consumed,
+        ) {
+            EcdhKeyAction::Issue(policy) => {
+                let server_pkey = info.server_pkey.read();
+                match server_pkey.as_ref() {
+                    Some(pkey) => {
+                        match opcua_crypto::ecc::issue_server_ephemeral_key(policy.to_uri(), pkey) {
+                            Ok((keypair, ephemeral_key)) => {
+                                session.set_ecdh_ephemeral_key(keypair, policy);
+                                Some(opcua_crypto::ecc::build_ecdh_key_response(ephemeral_key))
+                            }
+                            Err(e) => Some(opcua_crypto::ecc::build_ecdh_key_error(e.status())),
+                        }
+                    }
+                    None => Some(opcua_crypto::ecc::build_ecdh_key_error(
+                        StatusCode::BadSecurityPolicyRejected,
+                    )),
+                }
+            }
+            EcdhKeyAction::Reject => Some(opcua_crypto::ecc::build_ecdh_key_error(
+                StatusCode::BadSecurityPolicyRejected,
+            )),
+            EcdhKeyAction::Retain | EcdhKeyAction::None => None,
+        }
+    };
+
     let namespaces =
         handler.get_namespaces_for_user(session_lck.clone(), session_id, user_token.clone());
     {
@@ -667,12 +707,18 @@ pub(crate) async fn activate_session(
 
     // TODO: Audit
 
-    Ok(ActivateSessionResponse {
+    #[cfg_attr(not(feature = "ecc"), allow(unused_mut))]
+    let mut response = ActivateSessionResponse {
         response_header: ResponseHeader::new_good(&request.request_header),
         server_nonce,
         results: None,
         diagnostic_infos: None,
-    })
+    };
+    #[cfg(feature = "ecc")]
+    if let Some(header) = ecdh_response_header {
+        response.response_header.additional_header = header;
+    }
+    Ok(response)
 }
 
 #[cfg(test)]

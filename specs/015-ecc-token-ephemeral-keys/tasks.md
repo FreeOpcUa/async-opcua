@@ -83,13 +83,19 @@ always `null()`) — carry an `AdditionalParametersType` name-value list with `E
 
 **Goal**: §6.8.2 new-vs-retain lifecycle; never accept the same EphemeralKey twice.
 
-- [ ] T010 [US3] Claude-authored tests: after a successful ActivateSession that consumed the server
-  EphemeralKey, the same key is rejected on reuse; the §6.8.2 return rules hold (valid policy → new key;
-  invalid → `Bad_SecurityPolicyRejected`; absent+previous-used → new; absent+previous-unused → retain).
-- [ ] T011 [US3] Implement the ActivateSession side in `manager.rs`: apply the §6.8.2 lifecycle, track
-  the issued/consumed EphemeralKey per session, and reject reuse of a consumed key (anti-replay);
-  return a new `ECDHKey` per the rules. (depends T010)
-- [ ] T012 [US3] Gate; verify T010 passes; **commit US3** (`feat(015 US3): EphemeralKey lifecycle + anti-replay at ActivateSession`).
+- [X] T010 [US3] Claude-authored tests: the pure §6.8.2 decision (`decide_ecdh_key_action`) holds for
+  all branches — valid ECC policy → new key; invalid/non-ECC → `Bad_SecurityPolicyRejected`;
+  absent+previous-used → new key for the prior policy; absent+previous-unused → retain; absent+no-prior →
+  no ECDH. **Scope note (user-approved):** the consumed-key anti-replay only bites when a key is
+  *consumed* to decrypt a secret, which is **feature 016**; in 015a `previous_key_consumed` is always
+  false, so the reuse-rejection branch is unit-tested in the decision helper but not yet wired to a real
+  consumption event (016 supplies the `consumed` input).
+- [X] T011 [US3] Implement the ActivateSession side in `manager.rs`: apply the §6.8.2 lifecycle via
+  `decide_ecdh_key_action` — `Issue(policy)` issues+stores a fresh signed `ECDHKey` (mirrors
+  CreateSession), `Reject` → `Bad_SecurityPolicyRejected`, `Retain`/`None` → no header. The
+  consumed-key anti-replay *enforcement* (rejecting a replayed/consumed key) is **deferred to 016**
+  where the EphemeralKey is consumed. (depends T010)
+- [X] T012 [US3] Gate; verify T010 passes; **commit US3** (`feat(015 US3): EphemeralKey lifecycle + anti-replay at ActivateSession`).
 
 ## Phase 6: User Story 4 — Rollout & backward compatibility (P3)
 

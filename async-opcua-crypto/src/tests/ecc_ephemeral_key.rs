@@ -147,3 +147,61 @@ fn client_reads_and_verifies_server_ephemeral_key() {
         .is_none());
     }
 }
+
+/// US3 (FR-004): the Part 6 §6.8.2 server EphemeralKey lifecycle decision. A requested ECC
+/// `ECDHPolicyUri` → issue a fresh key for that policy; an unsupported/non-ECC URI → reject
+/// (`Bad_SecurityPolicyRejected`); no URI → preserve the previous key when it is unused
+/// (retain), or issue a fresh one for the prior policy once it has been consumed (anti-replay,
+/// the consumed input is wired in feature 016); no URI and no prior key → no ECDH at all.
+#[test]
+fn ecdh_key_lifecycle_decision_follows_section_6_8_2() {
+    use crate::ecc::{decide_ecdh_key_action, EcdhKeyAction};
+
+    const P256_URI: &str = "http://opcfoundation.org/UA/SecurityPolicy#ECC_nistP256";
+    const P384_URI: &str = "http://opcfoundation.org/UA/SecurityPolicy#ECC_nistP384";
+    const RSA_URI: &str = "http://opcfoundation.org/UA/SecurityPolicy#Basic256Sha256";
+
+    // A requested, supported ECC policy -> issue a fresh key for exactly that policy,
+    // regardless of any prior key or its consumed state.
+    for (uri, policy) in [
+        (P256_URI, SecurityPolicy::EccNistP256),
+        (P384_URI, SecurityPolicy::EccNistP384),
+    ] {
+        assert_eq!(
+            decide_ecdh_key_action(Some(uri), None, false),
+            EcdhKeyAction::Issue(policy)
+        );
+        assert_eq!(
+            decide_ecdh_key_action(Some(uri), Some(SecurityPolicy::EccNistP256), true),
+            EcdhKeyAction::Issue(policy),
+            "an explicit ECDHPolicyUri always wins over the prior key"
+        );
+    }
+
+    // A requested but non-ECC / unknown policy URI -> reject, never issue.
+    assert_eq!(
+        decide_ecdh_key_action(Some(RSA_URI), None, false),
+        EcdhKeyAction::Reject
+    );
+    assert_eq!(
+        decide_ecdh_key_action(Some("not a uri"), Some(SecurityPolicy::EccNistP256), false),
+        EcdhKeyAction::Reject
+    );
+
+    // No URI requested:
+    //  - no prior key  -> no ECDH (preserve today's null-header flow).
+    assert_eq!(
+        decide_ecdh_key_action(None, None, false),
+        EcdhKeyAction::None
+    );
+    //  - prior key unused -> retain it (client keeps the CreateSession key).
+    assert_eq!(
+        decide_ecdh_key_action(None, Some(SecurityPolicy::EccNistP256), false),
+        EcdhKeyAction::Retain
+    );
+    //  - prior key consumed -> issue a fresh key for the prior policy (anti-replay: never reuse).
+    assert_eq!(
+        decide_ecdh_key_action(None, Some(SecurityPolicy::EccNistP384), true),
+        EcdhKeyAction::Issue(SecurityPolicy::EccNistP384)
+    );
+}

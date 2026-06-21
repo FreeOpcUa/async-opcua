@@ -5,7 +5,7 @@
 //! The certificate store holds and retrieves private keys and certificates from disk. It is responsible
 //! for checking certificates supplied by the remote end to see if they are valid and trusted or not.
 
-use std::fs::{File, OpenOptions};
+use std::fs::{read_dir, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
@@ -16,6 +16,10 @@ use opcua_types::Error;
 use tracing::{debug, error, info, trace, warn};
 
 use opcua_types::status_code::StatusCode;
+use x509_cert::{
+    crl::CertificateList,
+    der::{Decode, Reader},
+};
 
 use crate::PrivateKey;
 
@@ -30,6 +34,12 @@ const OWN_CERTIFICATE_PATH: &str = "own/cert.der";
 const OWN_PRIVATE_KEY_PATH: &str = "private/private.pem";
 /// The directory holding trusted certificates
 const TRUSTED_CERTS_DIR: &str = "trusted";
+/// The directory holding issuer certificates
+const ISSUER_CERTS_DIR: &str = "issuer";
+/// The directory holding CRLs for trusted CA certificates
+const TRUSTED_CRLS_DIR: &str = "trusted_crls";
+/// The directory holding CRLs for issuer CA certificates
+const ISSUER_CRLS_DIR: &str = "issuer_crls";
 /// The directory holding rejected certificates
 const REJECTED_CERTS_DIR: &str = "rejected";
 
@@ -452,7 +462,13 @@ impl CertificateStore {
     ///
     pub fn ensure_pki_path(&self) -> Result<(), String> {
         let mut path = self.pki_path.clone();
-        let subdirs = [TRUSTED_CERTS_DIR, REJECTED_CERTS_DIR];
+        let subdirs = [
+            TRUSTED_CERTS_DIR,
+            REJECTED_CERTS_DIR,
+            ISSUER_CERTS_DIR,
+            TRUSTED_CRLS_DIR,
+            ISSUER_CRLS_DIR,
+        ];
         for subdir in &subdirs {
             path.push(subdir);
             CertificateStore::ensure_dir(&path)?;
@@ -506,6 +522,47 @@ impl CertificateStore {
         let mut path = PathBuf::from(&self.pki_path);
         path.push(TRUSTED_CERTS_DIR);
         path
+    }
+
+    /// Get the path to the issuer certs dir
+    pub fn issuer_certs_dir(&self) -> PathBuf {
+        let mut path = PathBuf::from(&self.pki_path);
+        path.push(ISSUER_CERTS_DIR);
+        path
+    }
+
+    /// Get the path to the trusted CRLs dir
+    pub fn trusted_crls_dir(&self) -> PathBuf {
+        let mut path = PathBuf::from(&self.pki_path);
+        path.push(TRUSTED_CRLS_DIR);
+        path
+    }
+
+    /// Get the path to the issuer CRLs dir
+    pub fn issuer_crls_dir(&self) -> PathBuf {
+        let mut path = PathBuf::from(&self.pki_path);
+        path.push(ISSUER_CRLS_DIR);
+        path
+    }
+
+    /// Read all trusted certificates from the store.
+    pub fn read_trusted_certs(&self) -> Vec<X509> {
+        CertificateStore::read_cert_dir(&self.trusted_certs_dir())
+    }
+
+    /// Read all issuer certificates from the store.
+    pub fn read_issuer_certs(&self) -> Vec<X509> {
+        CertificateStore::read_cert_dir(&self.issuer_certs_dir())
+    }
+
+    /// Read all trusted CRLs from the store.
+    pub fn read_trusted_crls(&self) -> Vec<CertificateList> {
+        CertificateStore::read_crl_dir(&self.trusted_crls_dir())
+    }
+
+    /// Read all issuer CRLs from the store.
+    pub fn read_issuer_crls(&self) -> Vec<CertificateList> {
+        CertificateStore::read_crl_dir(&self.issuer_crls_dir())
     }
 
     /// Write a cert to the rejected directory. If the write succeeds, the function
@@ -590,6 +647,110 @@ impl CertificateStore {
             )),
             Ok(val) => Ok(val),
         }
+    }
+
+    fn read_cert_dir(path: &Path) -> Vec<X509> {
+        let entries = match read_dir(path) {
+            Ok(entries) => entries,
+            Err(err) => {
+                trace!(
+                    "Cannot read certificate directory {}: {}",
+                    path.display(),
+                    err
+                );
+                return Vec::new();
+            }
+        };
+
+        let mut certs = Vec::new();
+        for entry in entries {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(err) => {
+                    trace!(
+                        "Cannot read certificate directory entry from {}: {}",
+                        path.display(),
+                        err
+                    );
+                    continue;
+                }
+            };
+            let cert_path = entry.path();
+            if !CertificateStore::is_der_or_pem_file(&cert_path) {
+                continue;
+            }
+
+            match CertificateStore::read_cert(&cert_path) {
+                Ok(cert) => certs.push(cert),
+                Err(err) => {
+                    trace!("Cannot read certificate {}: {}", cert_path.display(), err);
+                }
+            }
+        }
+        certs
+    }
+
+    fn read_crl_dir(path: &Path) -> Vec<CertificateList> {
+        let entries = match read_dir(path) {
+            Ok(entries) => entries,
+            Err(err) => {
+                trace!("Cannot read CRL directory {}: {}", path.display(), err);
+                return Vec::new();
+            }
+        };
+
+        let mut crls = Vec::new();
+        for entry in entries {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(err) => {
+                    trace!(
+                        "Cannot read CRL directory entry from {}: {}",
+                        path.display(),
+                        err
+                    );
+                    continue;
+                }
+            };
+            let crl_path = entry.path();
+            if !CertificateStore::is_der_or_pem_file(&crl_path) {
+                continue;
+            }
+
+            match CertificateStore::read_crl(&crl_path) {
+                Ok(crl) => crls.push(crl),
+                Err(err) => {
+                    trace!("Cannot read CRL {}: {}", crl_path.display(), err);
+                }
+            }
+        }
+        crls
+    }
+
+    fn read_crl(path: &Path) -> Result<CertificateList, String> {
+        let crl = std::fs::read(path)
+            .map_err(|_| format!("Could not read bytes from CRL file {}", path.display()))?;
+
+        match path.extension().and_then(|extension| extension.to_str()) {
+            Some("der") => CertificateList::from_der(&crl),
+            Some("pem") => CertificateStore::read_pem_crl(&crl),
+            _ => return Err("Only .der and .pem CRLs are supported".to_string()),
+        }
+        .map_err(|_| format!("Could not read CRL from CRL file {}", path.display()))
+    }
+
+    fn read_pem_crl(crl: &[u8]) -> Result<CertificateList, x509_cert::der::Error> {
+        let mut reader = x509_cert::der::PemReader::new(crl)?;
+        let crl = CertificateList::decode(&mut reader)?;
+        reader.finish(crl)
+    }
+
+    fn is_der_or_pem_file(path: &Path) -> bool {
+        path.is_file()
+            && matches!(
+                path.extension().and_then(|extension| extension.to_str()),
+                Some("der" | "pem")
+            )
     }
 
     /// Writes bytes to file and returns the size written, or an error reason for failure.

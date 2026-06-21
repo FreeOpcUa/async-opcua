@@ -30,27 +30,27 @@ Trust anchor preserved: self-signed leaf in `trusted/` stays valid. `None` polic
 
 ## Phase 1: Setup
 
-- [ ] T001 Add the new PKI directories to `async-opcua-crypto/src/certificate_store.rs`: dir
+- [X] T001 Add the new PKI directories to `async-opcua-crypto/src/certificate_store.rs`: dir
   constants + accessors `issuer_certs_dir()`, `trusted_crls_dir()`, `issuer_crls_dir()`, created in
   `ensure_pki_path()`; loaders that read all certs/CRLs from those dirs (DER + PEM), skipping
   unreadable entries without panic. Capture the baseline gate. No validation-logic change yet.
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-- [ ] T002 Add public X509 extension/field accessors in `async-opcua-crypto/src/x509.rs`
+- [X] T002 Add public X509 extension/field accessors in `async-opcua-crypto/src/x509.rs`
   (`issuer_name`, `serial_number`, `tbs_der`, `signature_and_algorithm`, `key_usage`,
   `extended_key_usage`, `basic_constraints` (is_ca + pathLen), `authority_key_identifier`,
   `subject_key_identifier`, `is_self_signed`) via `tbs_certificate.get::<T>()` with
   `x509_cert::ext::pkix::*`. All return `Option`/`Result`; **never panic** on malformed extensions.
-- [ ] T003 Add DER `Ecdsa-Sig-Value` verification in `async-opcua-crypto/src/ecc.rs`
+- [X] T003 Add DER `Ecdsa-Sig-Value` verification in `async-opcua-crypto/src/ecc.rs`
   (`ecdsa_verify_der` using `p256/p384::ecdsa::Signature::from_der`), alongside the unchanged raw
   `ecdsa_verify`. Behind the `ecc` feature.
-- [ ] T004 Scaffold `async-opcua-crypto/src/cert_chain.rs` (new module): the public
+- [X] T004 Scaffold `async-opcua-crypto/src/cert_chain.rs` (new module): the public
   `ValidationOptions` (enforce chain/usage, revocation mode, per-step suppression set) and the
   internal Table-100 validation entry point signature returning `Result<(), Error>` with
   step-specific status codes — stubs/`unimplemented` so US1 tests compile and fail. Wire the module
   into `lib.rs`. No logic yet.
-- [ ] T005 Add the Security-Policy certificate checks surface in
+- [X] T005 Add the Security-Policy certificate checks surface in
   `async-opcua-crypto/src/security_policy.rs`: per-policy certificate signature-algorithm +
   min/max asymmetric key-length accessors used by the Security-Policy Check (reuse
   `is_valid_keylength`/`asymmetric_signature_algorithm`). No call-site change yet.

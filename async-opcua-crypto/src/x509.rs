@@ -20,8 +20,14 @@ use rsa::pkcs1v15;
 use rsa::RsaPublicKey as RsaPublicKeyInner;
 use x509_cert::{
     self as x509,
-    der::asn1::{Ia5String, OctetString},
-    ext::pkix::name::GeneralName,
+    der::{
+        asn1::{Ia5String, OctetString},
+        Encode,
+    },
+    ext::pkix::{
+        name::GeneralName, AuthorityKeyIdentifier, BasicConstraints, ExtendedKeyUsage, KeyUsage,
+        SubjectKeyIdentifier,
+    },
 };
 
 use x509::builder::Error as BuilderError;
@@ -396,6 +402,18 @@ pub struct X509 {
     value: x509::certificate::Certificate,
 }
 
+/// The signature and signature-algorithm of an X.509 certificate, as needed to
+/// verify it against its issuer's public key.
+#[derive(Debug, Clone)]
+pub struct CertificateSignature {
+    /// The raw signature octets (the certificate `signature` BIT STRING contents).
+    pub value: Vec<u8>,
+    /// The signature algorithm OID (e.g. sha256WithRSAEncryption, ecdsa-with-SHA256).
+    pub algorithm_oid: const_oid::ObjectIdentifier,
+    /// DER-encoded AlgorithmIdentifier parameters when present (e.g. RSASSA-PSS params).
+    pub parameters: Option<Vec<u8>>,
+}
+
 impl Debug for X509 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         // This impl will not write out the cert, and exists to keep derive happy
@@ -577,7 +595,7 @@ impl X509 {
         let profile = Profile::Manual {
             issuer: Some(subject.clone()),
         };
-        let ski = Self::subject_key_identifier(&public_key);
+        let ski = Self::subject_key_identifier_from_public_key(&public_key);
         let mut builder = CertificateBuilder::new(
             profile,
             serial_number.clone(),
@@ -627,7 +645,9 @@ impl X509 {
     }
 
     #[cfg(feature = "ecc")]
-    fn subject_key_identifier(public_key: &x509_cert::spki::SubjectPublicKeyInfoOwned) -> Vec<u8> {
+    fn subject_key_identifier_from_public_key(
+        public_key: &x509_cert::spki::SubjectPublicKeyInfoOwned,
+    ) -> Vec<u8> {
         use sha1::Digest;
 
         let mut hasher = sha1::Sha1::new();
@@ -902,6 +922,112 @@ impl X509 {
     pub fn subject_name(&self) -> String {
         let r = self.value.tbs_certificate.subject.to_string();
         r.replace(";", "/")
+    }
+
+    /// Produces an issuer name string such as "CN=foo/C=IE".
+    pub fn issuer_name(&self) -> String {
+        let r = self.value.tbs_certificate.issuer.to_string();
+        r.replace(";", "/")
+    }
+
+    /// Returns the certificate serial number bytes.
+    pub fn serial_number(&self) -> Vec<u8> {
+        self.value.tbs_certificate.serial_number.as_bytes().to_vec()
+    }
+
+    /// Returns the DER-encoded TBSCertificate signed bytes.
+    pub fn tbs_der(&self) -> Result<Vec<u8>, Error> {
+        self.value.tbs_certificate.to_der().map_err(|err| {
+            Error::new(
+                StatusCode::BadCertificateInvalid,
+                format!("failed to encode TBSCertificate DER: {err}"),
+            )
+        })
+    }
+
+    /// Returns the certificate signature bytes, algorithm OID, and optional parameter DER.
+    pub fn signature_and_algorithm(&self) -> Result<CertificateSignature, Error> {
+        let Some(signature_bytes) = self.value.signature.as_bytes() else {
+            return Err(Error::new(
+                StatusCode::BadCertificateInvalid,
+                "certificate signature bit string is not octet-aligned",
+            ));
+        };
+
+        let algorithm_parameters_der = self
+            .value
+            .signature_algorithm
+            .parameters
+            .as_ref()
+            .and_then(|parameters| parameters.to_der().ok());
+
+        Ok(CertificateSignature {
+            value: signature_bytes.to_vec(),
+            algorithm_oid: self.value.signature_algorithm.oid,
+            parameters: algorithm_parameters_der,
+        })
+    }
+
+    /// Returns the KeyUsage extension, when present and well-formed.
+    pub fn key_usage(&self) -> Option<KeyUsage> {
+        let r: Result<Option<(bool, KeyUsage)>, _> = self.value.tbs_certificate.get::<KeyUsage>();
+        match r {
+            Err(_) => None,
+            Ok(option) => option.map(|(_critical, ext)| ext),
+        }
+    }
+
+    /// Returns the ExtendedKeyUsage extension, when present and well-formed.
+    pub fn extended_key_usage(&self) -> Option<ExtendedKeyUsage> {
+        let r: Result<Option<(bool, ExtendedKeyUsage)>, _> =
+            self.value.tbs_certificate.get::<ExtendedKeyUsage>();
+        match r {
+            Err(_) => None,
+            Ok(option) => option.map(|(_critical, ext)| ext),
+        }
+    }
+
+    /// Returns the BasicConstraints extension, when present and well-formed.
+    pub fn basic_constraints(&self) -> Option<BasicConstraints> {
+        let r: Result<Option<(bool, BasicConstraints)>, _> =
+            self.value.tbs_certificate.get::<BasicConstraints>();
+        match r {
+            Err(_) => None,
+            Ok(option) => option.map(|(_critical, ext)| ext),
+        }
+    }
+
+    /// Returns the AuthorityKeyIdentifier key identifier bytes, when present and well-formed.
+    pub fn authority_key_identifier(&self) -> Option<Vec<u8>> {
+        let r: Result<Option<(bool, AuthorityKeyIdentifier)>, _> =
+            self.value.tbs_certificate.get::<AuthorityKeyIdentifier>();
+        match r {
+            Err(_) => None,
+            Ok(option) => match option {
+                None => None,
+                Some((_critical, ext)) => ext
+                    .key_identifier
+                    .map(|key_identifier| key_identifier.as_bytes().to_vec()),
+            },
+        }
+    }
+
+    /// Returns the SubjectKeyIdentifier bytes, when present and well-formed.
+    pub fn subject_key_identifier(&self) -> Option<Vec<u8>> {
+        let r: Result<Option<(bool, SubjectKeyIdentifier)>, _> =
+            self.value.tbs_certificate.get::<SubjectKeyIdentifier>();
+        match r {
+            Err(_) => None,
+            Ok(option) => match option {
+                None => None,
+                Some((_critical, ext)) => Some(ext.0.as_bytes().to_vec()),
+            },
+        }
+    }
+
+    /// Returns true when the issuer and subject distinguished names are structurally equal.
+    pub fn is_self_signed(&self) -> bool {
+        self.value.tbs_certificate.issuer == self.value.tbs_certificate.subject
     }
 
     /// Gets the common name out of the cert

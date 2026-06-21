@@ -131,11 +131,12 @@ pub fn validate_certificate_chain<'a>(
         return Ok(Vec::new());
     }
 
-    let _ = context.security_policy; // consumed by US4
-
     let chain = build_chain(cert, context)?;
 
     verify_chain_signatures(&chain)?;
+
+    let mut findings = Vec::new();
+    validate_leaf_security_policy(&chain, context, &mut findings)?;
 
     if !chain_contains_trusted_cert(&chain, context.trusted_certs)? {
         return Err(validation_error(
@@ -144,7 +145,7 @@ pub fn validate_certificate_chain<'a>(
         ));
     }
 
-    let mut findings = validate_chain_validity(&chain, context)?;
+    findings.extend(validate_chain_validity(&chain, context)?);
     validate_certificate_usage(&chain, context, &mut findings)?;
     validate_chain_revocation(&chain, context, &mut findings)?;
 
@@ -350,6 +351,74 @@ fn chain_contains_trusted_cert(chain: &[&X509], trusted_certs: &[X509]) -> Resul
     }
 
     Ok(false)
+}
+
+fn validate_leaf_security_policy(
+    chain: &[&X509],
+    context: &ChainValidationContext<'_>,
+    findings: &mut Vec<SuppressedFinding>,
+) -> Result<(), Error> {
+    if context.security_policy == SecurityPolicy::None {
+        return Ok(());
+    }
+
+    let Some(leaf) = chain.first().copied() else {
+        return Err(validation_error(
+            StatusCode::BadCertificateChainIncomplete,
+            "certificate chain is empty",
+        ));
+    };
+
+    match leaf.signature_and_algorithm() {
+        Ok(signature)
+            if context
+                .security_policy
+                .is_valid_certificate_signature_algorithm(&signature.algorithm_oid) => {}
+        Ok(_) => handle_security_policy_failure(
+            context,
+            findings,
+            "leaf certificate signature algorithm is not allowed by the security policy",
+        )?,
+        Err(_) => handle_security_policy_failure(
+            context,
+            findings,
+            "cannot read leaf certificate signature algorithm",
+        )?,
+    }
+
+    match leaf.key_length() {
+        Ok(key_length) if context.security_policy.is_valid_keylength(key_length) => {}
+        Ok(_) => handle_security_policy_failure(
+            context,
+            findings,
+            "leaf certificate key length is not allowed by the security policy",
+        )?,
+        Err(_) => handle_security_policy_failure(context, findings, "cannot read leaf key length")?,
+    }
+
+    Ok(())
+}
+
+fn handle_security_policy_failure(
+    context: &ChainValidationContext<'_>,
+    findings: &mut Vec<SuppressedFinding>,
+    message: &str,
+) -> Result<(), Error> {
+    let status = StatusCode::BadCertificatePolicyCheckFailed;
+
+    if context
+        .options
+        .is_suppressed(SuppressibleStep::SecurityPolicy)
+    {
+        findings.push(SuppressedFinding {
+            step: SuppressibleStep::SecurityPolicy,
+            status,
+            message: message.to_string(),
+        });
+        Ok(())
+    } else {
+        Err(validation_error(status, message))
+    }
 }
 
 fn validate_chain_validity(

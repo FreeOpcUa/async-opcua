@@ -136,20 +136,20 @@ required-but-no-CRL → RevocationUnknown; disabled-per-CA → no error.
 **Independent Test**: key length out of policy → PolicyCheckFailed; suppressed non-critical failure →
 passes + audit event; critical steps never suppressible.
 
-- [ ] T016 [US4] Claude-authored failing tests: a cert whose key length/sig-alg violates the
+- [X] T016 [US4] Claude-authored failing tests: a cert whose key length/sig-alg violates the
   negotiated policy → `Bad_CertificatePolicyCheckFailed`; with that step suppressed → validation
   passes AND an audit event is recorded; assert critical steps (structure/chain/signature/untrusted/
   URI) reject regardless of suppression. **Ordering/precedence (SC-001 "in order"): a fixture that
   fails two steps at once returns the *earlier* Table-100 step's status code (e.g. untrusted+expired →
   the chain/untrusted code, not the time code); halt is on the first non-suppressed failure.**
-- [ ] T017 [US4] Implement the Security-Policy Check in `cert_chain.rs` (sig-alg + min/max key-length
+- [X] T017 [US4] Implement the Security-Policy Check in `cert_chain.rs` (sig-alg + min/max key-length
   per policy from T005) and the suppression model (suppressible set vs critical set); **assemble the
   full ordered Table-100 pipeline (structure → build-chain → signature → security-policy → trust-list →
   validity → host-name → URI → usage → find-revocation → revocation), halting on the first
   non-suppressed failure so its status code wins**; on a suppressed failure, continue but report the
   step via the existing server audit surface (`async-opcua-server/src/session/audit.rs`) with the
   precise status code (typed `AuditCertificate*` event types deferred — research Decision 8). (depends T016)
-- [ ] T018 [US4] Gate; verify T016 passes; **commit US4** (`feat(013 US4): security-policy check + suppression/audit`).
+- [X] T018 [US4] Gate; verify T016 passes; **commit US4** (`feat(013 US4): security-policy check + suppression/audit`).
 
 **Checkpoint**: full Table 100 step set enforced; suppression+audit per §6.1.3.
 

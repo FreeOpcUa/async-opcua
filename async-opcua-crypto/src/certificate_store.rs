@@ -411,9 +411,13 @@ impl CertificateStore {
                 let _ = self.store_rejected_cert(cert);
                 return Err(e);
             }
-            Ok(_findings) => {
-                // Suppressed findings are audited by US4.
-                // TODO(013 US4)
+            Ok(findings) => {
+                for finding in findings {
+                    warn!(
+                        "Certificate {cert_file_name}: suppressed certificate-validation finding [{:?}] {} - {}",
+                        finding.step, finding.status, finding.message
+                    );
+                }
             }
         }
 

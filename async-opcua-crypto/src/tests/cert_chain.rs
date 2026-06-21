@@ -41,7 +41,7 @@ use tempfile::TempDir;
 
 use crate::{
     validate_certificate_chain, CertificatePurpose, CertificateStore, ChainValidationContext,
-    PrivateKey, SecurityPolicy, ValidationOptions, X509,
+    PrivateKey, RevocationMode, SecurityPolicy, SuppressibleStep, ValidationOptions, X509,
 };
 
 // --- shared key pool (RSA-2048 keygen is the slow part; generate once) ---------------------
@@ -1041,7 +1041,7 @@ fn required_revocation_without_crl_is_unknown() {
     let issuers: [X509; 0] = [];
     let crls = empty_crls(); // none provided
     let options = ValidationOptions {
-        revocation_mode: crate::RevocationMode::Required,
+        revocation_mode: RevocationMode::Required,
         ..Default::default()
     };
     let now = now_valid();
@@ -1063,7 +1063,7 @@ fn required_revocation_with_clean_crl_is_accepted() {
     let issuers: [X509; 0] = [];
     let crls = [crl];
     let options = ValidationOptions {
-        revocation_mode: crate::RevocationMode::Required,
+        revocation_mode: RevocationMode::Required,
         ..Default::default()
     };
     let now = now_valid();
@@ -1084,7 +1084,7 @@ fn disabled_revocation_ignores_revoking_crl() {
     let issuers: [X509; 0] = [];
     let crls = [crl];
     let options = ValidationOptions {
-        revocation_mode: crate::RevocationMode::Disabled,
+        revocation_mode: RevocationMode::Disabled,
         ..Default::default()
     };
     let now = now_valid();
@@ -1111,4 +1111,166 @@ fn crl_with_forged_signature_is_not_trusted_for_revocation() {
     let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
     validate_certificate_chain(&leaf, &ctx)
         .expect("a CRL with an invalid signature must be ignored, not used to revoke");
+}
+
+// --- US4 tests: security-policy check + suppression -----------------------------------------
+
+fn suppress(steps: &[SuppressibleStep]) -> ValidationOptions {
+    ValidationOptions {
+        suppressed_steps: steps.iter().copied().collect(),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn leaf_key_too_short_is_policy_check_failed() {
+    // A 1024-bit leaf violates Basic256Sha256's minimum asymmetric key length.
+    let k = keys();
+    let short_key = PrivateKey::new(1024).expect("1024-bit key");
+    let root = root_ca();
+    let leaf = issue(&CertSpec {
+        subject_cn: LEAF_CN,
+        subject_key: &short_key,
+        issuer_cn: ROOT_CN,
+        issuer_key: &k.root,
+        signer_key: &k.root,
+        is_ca: false,
+        not_before: t(2020, 1, 1),
+        not_after: t(2030, 1, 1),
+        eku: Eku::Both,
+        key_usage: KuChoice::Default,
+        serial: 400,
+    });
+    let trusted = [root];
+    let issuers: [X509; 0] = [];
+    let crls = empty_crls();
+    let options = ValidationOptions::default();
+    let now = now_valid();
+    let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
+    let err = validate_certificate_chain(&leaf, &ctx).expect_err(
+        "a leaf key length below the policy minimum must fail the security-policy check",
+    );
+    assert_eq!(err.status(), StatusCode::BadCertificatePolicyCheckFailed);
+}
+
+#[test]
+fn suppressed_security_policy_passes_with_finding() {
+    let k = keys();
+    let short_key = PrivateKey::new(1024).expect("1024-bit key");
+    let root = root_ca();
+    let leaf = issue(&CertSpec {
+        subject_cn: LEAF_CN,
+        subject_key: &short_key,
+        issuer_cn: ROOT_CN,
+        issuer_key: &k.root,
+        signer_key: &k.root,
+        is_ca: false,
+        not_before: t(2020, 1, 1),
+        not_after: t(2030, 1, 1),
+        eku: Eku::Both,
+        key_usage: KuChoice::Default,
+        serial: 401,
+    });
+    let trusted = [root];
+    let issuers: [X509; 0] = [];
+    let crls = empty_crls();
+    let options = suppress(&[SuppressibleStep::SecurityPolicy]);
+    let now = now_valid();
+    let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
+    let findings = validate_certificate_chain(&leaf, &ctx)
+        .expect("suppressing the security-policy step lets validation pass");
+    assert!(
+        findings
+            .iter()
+            .any(|f| f.step == SuppressibleStep::SecurityPolicy
+                && f.status == StatusCode::BadCertificatePolicyCheckFailed),
+        "a suppressed security-policy failure must be recorded as an audit finding: {findings:?}"
+    );
+}
+
+#[test]
+fn suppressed_validity_passes_with_finding() {
+    let root = root_ca();
+    let intermediate = intermediate_ca();
+    let expired_leaf = leaf_via_intermediate(t(2021, 1, 1)); // expired before now
+    let trusted = [root];
+    let issuers = [intermediate];
+    let crls = empty_crls();
+    let options = suppress(&[SuppressibleStep::Validity]);
+    let now = now_valid();
+    let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
+    let findings = validate_certificate_chain(&expired_leaf, &ctx)
+        .expect("suppressing validity lets an expired leaf pass");
+    assert!(
+        findings.iter().any(|f| f.step == SuppressibleStep::Validity
+            && f.status == StatusCode::BadCertificateTimeInvalid),
+        "a suppressed validity failure must be recorded as an audit finding: {findings:?}"
+    );
+}
+
+#[test]
+fn critical_untrusted_is_not_suppressible() {
+    // Untrusted is a critical step: even suppressing every suppressible step cannot bypass it.
+    let k = keys();
+    let rogue_leaf = issue(&CertSpec {
+        subject_cn: LEAF_CN,
+        subject_key: &k.leaf,
+        issuer_cn: LEAF_CN,
+        issuer_key: &k.leaf,
+        signer_key: &k.leaf,
+        is_ca: false,
+        not_before: t(2020, 1, 1),
+        not_after: t(2030, 1, 1),
+        eku: Eku::Both,
+        key_usage: KuChoice::Default,
+        serial: 402,
+    });
+    let trusted = [root_ca()]; // the rogue leaf is NOT trusted
+    let issuers: [X509; 0] = [];
+    let crls = empty_crls();
+    let options = suppress(&[
+        SuppressibleStep::SecurityPolicy,
+        SuppressibleStep::Validity,
+        SuppressibleStep::HostName,
+        SuppressibleStep::CertificateUsage,
+        SuppressibleStep::FindRevocationList,
+    ]);
+    let now = now_valid();
+    let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
+    let err = validate_certificate_chain(&rogue_leaf, &ctx)
+        .expect_err("a critical untrusted failure must reject regardless of suppression");
+    assert_eq!(err.status(), StatusCode::BadCertificateUntrusted);
+}
+
+#[test]
+fn trust_list_check_precedes_validity_check() {
+    // Ordering/precedence (SC-001 "in order"): an untrusted AND expired leaf must report the
+    // earlier Table-100 step (trust-list / Untrusted), not the later validity (TimeInvalid).
+    let k = keys();
+    let rogue_expired_leaf = issue(&CertSpec {
+        subject_cn: LEAF_CN,
+        subject_key: &k.leaf,
+        issuer_cn: LEAF_CN,
+        issuer_key: &k.leaf,
+        signer_key: &k.leaf,
+        is_ca: false,
+        not_before: t(2020, 1, 1),
+        not_after: t(2021, 1, 1), // also expired
+        eku: Eku::Both,
+        key_usage: KuChoice::Default,
+        serial: 403,
+    });
+    let trusted = [root_ca()];
+    let issuers: [X509; 0] = [];
+    let crls = empty_crls();
+    let options = ValidationOptions::default();
+    let now = now_valid();
+    let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
+    let err = validate_certificate_chain(&rogue_expired_leaf, &ctx)
+        .expect_err("an untrusted, expired leaf must be rejected");
+    assert_eq!(
+        err.status(),
+        StatusCode::BadCertificateUntrusted,
+        "trust-list check must take precedence over the later validity check"
+    );
 }

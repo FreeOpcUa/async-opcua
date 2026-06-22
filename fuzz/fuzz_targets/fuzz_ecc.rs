@@ -60,4 +60,42 @@ libfuzzer_sys::fuzz_target!(|data: &[u8]| {
             let _ = read_ecdh_key(&header);
         }
     }
+
+    // Feature 016 (T023): the server decrypts an attacker-controlled `EccEncryptedSecret`
+    // (Part 4 §7.40.2.5) via `ecc_decrypt_secret`. Feed arbitrary bytes as the envelope against a
+    // fixed server EphemeralKey + signer cert: any malformed / tampered / wrong input must return
+    // the uniform error, never panic.
+    {
+        use opcua::crypto::ecc::{ecc_decrypt_secret, EccCurve, EphemeralPrivateKey};
+        use opcua::crypto::SecurityPolicy;
+        use std::sync::OnceLock;
+
+        // Build the fixed P-256 signer cert + server ephemeral key once (cert generation is costly).
+        static FIXTURE: OnceLock<Option<(opcua::crypto::X509, EphemeralPrivateKey)>> =
+            OnceLock::new();
+        let fixture = FIXTURE.get_or_init(|| {
+            let data = opcua::crypto::X509Data {
+                key_size: 0,
+                common_name: "fuzz-ecc".to_string(),
+                organization: "f".to_string(),
+                organizational_unit: "f".to_string(),
+                country: "IE".to_string(),
+                state: "f".to_string(),
+                alt_host_names: vec!["urn:f".to_string(), "localhost".to_string()].into(),
+                certificate_duration_days: 60,
+            };
+            let cert = opcua::crypto::X509::cert_and_pkey_ecc(EccCurve::P256, &data).ok()?;
+            let server = EphemeralPrivateKey::from_scalar_bytes(EccCurve::P256, &[7u8; 32]).ok()?;
+            Some((cert.0, server))
+        });
+        if let Some((signer_cert, server_ephemeral)) = fixture {
+            let _ = ecc_decrypt_secret(
+                SecurityPolicy::EccNistP256,
+                body,
+                &[0x5Au8; 32],
+                server_ephemeral,
+                signer_cert,
+            );
+        }
+    }
 });

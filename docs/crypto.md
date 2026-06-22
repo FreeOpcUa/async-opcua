@@ -98,9 +98,42 @@ At ActivateSession the server follows the §6.8.2 new-vs-retain rules
 unused prior key → retain it. The consumed-key anti-replay rule ("never accept
 the same EphemeralKey twice") is enforced where the key is actually consumed to
 decrypt a secret — the `EccEncryptedSecret` identity-token wrapping (Part 4
-§7.40.2.5 / Part 6 §6.8.3), which builds on this exchange and is implemented as a
-follow-on feature. RSA and `None` flows, and builds with the `ecc` feature off,
-are unaffected.
+§7.40.2.5 / Part 6 §6.8.3), described next. RSA and `None` flows, and builds with
+the `ecc` feature off, are unaffected.
+
+### Encrypted identity-token secrets (`EccEncryptedSecret`, Part 4 §7.40.2.5)
+
+Over an ECC policy a `UserNameIdentityToken` password (or `IssuedIdentityToken`
+token data) is wrapped as an **`EccEncryptedSecret`** (Part 4 §7.40.2.5, Table 186)
+rather than the legacy RSA-OAEP secret. The envelope is an ExtensionObject-framed
+structure: a common header (`SecurityPolicyUri`, signing `Certificate`,
+`SigningTime`), **unencrypted** `KeyData` (the sender + receiver EphemeralKey
+public keys), an AES-CBC-encrypted payload (`Nonce`, `Secret`, padding), and a
+trailing **asymmetric ECDSA `Signature`** over the whole envelope.
+
+* **Key derivation (Part 6 §6.8.3)**: ECDH between the client and server
+  EphemeralKeys (from the §6.8.2 exchange) → RFC 5869 HKDF with the salt
+  `L | "opcua-secret" | SenderPublicKey | ReceiverPublicKey` → the AES
+  `EncryptingKey` + `InitializationVector` (no derived signing key — integrity is
+  the asymmetric signature). Hash and AES size are per curve: SHA-256 + AES-128-CBC
+  for `ECC_nistP256`, SHA-384 + AES-256-CBC for `ECC_nistP384`.
+* **Client** (`ecc_encrypt_secret`): generates a fresh sender EphemeralKey, derives
+  the keys against the retained server `ECDHKey`, encrypts the secret bound to the
+  **current server nonce**, and signs the envelope with the client
+  ApplicationInstance certificate.
+* **Server** (`ecc_decrypt_secret`): validates the signature **before** decrypting,
+  checks the receiver key is its own EphemeralKey, derives the keys, decrypts,
+  verifies padding, and checks the `Nonce` equals the session's current server
+  nonce. Every failure returns a **single uniform error** (no padding/MAC/nonce
+  oracle) and never panics on attacker-supplied bytes.
+* **Anti-replay (Part 6 §6.8.2)**: the server marks its EphemeralKey *consumed*
+  after a successful decrypt and rotates to a fresh key for the next activation
+  (the §6.8.2 `decide_ecdh_key_action` lifecycle); the client retains the rotated
+  key from the ActivateSession response. Together with the server-nonce binding, a
+  captured secret cannot be replayed and the same EphemeralKey is never reused.
+
+The legacy RSA secret path and the `None` policy are unchanged; all of the above is
+behind the `ecc` feature.
 
 ## Hash
 

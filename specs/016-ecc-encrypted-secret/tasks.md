@@ -134,20 +134,20 @@ the real consumed state drives the §6.8.2 `decide_ecdh_key_action` (closes the 
 
 ## Phase 7: User Story 5 — Rollout & backward compatibility (P3)
 
-- [ ] T021 [P] [US5] Claude-authored regression tests: RSA / `None` / no-ECC identity-token
+- [X] T021 [P] [US5] Claude-authored regression tests: RSA / `None` / no-ECC identity-token
   create+activate behave byte-identically (legacy secret unchanged); the policy correctly selects RSA vs
   ECC vs None; confirm the `ecc`-off build compiles with no ECC secret handling.
-- [ ] T022 [US5] Gate (incl. `--no-default-features` build); verify T021 passes; **commit US5**
+- [X] T022 [US5] Gate (incl. `--no-default-features` build); verify T021 passes; **commit US5**
   (`test(016 US5): rollout + backward-compat (RSA/None/no-ECC unchanged)`).
 
 ## Phase 8: Polish
 
-- [ ] T023 [P] Fuzz: extend `fuzz/fuzz_targets/fuzz_ecc.rs` to run `ecc_decrypt_secret` over attacker-
+- [X] T023 [P] Fuzz: extend `fuzz/fuzz_targets/fuzz_ecc.rs` to run `ecc_decrypt_secret` over attacker-
   controlled `EccEncryptedSecret` bytes (fixed curve + key) → zero panics; run a bounded campaign.
-- [ ] T024 [P] Docs: document the `EccEncryptedSecret` identity-token path (§7.40.2.5 / §6.8.3 KDF,
+- [X] T024 [P] Docs: document the `EccEncryptedSecret` identity-token path (§7.40.2.5 / §6.8.3 KDF,
   asymmetric signature, nonce-binding, consumed-key anti-replay) in `docs/crypto.md`; note it completes
   the 015a exchange.
-- [ ] T025 Final gate: fmt + clippy --all-targets --all-features + crypto/server/client tests +
+- [X] T025 Final gate: fmt + clippy --all-targets --all-features + crypto/server/client tests +
   integration (failures confirmed in isolation as pre-existing flakiness) + `--no-default-features`
   build; confirm RSA/None byte-identical.
 

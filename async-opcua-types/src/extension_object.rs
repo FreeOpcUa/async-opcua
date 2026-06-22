@@ -393,8 +393,9 @@ mod json {
                     }
                     #[cfg(not(feature = "xml"))]
                     {
-                        tracing::warn!("XML feature is not enabled, deserializing XML payloads in JSON extension objects is not supported");
-                        Ok(ExtensionObject::null())
+                        Err(Error::decoding(
+                            "Cannot decode an XML-encoded ExtensionObject body from JSON: the `xml` feature is not enabled",
+                        ))
                     }
                 } else {
                     Err(Error::decoding(format!("Unsupported extension object encoding, expected 1 or 2 for string, got {encoding}")))

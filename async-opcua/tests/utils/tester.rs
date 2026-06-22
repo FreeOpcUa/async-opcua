@@ -531,7 +531,9 @@ fn ecc_endpoint_policy(curve: opcua::crypto::ecc::EccCurve) -> SecurityPolicy {
 #[cfg(feature = "ecc")]
 pub fn ecc_server(curve: opcua::crypto::ecc::EccCurve) -> ServerBuilder {
     let endpoint_path = "/";
-    let user_token_ids = vec![ANONYMOUS_USER_TOKEN_ID];
+    // Include the username/password token so the ECC EccEncryptedSecret identity-token path
+    // (feature 016) can be exercised end-to-end over the ECC channel.
+    let user_token_ids = vec![ANONYMOUS_USER_TOKEN_ID, CLIENT_USERPASS_ID];
     let policy = ecc_endpoint_policy(curve);
     let mut builder = ServerBuilder::new()
         .application_name("ecc_integration_server")
@@ -541,6 +543,13 @@ pub fn ecc_server(curve: opcua::crypto::ecc::EccCurve) -> ServerBuilder {
         .create_sample_keypair(false)
         .host(hostname())
         .trust_client_certs(true)
+        .add_user_token(
+            CLIENT_USERPASS_ID,
+            ServerUserToken::user_pass(
+                CLIENT_USERPASS_ID,
+                &format!("{CLIENT_USERPASS_ID}_password"),
+            ),
+        )
         .add_endpoint(
             "ecc_sign",
             (

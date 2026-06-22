@@ -619,15 +619,18 @@ dependencies = [
 name = "async-opcua-pubsub"
 version = "0.19.0"
 dependencies = [
+ "aes",
  "async-opcua-core",
  "async-opcua-crypto",
  "async-opcua-server",
  "async-opcua-types",
  "futures",
+ "hmac",
  "lapin",
  "rumqttc",
  "serde",
  "serde_json",
+ "sha2",
  "tokio",
  "tokio-tungstenite 0.21.0",
  "tokio-util",

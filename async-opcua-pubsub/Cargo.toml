@@ -40,5 +40,12 @@ lapin = "2.3.1"
 rumqttc = { version = "0.25", default-features = false }
 uuid = { workspace = true, features = ["v4"] }
 
+# Test-only: an independent crypto path (raw HMAC-SHA256 + AES-CTR) used by the US5 interop
+# cross-check to verify/decrypt production output WITHOUT going through the production codec.
+[dev-dependencies]
+aes = { workspace = true }
+hmac = { workspace = true }
+sha2 = { workspace = true }
+
 [lints]
 workspace = true

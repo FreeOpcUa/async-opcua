@@ -95,10 +95,10 @@ and never panics.
 
 ## Phase 5: User Story 4 — Backward compatibility (P2)
 
-- [ ] T011 [P] [US4] Claude-authored regression tests: the Table 166 single-dimension rows
+- [X] T011 [P] [US4] Claude-authored regression tests: the Table 166 single-dimension rows
   (`0:2`→`[2,33,12]`, `3:7`→`[0,99]`, `7:9`→NoData) and a single-dimension write behave as today; confirm
   the existing NumericRange parser tests + Variant single-dimension range tests still pass.
-- [ ] T012 [US4] Gate; verify T011 passes; **commit US4** (`test(017 US4): single-dimension + parser back-compat`).
+- [X] T012 [US4] Gate; verify T011 passes; **commit US4** (`test(017 US4): single-dimension + parser back-compat`).
 
 ## Phase 6: Polish
 

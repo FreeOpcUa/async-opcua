@@ -1874,3 +1874,56 @@ fn set_range_of_multidim_non_array_target() {
         StatusCode::BadWriteNotSupported
     );
 }
+
+/// US4: the Part 4 §7.27 Table 166 SINGLE-dimension read rows behave as before (back-compat).
+#[test]
+fn range_of_table166_single_dimension_rows() {
+    let v = multidim_i32(&[2, 33, 12, 0, 99], &[5]);
+    // 0:2 → [2,33,12]
+    let Variant::Array(a) = v.range_of(&nr("0:2")).unwrap() else {
+        panic!()
+    };
+    assert_eq!(
+        a.values,
+        vec![Variant::Int32(2), Variant::Int32(33), Variant::Int32(12)]
+    );
+    // 3:7 → [0,99] (upper clamped, partial)
+    let Variant::Array(a) = v.range_of(&nr("3:7")).unwrap() else {
+        panic!()
+    };
+    assert_eq!(a.values, vec![Variant::Int32(0), Variant::Int32(99)]);
+    // 7:9 → Bad_IndexRangeNoData (lower out of range)
+    assert_eq!(
+        v.range_of(&nr("7:9")).unwrap_err(),
+        StatusCode::BadIndexRangeNoData
+    );
+}
+
+/// US4: single-dimension write still works as before (existing partial-copy behavior).
+#[test]
+fn set_range_of_single_dimension_unchanged() {
+    let mut v = Variant::from((
+        VariantScalarTypeId::Int32,
+        vec![
+            Variant::Int32(0),
+            Variant::Int32(1),
+            Variant::Int32(2),
+            Variant::Int32(3),
+        ],
+    ));
+    let src = Variant::from((
+        VariantScalarTypeId::Int32,
+        vec![Variant::Int32(10), Variant::Int32(11)],
+    ));
+    v.set_range_of(&NumericRange::Range(1, 2), &src).unwrap();
+    let Variant::Array(a) = v else { panic!() };
+    assert_eq!(
+        a.values,
+        vec![
+            Variant::Int32(0),
+            Variant::Int32(10),
+            Variant::Int32(11),
+            Variant::Int32(3)
+        ]
+    );
+}

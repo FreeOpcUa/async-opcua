@@ -11,8 +11,7 @@ use opcua_pubsub::{
 };
 use opcua_server::address_space::AddressSpace;
 use opcua_types::{
-    BinaryEncodable, ContextOwned, DateTime, MessageSecurityMode, StatusCode,
-    Variant,
+    BinaryEncodable, ContextOwned, DateTime, MessageSecurityMode, StatusCode, Variant,
 };
 
 fn empty_connection(connection_id: &str, address: &str) -> PubSubConnectionConfig {
@@ -108,12 +107,7 @@ fn encodes_publisher_uadp_with_registered_security_group() {
     };
 
     let secured = engine
-        .sign_publisher_uadp_message(
-            "group-1",
-            SecurityPolicy::PubSubAes256Ctr,
-            &message,
-            &ctx,
-        )
+        .sign_publisher_uadp_message("group-1", SecurityPolicy::PubSubAes256Ctr, &message, &ctx)
         .unwrap();
 
     // Secured bytes carry the SecurityHeader + appended HMAC signature, so they differ from and

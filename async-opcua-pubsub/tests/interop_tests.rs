@@ -36,8 +36,13 @@ const NONCE_OFFSET: usize = 22; // 8-byte MessageNonce
 const CIPHERTEXT_OFFSET: usize = 30; // after the 8-byte nonce
 
 fn key_set() -> SecurityKeySet {
-    SecurityKeySet::from_parts(TOKEN, SIGNING_KEY.to_vec(), ENC_KEY.to_vec(), KEY_NONCE.to_vec())
-        .unwrap()
+    SecurityKeySet::from_parts(
+        TOKEN,
+        SIGNING_KEY.to_vec(),
+        ENC_KEY.to_vec(),
+        KEY_NONCE.to_vec(),
+    )
+    .unwrap()
 }
 
 fn message() -> UadpNetworkMessage {
@@ -66,7 +71,12 @@ fn independent_hmac(key: &[u8], data: &[u8]) -> Vec<u8> {
 
 /// AES-256-CTR via the raw block cipher + Part-14 Table-157 counter block
 /// (KeyNonce[4] ‖ MessageNonce[8] ‖ BlockCounter[4] big-endian from 1). Symmetric (enc == dec).
-fn independent_ctr(enc_key: &[u8], key_nonce4: &[u8], message_nonce8: &[u8], data: &[u8]) -> Vec<u8> {
+fn independent_ctr(
+    enc_key: &[u8],
+    key_nonce4: &[u8],
+    message_nonce8: &[u8],
+    data: &[u8],
+) -> Vec<u8> {
     let cipher = aes::Aes256::new(GenericArray::from_slice(enc_key));
     let mut counter = [0u8; 16];
     counter[0..4].copy_from_slice(&key_nonce4[..4]);
@@ -80,7 +90,8 @@ fn independent_ctr(enc_key: &[u8], key_nonce4: &[u8], message_nonce8: &[u8], dat
         for (b, k) in chunk.iter().zip(block.iter()) {
             out.push(b ^ k);
         }
-        let c = u32::from_be_bytes([counter[12], counter[13], counter[14], counter[15]]).wrapping_add(1);
+        let c = u32::from_be_bytes([counter[12], counter[13], counter[14], counter[15]])
+            .wrapping_add(1);
         counter[12..16].copy_from_slice(&c.to_be_bytes());
     }
     out
@@ -100,7 +111,11 @@ fn external_verifier_validates_production_output() {
     let signature = &secured[sig_start..];
 
     // 1) Independent HMAC-SHA256 over the whole message matches the appended signature.
-    assert_eq!(independent_hmac(&SIGNING_KEY, signed_region), signature, "HMAC mismatch");
+    assert_eq!(
+        independent_hmac(&SIGNING_KEY, signed_region),
+        signature,
+        "HMAC mismatch"
+    );
 
     // 2) Independent AES-CTR decrypt of the payload region recovers the plaintext DataSetMessages.
     let message_nonce = &secured[NONCE_OFFSET..NONCE_OFFSET + 8];
@@ -111,7 +126,11 @@ fn external_verifier_validates_production_output() {
     let mut reassembled = secured[..CIPHERTEXT_OFFSET].to_vec();
     reassembled.extend_from_slice(&plaintext_payload);
     let recovered = UadpNetworkMessage::decode(&mut &reassembled[..], &ctx).unwrap();
-    assert_eq!(recovered, message(), "external party must recover our DataSet");
+    assert_eq!(
+        recovered,
+        message(),
+        "external party must recover our DataSet"
+    );
 }
 
 // Direction 2: an independent encoder builds a foreign secured message; production decodes it.
@@ -143,9 +162,12 @@ fn production_decodes_externally_built_message() {
     let signature = independent_hmac(&SIGNING_KEY, &foreign);
     foreign.extend_from_slice(&signature);
 
-    let decoded =
-        UadpSecurityCodec::with_candidates(MessageSecurityMode::SignAndEncrypt, POLICY, vec![key_set()])
-            .decode_network_message(&foreign, &ctx)
-            .expect("production must decode the externally-built secured message");
+    let decoded = UadpSecurityCodec::with_candidates(
+        MessageSecurityMode::SignAndEncrypt,
+        POLICY,
+        vec![key_set()],
+    )
+    .decode_network_message(&foreign, &ctx)
+    .expect("production must decode the externally-built secured message");
     assert_eq!(decoded, message());
 }

@@ -12,12 +12,12 @@ pub mod transport;
 /// Main PubSub publishing engine coordinator.
 pub mod engine;
 
-/// PubSub security key management.
+/// PubSub security key management and OPC UA Part 14 secured-NetworkMessage codec.
 ///
-/// Note: the message security envelope used here (`OPCUAPS1`) is a
-/// proprietary format, not the UADP SecurityHeader from OPC UA Part 14 —
-/// it does not interoperate with other PubSub stacks. Treat PubSub
-/// security as experimental until the spec header is implemented.
+/// Secured UADP NetworkMessages use the Part 14 (§7.2.4.4) wire format: the real SecurityHeader
+/// (SecurityFlags, SecurityTokenId, MessageNonce), AES-CTR encryption of the payload region with a
+/// per-message nonce, and an HMAC-SHA256 signature over the entire message. The subscriber enforces
+/// a bounded anti-replay window on the NetworkMessage sequence number.
 pub mod security;
 
 pub use config::{

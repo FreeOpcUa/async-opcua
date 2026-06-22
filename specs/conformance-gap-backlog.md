@@ -78,9 +78,17 @@ Verify-before-fix triaged the 2026-06-22 review findings. Result:
 - **FIXED (real): OAuth2/JWT** — issuer pinning (was: any trusted cert verified a JWT → confused deputy)
   + require explicit oauth2_issuer/audience/issuer_certificate_path, fail closed (was: hardcoded
   defaults). PR for feature 025.
-- **SPLIT to own feature (real): PubSub static AES-CBC IV** — the fix needs a Part-14 SecurityHeader
-  `MessageNonce` wire change + an encrypted-PubSub interop test (verifiable vs the .NET reference stack /
-  open62541 — UACTT not required). IND-CPA IV-reuse tracked as known until that feature lands.
+- **DONE (feature 026): PubSub Part-14 message security** — the round-2 finding was framed as "the
+  secured path is AES-CBC with a static IV; add a MessageNonce", but the secured path was an entirely
+  proprietary `OPCUAPS1` envelope (not Part-14 at all). Feature 026 replaced it with the full OPC UA
+  Part 14 §7.2.4.4 secured-NetworkMessage format: new `PubSub-Aes128-CTR`/`PubSub-Aes256-CTR` crypto
+  policies (AES-CTR via `ctr::Ctr32BE`), the real SecurityHeader (SecurityFlags/SecurityTokenId/
+  MessageNonce), per-message nonce → unique AES-CTR IV (kills the IND-CPA reuse), HMAC-SHA256 over the
+  whole message (encrypt-then-MAC, verify-then-decrypt), SecurityTokenId key selection (fail closed),
+  and a bounded subscriber anti-replay window. Verified with spec-anchored KAT vectors (Tables 155-157)
+  + an independent-implementation interop cross-check (both directions). REMAINING GAP: live
+  third-party interop (OPC Foundation .NET / open62541 PubSub-CTR) is not runnable in this CI — the
+  .NET interop harness is plaintext UADP only; tracked as a future verification task.
 - **NO FIX — verified false-positive: cert validation** — KeyUsage/EKU/BasicConstraints "fail-open when
   absent" is RFC-5280-correct + tested (`leaf_without_key_usage_extension_is_accepted`); usage enforced
   when present; sigs + CRL sigs verified; revocation modes intentional. The review agent applied generic

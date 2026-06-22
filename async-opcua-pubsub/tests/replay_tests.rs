@@ -6,9 +6,8 @@ use std::time::Duration;
 use opcua_core::sync::RwLock;
 use opcua_crypto::SecurityPolicy;
 use opcua_pubsub::{
-    engine::PubSubEngine,
-    security::ReplayWindow,
-    PublisherId, SecurityGroup, UadpDataSetMessage, UadpNetworkMessage,
+    engine::PubSubEngine, security::ReplayWindow, PublisherId, SecurityGroup, UadpDataSetMessage,
+    UadpNetworkMessage,
 };
 use opcua_server::address_space::AddressSpace;
 use opcua_types::{ContextOwned, MessageSecurityMode, StatusCode};
@@ -26,14 +25,20 @@ fn accepts(w: &mut ReplayWindow, seq: u16) -> bool {
 #[test]
 fn first_message_is_accepted_and_seeds_the_window() {
     let mut w = ReplayWindow::new();
-    assert!(accepts(&mut w, 5000), "first message of an epoch must be accepted");
+    assert!(
+        accepts(&mut w, 5000),
+        "first message of an epoch must be accepted"
+    );
 }
 
 #[test]
 fn strictly_increasing_sequence_is_accepted() {
     let mut w = ReplayWindow::new();
     for seq in 1..=200u16 {
-        assert!(accepts(&mut w, seq), "increasing seq {seq} must be accepted");
+        assert!(
+            accepts(&mut w, seq),
+            "increasing seq {seq} must be accepted"
+        );
     }
 }
 
@@ -43,7 +48,10 @@ fn exact_replay_is_rejected() {
     assert!(accepts(&mut w, 10));
     assert!(accepts(&mut w, 11));
     assert!(!accepts(&mut w, 11), "replay of 11 must be rejected");
-    assert!(!accepts(&mut w, 10), "replay of an in-window seq must be rejected");
+    assert!(
+        !accepts(&mut w, 10),
+        "replay of an in-window seq must be rejected"
+    );
 }
 
 #[test]
@@ -63,8 +71,14 @@ fn benign_reordering_within_window_is_accepted_once() {
 fn stale_sequence_outside_window_is_rejected() {
     let mut w = ReplayWindow::new();
     assert!(accepts(&mut w, 100));
-    assert!(!accepts(&mut w, 36), "100-36 = 64 == WINDOW -> stale, rejected");
-    assert!(accepts(&mut w, 37), "100-37 = 63 < WINDOW -> still inside, accepted");
+    assert!(
+        !accepts(&mut w, 36),
+        "100-36 = 64 == WINDOW -> stale, rejected"
+    );
+    assert!(
+        accepts(&mut w, 37),
+        "100-37 = 63 < WINDOW -> still inside, accepted"
+    );
 }
 
 #[test]
@@ -72,7 +86,10 @@ fn token_change_resets_the_window() {
     let mut w = ReplayWindow::new();
     assert!(accepts(&mut w, 5000));
     // New SecurityTokenId => key/epoch rotation => sequence restarts at 1, window resets.
-    assert!(w.check(2, 1).is_ok(), "after token change seq 1 must be accepted");
+    assert!(
+        w.check(2, 1).is_ok(),
+        "after token change seq 1 must be accepted"
+    );
     // And the old high value under the new token is now just a normal fresh start point.
     assert!(w.check(2, 2).is_ok());
 }
@@ -81,10 +98,16 @@ fn token_change_resets_the_window() {
 fn sequence_wraparound_is_handled() {
     let mut w = ReplayWindow::new();
     for seq in [65530u16, 65531, 65532, 65533, 65534, 65535, 0, 1, 2] {
-        assert!(accepts(&mut w, seq), "wrap seq {seq} must be accepted in order");
+        assert!(
+            accepts(&mut w, seq),
+            "wrap seq {seq} must be accepted in order"
+        );
     }
     // A value from just before the wrap is now within the window and already seen -> replay.
-    assert!(!accepts(&mut w, 65534), "post-wrap replay of 65534 must be rejected");
+    assert!(
+        !accepts(&mut w, 65534),
+        "post-wrap replay of 65534 must be rejected"
+    );
 }
 
 fn sample(seq: u16) -> UadpNetworkMessage {
@@ -115,11 +138,19 @@ fn engine_rejects_replayed_network_message() {
     let mode = MessageSecurityMode::SignAndEncrypt;
     let policy = SecurityPolicy::PubSubAes256Ctr;
 
-    let m1 = engine.encode_publisher_uadp_message("line-a", mode, policy, &sample(1), &ctx).unwrap();
-    let m2 = engine.encode_publisher_uadp_message("line-a", mode, policy, &sample(2), &ctx).unwrap();
+    let m1 = engine
+        .encode_publisher_uadp_message("line-a", mode, policy, &sample(1), &ctx)
+        .unwrap();
+    let m2 = engine
+        .encode_publisher_uadp_message("line-a", mode, policy, &sample(2), &ctx)
+        .unwrap();
 
-    assert!(engine.decode_subscriber_uadp_message("line-a", mode, policy, &m1, &ctx).is_ok());
-    assert!(engine.decode_subscriber_uadp_message("line-a", mode, policy, &m2, &ctx).is_ok());
+    assert!(engine
+        .decode_subscriber_uadp_message("line-a", mode, policy, &m1, &ctx)
+        .is_ok());
+    assert!(engine
+        .decode_subscriber_uadp_message("line-a", mode, policy, &m2, &ctx)
+        .is_ok());
 
     // Replaying m1 (sequence 1, already accepted) must be rejected.
     let err = engine

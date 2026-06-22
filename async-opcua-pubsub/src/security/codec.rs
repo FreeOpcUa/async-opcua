@@ -2,7 +2,7 @@
 
 use std::io::Cursor;
 
-use opcua_crypto::{AesDerivedKeys, AesKey, SecurityPolicy, random};
+use opcua_crypto::{random, AesDerivedKeys, AesKey, SecurityPolicy};
 use opcua_types::{
     BinaryDecodable, BinaryEncodable, Context, Error, MessageSecurityMode, StatusCode,
 };

@@ -58,6 +58,8 @@ pub use services::attributes::{
 };
 pub use services::method::Call;
 pub use services::node_management::{AddNodes, AddReferences, DeleteNodes, DeleteReferences};
+#[allow(unused_imports, unreachable_pub)]
+pub use services::query::{QueryFirst, QueryNext};
 pub use services::session::{ActivateSession, Cancel, CloseSession, CreateSession};
 use services::subscriptions::state::SubscriptionState;
 pub use services::subscriptions::{

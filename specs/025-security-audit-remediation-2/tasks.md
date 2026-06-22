@@ -19,12 +19,12 @@ OPC UA Part 4/6/14 + the review (NOT codex loopback). Verify-before-fix is manda
 ## Phase 1: US1 — OAuth2 / JWT issuer pinning + required config (P1) 🎯 [CONFIRMED REAL]
 Confirmed: `identity/jwt_validator.rs:125` accepts a JWT verified by ANY cert in the trust dir;
 `info.rs:838` defaults issuer/audience to hardcoded values when unset.
-- [ ] T001 [P] [US1] Claude: failing tests — JWT signed by a trusted NON-issuer cert is rejected; unset
+- [X] T001 [P] [US1] Claude: failing tests — JWT signed by a trusted NON-issuer cert is rejected; unset
   oauth2_issuer/audience (issued-token auth enabled) fails closed; JWT signed by the configured issuer
   still accepted. (verify-before-fix)
-- [ ] T002 [US1] codex: pin JWT verify to a configured OAuth2 issuer cert (not the whole trust dir);
+- [X] T002 [US1] codex: pin JWT verify to a configured OAuth2 issuer cert (not the whole trust dir);
   require issuer/audience explicitly, fail closed if unset; document the behavior change. (depends T001)
-- [ ] T003 [US1] Gate; **commit US1** (`fix(025 US1): pin OAuth2 JWT issuer + require iss/aud (fail closed)`).
+- [X] T003 [US1] Gate; **commit US1** (`fix(025 US1): pin OAuth2 JWT issuer + require iss/aud (fail closed)`).
 
 ## Phase 2: US2 — PubSub per-message IV + replay (P2) [CONFIRMED REAL]
 Confirmed: `pubsub/security/codec.rs:259` IV = `key_nonce[..block]` (static per epoch); subscriber

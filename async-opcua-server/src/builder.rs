@@ -361,6 +361,12 @@ impl ServerBuilder {
         self
     }
 
+    /// Issuer certificate used to verify issued JWT identity token signatures.
+    pub fn oauth2_issuer_certificate_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.config.oauth2_issuer_certificate_path = Some(path.into());
+        self
+    }
+
     /// PKI folder, either absolute or relative to executable.
     pub fn pki_dir(mut self, pki_dir: impl Into<PathBuf>) -> Self {
         self.config.pki_dir = pki_dir.into();

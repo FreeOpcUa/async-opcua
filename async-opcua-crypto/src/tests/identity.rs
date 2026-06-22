@@ -1,20 +1,13 @@
-use std::{
-    fs::File,
-    io::Write,
-    sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::{prelude::BASE64_URL_SAFE_NO_PAD, Engine};
-use parking_lot::RwLock;
 use serde_json::json;
 
 use crate::{
-    certificate_store::CertificateStore,
     identity::{
         decrypt_rsa_oaep_secret, ClaimProfile, LocalOAuth2Validator, OAuth2IdentityValidator,
     },
-    tests::{make_certificate_store, make_test_cert_2048},
+    tests::make_test_cert_2048,
     KeySize, PrivateKey, SecurityPolicy,
 };
 use opcua_types::status_code::StatusCode;
@@ -64,22 +57,16 @@ fn create_signed_jwt(payload: serde_json::Value, private_key: &PrivateKey) -> St
     format!("{signing_input}.{encoded_signature}")
 }
 
-fn create_trusted_validator() -> (tempfile::TempDir, LocalOAuth2Validator, PrivateKey) {
-    let (tmp_dir, cert_store) = make_certificate_store();
-    let (cert, private_key) = make_test_cert_2048();
-    let mut cert_path = cert_store.trusted_certs_dir();
-    cert_path.push(CertificateStore::cert_file_name(&cert));
-
-    let mut file = File::create(cert_path).unwrap();
-    file.write_all(&cert.to_der().unwrap()).unwrap();
-
+// Feature 025 US1: the validator is pinned to a single configured ISSUER cert (not the whole trust
+// store). Build it from a freshly generated issuer cert/key.
+fn create_trusted_validator() -> (LocalOAuth2Validator, PrivateKey) {
+    let (issuer_cert, issuer_key) = make_test_cert_2048();
     let validator = LocalOAuth2Validator::new(
-        Arc::new(RwLock::new(cert_store)),
         "https://issuer.example".to_string(),
         "opcua-server".to_string(),
+        issuer_cert,
     );
-
-    (tmp_dir, validator, private_key)
+    (validator, issuer_key)
 }
 
 fn future_expiration() -> i64 {
@@ -92,7 +79,7 @@ fn future_expiration() -> i64 {
 
 #[test]
 fn local_oauth2_validator_accepts_valid_bearer_token() {
-    let (_tmp_dir, validator, private_key) = create_trusted_validator();
+    let (validator, private_key) = create_trusted_validator();
     let token = create_signed_jwt(
         json!({
             "iss": "https://issuer.example",
@@ -114,9 +101,35 @@ fn local_oauth2_validator_accepts_valid_bearer_token() {
     assert_eq!(profile.permissions, vec!["read", "write"]);
 }
 
+// Feature 025 US1 (confused-deputy fix): a JWT correctly signed by a cert that is NOT the configured
+// issuer must be rejected. Before the fix, verify_signature accepted any cert in the trust store, so a
+// trusted *client* cert could mint identity tokens. This test fails on the pre-fix code.
+#[test]
+fn local_oauth2_validator_rejects_non_issuer_signer() {
+    let (validator, _issuer_key) = create_trusted_validator();
+    // A different, valid cert/key that is NOT the pinned issuer.
+    let (_other_cert, other_key) = make_test_cert_2048();
+    let token = create_signed_jwt(
+        json!({
+            "iss": "https://issuer.example",
+            "aud": ["opcua-server"],
+            "exp": future_expiration(),
+            "sub": "operator"
+        }),
+        &other_key,
+    );
+    assert!(
+        matches!(
+            validator.validate_token(&token),
+            Err(StatusCode::BadIdentityTokenRejected)
+        ),
+        "a JWT signed by a non-issuer cert must be rejected"
+    );
+}
+
 #[test]
 fn local_oauth2_validator_rejects_invalid_audience() {
-    let (_tmp_dir, validator, private_key) = create_trusted_validator();
+    let (validator, private_key) = create_trusted_validator();
     let token = create_signed_jwt(
         json!({
             "iss": "https://issuer.example",

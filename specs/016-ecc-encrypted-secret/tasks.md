@@ -99,11 +99,11 @@ stories can proceed.
   in `async-opcua-crypto/src/user_identity.rs`: create a fresh client EphemeralKey (sender), ECDH +
   `derive_secret_keys`, build payload + padding (§6.8.3 formula), AES-CBC encrypt, serialize the envelope
   (T005), sign (T006), append Signature. Panic-free; behind `ecc`. (codex; depends T004–T006, T011)
-- [ ] T013 [US2] Wire the client: in `async-opcua-client/src/session/services/session.rs`, when the
+- [X] T013 [US2] Wire the client: in `async-opcua-client/src/session/services/session.rs`, when the
   negotiated policy is ECC and a server `ECDHKey` was retained (015a
   `Session.retained_server_ephemeral_key`), produce an `EccEncryptedSecret` via `ecc_encrypt_secret` for
   the UserName password instead of the legacy RSA secret. RSA / None paths unchanged. (codex; depends T012)
-- [ ] T014 [US2] Gate; verify T011 passes; **commit US2** (`feat(016 US2): client encrypts a UserName secret as an EccEncryptedSecret`).
+- [X] T014 [US2] Gate; verify T011 passes; **commit US2** (`feat(016 US2): client encrypts a UserName secret as an EccEncryptedSecret`).
 
 ## Phase 5: User Story 3 — IssuedIdentityToken secret under ECC (P2)
 

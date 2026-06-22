@@ -1476,6 +1476,155 @@ impl Variant {
             _ => Err(StatusCode::BadIndexRangeDataMismatch),
         }
     }
+
+    fn range_bounds(r: &NumericRange) -> Option<(usize, usize)> {
+        match r {
+            NumericRange::Index(i) => {
+                let i = (*i) as usize;
+                Some((i, i))
+            }
+            NumericRange::Range(min, max) => Some(((*min) as usize, (*max) as usize)),
+            NumericRange::None | NumericRange::MultipleRanges(_) => None,
+        }
+    }
+
+    fn row_major_strides(dims: &[usize]) -> Option<Vec<usize>> {
+        let mut strides = vec![1; dims.len()];
+        let mut stride = 1usize;
+        for (slot, dim) in strides.iter_mut().rev().zip(dims.iter().rev()) {
+            *slot = stride;
+            stride = stride.checked_mul(*dim)?;
+        }
+        Some(strides)
+    }
+
+    fn checked_dimension_product(dims: &[usize]) -> Option<usize> {
+        if dims.is_empty() {
+            return Some(0);
+        }
+
+        dims.iter()
+            .try_fold(1usize, |product, dim| product.checked_mul(*dim))
+    }
+
+    fn row_major_indices(dims: &[usize], selections: &[(usize, usize)]) -> Option<Vec<usize>> {
+        if dims.len() != selections.len() {
+            return None;
+        }
+
+        let strides = Self::row_major_strides(dims)?;
+        let selected_count = Self::checked_selection_count(selections)?;
+        let mut indices = Vec::with_capacity(selected_count);
+        if selections.is_empty() {
+            return Some(indices);
+        }
+
+        let mut coords: Vec<usize> = selections.iter().map(|(lo, _)| *lo).collect();
+        loop {
+            let mut flat = 0usize;
+            for (idx, stride) in coords.iter().zip(strides.iter()) {
+                flat = flat.checked_add(idx.checked_mul(*stride)?)?;
+            }
+            indices.push(flat);
+
+            let mut advanced = false;
+            for dim in (0..coords.len()).rev() {
+                let (_, hi) = selections.get(dim)?;
+                let coord = coords.get_mut(dim)?;
+                if *coord < *hi {
+                    *coord = coord.checked_add(1)?;
+                    let next_dim = dim.checked_add(1)?;
+                    for (next_coord, (lo, _)) in coords
+                        .iter_mut()
+                        .skip(next_dim)
+                        .zip(selections.iter().skip(next_dim))
+                    {
+                        *next_coord = *lo;
+                    }
+                    advanced = true;
+                    break;
+                }
+            }
+
+            if !advanced {
+                break;
+            }
+        }
+
+        Some(indices)
+    }
+
+    fn checked_selection_count(selections: &[(usize, usize)]) -> Option<usize> {
+        if selections.is_empty() {
+            return Some(0);
+        }
+
+        selections.iter().try_fold(1usize, |product, (lo, hi)| {
+            if hi < lo {
+                return None;
+            }
+            let extent = hi.checked_sub(*lo)?.checked_add(1)?;
+            product.checked_mul(extent)
+        })
+    }
+
+    fn array_stored_dimensions(array: &Array) -> Result<Vec<usize>, StatusCode> {
+        if let Some(dimensions) = &array.dimensions {
+            let stored_dims: Vec<usize> = dimensions.iter().map(|d| (*d) as usize).collect();
+            let stored_len = Self::checked_dimension_product(&stored_dims)
+                .ok_or(StatusCode::BadIndexRangeNoData)?;
+            if stored_len != array.values.len() {
+                return Err(StatusCode::BadIndexRangeNoData);
+            }
+            Ok(stored_dims)
+        } else {
+            Ok(vec![array.values.len()])
+        }
+    }
+
+    fn array_range_selection(
+        array: &Array,
+        stored_dims: &[usize],
+        ranges: &[NumericRange],
+    ) -> Result<(Vec<usize>, Vec<u32>), StatusCode> {
+        if ranges.len() != stored_dims.len() {
+            return Err(StatusCode::BadIndexRangeNoData);
+        }
+
+        let mut selections = Vec::with_capacity(ranges.len());
+        let mut extents = Vec::with_capacity(ranges.len());
+        for (range, dim) in ranges.iter().zip(stored_dims.iter()) {
+            let (lo, hi) = Self::range_bounds(range).ok_or(StatusCode::BadIndexRangeNoData)?;
+            if lo >= *dim {
+                return Err(StatusCode::BadIndexRangeNoData);
+            }
+            let max_hi = dim.checked_sub(1).ok_or(StatusCode::BadIndexRangeNoData)?;
+            let hi = hi.min(max_hi);
+            if hi < lo {
+                return Err(StatusCode::BadIndexRangeNoData);
+            }
+            let extent = hi
+                .checked_sub(lo)
+                .and_then(|extent| extent.checked_add(1))
+                .ok_or(StatusCode::BadIndexRangeNoData)?;
+            let extent = u32::try_from(extent).map_err(|_| StatusCode::BadIndexRangeNoData)?;
+            selections.push((lo, hi));
+            extents.push(extent);
+        }
+
+        let indices = Self::row_major_indices(stored_dims, &selections)
+            .ok_or(StatusCode::BadIndexRangeNoData)?;
+        if indices.len() > array.values.len()
+            && Self::checked_dimension_product(stored_dims)
+                .ok_or(StatusCode::BadIndexRangeNoData)?
+                != array.values.len()
+        {
+            return Err(StatusCode::BadIndexRangeNoData);
+        }
+
+        Ok((indices, extents))
+    }
+
     /// Set a range of values in this variant using a different variant.
     pub fn set_range_of(
         &mut self,
@@ -1607,34 +1756,78 @@ impl Variant {
                 }
             }
             NumericRange::MultipleRanges(ranges) => {
-                let mut res = Vec::new();
-                for range in ranges {
-                    let v = self.range_of(range)?;
-                    match v {
-                        Variant::Array(a) => {
-                            res.extend(a.values);
-                        }
-                        r => res.push(r),
-                    }
-                }
-                let type_id = if !res.is_empty() {
-                    let Some(first) = res.first() else {
-                        return Err(StatusCode::BadIndexRangeNoData);
-                    };
-                    let VariantTypeId::Scalar(s) = first.type_id() else {
-                        return Err(StatusCode::BadIndexRangeNoData);
-                    };
-                    s
-                } else {
-                    match self.type_id() {
-                        VariantTypeId::Array(s, _) => s,
-                        VariantTypeId::Scalar(s) => s,
-                        VariantTypeId::Empty => return Ok(Variant::Empty),
-                    }
+                let Variant::Array(array) = self else {
+                    return Err(StatusCode::BadIndexRangeNoData);
                 };
 
+                let stored_dims = Self::array_stored_dimensions(array)?;
+                let has_element_substring = matches!(
+                    array.value_type,
+                    VariantScalarTypeId::String | VariantScalarTypeId::ByteString
+                ) && ranges.len()
+                    == stored_dims
+                        .len()
+                        .checked_add(1)
+                        .ok_or(StatusCode::BadIndexRangeNoData)?;
+
+                if has_element_substring {
+                    let (array_ranges, substring_range) = ranges.split_at(stored_dims.len());
+                    let substring_range = substring_range
+                        .first()
+                        .ok_or(StatusCode::BadIndexRangeNoData)?;
+                    let (s_lo, s_hi) = Self::range_bounds(substring_range)
+                        .ok_or(StatusCode::BadIndexRangeNoData)?;
+                    let (source_indices, dimensions) =
+                        Self::array_range_selection(array, &stored_dims, array_ranges)?;
+                    let mut values = Vec::with_capacity(source_indices.len());
+                    let mut any_substring = false;
+
+                    for flat in source_indices {
+                        let element = array
+                            .values
+                            .get(flat)
+                            .ok_or(StatusCode::BadIndexRangeNoData)?;
+                        match element.substring(s_lo, s_hi) {
+                            Ok(value) => {
+                                any_substring = true;
+                                values.push(value);
+                            }
+                            Err(_) => match array.value_type {
+                                VariantScalarTypeId::String => {
+                                    values.push(Variant::String(UAString::null()));
+                                }
+                                VariantScalarTypeId::ByteString => {
+                                    values.push(Variant::ByteString(ByteString::null()));
+                                }
+                                _ => return Err(StatusCode::BadIndexRangeNoData),
+                            },
+                        }
+                    }
+
+                    if !any_substring {
+                        return Err(StatusCode::BadIndexRangeNoData);
+                    }
+
+                    return Ok(Self::Array(Box::new(
+                        Array::new_multi(array.value_type, values, dimensions)
+                            .map_err(|_| StatusCode::BadIndexRangeNoData)?,
+                    )));
+                }
+
+                let (source_indices, dimensions) =
+                    Self::array_range_selection(array, &stored_dims, ranges)?;
+                let mut values = Vec::with_capacity(source_indices.len());
+                for flat in source_indices {
+                    let value = array
+                        .values
+                        .get(flat)
+                        .ok_or(StatusCode::BadIndexRangeNoData)?;
+                    values.push(value.clone());
+                }
+
                 Ok(Self::Array(Box::new(
-                    Array::new(type_id, res).map_err(|_| StatusCode::BadInvalidArgument)?,
+                    Array::new_multi(array.value_type, values, dimensions)
+                        .map_err(|_| StatusCode::BadIndexRangeNoData)?,
                 )))
             }
         }

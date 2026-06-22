@@ -37,7 +37,7 @@ arms (None/Index/Range) + the BNF parser are UNCHANGED.
 
 ## Phase 1: Setup
 
-- [ ] T001 Capture the baseline gate; re-confirm the §7.27 / §A.3 / Table 166 facts in research.md against
+- [X] T001 Capture the baseline gate; re-confirm the §7.27 / §A.3 / Table 166 facts in research.md against
   `~/opcua-specs` and confirm the in-tree shapes (`NumericRange::MultipleRanges`, `Array.values` +
   `Array.dimensions` row-major, `Variant::substring`, the existing single-dimension `range_of`/`set_range_of`
   arms and the StatusCodes already used). No code change.
@@ -47,11 +47,11 @@ arms (None/Index/Range) + the BNF parser are UNCHANGED.
 **Goal**: a multi-dimensional `NumericRange` selects the correct sub-extent of an array's `dimensions` and
 returns a correctly-shaped sub-array (upper bounds clamped → partial); string/bytestring arrays handled as 2-D.
 
-- [ ] T002 [US1] Claude-authored failing tests in `async-opcua-types/src/tests/variant.rs`: the Table 166
+- [X] T002 [US1] Claude-authored failing tests in `async-opcua-types/src/tests/variant.rs`: the Table 166
   read vectors (the 1-D rows must still pass; the 2 string-array rows); a 2-D array `dimensions=[3,3]`
   range `1:2,0:1` → values `[…]` with `dimensions=[2,2]` (hand-computed, row-major); a 3-D example; an
   upper-bound-past-extent clamp/partial case. Expectations derived from §7.27, not the implementation.
-- [ ] T003 [US1] Implement the `NumericRange::MultipleRanges` arm of `Variant::range_of` in
+- [X] T003 [US1] Implement the `NumericRange::MultipleRanges` arm of `Variant::range_of` in
   `async-opcua-types/src/variant/mod.rs`: interpret one range per dimension against `array.dimensions`
   (or `[len]` if `None`), rank-check (mismatch → `Bad_IndexRangeNoData`), lower-bound check (→
   `Bad_IndexRangeNoData`), clamp upper bounds, collect the row-major Cartesian sub-extent into a sub-array

@@ -23,6 +23,8 @@ const POLICY: SecurityPolicy = SecurityPolicy::PubSubAes256Ctr;
 //   [16]  SecurityFlags           [17..21] SecurityTokenId [21] NonceLength  [22..] MessageNonce
 const SECURITY_FLAGS_OFFSET: usize = 16;
 const NONCE_LENGTH_OFFSET: usize = 21;
+const MESSAGE_NONCE_OFFSET: usize = 22; // 8-byte MessageNonce: [22..26]=Random, [26..30]=SeqNumber
+const SIGNATURE_LEN: usize = 32;
 
 fn sample_message() -> UadpNetworkMessage {
     UadpNetworkMessage {
@@ -163,6 +165,33 @@ fn decode_round_trips_both_modes() {
             .unwrap();
         assert_eq!(decoded, sample_message(), "round-trip must recover the message ({mode:?})");
     }
+}
+
+// US3 (T013): the core static-IV fix. Encoding the SAME message twice under one key set must
+// produce a DIFFERENT MessageNonce and DIFFERENT ciphertext. A static-IV implementation (the
+// pre-fix OPCUAPS1 codec, which reused key_nonce[..block] as the IV) produced identical ciphertext
+// here — so this test fails on the old behaviour and passes on the per-message-nonce fix.
+#[test]
+fn each_message_gets_a_fresh_nonce_and_distinct_ciphertext() {
+    let (a, _) = encode(MessageSecurityMode::SignAndEncrypt);
+    let (b, _) = encode(MessageSecurityMode::SignAndEncrypt);
+
+    // MessageNonce = Random[4] ‖ SequenceNumber(UInt32 LE). sample_message() has seq = 9, so the
+    // sequence portion is identical across both encodes; only the random portion changes.
+    assert_eq!(
+        &a[MESSAGE_NONCE_OFFSET + 4..MESSAGE_NONCE_OFFSET + 8],
+        &9u32.to_le_bytes(),
+        "nonce sequence portion must equal the NetworkMessage SequenceNumber"
+    );
+    let random_a = &a[MESSAGE_NONCE_OFFSET..MESSAGE_NONCE_OFFSET + 4];
+    let random_b = &b[MESSAGE_NONCE_OFFSET..MESSAGE_NONCE_OFFSET + 4];
+    assert_ne!(random_a, random_b, "the random nonce portion must be fresh per message");
+
+    // Identical plaintext under one key set must NOT yield identical ciphertext (no IV reuse).
+    let ct_a = &a[MESSAGE_NONCE_OFFSET + 8..a.len() - SIGNATURE_LEN];
+    let ct_b = &b[MESSAGE_NONCE_OFFSET + 8..b.len() - SIGNATURE_LEN];
+    assert_eq!(ct_a.len(), ct_b.len());
+    assert_ne!(ct_a, ct_b, "static-IV reuse would make these equal");
 }
 
 // A security group's current and next key sets are both accepted on decode (token selection).

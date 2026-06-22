@@ -40,7 +40,7 @@ not base-profile violations — flagged as such.
 |---|-----|------|-------|
 | 4 | ✅ **DONE (feature 017, PR #46)** — **NumericRange** multi-dimensional read (`range_of`) + write (`set_range_of`) per **Part 4 §7.27** (the backlog's "Part 6 §6.9" was wrong). Comma = dimension (not disjoint ranges); row-major sub-array; exact-size write; string/bytestring arrays as 2-D substring. Fuzz found + fixed 2 remote-panic DoS bugs (`UAString::substring` UTF-8 byte-slice; extent underflow). | Part 4 §7.27 | Complete. |
 | 5 | ✅ **DONE (feature 018, PR #47)** — **JSON encoding edges**. Real fix: XML-ExtensionObject inside JSON now **fails closed** (decoding error, not a silent null) when the `xml` feature is off. The other two claims were **STALE**: DataValue `SourcePicoseconds`/`ServerPicoseconds` already round-trip, and `Variant::XmlElement` already round-trips (`{"Type":16,"Body":...}`) — both now locked by tests (the `todo!()` is removed). | Part 6 §5.4 | Complete. |
-| 5b | **JSON DateTime sub-millisecond precision lost** (discovered during #5): the JSON DateTime encoding truncates to ISO-8601 milliseconds (`.975046100Z` → `.975Z`), so DateTime ticks are not preserved across a JSON round-trip. | Part 6 §5.4 | Newly found, deferred. Lower impact (ms precision is usually enough); not part of #5's scope. |
+| 5b | ✅ **DONE (feature 019, PR #48)** — **JSON DateTime full precision**: the JSON encoder now emits lossless fractional seconds (`SecondsFormat::AutoSi`) so 100-ns-tick precision round-trips (§5.4.2.6). JSON-only scope; `to_rfc3339()`/XML/`Display`/binary unchanged. | Part 6 §5.4.2.6 | Complete. |
 
 ## Tier 3 — Optional facets (only if you target them; NOT base/embedded violations)
 

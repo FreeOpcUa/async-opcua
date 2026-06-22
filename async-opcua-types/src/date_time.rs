@@ -52,7 +52,7 @@ mod json {
             stream: &mut JsonStreamWriter<&mut dyn std::io::Write>,
             _ctx: &crate::Context<'_>,
         ) -> super::EncodingResult<()> {
-            Ok(stream.string_value(&self.to_rfc3339())?)
+            Ok(stream.string_value(&self.rfc3339_full())?)
         }
     }
 
@@ -357,6 +357,11 @@ impl DateTime {
     /// Returns an RFC 3339 and ISO 8601 date and time string such as 1996-12-19T16:39:57-08:00.
     pub fn to_rfc3339(&self) -> String {
         self.date_time.to_rfc3339_opts(SecondsFormat::Millis, true)
+    }
+
+    /// Full-precision RFC 3339 (lossless fractional seconds) for JSON encoding (Part 6 §5.4.2.6).
+    fn rfc3339_full(&self) -> String {
+        self.date_time.to_rfc3339_opts(SecondsFormat::AutoSi, true)
     }
 
     /// Parses an RFC 3339 and ISO 8601 date and time string such as 1996-12-19T16:39:57-08:00, then returns a new DateTime

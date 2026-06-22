@@ -445,7 +445,9 @@ fn serialize_variant_datetime() {
     test_ser_de_variant(
         Variant::DateTime(Box::new(DateTime::ymd(2000, 1, 1))),
         json!({
-            "Type": 13, "Body": "2000-01-01T00:00:00.000Z"
+            // Feature 019: JSON DateTime now emits minimal lossless fractional digits (AutoSi),
+            // so a whole-second value has no `.000` suffix (valid ISO 8601, §5.4.2.6).
+            "Type": 13, "Body": "2000-01-01T00:00:00Z"
         }),
     );
 }
@@ -597,7 +599,11 @@ fn serialize_variant_data_value() {
     v.server_timestamp = Some(now);
     v.source_timestamp = Some(now);
 
-    let now_str = now.to_rfc3339();
+    // Feature 019: the JSON encoder emits full-precision (AutoSi) DateTime, matching the value's
+    // lossless ISO 8601 form (not the millisecond `to_rfc3339()`).
+    let now_str = now
+        .as_chrono()
+        .to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true);
 
     test_ser_de_variant(
         Variant::DataValue(Box::new(v)),
@@ -1055,4 +1061,26 @@ fn data_value_picoseconds_json_round_trip() {
     // DateTime-precision matter outside Tier 2 #5 (recorded as a separate potential backlog item).
     assert!(back.source_timestamp.is_some());
     assert!(back.server_timestamp.is_some());
+}
+
+/// Feature 019 (Tier 2 #5b): a DateTime with sub-millisecond (100-ns-tick) precision must round-trip
+/// through JSON exactly — §5.4.2.6 requires the encoder emit enough fractional digits for the full range.
+#[test]
+fn json_datetime_full_precision_round_trip() {
+    use crate::DateTime;
+    // .975046100 = 9_750_461 ticks of 100 ns — sub-millisecond, tick-aligned.
+    let dt = DateTime::parse_from_rfc3339("2026-06-22T06:02:33.975046100Z").unwrap();
+    let s = to_string(&dt).unwrap();
+    let back: DateTime = from_str(&s).unwrap();
+    assert_eq!(
+        back, dt,
+        "sub-ms DateTime must round-trip exactly; JSON was {s}"
+    );
+
+    // Whole-second and millisecond values also round-trip (valid ISO 8601).
+    for v in ["2020-01-01T00:00:00Z", "2020-01-01T00:00:00.975Z"] {
+        let d = DateTime::parse_from_rfc3339(v).unwrap();
+        let r: DateTime = from_str(&to_string(&d).unwrap()).unwrap();
+        assert_eq!(r, d, "round-trip of {v}");
+    }
 }

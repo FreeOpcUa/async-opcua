@@ -1,82 +1,64 @@
 ---
-description: "Task list for feature 025 — security audit remediation (round 2)"
+description: "Task list for feature 025 — security audit remediation (round 2, RE-SCOPED)"
 ---
 
 # Tasks: Security Audit Remediation (round 2)
 
-**Verification division**: codex implements the production fixes applying **ponytail** (minimal,
-fail-closed, no over-engineering, smallest diff, no new dep); **Claude authors + runs ALL tests** — each
-finding gets a test that FAILS on current code and PASSES after the fix, anchored to OPC UA Part 2/4/6/14
-+ the 2026-06-22 review (NOT codex loopback). VERIFY-BEFORE-FIX: write/observe the failing test (or a
-documented code trace) before the fix. Non-reproducing finding → document + skip. One commit per US.
+**RE-SCOPED (2026-06-22, post-verification):** original US1 (cert validation) DROPPED — verified false
+positives (deliberate, tested, RFC-5280-correct; see spec Scope Revision). Remaining: US1 OAuth2/JWT
+(confirmed real), US2 PubSub IV+replay (confirmed real), US3 Safety SPDU (verify→fix), US4 decoder+audit
+(verify→fix). Cert pathlen + trust_unknown_certs sig path = backlog checks, not fixes here.
+
+**Verification division**: codex implements fixes applying **ponytail** (minimal, fail-closed, smallest
+diff, no new dep); **Claude authors + runs ALL tests** — fail-before/pass-after per finding, anchored to
+OPC UA Part 4/6/14 + the review (NOT codex loopback). Verify-before-fix is mandatory. One commit per US.
 
 **Gate**: `cargo fmt --all --check && cargo clippy --all-targets --all-features --locked -- -D warnings`
-+ no-default / json-off legs + the touched crates' tests, single-threaded. Valid inputs must still pass.
++ no-default/json-off legs + touched-crate tests single-threaded. Valid inputs must still pass.
 
-## Phase 1: Setup
-- [ ] T001 Confirm exact fix sites + that the repo's VALID fixture certs/tokens/messages are available to
-  use as no-false-reject guards. No code change.
-
-## Phase 2: US1 — certificate validation (P1) 🎯
-- [ ] T002 [P] [US1] Claude: failing tests in async-opcua-crypto (cert_chain) — (a) CA-issuer w/o
-  BasicConstraints CA:TRUE rejected; (b) leaf w/ required-but-absent KeyUsage/EKU rejected; (c) pathlen
-  violation rejected; (d) non-self-signed leaf as own anchor (trust_unknown_certs) w/ a bad signature
-  rejected; (e) revoked cert w/ DN/serial-encoding-mismatched CRL rejected (strict); PLUS valid fixture
-  certs still pass. (verify-before-fix)
-- [ ] T003 [US1] codex: fix cert_chain.rs fail-closed per the OPC UA app-instance-cert profile (don't
-  over-tighten) — required-ext absence fails, pathLenConstraint enforced, verify_chain_signatures never
-  skips an unverified non-self-signed cert (fix comment), CRL issuer/serial matching robust (structural,
-  not lossy), strict revocation fails closed. (depends T002)
-- [ ] T004 [US1] Gate (incl. valid-cert no-regression); **commit US1**.
-
-## Phase 3: US2 — OAuth2 / JWT (P2)
-- [ ] T005 [P] [US2] Claude: failing tests — JWT signed by a non-issuer trusted cert rejected; unset
-  oauth2_issuer/audience (issued-token auth enabled) fails closed; a JWT signed by the configured issuer
+## Phase 1: US1 — OAuth2 / JWT issuer pinning + required config (P1) 🎯 [CONFIRMED REAL]
+Confirmed: `identity/jwt_validator.rs:125` accepts a JWT verified by ANY cert in the trust dir;
+`info.rs:838` defaults issuer/audience to hardcoded values when unset.
+- [ ] T001 [P] [US1] Claude: failing tests — JWT signed by a trusted NON-issuer cert is rejected; unset
+  oauth2_issuer/audience (issued-token auth enabled) fails closed; JWT signed by the configured issuer
   still accepted. (verify-before-fix)
-- [ ] T006 [US2] codex: pin JWT verify to a configured OAuth2 issuer cert (not the whole trust dir);
-  require issuer/audience explicitly (fail closed if unset) — document the behavior change. (depends T005)
-- [ ] T007 [US2] Gate; **commit US2**.
+- [ ] T002 [US1] codex: pin JWT verify to a configured OAuth2 issuer cert (not the whole trust dir);
+  require issuer/audience explicitly, fail closed if unset; document the behavior change. (depends T001)
+- [ ] T003 [US1] Gate; **commit US1** (`fix(025 US1): pin OAuth2 JWT issuer + require iss/aud (fail closed)`).
 
-## Phase 4: US3 — PubSub (P3)
-- [ ] T008 [P] [US3] Claude: failing tests in async-opcua-pubsub — two SignAndEncrypt messages get
-  DISTINCT IVs; encrypt→decrypt round-trips; a replayed message is rejected by the subscriber. (verify-before-fix)
-- [ ] T009 [US3] codex: per-message IV (Part 14) in security/codec.rs; subscriber replay reject
-  (monotonic/bounded sequence). Evaluate decrypt-then-MAC: fix only if a real contained exposure, else
-  doc-comment the construction. (depends T008)
-- [ ] T010 [US3] Gate; **commit US3**.
+## Phase 2: US2 — PubSub per-message IV + replay (P2) [CONFIRMED REAL]
+Confirmed: `pubsub/security/codec.rs:259` IV = `key_nonce[..block]` (static per epoch); subscriber
+discards sequence_number.
+- [ ] T004 [P] [US2] Claude: failing tests — two SignAndEncrypt messages get DISTINCT IVs;
+  encrypt→decrypt round-trips; a replayed message is rejected. (verify-before-fix)
+- [ ] T005 [US2] codex: per-message IV (Part 14, from MessageNonce/sequence); subscriber replay reject
+  (monotonic/bounded sequence). decrypt-then-MAC: doc-comment unless a real contained exposure. (depends T004)
+- [ ] T006 [US2] Gate; **commit US2** (`fix(025 US2): PubSub per-message IV + replay rejection`).
 
-## Phase 5: US4 — Safety SPDU (P4)
-- [ ] T011 [P] [US4] Claude: failing tests in async-opcua-safety — one reordered/dropped SPDU then next
-  valid SPDU still validates (bounded window); first-packet + wraparound handled; future-dated timestamp
-  rejected. (verify-before-fix)
-- [ ] T012 [US4] codex: bounded sequence window + first-packet/wraparound + timeout bounding in
-  validator.rs; add the black-channel CRC doc comment (no CRC change). (depends T011)
-- [ ] T013 [US4] Gate; **commit US4**.
+## Phase 3: US3 — Safety SPDU (P3) [VERIFY → FIX]
+- [ ] T007 [P] [US3] Claude: VERIFY first — tests for: one reordered/dropped SPDU then next valid SPDU
+  (does it permanently desync today?); first-packet; wraparound; future-dated timestamp. If current
+  behavior is actually correct, document + skip. Else failing tests. (verify-before-fix)
+- [ ] T008 [US3] codex (IF T007 confirms bugs): bounded sequence window + first-packet/wraparound +
+  timeout bounding in safety/validator.rs; add the black-channel-CRC doc comment (no CRC change). (depends T007)
+- [ ] T009 [US3] Gate; **commit US3** (`fix(025 US3): Safety SPDU sequence window + timeout`) — or commit
+  the documented "no-fix, verified correct" outcome.
 
-## Phase 6: US5 — decoder + audit (P5)
-- [ ] T014 [P] [US5] Claude: a small message claiming a near-cap array length doesn't eager-allocate
-  proportionally (assert via a bounded-reservation observable or a focused decode test); an integration
-  test that a successful ActivateSession emits its audit event. (verify-before-fix)
-- [ ] T015 [US5] codex: bounded/incremental reservation in encoding.rs + variant/mod.rs; emit success
-  ActivateSession/CreateSession audit events (remove the TODOs). (depends T014)
-- [ ] T016 [US5] Gate; **commit US5**.
+## Phase 4: US4 — decoder eager-alloc + success audit (P4) [VERIFY → FIX]
+- [ ] T010 [P] [US4] Claude: VERIFY — (a) does a small message claiming near-cap array length eager-
+  allocate? (b) is a successful ActivateSession audit event truly absent? Failing/observing tests. (verify-before-fix)
+- [ ] T011 [US4] codex (IF confirmed): bounded/incremental reservation in encoding.rs + variant/mod.rs;
+  emit success ActivateSession/CreateSession audit events (remove the TODOs). (depends T010)
+- [ ] T012 [US4] Gate; **commit US4** (`fix(025 US4): bounded decode reservation + success audit events`).
 
-## Phase 7: Polish
-- [ ] T017 Update specs/conformance-gap-backlog.md / a SECURITY note: record the remediated findings, the
-  two documented behavior changes (revocation strict posture, required OAuth2 issuer config), and the
-  black-channel-CRC clarification. Note any finding that didn't reproduce.
-- [ ] T018 Final gate: fmt + clippy --all-targets --all-features + no-default/json-off legs + the full
-  touched-crate test set single-threaded + existing-suite spot-check.
-
----
-
-## Dependencies & Execution
-- Setup (T001) → US1 → US2 → US3 → US4 → US5 → Polish. Within each US: Claude failing test [P] →
-  codex fix → gate+commit. codex: T003,T006,T009,T012,T015. Claude: all tests + docs. One commit per US.
+## Phase 5: Polish
+- [ ] T013 Backlog/SECURITY note: record the remediated REAL bugs (US1/US2 + any of US3/US4 confirmed),
+  the documented behavior changes (required OAuth2 issuer config; any pubsub-IV wire impact), the
+  black-channel-CRC clarification, AND the REJECTED US1-cert findings (why they were false positives) +
+  the two open verify items (cert pathlen, trust_unknown_certs sig path).
+- [ ] T014 Final gate: fmt + clippy --all-targets --all-features + no-default/json-off legs + touched-
+  crate tests single-threaded + existing-suite spot-check.
 
 ## Notes
-- Verify-before-fix is mandatory (FR-008): the test must fail on current code first.
-- Don't over-tighten cert checks (valid OPC UA certs must still pass) or silently flip the revocation
-  default. Two deliberate documented behavior changes only: strict-revocation posture + required OAuth2
-  issuer config.
-- Doc-only / not changed: unkeyed-CRC black-channel model. No new dependency anywhere.
+- Verify-before-fix mandatory. US3/US4 explicitly "verify → fix or document-skip" (the US1-cert lesson:
+  don't fix tested, intended behavior). No new dependency. Ponytail: smallest fail-closed diff per fix.

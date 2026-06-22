@@ -19,9 +19,20 @@ or a documented code trace); only then **fix it minimally and fail-closed**; kee
 correct change. If a finding does not reproduce, record why and skip it — no invented fixes. Security
 correctness is never simplified away; "minimal" applies to the *fix*, not to the *validation*.
 
+**SCOPE REVISION (2026-06-22, post-verification).** Verifying against the existing 1325-line cert-chain
+test suite (feature 013) showed the original **US1 certificate findings are mostly FALSE POSITIVES** —
+deliberate, tested, RFC-5280-correct behavior (e.g. `leaf_without_key_usage_extension_is_accepted` is
+intended per RFC 5280 §4.2.1.3: absent KeyUsage ⇒ all uses; usage IS enforced when present; CRL/cert
+signatures ARE verified; revocation modes are intentional + tested). The review agent applied
+generic-X.509 strictness to an OPC-UA-profile implementation that's already correct. **US1 cert is
+DROPPED** (documented below as rejected). Confirmed-by-reading-the-code REAL bugs: OAuth2 any-cert + iss/
+aud-default (US1 below), PubSub static IV (US2 below). Verify-then-maybe: Safety SPDU (US3), decoder/
+audit (US4). The two remaining "verify" items (cert pathlen, trust_unknown_certs sig path) are tracked as
+backlog checks, not fixes here.
+
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 — Certificate validation fails closed (Priority: P1) 🎯
+### User Story 1 — Certificate validation fails closed (REJECTED — false positives; see Scope Revision)
 
 As a server/client operator, I want certificate validation to reject certificates that omit required
 constraints or whose signature is never verified, so an attacker cannot present a crafted/forged

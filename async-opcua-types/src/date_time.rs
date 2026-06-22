@@ -360,6 +360,7 @@ impl DateTime {
     }
 
     /// Full-precision RFC 3339 (lossless fractional seconds) for JSON encoding (Part 6 §5.4.2.6).
+    #[cfg(feature = "json")]
     fn rfc3339_full(&self) -> String {
         self.date_time.to_rfc3339_opts(SecondsFormat::AutoSi, true)
     }

@@ -8,6 +8,7 @@ log/
 /samples/server.test.conf
 **/pki-client
 **/pki-server
+**/pki-ecc
 3rd-party/open62541/build/
 async-opcua/pki*
 async-opcua/certs

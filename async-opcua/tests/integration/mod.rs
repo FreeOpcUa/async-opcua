@@ -1,5 +1,6 @@
 mod alarms;
 mod browse;
+mod conformance;
 mod core_tests;
 mod custom_types;
 #[cfg(feature = "ecc")]

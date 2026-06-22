@@ -16,7 +16,9 @@ tokio-util = { workspace = true }
 
 [dependencies.async-opcua]
 path = "../../async-opcua"
-features = ["all"]
+# `ecc` is required so the server can negotiate the ECC_nistP256/P384 security
+# policies in the ECC conformance profile (sample.server.ecc.conf, `--ecc`).
+features = ["all", "ecc"]
 
 [features]
 default = ["json", "xml"]

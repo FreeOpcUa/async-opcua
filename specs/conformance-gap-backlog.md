@@ -12,6 +12,15 @@ not prose. `samples/demo-server` exists for exactly this. Running demo-server ag
 surface *behavioral* gaps (status codes, edge cases) this prose-scan cannot. **Strongly recommended if
 CTT is available** — it would re-rank this backlog with hard data.
 
+**CTT harness shipped (feature 020):** a Linux/CI **conformance smoke**
+(`async-opcua/tests/integration/conformance.rs`) now drives our server with our client across the full
+(security policy × mode × identity-token) matrix — RSA + ECC — on every change (a regression proxy, not
+an independent authority). The demo-server gained a separate **ECC profile** (`sample.server.ecc.conf` +
+`--ecc` EC-cert provisioning; the RSA profile already covers None + the full RSA matrix with all token
+types). For the authoritative pass on Windows, see **`docs/ctt-conformance.md`** (run guide,
+cross-trust, `run-conformance.sh`, and an expected-results/known-gaps table mapping the Tier 3 facets
+below that fail by design).
+
 **Targeted profiles:** `Server/Behaviour` + `EmbeddedUA`. Several "gaps" below are *optional facets*,
 not base-profile violations — flagged as such.
 

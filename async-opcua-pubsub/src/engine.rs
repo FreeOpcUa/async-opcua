@@ -10,12 +10,12 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    PubSubConnectionConfig, PubSubPublisher,
     codec::uadp::UadpNetworkMessage,
-    security::{SecurityGroup, SharedSecurityGroup, UadpSecurityCodec},
+    security::{ReplayWindow, SecurityGroup, SharedSecurityGroup, UadpSecurityCodec},
     transport::{
         amqp::AmqpPublisher, mqtt::MqttPublisher, udp::UdpPublisher, websocket::WebSocketPublisher,
     },
+    PubSubConnectionConfig, PubSubPublisher,
 };
 
 /// Supported OPC UA PubSub transport mappings.
@@ -69,6 +69,7 @@ pub struct PubSubEngine {
     address_space: Arc<RwLock<AddressSpace>>,
     connections: Vec<PubSubConnectionConfig>,
     security_groups: HashMap<String, SharedSecurityGroup>,
+    replay_windows: RwLock<HashMap<String, ReplayWindow>>,
     cancel_token: Option<CancellationToken>,
     publisher_handles: Vec<JoinHandle<()>>,
 }
@@ -80,6 +81,7 @@ impl PubSubEngine {
             address_space,
             connections: Vec::new(),
             security_groups: HashMap::new(),
+            replay_windows: RwLock::new(HashMap::new()),
             cancel_token: None,
             publisher_handles: Vec::new(),
         }
@@ -94,6 +96,7 @@ impl PubSubEngine {
             address_space,
             connections,
             security_groups: HashMap::new(),
+            replay_windows: RwLock::new(HashMap::new()),
             cancel_token: None,
             publisher_handles: Vec::new(),
         }
@@ -125,6 +128,7 @@ impl PubSubEngine {
     ) -> SharedSecurityGroup {
         let group_id = security_group.group_id().to_string();
         let shared_group = Arc::new(RwLock::new(security_group));
+        self.replay_windows.write().remove(&group_id);
         self.security_groups.insert(group_id, shared_group.clone());
         shared_group
     }
@@ -132,11 +136,13 @@ impl PubSubEngine {
     /// Registers shared PubSub security group state for publisher message signing.
     pub fn register_shared_security_group(&mut self, security_group: SharedSecurityGroup) {
         let group_id = security_group.read().group_id().to_string();
+        self.replay_windows.write().remove(&group_id);
         self.security_groups.insert(group_id, security_group);
     }
 
     /// Removes a registered PubSub security group.
     pub fn remove_security_group(&mut self, group_id: &str) -> Option<SharedSecurityGroup> {
+        self.replay_windows.write().remove(group_id);
         self.security_groups.remove(group_id)
     }
 
@@ -194,14 +200,30 @@ impl PubSubEngine {
             .security_groups
             .get(security_group_id)
             .ok_or(StatusCode::BadSecurityChecksFailed)?;
-        let security_group = security_group.read();
-        let key_sets = vec![
-            security_group.current_key_set().clone(),
-            security_group.next_key_set().clone(),
-        ];
-        UadpSecurityCodec::with_candidates(security_mode, security_policy, key_sets)
+        let (token_id, key_sets) = {
+            let security_group = security_group.read();
+            (
+                security_group.current_key_set().token_id(),
+                vec![
+                    security_group.current_key_set().clone(),
+                    security_group.next_key_set().clone(),
+                ],
+            )
+        };
+        let message = UadpSecurityCodec::with_candidates(security_mode, security_policy, key_sets)
             .decode_network_message(payload, ctx)
-            .map_err(|error| error.status())
+            .map_err(|error| error.status())?;
+
+        if security_mode != MessageSecurityMode::None {
+            self.replay_windows
+                .write()
+                .entry(security_group_id.to_string())
+                .or_default()
+                .check(token_id, message.sequence_number)
+                .map_err(|error| error.status())?;
+        }
+
+        Ok(message)
     }
 
     /// Returns true when the engine has started publisher loops.

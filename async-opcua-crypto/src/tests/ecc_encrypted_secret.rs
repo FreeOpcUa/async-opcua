@@ -9,8 +9,8 @@
 //! hand-building the salt bytes in the test and recomputing the keying material independently.
 
 use crate::ecc::{
-    derive_secret_keys, ecc_decrypt_secret, ecdh_shared_secret, encode_public_key,
-    generate_ephemeral_keypair, EccCurve, EccEncryptedSecret,
+    derive_secret_keys, ecc_decrypt_secret, ecc_encrypt_secret, ecdh_shared_secret,
+    encode_public_key, generate_ephemeral_keypair, EccCurve, EccEncryptedSecret,
 };
 use crate::x509::{X509Data, X509};
 use crate::{PrivateKey, SecurityPolicy};
@@ -386,6 +386,66 @@ fn server_rejects_invalid_ecc_encrypted_secret() {
             &server_nonce,
             &server_priv,
             &client_cert,
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------
+// US2 — client encrypts the secret as an EccEncryptedSecret. Verified by round-tripping the PRODUCTION
+// encrypt through the PRODUCTION decrypt (which is itself independently verified above against a
+// hand-built ciphertext), on real P-256 AND P-384 keys.
+// ---------------------------------------------------------------------------------------------------
+
+/// US2 (FR-002/FR-003): `ecc_encrypt_secret` produces an envelope that `ecc_decrypt_secret` recovers
+/// to the original secret, for both curves; the wire bytes parse as a Table 186 envelope.
+#[test]
+fn client_encrypt_server_decrypt_round_trip() {
+    for (curve, policy) in [
+        (EccCurve::P256, SecurityPolicy::EccNistP256),
+        (EccCurve::P384, SecurityPolicy::EccNistP384),
+    ] {
+        let (client_cert, client_key) = ec_cert(curve);
+        let server_kp = generate_ephemeral_keypair(curve).expect("server kp");
+        let server_pub = server_kp.public_key().clone();
+        let (server_priv, _p) = server_kp.into_parts();
+
+        let server_nonce = vec![0x37u8; 32];
+        let secret = b"s3cr3t-pa55w0rd-for-ecc";
+
+        let encrypted = ecc_encrypt_secret(
+            policy,
+            &server_nonce,
+            &server_pub,
+            &client_key,
+            &client_cert,
+            secret,
+        )
+        .expect("ecc_encrypt_secret must succeed");
+
+        // The produced bytes are a well-formed Table 186 envelope.
+        let env = EccEncryptedSecret::decode(&encrypted).expect("encrypt output must parse");
+        assert_eq!(env.security_policy_uri, policy.to_uri());
+
+        let recovered = ecc_decrypt_secret(
+            policy,
+            &encrypted,
+            &server_nonce,
+            &server_priv,
+            &client_cert,
+        )
+        .expect("round-trip decrypt must succeed");
+        assert_eq!(
+            recovered.as_ref(),
+            &secret[..],
+            "{curve:?}: round-trip secret must match"
+        );
+
+        // A different server nonce must not decrypt (replay binding holds end-to-end).
+        let wrong_nonce = vec![0x99u8; 32];
+        assert!(
+            ecc_decrypt_secret(policy, &encrypted, &wrong_nonce, &server_priv, &client_cert)
+                .is_err(),
+            "{curve:?}: wrong nonce must be rejected"
         );
     }
 }

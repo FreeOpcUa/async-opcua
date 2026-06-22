@@ -91,10 +91,10 @@ stories can proceed.
 
 **Goal**: client wraps the password as an `EccEncryptedSecret` the server (US1) decrypts; round-trip P-256/P-384.
 
-- [ ] T011 [US2] Claude-authored tests: `ecc_encrypt_secret` output round-trips through `ecc_decrypt_secret`
+- [X] T011 [US2] Claude-authored tests: `ecc_encrypt_secret` output round-trips through `ecc_decrypt_secret`
   on real P-256 and P-384 keys (client-encrypt ↔ server-decrypt) recovering the original password; the
   produced bytes parse as a Table 186 envelope bound to the given server nonce.
-- [ ] T012 [US2] Implement `ecc_encrypt_secret(security_policy, server_nonce,
+- [X] T012 [US2] Implement `ecc_encrypt_secret(security_policy, server_nonce,
   receiver_ephemeral_public_key, signing_key, signing_cert, secret_to_encrypt) -> Result<ByteString, Error>`
   in `async-opcua-crypto/src/user_identity.rs`: create a fresh client EphemeralKey (sender), ECDH +
   `derive_secret_keys`, build payload + padding (§6.8.3 formula), AES-CBC encrypt, serialize the envelope

@@ -1316,6 +1316,163 @@ pub fn derive_secret_keys(
     split_secret_keys(encryption_len, iv_len, &key_material)
 }
 
+/// Encrypt `secret` as a Part 4 §7.40.2.5 `EccEncryptedSecret` for the receiver's ECC EphemeralKey.
+/// Generates a fresh sender (client) EphemeralKey, derives the AES key+IV via the §6.8.3 KDF from
+/// ECDH(sender_private, receiver_public), AES-CBC encrypts the payload (Nonce|Secret|Padding|PadSize),
+/// and appends an asymmetric (ECDSA) signature over the envelope computed with `signing_key`.
+/// Returns the serialized envelope bytes. `signing_cert` populates the envelope `Certificate` field.
+#[cfg(feature = "ecc")]
+pub fn ecc_encrypt_secret(
+    security_policy: SecurityPolicy,
+    server_nonce: &[u8],
+    receiver_ephemeral_public_key: &EphemeralPublicKey,
+    signing_key: &PrivateKey,
+    signing_cert: &X509,
+    secret: &[u8],
+) -> Result<Vec<u8>, Error> {
+    let curve = EccCurve::from_security_policy(security_policy)?;
+    if receiver_ephemeral_public_key.curve() != curve {
+        return Err(invalid_argument(
+            "EccEncryptedSecret receiver public key curve mismatch",
+        ));
+    }
+
+    let sender_kp = generate_ephemeral_keypair(curve)?;
+    let sender_pub_bytes = encode_public_key(sender_kp.public_key())?;
+    let receiver_pub_bytes = encode_public_key(receiver_ephemeral_public_key)?;
+    let shared = ecdh_shared_secret(sender_kp.private_key(), receiver_ephemeral_public_key)?;
+    let keys = derive_secret_keys(curve, &shared, &sender_pub_bytes, &receiver_pub_bytes)?;
+
+    let plaintext = build_secret_payload(&keys, server_nonce, secret)?;
+    let encrypted_payload = encrypt_secret_payload(curve, &keys, &plaintext)?;
+
+    let mut env = EccEncryptedSecret {
+        security_policy_uri: security_policy.to_uri().to_string(),
+        certificate: signing_cert.as_byte_string(),
+        signing_time: DateTime::now(),
+        sender_public_key: ByteString::from(sender_pub_bytes),
+        receiver_public_key: ByteString::from(receiver_pub_bytes),
+        encrypted_payload,
+        signature: Vec::new(),
+    };
+
+    let to_sign = env.encode_data_to_sign()?;
+    let mut signature = vec![0u8; curve.raw_signature_len()];
+    let len = security_policy.asymmetric_sign(signing_key, &to_sign, &mut signature)?;
+    signature.truncate(len);
+    env.signature = signature;
+
+    env.encode()
+}
+
+#[cfg(feature = "ecc")]
+fn build_secret_payload(
+    keys: &EccSecretKeys,
+    server_nonce: &[u8],
+    secret: &[u8],
+) -> Result<Vec<u8>, Error> {
+    let block = keys.iv.len();
+    if block == 0 {
+        return Err(invalid_argument(
+            "EccEncryptedSecret initialization vector is empty",
+        ));
+    }
+
+    let server_nonce_len = payload_byte_string_len(server_nonce)?;
+    let secret_len = payload_byte_string_len(secret)?;
+    let data_len = 4usize
+        .checked_add(server_nonce_len)
+        .and_then(|len| len.checked_add(4))
+        .and_then(|len| len.checked_add(secret_len))
+        .and_then(|len| len.checked_add(2))
+        .ok_or_else(|| invalid_argument("EccEncryptedSecret payload length overflows"))?;
+    let mut pad = if data_len % block == 0 {
+        0
+    } else {
+        block - data_len % block
+    };
+    if pad + secret.len() < block {
+        pad += block;
+    }
+
+    let plaintext_len = data_len
+        .checked_add(pad)
+        .ok_or_else(|| invalid_argument("EccEncryptedSecret plaintext length overflows"))?;
+    let mut plaintext = Vec::with_capacity(plaintext_len);
+    encode_payload_byte_string(&mut plaintext, server_nonce)?;
+    encode_payload_byte_string(&mut plaintext, secret)?;
+    plaintext.extend(std::iter::repeat_n((pad as u16 & 0xff) as u8, pad));
+    plaintext.extend_from_slice(&(pad as u16).to_le_bytes());
+
+    if plaintext.len() != plaintext_len || !plaintext.len().is_multiple_of(block) {
+        return Err(invalid_argument(
+            "EccEncryptedSecret plaintext is not full AES-CBC blocks",
+        ));
+    }
+
+    Ok(plaintext)
+}
+
+#[cfg(feature = "ecc")]
+fn payload_byte_string_len(value: &[u8]) -> Result<usize, Error> {
+    i32::try_from(value.len())
+        .map_err(|_| invalid_argument("EccEncryptedSecret ByteString length exceeds i32"))?;
+    Ok(value.len())
+}
+
+#[cfg(feature = "ecc")]
+fn encode_payload_byte_string(buf: &mut Vec<u8>, value: &[u8]) -> Result<(), Error> {
+    let len = i32::try_from(value.len())
+        .map_err(|_| invalid_argument("EccEncryptedSecret ByteString length exceeds i32"))?;
+    buf.extend_from_slice(&len.to_le_bytes());
+    buf.extend_from_slice(value);
+    Ok(())
+}
+
+#[cfg(feature = "ecc")]
+fn encrypt_secret_payload(
+    curve: EccCurve,
+    keys: &EccSecretKeys,
+    plaintext: &[u8],
+) -> Result<Vec<u8>, Error> {
+    const AES_BLOCK_LEN: usize = 16;
+
+    if plaintext.is_empty() || !plaintext.len().is_multiple_of(AES_BLOCK_LEN) {
+        return Err(invalid_argument(
+            "EccEncryptedSecret plaintext is not full AES-CBC blocks",
+        ));
+    }
+    if keys.iv.len() != AES_BLOCK_LEN {
+        return Err(invalid_argument(
+            "EccEncryptedSecret initialization vector is not 16 bytes",
+        ));
+    }
+
+    let mut ciphertext = vec![0u8; plaintext.len()];
+    match curve {
+        EccCurve::P256 => {
+            if keys.encrypting_key.value().len() != 16 {
+                return Err(invalid_argument(
+                    "EccEncryptedSecret AES-128 key is not 16 bytes",
+                ));
+            }
+            keys.encrypting_key
+                .encrypt_aes128_cbc(plaintext, &keys.iv, &mut ciphertext)?;
+        }
+        EccCurve::P384 => {
+            if keys.encrypting_key.value().len() != 32 {
+                return Err(invalid_argument(
+                    "EccEncryptedSecret AES-256 key is not 32 bytes",
+                ));
+            }
+            keys.encrypting_key
+                .encrypt_aes256_cbc(plaintext, &keys.iv, &mut ciphertext)?;
+        }
+    }
+
+    Ok(ciphertext)
+}
+
 /// Decrypt an `EccEncryptedSecret` (Part 4 §7.40.2.5) and return the plaintext Secret.
 ///
 /// Verifies the asymmetric (ECDSA) signature against `signer_cert` BEFORE decrypting (§6.8.3), derives

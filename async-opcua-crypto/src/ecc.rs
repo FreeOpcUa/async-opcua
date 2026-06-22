@@ -1935,8 +1935,14 @@ mod tests {
             let encoded = encode_public_key(keypair.public_key())
                 .expect("encode ephemeral public key as X||Y");
 
+            // A raw X||Y encoding is exactly `encoded_public_key_len()` bytes; a SEC1
+            // uncompressed point would be one byte longer (the leading 0x04 tag). The length
+            // check below is therefore what proves there is no uncompressed prefix.
+            //
+            // NB: do NOT assert `encoded.first() != 0x04` — `encoded.first()` is the first byte
+            // of the (random) X coordinate, which legitimately equals 0x04 ~1/256 of the time,
+            // making that assertion flaky.
             assert_eq!(encoded.len(), curve.encoded_public_key_len());
-            assert_ne!(encoded.first(), Some(&0x04));
 
             let decoded = decode_public_key(curve, &encoded).expect("decode X||Y public key");
             assert_eq!(decoded.curve(), curve);

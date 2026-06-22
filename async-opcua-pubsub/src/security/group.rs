@@ -15,6 +15,7 @@ pub const DEFAULT_KEY_NONCE_LENGTH: usize = 32;
 /// Symmetric key material used to secure PubSub NetworkMessages.
 #[derive(Debug)]
 pub struct SecurityKeySet {
+    token_id: u32,
     signing_key: Vec<u8>,
     encryption_key: AesKey,
     key_nonce: Vec<u8>,
@@ -23,6 +24,7 @@ pub struct SecurityKeySet {
 impl SecurityKeySet {
     /// Creates a key set from caller-provided key material.
     pub fn from_parts(
+        token_id: u32,
         signing_key: Vec<u8>,
         encryption_key: Vec<u8>,
         key_nonce: Vec<u8>,
@@ -40,6 +42,7 @@ impl SecurityKeySet {
         }
 
         Ok(Self {
+            token_id,
             signing_key,
             encryption_key: AesKey::new(encryption_key),
             key_nonce,
@@ -47,12 +50,18 @@ impl SecurityKeySet {
     }
 
     /// Generates a default key set suitable for AES-256 PubSub security.
-    pub fn generate() -> Self {
+    pub fn generate(token_id: u32) -> Self {
         Self {
+            token_id,
             signing_key: random_bytes(DEFAULT_SIGNING_KEY_LENGTH),
             encryption_key: AesKey::new(random_bytes(DEFAULT_ENCRYPTION_KEY_LENGTH)),
             key_nonce: random_bytes(DEFAULT_KEY_NONCE_LENGTH),
         }
+    }
+
+    /// Returns the PubSub security token id for this key set.
+    pub fn token_id(&self) -> u32 {
+        self.token_id
     }
 
     /// Returns the symmetric signing key bytes.
@@ -74,6 +83,7 @@ impl SecurityKeySet {
 impl Clone for SecurityKeySet {
     fn clone(&self) -> Self {
         Self {
+            token_id: self.token_id,
             signing_key: self.signing_key.clone(),
             encryption_key: AesKey::new(self.encryption_key.value().to_vec()),
             key_nonce: self.key_nonce.clone(),
@@ -83,7 +93,8 @@ impl Clone for SecurityKeySet {
 
 impl PartialEq for SecurityKeySet {
     fn eq(&self, other: &Self) -> bool {
-        self.signing_key == other.signing_key
+        self.token_id == other.token_id
+            && self.signing_key == other.signing_key
             && self.encryption_key.value() == other.encryption_key.value()
             && self.key_nonce == other.key_nonce
     }
@@ -105,8 +116,8 @@ impl SecurityGroup {
     pub fn new(group_id: impl Into<String>, key_lifetime: Duration) -> Result<Self, Error> {
         Self::with_key_sets(
             group_id,
-            SecurityKeySet::generate(),
-            SecurityKeySet::generate(),
+            SecurityKeySet::generate(1),
+            SecurityKeySet::generate(2),
             key_lifetime,
         )
     }
@@ -153,6 +164,17 @@ impl SecurityGroup {
         &self.next_key
     }
 
+    /// Returns the current or next key set matching `token_id`.
+    pub fn key_set_for_token(&self, token_id: u32) -> Option<&SecurityKeySet> {
+        if self.current_key.token_id() == token_id {
+            Some(&self.current_key)
+        } else if self.next_key.token_id() == token_id {
+            Some(&self.next_key)
+        } else {
+            None
+        }
+    }
+
     /// Returns the current AES encryption key.
     pub fn current_key(&self) -> &AesKey {
         self.current_key.encryption_key()
@@ -170,7 +192,9 @@ impl SecurityGroup {
 
     /// Promotes the staged next key set and generates a new staged key set.
     pub fn rotate_key_sets(&mut self) {
-        self.current_key = std::mem::replace(&mut self.next_key, SecurityKeySet::generate());
+        let next_token_id = self.next_key.token_id() + 1;
+        self.current_key =
+            std::mem::replace(&mut self.next_key, SecurityKeySet::generate(next_token_id));
     }
 }
 
@@ -221,7 +245,7 @@ mod tests {
 
     #[test]
     fn key_set_clone_preserves_key_material() {
-        let key_set = SecurityKeySet::from_parts(vec![1; 32], vec![2; 32], vec![3; 32]).unwrap();
+        let key_set = SecurityKeySet::from_parts(1, vec![1; 32], vec![2; 32], vec![3; 32]).unwrap();
 
         assert_eq!(key_set.clone(), key_set);
     }

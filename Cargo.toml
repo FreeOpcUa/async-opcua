@@ -78,6 +78,7 @@ webpki-roots = "0.26"
 
 aes = { version = "^0.8", features = ["zeroize"] }
 cbc = "^0.1"
+ctr = "^0.9"
 const-oid = { version = "^0.9", features = ["db"] }
 ecdsa = { version = "^0.16", default-features = false, features = ["signing", "verifying"] }
 hkdf = "^0.12"

@@ -91,6 +91,14 @@ macro_rules! call_with_policy {
                 type $x = AesPolicy<Aes256Sha256RsaPss>;
                 $t
             }
+            Self::PubSubAes128Ctr => {
+                type $x = AesPolicy<PubSubAes128Ctr>;
+                $t
+            }
+            Self::PubSubAes256Ctr => {
+                type $x = AesPolicy<PubSubAes256Ctr>;
+                $t
+            }
             #[cfg(feature = "legacy-crypto")]
             Self::Basic128Rsa15 => {
                 type $x = AesPolicy<Basic128Rsa15>;
@@ -125,6 +133,10 @@ pub enum SecurityPolicy {
     Basic256Sha256,
     /// AES256/SHA256 RSA-PSS
     Aes256Sha256RsaPss,
+    /// PubSub AES128-CTR.
+    PubSubAes128Ctr,
+    /// PubSub AES256-CTR.
+    PubSubAes256Ctr,
     /// Basic128. Note that this security policy is deprecated.
     Basic128Rsa15,
     /// Basic256.
@@ -173,6 +185,14 @@ impl FromStr for SecurityPolicy {
             | crate::policy::aes::Aes256Sha256RsaPss::SECURITY_POLICY_URI => {
                 SecurityPolicy::Aes256Sha256RsaPss
             }
+            crate::policy::aes::PubSubAes128Ctr::SECURITY_POLICY
+            | crate::policy::aes::PubSubAes128Ctr::SECURITY_POLICY_URI => {
+                SecurityPolicy::PubSubAes128Ctr
+            }
+            crate::policy::aes::PubSubAes256Ctr::SECURITY_POLICY
+            | crate::policy::aes::PubSubAes256Ctr::SECURITY_POLICY_URI => {
+                SecurityPolicy::PubSubAes256Ctr
+            }
             _ => {
                 error!("Specified security policy \"{}\" is not recognized", s);
                 SecurityPolicy::Unknown
@@ -207,7 +227,9 @@ impl SecurityPolicy {
             SecurityPolicy::None
             | SecurityPolicy::Basic256Sha256
             | SecurityPolicy::Aes128Sha256RsaOaep
-            | SecurityPolicy::Aes256Sha256RsaPss => true,
+            | SecurityPolicy::Aes256Sha256RsaPss
+            | SecurityPolicy::PubSubAes128Ctr
+            | SecurityPolicy::PubSubAes256Ctr => true,
             SecurityPolicy::Basic128Rsa15 | SecurityPolicy::Basic256 => {
                 cfg!(feature = "legacy-crypto")
             }
@@ -333,7 +355,9 @@ impl SecurityPolicy {
             SecurityPolicy::EccNistP384 => *oid == const_oid::db::rfc5912::ECDSA_WITH_SHA_384,
             SecurityPolicy::Basic256Sha256
             | SecurityPolicy::Aes128Sha256RsaOaep
-            | SecurityPolicy::Aes256Sha256RsaPss => {
+            | SecurityPolicy::Aes256Sha256RsaPss
+            | SecurityPolicy::PubSubAes128Ctr
+            | SecurityPolicy::PubSubAes256Ctr => {
                 *oid == const_oid::db::rfc5912::SHA_256_WITH_RSA_ENCRYPTION
                     || *oid == const_oid::db::rfc5912::ID_RSASSA_PSS
             }
@@ -386,6 +410,12 @@ impl SecurityPolicy {
             }
             crate::policy::aes::Aes256Sha256RsaPss::SECURITY_POLICY_URI => {
                 SecurityPolicy::Aes256Sha256RsaPss
+            }
+            crate::policy::aes::PubSubAes128Ctr::SECURITY_POLICY_URI => {
+                SecurityPolicy::PubSubAes128Ctr
+            }
+            crate::policy::aes::PubSubAes256Ctr::SECURITY_POLICY_URI => {
+                SecurityPolicy::PubSubAes256Ctr
             }
             _ => {
                 error!(

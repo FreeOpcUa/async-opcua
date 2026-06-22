@@ -85,7 +85,10 @@ pub fn legacy_decrypt_secret(
                 legacy_secret_decrypt::<OaepSha256>(secret.raw_secret(), server_nonce, server_key)
             }
             r => {
-                error!("decrypt_user_identity_token_password has rejected unsupported user identity encryption algorithm \"{}\"", encryption_algorithm);
+                error!(
+                    "decrypt_user_identity_token_password has rejected unsupported user identity encryption algorithm \"{}\"",
+                    encryption_algorithm
+                );
                 Err(Error::new(
                     StatusCode::BadIdentityTokenInvalid,
                     format!("Identity token rejected, unsupported encryption algorithm {r}"),
@@ -167,7 +170,7 @@ pub fn legacy_encrypt_secret(
             return Err(Error::new(
                 StatusCode::BadSecurityPolicyRejected,
                 "User token policy security policy is None but message security mode is Sign",
-            ))
+            ));
         }
         (_, MessageSecurityMode::Sign | MessageSecurityMode::SignAndEncrypt, Some(p)) => {
             EncryptionMode::AsymmetricFor(p)
@@ -189,7 +192,9 @@ pub fn legacy_encrypt_secret(
                     MessageSecurityMode::None | MessageSecurityMode::Sign
                 )
             {
-                warn!("A user identity's password is being sent over the network in plain text. This could be a serious security issue");
+                warn!(
+                    "A user identity's password is being sent over the network in plain text. This could be a serious security issue"
+                );
             }
             Ok(LegacyEncryptedSecret {
                 secret: ByteString::from(secret_to_encrypt),

@@ -101,13 +101,16 @@ fn uadp_dataset_message_rejects_field_count_above_decoding_limit() {
 
     let payload = [
         0x61, // UADP v1 + GroupHeader + PayloadHeader
+        0x0f, // GroupFlags: WriterGroupId + GroupVersion + NetworkMessageNumber + SequenceNumber
         0x01, 0x00, // writer_group_id
         0x00, 0x00, 0x00, 0x00, // group_version
+        0x00, 0x00, // network_message_number
+        0x01, 0x00, // NetworkMessage-level sequence_number
         0x01, // dataset_writer_count
         0x65, 0x00, // payload header dataset_writer_id
         0x65, 0x00, // dataset message dataset_writer_id
         0x09, // valid + sequence number enabled
-        0x01, 0x00, // sequence_number
+        0x01, 0x00, // dataset message sequence_number
         0xff, 0xff, // field_count: 65535
     ];
 

@@ -1,6 +1,7 @@
 use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
 
+use aes::cipher::{KeyIvInit, StreamCipher};
 use opcua_types::{Error, StatusCode};
 use rsa::{Oaep, Pkcs1v15Encrypt};
 use zeroize::Zeroizing;
@@ -291,6 +292,84 @@ impl AesSymmetricEncryptionAlgorithm for Aes256Cbc {
 
     fn decrypt(key: &AesKey, src: &[u8], iv: &[u8], dst: &mut [u8]) -> Result<usize, Error> {
         key.decrypt_aes256_cbc(src, iv, dst)
+    }
+}
+
+/// AES-128-CTR symmetric encryption algorithm
+pub(crate) struct Aes128Ctr;
+impl AesSymmetricEncryptionAlgorithm for Aes128Ctr {
+    const URI: &'static str = crate::algorithms::ENC_AES128_CTR;
+    const KEY_LENGTH: usize = 16;
+    const BLOCK_SIZE: usize = 16;
+
+    fn encrypt(key: &AesKey, src: &[u8], iv: &[u8], dst: &mut [u8]) -> Result<usize, Error> {
+        apply_aes128_ctr(key, src, iv, dst)
+    }
+
+    fn decrypt(key: &AesKey, src: &[u8], iv: &[u8], dst: &mut [u8]) -> Result<usize, Error> {
+        apply_aes128_ctr(key, src, iv, dst)
+    }
+
+    fn validate_args(src: &[u8], iv: &[u8], dst: &[u8]) -> Result<(), Error> {
+        validate_ctr_args(src, iv, dst)
+    }
+}
+
+/// AES-256-CTR symmetric encryption algorithm
+pub(crate) struct Aes256Ctr;
+impl AesSymmetricEncryptionAlgorithm for Aes256Ctr {
+    const URI: &'static str = crate::algorithms::ENC_AES256_CTR;
+    const KEY_LENGTH: usize = 32;
+    const BLOCK_SIZE: usize = 16;
+
+    fn encrypt(key: &AesKey, src: &[u8], iv: &[u8], dst: &mut [u8]) -> Result<usize, Error> {
+        apply_aes256_ctr(key, src, iv, dst)
+    }
+
+    fn decrypt(key: &AesKey, src: &[u8], iv: &[u8], dst: &mut [u8]) -> Result<usize, Error> {
+        apply_aes256_ctr(key, src, iv, dst)
+    }
+
+    fn validate_args(src: &[u8], iv: &[u8], dst: &[u8]) -> Result<(), Error> {
+        validate_ctr_args(src, iv, dst)
+    }
+}
+
+fn apply_aes128_ctr(key: &AesKey, src: &[u8], iv: &[u8], dst: &mut [u8]) -> Result<usize, Error> {
+    let mut cipher = ctr::Ctr32BE::<aes::Aes128>::new_from_slices(key.value(), iv)
+        .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e.to_string()))?;
+    cipher
+        .apply_keystream_b2b(src, dst)
+        .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e.to_string()))?;
+    Ok(src.len())
+}
+
+fn apply_aes256_ctr(key: &AesKey, src: &[u8], iv: &[u8], dst: &mut [u8]) -> Result<usize, Error> {
+    let mut cipher = ctr::Ctr32BE::<aes::Aes256>::new_from_slices(key.value(), iv)
+        .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e.to_string()))?;
+    cipher
+        .apply_keystream_b2b(src, dst)
+        .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e.to_string()))?;
+    Ok(src.len())
+}
+
+fn validate_ctr_args(src: &[u8], iv: &[u8], dst: &[u8]) -> Result<(), Error> {
+    if iv.len() != 16 {
+        Err(Error::new(
+            StatusCode::BadUnexpectedError,
+            format!("IV is not an expected size ({}), expected 16", iv.len()),
+        ))
+    } else if dst.len() < src.len() {
+        Err(Error::new(
+            StatusCode::BadUnexpectedError,
+            format!(
+                "Destination buffer is too small ({}), expected at least {}",
+                dst.len(),
+                src.len()
+            ),
+        ))
+    } else {
+        Ok(())
     }
 }
 
@@ -622,6 +701,40 @@ impl AesSecurityPolicy for Aes256Sha256RsaPss {
     type SymmetricSignature = DsigHmacSha256;
     type SymmetricEncryption = Aes256Cbc;
     type AsymmetricEncryption = OaepSha256;
+}
+
+/// PubSub-Aes128-CTR security policy
+pub(crate) struct PubSubAes128Ctr;
+impl AesSecurityPolicy for PubSubAes128Ctr {
+    const SECURITY_POLICY: &str = "PubSub-Aes128-CTR";
+    const SECURITY_POLICY_URI: &str =
+        "http://opcfoundation.org/UA/SecurityPolicy#PubSub-Aes128-CTR";
+    const NONCE_LENGTH: usize = 32;
+
+    const DERIVED_SIGNATURE_KEY_LENGTH: usize = 32;
+    const ASYMMETRIC_KEY_LENGTH: (usize, usize) = (2048, 4096);
+
+    type AsymmetricSignature = DsigRsaSha256;
+    type SymmetricSignature = DsigHmacSha256;
+    type SymmetricEncryption = Aes128Ctr;
+    type AsymmetricEncryption = OaepSha1;
+}
+
+/// PubSub-Aes256-CTR security policy
+pub(crate) struct PubSubAes256Ctr;
+impl AesSecurityPolicy for PubSubAes256Ctr {
+    const SECURITY_POLICY: &str = "PubSub-Aes256-CTR";
+    const SECURITY_POLICY_URI: &str =
+        "http://opcfoundation.org/UA/SecurityPolicy#PubSub-Aes256-CTR";
+    const NONCE_LENGTH: usize = 32;
+
+    const DERIVED_SIGNATURE_KEY_LENGTH: usize = 32;
+    const ASYMMETRIC_KEY_LENGTH: (usize, usize) = (2048, 4096);
+
+    type AsymmetricSignature = DsigRsaSha256;
+    type SymmetricSignature = DsigHmacSha256;
+    type SymmetricEncryption = Aes256Ctr;
+    type AsymmetricEncryption = OaepSha1;
 }
 
 /// Basic256Sha256 security policy

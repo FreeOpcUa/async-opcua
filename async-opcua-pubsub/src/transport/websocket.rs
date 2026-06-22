@@ -260,6 +260,8 @@ fn build_writer_group_payload(
             let msg = UadpNetworkMessage {
                 publisher_id: PublisherId::String(publisher_id.to_string()),
                 writer_group_id: writer_group.writer_group_id,
+                network_message_number: 0,
+                sequence_number: *sequence_number,
                 dataset_messages: uadp_dataset_messages,
             };
             let ctx_owned = ContextOwned::default();

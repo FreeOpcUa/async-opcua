@@ -1,25 +1,29 @@
 //! UADP PubSub message security codec.
 
-use std::convert::TryInto;
+use std::io::Cursor;
 
-use opcua_crypto::{AesDerivedKeys, AesKey, SecurityPolicy};
+use opcua_crypto::{random, AesDerivedKeys, AesKey, SecurityPolicy};
 use opcua_types::{
     BinaryDecodable, BinaryEncodable, Context, Error, MessageSecurityMode, StatusCode,
 };
 
-use crate::codec::uadp::UadpNetworkMessage;
+use crate::codec::uadp::{SecurityHeader, UadpHeaderRegion, UadpNetworkMessage};
 
 use super::SecurityKeySet;
 
-const SECURED_UADP_MAGIC: &[u8; 8] = b"OPCUAPS1";
-const ENVELOPE_HEADER_LEN: usize = SECURED_UADP_MAGIC.len() + 1 + 2 + 4;
+const SECURITY_FLAG_SIGNED: u8 = 0x01;
+const SECURITY_FLAG_ENCRYPTED: u8 = 0x02;
+const SIGNATURE_SIZE: usize = 32;
+const KEY_NONCE_COUNTER_PREFIX_LEN: usize = 4;
+const MESSAGE_NONCE_LEN: usize = 8;
+const COUNTER_BLOCK_LEN: usize = 16;
 
 /// Encodes and decodes secured UADP NetworkMessages using PubSub group keys.
 #[derive(Debug, Clone)]
 pub struct UadpSecurityCodec {
     security_mode: MessageSecurityMode,
     security_policy: SecurityPolicy,
-    key_set: Option<SecurityKeySet>,
+    key_sets: Vec<SecurityKeySet>,
 }
 
 impl UadpSecurityCodec {
@@ -32,7 +36,20 @@ impl UadpSecurityCodec {
         Self {
             security_mode,
             security_policy,
-            key_set: Some(key_set),
+            key_sets: vec![key_set],
+        }
+    }
+
+    /// Creates a codec with candidate PubSub security key sets for decoding.
+    pub fn with_candidates(
+        security_mode: MessageSecurityMode,
+        security_policy: SecurityPolicy,
+        key_sets: Vec<SecurityKeySet>,
+    ) -> Self {
+        Self {
+            security_mode,
+            security_policy,
+            key_sets,
         }
     }
 
@@ -44,7 +61,7 @@ impl UadpSecurityCodec {
         Self {
             security_mode,
             security_policy,
-            key_set: None,
+            key_sets: Vec::new(),
         }
     }
 
@@ -54,13 +71,11 @@ impl UadpSecurityCodec {
         message: &UadpNetworkMessage,
         ctx: &Context<'_>,
     ) -> Result<Vec<u8>, Error> {
-        let plaintext = message.encode_to_vec(ctx);
-
         match self.security_mode {
-            MessageSecurityMode::None => Ok(plaintext),
-            MessageSecurityMode::Sign => self.encode_signed_payload(&plaintext),
+            MessageSecurityMode::None => Ok(message.encode_to_vec(ctx)),
+            MessageSecurityMode::Sign => self.encode_signed_message(message, ctx),
             MessageSecurityMode::SignAndEncrypt => {
-                self.encode_signed_and_encrypted_payload(&plaintext)
+                self.encode_signed_and_encrypted_message(message, ctx)
             }
             MessageSecurityMode::Invalid => Err(security_error("invalid message security mode")),
         }
@@ -72,183 +87,204 @@ impl UadpSecurityCodec {
         payload: &[u8],
         ctx: &Context<'_>,
     ) -> Result<UadpNetworkMessage, Error> {
-        let plaintext = match self.security_mode {
-            MessageSecurityMode::None => {
-                enforce_secured_payload_len(payload.len(), ctx)?;
-                payload.to_vec()
+        enforce_secured_payload_len(payload.len(), ctx)?;
+
+        match self.security_mode {
+            MessageSecurityMode::None => UadpNetworkMessage::decode(&mut &payload[..], ctx),
+            MessageSecurityMode::Sign | MessageSecurityMode::SignAndEncrypt => {
+                self.decode_secured_message(payload, ctx)
             }
-            MessageSecurityMode::Sign => self.decode_signed_payload(payload, ctx)?,
-            MessageSecurityMode::SignAndEncrypt => {
-                self.decode_signed_and_encrypted_payload(payload, ctx)?
-            }
-            MessageSecurityMode::Invalid => {
-                return Err(security_error("invalid message security mode"))
-            }
-        };
-
-        UadpNetworkMessage::decode(&mut &plaintext[..], ctx)
-    }
-
-    fn encode_signed_payload(&self, plaintext: &[u8]) -> Result<Vec<u8>, Error> {
-        self.ensure_secure_policy()?;
-        let keys = self.keys(false)?;
-        let signature = self.signature(plaintext, &keys)?;
-        let mut body = Vec::with_capacity(plaintext.len() + signature.len());
-        body.extend_from_slice(plaintext);
-        body.extend_from_slice(&signature);
-        self.envelope(MessageSecurityMode::Sign, &body)
-    }
-
-    fn encode_signed_and_encrypted_payload(&self, plaintext: &[u8]) -> Result<Vec<u8>, Error> {
-        self.ensure_secure_policy()?;
-        let keys = self.keys(true)?;
-        let mut signed_plaintext = plaintext.to_vec();
-        append_padding(
-            &mut signed_plaintext,
-            self.security_policy.symmetric_padding_info().block_size,
-            self.security_policy.symmetric_signature_size(),
-        )?;
-
-        let signature = self.signature(&signed_plaintext, &keys)?;
-        signed_plaintext.extend_from_slice(&signature);
-
-        let block_size = self.security_policy.symmetric_padding_info().block_size;
-        let mut encrypted = vec![0u8; signed_plaintext.len() + block_size];
-        let encrypted_size =
-            self.security_policy
-                .symmetric_encrypt(&keys, &signed_plaintext, &mut encrypted)?;
-        encrypted.truncate(encrypted_size);
-
-        self.envelope(MessageSecurityMode::SignAndEncrypt, &encrypted)
-    }
-
-    fn decode_signed_payload(&self, payload: &[u8], ctx: &Context<'_>) -> Result<Vec<u8>, Error> {
-        self.ensure_secure_policy()?;
-        let body = self.open_envelope(payload, MessageSecurityMode::Sign, ctx)?;
-        let signature_size = self.security_policy.symmetric_signature_size();
-        if body.len() < signature_size {
-            return Err(security_error(
-                "secured UADP payload is shorter than its signature",
-            ));
+            MessageSecurityMode::Invalid => Err(security_error("invalid message security mode")),
         }
-
-        let message_len = body.len() - signature_size;
-        let (plaintext, signature) = body.split_at(message_len);
-        self.verify_signature(plaintext, signature)?;
-        Ok(plaintext.to_vec())
     }
 
-    fn decode_signed_and_encrypted_payload(
+    fn encode_signed_message(
         &self,
-        payload: &[u8],
+        message: &UadpNetworkMessage,
         ctx: &Context<'_>,
     ) -> Result<Vec<u8>, Error> {
         self.ensure_secure_policy()?;
-        let encrypted = self.open_envelope(payload, MessageSecurityMode::SignAndEncrypt, ctx)?;
-        let keys = self.keys(true)?;
-        let block_size = self.security_policy.symmetric_padding_info().block_size;
-        let mut decrypted = vec![0u8; encrypted.len() + block_size];
-        let decrypted_size =
-            self.security_policy
-                .symmetric_decrypt(&keys, encrypted, &mut decrypted)?;
-        decrypted.truncate(decrypted_size);
+        let key_set = self.encoding_key_set()?;
+        let keys = self.signing_keys(key_set);
+        let security_header = SecurityHeader {
+            security_flags: SECURITY_FLAG_SIGNED,
+            security_token_id: 0,
+            message_nonce: Vec::new(),
+        };
 
-        let signature_size = self.security_policy.symmetric_signature_size();
-        if decrypted.len() < signature_size {
+        let mut out = Vec::with_capacity(
+            message.header_region_byte_len(ctx, Some(&security_header))
+                + message.payload_region_byte_len(ctx)
+                + SIGNATURE_SIZE,
+        );
+        message.encode_header_region(&mut out, ctx, Some(&security_header))?;
+        message.encode_payload_region(&mut out, ctx)?;
+        self.append_signature(&mut out, &keys)?;
+        Ok(out)
+    }
+
+    fn encode_signed_and_encrypted_message(
+        &self,
+        message: &UadpNetworkMessage,
+        ctx: &Context<'_>,
+    ) -> Result<Vec<u8>, Error> {
+        self.ensure_secure_policy()?;
+        let key_set = self.encoding_key_set()?;
+        let message_nonce = message_nonce(message.sequence_number);
+        let security_header = SecurityHeader {
+            security_flags: SECURITY_FLAG_SIGNED | SECURITY_FLAG_ENCRYPTED,
+            security_token_id: key_set.token_id(),
+            message_nonce,
+        };
+        let keys = self.encryption_keys(key_set, &security_header.message_nonce)?;
+
+        let mut header =
+            Vec::with_capacity(message.header_region_byte_len(ctx, Some(&security_header)));
+        message.encode_header_region(&mut header, ctx, Some(&security_header))?;
+
+        let mut plaintext = Vec::with_capacity(message.payload_region_byte_len(ctx));
+        message.encode_payload_region(&mut plaintext, ctx)?;
+
+        let mut ciphertext = vec![0u8; plaintext.len()];
+        let ciphertext_len =
+            self.security_policy
+                .symmetric_encrypt(&keys, &plaintext, &mut ciphertext)?;
+        ciphertext.truncate(ciphertext_len);
+        if ciphertext.len() != plaintext.len() {
+            return Err(security_error(
+                "PubSub AES-CTR encryption changed payload length",
+            ));
+        }
+
+        let mut out = Vec::with_capacity(header.len() + ciphertext.len() + SIGNATURE_SIZE);
+        out.extend_from_slice(&header);
+        out.extend_from_slice(&ciphertext);
+        self.append_signature(&mut out, &keys)?;
+        Ok(out)
+    }
+
+    fn decode_secured_message(
+        &self,
+        payload: &[u8],
+        ctx: &Context<'_>,
+    ) -> Result<UadpNetworkMessage, Error> {
+        self.ensure_secure_policy()?;
+
+        let mut cursor = Cursor::new(payload);
+        let (header_region, security_header) =
+            UadpNetworkMessage::decode_header_region(&mut cursor, ctx)?;
+        let security_header =
+            security_header.ok_or_else(|| security_error("UADP SecurityHeader is missing"))?;
+        self.verify_security_flags(security_header.security_flags)?;
+
+        let header_len = cursor.position() as usize;
+        if payload.len() < header_len + SIGNATURE_SIZE {
             return Err(security_error(
                 "secured UADP payload is shorter than its signature",
             ));
         }
 
-        let signature_start = decrypted.len() - signature_size;
-        let (signed_payload, signature) = decrypted.split_at(signature_start);
-        self.verify_signature(signed_payload, signature)?;
+        let signature_start = payload.len() - SIGNATURE_SIZE;
+        let signature = &payload[signature_start..];
+        let signed_region = &payload[..signature_start];
+        let body = &payload[header_len..signature_start];
 
-        let plaintext_len = unpadded_len(
-            signed_payload,
-            self.security_policy.symmetric_padding_info().block_size,
-        )?;
-        Ok(signed_payload[..plaintext_len].to_vec())
+        let key_set = self.decode_key_set(&security_header)?;
+        let keys = if self.security_mode == MessageSecurityMode::SignAndEncrypt {
+            self.encryption_keys(key_set, &security_header.message_nonce)?
+        } else {
+            self.signing_keys(key_set)
+        };
+        self.security_policy
+            .symmetric_verify_signature(&keys, signed_region, signature)?;
+
+        let plaintext = if self.security_mode == MessageSecurityMode::SignAndEncrypt {
+            let mut plaintext = vec![0u8; body.len()];
+            let plaintext_len =
+                self.security_policy
+                    .symmetric_decrypt(&keys, body, &mut plaintext)?;
+            plaintext.truncate(plaintext_len);
+            if plaintext.len() != body.len() {
+                return Err(security_error(
+                    "PubSub AES-CTR decryption changed payload length",
+                ));
+            }
+            plaintext
+        } else {
+            body.to_vec()
+        };
+
+        let dataset_messages =
+            UadpNetworkMessage::decode_payload_region(&header_region, &mut &plaintext[..], ctx)?;
+        Ok(rebuild_message(header_region, dataset_messages))
     }
 
-    fn envelope(&self, security_mode: MessageSecurityMode, body: &[u8]) -> Result<Vec<u8>, Error> {
-        let policy_uri = self.security_policy.to_uri().as_bytes();
-        let policy_uri_len: u16 = policy_uri
-            .len()
-            .try_into()
-            .map_err(|_| security_error("security policy uri is too long"))?;
-        let body_len: u32 = body
-            .len()
-            .try_into()
-            .map_err(|_| security_error("secured UADP payload is too large"))?;
+    fn verify_security_flags(&self, security_flags: u8) -> Result<(), Error> {
+        let expected = match self.security_mode {
+            MessageSecurityMode::Sign => SECURITY_FLAG_SIGNED,
+            MessageSecurityMode::SignAndEncrypt => SECURITY_FLAG_SIGNED | SECURITY_FLAG_ENCRYPTED,
+            MessageSecurityMode::None | MessageSecurityMode::Invalid => {
+                return Err(security_error("invalid message security mode"));
+            }
+        };
 
-        let mut envelope = Vec::with_capacity(ENVELOPE_HEADER_LEN + policy_uri.len() + body.len());
-        envelope.extend_from_slice(SECURED_UADP_MAGIC);
-        envelope.push(security_mode as u8);
-        envelope.extend_from_slice(&policy_uri_len.to_be_bytes());
-        envelope.extend_from_slice(&body_len.to_be_bytes());
-        envelope.extend_from_slice(policy_uri);
-        envelope.extend_from_slice(body);
-        Ok(envelope)
-    }
-
-    fn open_envelope<'a>(
-        &self,
-        payload: &'a [u8],
-        expected_mode: MessageSecurityMode,
-        ctx: &Context<'_>,
-    ) -> Result<&'a [u8], Error> {
-        if payload.len() < ENVELOPE_HEADER_LEN
-            || &payload[..SECURED_UADP_MAGIC.len()] != SECURED_UADP_MAGIC
-        {
-            return Err(security_error("secured UADP envelope is missing"));
-        }
-
-        let security_mode = payload[SECURED_UADP_MAGIC.len()];
-        if security_mode != expected_mode as u8 {
+        if security_flags != expected {
             return Err(security_error(
-                "secured UADP envelope security mode mismatch",
+                "UADP SecurityHeader flags do not match security mode",
             ));
         }
 
-        let mut offset = SECURED_UADP_MAGIC.len() + 1;
-        let policy_uri_len = read_u16(payload, &mut offset)? as usize;
-        let body_len = read_u32(payload, &mut offset)? as usize;
-        enforce_secured_payload_len(body_len, ctx)?;
-        let policy_end = offset
-            .checked_add(policy_uri_len)
-            .ok_or_else(|| security_error("secured UADP envelope length overflow"))?;
-        let body_end = policy_end
-            .checked_add(body_len)
-            .ok_or_else(|| security_error("secured UADP envelope length overflow"))?;
-
-        if payload.len() != body_end {
-            return Err(security_error("secured UADP envelope length mismatch"));
-        }
-
-        let policy_uri = std::str::from_utf8(&payload[offset..policy_end])
-            .map_err(|_| security_error("secured UADP security policy uri is invalid"))?;
-        if policy_uri != self.security_policy.to_uri() {
-            return Err(security_error("secured UADP security policy mismatch"));
-        }
-
-        Ok(&payload[policy_end..body_end])
+        Ok(())
     }
 
-    fn keys(&self, validate_encryption_key: bool) -> Result<AesDerivedKeys, Error> {
-        let key_set = self
-            .key_set
-            .as_ref()
-            .ok_or_else(|| security_error("missing PubSub security group keys"))?;
-        let block_size = self.security_policy.symmetric_padding_info().block_size;
-        if block_size == 0 || key_set.key_nonce().len() < block_size {
+    fn decode_key_set(&self, security_header: &SecurityHeader) -> Result<&SecurityKeySet, Error> {
+        if let Some(key_set) = self
+            .key_sets
+            .iter()
+            .find(|key_set| key_set.token_id() == security_header.security_token_id)
+        {
+            return Ok(key_set);
+        }
+
+        if self.security_mode == MessageSecurityMode::Sign && security_header.security_token_id == 0
+        {
+            return self
+                .key_sets
+                .first()
+                .ok_or_else(|| security_error("missing PubSub security group keys"));
+        }
+
+        Err(security_error("PubSub security token id is unknown"))
+    }
+
+    fn encoding_key_set(&self) -> Result<&SecurityKeySet, Error> {
+        self.key_sets
+            .first()
+            .ok_or_else(|| security_error("missing PubSub security group keys"))
+    }
+
+    fn signing_keys(&self, key_set: &SecurityKeySet) -> AesDerivedKeys {
+        AesDerivedKeys::from_parts(
+            key_set.signing_key().to_vec(),
+            AesKey::new(key_set.encryption_key().value().to_vec()),
+            Vec::new(),
+        )
+    }
+
+    fn encryption_keys(
+        &self,
+        key_set: &SecurityKeySet,
+        message_nonce: &[u8],
+    ) -> Result<AesDerivedKeys, Error> {
+        if message_nonce.len() != MESSAGE_NONCE_LEN {
+            return Err(security_error("PubSub message nonce length is invalid"));
+        }
+
+        if key_set.key_nonce().len() < KEY_NONCE_COUNTER_PREFIX_LEN {
             return Err(security_error("PubSub key nonce is too short"));
         }
 
-        if validate_encryption_key
-            && key_set.encryption_key().value().len()
-                != self.security_policy.encrypting_key_length()
-        {
+        if key_set.encryption_key().value().len() != self.security_policy.encrypting_key_length() {
             return Err(security_error(
                 "PubSub encryption key length does not match policy",
             ));
@@ -257,58 +293,62 @@ impl UadpSecurityCodec {
         Ok(AesDerivedKeys::from_parts(
             key_set.signing_key().to_vec(),
             AesKey::new(key_set.encryption_key().value().to_vec()),
-            key_set.key_nonce()[..block_size].to_vec(),
+            counter_block(key_set, message_nonce)?,
         ))
     }
 
-    fn signature(&self, data: &[u8], keys: &AesDerivedKeys) -> Result<Vec<u8>, Error> {
+    fn append_signature(&self, out: &mut Vec<u8>, keys: &AesDerivedKeys) -> Result<(), Error> {
         let mut signature = vec![0u8; self.security_policy.symmetric_signature_size()];
         self.security_policy
-            .symmetric_sign(keys, data, &mut signature)?;
-        Ok(signature)
-    }
-
-    fn verify_signature(&self, data: &[u8], signature: &[u8]) -> Result<(), Error> {
-        let keys = self.keys(false)?;
-        self.security_policy
-            .symmetric_verify_signature(&keys, data, signature)
+            .symmetric_sign(keys, out, &mut signature)?;
+        out.extend_from_slice(&signature);
+        Ok(())
     }
 
     fn ensure_secure_policy(&self) -> Result<(), Error> {
-        if self.security_policy == SecurityPolicy::None || !self.security_policy.is_supported() {
-            return Err(security_error(
-                "PubSub security policy does not support message signing",
-            ));
+        match self.security_policy {
+            SecurityPolicy::PubSubAes128Ctr | SecurityPolicy::PubSubAes256Ctr => Ok(()),
+            _ => Err(security_error(
+                "PubSub security policy must be a PubSub AES-CTR policy",
+            )),
         }
-
-        Ok(())
     }
 }
 
-fn read_u16(payload: &[u8], offset: &mut usize) -> Result<u16, Error> {
-    let end = offset
-        .checked_add(2)
-        .ok_or_else(|| security_error("secured UADP envelope length overflow"))?;
-    let bytes = payload
-        .get(*offset..end)
-        .ok_or_else(|| security_error("secured UADP envelope is truncated"))?;
-    *offset = end;
-    Ok(u16::from_be_bytes(bytes.try_into().map_err(|_| {
-        security_error("secured UADP envelope length is invalid")
-    })?))
+fn message_nonce(sequence_number: u16) -> Vec<u8> {
+    let mut nonce = vec![0u8; MESSAGE_NONCE_LEN];
+    random::bytes(&mut nonce[..4]);
+    nonce[4..].copy_from_slice(&(sequence_number as u32).to_le_bytes());
+    nonce
 }
 
-fn read_u32(payload: &[u8], offset: &mut usize) -> Result<u32, Error> {
-    let end = offset
-        .checked_add(4)
-        .ok_or_else(|| security_error("secured UADP envelope length overflow"))?;
-    let bytes = payload
-        .get(*offset..end)
-        .ok_or_else(|| security_error("secured UADP envelope is truncated"))?;
-    *offset = end;
-    Ok(u32::from_be_bytes(bytes.try_into().map_err(|_| {
-        security_error("secured UADP envelope length is invalid")
-    })?))
+fn counter_block(key_set: &SecurityKeySet, message_nonce: &[u8]) -> Result<Vec<u8>, Error> {
+    if key_set.key_nonce().len() < KEY_NONCE_COUNTER_PREFIX_LEN {
+        return Err(security_error("PubSub key nonce is too short"));
+    }
+
+    if message_nonce.len() != MESSAGE_NONCE_LEN {
+        return Err(security_error("PubSub message nonce length is invalid"));
+    }
+
+    let mut counter_block = Vec::with_capacity(COUNTER_BLOCK_LEN);
+    counter_block.extend_from_slice(&key_set.key_nonce()[..KEY_NONCE_COUNTER_PREFIX_LEN]);
+    counter_block.extend_from_slice(message_nonce);
+    counter_block.extend_from_slice(&1u32.to_be_bytes());
+    Ok(counter_block)
+}
+
+fn rebuild_message(
+    header: UadpHeaderRegion,
+    dataset_messages: Vec<crate::codec::uadp::UadpDataSetMessage>,
+) -> UadpNetworkMessage {
+    UadpNetworkMessage {
+        publisher_id: header.publisher_id,
+        writer_group_id: header.writer_group_id,
+        network_message_number: header.network_message_number,
+        sequence_number: header.sequence_number,
+        dataset_messages,
+    }
 }
 
 fn enforce_secured_payload_len(payload_len: usize, ctx: &Context<'_>) -> Result<(), Error> {
@@ -320,52 +360,6 @@ fn enforce_secured_payload_len(payload_len: usize, ctx: &Context<'_>) -> Result<
     }
 
     Ok(())
-}
-
-fn append_padding(
-    payload: &mut Vec<u8>,
-    block_size: usize,
-    signature_size: usize,
-) -> Result<(), Error> {
-    if block_size == 0 {
-        return Err(security_error(
-            "security policy has no symmetric block size",
-        ));
-    }
-
-    let padding_size = block_size - ((payload.len() + signature_size + 1) % block_size);
-    let padding_size = if padding_size == block_size {
-        0
-    } else {
-        padding_size
-    };
-    let padding_byte = padding_size as u8;
-    payload.resize(payload.len() + padding_size + 1, padding_byte);
-    Ok(())
-}
-
-fn unpadded_len(payload: &[u8], block_size: usize) -> Result<usize, Error> {
-    if block_size == 0 || payload.is_empty() {
-        return Err(security_error("secured UADP padding is invalid"));
-    }
-
-    let padding_size = *payload
-        .last()
-        .ok_or_else(|| security_error("secured UADP padding is missing"))?
-        as usize;
-    if padding_size >= block_size || payload.len() < padding_size + 1 {
-        return Err(security_error("secured UADP padding is invalid"));
-    }
-
-    let padding_start = payload.len() - padding_size - 1;
-    if payload[padding_start..]
-        .iter()
-        .any(|byte| *byte as usize != padding_size)
-    {
-        return Err(security_error("secured UADP padding bytes are invalid"));
-    }
-
-    Ok(padding_start)
 }
 
 fn security_error(message: &'static str) -> Error {

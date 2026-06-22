@@ -16,6 +16,8 @@ fn sample_message() -> UadpNetworkMessage {
     UadpNetworkMessage {
         publisher_id: PublisherId::String("line-a-publisher".to_string()),
         writer_group_id: 7,
+        network_message_number: 0,
+        sequence_number: 1,
         dataset_messages: vec![UadpDataSetMessage {
             dataset_writer_id: 42,
             sequence_number: 101,
@@ -37,7 +39,7 @@ fn sign_and_encrypt_hides_payload_and_valid_group_keys_recover_it() {
     let group_keys = security_group.current_key_set().clone();
     let publisher = UadpSecurityCodec::new(
         MessageSecurityMode::SignAndEncrypt,
-        SecurityPolicy::Aes256Sha256RsaPss,
+        SecurityPolicy::PubSubAes256Ctr,
         group_keys.clone(),
     );
 
@@ -48,7 +50,7 @@ fn sign_and_encrypt_hides_payload_and_valid_group_keys_recover_it() {
 
     let subscriber_without_keys = UadpSecurityCodec::without_keys(
         MessageSecurityMode::SignAndEncrypt,
-        SecurityPolicy::Aes256Sha256RsaPss,
+        SecurityPolicy::PubSubAes256Ctr,
     );
     let missing_key_error = subscriber_without_keys
         .decode_network_message(&secured, &ctx)
@@ -60,7 +62,7 @@ fn sign_and_encrypt_hides_payload_and_valid_group_keys_recover_it() {
 
     let subscriber_with_keys = UadpSecurityCodec::new(
         MessageSecurityMode::SignAndEncrypt,
-        SecurityPolicy::Aes256Sha256RsaPss,
+        SecurityPolicy::PubSubAes256Ctr,
         group_keys,
     );
     let decoded = subscriber_with_keys
@@ -79,7 +81,7 @@ fn sign_and_encrypt_subscriber_rejects_unsigned_plaintext_uadp() {
     let security_group = SecurityGroup::new("brewery-line-a", Duration::from_secs(3600)).unwrap();
     let subscriber = UadpSecurityCodec::new(
         MessageSecurityMode::SignAndEncrypt,
-        SecurityPolicy::Aes256Sha256RsaPss,
+        SecurityPolicy::PubSubAes256Ctr,
         security_group.current_key_set().clone(),
     );
 
@@ -104,7 +106,7 @@ fn secured_uadp_payload_limit_rejects_oversized_before_copy_or_decrypt() {
     ] {
         let publisher = UadpSecurityCodec::new(
             security_mode,
-            SecurityPolicy::Aes256Sha256RsaPss,
+            SecurityPolicy::PubSubAes256Ctr,
             group_keys.clone(),
         );
         let secured = publisher.encode_network_message(&message, &ctx).unwrap();
@@ -116,7 +118,7 @@ fn secured_uadp_payload_limit_rejects_oversized_before_copy_or_decrypt() {
         let limited_ctx_owned = ContextOwned::new_default(NamespaceMap::new(), limited_options);
         let limited_ctx = limited_ctx_owned.context();
         let subscriber_without_keys =
-            UadpSecurityCodec::without_keys(security_mode, SecurityPolicy::Aes256Sha256RsaPss);
+            UadpSecurityCodec::without_keys(security_mode, SecurityPolicy::PubSubAes256Ctr);
 
         let error = subscriber_without_keys
             .decode_network_message(&secured, &limited_ctx)
@@ -131,7 +133,7 @@ fn secured_uadp_payload_limit_rejects_oversized_before_copy_or_decrypt() {
 
         let subscriber_with_keys = UadpSecurityCodec::new(
             security_mode,
-            SecurityPolicy::Aes256Sha256RsaPss,
+            SecurityPolicy::PubSubAes256Ctr,
             group_keys.clone(),
         );
         let decoded = subscriber_with_keys

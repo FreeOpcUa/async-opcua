@@ -15,7 +15,7 @@ use opcua::{
     types::{MessageSecurityMode, NodeId, ReadValueId, TimestampsToReturn, VariableId},
 };
 
-use crate::utils::Tester;
+use crate::utils::{client_user_token, Tester};
 
 async fn read_service_level(session: &Session) {
     let values = session
@@ -95,6 +95,40 @@ async fn ecc_nistp384_sign_and_encrypt() {
         MessageSecurityMode::SignAndEncrypt,
     )
     .await;
+}
+
+/// Feature 016 end-to-end (US1 + US2): a UserNameIdentityToken password is wrapped as a Part 4
+/// §7.40.2.5 EccEncryptedSecret by the client over a real ECC channel and decrypted + authenticated
+/// by the server. A successful authenticated read proves client-encrypt ↔ server-decrypt through the
+/// full session flow (the EphemeralKey exchange from 015a feeding the §6.8.3 KDF).
+async fn ecc_username_password(curve: EccCurve, policy: SecurityPolicy) {
+    let mut tester = Tester::new_ecc(curve).await;
+    let (session, handle) = tester
+        .connect(
+            policy,
+            MessageSecurityMode::SignAndEncrypt,
+            client_user_token(),
+        )
+        .await
+        .unwrap();
+    let _h = handle.spawn();
+
+    tokio::time::timeout(Duration::from_secs(20), session.wait_for_connection())
+        .await
+        .unwrap();
+    // The session is activated only if the server successfully decrypted the EccEncryptedSecret
+    // password and authenticated the user; an authenticated read then succeeds.
+    read_service_level(&session).await;
+}
+
+#[tokio::test]
+async fn ecc_nistp256_username_password() {
+    ecc_username_password(EccCurve::P256, SecurityPolicy::EccNistP256).await;
+}
+
+#[tokio::test]
+async fn ecc_nistp384_username_password() {
+    ecc_username_password(EccCurve::P384, SecurityPolicy::EccNistP384).await;
 }
 
 /// Channel renewal: with a short channel lifetime the client renews the secure

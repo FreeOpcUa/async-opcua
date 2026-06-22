@@ -14,10 +14,12 @@ use opcua_types::{
 use tracing::{debug, error, warn};
 
 use crate::identity_token::{
-    POLICY_ID_ANONYMOUS, POLICY_ID_ISSUED_TOKEN_NONE, POLICY_ID_ISSUED_TOKEN_RSA_15,
-    POLICY_ID_ISSUED_TOKEN_RSA_OAEP, POLICY_ID_ISSUED_TOKEN_RSA_OAEP_SHA256,
-    POLICY_ID_USER_PASS_NONE, POLICY_ID_USER_PASS_RSA_15, POLICY_ID_USER_PASS_RSA_OAEP,
-    POLICY_ID_USER_PASS_RSA_OAEP_SHA256, POLICY_ID_X509,
+    POLICY_ID_ANONYMOUS, POLICY_ID_ISSUED_TOKEN_ECC_NIST_P256,
+    POLICY_ID_ISSUED_TOKEN_ECC_NIST_P384, POLICY_ID_ISSUED_TOKEN_NONE,
+    POLICY_ID_ISSUED_TOKEN_RSA_15, POLICY_ID_ISSUED_TOKEN_RSA_OAEP,
+    POLICY_ID_ISSUED_TOKEN_RSA_OAEP_SHA256, POLICY_ID_USER_PASS_ECC_NIST_P256,
+    POLICY_ID_USER_PASS_ECC_NIST_P384, POLICY_ID_USER_PASS_NONE, POLICY_ID_USER_PASS_RSA_15,
+    POLICY_ID_USER_PASS_RSA_OAEP, POLICY_ID_USER_PASS_RSA_OAEP_SHA256, POLICY_ID_X509,
 };
 
 use super::{
@@ -392,6 +394,8 @@ pub fn user_pass_security_policy_id(endpoint: &ServerEndpoint) -> UAString {
         | SecurityPolicy::Basic256Sha256
         | SecurityPolicy::Aes128Sha256RsaOaep => POLICY_ID_USER_PASS_RSA_OAEP,
         SecurityPolicy::Aes256Sha256RsaPss => POLICY_ID_USER_PASS_RSA_OAEP_SHA256,
+        SecurityPolicy::EccNistP256 => POLICY_ID_USER_PASS_ECC_NIST_P256,
+        SecurityPolicy::EccNistP384 => POLICY_ID_USER_PASS_ECC_NIST_P384,
         _ => {
             panic!("Invalid security policy for username and password")
         }
@@ -408,6 +412,8 @@ pub fn issued_token_security_policy(endpoint: &ServerEndpoint) -> UAString {
         | SecurityPolicy::Basic256Sha256
         | SecurityPolicy::Aes128Sha256RsaOaep => POLICY_ID_ISSUED_TOKEN_RSA_OAEP,
         SecurityPolicy::Aes256Sha256RsaPss => POLICY_ID_ISSUED_TOKEN_RSA_OAEP_SHA256,
+        SecurityPolicy::EccNistP256 => POLICY_ID_ISSUED_TOKEN_ECC_NIST_P256,
+        SecurityPolicy::EccNistP384 => POLICY_ID_ISSUED_TOKEN_ECC_NIST_P384,
         _ => {
             panic!("Invalid security policy for username and password")
         }

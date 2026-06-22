@@ -15,7 +15,9 @@ use crate::auth::oauth2::validate_issued_jwt;
 use crate::authenticator::{issued_token_security_policy, user_pass_security_policy_id, Password};
 use crate::diagnostics::{ServerDiagnostics, ServerDiagnosticsSummary};
 use crate::node_manager::TypeTreeForUser;
-use crate::session::negotiate::{decrypt_identity_token_secret, tarpit_authentication_failure};
+use crate::session::negotiate::{
+    decrypt_identity_token_secret, tarpit_authentication_failure, EccSecretContext,
+};
 use opcua_core::comms::url::{hostname_from_url, url_matches_except_host};
 use opcua_core::handle::AtomicHandle;
 use opcua_core::sync::RwLock;
@@ -472,6 +474,29 @@ impl ServerInfo {
         user_identity_token: ExtensionObject,
         server_nonce: &ByteString,
     ) -> Result<(UserToken, Option<opcua_crypto::identity::ClaimProfile>), Error> {
+        self.authenticate_endpoint_with_ecc_ctx(
+            request,
+            endpoint_url,
+            security_policy,
+            security_mode,
+            user_identity_token,
+            server_nonce,
+            EccSecretContext::default(),
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn authenticate_endpoint_with_ecc_ctx(
+        &self,
+        request: &ActivateSessionRequest,
+        endpoint_url: &str,
+        security_policy: SecurityPolicy,
+        security_mode: MessageSecurityMode,
+        user_identity_token: ExtensionObject,
+        server_nonce: &ByteString,
+        ecc_ctx: EccSecretContext,
+    ) -> Result<(UserToken, Option<opcua_crypto::identity::ClaimProfile>), Error> {
         // Get security from endpoint url
         let result = if let Some(endpoint) = self.config.find_endpoint(
             endpoint_url,
@@ -499,6 +524,8 @@ impl ServerInfo {
                         &token,
                         &server_key,
                         server_nonce,
+                        security_policy,
+                        &ecc_ctx,
                     )
                     .await
                     .map(|token| (token, None))
@@ -524,6 +551,8 @@ impl ServerInfo {
                         &token,
                         &server_key,
                         server_nonce,
+                        security_policy,
+                        &ecc_ctx,
                     )
                     .await
                 }
@@ -583,6 +612,8 @@ impl ServerInfo {
         token: &UserNameIdentityToken,
         server_key: &Option<PrivateKey>,
         server_nonce: &ByteString,
+        security_policy: SecurityPolicy,
+        ecc_ctx: &EccSecretContext,
     ) -> Result<UserToken, Error> {
         if !self.authenticator.supports_user_pass(endpoint) {
             Err(Error::new(
@@ -605,27 +636,25 @@ impl ServerInfo {
                 token.policy_id.as_ref(),
                 token.encryption_algorithm.as_ref()
             );
-            let token_password = if !token.encryption_algorithm.is_empty() {
-                if let Some(ref server_key) = server_key {
-                    let decrypted =
-                        decrypt_identity_token_secret(token, server_nonce.as_ref(), server_key)?;
-                    String::from_utf8(decrypted.value.unwrap_or_default().to_vec()).map_err(
-                        |e| {
-                            Error::new(
-                                StatusCode::BadIdentityTokenInvalid,
-                                format!("Failed to decode identity token to string: {e}"),
-                            )
-                        },
-                    )?
-                } else {
-                    error!(
-                        "Identity token password is encrypted but no server private key was supplied"
-                    );
-                    return Err(Error::new(
+            let needs_decrypt = !token.encryption_algorithm.is_empty()
+                || matches!(
+                    security_policy,
+                    SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384
+                );
+            let token_password = if needs_decrypt {
+                let decrypted = decrypt_identity_token_secret(
+                    token,
+                    server_nonce.as_ref(),
+                    security_policy,
+                    server_key,
+                    ecc_ctx,
+                )?;
+                String::from_utf8(decrypted.value.unwrap_or_default().to_vec()).map_err(|e| {
+                    Error::new(
                         StatusCode::BadIdentityTokenInvalid,
-                        "Failed to decrypt identity token password",
-                    ));
-                }
+                        format!("Failed to decode identity token to string: {e}"),
+                    )
+                })?
             } else {
                 token.plaintext_password()?
             };
@@ -713,6 +742,8 @@ impl ServerInfo {
         token: &IssuedIdentityToken,
         server_key: &Option<PrivateKey>,
         server_nonce: &ByteString,
+        security_policy: SecurityPolicy,
+        ecc_ctx: &EccSecretContext,
     ) -> Result<(UserToken, Option<opcua_crypto::identity::ClaimProfile>), Error> {
         if !self.authenticator.supports_issued_token(endpoint) {
             Err(Error::new(
@@ -730,18 +761,19 @@ impl ServerInfo {
                 token.policy_id.as_ref(),
                 token.encryption_algorithm.as_ref()
             );
-            let decrypted_token = if !token.encryption_algorithm.is_empty() {
-                if let Some(ref server_key) = server_key {
-                    decrypt_identity_token_secret(token, server_nonce.as_ref(), server_key)?
-                } else {
-                    error!(
-                        "Identity token password is encrypted but no server private key was supplied"
-                    );
-                    return Err(Error::new(
-                        StatusCode::BadIdentityTokenInvalid,
-                        "Failed to decrypt identity token issued token",
-                    ));
-                }
+            let needs_decrypt = !token.encryption_algorithm.is_empty()
+                || matches!(
+                    security_policy,
+                    SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384
+                );
+            let decrypted_token = if needs_decrypt {
+                decrypt_identity_token_secret(
+                    token,
+                    server_nonce.as_ref(),
+                    security_policy,
+                    server_key,
+                    ecc_ctx,
+                )?
             } else {
                 token.token_data.clone()
             };

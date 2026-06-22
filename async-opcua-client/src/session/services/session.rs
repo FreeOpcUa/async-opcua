@@ -304,6 +304,10 @@ impl UARequest for CreateSession<'_> {
 pub struct ActivateSession {
     identity_token: IdentityToken,
     private_key: Option<PrivateKey>,
+    #[cfg(feature = "ecc")]
+    retained_server_ephemeral_key: Option<opcua_crypto::ecc::EphemeralPublicKey>,
+    #[cfg(feature = "ecc")]
+    own_certificate: Option<X509>,
     locale_ids: Vec<UAString>,
     client_software_certificates: Vec<SignedSoftwareCertificate>,
     endpoint: EndpointDescription,
@@ -321,6 +325,10 @@ impl ActivateSession {
         Self {
             identity_token: session.endpoint_info().user_identity_token.clone(),
             private_key: session.channel.read_own_private_key(),
+            #[cfg(feature = "ecc")]
+            retained_server_ephemeral_key: session.retained_server_ephemeral_key(),
+            #[cfg(feature = "ecc")]
+            own_certificate: session.channel.read_own_certificate(),
             locale_ids: session
                 .endpoint_info()
                 .preferred_locales
@@ -344,6 +352,10 @@ impl ActivateSession {
         Self {
             identity_token: IdentityToken::Anonymous,
             private_key: None,
+            #[cfg(feature = "ecc")]
+            retained_server_ephemeral_key: None,
+            #[cfg(feature = "ecc")]
+            own_certificate: None,
             locale_ids: Vec::new(),
             client_software_certificates: Vec::new(),
             endpoint,
@@ -441,6 +453,44 @@ impl ActivateSession {
             }
             IdentityToken::UserName(user, pass) => {
                 let nonce = remote_nonce.as_ref();
+
+                #[cfg(feature = "ecc")]
+                if matches!(
+                    channel_security_policy,
+                    SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384
+                ) {
+                    let (Some(server_eph), Some(signing_key), Some(signing_cert)) = (
+                        self.retained_server_ephemeral_key.as_ref(),
+                        self.private_key.as_ref(),
+                        self.own_certificate.as_ref(),
+                    ) else {
+                        return Err(Error::new(
+                            StatusCode::BadIdentityTokenInvalid,
+                            "ECC identity-token encryption requires a retained server EphemeralKey and a client certificate",
+                        ));
+                    };
+                    let encrypted = opcua_crypto::ecc::ecc_encrypt_secret(
+                        channel_security_policy,
+                        nonce,
+                        server_eph,
+                        signing_key,
+                        signing_cert,
+                        pass.0.as_bytes(),
+                    )?;
+                    let identity_token = UserNameIdentityToken {
+                        policy_id: policy.policy_id.clone(),
+                        user_name: UAString::from(user.as_str()),
+                        password: ByteString::from(encrypted),
+                        // The EccEncryptedSecret is self-describing (carries its SecurityPolicyUri);
+                        // the legacy encryptionAlgorithm field is left null.
+                        encryption_algorithm: UAString::null(),
+                    };
+                    return Ok((
+                        ExtensionObject::from_message(identity_token),
+                        SignatureData::null(),
+                    ));
+                }
+
                 let cert = remote_cert;
                 let secret = legacy_encrypt_secret(
                     channel_security_policy,
@@ -495,6 +545,39 @@ impl ActivateSession {
             IdentityToken::IssuedToken(source) => {
                 let token = source.0.get_issued_token().await?;
                 let nonce = remote_nonce.as_ref();
+                #[cfg(feature = "ecc")]
+                if matches!(
+                    channel_security_policy,
+                    SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384
+                ) {
+                    let (Some(server_eph), Some(signing_key), Some(signing_cert)) = (
+                        self.retained_server_ephemeral_key.as_ref(),
+                        self.private_key.as_ref(),
+                        self.own_certificate.as_ref(),
+                    ) else {
+                        return Err(Error::new(
+                            StatusCode::BadIdentityTokenInvalid,
+                            "ECC identity-token encryption requires a retained server EphemeralKey and a client certificate",
+                        ));
+                    };
+                    let encrypted = opcua_crypto::ecc::ecc_encrypt_secret(
+                        channel_security_policy,
+                        nonce,
+                        server_eph,
+                        signing_key,
+                        signing_cert,
+                        token.as_ref(),
+                    )?;
+                    let identity_token = IssuedIdentityToken {
+                        policy_id: policy.policy_id.clone(),
+                        encryption_algorithm: UAString::null(),
+                        token_data: ByteString::from(encrypted),
+                    };
+                    return Ok((
+                        ExtensionObject::from_message(identity_token),
+                        SignatureData::null(),
+                    ));
+                }
                 let cert = remote_cert;
                 let secret = legacy_encrypt_secret(
                     channel_security_policy,
@@ -823,7 +906,30 @@ impl Session {
     /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub(crate) async fn activate_session(&self) -> Result<(), Error> {
-        ActivateSession::new(self).send(&self.channel).await?;
+        #[cfg_attr(not(feature = "ecc"), allow(unused_variables))]
+        let response = ActivateSession::new(self).send(&self.channel).await?;
+
+        #[cfg(feature = "ecc")]
+        {
+            let security_policy = self.channel.security_policy();
+            if matches!(
+                security_policy,
+                SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384
+            ) {
+                // The server rotates its EphemeralKey after consuming it (Part 6 §6.8.2); retain the new
+                // one for the next activation. Verify it against the server certificate from the channel.
+                if let Some(server_cert) = self.channel.remote_certificate() {
+                    if let Some(key) = opcua_crypto::ecc::read_and_verify_server_ephemeral_key(
+                        &response.response_header.additional_header,
+                        security_policy,
+                        &server_cert,
+                    )? {
+                        self.set_retained_server_ephemeral_key(Some(key));
+                    }
+                }
+            }
+        }
+
         Ok(())
     }
 

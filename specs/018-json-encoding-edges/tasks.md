@@ -74,17 +74,17 @@ without XML support.
 
 ## Phase 5: User Story 4 — Backward compatibility (P2)
 
-- [ ] T009 [P] [US4] Confirm (Claude) the full JSON + serde suites pass with `xml` on AND off, and that
+- [X] T009 [P] [US4] Confirm (Claude) the full JSON + serde suites pass with `xml` on AND off, and that
   the only behavioral change is the xml-off XML-ExtensionObject-in-JSON path (null → error): run
   `cargo test -p async-opcua-types --all-features` and `--no-default-features --features json`; no new
   failures. (No new test file needed beyond the existing suites + US1–US3 additions.)
-- [ ] T010 [US4] Gate both configs; **commit US4** if any back-compat note/test is added (else fold into final gate).
+- [X] T010 [US4] Gate both configs; **commit US4** if any back-compat note/test is added (else fold into final gate).
 
 ## Phase 6: Polish
 
-- [ ] T011 Update `specs/conformance-gap-backlog.md` Tier 2 #5: mark done; note US2/US3 were stale (already
+- [X] T011 Update `specs/conformance-gap-backlog.md` Tier 2 #5: mark done; note US2/US3 were stale (already
   round-tripped) and US1 was the real fail-closed fix.
-- [ ] T012 Final gate: fmt + clippy --all-targets --all-features + `cargo test -p async-opcua-types
+- [X] T012 Final gate: fmt + clippy --all-targets --all-features + `cargo test -p async-opcua-types
   --all-features` + `--no-default-features --features json`; confirm only the xml-off ExtensionObject path
   changed.
 

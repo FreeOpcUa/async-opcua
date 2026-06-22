@@ -24,6 +24,7 @@ mod context;
 mod history;
 pub mod memory;
 mod method;
+mod method_typed;
 mod monitored_items;
 mod node_management;
 mod query;
@@ -49,6 +50,10 @@ pub use {
     },
     history::{HistoryNode, HistoryResult, HistoryUpdateDetails, HistoryUpdateNode},
     method::MethodCall,
+    method_typed::{
+        typed_method, typed_method_with_context, IntoMethodOutputs, MethodArg, MethodHandler,
+        MethodHandlerWithContext,
+    },
     monitored_items::{MonitoredItemRef, MonitoredItemUpdateRef},
     node_management::{AddNodeItem, AddReferenceItem, DeleteNodeItem, DeleteReferenceItem},
     query::{ParsedNodeTypeDescription, ParsedQueryDataDescription, QueryRequest},

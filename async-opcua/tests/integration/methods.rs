@@ -7,7 +7,10 @@ use crate::utils::ChannelNotifications;
 
 use super::utils::setup;
 use opcua::{
-    server::address_space::MethodBuilder,
+    server::{
+        address_space::MethodBuilder,
+        node_manager::{typed_method, typed_method_with_context, RequestContext},
+    },
     types::{
         AttributeId, CallMethodRequest, DataTypeId, NodeId, ObjectId, StatusCode, Variant,
         VariantTypeId,
@@ -298,4 +301,164 @@ async fn call_get_monitored_items() {
     assert_eq!(ids.len(), 1);
     assert_eq!(handles.len(), 1);
     assert_eq!(15, handles[0]);
+}
+
+// --- Feature 021: typed method-call framework, end-to-end through the Call service ---
+
+/// A method registered via the typed framework is callable end-to-end and returns the right
+/// typed output (SC-003) — no manual Variant indexing/marshaling in the handler.
+#[tokio::test]
+async fn call_typed_method_roundtrip() {
+    let (_tester, nm, session) = setup().await;
+
+    let id = nm.inner().next_node_id();
+    let input_id = nm.inner().next_node_id();
+    let output_id = nm.inner().next_node_id();
+    {
+        let mut sp = nm.address_space().write();
+        MethodBuilder::new(&id, "TypedAdd", "TypedAdd")
+            .component_of(ObjectId::ObjectsFolder)
+            .input_args(
+                &mut *sp,
+                &input_id,
+                &[
+                    ("Lhs", DataTypeId::Int64).into(),
+                    ("Rhs", DataTypeId::Int64).into(),
+                ],
+            )
+            .output_args(
+                &mut *sp,
+                &output_id,
+                &[("Result", DataTypeId::Int64).into()],
+            )
+            .insert(&mut *sp);
+    }
+
+    // Registered through the typed adapter — the closure sees decoded i64s and returns a typed tuple.
+    nm.inner().add_method_cb(
+        id.clone(),
+        typed_method(|a: i64, b: i64| -> Result<(i64,), StatusCode> { Ok((a + b,)) }),
+    );
+
+    let r = session
+        .call_one(CallMethodRequest {
+            object_id: ObjectId::ObjectsFolder.into(),
+            method_id: id.clone(),
+            input_arguments: Some(vec![Variant::Int64(3), Variant::Int64(4)]),
+        })
+        .await
+        .unwrap();
+    assert_eq!(r.status_code, StatusCode::Good);
+    assert_eq!(r.output_arguments.unwrap(), vec![Variant::Int64(7)]);
+}
+
+/// A typed handler's own error return propagates as the Call operation status, end-to-end.
+#[tokio::test]
+async fn call_typed_method_user_error_propagates() {
+    let (_tester, nm, session) = setup().await;
+
+    let id = nm.inner().next_node_id();
+    let input_id = nm.inner().next_node_id();
+    let output_id = nm.inner().next_node_id();
+    {
+        let mut sp = nm.address_space().write();
+        MethodBuilder::new(&id, "TypedDouble", "TypedDouble")
+            .component_of(ObjectId::ObjectsFolder)
+            .input_args(&mut *sp, &input_id, &[("X", DataTypeId::Int64).into()])
+            .output_args(
+                &mut *sp,
+                &output_id,
+                &[("Result", DataTypeId::Int64).into()],
+            )
+            .insert(&mut *sp);
+    }
+
+    nm.inner().add_method_cb(
+        id.clone(),
+        typed_method(|x: i64| -> Result<(i64,), StatusCode> {
+            if x < 0 {
+                Err(StatusCode::BadOutOfRange)
+            } else {
+                Ok((x * 2,))
+            }
+        }),
+    );
+
+    // Valid input -> Good + correct output.
+    let ok = session
+        .call_one(CallMethodRequest {
+            object_id: ObjectId::ObjectsFolder.into(),
+            method_id: id.clone(),
+            input_arguments: Some(vec![Variant::Int64(5)]),
+        })
+        .await
+        .unwrap();
+    assert_eq!(ok.status_code, StatusCode::Good);
+    assert_eq!(ok.output_arguments.unwrap(), vec![Variant::Int64(10)]);
+
+    // Handler's own error surfaces as the Call status.
+    let err = session
+        .call_one(CallMethodRequest {
+            object_id: ObjectId::ObjectsFolder.into(),
+            method_id: id.clone(),
+            input_arguments: Some(vec![Variant::Int64(-1)]),
+        })
+        .await
+        .unwrap();
+    assert_eq!(err.status_code, StatusCode::BadOutOfRange);
+}
+
+/// US3: a context-aware typed method receives both the `RequestContext` and decoded typed args, and
+/// runs end-to-end through the Call service. The handler reads the context (session id) and the typed
+/// argument, proving both are threaded correctly.
+#[tokio::test]
+async fn call_typed_method_with_context() {
+    let (_tester, nm, session) = setup().await;
+
+    let id = nm.inner().next_node_id();
+    let input_id = nm.inner().next_node_id();
+    let output_id = nm.inner().next_node_id();
+    {
+        let mut sp = nm.address_space().write();
+        MethodBuilder::new(&id, "TypedCtx", "TypedCtx")
+            .component_of(ObjectId::ObjectsFolder)
+            .input_args(&mut *sp, &input_id, &[("Addend", DataTypeId::Int64).into()])
+            .output_args(
+                &mut *sp,
+                &output_id,
+                &[("SessionPlusAddend", DataTypeId::Int64).into()],
+            )
+            .insert(&mut *sp);
+    }
+
+    // Context-aware typed handler: reads the session id from the context AND a decoded i64 argument.
+    nm.inner().add_method_cb_with_context(
+        id.clone(),
+        typed_method_with_context(
+            |ctx: &RequestContext, addend: i64| -> Result<(i64,), StatusCode> {
+                Ok((ctx.session_id as i64 + addend,))
+            },
+        ),
+    );
+
+    let r = session
+        .call_one(CallMethodRequest {
+            object_id: ObjectId::ObjectsFolder.into(),
+            method_id: id.clone(),
+            input_arguments: Some(vec![Variant::Int64(1000)]),
+        })
+        .await
+        .unwrap();
+    assert_eq!(r.status_code, StatusCode::Good);
+    let outputs = r.output_arguments.unwrap();
+    assert_eq!(outputs.len(), 1);
+    let Variant::Int64(v) = outputs[0] else {
+        panic!("wrong output type");
+    };
+    // A real activated session has a positive numeric id, so the context was threaded through
+    // (output = session_id + 1000 > 1000) and the typed argument decoded correctly.
+    assert!(
+        v > 1000,
+        "context session id should be threaded through, got {v}"
+    );
 }

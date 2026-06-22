@@ -8,7 +8,7 @@ This is a list of things that are known to be missing, or ideas that could be im
  - Implement a better framework for security checks on the server.
  - Write a sophisticated server example with a persistent store. This would be a great way to verify the flexibility of the server.
  - Write some "bad ideas" servers, it would be nice to showcase how flexible this is.
- - Write a framework for method calls. The foundation for this has been laid with `TryFromVariant`, if we really wanted to we could use clever trait magic to let users simply define a rust method that takes in values that each implement a trait `MethodArg`, with a blanket impl for `TryFromVariant`, and return a tuple of results. Could be really powerful, but methods are a little niche.
+ - ~~Write a framework for method calls.~~ **Done** — `async-opcua-server`'s `node_manager::{MethodArg, IntoMethodOutputs, typed_method, typed_method_with_context}` (`method_typed.rs`). Write a method as a typed Rust closure (`typed_method(|name: String, n: i32| -> Result<(String,), StatusCode> { … })`); arguments decode via a `MethodArg` blanket impl over `TryFromVariant`, outputs marshal from a tuple (arity 0..=6), and the adapter returns the Part 4 Call status codes (`BadArgumentsMissing`/`BadTooManyArguments`/`BadInvalidArgument`). Additive over the existing `add_method_callback` path (raw callbacks still work). The demo server uses it (`samples/demo-server/src/methods.rs`).
  - Implement `Query`. I never got around to this, because the service is just so complex. Currently there is no way to actually implement it, since it won't work unless _all_ node managers implement it, and the core node managers don't.
 
 ## Performance / bounded-time (Big-O) backlog

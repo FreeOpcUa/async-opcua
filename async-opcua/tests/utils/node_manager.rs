@@ -45,6 +45,10 @@ struct HistoryContinuationPoint {
 }
 
 type MethodCb = dyn FnMut(&[Variant]) -> Result<Vec<Variant>, StatusCode> + Send + Sync + 'static;
+type MethodCbCtx = dyn FnMut(&RequestContext, &[Variant]) -> Result<Vec<Variant>, StatusCode>
+    + Send
+    + Sync
+    + 'static;
 
 pub struct TestNodeManagerImpl {
     // In practice you would never store history data in memory, and you would not want
@@ -52,6 +56,7 @@ pub struct TestNodeManagerImpl {
     history_data: RwLock<HashMap<NodeId, HistoryData>>,
     call_info: Mutex<CallInfo>,
     method_cbs: Mutex<HashMap<NodeId, Box<MethodCb>>>,
+    method_cbs_ctx: Mutex<HashMap<NodeId, Box<MethodCbCtx>>>,
     node_id_generator: AtomicU32,
     namespace_index: u16,
     node_managers: NodeManagersRef,
@@ -389,7 +394,7 @@ impl InMemoryNodeManagerImpl for TestNodeManagerImpl {
 
     async fn call(
         &self,
-        _context: &RequestContext,
+        context: &RequestContext,
         _address_space: &RwLock<AddressSpace>,
         methods_to_call: &mut [&mut &mut MethodCall],
     ) -> Result<(), StatusCode> {
@@ -401,12 +406,16 @@ impl InMemoryNodeManagerImpl for TestNodeManagerImpl {
         }
 
         let mut cbs = self.method_cbs.lock();
+        let mut cbs_ctx = self.method_cbs_ctx.lock();
         for method in methods_to_call {
-            let Some(cb) = cbs.get_mut(method.method_id()) else {
+            let res = if let Some(cb) = cbs.get_mut(method.method_id()) {
+                (*cb)(method.arguments())
+            } else if let Some(cb) = cbs_ctx.get_mut(method.method_id()) {
+                (*cb)(context, method.arguments())
+            } else {
                 method.set_status(StatusCode::BadMethodInvalid);
                 continue;
             };
-            let res = (*cb)(method.arguments());
             match res {
                 Ok(r) => {
                     method.set_outputs(r);
@@ -722,6 +731,7 @@ impl TestNodeManagerImpl {
             history_data: Default::default(),
             call_info: Default::default(),
             method_cbs: Default::default(),
+            method_cbs_ctx: Default::default(),
             node_id_generator: AtomicU32::new(1),
             namespace_index,
             node_managers,
@@ -740,6 +750,19 @@ impl TestNodeManagerImpl {
         cb: impl FnMut(&[Variant]) -> Result<Vec<Variant>, StatusCode> + Send + Sync + 'static,
     ) {
         let mut cbs = self.method_cbs.lock();
+        cbs.insert(node_id, Box::new(cb));
+    }
+
+    #[allow(unused)]
+    pub fn add_method_cb_with_context(
+        &self,
+        node_id: NodeId,
+        cb: impl FnMut(&RequestContext, &[Variant]) -> Result<Vec<Variant>, StatusCode>
+            + Send
+            + Sync
+            + 'static,
+    ) {
+        let mut cbs = self.method_cbs_ctx.lock();
         cbs.insert(node_id, Box::new(cb));
     }
 

@@ -9,7 +9,7 @@ use std::sync::Arc;
 use opcua::{
     server::{
         address_space::{EventNotifier, MethodBuilder, ObjectBuilder},
-        node_manager::memory::SimpleNodeManager,
+        node_manager::{memory::SimpleNodeManager, typed_method},
     },
     types::{DataTypeId, NodeId, ObjectId, StatusCode, Variant},
 };
@@ -49,6 +49,7 @@ pub fn add_methods(manager: Arc<SimpleNodeManager>, ns: u16) {
         Ok(vec![Variant::from("Hello World!".to_owned())])
     });
 
+    // HelloX uses the typed framework; NoOp above shows the raw path still works.
     // HelloX has 1 one input and 1 output - "Hello Foo" in a result parameter
     let fn_node_id = NodeId::new(ns, "HelloX");
     MethodBuilder::new(&fn_node_id, "HelloX", "HelloX")
@@ -64,17 +65,35 @@ pub fn add_methods(manager: Arc<SimpleNodeManager>, ns: u16) {
             &[("Result", DataTypeId::String).into()],
         )
         .insert(&mut *address_space);
-    manager.inner().add_method_callback(fn_node_id, |args| {
-        // We don't actually need to do much validation here, since it should all have happened elsewhere,
-        // but we don't want to panic if something goes wrong.
-        let Some(Variant::String(s)) = args.first() else {
-            return Err(StatusCode::BadTypeMismatch);
-        };
+    manager.inner().add_method_callback(
+        fn_node_id,
+        typed_method(|your_name: String| -> Result<(String,), StatusCode> {
+            Ok((format!("Hello {your_name}!"),))
+        }),
+    );
 
-        Ok(vec![Variant::String(
-            format!("Hello {}!", s.as_ref()).into(),
-        )])
-    });
+    // Add uses the typed framework for multiple inputs.
+    let fn_node_id = NodeId::new(ns, "Add");
+    MethodBuilder::new(&fn_node_id, "Add", "Add")
+        .component_of(object_id.clone())
+        .input_args(
+            &mut *address_space,
+            &NodeId::new(ns, "AddInput"),
+            &[
+                ("Lhs", DataTypeId::Int64).into(),
+                ("Rhs", DataTypeId::Int64).into(),
+            ],
+        )
+        .output_args(
+            &mut *address_space,
+            &NodeId::new(ns, "AddOutput"),
+            &[("Result", DataTypeId::Int64).into()],
+        )
+        .insert(&mut *address_space);
+    manager.inner().add_method_callback(
+        fn_node_id,
+        typed_method(|lhs: i64, rhs: i64| -> Result<(i64,), StatusCode> { Ok((lhs + rhs,)) }),
+    );
 
     // Boop has 1 one input and 0 output
     let fn_node_id = NodeId::new(ns, "Boop");

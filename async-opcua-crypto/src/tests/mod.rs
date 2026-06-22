@@ -57,4 +57,5 @@ mod ecc_ephemeral_key;
 #[cfg(feature = "ecc")]
 mod ecc_token_header;
 mod identity;
+mod pubsub_ctr;
 mod security_policy;

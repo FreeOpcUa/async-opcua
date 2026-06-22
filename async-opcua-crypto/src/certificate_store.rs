@@ -104,7 +104,9 @@ impl CertificateStore {
             certificate_store.own_private_key_path = pkey_path.to_path_buf();
         }
         let (cert, pkey) = if certificate_store.ensure_pki_path().is_err() {
-            error!("Folder for storing certificates cannot be examined so server has no application instance certificate or private key.");
+            error!(
+                "Folder for storing certificates cannot be examined so server has no application instance certificate or private key."
+            );
             (None, None)
         } else {
             let cert = certificate_store.read_own_cert();
@@ -776,7 +778,10 @@ impl CertificateStore {
     ///
     fn write_to_file(bytes: &[u8], file_path: &Path, overwrite: bool) -> Result<usize, String> {
         if !overwrite && file_path.exists() {
-            Err(format!("File {} already exists and will not be overwritten. Enable overwrite to disable this safeguard.", file_path.display()))
+            Err(format!(
+                "File {} already exists and will not be overwritten. Enable overwrite to disable this safeguard.",
+                file_path.display()
+            ))
         } else {
             if let Some(parent) = file_path.parent() {
                 CertificateStore::ensure_dir(parent)?;
@@ -796,7 +801,10 @@ impl CertificateStore {
         overwrite: bool,
     ) -> Result<usize, String> {
         if !overwrite && file_path.exists() {
-            Err(format!("File {} already exists and will not be overwritten. Enable overwrite to disable this safeguard.", file_path.display()))
+            Err(format!(
+                "File {} already exists and will not be overwritten. Enable overwrite to disable this safeguard.",
+                file_path.display()
+            ))
         } else {
             if let Some(parent) = file_path.parent() {
                 CertificateStore::ensure_dir(parent)?;

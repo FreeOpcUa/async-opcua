@@ -1123,7 +1123,12 @@ impl X509 {
                 Ok(())
             } else {
                 warn!("Did not find hostname {hostname} in alt names {subject_alt_names:?}");
-                Err(Error::new(StatusCode::BadCertificateHostNameInvalid, format!("Certificate hostname ({hostname}) not found in alt names ({subject_alt_names:?})")))
+                Err(Error::new(
+                    StatusCode::BadCertificateHostNameInvalid,
+                    format!(
+                        "Certificate hostname ({hostname}) not found in alt names ({subject_alt_names:?})"
+                    ),
+                ))
             }
         } else {
             // No alt names
@@ -1157,7 +1162,12 @@ impl X509 {
                                 "Application uri {} does not match first alt name {}",
                                 application_uri, val
                             );
-                            Err(Error::new(StatusCode::BadCertificateUriInvalid, format!("Application uri {application_uri} does not match first alt name {val}")))
+                            Err(Error::new(
+                                StatusCode::BadCertificateUriInvalid,
+                                format!(
+                                    "Application uri {application_uri} does not match first alt name {val}"
+                                ),
+                            ))
                         }
                     }
 

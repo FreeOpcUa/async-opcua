@@ -80,9 +80,17 @@ pub(crate) mod algorithms {
     #[allow(unused)]
     pub(crate) const ENC_AES128_CBC: &str = "http://www.w3.org/2001/04/xmlenc#aes128-cbc";
 
+    /// Symmetric encryption algorithm AES128-CTR
+    #[allow(unused)]
+    pub(crate) const ENC_AES128_CTR: &str = "http://opcfoundation.org/UA/SecurityPolicy#Aes128-CTR";
+
     /// Symmetric encryption algorithm AES256-CBC
     #[allow(unused)]
     pub(crate) const ENC_AES256_CBC: &str = "http://www.w3.org/2001/04/xmlenc#aes256-cbc";
+
+    /// Symmetric encryption algorithm AES256-CTR
+    #[allow(unused)]
+    pub(crate) const ENC_AES256_CTR: &str = "http://opcfoundation.org/UA/SecurityPolicy#Aes256-CTR";
 
     /// Asymmetric encryption algorithm RSA15
     pub(crate) const ENC_RSA_15: &str = "http://www.w3.org/2001/04/xmlenc#rsa-1_5";
@@ -156,7 +164,7 @@ pub fn create_signature_data(
             return Err(Error::new(
                 StatusCode::BadSecurityPolicyRejected,
                 "Cannot create signature for Unknown security policy",
-            ))
+            ));
         }
         SecurityPolicy::None => (UAString::null(), ByteString::null()),
         security_policy => {

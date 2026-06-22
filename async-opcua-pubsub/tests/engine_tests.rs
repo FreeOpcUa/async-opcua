@@ -96,6 +96,8 @@ fn encodes_publisher_uadp_with_registered_security_group() {
     let message = UadpNetworkMessage {
         publisher_id: PublisherId::String("publisher-1".to_string()),
         writer_group_id: 1,
+        network_message_number: 0,
+        sequence_number: 1,
         dataset_messages: vec![UadpDataSetMessage {
             dataset_writer_id: 10,
             sequence_number: 1,
@@ -139,6 +141,8 @@ fn decodes_subscriber_uadp_with_registered_security_group() {
     let message = UadpNetworkMessage {
         publisher_id: PublisherId::String("publisher-1".to_string()),
         writer_group_id: 1,
+        network_message_number: 0,
+        sequence_number: 1,
         dataset_messages: vec![UadpDataSetMessage {
             dataset_writer_id: 10,
             sequence_number: 1,

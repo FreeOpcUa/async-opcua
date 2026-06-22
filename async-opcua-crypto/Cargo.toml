@@ -34,6 +34,7 @@ async-opcua-types = { path = "../async-opcua-types", version = "0.19.0" }
 aes = { workspace = true }
 aws-lc-rs = { version = "1.17.0", optional = true }
 cbc = { workspace = true }
+ctr = { workspace = true }
 const-oid = { workspace = true }
 ecdsa = { workspace = true, optional = true }
 hkdf = { workspace = true, optional = true }

@@ -164,6 +164,7 @@ impl PubSubBridge {
                         if group_changed {
                             pending.push((
                                 writer_group,
+                                sequence_number,
                                 json_dataset_messages,
                                 uadp_dataset_messages,
                             ));
@@ -171,7 +172,13 @@ impl PubSubBridge {
                     }
                 }
 
-                for (writer_group, json_dataset_messages, uadp_dataset_messages) in pending {
+                for (
+                    writer_group,
+                    network_sequence_number,
+                    json_dataset_messages,
+                    uadp_dataset_messages,
+                ) in pending
+                {
                     {
                         let topic = format!("opcua/telemetry/{}", writer_group.writer_group_id);
                         match writer_group.encoding {
@@ -211,6 +218,8 @@ impl PubSubBridge {
                                 let msg = UadpNetworkMessage {
                                     publisher_id: PublisherId::String(publisher_id.clone()),
                                     writer_group_id: writer_group.writer_group_id,
+                                    network_message_number: 0,
+                                    sequence_number: network_sequence_number,
                                     dataset_messages: uadp_dataset_messages,
                                 };
                                 let ctx_owned = ContextOwned::default();

@@ -198,6 +198,10 @@ pub struct UadpNetworkMessage {
     pub publisher_id: PublisherId,
     /// The writer group ID for cyclic publishing.
     pub writer_group_id: u16,
+    /// GroupHeader NetworkMessageNumber.
+    pub network_message_number: u16,
+    /// GroupHeader NetworkMessage-level sequence number; owned/incremented by the publisher, consumed by message security and replay protection.
+    pub sequence_number: u16,
     /// The collection of dataset messages in the payload.
     pub dataset_messages: Vec<UadpDataSetMessage>,
 }
@@ -209,8 +213,11 @@ impl BinaryEncodable for UadpNetworkMessage {
             len += self.publisher_id.byte_len(ctx);
         }
         // GroupHeader
+        len += 1; // group_flags
         len += 2; // writer_group_id
         len += 4; // group_version
+        len += 2; // network_message_number
+        len += 2; // sequence_number
                   // PayloadHeader
         len += 1; // dataset_writer_count
         len += self.dataset_messages.len() * 2; // dataset_writer_ids
@@ -235,8 +242,11 @@ impl BinaryEncodable for UadpNetworkMessage {
         }
 
         // GroupHeader
+        0b0000_1111u8.encode(stream, ctx)?;
         self.writer_group_id.encode(stream, ctx)?;
         0u32.encode(stream, ctx)?; // GroupVersion (0 for simplicity)
+        self.network_message_number.encode(stream, ctx)?;
+        self.sequence_number.encode(stream, ctx)?;
 
         // PayloadHeader
         let count = self.dataset_messages.len() as u8;
@@ -267,10 +277,30 @@ impl BinaryDecodable for UadpNetworkMessage {
             PublisherId::None
         };
 
-        let writer_group_id = if (flags & 0x20) != 0 {
-            let id = u16::decode(stream, ctx)?;
-            let _group_version = u32::decode(stream, ctx)?;
-            id
+        let (writer_group_id, network_message_number, sequence_number) = if (flags & 0x20) != 0 {
+            let group_flags = u8::decode(stream, ctx)?;
+            if (group_flags & 0b1111_0000) != 0 {
+                return Err(Error::decoding("UADP GroupFlags reserved bits are set"));
+            }
+            let writer_group_id = if (group_flags & 0b0000_0001) != 0 {
+                u16::decode(stream, ctx)?
+            } else {
+                0
+            };
+            if (group_flags & 0b0000_0010) != 0 {
+                let _group_version = u32::decode(stream, ctx)?;
+            }
+            let network_message_number = if (group_flags & 0b0000_0100) != 0 {
+                u16::decode(stream, ctx)?
+            } else {
+                0
+            };
+            let sequence_number = if (group_flags & 0b0000_1000) != 0 {
+                u16::decode(stream, ctx)?
+            } else {
+                0
+            };
+            (writer_group_id, network_message_number, sequence_number)
         } else {
             return Err(Error::decoding("GroupHeader is missing"));
         };
@@ -299,6 +329,8 @@ impl BinaryDecodable for UadpNetworkMessage {
         Ok(UadpNetworkMessage {
             publisher_id,
             writer_group_id,
+            network_message_number,
+            sequence_number,
             dataset_messages,
         })
     }
@@ -317,6 +349,8 @@ mod tests {
         let msg = UadpNetworkMessage {
             publisher_id: PublisherId::String("UdpPublisher1".to_string()),
             writer_group_id: 1,
+            network_message_number: 0,
+            sequence_number: 1,
             dataset_messages: vec![UadpDataSetMessage {
                 dataset_writer_id: 101,
                 sequence_number: 1,
@@ -347,5 +381,55 @@ mod tests {
             msg.dataset_messages[0].fields,
             decoded.dataset_messages[0].fields
         );
+    }
+
+    // T003 (feature 026): the Part-14 GroupHeader NetworkMessageNumber + NetworkMessage-level
+    // SequenceNumber round-trip, and decode rejects reserved GroupFlags bits.
+    fn sample_message(network_message_number: u16, sequence_number: u16) -> UadpNetworkMessage {
+        UadpNetworkMessage {
+            publisher_id: PublisherId::None,
+            writer_group_id: 7,
+            network_message_number,
+            sequence_number,
+            dataset_messages: vec![UadpDataSetMessage {
+                dataset_writer_id: 101,
+                sequence_number: 3,
+                timestamp: None,
+                status: None,
+                fields: vec![Variant::from(20.0f64)],
+            }],
+        }
+    }
+
+    #[test]
+    fn group_header_sequence_fields_round_trip() {
+        let ctx_owned = ContextOwned::default();
+        let ctx = ctx_owned.context();
+        let msg = sample_message(5, 42);
+
+        let encoded = msg.encode_to_vec(&ctx);
+        // PublisherId::None => NetworkMessage flags byte (0x60) at [0], GroupFlags at [1].
+        assert_eq!(
+            encoded[1], 0b0000_1111,
+            "GroupFlags should enable all four fields"
+        );
+
+        let decoded = UadpNetworkMessage::decode(&mut &encoded[..], &ctx).unwrap();
+        assert_eq!(decoded.network_message_number, 5);
+        assert_eq!(decoded.sequence_number, 42);
+        assert_eq!(decoded.writer_group_id, 7);
+        // NetworkMessage-level sequence is distinct from the DataSetMessage-level one.
+        assert_eq!(decoded.dataset_messages[0].sequence_number, 3);
+    }
+
+    #[test]
+    fn group_header_rejects_reserved_flag_bits() {
+        let ctx_owned = ContextOwned::default();
+        let ctx = ctx_owned.context();
+        let mut encoded = sample_message(1, 1).encode_to_vec(&ctx);
+        encoded[1] |= 0b0001_0000; // set a reserved GroupFlags bit (bit 4)
+
+        let err = UadpNetworkMessage::decode(&mut &encoded[..], &ctx);
+        assert!(err.is_err(), "decode must reject reserved GroupFlags bits");
     }
 }

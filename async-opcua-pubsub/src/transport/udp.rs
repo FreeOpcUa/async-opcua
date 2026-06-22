@@ -157,6 +157,8 @@ impl PubSubPublisher for UdpPublisher {
                                 let msg = UadpNetworkMessage {
                                     publisher_id: PublisherId::String(publisher_id.clone()),
                                     writer_group_id: writer_group.writer_group_id,
+                                    network_message_number: 0,
+                                    sequence_number,
                                     dataset_messages: uadp_dataset_messages,
                                 };
                                 let ctx_owned = ContextOwned::default();

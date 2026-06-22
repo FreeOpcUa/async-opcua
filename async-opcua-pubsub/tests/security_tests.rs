@@ -16,6 +16,8 @@ fn sample_message() -> UadpNetworkMessage {
     UadpNetworkMessage {
         publisher_id: PublisherId::String("line-a-publisher".to_string()),
         writer_group_id: 7,
+        network_message_number: 0,
+        sequence_number: 1,
         dataset_messages: vec![UadpDataSetMessage {
             dataset_writer_id: 42,
             sequence_number: 101,

@@ -72,3 +72,25 @@ not base-profile violations — flagged as such.
 
 Each item → one speckit feature, ECC-style: extract the normative SHALL/MUST → check impl → fix →
 independent tests anchored to spec text / official vectors / crafted PKI fixtures.
+
+## Security audit remediation round 2 outcome (feature 025, 2026-06-22)
+Verify-before-fix triaged the 2026-06-22 review findings. Result:
+- **FIXED (real): OAuth2/JWT** — issuer pinning (was: any trusted cert verified a JWT → confused deputy)
+  + require explicit oauth2_issuer/audience/issuer_certificate_path, fail closed (was: hardcoded
+  defaults). PR for feature 025.
+- **SPLIT to own feature (real): PubSub static AES-CBC IV** — the fix needs a Part-14 SecurityHeader
+  `MessageNonce` wire change + an encrypted-PubSub interop test (verifiable vs the .NET reference stack /
+  open62541 — UACTT not required). IND-CPA IV-reuse tracked as known until that feature lands.
+- **NO FIX — verified false-positive: cert validation** — KeyUsage/EKU/BasicConstraints "fail-open when
+  absent" is RFC-5280-correct + tested (`leaf_without_key_usage_extension_is_accepted`); usage enforced
+  when present; sigs + CRL sigs verified; revocation modes intentional. The review agent applied generic
+  X.509 strictness to an OPC-UA-profile impl. (Open minor checks: BasicConstraints pathLen, the
+  trust_unknown_certs 1-element-chain sig path — backlog, low priority.)
+- **NO FIX — fail-safe-by-design: Safety SPDU** — strict reject-on-sequence-gap is the SAFE behavior for
+  a SIL-3 channel; a tolerant window would be a safety regression. Gap recovery is a deferred Part-15
+  re-sync handshake (a feature), not a fix. Documented in validator.rs. CRC = black-channel (unkeyed,
+  per-spec), documented.
+- **NO FIX — bounded/completeness: decoder + audit** — eager `with_capacity` is bounded by
+  MAX_ARRAY_LENGTH=1000 (≤tens of KB, + max_message_size) — not a meaningful amplification. Audit: auth
+  FAILURES are already emitted; success/extra-event auditing is OPC-UA completeness, not a security hole
+  (deferred).

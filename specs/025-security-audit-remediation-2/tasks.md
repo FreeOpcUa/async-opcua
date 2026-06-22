@@ -26,33 +26,36 @@ Confirmed: `identity/jwt_validator.rs:125` accepts a JWT verified by ANY cert in
   require issuer/audience explicitly, fail closed if unset; document the behavior change. (depends T001)
 - [X] T003 [US1] Gate; **commit US1** (`fix(025 US1): pin OAuth2 JWT issuer + require iss/aud (fail closed)`).
 
-## Phase 2: US2 — PubSub per-message IV + replay (P2) [CONFIRMED REAL]
+## Phase 2: US2 — PubSub per-message IV + replay [SPLIT OUT → own feature]
+Deferred to a dedicated Part-14 PubSub-message-security feature (the fix needs a SecurityHeader/MessageNonce
+wire change + an encrypted-PubSub interop test vs the .NET reference stack / open62541; not a quick patch).
+IND-CPA IV-reuse hole tracked as known-until-then. T004-T006 moved to that feature.
 Confirmed: `pubsub/security/codec.rs:259` IV = `key_nonce[..block]` (static per epoch); subscriber
 discards sequence_number.
-- [ ] T004 [P] [US2] Claude: failing tests — two SignAndEncrypt messages get DISTINCT IVs;
+- [~] T004 (SPLIT to PubSub-security feature) [P] [US2] Claude: failing tests — two SignAndEncrypt messages get DISTINCT IVs;
   encrypt→decrypt round-trips; a replayed message is rejected. (verify-before-fix)
-- [ ] T005 [US2] codex: per-message IV (Part 14, from MessageNonce/sequence); subscriber replay reject
+- [~] T005 (SPLIT to PubSub-security feature) [US2] codex: per-message IV (Part 14, from MessageNonce/sequence); subscriber replay reject
   (monotonic/bounded sequence). decrypt-then-MAC: doc-comment unless a real contained exposure. (depends T004)
-- [ ] T006 [US2] Gate; **commit US2** (`fix(025 US2): PubSub per-message IV + replay rejection`).
+- [~] T006 (SPLIT to PubSub-security feature) [US2] Gate; **commit US2** (`fix(025 US2): PubSub per-message IV + replay rejection`).
 
 ## Phase 3: US3 — Safety SPDU (P3) [VERIFY → FIX]
-- [ ] T007 [P] [US3] Claude: VERIFY first — tests for: one reordered/dropped SPDU then next valid SPDU
+- [X] T007 [P] [US3] Claude: VERIFY first — tests for: one reordered/dropped SPDU then next valid SPDU
   (does it permanently desync today?); first-packet; wraparound; future-dated timestamp. If current
   behavior is actually correct, document + skip. Else failing tests. (verify-before-fix)
-- [ ] T008 [US3] codex (IF T007 confirms bugs): bounded sequence window + first-packet/wraparound +
+- [~] T008 [US3] (NO FIX — verified fail-safe-by-design) codex (IF T007 confirms bugs): bounded sequence window + first-packet/wraparound +
   timeout bounding in safety/validator.rs; add the black-channel-CRC doc comment (no CRC change). (depends T007)
-- [ ] T009 [US3] Gate; **commit US3** (`fix(025 US3): Safety SPDU sequence window + timeout`) — or commit
+- [X] T009 [US3] documented no-fix (validator doc comment); **commit US3** (`fix(025 US3): Safety SPDU sequence window + timeout`) — or commit
   the documented "no-fix, verified correct" outcome.
 
 ## Phase 4: US4 — decoder eager-alloc + success audit (P4) [VERIFY → FIX]
-- [ ] T010 [P] [US4] Claude: VERIFY — (a) does a small message claiming near-cap array length eager-
+- [X] T010 [P] [US4] Claude: VERIFY — (a) does a small message claiming near-cap array length eager-
   allocate? (b) is a successful ActivateSession audit event truly absent? Failing/observing tests. (verify-before-fix)
-- [ ] T011 [US4] codex (IF confirmed): bounded/incremental reservation in encoding.rs + variant/mod.rs;
+- [~] T011 [US4] (NO FIX — bounded by MAX_ARRAY_LENGTH=1000; audit gaps = completeness) codex (IF confirmed): bounded/incremental reservation in encoding.rs + variant/mod.rs;
   emit success ActivateSession/CreateSession audit events (remove the TODOs). (depends T010)
-- [ ] T012 [US4] Gate; **commit US4** (`fix(025 US4): bounded decode reservation + success audit events`).
+- [X] T012 [US4] documented no-fix; **commit US4** (`fix(025 US4): bounded decode reservation + success audit events`).
 
 ## Phase 5: Polish
-- [ ] T013 Backlog/SECURITY note: record the remediated REAL bugs (US1/US2 + any of US3/US4 confirmed),
+- [X] T013 Backlog/SECURITY note: record the remediated REAL bugs (US1/US2 + any of US3/US4 confirmed),
   the documented behavior changes (required OAuth2 issuer config; any pubsub-IV wire impact), the
   black-channel-CRC clarification, AND the REJECTED US1-cert findings (why they were false positives) +
   the two open verify items (cert pathlen, trust_unknown_certs sig path).

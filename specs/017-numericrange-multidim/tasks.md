@@ -60,24 +60,24 @@ returns a correctly-shaped sub-array (upper bounds clamped → partial); string/
   Add private row-major **stride** + **sub-extent flat-index** helpers using checked arithmetic
   (overflow → `Bad_IndexRangeNoData`); validate `Π dimensions == values.len()` (else fail closed).
   Panic-free; no unbounded allocation (clamp before allocate). Single-dimension arms unchanged. (codex; depends T002)
-- [ ] T004 [US1] Gate; verify T002 passes; **commit US1** (`feat(017 US1): dimension-aware multi-dimensional NumericRange read`).
+- [X] T004 [US1] Gate; verify T002 passes; **commit US1** (`feat(017 US1): dimension-aware multi-dimensional NumericRange read`).
 
 ## Phase 3: User Story 2 — Multi-dimensional write (`set_range_of`) (P1)
 
 **Goal**: a multi-dimensional `NumericRange` copies an exact-size source sub-array into the addressed
 sub-extent, leaving other elements unchanged.
 
-- [ ] T005 [US2] Claude-authored failing tests: destination 2-D `[3,3]`, range `1:2,0:1`, exact-shaped
+- [X] T005 [US2] Claude-authored failing tests: destination 2-D `[3,3]`, range `1:2,0:1`, exact-shaped
   source → exactly those cells replaced, all others unchanged, `dimensions` preserved; a 3-D write; an
   exact-match round-trip with `range_of` (write then read back the same range).
-- [ ] T006 [US2] Implement the `NumericRange::MultipleRanges` arm of `Variant::set_range_of` in
+- [X] T006 [US2] Implement the `NumericRange::MultipleRanges` arm of `Variant::set_range_of` in
   `async-opcua-types/src/variant/mod.rs` (replacing the "Not yet supported" stub): target must be an
   array (else `Bad_WriteNotSupported`); source must be an array of matching `value_type` whose shape
   **exactly matches** the addressed sub-extent (else `Bad_IndexRangeDataMismatch`); addressed extent out
   of range / rank mismatch / overflow → `Bad_IndexRangeNoData`; copy each addressed cell (row-major) from
   source into destination, leaving others unchanged. Reuse the T003 stride/sub-extent helpers. Panic-free.
   Single-dimension arm unchanged (keeps existing partial-copy behavior, back-compat). (codex; depends T003, T005)
-- [ ] T007 [US2] Gate; verify T005 passes; **commit US2** (`feat(017 US2): multi-dimensional NumericRange write`).
+- [X] T007 [US2] Gate; verify T005 passes; **commit US2** (`feat(017 US2): multi-dimensional NumericRange write`).
 
 ## Phase 4: User Story 3 — Fail-closed StatusCodes & panic-free bounds (P1)
 

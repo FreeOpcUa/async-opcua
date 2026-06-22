@@ -1763,3 +1763,57 @@ fn range_of_string_array_substring_all_out_of_range() {
         StatusCode::BadIndexRangeNoData
     );
 }
+
+/// US2: a multi-dimensional write replaces exactly the addressed cells, leaving others unchanged.
+/// dest 3x3 = 0..8; write range "1:2,0:1" with source [[90,91],[92,93]] → rows 1..=2 × cols 0..=1.
+#[test]
+fn set_range_of_multidim_2d_block() {
+    let mut v = multidim_i32(&[0, 1, 2, 3, 4, 5, 6, 7, 8], &[3, 3]);
+    let src = multidim_i32(&[90, 91, 92, 93], &[2, 2]);
+    v.set_range_of(&nr("1:2,0:1"), &src).unwrap();
+    let Variant::Array(a) = v else {
+        panic!("expected array")
+    };
+    let got: Vec<i32> = a
+        .values
+        .iter()
+        .map(|x| match x {
+            Variant::Int32(n) => *n,
+            _ => panic!(),
+        })
+        .collect();
+    // rows: [0,1,2], [90,91,5], [92,93,8]
+    assert_eq!(got, vec![0, 1, 2, 90, 91, 5, 92, 93, 8]);
+    assert_eq!(a.dimensions, Some(vec![3, 3]));
+}
+
+/// US2: write then read back the same range returns the written sub-array (round-trip).
+#[test]
+fn set_range_of_multidim_round_trip() {
+    let mut v = multidim_i32(&[0, 1, 2, 3, 4, 5, 6, 7, 8], &[3, 3]);
+    let src = multidim_i32(&[90, 91, 92, 93], &[2, 2]);
+    v.set_range_of(&nr("1:2,0:1"), &src).unwrap();
+    let read_back = v.range_of(&nr("1:2,0:1")).unwrap();
+    assert_eq!(read_back, src);
+}
+
+/// US2: a 3-D write replaces exactly the addressed cells.
+/// dest 2x2x2 = 0..7; write "0:1,1,0" (cells (0,1,0)=idx2, (1,1,0)=idx6) with source [20,60].
+#[test]
+fn set_range_of_multidim_3d() {
+    let mut v = multidim_i32(&[0, 1, 2, 3, 4, 5, 6, 7], &[2, 2, 2]);
+    let src = multidim_i32(&[20, 60], &[2, 1, 1]);
+    v.set_range_of(&nr("0:1,1,0"), &src).unwrap();
+    let Variant::Array(a) = v else {
+        panic!("expected array")
+    };
+    let got: Vec<i32> = a
+        .values
+        .iter()
+        .map(|x| match x {
+            Variant::Int32(n) => *n,
+            _ => panic!(),
+        })
+        .collect();
+    assert_eq!(got, vec![0, 1, 20, 3, 4, 5, 60, 7]);
+}

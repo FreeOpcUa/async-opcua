@@ -1647,10 +1647,10 @@ impl Variant {
         // Check value is same type as our array
         match self {
             Variant::Array(ref mut array) => {
-                let values = &mut array.values;
                 match range {
                     NumericRange::None => Err(StatusCode::BadIndexRangeNoData),
                     NumericRange::Index(idx) => {
+                        let values = &mut array.values;
                         let idx = (*idx) as usize;
                         if idx >= values.len() || other_values.is_empty() {
                             Err(StatusCode::BadIndexRangeNoData)
@@ -1664,6 +1664,7 @@ impl Variant {
                         }
                     }
                     NumericRange::Range(min, max) => {
+                        let values = &mut array.values;
                         let (min, max) = ((*min) as usize, (*max) as usize);
                         if min >= values.len() {
                             Err(StatusCode::BadIndexRangeNoData)
@@ -1685,10 +1686,59 @@ impl Variant {
                             Ok(())
                         }
                     }
-                    NumericRange::MultipleRanges(_ranges) => {
-                        // Not yet supported
-                        error!("Multiple ranges not supported");
-                        Err(StatusCode::BadIndexRangeNoData)
+                    NumericRange::MultipleRanges(ranges) => {
+                        let dest_dims: Vec<usize> = array
+                            .dimensions
+                            .as_ref()
+                            .map(|dimensions| {
+                                dimensions
+                                    .iter()
+                                    .map(|dimension| (*dimension) as usize)
+                                    .collect()
+                            })
+                            .unwrap_or_else(|| vec![array.values.len()]);
+
+                        let stored_len = Self::checked_dimension_product(&dest_dims)
+                            .ok_or(StatusCode::BadIndexRangeNoData)?;
+                        if stored_len != array.values.len() {
+                            return Err(StatusCode::BadIndexRangeNoData);
+                        }
+
+                        if ranges.len() != dest_dims.len() {
+                            return Err(StatusCode::BadIndexRangeNoData);
+                        }
+
+                        let mut selections = Vec::with_capacity(ranges.len());
+                        for (range, dim) in ranges.iter().zip(dest_dims.iter()) {
+                            let (lo, hi) =
+                                Self::range_bounds(range).ok_or(StatusCode::BadIndexRangeNoData)?;
+                            if lo >= *dim || hi >= *dim {
+                                return Err(StatusCode::BadIndexRangeNoData);
+                            }
+                            selections.push((lo, hi));
+                        }
+
+                        let selected_count = Self::checked_selection_count(&selections)
+                            .ok_or(StatusCode::BadIndexRangeNoData)?;
+                        if selected_count != other_values.len() {
+                            return Err(StatusCode::BadIndexRangeDataMismatch);
+                        }
+
+                        let dest_indices = Self::row_major_indices(&dest_dims, &selections)
+                            .ok_or(StatusCode::BadIndexRangeNoData)?;
+
+                        for (source_idx, flat) in dest_indices.iter().copied().enumerate() {
+                            let value = array
+                                .values
+                                .get_mut(flat)
+                                .ok_or(StatusCode::BadIndexRangeNoData)?;
+                            let other_value = other_values
+                                .get(source_idx)
+                                .ok_or(StatusCode::BadIndexRangeDataMismatch)?;
+                            *value = other_value.clone();
+                        }
+
+                        Ok(())
                     }
                 }
             }

@@ -116,3 +116,28 @@ references indexed `by_source`/`by_target`; node lookup is `HashMap` (O(1)).
   amplification on the Browse/Translate paths. Tier 3 is latency hygiene, not DoS.
 - Each item → a `complexity-cuts` transformation: characterization test green first, one transformation,
   re-verify, then report `before → after · N× faster` (or `asymptotic only`). One commit per fix.
+
+---
+
+## YAGNI / over-build backlog (ponytail-audit, 2026-06-22)
+
+- **`yagni`** — context-aware typed-method variant (`MethodHandlerWithContext` trait + 7 macro arity
+  impls + `typed_method_with_context()` + the `node_manager` re-export), `async-opcua-server/src/
+  node_manager/method_typed.rs`. Only caller is the test written to test it; no demo/sample/production
+  use. The raw `add_method_callback_with_context` already covers context. **Cut ≈ -80 lines** (trait +
+  impls + wrapper + re-export + `methods.rs` test). Add back when a real consumer needs typed context.
+  Low priority — merged + green, so cutting is churn-only.
+
+### Repo-wide ponytail-audit (since fork f7ab8d72, 2026-06-22)
+
+- **`native`** — `async-opcua-pubsub` + `async-opcua-history-sqlite` are NON-optional deps of
+  `async-opcua` (`async-opcua/Cargo.toml:87-88`, no `optional = true`), unlike client/server/nodes/xml
+  which are feature-gated. They are always compiled, forcing AMQP/MQTT/WebSocket + libsqlite3-sys onto
+  every async-opcua user. **Fix:** `optional = true` + `pubsub`/`history` features. Cut = 2 always-on
+  subsystems + their transitive deps from default builds.
+- **`delete`** — `async-opcua-safety/src/cli.rs` (135 lines): a CLI module inside the safety *library*
+  crate (`pub mod cli`), wired to no `[[bin]]`, nothing runs it. The crate's `Spdu`/`SafetyValidator`
+  ARE used (server `node_access.rs`); only the `cli` submodule is dead. Delete it + the `pub mod cli`.
+- **Scope (not a code cut)** — breadth question: PubSub (3 transports), GDS push+pull, FOTA, programs
+  engine, OAuth2, Safety/SPDU were added to tick OPC UA facets. Whether the deployment needs each is a
+  product call. Real signal to gather: which of these subsystems have zero tests/callers.

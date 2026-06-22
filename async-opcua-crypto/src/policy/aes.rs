@@ -11,10 +11,10 @@ use crate::SHA1_SIZE;
 #[cfg(feature = "ecc")]
 use crate::SHA384_SIZE;
 use crate::{
-    AesKey, KeySize, PrivateKey, PublicKey, SHA256_SIZE,
     aes::calculate_cipher_text_size,
     hash,
-    policy::{PaddingInfo, SecurityPolicyImpl, minimum_padding},
+    policy::{minimum_padding, PaddingInfo, SecurityPolicyImpl},
+    AesKey, KeySize, PrivateKey, PublicKey, SHA256_SIZE,
 };
 
 pub(crate) struct AesPolicy<T> {
@@ -864,7 +864,7 @@ impl AesSecurityPolicy for Basic256 {
 
 #[cfg(test)]
 mod tests {
-    use crate::{AesDerivedKeys, AesKey, SecurityPolicy, random};
+    use crate::{random, AesDerivedKeys, AesKey, SecurityPolicy};
 
     #[test]
     fn aes_test() {

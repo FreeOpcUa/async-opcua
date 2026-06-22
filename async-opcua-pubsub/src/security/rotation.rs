@@ -66,7 +66,13 @@ mod tests {
     use super::*;
 
     fn key_set(seed: u8) -> SecurityKeySet {
-        SecurityKeySet::from_parts(vec![seed; 32], vec![seed + 1; 32], vec![seed + 2; 32]).unwrap()
+        SecurityKeySet::from_parts(
+            seed as u32,
+            vec![seed; 32],
+            vec![seed + 1; 32],
+            vec![seed + 2; 32],
+        )
+        .unwrap()
     }
 
     fn test_group(lifetime: Duration) -> (SecurityGroup, SecurityKeySet, SecurityKeySet) {

@@ -22,14 +22,19 @@ fn counter_block(key_nonce: &[u8; 4], message_nonce: &[u8; 8]) -> [u8; 16] {
 
 /// Independent AES-CTR: XOR plaintext with keystream, incrementing only the low 32 bits of the
 /// counter block as a big-endian integer (Part-14 / RFC 3686 convention).
-fn ctr_oracle<F: Fn([u8; 16]) -> [u8; 16]>(encrypt_block: F, mut counter: [u8; 16], data: &[u8]) -> Vec<u8> {
+fn ctr_oracle<F: Fn([u8; 16]) -> [u8; 16]>(
+    encrypt_block: F,
+    mut counter: [u8; 16],
+    data: &[u8],
+) -> Vec<u8> {
     let mut out = Vec::with_capacity(data.len());
     for chunk in data.chunks(16) {
         let keystream = encrypt_block(counter);
         for (b, k) in chunk.iter().zip(keystream.iter()) {
             out.push(b ^ k);
         }
-        let c = u32::from_be_bytes([counter[12], counter[13], counter[14], counter[15]]).wrapping_add(1);
+        let c = u32::from_be_bytes([counter[12], counter[13], counter[14], counter[15]])
+            .wrapping_add(1);
         counter[12..16].copy_from_slice(&c.to_be_bytes());
     }
     out
@@ -59,7 +64,11 @@ fn aes256_block(key: &[u8]) -> impl Fn([u8; 16]) -> [u8; 16] + '_ {
 
 fn keys(enc_key: &[u8], counter: [u8; 16]) -> AesDerivedKeys {
     // 32-byte HMAC-SHA256 signing key; contents irrelevant to the encryption KAT.
-    AesDerivedKeys::from_parts(vec![0x11; 32], AesKey::new(enc_key.to_vec()), counter.to_vec())
+    AesDerivedKeys::from_parts(
+        vec![0x11; 32],
+        AesKey::new(enc_key.to_vec()),
+        counter.to_vec(),
+    )
 }
 
 #[test]
@@ -79,7 +88,10 @@ fn aes128_ctr_matches_part14_counter_block_vector() {
         .symmetric_encrypt(&keys(&enc_key, cb), &plaintext, &mut dst)
         .expect("AES-128-CTR encrypt should succeed");
     assert_eq!(n, plaintext.len(), "CTR is size-preserving (no padding)");
-    assert_eq!(dst, expected, "ciphertext must match the Part-14 Table-157 keystream");
+    assert_eq!(
+        dst, expected,
+        "ciphertext must match the Part-14 Table-157 keystream"
+    );
 }
 
 #[test]
@@ -109,12 +121,16 @@ fn ctr_round_trips_and_is_symmetric() {
     let plaintext = b"the quick brown fox jumps over!!"; // 32 bytes
 
     let mut ct = vec![0u8; plaintext.len()];
-    policy.symmetric_encrypt(&keys(&enc_key, cb), plaintext, &mut ct).unwrap();
+    policy
+        .symmetric_encrypt(&keys(&enc_key, cb), plaintext, &mut ct)
+        .unwrap();
     assert_ne!(&ct[..], &plaintext[..]);
 
     // CTR decrypt == encrypt with the same counter block.
     let mut pt = vec![0u8; ct.len()];
-    policy.symmetric_decrypt(&keys(&enc_key, cb), &ct, &mut pt).unwrap();
+    policy
+        .symmetric_decrypt(&keys(&enc_key, cb), &ct, &mut pt)
+        .unwrap();
     assert_eq!(&pt[..], &plaintext[..]);
 }
 
@@ -122,26 +138,42 @@ fn ctr_round_trips_and_is_symmetric() {
 fn ctr_rejects_wrong_iv_length() {
     let policy = SecurityPolicy::PubSubAes128Ctr;
     // 15-byte IV (not a 16-byte counter block) must fail closed.
-    let bad = AesDerivedKeys::from_parts(vec![0x11; 32], AesKey::new(vec![0xA5; 16]), vec![0u8; 15]);
+    let bad =
+        AesDerivedKeys::from_parts(vec![0x11; 32], AesKey::new(vec![0xA5; 16]), vec![0u8; 15]);
     let mut dst = vec![0u8; 16];
-    assert!(policy.symmetric_encrypt(&bad, &[0u8; 16], &mut dst).is_err());
+    assert!(policy
+        .symmetric_encrypt(&bad, &[0u8; 16], &mut dst)
+        .is_err());
 }
 
 #[test]
 fn ctr_policy_key_and_signature_lengths() {
     assert_eq!(SecurityPolicy::PubSubAes128Ctr.encrypting_key_length(), 16);
     assert_eq!(SecurityPolicy::PubSubAes256Ctr.encrypting_key_length(), 32);
-    assert_eq!(SecurityPolicy::PubSubAes128Ctr.symmetric_signature_size(), 32);
-    assert_eq!(SecurityPolicy::PubSubAes256Ctr.symmetric_signature_size(), 32);
+    assert_eq!(
+        SecurityPolicy::PubSubAes128Ctr.symmetric_signature_size(),
+        32
+    );
+    assert_eq!(
+        SecurityPolicy::PubSubAes256Ctr.symmetric_signature_size(),
+        32
+    );
     assert!(SecurityPolicy::PubSubAes128Ctr.is_supported());
     assert!(SecurityPolicy::PubSubAes256Ctr.is_supported());
 }
 
 #[test]
 fn ctr_policy_uri_round_trips() {
-    for policy in [SecurityPolicy::PubSubAes128Ctr, SecurityPolicy::PubSubAes256Ctr] {
+    for policy in [
+        SecurityPolicy::PubSubAes128Ctr,
+        SecurityPolicy::PubSubAes256Ctr,
+    ] {
         let uri = policy.to_uri();
-        assert_eq!(SecurityPolicy::from_uri(uri), policy, "URI {uri} must round-trip");
+        assert_eq!(
+            SecurityPolicy::from_uri(uri),
+            policy,
+            "URI {uri} must round-trip"
+        );
     }
 }
 
@@ -150,7 +182,8 @@ fn ctr_policy_uri_round_trips() {
 fn ctr_policy_hmac_sha256_signs_and_detects_tampering() {
     let policy = SecurityPolicy::PubSubAes256Ctr;
     let signing_key = vec![0x42u8; 32];
-    let signed = AesDerivedKeys::from_parts(signing_key, AesKey::new(vec![0u8; 32]), [0u8; 16].to_vec());
+    let signed =
+        AesDerivedKeys::from_parts(signing_key, AesKey::new(vec![0u8; 32]), [0u8; 16].to_vec());
 
     let data = b"part-14 network message bytes";
     let mut sig = vec![0u8; policy.symmetric_signature_size()];
@@ -164,7 +197,9 @@ fn ctr_policy_hmac_sha256_signs_and_detects_tampering() {
     let mut tampered = data.to_vec();
     tampered[0] ^= 0x01;
     assert!(
-        policy.symmetric_verify_signature(&signed, &tampered, &sig).is_err(),
+        policy
+            .symmetric_verify_signature(&signed, &tampered, &sig)
+            .is_err(),
         "a tampered message must fail HMAC verification"
     );
 }

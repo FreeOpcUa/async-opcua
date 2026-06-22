@@ -4,6 +4,17 @@ use opcua_types::{
 };
 use std::io::{Read, Write};
 
+const UADP_VERSION: u8 = 1;
+const UADP_FLAG_PUBLISHER_ID: u8 = 0x10;
+const UADP_FLAG_GROUP_HEADER: u8 = 0x20;
+const UADP_FLAG_PAYLOAD_HEADER: u8 = 0x40;
+const UADP_FLAG_EXTENDED_FLAGS1: u8 = 0x80;
+const UADP_EXTENDED_FLAGS1_SECURITY_HEADER: u8 = 0x10;
+const SECURITY_FLAG_ENCRYPTED: u8 = 0x02;
+const SECURITY_FLAG_FOOTER: u8 = 0x04;
+const SECURITY_FLAGS_RESERVED: u8 = 0xF0;
+const ENCRYPTED_MESSAGE_NONCE_LEN: u8 = 8;
+
 /// The PublisherId type in a UADP NetworkMessage.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PublisherId {
@@ -95,6 +106,77 @@ pub struct UadpDataSetMessage {
     pub status: Option<StatusCode>,
     /// The field values making up the dataset message.
     pub fields: Vec<Variant>,
+}
+
+/// UADP NetworkMessage SecurityHeader.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SecurityHeader {
+    /// SecurityFlags: bit0 signed, bit1 encrypted, bit2 footer, bit3 force key reset.
+    pub security_flags: u8,
+    /// PubSub security token id selecting the key set.
+    pub security_token_id: u32,
+    /// Message nonce bytes.
+    pub message_nonce: Vec<u8>,
+}
+
+impl BinaryEncodable for SecurityHeader {
+    fn byte_len(&self, _ctx: &Context<'_>) -> usize {
+        let mut len = 1 + 4 + 1 + self.message_nonce.len();
+        if (self.security_flags & SECURITY_FLAG_FOOTER) != 0 {
+            len += 2;
+        }
+        len
+    }
+
+    fn encode<S: Write + ?Sized>(&self, stream: &mut S, ctx: &Context<'_>) -> EncodingResult<()> {
+        let nonce_len: u8 = self
+            .message_nonce
+            .len()
+            .try_into()
+            .map_err(|_| Error::encoding("UADP SecurityHeader nonce is too long"))?;
+
+        self.security_flags.encode(stream, ctx)?;
+        self.security_token_id.encode(stream, ctx)?;
+        nonce_len.encode(stream, ctx)?;
+        stream.write_all(&self.message_nonce)?;
+        if (self.security_flags & SECURITY_FLAG_FOOTER) != 0 {
+            0u16.encode(stream, ctx)?;
+        }
+        Ok(())
+    }
+}
+
+impl BinaryDecodable for SecurityHeader {
+    fn decode<S: Read + ?Sized>(stream: &mut S, ctx: &Context<'_>) -> EncodingResult<Self> {
+        let security_flags = u8::decode(stream, ctx)?;
+        if (security_flags & SECURITY_FLAGS_RESERVED) != 0 {
+            return Err(Error::decoding(
+                "UADP SecurityHeader reserved security flags are set",
+            ));
+        }
+
+        let security_token_id = u32::decode(stream, ctx)?;
+        let nonce_len = u8::decode(stream, ctx)?;
+        if (security_flags & SECURITY_FLAG_ENCRYPTED) != 0
+            && nonce_len != ENCRYPTED_MESSAGE_NONCE_LEN
+        {
+            return Err(Error::decoding(
+                "UADP encrypted SecurityHeader nonce length must be 8",
+            ));
+        }
+
+        let mut message_nonce = vec![0u8; nonce_len as usize];
+        stream.read_exact(&mut message_nonce)?;
+        if (security_flags & SECURITY_FLAG_FOOTER) != 0 {
+            let _security_footer_size = u16::decode(stream, ctx)?;
+        }
+
+        Ok(Self {
+            security_flags,
+            security_token_id,
+            message_nonce,
+        })
+    }
 }
 
 impl BinaryEncodable for UadpDataSetMessage {
@@ -206,106 +288,160 @@ pub struct UadpNetworkMessage {
     pub dataset_messages: Vec<UadpDataSetMessage>,
 }
 
-impl BinaryEncodable for UadpNetworkMessage {
-    fn byte_len(&self, ctx: &Context<'_>) -> usize {
-        let mut len = 1; // version and flags
+/// Decoded UADP header region metadata.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct UadpHeaderRegion {
+    pub publisher_id: PublisherId,
+    pub writer_group_id: u16,
+    pub network_message_number: u16,
+    pub sequence_number: u16,
+    pub dataset_writer_ids: Vec<u16>,
+}
+
+impl UadpNetworkMessage {
+    pub(crate) fn header_region_byte_len(
+        &self,
+        ctx: &Context<'_>,
+        security_header: Option<&SecurityHeader>,
+    ) -> usize {
+        let mut len = 1; // UADPFlags
+        if security_header.is_some() {
+            len += 1; // ExtendedFlags1
+        }
         if self.publisher_id != PublisherId::None {
             len += self.publisher_id.byte_len(ctx);
         }
-        // GroupHeader
         len += 1; // group_flags
         len += 2; // writer_group_id
         len += 4; // group_version
         len += 2; // network_message_number
         len += 2; // sequence_number
-                  // PayloadHeader
         len += 1; // dataset_writer_count
         len += self.dataset_messages.len() * 2; // dataset_writer_ids
-                                                // DataSetMessages
-        for msg in &self.dataset_messages {
-            len += msg.byte_len(ctx);
+        if let Some(security_header) = security_header {
+            len += security_header.byte_len(ctx);
         }
         len
     }
 
-    fn encode<S: Write + ?Sized>(&self, stream: &mut S, ctx: &Context<'_>) -> EncodingResult<()> {
-        let mut flags = 1u8; // UADP version 1
+    pub(crate) fn payload_region_byte_len(&self, ctx: &Context<'_>) -> usize {
+        self.dataset_messages
+            .iter()
+            .map(|msg| msg.byte_len(ctx))
+            .sum()
+    }
+
+    pub(crate) fn encode_header_region<S: Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &Context<'_>,
+        security_header: Option<&SecurityHeader>,
+    ) -> EncodingResult<()> {
+        let mut flags = UADP_VERSION;
         if self.publisher_id != PublisherId::None {
-            flags |= 0x10; // PublisherId present
+            flags |= UADP_FLAG_PUBLISHER_ID;
         }
-        flags |= 0x20; // GroupHeader present
-        flags |= 0x40; // PayloadHeader present
+        flags |= UADP_FLAG_GROUP_HEADER | UADP_FLAG_PAYLOAD_HEADER;
+        if security_header.is_some() {
+            flags |= UADP_FLAG_EXTENDED_FLAGS1;
+        }
         flags.encode(stream, ctx)?;
+
+        if security_header.is_some() {
+            UADP_EXTENDED_FLAGS1_SECURITY_HEADER.encode(stream, ctx)?;
+        }
 
         if self.publisher_id != PublisherId::None {
             self.publisher_id.encode(stream, ctx)?;
         }
 
-        // GroupHeader
         0b0000_1111u8.encode(stream, ctx)?;
         self.writer_group_id.encode(stream, ctx)?;
-        0u32.encode(stream, ctx)?; // GroupVersion (0 for simplicity)
+        0u32.encode(stream, ctx)?;
         self.network_message_number.encode(stream, ctx)?;
         self.sequence_number.encode(stream, ctx)?;
 
-        // PayloadHeader
-        let count = self.dataset_messages.len() as u8;
+        let count: u8 = self
+            .dataset_messages
+            .len()
+            .try_into()
+            .map_err(|_| Error::encoding("UADP dataset message count exceeds u8"))?;
         count.encode(stream, ctx)?;
         for msg in &self.dataset_messages {
             msg.dataset_writer_id.encode(stream, ctx)?;
         }
 
-        // DataSetMessages
+        if let Some(security_header) = security_header {
+            security_header.encode(stream, ctx)?;
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn encode_payload_region<S: Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &Context<'_>,
+    ) -> EncodingResult<()> {
         for msg in &self.dataset_messages {
             msg.encode(stream, ctx)?;
         }
         Ok(())
     }
-}
 
-impl BinaryDecodable for UadpNetworkMessage {
-    fn decode<S: Read + ?Sized>(stream: &mut S, ctx: &Context<'_>) -> EncodingResult<Self> {
+    pub(crate) fn decode_header_region<S: Read + ?Sized>(
+        stream: &mut S,
+        ctx: &Context<'_>,
+    ) -> EncodingResult<(UadpHeaderRegion, Option<SecurityHeader>)> {
         let flags = u8::decode(stream, ctx)?;
         let version = flags & 0x0F;
-        if version != 1 {
+        if version != UADP_VERSION {
             return Err(Error::decoding("Unsupported UADP version"));
         }
 
-        let publisher_id = if (flags & 0x10) != 0 {
+        let security_header_present = if (flags & UADP_FLAG_EXTENDED_FLAGS1) != 0 {
+            let extended_flags1 = u8::decode(stream, ctx)?;
+            (extended_flags1 & UADP_EXTENDED_FLAGS1_SECURITY_HEADER) != 0
+        } else {
+            false
+        };
+
+        let publisher_id = if (flags & UADP_FLAG_PUBLISHER_ID) != 0 {
             PublisherId::decode(stream, ctx)?
         } else {
             PublisherId::None
         };
 
-        let (writer_group_id, network_message_number, sequence_number) = if (flags & 0x20) != 0 {
-            let group_flags = u8::decode(stream, ctx)?;
-            if (group_flags & 0b1111_0000) != 0 {
-                return Err(Error::decoding("UADP GroupFlags reserved bits are set"));
-            }
-            let writer_group_id = if (group_flags & 0b0000_0001) != 0 {
-                u16::decode(stream, ctx)?
+        let (writer_group_id, network_message_number, sequence_number) =
+            if (flags & UADP_FLAG_GROUP_HEADER) != 0 {
+                let group_flags = u8::decode(stream, ctx)?;
+                if (group_flags & 0b1111_0000) != 0 {
+                    return Err(Error::decoding("UADP GroupFlags reserved bits are set"));
+                }
+                let writer_group_id = if (group_flags & 0b0000_0001) != 0 {
+                    u16::decode(stream, ctx)?
+                } else {
+                    0
+                };
+                if (group_flags & 0b0000_0010) != 0 {
+                    let _group_version = u32::decode(stream, ctx)?;
+                }
+                let network_message_number = if (group_flags & 0b0000_0100) != 0 {
+                    u16::decode(stream, ctx)?
+                } else {
+                    0
+                };
+                let sequence_number = if (group_flags & 0b0000_1000) != 0 {
+                    u16::decode(stream, ctx)?
+                } else {
+                    0
+                };
+                (writer_group_id, network_message_number, sequence_number)
             } else {
-                0
+                return Err(Error::decoding("GroupHeader is missing"));
             };
-            if (group_flags & 0b0000_0010) != 0 {
-                let _group_version = u32::decode(stream, ctx)?;
-            }
-            let network_message_number = if (group_flags & 0b0000_0100) != 0 {
-                u16::decode(stream, ctx)?
-            } else {
-                0
-            };
-            let sequence_number = if (group_flags & 0b0000_1000) != 0 {
-                u16::decode(stream, ctx)?
-            } else {
-                0
-            };
-            (writer_group_id, network_message_number, sequence_number)
-        } else {
-            return Err(Error::decoding("GroupHeader is missing"));
-        };
 
-        let count = if (flags & 0x40) != 0 {
+        let dataset_writer_ids = if (flags & UADP_FLAG_PAYLOAD_HEADER) != 0 {
             let count = u8::decode(stream, ctx)?;
             let max_dataset_messages = ctx.options().max_dataset_messages;
             if count as usize > max_dataset_messages {
@@ -313,24 +449,67 @@ impl BinaryDecodable for UadpNetworkMessage {
                     "UADP network message dataset message count ({count}) exceeds max_dataset_messages ({max_dataset_messages})"
                 )));
             }
+            let mut dataset_writer_ids = Vec::with_capacity(count as usize);
             for _ in 0..count {
-                let _writer_id = u16::decode(stream, ctx)?;
+                dataset_writer_ids.push(u16::decode(stream, ctx)?);
             }
-            count
+            dataset_writer_ids
         } else {
-            0
+            Vec::new()
         };
 
-        let mut dataset_messages = Vec::with_capacity(count as usize);
-        for _ in 0..count {
+        let security_header = if security_header_present {
+            Some(SecurityHeader::decode(stream, ctx)?)
+        } else {
+            None
+        };
+
+        Ok((
+            UadpHeaderRegion {
+                publisher_id,
+                writer_group_id,
+                network_message_number,
+                sequence_number,
+                dataset_writer_ids,
+            },
+            security_header,
+        ))
+    }
+
+    pub(crate) fn decode_payload_region<S: Read + ?Sized>(
+        header: &UadpHeaderRegion,
+        stream: &mut S,
+        ctx: &Context<'_>,
+    ) -> EncodingResult<Vec<UadpDataSetMessage>> {
+        let mut dataset_messages = Vec::with_capacity(header.dataset_writer_ids.len());
+        for _ in &header.dataset_writer_ids {
             dataset_messages.push(UadpDataSetMessage::decode(stream, ctx)?);
         }
+        Ok(dataset_messages)
+    }
+}
+
+impl BinaryEncodable for UadpNetworkMessage {
+    fn byte_len(&self, ctx: &Context<'_>) -> usize {
+        self.header_region_byte_len(ctx, None) + self.payload_region_byte_len(ctx)
+    }
+
+    fn encode<S: Write + ?Sized>(&self, stream: &mut S, ctx: &Context<'_>) -> EncodingResult<()> {
+        self.encode_header_region(stream, ctx, None)?;
+        self.encode_payload_region(stream, ctx)
+    }
+}
+
+impl BinaryDecodable for UadpNetworkMessage {
+    fn decode<S: Read + ?Sized>(stream: &mut S, ctx: &Context<'_>) -> EncodingResult<Self> {
+        let (header, _security_header) = Self::decode_header_region(stream, ctx)?;
+        let dataset_messages = Self::decode_payload_region(&header, stream, ctx)?;
 
         Ok(UadpNetworkMessage {
-            publisher_id,
-            writer_group_id,
-            network_message_number,
-            sequence_number,
+            publisher_id: header.publisher_id,
+            writer_group_id: header.writer_group_id,
+            network_message_number: header.network_message_number,
+            sequence_number: header.sequence_number,
             dataset_messages,
         })
     }

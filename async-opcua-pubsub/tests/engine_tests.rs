@@ -11,7 +11,7 @@ use opcua_pubsub::{
 };
 use opcua_server::address_space::AddressSpace;
 use opcua_types::{
-    BinaryDecodable, BinaryEncodable, ContextOwned, DateTime, MessageSecurityMode, StatusCode,
+    BinaryEncodable, ContextOwned, DateTime, MessageSecurityMode, StatusCode,
     Variant,
 };
 
@@ -110,18 +110,21 @@ fn encodes_publisher_uadp_with_registered_security_group() {
     let secured = engine
         .sign_publisher_uadp_message(
             "group-1",
-            SecurityPolicy::Aes256Sha256RsaPss,
+            SecurityPolicy::PubSubAes256Ctr,
             &message,
             &ctx,
         )
         .unwrap();
 
-    assert_ne!(secured, message.encode_to_vec(&ctx));
-    assert!(UadpNetworkMessage::decode(&mut &secured[..], &ctx).is_err());
+    // Secured bytes carry the SecurityHeader + appended HMAC signature, so they differ from and
+    // are longer than the plain encoding.
+    let plain = message.encode_to_vec(&ctx);
+    assert_ne!(secured, plain);
+    assert!(secured.len() > plain.len());
 
     let decoded = UadpSecurityCodec::new(
         MessageSecurityMode::Sign,
-        SecurityPolicy::Aes256Sha256RsaPss,
+        SecurityPolicy::PubSubAes256Ctr,
         key_set,
     )
     .decode_network_message(&secured, &ctx)
@@ -154,7 +157,7 @@ fn decodes_subscriber_uadp_with_registered_security_group() {
 
     let secured = UadpSecurityCodec::new(
         MessageSecurityMode::SignAndEncrypt,
-        SecurityPolicy::Aes256Sha256RsaPss,
+        SecurityPolicy::PubSubAes256Ctr,
         key_set,
     )
     .encode_network_message(&message, &ctx)
@@ -164,7 +167,7 @@ fn decodes_subscriber_uadp_with_registered_security_group() {
         .decode_subscriber_uadp_message(
             "group-1",
             MessageSecurityMode::SignAndEncrypt,
-            SecurityPolicy::Aes256Sha256RsaPss,
+            SecurityPolicy::PubSubAes256Ctr,
             &secured,
             &ctx,
         )

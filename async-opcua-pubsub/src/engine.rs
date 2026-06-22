@@ -10,12 +10,12 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
+    PubSubConnectionConfig, PubSubPublisher,
     codec::uadp::UadpNetworkMessage,
     security::{SecurityGroup, SharedSecurityGroup, UadpSecurityCodec},
     transport::{
         amqp::AmqpPublisher, mqtt::MqttPublisher, udp::UdpPublisher, websocket::WebSocketPublisher,
     },
-    PubSubConnectionConfig, PubSubPublisher,
 };
 
 /// Supported OPC UA PubSub transport mappings.
@@ -194,8 +194,12 @@ impl PubSubEngine {
             .security_groups
             .get(security_group_id)
             .ok_or(StatusCode::BadSecurityChecksFailed)?;
-        let key_set = security_group.read().current_key_set().clone();
-        UadpSecurityCodec::new(security_mode, security_policy, key_set)
+        let security_group = security_group.read();
+        let key_sets = vec![
+            security_group.current_key_set().clone(),
+            security_group.next_key_set().clone(),
+        ];
+        UadpSecurityCodec::with_candidates(security_mode, security_policy, key_sets)
             .decode_network_message(payload, ctx)
             .map_err(|error| error.status())
     }

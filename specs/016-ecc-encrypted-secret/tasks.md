@@ -80,12 +80,12 @@ stories can proceed.
   ECDH(server private, SenderPublicKey) + `derive_secret_keys` (T004) → AES-CBC decrypt (per curve) → verify
   padding → check Nonce == server_nonce → return Secret. Single uniform error on any failure; panic-free.
   (codex; depends T004–T006, T007)
-- [ ] T009 [US1] Wire the server: add an ECC branch to `decrypt_identity_token_secret` in
+- [X] T009 [US1] Wire the server: add an ECC branch to `decrypt_identity_token_secret` in
   `async-opcua-server/src/info.rs` (when the channel policy is ECC and the token carries an
   `EccEncryptedSecret`, call `ecc_decrypt_secret` with the session's server EphemeralKey private + the
   client cert known from the channel + the current server nonce). Legacy RSA / None branches unchanged.
   (codex; depends T008)
-- [ ] T010 [US1] Gate; verify T007 passes; **commit US1** (`feat(016 US1): server decrypts an ECC EccEncryptedSecret UserName password`).
+- [X] T010 [US1] Gate; verify T007 passes; **commit US1** (`feat(016 US1): server decrypts an ECC EccEncryptedSecret UserName password`).
 
 ## Phase 4: User Story 2 — Client encrypts a UserName secret (P1)
 

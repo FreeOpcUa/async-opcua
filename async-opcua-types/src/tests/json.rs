@@ -986,3 +986,39 @@ fn test_binary_in_json() {
         obj_3.inner_as().unwrap()
     );
 }
+
+/// Feature 018 US1: an XML-bodied ExtensionObject (UaEncoding=2) in JSON MUST fail closed (error,
+/// not a silent null) when the crate is built without XML support. (Reachable from untrusted JSON.)
+#[cfg(not(feature = "xml"))]
+#[test]
+fn xml_extension_object_in_json_fails_closed_without_xml() {
+    let v = json!({"UaTypeId": {"Id": 1}, "UaEncoding": 2, "UaBody": "<Foo></Foo>"});
+    let res = from_value::<ExtensionObject>(v);
+    assert!(
+        res.is_err(),
+        "XML-bodied ExtensionObject must error (not null) when the xml feature is off, got {res:?}"
+    );
+}
+
+/// Feature 018 US1: malformed / truncated JSON extension objects must error, never panic (both configs).
+#[test]
+fn malformed_json_extension_object_no_panic() {
+    let _ = from_str::<ExtensionObject>("{\"UaTypeId\":");
+    let _ = from_str::<ExtensionObject>("not json at all");
+    // Missing type id → error, no panic.
+    assert!(from_str::<ExtensionObject>("{\"UaEncoding\": 2, \"UaBody\": \"<x/>\"}").is_err());
+}
+
+/// Feature 018 US1 (xml ON, CI-runnable): an XML-bodied ExtensionObject in JSON is PRESERVED as a
+/// non-null body when XML support is compiled in — it is never silently dropped to null. (The xml-OFF
+/// counterpart, which must instead error, is `xml_extension_object_in_json_fails_closed_without_xml`.)
+#[cfg(feature = "xml")]
+#[test]
+fn xml_extension_object_in_json_preserved_with_xml() {
+    let v = json!({"UaTypeId": {"Id": 1}, "UaEncoding": 2, "UaBody": "<Foo></Foo>"});
+    let res = from_value::<ExtensionObject>(v).expect("xml-on decode should succeed");
+    assert!(
+        !res.is_null(),
+        "an XML-bodied ExtensionObject must be preserved (non-null) when xml is enabled, got null"
+    );
+}

@@ -28,8 +28,9 @@ use opcua_core::{
 use opcua_crypto::{CertificateStore, SecurityPolicy};
 use opcua_types::{
     ChannelSecurityToken, DateTime, FindServersResponse, GetEndpointsResponse, MessageSecurityMode,
-    NodeId, OpenSecureChannelRequest, OpenSecureChannelResponse, ResponseHeader,
-    SecurityTokenRequestType, ServiceFault, StatusCode, UAString,
+    NodeId, OpenSecureChannelRequest, OpenSecureChannelResponse, RegisterServer2Response,
+    RegisterServerResponse, ResponseHeader, SecurityTokenRequestType, ServiceFault, StatusCode,
+    UAString,
 };
 use tokio_util::sync::CancellationToken;
 use tracing_futures::Instrument;
@@ -474,6 +475,10 @@ impl<T: ConnectionTransport> SessionController<T> {
                 } else {
                     Vec::new()
                 };
+                servers.extend(self.info.registered_application_descriptions(
+                    &request.endpoint_url,
+                    &request.locale_ids,
+                ));
 
                 // Filter servers that do not have a matching application uri
                 if let Some(ref server_uris) = request.server_uris {
@@ -522,18 +527,16 @@ impl<T: ConnectionTransport> SessionController<T> {
             }
             RequestMessage::RegisterServer(request) => {
                 let _h = span.enter();
-                let audit_context =
-                    AuditEventContext::new("RegisterServer", &request.request_header, None, None);
-                dispatch_service_failure(
-                    &self.subscriptions,
-                    &self.info,
-                    &audit_context,
-                    StatusCode::BadServiceUnsupported,
-                );
+                let status = self.info.apply_register_server(request.server.clone());
                 if let Err(e) = self.transport.enqueue_message_for_send(
                     &mut self.channel,
-                    ServiceFault::new(&request.request_header, StatusCode::BadServiceUnsupported)
-                        .into(),
+                    RegisterServerResponse {
+                        response_header: ResponseHeader::new_service_result(
+                            &request.request_header,
+                            status,
+                        ),
+                    }
+                    .into(),
                     id,
                 ) {
                     error!("Failed to send request response: {e}");
@@ -544,18 +547,27 @@ impl<T: ConnectionTransport> SessionController<T> {
             }
             RequestMessage::RegisterServer2(request) => {
                 let _h = span.enter();
-                let audit_context =
-                    AuditEventContext::new("RegisterServer2", &request.request_header, None, None);
-                dispatch_service_failure(
-                    &self.subscriptions,
-                    &self.info,
-                    &audit_context,
-                    StatusCode::BadServiceUnsupported,
-                );
+                let status = self.info.apply_register_server(request.server.clone());
+                let configuration_results =
+                    request
+                        .discovery_configuration
+                        .as_ref()
+                        .map(|configurations| {
+                            // Discovery configuration payloads are intentionally not decoded here:
+                            // this server does not support any RegisterServer2 discovery config type.
+                            vec![StatusCode::BadNotSupported; configurations.len()]
+                        });
                 if let Err(e) = self.transport.enqueue_message_for_send(
                     &mut self.channel,
-                    ServiceFault::new(&request.request_header, StatusCode::BadServiceUnsupported)
-                        .into(),
+                    RegisterServer2Response {
+                        response_header: ResponseHeader::new_service_result(
+                            &request.request_header,
+                            status,
+                        ),
+                        configuration_results,
+                        diagnostic_infos: None,
+                    }
+                    .into(),
                     id,
                 ) {
                     error!("Failed to send request response: {e}");

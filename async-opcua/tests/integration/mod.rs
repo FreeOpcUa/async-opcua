@@ -3,6 +3,7 @@ mod browse;
 mod conformance;
 mod core_tests;
 mod custom_types;
+mod discovery;
 #[cfg(feature = "ecc")]
 mod ecc;
 mod hardening;

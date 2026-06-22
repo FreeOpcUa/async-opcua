@@ -25,9 +25,9 @@ use opcua_crypto::{
 };
 use opcua_types::{
     ApplicationDescription, ContextOwned, DecodingOptions, EndpointDescription, Error,
-    FindServersOnNetworkRequest, FindServersOnNetworkResponse, FindServersRequest,
-    GetEndpointsRequest, MessageSecurityMode, NamespaceMap, RegisterServerRequest,
-    RegisteredServer, StatusCode, UAString,
+    ExtensionObject, FindServersOnNetworkRequest, FindServersOnNetworkResponse, FindServersRequest,
+    GetEndpointsRequest, MessageSecurityMode, NamespaceMap, RegisterServer2Request,
+    RegisterServerRequest, RegisteredServer, StatusCode, UAString,
 };
 
 use super::{
@@ -681,6 +681,26 @@ impl Client {
         }
     }
 
+    async fn register_server2_inner(
+        &self,
+        server: RegisteredServer,
+        discovery_configuration: Option<Vec<ExtensionObject>>,
+        channel: &AsyncSecureChannel,
+    ) -> Result<Vec<StatusCode>, Error> {
+        let request = RegisterServer2Request {
+            request_header: channel.make_request_header(self.config.request_timeout),
+            server,
+            discovery_configuration,
+        };
+        let response = channel.send(request, self.config.request_timeout).await?;
+        if let ResponseMessage::RegisterServer2(response) = response {
+            process_service_result(&response.response_header)?;
+            Ok(response.configuration_results.unwrap_or_default())
+        } else {
+            Err(process_unexpected_response(response))
+        }
+    }
+
     /// Get the best endpoint for the server, "best" here is the endpoint with the highest security level.
     ///
     /// # Arguments
@@ -755,6 +775,69 @@ impl Client {
         let mut evt_loop = channel.connect(&connector).await?;
 
         let send_fut = self.register_server_inner(server, &channel);
+        pin!(send_fut);
+
+        let res = loop {
+            select! {
+                r = evt_loop.poll() => {
+                    if let TransportPollResult::Closed(e) = r {
+                        return Err(Error::new(e, "Connection closed unexpectedly"));
+                    }
+                },
+                res = &mut send_fut => break res
+            }
+        };
+
+        channel.close_channel().await;
+
+        loop {
+            if matches!(evt_loop.poll().await, TransportPollResult::Closed(_)) {
+                break;
+            }
+        }
+
+        res
+    }
+
+    /// This function is used by servers that wish to register themselves with a discovery server.
+    /// i.e. one server is the client to another server. The server sends a [`RegisterServer2Request`]
+    /// to the discovery server to register itself. Servers are expected to re-register themselves periodically
+    /// with the discovery server, with a maximum of 10 minute intervals.
+    ///
+    /// See OPC UA Part 4 - Services 5.4.6 for complete description of the service and error responses.
+    ///
+    /// # Arguments
+    ///
+    /// * `connector` - Connector to the discovery server. This is implemented for `String` and `&str`.
+    ///   A simple usage would be to just pass `server_endpoint.endpoint_url.as_ref()` here.
+    /// * `server_endpoint` - The endpoint to use for registration. If this requires security, you first need to get an appropriate.
+    ///   server endpoint using `get_best_endpoint` or `get_server_endpoints_from_url`.
+    /// * `server` - The server to register
+    /// * `discovery_configuration` - Optional discovery configuration extension objects.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Vec<StatusCode>)` - Success, with configuration result status codes.
+    /// * `Err(Error)` - Request failed, [status code](StatusCode) is the reason for failure.
+    ///
+    pub async fn register_server2(
+        &self,
+        connector: impl ConnectorBuilder,
+        server_endpoint: &EndpointDescription,
+        server: RegisteredServer,
+        discovery_configuration: Option<Vec<ExtensionObject>>,
+    ) -> Result<Vec<StatusCode>, Error> {
+        let endpoint_info = EndpointInfo {
+            endpoint: server_endpoint.clone(),
+            user_identity_token: IdentityToken::Anonymous,
+            preferred_locales: Vec::new(),
+        };
+        let connector = connector.build()?;
+        let channel = self.channel_from_endpoint_info(endpoint_info, self.config.channel_lifetime);
+
+        let mut evt_loop = channel.connect(&connector).await?;
+
+        let send_fut = self.register_server2_inner(server, discovery_configuration, &channel);
         pin!(send_fut);
 
         let res = loop {

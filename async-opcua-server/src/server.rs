@@ -372,6 +372,7 @@ impl Server {
                 .type_tree_getter
                 .unwrap_or_else(|| Arc::new(DefaultTypeTreeGetter)),
             type_loaders: RwLock::new(builder.type_loaders),
+            registered_servers: RwLock::new(Default::default()),
             diagnostics: ServerDiagnostics {
                 enabled: config.diagnostics,
                 ..Default::default()

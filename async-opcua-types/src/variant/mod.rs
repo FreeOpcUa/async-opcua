@@ -1712,6 +1712,9 @@ impl Variant {
                         for (range, dim) in ranges.iter().zip(dest_dims.iter()) {
                             let (lo, hi) =
                                 Self::range_bounds(range).ok_or(StatusCode::BadIndexRangeNoData)?;
+                            if hi < lo {
+                                return Err(StatusCode::BadIndexRangeNoData);
+                            }
                             if lo >= *dim || hi >= *dim {
                                 return Err(StatusCode::BadIndexRangeNoData);
                             }

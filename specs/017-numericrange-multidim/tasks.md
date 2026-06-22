@@ -102,11 +102,11 @@ and never panics.
 
 ## Phase 6: Polish
 
-- [ ] T013 [P] Fold in the minor `NumericRange::MultipleRanges` clone/allocation cleanup in `variant/mod.rs`
+- [X] T013 [P] Fold in the minor `NumericRange::MultipleRanges` clone/allocation cleanup in `variant/mod.rs`
   (TODO.md tie-in), in-scope only — no behavior change. (codex)
-- [ ] T014 [P] Fuzz the attacker-reachable range application: add/extend a fuzz target over arbitrary
+- [X] T014 [P] Fuzz the attacker-reachable range application: add/extend a fuzz target over arbitrary
   `(Variant, NumericRange)` pairs running `range_of` + `set_range_of` → zero panics; run a bounded campaign.
-- [ ] T015 Final gate: fmt + clippy --all-targets --all-features + `cargo test -p async-opcua-types`;
+- [X] T015 Final gate: fmt + clippy --all-targets --all-features + `cargo test -p async-opcua-types`;
   confirm single-dimension byte-identical and the BNF parser unchanged.
 
 ---

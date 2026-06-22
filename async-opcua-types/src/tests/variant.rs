@@ -1927,3 +1927,23 @@ fn set_range_of_single_dimension_unchanged() {
         ]
     );
 }
+
+/// Feature 017 (fuzz-found): a String substring IndexRange that lands on a non-char-boundary of a
+/// multi-byte UTF-8 string MUST NOT panic (it is reachable from a Read IndexRange on attacker data).
+/// Regression for UAString::substring's raw byte-slice panic.
+#[test]
+fn range_of_string_substring_non_char_boundary_no_panic() {
+    // "aé" = 'a' (1 byte) + 'é' (2 bytes); byte range 0..=1 splits the 'é'.
+    let v = Variant::from("aé");
+    // Must return a result (Ok or Err), never panic.
+    let _ = v.range_of(&NumericRange::Range(0, 1));
+    let _ = v.range_of(&NumericRange::Index(1));
+    let _ = v.range_of(&NumericRange::Range(1, 2));
+
+    // Also via a string array (the 2-D substring path).
+    let arr = Variant::from((
+        VariantScalarTypeId::String,
+        vec![Variant::from("aé"), Variant::from("héllo")],
+    ));
+    let _ = arr.range_of(&"0:1,0:1".parse::<NumericRange>().unwrap());
+}

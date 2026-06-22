@@ -476,13 +476,19 @@ fn serialize_variant_bytestring() {
     );
 }
 
-/*
 #[test]
 fn serialize_variant_xmlelement() {
-    // TODO XmlElement (16)
-    todo!()
+    // XmlElement (16) — feature 018 US3: the JSON round-trip works (the backlog "untested" todo!()
+    // was a coverage gap, not a bug). Body is the XML string; null XmlElement → null body.
+    test_ser_de_variant(
+        Variant::from(crate::XmlElement::from("<a>1</a>")),
+        json!({"Type": 16, "Body": "<a>1</a>"}),
+    );
+    test_ser_de_variant(
+        Variant::from(crate::XmlElement::null()),
+        json!({"Type": 16, "Body": null}),
+    );
 }
- */
 
 #[test]
 fn serialize_variant_node_id() {

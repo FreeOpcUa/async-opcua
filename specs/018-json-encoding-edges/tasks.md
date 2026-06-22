@@ -66,11 +66,11 @@ without XML support.
 
 **Goal**: replace the commented-out `todo!()` with a real test; record the backlog claim as stale.
 
-- [ ] T007 [US3] Claude-authored test in `tests/json.rs`: replace the commented-out
+- [X] T007 [US3] Claude-authored test in `tests/json.rs`: replace the commented-out
   `serialize_variant_xmlelement` `/* todo!() */` block with
   `test_ser_de_variant(Variant::from(XmlElement::from("<a>1</a>")), json!({"Type": 16, "Body": "<a>1</a>"}))`
   plus a null/empty XmlElement case (`{"Type": 16, "Body": null}`). No production change (stale claim).
-- [ ] T008 [US3] Gate; verify T007 passes; **commit US3** (`test(018 US3): lock Variant XmlElement JSON round-trip, remove todo!() (backlog claim was stale)`).
+- [X] T008 [US3] Gate; verify T007 passes; **commit US3** (`test(018 US3): lock Variant XmlElement JSON round-trip, remove todo!() (backlog claim was stale)`).
 
 ## Phase 5: User Story 4 — Backward compatibility (P2)
 

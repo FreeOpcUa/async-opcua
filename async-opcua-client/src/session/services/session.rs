@@ -906,7 +906,30 @@ impl Session {
     /// * `Err(Error)` - Request failed, [Status code](StatusCode) is the reason for failure.
     ///
     pub(crate) async fn activate_session(&self) -> Result<(), Error> {
-        ActivateSession::new(self).send(&self.channel).await?;
+        #[cfg_attr(not(feature = "ecc"), allow(unused_variables))]
+        let response = ActivateSession::new(self).send(&self.channel).await?;
+
+        #[cfg(feature = "ecc")]
+        {
+            let security_policy = self.channel.security_policy();
+            if matches!(
+                security_policy,
+                SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384
+            ) {
+                // The server rotates its EphemeralKey after consuming it (Part 6 §6.8.2); retain the new
+                // one for the next activation. Verify it against the server certificate from the channel.
+                if let Some(server_cert) = self.channel.remote_certificate() {
+                    if let Some(key) = opcua_crypto::ecc::read_and_verify_server_ephemeral_key(
+                        &response.response_header.additional_header,
+                        security_policy,
+                        &server_cert,
+                    )? {
+                        self.set_retained_server_ephemeral_key(Some(key));
+                    }
+                }
+            }
+        }
+
         Ok(())
     }
 

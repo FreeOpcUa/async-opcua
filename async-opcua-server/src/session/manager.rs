@@ -655,6 +655,15 @@ pub(crate) async fn activate_session(
         )
         .await?;
 
+    #[cfg(feature = "ecc")]
+    let ecc_secret_consumed = matches!(
+        security_policy,
+        SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384
+    ) && matches!(
+        IdentityToken::new(request.user_identity_token.clone()),
+        IdentityToken::UserName(_) | IdentityToken::IssuedToken(_)
+    );
+
     let (server_nonce, session_id, user_changed) = {
         let mut session = trace_write_lock!(session_lck);
 
@@ -714,10 +723,10 @@ pub(crate) async fn activate_session(
         let requested_uri =
             opcua_crypto::ecc::read_ecdh_policy_uri(&request.request_header.additional_header);
         let previous_policy = session.ecdh_ephemeral_key().map(|(_, policy)| *policy);
-        // 015a: no EphemeralKey is consumed yet - secret decryption (which consumes the key) is
-        // feature 016 - so the previous key is never "used". The §6.8.2 consumed-key anti-replay
-        // (never accept the same EphemeralKey twice) is enforced in 016 where the key is consumed.
-        let previous_key_consumed = false;
+        if ecc_secret_consumed {
+            session.mark_ecdh_key_consumed();
+        }
+        let previous_key_consumed = session.ecdh_key_consumed();
         match opcua_crypto::ecc::decide_ecdh_key_action(
             requested_uri.as_deref(),
             previous_policy,

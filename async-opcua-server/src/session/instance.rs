@@ -74,6 +74,8 @@ pub struct Session {
     session_nonce: ByteString,
     #[cfg(feature = "ecc")]
     ecdh_ephemeral_key: Option<(opcua_crypto::ecc::EphemeralKeyPair, SecurityPolicy)>,
+    #[cfg(feature = "ecc")]
+    ecdh_key_consumed: bool,
     /// Session name (supplied by client)
     session_name: UAString,
     /// Session timeout
@@ -157,6 +159,8 @@ impl Session {
             session_nonce,
             #[cfg(feature = "ecc")]
             ecdh_ephemeral_key: None,
+            #[cfg(feature = "ecc")]
+            ecdh_key_consumed: false,
             session_name,
             session_timeout: if session_timeout == 0 {
                 Duration::from_millis(info.config.max_session_timeout_ms)
@@ -306,6 +310,7 @@ impl Session {
         policy: SecurityPolicy,
     ) {
         self.ecdh_ephemeral_key = Some((key, policy));
+        self.ecdh_key_consumed = false;
     }
 
     #[cfg(feature = "ecc")]
@@ -314,6 +319,16 @@ impl Session {
         &self,
     ) -> Option<&(opcua_crypto::ecc::EphemeralKeyPair, SecurityPolicy)> {
         self.ecdh_ephemeral_key.as_ref()
+    }
+
+    #[cfg(feature = "ecc")]
+    pub(crate) fn ecdh_key_consumed(&self) -> bool {
+        self.ecdh_key_consumed
+    }
+
+    #[cfg(feature = "ecc")]
+    pub(crate) fn mark_ecdh_key_consumed(&mut self) {
+        self.ecdh_key_consumed = true;
     }
 
     /// Whether this session is activated.
@@ -520,6 +535,40 @@ mod tests {
             session.query_continuation_point_count_for_test(),
             baseline_query,
             "abandoned query continuation point should be TTL-evicted without closing the session"
+        );
+    }
+
+    /// US4 (feature 016): the server EphemeralKey consumed flag — `false` initially, set by
+    /// `mark_ecdh_key_consumed`, and RESET when a fresh key is issued via `set_ecdh_ephemeral_key`
+    /// (so the §6.8.2 lifecycle issues a new unconsumed key after a consuming activation).
+    #[cfg(feature = "ecc")]
+    #[tokio::test]
+    async fn ecdh_key_consumed_state_machine() {
+        use opcua_crypto::ecc::{generate_ephemeral_keypair, EccCurve};
+        let mut session = test_session();
+
+        // No key issued yet -> not consumed.
+        assert!(!session.ecdh_key_consumed());
+
+        let kp1 = generate_ephemeral_keypair(EccCurve::P256).expect("kp1");
+        session.set_ecdh_ephemeral_key(kp1, SecurityPolicy::EccNistP256);
+        assert!(
+            !session.ecdh_key_consumed(),
+            "a freshly issued key is unconsumed"
+        );
+
+        session.mark_ecdh_key_consumed();
+        assert!(
+            session.ecdh_key_consumed(),
+            "decrypting a secret consumes the key"
+        );
+
+        // Issuing a fresh key (the §6.8.2 rotation) resets the consumed flag.
+        let kp2 = generate_ephemeral_keypair(EccCurve::P256).expect("kp2");
+        session.set_ecdh_ephemeral_key(kp2, SecurityPolicy::EccNistP256);
+        assert!(
+            !session.ecdh_key_consumed(),
+            "a rotated key must start unconsumed"
         );
     }
 

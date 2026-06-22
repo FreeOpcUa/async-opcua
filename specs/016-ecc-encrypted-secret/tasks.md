@@ -121,16 +121,16 @@ stories can proceed.
 **Goal**: server marks its EphemeralKey consumed after a decrypt; consumed key / replayed secret rejected;
 the real consumed state drives the §6.8.2 `decide_ecdh_key_action` (closes the 015a deferral).
 
-- [ ] T018 [US4] Claude-authored tests: after a successful ActivateSession that consumed the server
+- [X] T018 [US4] Claude-authored tests: after a successful ActivateSession that consumed the server
   EphemeralKey, (a) re-presenting the same EphemeralKey / the same `EccEncryptedSecret` is rejected;
   (b) `decide_ecdh_key_action(None, Some(prev), /*consumed=*/true)` is what the next ActivateSession now
   feeds (real state, not hardwired false) → issues a fresh key. Unit-level where a full handshake is heavy.
-- [ ] T019 [US4] Implement the consumed-state in `async-opcua-server/src/session/instance.rs` +
+- [X] T019 [US4] Implement the consumed-state in `async-opcua-server/src/session/instance.rs` +
   `session/manager.rs`: mark the server EphemeralKey consumed on a successful identity-token decrypt;
   reject reuse of a consumed key / a duplicate secret; replace the 015a hardwired
   `previous_key_consumed = false` at the ActivateSession `decide_ecdh_key_action` call with the real
   per-session consumed flag. (codex; depends T009, T018)
-- [ ] T020 [US4] Gate; verify T018 passes; **commit US4** (`feat(016 US4): consumed-key anti-replay enforced end-to-end`).
+- [X] T020 [US4] Gate; verify T018 passes; **commit US4** (`feat(016 US4): consumed-key anti-replay enforced end-to-end`).
 
 ## Phase 7: User Story 5 — Rollout & backward compatibility (P3)
 

@@ -38,7 +38,7 @@ not base-profile violations — flagged as such.
 
 | # | Gap | Spec | Notes |
 |---|-----|------|-------|
-| 4 | **NumericRange**: multiple disjoint ranges (`[0:2,5:7]`) rejected with `BadIndexRangeNoData`; multi-dimensional `set_range_of` incomplete (`variant/mod.rs:~1485,1539`). | Part 6 §6.9 | Confirmed partial. Clean, self-contained. |
+| 4 | ✅ **DONE (feature 017, PR #46)** — **NumericRange** multi-dimensional read (`range_of`) + write (`set_range_of`) per **Part 4 §7.27** (the backlog's "Part 6 §6.9" was wrong). Comma = dimension (not disjoint ranges); row-major sub-array; exact-size write; string/bytestring arrays as 2-D substring. Fuzz found + fixed 2 remote-panic DoS bugs (`UAString::substring` UTF-8 byte-slice; extent underflow). | Part 4 §7.27 | Complete. |
 | 5 | **JSON encoding edges**: XmlElement-in-Variant untested (`todo!()` in test); DataValue picoseconds not round-tripped; **XML-ExtensionObject inside JSON silently drops to null** when `xml` feature off (should error). | Part 6 §5.4 | JSON is opt-in / less used than binary → lower impact, but the silent-drop should at least error. |
 
 ## Tier 3 — Optional facets (only if you target them; NOT base/embedded violations)

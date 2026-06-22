@@ -75,9 +75,10 @@ other elements unchanged; the destination `dimensions` are preserved.
 1. **Given** a destination 2-D array `dimensions = [3,3]` and a range `1:2,0:1` with a matching source
    sub-array, **When** written, **Then** exactly the rows 1..=2 × columns 0..=1 elements are replaced and
    every other element is unchanged.
-2. **Given** a write whose addressed sub-extent partially overlaps the destination, **When** written,
-   **Then** only the overlapping elements are copied (consistent with the §6.9 / single-dimension copy
-   semantics), without error.
+2. **Given** a write whose source sub-array does NOT exactly match the addressed sub-extent (wrong shape
+   or element type), **When** written, **Then** it is rejected with `Bad_IndexRangeDataMismatch` — a
+   multi-dimensional write is exact-size per §7.27 ("the size of the array shall match the size specified
+   by the NumericRange"), not a partial copy.
 
 ---
 
@@ -101,7 +102,10 @@ sub-extent (must be clamped/bounded, not allocated wholesale).
    **Then** it is rejected (no panic) with the appropriate StatusCode.
 2. **Given** a dimension range that selects nothing (start beyond the dimension extent), **When** applied,
    **Then** `Bad_IndexRangeNoData`.
-3. **Given** a structurally invalid range (`min > max`), **When** applied, **Then** `Bad_IndexRangeInvalid`.
+3. **Given** a structurally invalid range string (`min >= max`, bad characters), **When** parsed, **Then**
+   `Bad_IndexRangeInvalid` — note this is a **parser/syntax-only** code; the parser already rejects such
+   ranges, so `range_of`/`set_range_of` (which receive an already-parsed range) never emit it. All
+   valid-syntax-but-invalid application-layer cases → `Bad_IndexRangeNoData`.
 4. **Given** a write whose source shape/type does not match the addressed sub-extent, **When** applied,
    **Then** `Bad_IndexRangeDataMismatch`; a range write to a non-array → `Bad_WriteNotSupported`.
 5. **Given** an oversized declared sub-extent (e.g. a huge upper bound), **When** applied, **Then** it is
@@ -140,18 +144,21 @@ path behave exactly as before.
 - **FR-001**: `Variant::range_of` MUST interpret a multi-dimensional `NumericRange::MultipleRanges`
   against the array's row-major `dimensions`, selecting the per-dimension sub-extent and returning a
   sub-array whose `values` (row-major) and `dimensions` reflect exactly the selected extents (Part 6 §6.9).
-- **FR-002**: `Variant::set_range_of` MUST apply a multi-dimensional `NumericRange::MultipleRanges`,
-  copying the overlapping addressed sub-extent from the source array into the destination array (by its
-  `dimensions`), leaving non-addressed elements unchanged.
+- **FR-002**: `Variant::set_range_of` MUST apply a multi-dimensional `NumericRange::MultipleRanges` as an
+  **exact-size** write (§7.27): the source array's shape and element type MUST match the addressed
+  sub-extent exactly, copying it into the destination array (by its `dimensions`) and leaving
+  non-addressed elements unchanged; a non-matching source MUST be rejected with `Bad_IndexRangeDataMismatch`
+  (not a partial copy).
 - **FR-003**: The existing single-dimension behavior (`None` / `Index` / `Range` for arrays and the
   String/ByteString substring path) and the NumericRange BNF parser MUST remain unchanged.
 - **FR-004**: Per-dimension upper bounds that exceed the dimension extent MUST be clamped to that extent
   (consistent with the current single-dimension `Range` clamping); a selection that addresses no elements
   MUST return `Bad_IndexRangeNoData`.
-- **FR-005**: The StatusCode contract MUST hold: out-of-range / no overlap → `Bad_IndexRangeNoData`;
-  structurally invalid range (`min > max`) → `Bad_IndexRangeInvalid`; type/shape mismatch on write →
-  `Bad_IndexRangeDataMismatch`; range write to a non-array → `Bad_WriteNotSupported`; dimension-count vs
-  array-rank mismatch → the appropriate documented code (pinned at planning).
+- **FR-005**: The application-layer (`range_of`/`set_range_of`) StatusCode contract MUST hold:
+  out-of-range / no overlap / **dimension-count vs array-rank mismatch** / overflow → `Bad_IndexRangeNoData`;
+  type/shape mismatch on write → `Bad_IndexRangeDataMismatch`; range write to a non-array →
+  `Bad_WriteNotSupported`. `Bad_IndexRangeInvalid` is reserved for invalid **syntax** and is produced by
+  the BNF parser only (the parser already rejects `min >= max`), never by `range_of`/`set_range_of`.
 - **FR-006**: All of `range_of` / `set_range_of` MUST be **panic-free** and **bounded** on
   attacker-controlled ranges and values: every dimension/index/length is checked before indexing or
   allocating; dimension products MUST NOT overflow; an oversized declared sub-extent MUST be clamped to
@@ -176,9 +183,10 @@ path behave exactly as before.
   spec-derived expectations.
 - **SC-002**: A multi-dimensional Write `IndexRange` updates exactly the addressed elements of a known
   multi-dimensional array and leaves all others unchanged (verified element-by-element).
-- **SC-003**: Every negative case returns the documented StatusCode (`Bad_IndexRangeNoData` /
-  `Bad_IndexRangeInvalid` / `Bad_IndexRangeDataMismatch` / `Bad_WriteNotSupported`) and **no input
-  causes a panic** (including oversized/overflowing declared bounds).
+- **SC-003**: Every application-layer negative case returns the documented StatusCode
+  (`Bad_IndexRangeNoData` / `Bad_IndexRangeDataMismatch` / `Bad_WriteNotSupported`; `Bad_IndexRangeInvalid`
+  remains the parser's syntax code) and **no input causes a panic** (including oversized/overflowing
+  declared bounds).
 - **SC-004**: All existing NumericRange parser tests and Variant single-dimension range tests continue to
   pass unchanged; `cargo clippy --all-targets --all-features` is clean with no new dependency.
 

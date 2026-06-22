@@ -835,19 +835,32 @@ impl ServerInfo {
                 issued_jwt.claims().sub.as_deref().unwrap_or("")
             );
 
+            // ponytail: issued-token auth now requires explicit issuer, audience, and issuer
+            // certificate configuration instead of falling back to defaults or any trusted cert.
+            let missing_oauth2_config = || {
+                Error::new(
+                    StatusCode::BadIdentityTokenRejected,
+                    "OAuth2 issuer/audience not configured",
+                )
+            };
             let issuer = self
                 .config
                 .oauth2_issuer
                 .clone()
-                .unwrap_or_else(|| "opcua-issuer".to_string());
+                .ok_or_else(missing_oauth2_config)?;
             let audience = self
                 .config
                 .oauth2_audience
                 .clone()
-                .unwrap_or_else(|| "opcua-server".to_string());
-            let certificate_store =
-                Arc::new(RwLock::new(CertificateStore::new(&self.config.pki_dir)));
-            let validator = LocalOAuth2Validator::new(certificate_store, issuer, audience);
+                .ok_or_else(missing_oauth2_config)?;
+            let issuer_cert_path = self
+                .config
+                .oauth2_issuer_certificate_path
+                .as_ref()
+                .ok_or_else(missing_oauth2_config)?;
+            let issuer_cert = CertificateStore::read_cert(issuer_cert_path)
+                .map_err(|_| missing_oauth2_config())?;
+            let validator = LocalOAuth2Validator::new(issuer, audience, issuer_cert);
             let claims = validator
                 .validate_token(issued_jwt.raw())
                 .map_err(|status| {

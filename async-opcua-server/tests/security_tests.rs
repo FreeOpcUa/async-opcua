@@ -261,7 +261,8 @@ struct OAuth2Fixture {
 impl OAuth2Fixture {
     fn new() -> Self {
         let pki = TempPath::new("oauth2-pki");
-        let (private_key, policy_id) = setup_trusted_oauth2_certificate(pki.path());
+        let (private_key, policy_id, issuer_cert_path) =
+            setup_trusted_oauth2_certificate(pki.path());
         let endpoint = ServerEndpoint::new_none(OAUTH2_PATH, &[]);
         let policy_id = {
             assert_eq!(issued_token_security_policy(&endpoint), policy_id);
@@ -279,6 +280,7 @@ impl OAuth2Fixture {
             .discovery_urls(vec!["opc.tcp://127.0.0.1:4855/oauth2".to_string()])
             .oauth2_issuer(OAUTH2_ISSUER)
             .oauth2_audience(OAUTH2_AUDIENCE)
+            .oauth2_issuer_certificate_path(issuer_cert_path)
             .with_authenticator(Arc::new(IssuedTokenAuthenticator))
             .add_endpoint("oauth2", endpoint)
             .build()
@@ -436,7 +438,8 @@ impl PasswordFixture {
     }
 }
 
-fn setup_trusted_oauth2_certificate(pki_path: &Path) -> (PrivateKey, UAString) {
+// Feature 025 US1: also returns the issuer cert path — the validator now pins to it.
+fn setup_trusted_oauth2_certificate(pki_path: &Path) -> (PrivateKey, UAString, std::path::PathBuf) {
     let certificate_store = CertificateStore::new(pki_path);
     certificate_store
         .ensure_pki_path()
@@ -446,11 +449,18 @@ fn setup_trusted_oauth2_certificate(pki_path: &Path) -> (PrivateKey, UAString) {
     let cert_path = certificate_store
         .trusted_certs_dir()
         .join(CertificateStore::cert_file_name(&cert));
-    fs::write(cert_path, cert.to_der().expect("certificate should encode"))
-        .expect("trusted OAuth2 certificate should be written");
+    fs::write(
+        &cert_path,
+        cert.to_der().expect("certificate should encode"),
+    )
+    .expect("trusted OAuth2 certificate should be written");
 
     let endpoint = ServerEndpoint::new_none(OAUTH2_PATH, &[]);
-    (private_key, issued_token_security_policy(&endpoint))
+    (
+        private_key,
+        issued_token_security_policy(&endpoint),
+        cert_path,
+    )
 }
 
 fn oauth2_cert_and_key(common_name: &str) -> (X509, PrivateKey) {

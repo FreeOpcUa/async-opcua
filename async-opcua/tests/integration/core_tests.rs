@@ -13,7 +13,7 @@ use opcua::{
     client::IdentityToken,
     core::comms::tcp_codec::{Message, TcpCodec},
     core::config::Config,
-    crypto::{CertificateStore, KeySize, PrivateKey, SecurityPolicy},
+    crypto::{KeySize, PrivateKey, SecurityPolicy},
     types::{
         ApplicationType, DecodingOptions, MessageSecurityMode, NodeId, ReadValueId, StatusCode,
         TimestampsToReturn, VariableId, Variant,
@@ -443,35 +443,25 @@ fn sign_issued_jwt(claims: &str, private_key: &PrivateKey) -> String {
     format!("{signing_input}.{signature}")
 }
 
-fn trusted_issued_jwt(test_id: u16) -> String {
-    use opcua::core::sync::RwLock;
-    use opcua::crypto::identity::{LocalOAuth2Validator, OAuth2IdentityValidator};
-
-    let cert_path = PathBuf::from(format!("pki-server/{test_id}/own/cert.der"));
-    let private_key_path = PathBuf::from(format!("pki-server/{test_id}/private/private.pem"));
-    let cert = CertificateStore::read_cert(&cert_path).unwrap();
-    let private_key = CertificateStore::read_pkey(&private_key_path).unwrap();
-    let mut trusted_cert_path = PathBuf::from(format!("pki-server/{test_id}/trusted"));
-    fs::create_dir_all(&trusted_cert_path).unwrap();
-    trusted_cert_path.push(CertificateStore::cert_file_name(&cert));
-    fs::copy(cert_path, trusted_cert_path).unwrap();
-
-    let token = sign_issued_jwt(
-        r#"{"sub":"valid","iss":"opcua-issuer","aud":"opcua-server","exp":4102444800,"roles":["operator"],"permissions":["read","write"]}"#,
-        &private_key,
-    );
-    let validator = LocalOAuth2Validator::new(
-        Arc::new(RwLock::new(CertificateStore::new(&PathBuf::from(format!(
-            "pki-server/{test_id}"
-        ))))),
-        "opcua-issuer".to_string(),
-        "opcua-server".to_string(),
-    );
-    validator
-        .validate_token(&token)
-        .expect("test issued JWT should validate against server PKI");
-
-    token
+// Feature 025 US1: a DEDICATED OAuth2 issuer cert (separate from the server's app cert — the point of
+// the pinning fix). Returns the cert path (to configure on the server) + its signing key.
+fn make_oauth_issuer() -> (PathBuf, tempfile::TempDir, PrivateKey) {
+    use opcua::crypto::{X509Data, X509};
+    let data = X509Data {
+        key_size: 2048,
+        common_name: "oauth-issuer".to_string(),
+        organization: "test".to_string(),
+        organizational_unit: "test".to_string(),
+        country: "EN".to_string(),
+        state: "London".to_string(),
+        alt_host_names: vec!["urn:oauth-issuer".to_string()].into(),
+        certificate_duration_days: 60,
+    };
+    let (cert, key) = X509::cert_and_pkey(&data).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("issuer.der");
+    fs::write(&path, cert.to_der().unwrap()).unwrap();
+    (path, dir, key)
 }
 
 #[async_trait]
@@ -511,6 +501,7 @@ impl AuthManager for IssuedTokenAuthenticator {
 
 #[tokio::test]
 async fn issued_token_test() {
+    let (issuer_cert_path, _issuer_dir, issuer_key) = make_oauth_issuer();
     let server = test_server()
         .add_endpoint(
             "issued_token",
@@ -521,9 +512,16 @@ async fn issued_token_test() {
                 &[] as &[&str],
             ),
         )
-        .with_authenticator(Arc::new(IssuedTokenAuthenticator));
+        .with_authenticator(Arc::new(IssuedTokenAuthenticator))
+        // Feature 025 US1: issued-token auth now requires explicit issuer/audience + a pinned issuer cert.
+        .oauth2_issuer("opcua-issuer")
+        .oauth2_audience("opcua-server")
+        .oauth2_issuer_certificate_path(issuer_cert_path);
     let mut tester = Tester::new(server, false).await;
-    let issued_jwt = trusted_issued_jwt(tester.test_id);
+    let issued_jwt = sign_issued_jwt(
+        r#"{"sub":"valid","iss":"opcua-issuer","aud":"opcua-server","exp":4102444800,"roles":["operator"],"permissions":["read","write"]}"#,
+        &issuer_key,
+    );
     let (session, lp) = tester
         .connect_path(
             SecurityPolicy::Aes128Sha256RsaOaep,

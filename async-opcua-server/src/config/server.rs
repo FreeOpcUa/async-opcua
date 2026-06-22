@@ -415,6 +415,12 @@ pub struct ServerConfig {
     /// Expected OAuth2 audience for issued JWT identity tokens.
     #[serde(default)]
     pub oauth2_audience: Option<String>,
+    /// Issuer certificate used to verify issued JWT identity token signatures.
+    ///
+    /// ponytail: issued-token auth now fails closed unless issuer, audience, and this certificate
+    /// are explicitly configured.
+    #[serde(default)]
+    pub oauth2_issuer_certificate_path: Option<PathBuf>,
     /// TLS server configuration used for `opc.wss` listeners.
     ///
     /// Public so `ServerConfig` stays constructible via struct literal (like its sibling
@@ -609,6 +615,7 @@ impl Default for ServerConfig {
             allow_legacy_crypto: false,
             oauth2_issuer: None,
             oauth2_audience: None,
+            oauth2_issuer_certificate_path: None,
             #[cfg(feature = "wss")]
             wss_tls: None,
         }

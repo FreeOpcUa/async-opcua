@@ -1,36 +1,28 @@
-//! Local OAuth2 JWT validation backed by the certificate trust store.
+//! Local OAuth2 JWT validation backed by a configured issuer certificate.
 
-use std::{
-    fs,
-    sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::{prelude::BASE64_URL_SAFE_NO_PAD, Engine};
 use opcua_types::status_code::StatusCode;
 use serde_json::Value;
 
-use crate::CertificateStore;
+use crate::X509;
 
 use super::{ClaimProfile, OAuth2IdentityValidator};
 
-/// OAuth2 identity validator that verifies RS256 JWTs against trusted local certificates.
+/// OAuth2 identity validator that verifies RS256 JWTs against one configured issuer certificate.
 pub struct LocalOAuth2Validator {
-    certificate_store: Arc<parking_lot::RwLock<CertificateStore>>,
+    issuer_cert: X509,
     issuer: String,
     audience: String,
 }
 
 impl LocalOAuth2Validator {
-    /// Creates a local OAuth2 validator using the supplied certificate trust store.
+    /// Creates a local OAuth2 validator using the supplied issuer certificate.
     #[must_use]
-    pub fn new(
-        certificate_store: Arc<parking_lot::RwLock<CertificateStore>>,
-        issuer: String,
-        audience: String,
-    ) -> Self {
+    pub fn new(issuer: String, audience: String, issuer_cert: X509) -> Self {
         Self {
-            certificate_store,
+            issuer_cert,
             issuer,
             audience,
         }
@@ -123,25 +115,12 @@ impl LocalOAuth2Validator {
     }
 
     fn verify_signature(&self, data: &[u8], signature: &[u8]) -> Result<(), StatusCode> {
-        let trusted_certs_dir = self.certificate_store.read().trusted_certs_dir();
-        let entries =
-            fs::read_dir(trusted_certs_dir).map_err(|_| StatusCode::BadIdentityTokenRejected)?;
-
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if !path.is_file() {
-                continue;
-            }
-
-            let Ok(cert) = CertificateStore::read_cert(&path) else {
-                continue;
-            };
-            let Ok(public_key) = cert.public_key() else {
-                continue;
-            };
-            if public_key.verify_sha256(data, signature).unwrap_or(false) {
-                return Ok(());
-            }
+        let public_key = self
+            .issuer_cert
+            .public_key()
+            .map_err(|_| StatusCode::BadIdentityTokenRejected)?;
+        if public_key.verify_sha256(data, signature).unwrap_or(false) {
+            return Ok(());
         }
 
         Self::reject()

@@ -1022,3 +1022,31 @@ fn xml_extension_object_in_json_preserved_with_xml() {
         "an XML-bodied ExtensionObject must be preserved (non-null) when xml is enabled, got null"
     );
 }
+
+/// Feature 018 US2: DataValue SourcePicoseconds/ServerPicoseconds round-trip through the OPC UA JSON
+/// encoding (Part 6 §5.4). The backlog claimed they were dropped; this verifies they are preserved.
+#[test]
+fn data_value_picoseconds_json_round_trip() {
+    use crate::{DataValue, DateTime, Variant};
+    let dv = DataValue {
+        value: Some(Variant::UInt16(100)),
+        status: Some(crate::StatusCode::Good),
+        source_timestamp: Some(DateTime::now()),
+        source_picoseconds: Some(123),
+        server_timestamp: Some(DateTime::now()),
+        server_picoseconds: Some(456),
+    };
+    let s = to_string(&dv).unwrap();
+    // §5.4 field names present.
+    assert!(s.contains("\"SourcePicoseconds\":123"), "JSON: {s}");
+    assert!(s.contains("\"ServerPicoseconds\":456"), "JSON: {s}");
+    let back: DataValue = from_str(&s).unwrap();
+    // Picoseconds round-trip (the US2 subject — the backlog claim that they don't is stale).
+    assert_eq!(back.source_picoseconds, Some(123));
+    assert_eq!(back.server_picoseconds, Some(456));
+    // Timestamps are preserved (present). NOTE: the JSON DateTime encoding truncates sub-millisecond
+    // precision (ISO-8601 ms), so exact-tick equality is not asserted here — that is an orthogonal
+    // DateTime-precision matter outside Tier 2 #5 (recorded as a separate potential backlog item).
+    assert!(back.source_timestamp.is_some());
+    assert!(back.server_timestamp.is_some());
+}

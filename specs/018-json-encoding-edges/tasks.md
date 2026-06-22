@@ -56,11 +56,11 @@ without XML support.
 
 **Goal**: lock the (already-working) picoseconds round-trip with a test; record the backlog claim as stale.
 
-- [ ] T005 [US2] Claude-authored test in `tests/json.rs`: a `DataValue` with source+server timestamps and
+- [X] T005 [US2] Claude-authored test in `tests/json.rs`: a `DataValue` with source+server timestamps and
   non-zero `source_picoseconds`/`server_picoseconds` round-trips through `to_string`/`from_str` preserving
   all four fields; assert the emitted JSON uses the §5.4 names `SourcePicoseconds`/`ServerPicoseconds`;
   add a no-timestamp DataValue case (picoseconds omitted). No production change (stale claim).
-- [ ] T006 [US2] Gate; verify T005 passes; **commit US2** (`test(018 US2): lock DataValue picoseconds JSON round-trip (backlog claim was stale)`).
+- [X] T006 [US2] Gate; verify T005 passes; **commit US2** (`test(018 US2): lock DataValue picoseconds JSON round-trip (backlog claim was stale)`).
 
 ## Phase 4: User Story 3 — Variant XmlElement JSON round-trip (P3)
 

@@ -84,14 +84,14 @@ sub-extent, leaving other elements unchanged.
 **Goal**: every malformed / out-of-range / mismatched / oversized range is rejected with the correct code
 and never panics.
 
-- [ ] T008 [US3] Claude-authored tests (against the T003/T006 impls): rank mismatch (range dims ≠ array
+- [X] T008 [US3] Claude-authored tests (against the T003/T006 impls): rank mismatch (range dims ≠ array
   rank) → `Bad_IndexRangeNoData`; lower bound out of range → `Bad_IndexRangeNoData` (Table 166 `7:9`,
   `0:1,10:15`); write source shape/type ≠ addressed extent → `Bad_IndexRangeDataMismatch`; range write to
   a non-array → `Bad_WriteNotSupported`; an **oversized/overflowing declared bound** (e.g. `0:4294967294`,
   and a multi-dim range whose extents would overflow `usize`) → bounded, **no panic**, no unbounded alloc.
-- [ ] T009 [US3] If T008 surfaces any gap, fix it in `variant/mod.rs` (codex; bounds/clamp/checked-arith
+- [X] T009 [US3] If T008 surfaces any gap, fix it in `variant/mod.rs` (codex; bounds/clamp/checked-arith
   only — no behavior change beyond fail-closed). Otherwise no-op.
-- [ ] T010 [US3] Gate; verify T008 passes; **commit US3** (`test(017 US3): fail-closed StatusCodes + panic-free bounds`).
+- [X] T010 [US3] Gate; verify T008 passes; **commit US3** (`test(017 US3): fail-closed StatusCodes + panic-free bounds`).
 
 ## Phase 5: User Story 4 — Backward compatibility (P2)
 

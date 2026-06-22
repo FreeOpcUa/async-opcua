@@ -1817,3 +1817,60 @@ fn set_range_of_multidim_3d() {
         .collect();
     assert_eq!(got, vec![0, 1, 20, 3, 4, 5, 60, 7]);
 }
+
+/// US3: a multi-dim read whose lower bound is out of range → BadIndexRangeNoData.
+#[test]
+fn range_of_multidim_lower_out_of_range() {
+    let v = multidim_i32(&[0, 1, 2, 3, 4, 5, 6, 7, 8], &[3, 3]);
+    assert_eq!(
+        v.range_of(&nr("5:6,0:1")).unwrap_err(),
+        StatusCode::BadIndexRangeNoData
+    );
+}
+
+/// US3: an oversized declared upper bound on read is CLAMPED (partial), never allocated wholesale,
+/// never panics. "0:4294967294,0:1" on a 3x3 → rows 0..=2 × cols 0..=1 (6 elements).
+#[test]
+fn range_of_multidim_oversized_bound_is_clamped_not_allocated() {
+    let v = multidim_i32(&[0, 1, 2, 3, 4, 5, 6, 7, 8], &[3, 3]);
+    let Variant::Array(a) = v.range_of(&nr("0:4294967294,0:1")).unwrap() else {
+        panic!("expected array");
+    };
+    assert_eq!(a.dimensions, Some(vec![3, 2]));
+    assert_eq!(a.values.len(), 6); // bounded to the actual extent, no 4-billion allocation
+}
+
+/// US3: a multi-dim write whose source size != the addressed extent → BadIndexRangeDataMismatch.
+#[test]
+fn set_range_of_multidim_size_mismatch() {
+    let mut v = multidim_i32(&[0, 1, 2, 3, 4, 5, 6, 7, 8], &[3, 3]);
+    // "1:2,0:1" addresses 2x2 = 4 cells; give a 3-element source.
+    let src = multidim_i32(&[90, 91, 92], &[3]);
+    assert_eq!(
+        v.set_range_of(&nr("1:2,0:1"), &src).unwrap_err(),
+        StatusCode::BadIndexRangeDataMismatch
+    );
+}
+
+/// US3: a multi-dim write whose upper bound exceeds the destination → BadIndexRangeNoData
+/// (write cannot write all elements; no clamp, no panic, no huge allocation).
+#[test]
+fn set_range_of_multidim_oversized_bound_is_nodata() {
+    let mut v = multidim_i32(&[0, 1, 2, 3, 4, 5, 6, 7, 8], &[3, 3]);
+    let src = multidim_i32(&[1, 2], &[2]);
+    assert_eq!(
+        v.set_range_of(&nr("0:4294967294,0:1"), &src).unwrap_err(),
+        StatusCode::BadIndexRangeNoData
+    );
+}
+
+/// US3: a multi-dim range write to a non-array target → BadWriteNotSupported.
+#[test]
+fn set_range_of_multidim_non_array_target() {
+    let mut v = Variant::from(5i32); // scalar
+    let src = multidim_i32(&[1, 2, 3, 4], &[2, 2]);
+    assert_eq!(
+        v.set_range_of(&nr("1:2,0:1"), &src).unwrap_err(),
+        StatusCode::BadWriteNotSupported
+    );
+}

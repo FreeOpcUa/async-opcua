@@ -109,12 +109,12 @@ stories can proceed.
 
 **Goal**: the same envelope applied to `IssuedIdentityToken.tokenData`.
 
-- [ ] T015 [US3] Claude-authored tests: an `IssuedIdentityToken` whose `tokenData` is an
+- [X] T015 [US3] Claude-authored tests: an `IssuedIdentityToken` whose `tokenData` is an
   `EccEncryptedSecret` round-trips client→server on P-256/P-384; wrong-nonce/tampered → uniform reject, no panic.
-- [ ] T016 [US3] Wire the IssuedIdentityToken path on both sides (client encrypt in
+- [X] T016 [US3] Wire the IssuedIdentityToken path on both sides (client encrypt in
   `session/services/session.rs`; server decrypt branch in `info.rs`) to use the ECC envelope for issued
   token data under ECC policies, reusing T008/T012. RSA / None unchanged. (codex; depends T015)
-- [ ] T017 [US3] Gate; verify T015 passes; **commit US3** (`feat(016 US3): IssuedIdentityToken secret under ECC`).
+- [X] T017 [US3] Gate; verify T015 passes; **commit US3** (`feat(016 US3): IssuedIdentityToken secret under ECC`).
 
 ## Phase 6: User Story 4 — Consumed-key anti-replay end-to-end (P1)
 

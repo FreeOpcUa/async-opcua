@@ -125,7 +125,7 @@ mod ecc_routing_tests {
         ecc_encrypt_secret, generate_ephemeral_keypair, EccCurve, EphemeralPrivateKey,
     };
     use opcua_crypto::{SecurityPolicy, X509Data, X509};
-    use opcua_types::{ByteString, UserNameIdentityToken};
+    use opcua_types::{ByteString, IssuedIdentityToken, UserNameIdentityToken};
 
     fn ec_cert(curve: EccCurve) -> (X509, opcua_crypto::PrivateKey) {
         let data = X509Data {
@@ -185,6 +185,46 @@ mod ecc_routing_tests {
         );
 
         // Wrong server nonce -> reject.
+        assert!(decrypt_identity_token_secret(&token, &[0u8; 32], policy, &None, &ctx).is_err());
+    }
+
+    /// US3: the same ECC routing applies to an `IssuedIdentityToken` (its `token_data` is the secret).
+    #[test]
+    fn routes_ecc_issued_secret_through_ecc_decrypt() {
+        let policy = SecurityPolicy::EccNistP384;
+        let curve = EccCurve::P384;
+        let (client_cert, client_key) = ec_cert(curve);
+        let server_kp = generate_ephemeral_keypair(curve).expect("server kp");
+        let server_pub = server_kp.public_key().clone();
+        let server_priv_scalar = server_kp.private_key().scalar().to_vec();
+        let server_nonce = vec![0x7Eu8; 32];
+        let token_data = b"issued-jwt-bytes-over-ecc";
+
+        let secret_bytes = ecc_encrypt_secret(
+            policy,
+            &server_nonce,
+            &server_pub,
+            &client_key,
+            &client_cert,
+            token_data,
+        )
+        .expect("encrypt");
+
+        let token = IssuedIdentityToken {
+            token_data: ByteString::from(secret_bytes),
+            ..Default::default()
+        };
+        let ctx = EccSecretContext {
+            server_ephemeral: Some(
+                EphemeralPrivateKey::from_scalar_bytes(curve, &server_priv_scalar).unwrap(),
+            ),
+            client_certificate: Some(client_cert.clone()),
+        };
+
+        let recovered =
+            decrypt_identity_token_secret(&token, &server_nonce, policy, &None, &ctx).unwrap();
+        assert_eq!(recovered.as_ref(), &token_data[..]);
+        // Wrong nonce -> reject.
         assert!(decrypt_identity_token_secret(&token, &[0u8; 32], policy, &None, &ctx).is_err());
     }
 }

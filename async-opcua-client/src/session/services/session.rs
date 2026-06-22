@@ -545,6 +545,39 @@ impl ActivateSession {
             IdentityToken::IssuedToken(source) => {
                 let token = source.0.get_issued_token().await?;
                 let nonce = remote_nonce.as_ref();
+                #[cfg(feature = "ecc")]
+                if matches!(
+                    channel_security_policy,
+                    SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384
+                ) {
+                    let (Some(server_eph), Some(signing_key), Some(signing_cert)) = (
+                        self.retained_server_ephemeral_key.as_ref(),
+                        self.private_key.as_ref(),
+                        self.own_certificate.as_ref(),
+                    ) else {
+                        return Err(Error::new(
+                            StatusCode::BadIdentityTokenInvalid,
+                            "ECC identity-token encryption requires a retained server EphemeralKey and a client certificate",
+                        ));
+                    };
+                    let encrypted = opcua_crypto::ecc::ecc_encrypt_secret(
+                        channel_security_policy,
+                        nonce,
+                        server_eph,
+                        signing_key,
+                        signing_cert,
+                        token.as_ref(),
+                    )?;
+                    let identity_token = IssuedIdentityToken {
+                        policy_id: policy.policy_id.clone(),
+                        encryption_algorithm: UAString::null(),
+                        token_data: ByteString::from(encrypted),
+                    };
+                    return Ok((
+                        ExtensionObject::from_message(identity_token),
+                        SignatureData::null(),
+                    ));
+                }
                 let cert = remote_cert;
                 let secret = legacy_encrypt_secret(
                     channel_security_policy,

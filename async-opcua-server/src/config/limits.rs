@@ -51,6 +51,9 @@ pub struct Limits {
     /// Maximum number of registered sessions before new ones are rejected.
     #[serde(default = "defaults::max_sessions")]
     pub max_sessions: usize,
+    /// Whether clients are allowed to modify the address space via the NodeManagement service (AddNodes/DeleteNodes/AddReferences/DeleteReferences) on node managers that support it. Default false (read-only).
+    #[serde(default = "defaults::clients_can_modify_address_space")]
+    pub clients_can_modify_address_space: bool,
 }
 
 impl Default for Limits {
@@ -72,6 +75,7 @@ impl Default for Limits {
             unactivated_session_timeout_ms: defaults::unactivated_session_timeout_ms(),
             operational: OperationalLimits::default(),
             max_sessions: defaults::max_sessions(),
+            clients_can_modify_address_space: defaults::clients_can_modify_address_space(),
         }
     }
 }
@@ -264,6 +268,9 @@ mod defaults {
     pub(super) fn max_sessions() -> usize {
         constants::MAX_SESSIONS
     }
+    pub(super) fn clients_can_modify_address_space() -> bool {
+        false
+    }
 
     pub(super) fn max_subscriptions_per_session() -> usize {
         constants::MAX_SUBSCRIPTIONS_PER_SESSION
@@ -390,6 +397,7 @@ mod tests {
                 max_inflight_requests_per_connection: 512,
                 max_unactivated_sessions_per_channel: 5,
                 unactivated_session_timeout_ms: 10_000,
+                clients_can_modify_address_space: false,
                 subscriptions: SubscriptionLimits {
                     max_subscriptions_per_session: 100,
                     max_pending_publish_requests: 20,

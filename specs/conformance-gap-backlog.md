@@ -55,7 +55,7 @@ not base-profile violations — flagged as such.
 
 | # | Gap | Facet | Notes |
 |---|-----|-------|-------|
-| 6 | Writable address space / **Node Management** (AddNodes/Write/Delete) — CoreNodeManager is read-only by design; defaults return `BadServiceUnsupported`. | NodeManagement | Architectural opt-in per node manager. |
+| 6 | ✅ **DONE (feature 022)** — **Writable address space / Node Management**: the in-memory node manager now implements AddNodes/DeleteNodes/AddReferences/DeleteReferences (Object+Variable node classes), gated by the new opt-in `clients_can_modify_address_space` config flag (default OFF = read-only, unchanged). Part 4 §5.7 status codes; additive (CoreNodeManager/overrides untouched). Deferred: GeneralModelChangeEventType emission, persistence, full 9-node-class AddNodes, server-assigned (null) ids on the default (use `handle_new_node` to opt in). | NodeManagement | Opt-in per node manager. |
 | 7 | **Query over CoreNodeManager** — service works, but CoreNodeManager doesn't implement `QueryProvider`, and non-default `view` is rejected (`BadViewIdUnknown`). | Query | Service framework is there; the standard address space just isn't queryable. |
 | 8 | **Discovery LDS** stubs — FindServersOnNetwork / RegisterServer / RegisterServer2 → `BadServiceUnsupported`. | LDS registration | Not required by base/embedded; needed for LDS integration. |
 | 9 | **Method Call** on core address-space methods; **Audit events** (Part 4 §5.6) partial (non-mandatory). | Methods / Auditing | Low priority. |

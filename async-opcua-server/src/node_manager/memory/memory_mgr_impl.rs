@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use std::sync::Arc;
 
 use crate::{
-    address_space::AddressSpace,
+    address_space::{AccessLevel, AddressSpace, EventNotifier, NodeType, ReferenceDirection},
     diagnostics::NamespaceMetadata,
     node_manager::{
         AddNodeItem, AddReferenceItem, DeleteNodeItem, DeleteReferenceItem, HistoryNode,
@@ -13,10 +13,12 @@ use crate::{
     subscriptions::CreateMonitoredItem,
 };
 use opcua_core::sync::RwLock;
+use opcua_nodes::{NodeBase, Object, TypeTree, Variable};
 use opcua_types::{
-    DataValue, ExpandedNodeId, MonitoringMode, NodeId, ReadAnnotationDataDetails,
-    ReadAtTimeDetails, ReadEventDetails, ReadProcessedDetails, ReadRawModifiedDetails, StatusCode,
-    TimestampsToReturn, Variant,
+    AddNodeAttributes, AttributesMask, DataTypeId, DataValue, ExpandedNodeId, LocalizedText,
+    MonitoringMode, NodeClass, NodeId, ReadAnnotationDataDetails, ReadAtTimeDetails,
+    ReadEventDetails, ReadProcessedDetails, ReadRawModifiedDetails, ReferenceTypeId, StatusCode,
+    TimestampsToReturn, Variant, WriteMask,
 };
 
 /// Callback used by the default in-memory method `Call` implementation.
@@ -44,6 +46,437 @@ where
 
     fn build(self, context: ServerContext, address_space: &mut AddressSpace) -> Self::Impl {
         self(context, address_space)
+    }
+}
+
+fn clients_can_modify_address_space(context: &RequestContext) -> bool {
+    context.info.config.limits.clients_can_modify_address_space
+}
+
+fn add_nodes_impl(
+    context: &RequestContext,
+    address_space: &RwLock<AddressSpace>,
+    nodes_to_add: &mut [&mut AddNodeItem],
+) {
+    if !clients_can_modify_address_space(context) {
+        for item in nodes_to_add {
+            item.set_result(NodeId::null(), StatusCode::BadServiceUnsupported);
+        }
+        return;
+    }
+
+    let mut address_space = address_space.write();
+
+    for item in nodes_to_add {
+        if item.status().is_bad() && item.status() != StatusCode::BadNotSupported {
+            continue;
+        }
+
+        let parent_id = item.parent_node_id().node_id.clone();
+        if parent_id.is_null() || !address_space.node_exists(&parent_id) {
+            item.set_result(NodeId::null(), StatusCode::BadParentNodeIdInvalid);
+            continue;
+        }
+
+        if item.reference_type_id().is_null() {
+            item.set_result(NodeId::null(), StatusCode::BadReferenceTypeIdInvalid);
+            continue;
+        }
+
+        let assigned_id = if item.requested_new_node_id().is_null() {
+            next_unused_node_id(&address_space, parent_id.namespace)
+        } else if !address_space
+            .namespaces()
+            .contains_key(&item.requested_new_node_id().namespace)
+        {
+            item.set_result(NodeId::null(), StatusCode::BadNodeIdRejected);
+            continue;
+        } else if address_space.node_exists(item.requested_new_node_id()) {
+            item.set_result(NodeId::null(), StatusCode::BadNodeIdExists);
+            continue;
+        } else {
+            item.requested_new_node_id().clone()
+        };
+
+        let node = match build_node(item, &assigned_id) {
+            Ok(node) => node,
+            Err(status) => {
+                item.set_result(NodeId::null(), status);
+                continue;
+            }
+        };
+
+        let type_definition_id = item.type_definition_id().node_id.clone();
+        let has_type_definition_id = NodeId::from(ReferenceTypeId::HasTypeDefinition);
+        let mut references = vec![(
+            &parent_id,
+            item.reference_type_id(),
+            ReferenceDirection::Inverse,
+        )];
+        if !type_definition_id.is_null() {
+            references.push((
+                &type_definition_id,
+                &has_type_definition_id,
+                ReferenceDirection::Forward,
+            ));
+        }
+
+        if address_space.insert(node, Some(references.as_slice())) {
+            item.set_result(assigned_id, StatusCode::Good);
+        } else {
+            item.set_result(NodeId::null(), StatusCode::BadNodeIdExists);
+        }
+    }
+}
+
+fn delete_nodes_impl(
+    context: &RequestContext,
+    address_space: &RwLock<AddressSpace>,
+    nodes_to_delete: &mut [&mut DeleteNodeItem],
+) {
+    if !clients_can_modify_address_space(context) {
+        for item in nodes_to_delete {
+            item.set_result(StatusCode::BadServiceUnsupported);
+        }
+        return;
+    }
+
+    let mut address_space = address_space.write();
+
+    for item in nodes_to_delete {
+        if item.node_id().is_null() {
+            item.set_result(StatusCode::BadNodeIdInvalid);
+            continue;
+        }
+
+        if address_space
+            .delete(item.node_id(), item.delete_target_references())
+            .is_some()
+        {
+            item.set_result(StatusCode::Good);
+        } else {
+            item.set_result(StatusCode::BadNodeIdUnknown);
+        }
+    }
+}
+
+fn add_references_impl(
+    context: &RequestContext,
+    address_space: &RwLock<AddressSpace>,
+    references_to_add: &mut [&mut AddReferenceItem],
+) {
+    if !clients_can_modify_address_space(context) {
+        for item in references_to_add {
+            item.set_source_result(StatusCode::BadServiceUnsupported);
+            item.set_target_result(StatusCode::BadServiceUnsupported);
+        }
+        return;
+    }
+
+    let mut address_space = address_space.write();
+    let type_tree = context.type_tree.read();
+
+    for item in references_to_add {
+        let source_owned = address_space
+            .namespaces()
+            .contains_key(&item.source_node_id().namespace);
+        let target_owned = address_space
+            .namespaces()
+            .contains_key(&item.target_node_id().node_id.namespace);
+
+        let handle_source = source_owned && item.source_status() == StatusCode::BadNotSupported;
+        let handle_target = target_owned && item.target_status() == StatusCode::BadNotSupported;
+        if !handle_source && !handle_target {
+            continue;
+        }
+
+        if !type_tree
+            .get(item.reference_type_id())
+            .is_some_and(|node_class| node_class == NodeClass::ReferenceType)
+        {
+            if handle_source {
+                item.set_source_result(StatusCode::BadReferenceTypeIdInvalid);
+            }
+            if handle_target {
+                item.set_target_result(StatusCode::BadReferenceTypeIdInvalid);
+            }
+            continue;
+        }
+
+        let source_exists = address_space.node_exists(item.source_node_id());
+        let target_exists = address_space.node_exists(&item.target_node_id().node_id);
+
+        if handle_source && !source_exists {
+            item.set_source_result(StatusCode::BadSourceNodeIdInvalid);
+        }
+        if handle_target && !target_exists {
+            item.set_target_result(StatusCode::BadTargetNodeIdInvalid);
+        }
+
+        let source_ready = handle_source && source_exists;
+        let target_ready = handle_target && target_exists;
+        if !source_ready && !target_ready {
+            continue;
+        }
+
+        if item.source_node_id() == &item.target_node_id().node_id {
+            if source_ready {
+                item.set_source_result(StatusCode::BadSourceNodeIdInvalid);
+            }
+            if target_ready {
+                item.set_target_result(StatusCode::BadTargetNodeIdInvalid);
+            }
+            continue;
+        }
+
+        if item.is_forward() {
+            address_space.insert_reference(
+                item.source_node_id(),
+                &item.target_node_id().node_id,
+                item.reference_type_id(),
+            );
+        } else {
+            address_space.insert_reference(
+                &item.target_node_id().node_id,
+                item.source_node_id(),
+                item.reference_type_id(),
+            );
+        }
+
+        if source_ready {
+            item.set_source_result(StatusCode::Good);
+        }
+        if target_ready {
+            item.set_target_result(StatusCode::Good);
+        }
+    }
+}
+
+fn delete_references_impl(
+    context: &RequestContext,
+    address_space: &RwLock<AddressSpace>,
+    references_to_delete: &mut [&mut DeleteReferenceItem],
+) {
+    if !clients_can_modify_address_space(context) {
+        for item in references_to_delete {
+            item.set_source_result(StatusCode::BadServiceUnsupported);
+            item.set_target_result(StatusCode::BadServiceUnsupported);
+        }
+        return;
+    }
+
+    let mut address_space = address_space.write();
+    let type_tree = context.type_tree.read();
+
+    for item in references_to_delete {
+        let source_owned = address_space
+            .namespaces()
+            .contains_key(&item.source_node_id().namespace);
+        let target_owned = address_space
+            .namespaces()
+            .contains_key(&item.target_node_id().node_id.namespace);
+
+        let handle_source = source_owned && item.source_status() == StatusCode::BadNotSupported;
+        let handle_target = target_owned && item.target_status() == StatusCode::BadNotSupported;
+        if !handle_source && !handle_target {
+            continue;
+        }
+
+        if !type_tree
+            .get(item.reference_type_id())
+            .is_some_and(|node_class| node_class == NodeClass::ReferenceType)
+        {
+            if handle_source {
+                item.set_source_result(StatusCode::BadReferenceTypeIdInvalid);
+            }
+            if handle_target {
+                item.set_target_result(StatusCode::BadReferenceTypeIdInvalid);
+            }
+            continue;
+        }
+
+        let source_exists = address_space.node_exists(item.source_node_id());
+        let target_exists = address_space.node_exists(&item.target_node_id().node_id);
+
+        if handle_source && !source_exists {
+            item.set_source_result(StatusCode::BadSourceNodeIdInvalid);
+        }
+        if handle_target && !target_exists {
+            item.set_target_result(StatusCode::BadTargetNodeIdInvalid);
+        }
+
+        let source_ready = handle_source && source_exists;
+        let target_ready = handle_target && target_exists;
+        if !source_ready && !target_ready {
+            continue;
+        }
+
+        let (source_node, target_node) = if item.is_forward() {
+            (item.source_node_id(), &item.target_node_id().node_id)
+        } else {
+            (&item.target_node_id().node_id, item.source_node_id())
+        };
+
+        address_space.delete_reference(source_node, target_node, item.reference_type_id());
+        if item.delete_bidirectional() {
+            address_space.delete_reference(target_node, source_node, item.reference_type_id());
+        }
+
+        if source_ready {
+            item.set_source_result(StatusCode::Good);
+        }
+        if target_ready {
+            item.set_target_result(StatusCode::Good);
+        }
+    }
+}
+
+fn next_unused_node_id(address_space: &AddressSpace, namespace: u16) -> NodeId {
+    loop {
+        let node_id = NodeId::next_numeric(namespace);
+        if !address_space.node_exists(&node_id) {
+            return node_id;
+        }
+    }
+}
+
+fn build_node(item: &AddNodeItem, node_id: &NodeId) -> Result<NodeType, StatusCode> {
+    match (item.node_class(), item.node_attributes()) {
+        (NodeClass::Object, AddNodeAttributes::Object(attributes)) => {
+            build_object(node_id, item.browse_name().clone(), attributes).map(NodeType::from)
+        }
+        (NodeClass::Variable, AddNodeAttributes::Variable(attributes)) => {
+            build_variable(node_id, item.browse_name().clone(), attributes).map(NodeType::from)
+        }
+        (NodeClass::Object, _) | (NodeClass::Variable, _) => {
+            Err(StatusCode::BadNodeAttributesInvalid)
+        }
+        _ => Err(StatusCode::BadNodeClassInvalid),
+    }
+}
+
+fn build_object(
+    node_id: &NodeId,
+    browse_name: impl Into<opcua_types::QualifiedName>,
+    attributes: &opcua_types::ObjectAttributes,
+) -> Result<Object, StatusCode> {
+    let browse_name = browse_name.into();
+    let mask = attributes_mask(attributes.specified_attributes)?;
+    let display_name =
+        display_name_or_browse_name(&mask, attributes.display_name.clone(), &browse_name);
+    let event_notifier = if mask.contains(AttributesMask::EVENT_NOTIFIER) {
+        EventNotifier::from_bits_truncate(attributes.event_notifier)
+    } else {
+        EventNotifier::empty()
+    };
+
+    let mut node = Object::new(node_id, browse_name, display_name, event_notifier);
+    apply_base_attributes(
+        &mut node,
+        mask,
+        attributes.description.clone(),
+        attributes.write_mask,
+        attributes.user_write_mask,
+    );
+    Ok(node)
+}
+
+fn build_variable(
+    node_id: &NodeId,
+    browse_name: impl Into<opcua_types::QualifiedName>,
+    attributes: &opcua_types::VariableAttributes,
+) -> Result<Variable, StatusCode> {
+    let browse_name = browse_name.into();
+    let mask = attributes_mask(attributes.specified_attributes)?;
+    let display_name =
+        display_name_or_browse_name(&mask, attributes.display_name.clone(), &browse_name);
+    let data_type = if mask.contains(AttributesMask::DATA_TYPE) {
+        attributes.data_type.clone()
+    } else {
+        NodeId::from(DataTypeId::BaseDataType)
+    };
+    let value = if mask.contains(AttributesMask::VALUE) {
+        attributes.value.clone()
+    } else {
+        Variant::Empty
+    };
+
+    let mut node = Variable::new_data_value(
+        node_id,
+        browse_name,
+        display_name,
+        data_type,
+        None,
+        None,
+        value,
+    );
+
+    if mask.contains(AttributesMask::VALUE_RANK) {
+        node.set_value_rank(attributes.value_rank);
+    }
+    if mask.contains(AttributesMask::HISTORIZING) {
+        node.set_historizing(attributes.historizing);
+    }
+    if mask.contains(AttributesMask::ACCESS_LEVEL) {
+        node.set_access_level(AccessLevel::from_bits_truncate(attributes.access_level));
+    }
+    if mask.contains(AttributesMask::USER_ACCESS_LEVEL) {
+        node.set_user_access_level(AccessLevel::from_bits_truncate(
+            attributes.user_access_level,
+        ));
+    }
+    if mask.contains(AttributesMask::ARRAY_DIMENSIONS) {
+        if let Some(array_dimensions) = attributes.array_dimensions.as_ref() {
+            node.set_array_dimensions(array_dimensions);
+        } else {
+            return Err(StatusCode::BadNodeAttributesInvalid);
+        }
+    }
+    if mask.contains(AttributesMask::MINIMUM_SAMPLING_INTERVAL) {
+        node.set_minimum_sampling_interval(attributes.minimum_sampling_interval);
+    }
+    apply_base_attributes(
+        &mut node,
+        mask,
+        attributes.description.clone(),
+        attributes.write_mask,
+        attributes.user_write_mask,
+    );
+
+    Ok(node)
+}
+
+fn attributes_mask(specified_attributes: u32) -> Result<AttributesMask, StatusCode> {
+    AttributesMask::from_bits(specified_attributes).ok_or(StatusCode::BadNodeAttributesInvalid)
+}
+
+fn display_name_or_browse_name(
+    mask: &AttributesMask,
+    display_name: LocalizedText,
+    browse_name: &opcua_types::QualifiedName,
+) -> LocalizedText {
+    if mask.contains(AttributesMask::DISPLAY_NAME) {
+        display_name
+    } else {
+        browse_name.name.to_string().into()
+    }
+}
+
+fn apply_base_attributes<T: NodeBase>(
+    node: &mut T,
+    mask: AttributesMask,
+    description: LocalizedText,
+    write_mask: u32,
+    user_write_mask: u32,
+) {
+    if mask.contains(AttributesMask::DESCRIPTION) {
+        node.set_description(description);
+    }
+    if mask.contains(AttributesMask::WRITE_MASK) {
+        node.set_write_mask(WriteMask::from_bits_truncate(write_mask));
+    }
+    if mask.contains(AttributesMask::USER_WRITE_MASK) {
+        node.set_user_write_mask(WriteMask::from_bits_truncate(user_write_mask));
     }
 }
 
@@ -339,7 +772,8 @@ pub trait InMemoryNodeManagerImpl: Send + Sync + 'static {
         address_space: &RwLock<AddressSpace>,
         nodes_to_add: &mut [&mut AddNodeItem],
     ) -> Result<(), StatusCode> {
-        Err(StatusCode::BadServiceUnsupported)
+        add_nodes_impl(context, address_space, nodes_to_add);
+        Ok(())
     }
 
     /// Add a list of references.
@@ -359,7 +793,8 @@ pub trait InMemoryNodeManagerImpl: Send + Sync + 'static {
         address_space: &RwLock<AddressSpace>,
         references_to_add: &mut [&mut AddReferenceItem],
     ) -> Result<(), StatusCode> {
-        Err(StatusCode::BadServiceUnsupported)
+        add_references_impl(context, address_space, references_to_add);
+        Ok(())
     }
 
     /// Delete a list of nodes.
@@ -374,7 +809,8 @@ pub trait InMemoryNodeManagerImpl: Send + Sync + 'static {
         address_space: &RwLock<AddressSpace>,
         nodes_to_delete: &mut [&mut DeleteNodeItem],
     ) -> Result<(), StatusCode> {
-        Err(StatusCode::BadServiceUnsupported)
+        delete_nodes_impl(context, address_space, nodes_to_delete);
+        Ok(())
     }
 
     /// Delete references for the given list of nodes.
@@ -407,6 +843,7 @@ pub trait InMemoryNodeManagerImpl: Send + Sync + 'static {
         address_space: &RwLock<AddressSpace>,
         references_to_delete: &mut [&mut DeleteReferenceItem],
     ) -> Result<(), StatusCode> {
-        Err(StatusCode::BadServiceUnsupported)
+        delete_references_impl(context, address_space, references_to_delete);
+        Ok(())
     }
 }

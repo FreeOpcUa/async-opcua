@@ -1649,3 +1649,301 @@ fn variant_bytestring_to_bytearray() {
 }
 
 // TODO arrays
+
+// ---------------------------------------------------------------------------------------------------
+// Feature 017 — multi-dimensional NumericRange (Part 4 §7.27). Ranges are built via the real BNF parser
+// (`.parse::<NumericRange>()`); expectations are hand-derived from §7.27 + Table 166, not the impl.
+// ---------------------------------------------------------------------------------------------------
+
+fn multidim_i32(values: &[i32], dims: &[u32]) -> Variant {
+    let vars: Vec<Variant> = values.iter().map(|v| Variant::from(*v)).collect();
+    Variant::Array(Box::new(
+        crate::Array::new_multi(VariantScalarTypeId::Int32, vars, dims.to_vec()).unwrap(),
+    ))
+}
+
+fn nr(s: &str) -> NumericRange {
+    s.parse::<NumericRange>().unwrap()
+}
+
+/// US1: a 2-D sub-range selects the Cartesian block and returns a correctly-shaped sub-array.
+/// 3x3 matrix rows [0,1,2]=0..2, [3,4,5], [6,7,8]; range "1:2,0:1" → rows 1..=2 × cols 0..=1.
+#[test]
+fn range_of_multidim_2d_block() {
+    let v = multidim_i32(&[0, 1, 2, 3, 4, 5, 6, 7, 8], &[3, 3]);
+    let Variant::Array(a) = v.range_of(&nr("1:2,0:1")).unwrap() else {
+        panic!("expected array");
+    };
+    assert_eq!(
+        a.values,
+        vec![
+            Variant::Int32(3),
+            Variant::Int32(4),
+            Variant::Int32(6),
+            Variant::Int32(7)
+        ]
+    );
+    assert_eq!(a.dimensions, Some(vec![2, 2]));
+}
+
+/// US1: an upper bound past a dimension extent is clamped → partial result (not an error).
+/// "1:2,1:5" on the 3x3 → rows 1..=2 × cols 1..=2.
+#[test]
+fn range_of_multidim_upper_bound_clamped() {
+    let v = multidim_i32(&[0, 1, 2, 3, 4, 5, 6, 7, 8], &[3, 3]);
+    let Variant::Array(a) = v.range_of(&nr("1:2,1:5")).unwrap() else {
+        panic!("expected array");
+    };
+    assert_eq!(
+        a.values,
+        vec![
+            Variant::Int32(4),
+            Variant::Int32(5),
+            Variant::Int32(7),
+            Variant::Int32(8)
+        ]
+    );
+    assert_eq!(a.dimensions, Some(vec![2, 2]));
+}
+
+/// US1: a 3-D sub-range with a size-1 inner extent keeps the rank.
+/// 2x2x2 values 0..7 (row-major); range "0:1,1,0" → (0,1,0)=2, (1,1,0)=6.
+#[test]
+fn range_of_multidim_3d_keeps_rank() {
+    let v = multidim_i32(&[0, 1, 2, 3, 4, 5, 6, 7], &[2, 2, 2]);
+    let Variant::Array(a) = v.range_of(&nr("0:1,1,0")).unwrap() else {
+        panic!("expected array");
+    };
+    assert_eq!(a.values, vec![Variant::Int32(2), Variant::Int32(6)]);
+    assert_eq!(a.dimensions, Some(vec![2, 1, 1]));
+}
+
+/// US1: rank mismatch (range dims != array rank) is rejected with BadIndexRangeNoData (valid syntax).
+#[test]
+fn range_of_multidim_rank_mismatch_is_nodata() {
+    let v = multidim_i32(&[0, 1, 2, 3, 4, 5, 6, 7, 8], &[3, 3]);
+    // 3 ranges against a rank-2 array.
+    assert_eq!(
+        v.range_of(&nr("0:1,0:1,0:1")).unwrap_err(),
+        StatusCode::BadIndexRangeNoData
+    );
+}
+
+/// US1 / Table 166: String arrays are 2-D — the final index is a per-element substring.
+/// ["TestString","Test","String"] "0:1,7:9" → ["ing", <null/empty>] (out-of-bounds substring → null).
+#[test]
+fn range_of_string_array_substring_partial() {
+    let strs: Vec<Variant> = ["TestString", "Test", "String"]
+        .iter()
+        .map(|s| Variant::from(*s))
+        .collect();
+    let v = Variant::from((VariantScalarTypeId::String, strs));
+    let Variant::Array(a) = v.range_of(&nr("0:1,7:9")).unwrap() else {
+        panic!("expected array");
+    };
+    assert_eq!(a.values.len(), 2);
+    assert_eq!(a.values[0], Variant::from("ing"));
+    match &a.values[1] {
+        // §7.27: out-of-bounds substring yields a null OR empty value.
+        Variant::String(s) => assert!(s.is_null() || s.as_ref().is_empty()),
+        other => panic!("expected a String, got {other:?}"),
+    }
+}
+
+/// US1 / Table 166: a substring lower bound out of range for all selected elements → BadIndexRangeNoData.
+#[test]
+fn range_of_string_array_substring_all_out_of_range() {
+    let strs: Vec<Variant> = ["TestString", "Test", "String"]
+        .iter()
+        .map(|s| Variant::from(*s))
+        .collect();
+    let v = Variant::from((VariantScalarTypeId::String, strs));
+    assert_eq!(
+        v.range_of(&nr("0:1,10:15")).unwrap_err(),
+        StatusCode::BadIndexRangeNoData
+    );
+}
+
+/// US2: a multi-dimensional write replaces exactly the addressed cells, leaving others unchanged.
+/// dest 3x3 = 0..8; write range "1:2,0:1" with source [[90,91],[92,93]] → rows 1..=2 × cols 0..=1.
+#[test]
+fn set_range_of_multidim_2d_block() {
+    let mut v = multidim_i32(&[0, 1, 2, 3, 4, 5, 6, 7, 8], &[3, 3]);
+    let src = multidim_i32(&[90, 91, 92, 93], &[2, 2]);
+    v.set_range_of(&nr("1:2,0:1"), &src).unwrap();
+    let Variant::Array(a) = v else {
+        panic!("expected array")
+    };
+    let got: Vec<i32> = a
+        .values
+        .iter()
+        .map(|x| match x {
+            Variant::Int32(n) => *n,
+            _ => panic!(),
+        })
+        .collect();
+    // rows: [0,1,2], [90,91,5], [92,93,8]
+    assert_eq!(got, vec![0, 1, 2, 90, 91, 5, 92, 93, 8]);
+    assert_eq!(a.dimensions, Some(vec![3, 3]));
+}
+
+/// US2: write then read back the same range returns the written sub-array (round-trip).
+#[test]
+fn set_range_of_multidim_round_trip() {
+    let mut v = multidim_i32(&[0, 1, 2, 3, 4, 5, 6, 7, 8], &[3, 3]);
+    let src = multidim_i32(&[90, 91, 92, 93], &[2, 2]);
+    v.set_range_of(&nr("1:2,0:1"), &src).unwrap();
+    let read_back = v.range_of(&nr("1:2,0:1")).unwrap();
+    assert_eq!(read_back, src);
+}
+
+/// US2: a 3-D write replaces exactly the addressed cells.
+/// dest 2x2x2 = 0..7; write "0:1,1,0" (cells (0,1,0)=idx2, (1,1,0)=idx6) with source [20,60].
+#[test]
+fn set_range_of_multidim_3d() {
+    let mut v = multidim_i32(&[0, 1, 2, 3, 4, 5, 6, 7], &[2, 2, 2]);
+    let src = multidim_i32(&[20, 60], &[2, 1, 1]);
+    v.set_range_of(&nr("0:1,1,0"), &src).unwrap();
+    let Variant::Array(a) = v else {
+        panic!("expected array")
+    };
+    let got: Vec<i32> = a
+        .values
+        .iter()
+        .map(|x| match x {
+            Variant::Int32(n) => *n,
+            _ => panic!(),
+        })
+        .collect();
+    assert_eq!(got, vec![0, 1, 20, 3, 4, 5, 60, 7]);
+}
+
+/// US3: a multi-dim read whose lower bound is out of range → BadIndexRangeNoData.
+#[test]
+fn range_of_multidim_lower_out_of_range() {
+    let v = multidim_i32(&[0, 1, 2, 3, 4, 5, 6, 7, 8], &[3, 3]);
+    assert_eq!(
+        v.range_of(&nr("5:6,0:1")).unwrap_err(),
+        StatusCode::BadIndexRangeNoData
+    );
+}
+
+/// US3: an oversized declared upper bound on read is CLAMPED (partial), never allocated wholesale,
+/// never panics. "0:4294967294,0:1" on a 3x3 → rows 0..=2 × cols 0..=1 (6 elements).
+#[test]
+fn range_of_multidim_oversized_bound_is_clamped_not_allocated() {
+    let v = multidim_i32(&[0, 1, 2, 3, 4, 5, 6, 7, 8], &[3, 3]);
+    let Variant::Array(a) = v.range_of(&nr("0:4294967294,0:1")).unwrap() else {
+        panic!("expected array");
+    };
+    assert_eq!(a.dimensions, Some(vec![3, 2]));
+    assert_eq!(a.values.len(), 6); // bounded to the actual extent, no 4-billion allocation
+}
+
+/// US3: a multi-dim write whose source size != the addressed extent → BadIndexRangeDataMismatch.
+#[test]
+fn set_range_of_multidim_size_mismatch() {
+    let mut v = multidim_i32(&[0, 1, 2, 3, 4, 5, 6, 7, 8], &[3, 3]);
+    // "1:2,0:1" addresses 2x2 = 4 cells; give a 3-element source.
+    let src = multidim_i32(&[90, 91, 92], &[3]);
+    assert_eq!(
+        v.set_range_of(&nr("1:2,0:1"), &src).unwrap_err(),
+        StatusCode::BadIndexRangeDataMismatch
+    );
+}
+
+/// US3: a multi-dim write whose upper bound exceeds the destination → BadIndexRangeNoData
+/// (write cannot write all elements; no clamp, no panic, no huge allocation).
+#[test]
+fn set_range_of_multidim_oversized_bound_is_nodata() {
+    let mut v = multidim_i32(&[0, 1, 2, 3, 4, 5, 6, 7, 8], &[3, 3]);
+    let src = multidim_i32(&[1, 2], &[2]);
+    assert_eq!(
+        v.set_range_of(&nr("0:4294967294,0:1"), &src).unwrap_err(),
+        StatusCode::BadIndexRangeNoData
+    );
+}
+
+/// US3: a multi-dim range write to a non-array target → BadWriteNotSupported.
+#[test]
+fn set_range_of_multidim_non_array_target() {
+    let mut v = Variant::from(5i32); // scalar
+    let src = multidim_i32(&[1, 2, 3, 4], &[2, 2]);
+    assert_eq!(
+        v.set_range_of(&nr("1:2,0:1"), &src).unwrap_err(),
+        StatusCode::BadWriteNotSupported
+    );
+}
+
+/// US4: the Part 4 §7.27 Table 166 SINGLE-dimension read rows behave as before (back-compat).
+#[test]
+fn range_of_table166_single_dimension_rows() {
+    let v = multidim_i32(&[2, 33, 12, 0, 99], &[5]);
+    // 0:2 → [2,33,12]
+    let Variant::Array(a) = v.range_of(&nr("0:2")).unwrap() else {
+        panic!()
+    };
+    assert_eq!(
+        a.values,
+        vec![Variant::Int32(2), Variant::Int32(33), Variant::Int32(12)]
+    );
+    // 3:7 → [0,99] (upper clamped, partial)
+    let Variant::Array(a) = v.range_of(&nr("3:7")).unwrap() else {
+        panic!()
+    };
+    assert_eq!(a.values, vec![Variant::Int32(0), Variant::Int32(99)]);
+    // 7:9 → Bad_IndexRangeNoData (lower out of range)
+    assert_eq!(
+        v.range_of(&nr("7:9")).unwrap_err(),
+        StatusCode::BadIndexRangeNoData
+    );
+}
+
+/// US4: single-dimension write still works as before (existing partial-copy behavior).
+#[test]
+fn set_range_of_single_dimension_unchanged() {
+    let mut v = Variant::from((
+        VariantScalarTypeId::Int32,
+        vec![
+            Variant::Int32(0),
+            Variant::Int32(1),
+            Variant::Int32(2),
+            Variant::Int32(3),
+        ],
+    ));
+    let src = Variant::from((
+        VariantScalarTypeId::Int32,
+        vec![Variant::Int32(10), Variant::Int32(11)],
+    ));
+    v.set_range_of(&NumericRange::Range(1, 2), &src).unwrap();
+    let Variant::Array(a) = v else { panic!() };
+    assert_eq!(
+        a.values,
+        vec![
+            Variant::Int32(0),
+            Variant::Int32(10),
+            Variant::Int32(11),
+            Variant::Int32(3)
+        ]
+    );
+}
+
+/// Feature 017 (fuzz-found): a String substring IndexRange that lands on a non-char-boundary of a
+/// multi-byte UTF-8 string MUST NOT panic (it is reachable from a Read IndexRange on attacker data).
+/// Regression for UAString::substring's raw byte-slice panic.
+#[test]
+fn range_of_string_substring_non_char_boundary_no_panic() {
+    // "aé" = 'a' (1 byte) + 'é' (2 bytes); byte range 0..=1 splits the 'é'.
+    let v = Variant::from("aé");
+    // Must return a result (Ok or Err), never panic.
+    let _ = v.range_of(&NumericRange::Range(0, 1));
+    let _ = v.range_of(&NumericRange::Index(1));
+    let _ = v.range_of(&NumericRange::Range(1, 2));
+
+    // Also via a string array (the 2-D substring path).
+    let arr = Variant::from((
+        VariantScalarTypeId::String,
+        vec![Variant::from("aé"), Variant::from("héllo")],
+    ));
+    let _ = arr.range_of(&"0:1,0:1".parse::<NumericRange>().unwrap());
+}

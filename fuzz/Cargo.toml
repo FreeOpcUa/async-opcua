@@ -56,3 +56,10 @@ path = "fuzz_targets/fuzz_dynamic_struct.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "fuzz_numeric_range"
+path = "fuzz_targets/fuzz_numeric_range.rs"
+test = false
+doc = false
+bench = false

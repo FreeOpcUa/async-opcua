@@ -294,12 +294,17 @@ impl UAString {
     /// returned (see docs for NumericRange).
     pub fn substring(&self, min: usize, max: usize) -> Result<UAString, OutOfRange> {
         if let Some(ref v) = self.value() {
-            if min >= v.len() {
-                Err(OutOfRange)
-            } else {
-                let max = if max >= v.len() { v.len() - 1 } else { max };
-                Ok(UAString::from(&v[min..=max]))
+            let char_count = v.chars().count();
+            if min >= char_count {
+                return Err(OutOfRange);
             }
+
+            let max = max.min(char_count - 1);
+            if max < min {
+                return Err(OutOfRange);
+            }
+            let s: String = v.chars().skip(min).take(max - min + 1).collect();
+            Ok(UAString::from(s))
         } else {
             Err(OutOfRange)
         }

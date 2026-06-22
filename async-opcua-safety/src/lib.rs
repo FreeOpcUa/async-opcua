@@ -12,9 +12,6 @@ pub mod builder;
 /// SafetyValidator for validating SPDUs against safety constraints
 pub mod validator;
 
-/// CLI module for SPDU encoding/decoding and verification
-pub mod cli;
-
 pub use builder::SpduBuilder;
 pub use crc::calculate_crc;
 pub use spdu::Spdu;

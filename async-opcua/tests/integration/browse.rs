@@ -685,3 +685,27 @@ async fn register_nodes_echoes_every_input_node() {
     );
     assert_eq!(res[0], unowned);
 }
+
+#[tokio::test]
+async fn translate_browse_path_null_target_name_is_bad_browse_name_invalid() {
+    // P4-VIEW-02 — OPC UA Part 4 §5.9.4.2: the last RelativePath element shall have a targetName;
+    // a missing targetName is Bad_BrowseNameInvalid (not a wildcard match). Anchored to the spec.
+    let (_tester, _nm, session) = setup().await;
+
+    let r = session
+        .translate_browse_paths_to_node_ids(&[BrowsePath {
+            starting_node: ObjectId::ObjectsFolder.into(),
+            relative_path: RelativePath {
+                elements: Some(vec![RelativePathElement {
+                    reference_type_id: ReferenceTypeId::HierarchicalReferences.into(),
+                    is_inverse: false,
+                    include_subtypes: true,
+                    target_name: opcua::types::QualifiedName::null(),
+                }]),
+            },
+        }])
+        .await
+        .unwrap();
+    assert_eq!(1, r.len());
+    assert_eq!(r[0].status_code, StatusCode::BadBrowseNameInvalid);
+}

@@ -42,14 +42,26 @@ auto-accepts the server cert, so the secured handshake completes unattended. The
 certificate is generated with a matching `applicationUri` so the server's
 `Bad_CertificateUriInvalid` check is satisfied.
 
-## Adding a second independent stack
+## Second independent stack: open62541 (C)
 
 Two independently-written stacks agreeing is a strong conformance signal; disagreement is
-high-signal. node-opcua (JavaScript) is the primary stack here. A good second stack is
-**open62541** (C, MPL-2.0) — it builds from source with `cmake` + a C compiler (no Windows
-needed) and is a completely different implementation lineage. For the strongest signal, the
-OPC Foundation **UA-.NETStandard** reference stack is what the UACTT itself is built on
-(needs the .NET SDK). **UaExpert** (free GUI) is handy for manual exploration.
+high-signal. A second stack — **open62541** (C, MPL-2.0) — lives in
+[`open62541/`](open62541/) and is driven the same way:
+
+```sh
+./open62541/run-open62541.sh   # 14/14 checks
+```
+
+It builds open62541 from source (`cmake` + a C compiler — no Windows needed), so it shares
+no code with node-opcua. Run both for the strongest signal. To run them together:
+
+```sh
+./run-interop.sh && ./open62541/run-open62541.sh
+```
+
+For an even stronger (CTT-grade) cross-check, the OPC Foundation **UA-.NETStandard**
+reference stack is what the UACTT itself is built on (needs the .NET SDK); **UaExpert**
+(free GUI) is handy for manual exploration.
 
 ## Extending it
 

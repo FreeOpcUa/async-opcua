@@ -84,7 +84,7 @@ FINDINGS for the verified-conformant carryover).
 ### Part 2 — Security Model
 | Unit | Area | Priority | Status | Prior |
 |---|---|---|---|---|
-| **P2-SEC** | Handshake, policy negotiation, cert validation, key derivation/nonce, ECC, user-token encryption, application authentication | P1 | ⬜ | 012/013/014/015/016/025 |
+| **P2-SEC** | Handshake, policy negotiation, cert validation, key derivation/nonce, ECC, user-token encryption, application authentication | P1 | ✅ | 012/013/014/015/016/025 |
 
 ### Parts 5 / 8 / 11 / 12 / 14 — as claimed
 | Unit | Area | Priority | Status | Prior |
@@ -148,4 +148,8 @@ commit per user-story; PR to fork `occamsshavingkit/async-opcua`; wait for full 
   ECC buffer, abort-chunk pre-verify clear). High confidence (3-way corroboration).
 - **P3 done (3-of-3):** model sound; gaps are missing mutation-validation (ValueRank/ArrayDimensions
   semantics, abstract-type & symmetric-ref instantiation) — mostly the opt-in AddNodes surface.
-- **Next (no fixes):** P4-GENERAL (§5.1–5.3), **P2-SEC** (Security — high-stakes), then P5/P8/P11/P12/P14 — 3-AI.
+- **P2 done (2-of-3, AG timed out on file write):** security is the strongest area — crypto/cert
+  pipeline fully HONORED (012-016/013/014/025 paid off). 4 invocation-ordering gaps: **P2-SEC-01 (S2,
+  verified)** OpenSecureChannel skips §6.1.3 trust validation (only at CreateSession); +Renew re-check,
+  AuditCertificate emission, user-X509 validate-before-verify. P4-SESS-05 reconciled → likely-FP.
+- **Next (no fixes):** P4-GENERAL (§5.1–5.3), then companion parts P5/P8/P11/P12/P14 — 3-AI pattern.

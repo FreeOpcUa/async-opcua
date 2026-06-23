@@ -23,7 +23,7 @@ model(s) surfaced it.
 | P4-SESS-02 | S2 | C,X | ✅ | §5.7.2 (2417) | CreateSession enforces only clientNonce min, not the `>128` max. *AG missed.* | open |
 | P4-SESS-03 | S2 | X | ⚠ | §5.6.2.2 T11 | OpenSecureChannel can return `revisedLifetime==0`; spec requires >0 (`min(max,requested)` no lower bound). | open |
 | P4-SESS-04 | S3 | X | ⚠ | §5.6.2.3 T12 | OSC Renew before any Issue → `BadUnexpectedError` not `BadSecureChannelIdInvalid`. | open |
-| P4-SESS-05 | S2 | A | ⚠ | §5.7.2.1 | Client-cert app-URI check (`is_application_uri_valid`) only inspects the FIRST SAN → false denials / missed URI. | open |
+| P4-SESS-05 | S3 | A | ✅ | §5.7.2.1 | Client-cert app-URI check uses the FIRST SAN entry. *Reconciled (P2 pass): conventional-correct — the applicationUri is the first SAN by OPC UA convention and the hostname check correctly skips index 0. Likely false-positive; X.509 SAN ordering not strictly guaranteed, so low-priority.* | likely-FP |
 | P4-SESS-06 | S3 | A | ⚠ | §5.7.3.1 | Request on an unactivated session returns a fault but does not close the session. | open |
 | P4-SESS-07 | S3 | A | ✅ | §5.7.3.1 | Cross-channel transfer enforces client-cert match (HONORED) but NOT SecurityPolicy/SecurityMode equality (`is_cross_channel_transfer_forbidden` only special-cases None); ClientUserId is re-authed (moot). *Conflict resolved: narrowed to policy/mode equality.* | open |
 | P4-SESS-08 | S2 | A | ⚠ | §5.7.3.1 | Anonymous token over a new SecureChannel using Sign mode not rejected. *Claude agent UNCERTAIN.* | open |
@@ -95,6 +95,25 @@ P4-NODEMGMT-01.
 | P3-07 | S3 | C | ⚠ | §6.2.8 | Type-refinement subtype rules not enforced: a subtype's DataType/ValueRank may only further-restrict the supertype's; setters accept arbitrary changes. | open |
 | P3-08 | S3 | A | ⚠ | §5.2 | Base optional attrs `RolePermissions`/`UserRolePermissions`/`AccessRestrictions` un-modeled (relevant to Part 18 role security). | open |
 | P3-09 | S3 | C | ⚠ | §5.6 | Variable `AccessLevelEx` optional attribute not modeled. | open |
+
+## Part 2 — Security Model (+ Part 4 §6.1 mechanisms)
+**2-of-3 pass:** Claude (cert validation + SecureChannel crypto) + Codex (`FINDINGS-codex-p2.md`, 4).
+**Antigravity timed out during the file WRITE** (narrated ~6, no file) — retry optional. Strongly
+reassuring: the crypto is well-hardened — all 11 §6.1.3 cert-validation steps (chain/signature/validity/
+keyUsage/EKU/URI/hostname/CRL revocation, correct status codes + suppressibility) HONORED, and nonce
+length/CSPRNG, P-SHA1/256 + ECC-HKDF key derivation, and CreateSession/ActivateSession signatures (over
+cert‖nonce, algorithm-matched) all HONORED (Claude + Codex agree). The real gaps are about **WHERE
+validation is invoked**, not the crypto itself:
+
+| ID | Sev | Found | Verify | § | Divergence | Status |
+|---|---|---|---|---|---|---|
+| P2-SEC-01 | S2 | X | ✅ | P4 §6.1.4/§6.1.3 | OpenSecureChannel verifies proof-of-possession (asym signature) + nonce length but does NOT run §6.1.3 trust-chain validation; `validate_or_reject_application_instance_cert` is called only at CreateSession (manager.rs:268). An untrusted/expired/revoked cert can establish a SecureChannel. | open |
+| P2-SEC-02 | S3 | X | ⚠ | P4 §6.1.7 | SecureChannel Renew does not re-run ApplicationInstanceCertificate verification; §6.1.7 says cert checks shall run on every token renewal (catches mid-session expiry/revocation). | open |
+| P2-SEC-03 | S3 | X | ⚠ | P4 §6.1.3 | Suppressed cert-validation failures are logged `warn!` but emit no `AuditCertificate*` event; §6.1.3 says suppressed errors are always reported via auditing. *Matches the known feature-013 deferral (typed AuditCertificate events).* | open |
+| P2-SEC-04 | S2 | X | ⚠ | P4 §6.1.8 | X.509 user-token signature is verified before any §6.1.3 validation of the user signing certificate; authentication then checks only the configured thumbprint. Spec: don't verify a signature before validating the signing cert. | open |
+
+> Net: security is the strongest area audited — no crypto/algorithm/key-derivation gaps. The four
+> findings are validation-invocation/ordering + audit-event emission. P2-SEC-01 is the notable one.
 
 ## Conflict log (resolved + open)
 - **DeleteNodes target refs** (A:DIVERGENCE / X:HONORED) → **resolved partial:** within-manager cleanup

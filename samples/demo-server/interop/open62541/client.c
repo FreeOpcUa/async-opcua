@@ -176,6 +176,83 @@ static void test_unsecured_services(void) {
     UA_Client_delete(client);
 }
 
+/* Arrays, error paths, attribute reads, and a no-argument method call. */
+static void test_service_breadth(void) {
+    printf("\n[None] arrays / error paths / attributes / NoOp\n");
+    UA_Client *client = UA_Client_new();
+    UA_ClientConfig_setDefault(UA_Client_getConfig(client));
+    if(UA_Client_connect(client, endpoint) != UA_STATUSCODE_GOOD) {
+        check("Breadth: session established", 0, "connect failed");
+        UA_Client_delete(client);
+        return;
+    }
+    int ns = resolve_demo_namespace(client);
+
+    /* Array round-trip: write an Int32 array and read it back. */
+    if(ns > 0) {
+        UA_Int32 arr[4] = {11, 22, 33, 44};
+        UA_Variant wv;
+        UA_Variant_init(&wv);
+        UA_Variant_setArray(&wv, arr, 4, &UA_TYPES[UA_TYPES_INT32]);
+        UA_StatusCode rc =
+            UA_Client_writeValueAttribute(client, UA_NODEID_STRING(ns, "Int32Array"), &wv);
+        check("Write Int32 array is Good", rc == UA_STATUSCODE_GOOD, NULL);
+        UA_Variant rb;
+        UA_Variant_init(&rb);
+        rc = UA_Client_readValueAttribute(client, UA_NODEID_STRING(ns, "Int32Array"), &rb);
+        int matched = rc == UA_STATUSCODE_GOOD &&
+                      UA_Variant_hasArrayType(&rb, &UA_TYPES[UA_TYPES_INT32]) &&
+                      rb.arrayLength == 4;
+        if(matched) {
+            UA_Int32 *got = (UA_Int32 *)rb.data;
+            for(int i = 0; i < 4; i++)
+                if(got[i] != arr[i])
+                    matched = 0;
+        }
+        check("Array read-back matches", matched, NULL);
+        UA_Variant_clear(&rb);
+    }
+
+    /* Reading an unknown node returns Bad_NodeIdUnknown. */
+    UA_Variant uv;
+    UA_Variant_init(&uv);
+    UA_StatusCode urc = UA_Client_readValueAttribute(
+        client, UA_NODEID_STRING(ns > 0 ? ns : 1, "NoSuchNode"), &uv);
+    check("Read unknown node -> BadNodeIdUnknown", urc == UA_STATUSCODE_BADNODEIDUNKNOWN,
+          UA_StatusCode_name(urc));
+    UA_Variant_clear(&uv);
+
+    /* Writing a read-only node (CurrentTime) is rejected. */
+    UA_DateTime now = UA_DateTime_now();
+    UA_Variant rov;
+    UA_Variant_init(&rov);
+    UA_Variant_setScalar(&rov, &now, &UA_TYPES[UA_TYPES_DATETIME]);
+    UA_StatusCode wrc =
+        UA_Client_writeValueAttribute(client, UA_NODEID_NUMERIC(0, 2258), &rov);
+    check("Write to read-only CurrentTime is rejected", wrc != UA_STATUSCODE_GOOD,
+          UA_StatusCode_name(wrc));
+
+    /* Read the Server object's NodeClass attribute. */
+    UA_NodeClass nc = UA_NODECLASS_UNSPECIFIED;
+    UA_StatusCode ncrc =
+        UA_Client_readNodeClassAttribute(client, UA_NODEID_NUMERIC(0, 2253), &nc);
+    check("Read Server NodeClass = Object",
+          ncrc == UA_STATUSCODE_GOOD && nc == UA_NODECLASS_OBJECT, NULL);
+
+    /* Call the no-argument NoOp method. */
+    if(ns > 0) {
+        size_t outSize = 0;
+        UA_Variant *out = NULL;
+        UA_StatusCode crc = UA_Client_call(client, UA_NODEID_STRING(ns, "Functions"),
+                                           UA_NODEID_STRING(ns, "NoOp"), 0, NULL, &outSize, &out);
+        check("NoOp method call is Good", crc == UA_STATUSCODE_GOOD, UA_StatusCode_name(crc));
+        UA_Array_delete(out, outSize, &UA_TYPES[UA_TYPES_VARIANT]);
+    }
+
+    UA_Client_disconnect(client);
+    UA_Client_delete(client);
+}
+
 /* Username/password identity token over the unsecured endpoint (the demo's None endpoint
  * accepts sample_password_user1). */
 static void test_username(void) {
@@ -249,6 +326,7 @@ int main(int argc, char **argv) {
         endpoint = argv[1];
     printf("open62541 interop smoke test against %s\n", endpoint);
     test_unsecured_services();
+    test_service_breadth();
     test_username();
     test_secured();
     printf("\n%s: %d/%d checks passed\n",

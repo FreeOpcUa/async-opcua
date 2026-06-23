@@ -19,6 +19,9 @@ import {
   ClientMonitoredItem,
   UserTokenType,
   DataType,
+  VariantArrayType,
+  NodeClass,
+  StatusCodes,
   makeBrowsePath,
 } from "node-opcua";
 import { fileURLToPath } from "node:url";
@@ -289,6 +292,84 @@ async function testWriteAndTranslate() {
   });
 }
 
+async function testServiceBreadth() {
+  console.log("\n[None] arrays / error paths / attributes / NoOp");
+  await withSession(
+    "Breadth",
+    { securityMode: MessageSecurityMode.None, securityPolicy: SecurityPolicy.None },
+    async (session) => {
+      const nsArray = await session.readNamespaceArray();
+      const nsIdx = nsArray.indexOf(DEMO_NS);
+
+      // Array round-trip: write an Int32 array to a writable array variable and read it back.
+      if (nsIdx > 0) {
+        const nodeId = `ns=${nsIdx};s=Int32Array`;
+        const arr = [11, 22, 33, 44];
+        const status = await session.write({
+          nodeId,
+          attributeId: AttributeIds.Value,
+          value: {
+            value: { dataType: DataType.Int32, arrayType: VariantArrayType.Array, value: arr },
+          },
+        });
+        check("Write Int32 array is Good", status.isGood(), status.toString());
+        const dv = await session.read({ nodeId, attributeId: AttributeIds.Value });
+        const got = dv.value && Array.from(dv.value.value || []);
+        check(
+          "Array read-back matches",
+          got && got.length === arr.length && got.every((v, i) => v === arr[i]),
+          `got ${JSON.stringify(got)}`,
+        );
+      }
+
+      // Reading an unknown node returns Bad_NodeIdUnknown.
+      const unknown = await session.read({
+        nodeId: `ns=${nsIdx > 0 ? nsIdx : 1};s=NoSuchNode`,
+        attributeId: AttributeIds.Value,
+      });
+      check(
+        "Read unknown node -> BadNodeIdUnknown",
+        unknown.statusCode.equals(StatusCodes.BadNodeIdUnknown),
+        unknown.statusCode.toString(),
+      );
+
+      // Writing a read-only node (CurrentTime) is rejected.
+      const roWrite = await session.write({
+        nodeId: CURRENT_TIME,
+        attributeId: AttributeIds.Value,
+        value: { value: { dataType: DataType.DateTime, value: new Date() } },
+      });
+      check("Write to read-only CurrentTime is rejected", !roWrite.isGood(), roWrite.toString());
+
+      // Read several attributes of the Server object in one request.
+      const attrs = await session.read([
+        { nodeId: "i=2253", attributeId: AttributeIds.NodeClass },
+        { nodeId: "i=2253", attributeId: AttributeIds.BrowseName },
+        { nodeId: "i=2253", attributeId: AttributeIds.DisplayName },
+      ]);
+      check(
+        "Read Server NodeClass = Object",
+        attrs[0].statusCode.isGood() && attrs[0].value.value === NodeClass.Object,
+        `got ${attrs[0].value && attrs[0].value.value}`,
+      );
+      check(
+        "Read Server BrowseName + DisplayName Good",
+        attrs[1].statusCode.isGood() && attrs[2].statusCode.isGood(),
+      );
+
+      // Call the no-argument NoOp method.
+      if (nsIdx > 0) {
+        const noop = await session.call({
+          objectId: `ns=${nsIdx};s=Functions`,
+          methodId: `ns=${nsIdx};s=NoOp`,
+          inputArguments: [],
+        });
+        check("NoOp method call is Good", noop.statusCode.isGood(), noop.statusCode.toString());
+      }
+    },
+  );
+}
+
 async function testUsernamePassword() {
   console.log("\n[Basic256Sha256 / SignAndEncrypt] username/password identity token");
   const ok = await withSession(
@@ -312,6 +393,7 @@ async function main() {
   await testSecuredSession();
   await testSecurityPolicyMatrix();
   await testWriteAndTranslate();
+  await testServiceBreadth();
   await testUsernamePassword();
   console.log(
     `\n${failures === 0 ? "\x1b[32mPASS\x1b[0m" : "\x1b[31mFAIL\x1b[0m"}: ${checks - failures}/${checks} checks passed`,

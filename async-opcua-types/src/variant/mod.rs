@@ -380,6 +380,15 @@ impl BinaryDecodable for Variant {
     fn decode<S: Read + ?Sized>(stream: &mut S, ctx: &crate::Context<'_>) -> EncodingResult<Self> {
         let encoding_mask = u8::decode(stream, ctx)?;
         let element_encoding_mask = encoding_mask & !EncodingMask::ARRAY_MASK;
+        // Part 6 §5.2.2.16: built-in type IDs 26-31 are reserved for future use. Decoders
+        // shall accept them, assume the value is a ByteString (or array of ByteStrings),
+        // and pass it on. Normalise to ByteString so both the scalar and array paths below
+        // read the value correctly instead of erroring / silently consuming nothing.
+        let element_encoding_mask = if (26..=31).contains(&element_encoding_mask) {
+            EncodingMask::BYTE_STRING
+        } else {
+            element_encoding_mask
+        };
 
         // IMPORTANT NOTE: Arrays are constructed through Array::new_multi or Array::new_single
         // to correctly process failures. Don't use Variant::from((value_type, values)) since

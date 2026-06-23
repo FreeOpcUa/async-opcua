@@ -570,6 +570,13 @@ impl<TImpl: InMemoryNodeManagerImpl> InMemoryNodeManager<TImpl> {
                 continue;
             };
 
+            // Part 4 §5.12 Table 61: the Executable attribute not allowing execution is
+            // Bad_NotExecutable, distinct from the UserExecutable/permission case below.
+            if !method_node.executable() {
+                method.set_status(StatusCode::BadNotExecutable);
+                continue;
+            }
+
             if !method_node.user_executable()
                 || !context
                     .authenticator

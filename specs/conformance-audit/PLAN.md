@@ -64,10 +64,10 @@ FINDINGS for the verified-conformant carryover).
 | **P4-VIEW** | View set: Browse/BrowseNext/TranslateBrowsePaths/Register/Unregister (§5.9), continuation points, ref/nodeclass filtering, BrowseDirection | P1 | ✅ | — |
 | **P4-SESS** | SecureChannel (§5.6) + Session (§5.7): Open/Close, Create/Activate/Close/Cancel, nonce, cert binding, token renewal, timeouts | P1 | ✅ | 013/014 |
 | **P4-GENERAL** | General service behaviour (§5.1–5.3): request/response headers, diagnostics, OperationLimits, service-result vs operation-level status, per-service security checks | P1 | ⬜ | 011/025 |
-| **P4-NODEMGMT** | NodeManagement set (§5.8): Add/Delete Nodes+References, status codes, gating | P2 | ⬜ | 022 |
-| **P4-METHOD** | Method Call (§5.12): argument validation, status codes, output mapping | P2 | ⬜ | 021 |
-| **P4-QUERY** | Query set (§5.10): QueryFirst/Next, content filter, continuation points | P2 | ⬜ | 023 |
-| **P4-DISC** | Discovery set (§5.5): GetEndpoints, FindServers, RegisterServer/2; FindServersOnNetwork (deferred, mDNS) | P2 | ⬜ | 024 |
+| **P4-NODEMGMT** | NodeManagement set (§5.8): Add/Delete Nodes+References, status codes, gating | P2 | ✅ | 022 |
+| **P4-METHOD** | Method Call (§5.12): argument validation, status codes, output mapping | P2 | ✅ | 021 |
+| **P4-QUERY** | Query set (Annex B): QueryFirst/Next, content filter, continuation points | P2 | ✅ | 023 |
+| **P4-DISC** | Discovery set (§5.5): GetEndpoints, FindServers, RegisterServer/2; FindServersOnNetwork (deferred, mDNS) | P2 | ✅ | 024 |
 
 ### Part 6 — Mappings (encoding / transport)
 | Unit | Area (Part 6 §) | Priority | Status | Prior |
@@ -134,5 +134,10 @@ commit per user-story; PR to fork `occamsshavingkit/async-opcua`; wait for full 
   (S2 HistoryRead NEITHER) · P4-VIEW-01 (S2 invalid referenceTypeId) · P4-SESS-01 (S2 Cancel
   unimplemented + doc drift) · P4-SESS-02 (S2 nonce max-len) · plus P4-ATTR-02/03/04 deferred S3.
   Several unverified candidates parked in FINDINGS.md.
-- **Audited units:** P4-SUB (partial), P4-ATTR ✅, P4-VIEW ✅, P4-SESS ✅.
-- **Next (no fixes):** P4-GENERAL, P4-NODEMGMT, P4-METHOD, P4-QUERY, P4-DISC, then P6/P3/P2/rest.
+- **Audited units:** P4-SUB (partial), P4-ATTR ✅, P4-VIEW ✅, P4-SESS ✅, P4-NODEMGMT ✅, P4-METHOD ✅,
+  P4-QUERY ✅, P4-DISC ✅. **Part 4 service sets essentially done** except P4-GENERAL (§5.1–5.3).
+- **Later findings (P2 batch):** P4-METHOD-01 (S2 Executable not checked), P4-METHOD-02 (S3), P4-QUERY-01
+  (S2 typeDef not validated), P4-NODEMGMT-01 (S3 cluster), P4-DISC-01 (S3). ⚠ = agent-cited, re-verify
+  at fix time.
+- **Next (no fixes):** P4-GENERAL (§5.1–5.3 common behaviour), then P6-BIN/P6-JSON/P6-TCP, P3-NODES,
+  P2-SEC, then P5/P8/P11/P12/P14.

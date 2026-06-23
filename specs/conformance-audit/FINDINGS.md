@@ -21,9 +21,22 @@ deferred(reason) · verified-conformant.
 | P4-SESS-01 | 4 §5.7.5 (Cancel) | `session/message_handler.rs` catch-all (no Cancel arm); `controller.rs` | Cancel service is unimplemented → falls through to `BadServiceUnsupported`. `docs/compatibility.md` **claims Cancel is supported** (doc drift). Conformant minimal behaviour: return a `CancelResponse` with `cancelCount=0`. | S2 | S | open |
 | P4-SESS-02 | 4 §5.7.2 (line 2417) | `session/manager.rs:250` | CreateSession checks only clientNonce *minimum* length; spec requires `Bad_NonceInvalid` if length `< 32` **or `> 128`** bytes. No upper bound enforced (bounded only by max message size). | S2 | S | open |
 
+| P4-METHOD-01 | 4 §5.12 Table 61 | `node_manager/memory/mod.rs:573` | Call checks only `user_executable()` (+ authenticator) → `BadUserAccessDenied`; the base **`Executable`** attribute is never checked. A method with `Executable=false` but user-executable is still callable; spec requires `Bad_NotExecutable`. ✅verified | S2 | S | open |
+| P4-METHOD-02 | 4 §5.12 (line 3953) | `node_manager/method.rs:100` | `output_arguments: Some(self.outputs)` returned unconditionally; spec: outputArguments shall be empty when the operation statusCode severity is Bad. ✅verified | S3 | S | open |
+| P4-QUERY-01 | 4 Annex B.2.3 Table B.6 | `node_manager/query.rs:59`, `services/query/handlers.rs:153` | QueryFirst does not validate `typeDefinitionNode`; an invalid/non-TypeDefinition node is silently skipped (falls back to full traversal) instead of reporting `Bad_NodeIdInvalid`/`Bad_NodeIdUnknown`/`Bad_NotTypeDefinition` in `parsingResults`. ⚠agent-cited | S2 | M | open |
+| P4-NODEMGMT-01 | 4 §5.8 Tables 24/27 | `node_manager/node_management.rs`, `memory/memory_mgr_impl.rs` | Cluster of missing AddNodes/AddReferences validations: hierarchical-ref-type constraint, `typeDefinition` node existence, `Bad_BrowseNameDuplicated`, AddReferences `targetNodeClass` match, duplicate-reference (`Bad_DuplicateReferenceNotAllowed`), `Bad_ReferenceNotAllowed`. Opt-in surface (`clients_can_modify_address_space` default OFF). ⚠agent-cited | S3 | M | open |
+| P4-DISC-01 | 4 §5.5.5 Table 7 | `info.rs:209` `apply_register_server` | RegisterServer/RegisterServer2 validate only `Bad_ServerUriInvalid` + `BadTooManyOperations`; missing `Bad_ServerNameMissing`, `Bad_DiscoveryUrlMissing`, `Bad_SemaphoreFileMissing`. LDS-side registry hygiene. ⚠agent-cited | S3 | S | open |
+
+> **Cross-cutting confirmation:** the Query audit independently re-surfaced the NumericRange lazy/lenient
+> parse — `Bad_IndexRangeInvalid` deferred to read-time (same root cause as **P4-ATTR-01**). Fixing
+> P4-ATTR-01 in the codec should resolve both. Also noted (S3): Query never returns `Bad_QueryTooComplex`
+> (no complexity limit — mild DoS-adjacent for a public-ish service).
+>
 > **Audited:** Read/Write (R1–R6, W1–W9), HistoryRead/HistoryUpdate (§5.11.3/.5 — variants & CP handling
 > mostly HONORED), View §5.9 (Browse/BrowseNext/Translate/Register/Unregister), SecureChannel §5.6 +
-> Session §5.7 (013/014/025 already hardened most; nonce rotation, sig verify, channel binding HONORED).
+> Session §5.7 (013/014/025 already hardened most; nonce rotation, sig verify, channel binding HONORED),
+> NodeManagement §5.8, Method §5.12, Query Annex B, Discovery §5.5 (mostly HONORED; GetEndpoints/
+> FindServers conformant; FindServersOnNetwork = known mDNS stub).
 >
 > **Unverified candidates** (surfaced by audit agents, NOT yet confirmed against code — verify before
 > acting): Browse `browseDirection` out-of-range masked via `from_bits_truncate` instead of

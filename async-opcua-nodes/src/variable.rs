@@ -803,8 +803,11 @@ impl Variable {
     }
 
     /// Set the variable value rank.
+    ///
+    /// Part 3 §5.6: the valid ValueRank values are -3, -2, -1, 0, or n >= 1. Values below
+    /// -3 are invalid and are normalised to ANY (-2) rather than stored verbatim.
     pub fn set_value_rank(&mut self, value_rank: i32) {
-        self.value_rank = value_rank;
+        self.value_rank = if value_rank < -3 { -2 } else { value_rank };
     }
 
     /// Get the `Historizing` attribute of the variable,
@@ -898,6 +901,22 @@ mod tests {
             None,
             ExtensionObject::from_message(TestStructure::default()),
         )
+    }
+
+    #[test]
+    fn set_value_rank_normalises_invalid_ranks() {
+        // Part 3 §5.6: valid ValueRank values are -3, -2, -1, 0, or n >= 1. Values below -3
+        // are invalid and must not be stored verbatim; they are normalised to ANY (-2).
+        let mut v = structure_variable();
+        v.set_value_rank(-5);
+        assert_eq!(v.value_rank(), -2);
+        v.set_value_rank(i32::MIN);
+        assert_eq!(v.value_rank(), -2);
+        // Valid ranks are preserved.
+        for rank in [-3, -2, -1, 0, 1, 5] {
+            v.set_value_rank(rank);
+            assert_eq!(v.value_rank(), rank);
+        }
     }
 
     #[test]

@@ -986,3 +986,56 @@ async fn write_value_rank_mismatch_is_rejected() {
         .unwrap();
     assert_eq!(r[0], StatusCode::Good, "array -> array node");
 }
+
+#[tokio::test]
+async fn write_out_of_bounds_index_range_is_rejected() {
+    // Part 4 §7.22: writing to an index beyond the array's bounds returns Bad_IndexRangeNoData
+    // and must not mutate the value.
+    let (tester, nm, session) = setup().await;
+    let arr = nm.inner().next_node_id();
+    nm.inner().add_node(
+        nm.address_space(),
+        tester.handle.type_tree(),
+        VariableBuilder::new(&arr, "OobArr", "OobArr")
+            .data_type(DataTypeId::Int32)
+            .value_rank(1)
+            .value(vec![1i32, 2, 3])
+            .access_level(AccessLevel::CURRENT_READ | AccessLevel::CURRENT_WRITE)
+            .user_access_level(AccessLevel::CURRENT_READ | AccessLevel::CURRENT_WRITE)
+            .build()
+            .into(),
+        &ObjectId::ObjectsFolder.into(),
+        &ReferenceTypeId::Organizes.into(),
+        Some(&VariableTypeId::BaseDataVariableType.into()),
+        Vec::new(),
+    );
+
+    let wv = WriteValue {
+        value: DataValue {
+            value: Some(99i32.into()),
+            status: Some(StatusCode::Good),
+            source_timestamp: Some(DateTime::now()),
+            ..Default::default()
+        },
+        node_id: arr.clone(),
+        attribute_id: AttributeId::Value as u32,
+        index_range: NumericRange::Index(10),
+    };
+    let r = session.write(&[wv]).await.unwrap();
+    assert_eq!(r[0], StatusCode::BadIndexRangeNoData);
+
+    // The array must be unchanged.
+    let r = session
+        .read(
+            &[read_value_id(AttributeId::Value, &arr)],
+            TimestampsToReturn::Both,
+            0.0,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        r[0].value,
+        Some(Variant::from(vec![1i32, 2, 3])),
+        "out-of-bounds write must not mutate the array"
+    );
+}

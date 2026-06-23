@@ -14,8 +14,8 @@ use opcua::{
 };
 use opcua_client::{
     services::{
-        CreateMonitoredItems, CreateSubscription, DeleteMonitoredItems, ModifySubscription,
-        Publish, Republish, TransferSubscriptions,
+        CreateMonitoredItems, CreateSubscription, DeleteMonitoredItems, ModifyMonitoredItems,
+        ModifySubscription, Publish, Republish, SetMonitoringMode, TransferSubscriptions,
     },
     IdentityToken, Subscription, UARequest,
 };
@@ -1454,5 +1454,105 @@ async fn create_monitored_item_on_unknown_node_is_rejected() {
         StatusCode::Good,
         res.results[1].result.status_code,
         "known node must still succeed"
+    );
+}
+
+// Shared helper for the monitored-item error-mode tests below: a subscription on a real node.
+async fn sub_with_one_item(
+    session: &opcua_client::Session,
+    nm: &TestNodeManager,
+    tester: &Tester,
+) -> (u32, u32) {
+    let id = nm.inner().next_node_id();
+    nm.inner().add_node(
+        nm.address_space(),
+        tester.handle.type_tree(),
+        VariableBuilder::new(&id, "MmVar", "MmVar")
+            .data_type(DataTypeId::Int32)
+            .value(1i32)
+            .access_level(AccessLevel::CURRENT_READ)
+            .user_access_level(AccessLevel::CURRENT_READ)
+            .build()
+            .into(),
+        &ObjectId::ObjectsFolder.into(),
+        &ReferenceTypeId::Organizes.into(),
+        Some(&VariableTypeId::BaseDataVariableType.into()),
+        Vec::new(),
+    );
+    let res = CreateSubscription::new(session)
+        .publishing_interval(Duration::from_millis(100))
+        .max_lifetime_count(100)
+        .max_keep_alive_count(20)
+        .max_notifications_per_publish(1000)
+        .priority(0)
+        .publishing_enabled(true)
+        .send(session.channel())
+        .await
+        .unwrap();
+    let sub_id = res.subscription_id;
+    let res = CreateMonitoredItems::new(sub_id, session)
+        .item(MonitoredItemCreateRequest {
+            item_to_monitor: ReadValueId {
+                node_id: id,
+                attribute_id: AttributeId::Value as u32,
+                ..Default::default()
+            },
+            monitoring_mode: MonitoringMode::Reporting,
+            requested_parameters: MonitoringParameters {
+                sampling_interval: 0.0,
+                queue_size: 10,
+                discard_oldest: true,
+                ..Default::default()
+            },
+        })
+        .timestamps_to_return(TimestampsToReturn::Both)
+        .send(session.channel())
+        .await
+        .unwrap();
+    let item_id = res.results[0].result.monitored_item_id;
+    (sub_id, item_id)
+}
+
+#[tokio::test]
+async fn set_monitoring_mode_unknown_item_is_rejected() {
+    // Part 4 §5.12.4: SetMonitoringMode for an unknown monitored item id -> Bad_MonitoredItemIdInvalid.
+    let (tester, nm, session) = setup().await;
+    let (sub_id, item_id) = sub_with_one_item(&session, &nm, &tester).await;
+
+    let r = SetMonitoringMode::new(sub_id, MonitoringMode::Disabled, &session)
+        .item(item_id.wrapping_add(1000))
+        .send(session.channel())
+        .await
+        .unwrap();
+    let results = r.results.unwrap();
+    assert_eq!(1, results.len());
+    assert_eq!(StatusCode::BadMonitoredItemIdInvalid, results[0]);
+}
+
+#[tokio::test]
+async fn modify_unknown_monitored_item_is_rejected() {
+    // Part 4 §5.12.3: ModifyMonitoredItems for an unknown monitored item id -> Bad_MonitoredItemIdInvalid.
+    let (tester, nm, session) = setup().await;
+    let (sub_id, item_id) = sub_with_one_item(&session, &nm, &tester).await;
+
+    let r = ModifyMonitoredItems::new(sub_id, &session)
+        .item(MonitoredItemModifyRequest {
+            monitored_item_id: item_id.wrapping_add(1000),
+            requested_parameters: MonitoringParameters {
+                sampling_interval: 0.0,
+                queue_size: 5,
+                discard_oldest: true,
+                ..Default::default()
+            },
+        })
+        .timestamps_to_return(TimestampsToReturn::Both)
+        .send(session.channel())
+        .await
+        .unwrap();
+    let results = r.results.unwrap();
+    assert_eq!(1, results.len());
+    assert_eq!(
+        StatusCode::BadMonitoredItemIdInvalid,
+        results[0].status_code
     );
 }

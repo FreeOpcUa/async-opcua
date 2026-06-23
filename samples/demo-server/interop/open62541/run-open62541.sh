@@ -38,20 +38,26 @@ cd "$here/../.."
 conf="interop/interop.server.conf"
 pki="interop/pki-interop"
 cert="$pki/own/cert.der"
-echo "==> cleaning PKI directory: $pki"
-rm -rf "$pki"
+# A companion server that does NOT auto-trust client certs, for the untrusted-cert test.
+nt_conf="interop/interop.server.notrust.conf"
+nt_pki="interop/pki-notrust"
+nt_cert="$nt_pki/own/cert.der"
+nt_endpoint="opc.tcp://127.0.0.1:4856"
+echo "==> cleaning PKI directories: $pki $nt_pki"
+rm -rf "$pki" "$nt_pki"
 echo "==> building demo server"
 cargo build -q -p async-opcua-demo-server
-echo "==> starting demo server (config: $conf)"
+echo "==> starting demo servers (trust-all :4855, no-trust :4856)"
 cargo run -q -p async-opcua-demo-server -- --config "$conf" &
 srv_pid=$!
+cargo run -q -p async-opcua-demo-server -- --config "$nt_conf" &
+srv_pid2=$!
 # shellcheck disable=SC2064
-trap "kill ${srv_pid} 2>/dev/null || true" INT TERM EXIT
+trap "kill ${srv_pid} ${srv_pid2} 2>/dev/null || true" INT TERM EXIT
 for _ in $(seq 1 120); do
-  [ -f "$cert" ] && break
-  if ! kill -0 "$srv_pid" 2>/dev/null; then
-    echo "server exited before writing $cert" >&2
-    wait "$srv_pid" || true
+  [ -f "$cert" ] && [ -f "$nt_cert" ] && break
+  if ! kill -0 "$srv_pid" 2>/dev/null || ! kill -0 "$srv_pid2" 2>/dev/null; then
+    echo "a server exited before writing its certificate" >&2
     exit 1
   fi
   sleep 0.5
@@ -60,10 +66,10 @@ sleep 2
 
 echo "==> running open62541 interop client against ${endpoint}"
 set +e
-"$here/client" "$endpoint"
+NOTRUST_ENDPOINT="$nt_endpoint" "$here/client" "$endpoint"
 rc=$?
 set -e
 
-echo "==> stopping demo server"
-kill "$srv_pid" 2>/dev/null || true
+echo "==> stopping demo servers"
+kill "$srv_pid" "$srv_pid2" 2>/dev/null || true
 exit "$rc"

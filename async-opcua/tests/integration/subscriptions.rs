@@ -14,7 +14,8 @@ use opcua::{
 };
 use opcua_client::{
     services::{
-        CreateMonitoredItems, CreateSubscription, Publish, Republish, TransferSubscriptions,
+        CreateMonitoredItems, CreateSubscription, DeleteMonitoredItems, ModifySubscription,
+        Publish, Republish, TransferSubscriptions,
     },
     IdentityToken, Subscription, UARequest,
 };
@@ -1328,4 +1329,58 @@ async fn monitored_items_reject_invalid_timestamps_to_return() {
         .await
         .unwrap_err();
     assert_eq!(e.status(), StatusCode::BadTimestampsToReturnInvalid);
+}
+
+#[tokio::test]
+async fn modify_unknown_subscription_is_rejected() {
+    // Part 4 §5.13.5: ModifySubscription on a subscription id the session does not own
+    // returns Bad_SubscriptionIdInvalid. Uses the raw service builder so the request reaches
+    // the server (the high-level helper short-circuits client-side).
+    let (_tester, _nm, session) = setup().await;
+
+    let res = CreateSubscription::new(&session)
+        .publishing_interval(Duration::from_millis(100))
+        .max_lifetime_count(100)
+        .max_keep_alive_count(20)
+        .max_notifications_per_publish(1000)
+        .priority(0)
+        .publishing_enabled(true)
+        .send(session.channel())
+        .await
+        .unwrap();
+    let sub_id = res.subscription_id;
+
+    let e = ModifySubscription::new(sub_id.wrapping_add(1), &session)
+        .send(session.channel())
+        .await
+        .unwrap_err();
+    assert_eq!(StatusCode::BadSubscriptionIdInvalid, e.status());
+}
+
+#[tokio::test]
+async fn delete_unknown_monitored_item_is_rejected() {
+    // Part 4 §5.12.6: DeleteMonitoredItems for a monitored item id that does not exist on the
+    // subscription returns Bad_MonitoredItemIdInvalid as the per-operation result.
+    let (_tester, _nm, session) = setup().await;
+
+    let res = CreateSubscription::new(&session)
+        .publishing_interval(Duration::from_millis(100))
+        .max_lifetime_count(100)
+        .max_keep_alive_count(20)
+        .max_notifications_per_publish(1000)
+        .priority(0)
+        .publishing_enabled(true)
+        .send(session.channel())
+        .await
+        .unwrap();
+    let sub_id = res.subscription_id;
+
+    let res = DeleteMonitoredItems::new(sub_id, &session)
+        .item(999_999)
+        .send(session.channel())
+        .await
+        .unwrap();
+    let results = res.results.unwrap();
+    assert_eq!(1, results.len());
+    assert_eq!(StatusCode::BadMonitoredItemIdInvalid, results[0]);
 }

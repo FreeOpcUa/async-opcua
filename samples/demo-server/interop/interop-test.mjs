@@ -31,6 +31,8 @@ import { mkdirSync } from "node:fs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const endpoint = process.argv[2] || "opc.tcp://localhost:4855/";
+// A companion server (set by run-interop.sh) that does not auto-trust client certs.
+const NOTRUST_ENDPOINT = process.env.NOTRUST_ENDPOINT;
 
 const CLIENT_APP_URI = "urn:async-opcua-interop-client";
 const certFile = join(here, "client-pki", "own", "certs", "client_certificate.pem");
@@ -570,6 +572,32 @@ async function testFailureModes() {
     }
   }
 
+  // An unknown user is rejected.
+  {
+    const client = newClient(SECURED);
+    try {
+      await client.connect(endpoint);
+      await client.createSession({
+        type: UserTokenType.UserName,
+        userName: "no-such-user",
+        password: "whatever",
+      });
+      check("Unknown user is rejected", false, "session unexpectedly created");
+      await client.disconnect();
+    } catch (e) {
+      check(
+        "Unknown user is rejected",
+        /BadUserAccessDenied|BadIdentityTokenRejected|rejected|denied/i.test(e.message),
+        e.message,
+      );
+      try {
+        await client.disconnect();
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
   await withSession(
     "Failures",
     { securityMode: MessageSecurityMode.None, securityPolicy: SecurityPolicy.None },
@@ -606,8 +634,69 @@ async function testFailureModes() {
         bad.statusCode.equals(StatusCodes.BadReferenceTypeIdInvalid),
         bad.statusCode.toString(),
       );
+
+      // Reading an invalid attribute id is rejected.
+      const ia = await session.read({ nodeId: CURRENT_TIME, attributeId: 999 });
+      check(
+        "Read of an invalid attribute id -> BadAttributeIdInvalid",
+        ia.statusCode.equals(StatusCodes.BadAttributeIdInvalid),
+        ia.statusCode.toString(),
+      );
+
+      // Calling a zero-argument method with an argument is rejected.
+      const wa = await session.call({
+        objectId: `ns=${ns};s=Functions`,
+        methodId: `ns=${ns};s=NoOp`,
+        inputArguments: [{ dataType: DataType.Int32, value: 1 }],
+      });
+      check("Method call with wrong arguments is rejected", !wa.statusCode.isGood(), wa.statusCode.toString());
+
+      // A browse path that resolves to nothing returns Bad_NoMatch.
+      const nm = await session.translateBrowsePath(
+        makeBrowsePath("RootFolder", "/Objects/NoSuchChildXYZ"),
+      );
+      check(
+        "TranslateBrowsePath with no match -> BadNoMatch",
+        nm.statusCode.equals(StatusCodes.BadNoMatch),
+        nm.statusCode.toString(),
+      );
+
+      // BrowseNext with an invalid continuation point is rejected.
+      const bn = await session.browseNext(Buffer.from([1, 2, 3, 4]), false);
+      const bnsc = Array.isArray(bn) ? bn[0].statusCode : bn.statusCode;
+      check(
+        "BrowseNext with an invalid continuation point -> BadContinuationPointInvalid",
+        bnsc.equals(StatusCodes.BadContinuationPointInvalid),
+        bnsc.toString(),
+      );
     },
   );
+}
+
+// A server that does not auto-trust client certs must reject an unknown ("discarded")
+// client certificate on a secured handshake.
+async function testUntrustedCert() {
+  if (!NOTRUST_ENDPOINT) return;
+  console.log("\n[no-trust server] discarded / untrusted client certificate");
+  const client = newClient(SECURED);
+  try {
+    await client.connect(NOTRUST_ENDPOINT);
+    const s = await client.createSession();
+    check("Untrusted client cert is rejected by the no-trust server", false, "connected unexpectedly");
+    await s.close();
+    await client.disconnect();
+  } catch (e) {
+    check(
+      "Untrusted client cert is rejected by the no-trust server",
+      /BadSecurityChecksFailed|BadCertificate|untrusted|rejected|not.*trust/i.test(e.message),
+      e.message,
+    );
+    try {
+      await client.disconnect();
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 async function testUsernamePassword() {
@@ -639,6 +728,7 @@ async function main() {
   await testBrowseBreadth();
   await testUnsupportedServices();
   await testFailureModes();
+  await testUntrustedCert();
   await testUsernamePassword();
   console.log(
     `\n${failures === 0 ? "\x1b[32mPASS\x1b[0m" : "\x1b[31mFAIL\x1b[0m"}: ${checks - failures}/${checks} checks passed`,

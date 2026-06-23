@@ -420,7 +420,7 @@ impl SubscriptionCache {
         }) else {
             return Err(StatusCode::BadNoSubscription);
         };
-        let cache_lck = cache.lock();
+        let mut cache_lck = cache.lock();
         cache_lck.republish(request)
     }
 

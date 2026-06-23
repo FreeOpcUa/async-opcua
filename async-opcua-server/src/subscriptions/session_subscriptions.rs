@@ -273,9 +273,14 @@ impl SessionSubscriptions {
     }
 
     pub(super) fn republish(
-        &self,
+        &mut self,
         request: &RepublishRequest,
     ) -> Result<RepublishResponseShared, StatusCode> {
+        let Some(subscription) = self.subscriptions.get_mut(&request.subscription_id) else {
+            return Err(StatusCode::BadSubscriptionIdInvalid);
+        };
+        subscription.reset_lifetime_counter();
+
         let msg = self.find_notification_message(
             request.subscription_id,
             request.retransmit_sequence_number,

@@ -1384,3 +1384,75 @@ async fn delete_unknown_monitored_item_is_rejected() {
     assert_eq!(1, results.len());
     assert_eq!(StatusCode::BadMonitoredItemIdInvalid, results[0]);
 }
+
+#[tokio::test]
+async fn create_monitored_item_on_unknown_node_is_rejected() {
+    // Part 4 §5.12.2: a monitored item on a non-existent node must be rejected with
+    // Bad_NodeIdUnknown, not silently created as Good. A valid node still succeeds.
+    let (tester, nm, session) = setup().await;
+
+    // A real, readable node to prove the happy path still works.
+    let good_id = nm.inner().next_node_id();
+    nm.inner().add_node(
+        nm.address_space(),
+        tester.handle.type_tree(),
+        VariableBuilder::new(&good_id, "MiVar", "MiVar")
+            .data_type(DataTypeId::Int32)
+            .value(1i32)
+            .access_level(AccessLevel::CURRENT_READ)
+            .user_access_level(AccessLevel::CURRENT_READ)
+            .build()
+            .into(),
+        &ObjectId::ObjectsFolder.into(),
+        &ReferenceTypeId::Organizes.into(),
+        Some(&VariableTypeId::BaseDataVariableType.into()),
+        Vec::new(),
+    );
+
+    let res = CreateSubscription::new(&session)
+        .publishing_interval(Duration::from_millis(100))
+        .max_lifetime_count(100)
+        .max_keep_alive_count(20)
+        .max_notifications_per_publish(1000)
+        .priority(0)
+        .publishing_enabled(true)
+        .send(session.channel())
+        .await
+        .unwrap();
+    let sub_id = res.subscription_id;
+
+    let mk = |node_id: NodeId| MonitoredItemCreateRequest {
+        item_to_monitor: ReadValueId {
+            node_id,
+            attribute_id: AttributeId::Value as u32,
+            ..Default::default()
+        },
+        monitoring_mode: MonitoringMode::Reporting,
+        requested_parameters: MonitoringParameters {
+            sampling_interval: 0.0,
+            queue_size: 10,
+            discard_oldest: true,
+            ..Default::default()
+        },
+    };
+
+    let res = CreateMonitoredItems::new(sub_id, &session)
+        .item(mk(NodeId::new(2, 999_999u32))) // unknown
+        .item(mk(good_id.clone())) // known
+        .timestamps_to_return(TimestampsToReturn::Both)
+        .send(session.channel())
+        .await
+        .unwrap();
+
+    assert_eq!(2, res.results.len());
+    assert_eq!(
+        StatusCode::BadNodeIdUnknown,
+        res.results[0].result.status_code,
+        "unknown node must be rejected"
+    );
+    assert_eq!(
+        StatusCode::Good,
+        res.results[1].result.status_code,
+        "known node must still succeed"
+    );
+}

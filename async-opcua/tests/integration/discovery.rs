@@ -208,3 +208,35 @@ async fn find_servers_on_network_is_unsupported() {
     let status = res.err().map(|e| e.status());
     assert_eq!(status, Some(StatusCode::BadServiceUnsupported));
 }
+
+#[tokio::test]
+async fn register_server_missing_name_or_url_is_rejected() {
+    // P4-DISC-01 — OPC UA Part 4 §5.4.5: an online RegisterServer with no ServerName must return
+    // Bad_ServerNameMissing, and with no discoveryUrl, Bad_DiscoveryUrlMissing. Anchored to the spec.
+    let tester = Tester::new_default_server(true).await;
+    let url = tester.endpoint();
+    let endpoints = tester
+        .client
+        .get_endpoints(url.clone(), &[], &[])
+        .await
+        .unwrap();
+    let endpoint = endpoints.first().expect("at least one endpoint").clone();
+
+    let mut no_name = registered_server(true);
+    no_name.server_names = None;
+    let e = tester
+        .client
+        .register_server(url.clone(), &endpoint, no_name)
+        .await
+        .unwrap_err();
+    assert_eq!(e.status(), StatusCode::BadServerNameMissing);
+
+    let mut no_url = registered_server(true);
+    no_url.discovery_urls = None;
+    let e = tester
+        .client
+        .register_server(url.clone(), &endpoint, no_url)
+        .await
+        .unwrap_err();
+    assert_eq!(e.status(), StatusCode::BadDiscoveryUrlMissing);
+}

@@ -156,9 +156,12 @@ async fn query_next_release_frees_continuation_point() {
 
 /// A query that matches nothing is handled cleanly (no panic) — record the actual status.
 #[tokio::test]
-async fn query_no_match_is_handled() {
+async fn query_invalid_type_definition_is_rejected() {
+    // P4-QUERY-01 — OPC UA Part 4 Annex B Table B.6: a typeDefinitionNode that is not a valid
+    // TypeDefinitionNode must be reported (Bad_NotTypeDefinition in parsingResults, surfaced as a
+    // Bad_InvalidArgument service result) rather than silently treated as a no-match. Spec-anchored.
     let (_tester, _nm, session) = setup().await;
-    // A node id that is not a type definition → no matches.
+    // NodeId 0:999_999 is not a type definition node.
     let bogus = NodeTypeDescription {
         type_definition_node: NodeId::new(0, 999_999u32).into(),
         include_sub_types: false,
@@ -168,7 +171,7 @@ async fn query_no_match_is_handled() {
             index_range: NumericRange::default(),
         }]),
     };
-    let resp = session
+    let e = session
         .query_first(
             ViewDescription::default(),
             vec![bogus],
@@ -177,21 +180,8 @@ async fn query_no_match_is_handled() {
             0,
         )
         .await
-        .unwrap();
-    println!(
-        "no-match: status={:?} sets={}",
-        resp.response_header.service_result,
-        resp.query_data_sets.as_ref().map(|v| v.len()).unwrap_or(0)
-    );
-    // Either an explicit "nothing to do" status, or Good with no data sets — never a panic/hang.
-    let sets = resp.query_data_sets.unwrap_or_default();
-    assert!(
-        resp.response_header.service_result.is_good() && sets.is_empty()
-            || !resp.response_header.service_result.is_good(),
-        "no-match must be empty-Good or a non-Good status, got {:?} with {} sets",
-        resp.response_header.service_result,
-        sets.len()
-    );
+        .unwrap_err();
+    assert_eq!(e.status(), opcua::types::StatusCode::BadInvalidArgument);
 }
 
 /// A non-default / unknown view — record the actual handler behavior (the backlog's BadViewIdUnknown

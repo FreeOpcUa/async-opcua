@@ -219,6 +219,14 @@ impl ServerInfo {
             return StatusCode::Good;
         }
 
+        // Part 4 §5.4.5: an online registration must provide a ServerName and a DiscoveryUrl.
+        if server.server_names.as_ref().is_none_or(|n| n.is_empty()) {
+            return StatusCode::BadServerNameMissing;
+        }
+        if server.discovery_urls.as_ref().is_none_or(|u| u.is_empty()) {
+            return StatusCode::BadDiscoveryUrlMissing;
+        }
+
         if !registered_servers.contains_key(&server_uri)
             && registered_servers.len() >= MAX_REGISTERED_SERVERS
         {
@@ -960,10 +968,11 @@ mod tests {
         RegisteredServer {
             server_uri: uri.into(),
             product_uri: UAString::null(),
-            server_names: None,
+            // ServerName + DiscoveryUrl are required for an online registration (Part 4 §5.4.5).
+            server_names: Some(vec![opcua_types::LocalizedText::new("en", "Test")]),
             server_type: ApplicationType::Server,
             gateway_server_uri: UAString::null(),
-            discovery_urls: None,
+            discovery_urls: Some(vec!["opc.tcp://127.0.0.1:4840/".into()]),
             semaphore_file_path: UAString::null(),
             is_online,
         }

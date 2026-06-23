@@ -43,21 +43,40 @@ pub(crate) async fn query_first(
 
     let mut parsing_results = Vec::with_capacity(node_types.len());
     let mut final_node_types = Vec::with_capacity(node_types.len());
-    for node_type in node_types {
-        let (res, parsed) = ParsedNodeTypeDescription::parse(node_type);
-        if let Ok(parsed) = parsed {
-            final_node_types.push(parsed);
-        } else {
-            status_code = StatusCode::BadInvalidArgument;
-        }
-        parsing_results.push(res);
-    }
-
     let (filter_result, filter) = {
-        let type_tree = context.get_type_tree_for_user();
+        let type_tree_ctx = context.get_type_tree_for_user();
+        let type_tree = type_tree_ctx.get();
+        for node_type in node_types {
+            let (mut res, parsed) = ParsedNodeTypeDescription::parse(node_type);
+            match parsed {
+                // Part 4 Annex B Table B.6: typeDefinitionNode shall be a valid TypeDefinitionNode.
+                // A non-null id that is not a known type definition is Bad_NotTypeDefinition, rather
+                // than a silent no-match fall-back.
+                Ok(parsed)
+                    if res.status_code.is_good()
+                        && !parsed.type_definition_node.node_id.is_null()
+                        && type_tree
+                            .get(&parsed.type_definition_node.node_id)
+                            .is_none() =>
+                {
+                    res.status_code = StatusCode::BadNotTypeDefinition;
+                    status_code = StatusCode::BadInvalidArgument;
+                    parsing_results.push(res);
+                }
+                Ok(parsed) => {
+                    final_node_types.push(parsed);
+                    parsing_results.push(res);
+                }
+                Err(_) => {
+                    status_code = StatusCode::BadInvalidArgument;
+                    parsing_results.push(res);
+                }
+            }
+        }
+
         ParsedContentFilter::parse(
             request.request.filter,
-            type_tree.get(),
+            type_tree,
             false,
             &[FilterOperator::InView],
         )

@@ -40,7 +40,9 @@ pki="interop/pki-interop"
 cert="$pki/own/cert.der"
 echo "==> cleaning PKI directory: $pki"
 rm -rf "$pki"
-echo "==> building + starting demo server (config: $conf)"
+echo "==> building demo server"
+cargo build -q -p async-opcua-demo-server
+echo "==> starting demo server (config: $conf)"
 cargo run -q -p async-opcua-demo-server -- --config "$conf" &
 srv_pid=$!
 # shellcheck disable=SC2064

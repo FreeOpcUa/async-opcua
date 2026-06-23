@@ -471,6 +471,14 @@ where
                 let header = chunk.message_header(&channel.decoding_options())?;
 
                 if header.is_final == MessageIsFinalType::FinalError {
+                    // Part 6 §6.7.3: "The receiver shall check the security on the abort
+                    // MessageChunk before processing it." Verify before discarding the
+                    // pending chunks, so a forged/unverified abort cannot silently drop a
+                    // legitimate in-progress message.
+                    channel.verify_and_remove_security_server(
+                        chunk.data,
+                        &mut self.decrypted_chunk_storage,
+                    )?;
                     self.pending_chunks.clear();
                     Ok(None)
                 } else {

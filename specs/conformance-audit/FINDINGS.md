@@ -38,6 +38,9 @@ model(s) surfaced it.
 | P4-DISC-01 | S3 | C,X | ✅ | §5.5.5 T7 | RegisterServer/2 validate only `Bad_ServerUriInvalid`+limit; missing `Bad_ServerNameMissing`/`Bad_DiscoveryUrlMissing`/`Bad_SemaphoreFileMissing`. | open |
 | P4-DISC-02 | S3 | A | ⚠ | §5.5.2/.4 | GetEndpoints/FindServers return configured `host`, ignoring the client's connect-URL hostname. | open |
 | P4-DISC-03 | S2 | A | ⚠ | §5.5.5.1 | RegisterServer accepts registrations without client-cert auth / serverUri↔applicationUri binding. | open |
+| P4-GEN-01 | S3 | C,A,X | ✅ | §5.2/5.3 | `returnDiagnostics` never honored: ResponseHeader `serviceDiagnostics` always default, `stringTable` always None, per-op `diagnosticInfos` always None/empty. `set_diagnostic_info()` exists but is never called. 3-way consensus. | open |
+| P4-GEN-02 | S3 | C,X | ✅ | §5.3 (1240) | Client's `MaxResponseMessageSize` (from CreateSession) is stored but never enforced; responses bounded only by the server's own `max_message_size`, not the client's declared limit → `Bad_ResponseTooLarge` per client limit not produced. | open |
+| P4-GEN-03 | S3 | C,A,X | ✅ | §5.4 | Locale negotiation applied only in Discovery (FindServers/GetEndpoints); session-service LocalizedText (DisplayName/Description) returned ignoring the session's `localeIds`; special `mul`/`qst` locales unhandled and not rejected in Write. | open |
 | P4-ATTR-06 | S3 | A | ⚠ | §5.11.2 | IndexRange parsing hard-capped at 10 dimensions → decode error for higher-dim arrays. | open |
 | P4-SUB-02 | S2 | C,A | ✅ | §5.14.7 T79 r22/23 | TransferSubscriptions issues no `Good_SubscriptionTransferred` to old session and doesn't reset lifetime. *Conflict resolved: confirmed (Codex marked HONORED = miss).* | open |
 | P4-SUB-03 | S2 | C | ✅ | §5.13.1.5 | First Event discard places no `EventQueueOverflowEventType` in the queue (feature 030 gap). | open |

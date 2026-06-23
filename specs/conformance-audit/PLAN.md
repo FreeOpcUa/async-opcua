@@ -63,7 +63,7 @@ FINDINGS for the verified-conformant carryover).
 | **P4-ATTR** | Attribute set: Read/Write/HistoryRead/HistoryUpdate (§5.11), IndexRange/NumericRange, DataValue, timestamps, write masks | P1 | ✅ | 017 (NumericRange) |
 | **P4-VIEW** | View set: Browse/BrowseNext/TranslateBrowsePaths/Register/Unregister (§5.9), continuation points, ref/nodeclass filtering, BrowseDirection | P1 | ✅ | — |
 | **P4-SESS** | SecureChannel (§5.6) + Session (§5.7): Open/Close, Create/Activate/Close/Cancel, nonce, cert binding, token renewal, timeouts | P1 | ✅ | 013/014 |
-| **P4-GENERAL** | General service behaviour (§5.1–5.3): request/response headers, diagnostics, OperationLimits, service-result vs operation-level status, per-service security checks | P1 | ⬜ | 011/025 |
+| **P4-GENERAL** | General service behaviour (§5.1–5.4): request/response headers, diagnostics, OperationLimits, service-result vs operation-level status, per-service security checks | P1 | ✅ | 011/025 |
 | **P4-NODEMGMT** | NodeManagement set (§5.8): Add/Delete Nodes+References, status codes, gating | P2 | ✅ | 022 |
 | **P4-METHOD** | Method Call (§5.12): argument validation, status codes, output mapping | P2 | ✅ | 021 |
 | **P4-QUERY** | Query set (Annex B): QueryFirst/Next, content filter, continuation points | P2 | ✅ | 023 |
@@ -152,4 +152,9 @@ commit per user-story; PR to fork `occamsshavingkit/async-opcua`; wait for full 
   pipeline fully HONORED (012-016/013/014/025 paid off). 4 invocation-ordering gaps: **P2-SEC-01 (S2,
   verified)** OpenSecureChannel skips §6.1.3 trust validation (only at CreateSession); +Renew re-check,
   AuditCertificate emission, user-X509 validate-before-verify. P4-SESS-05 reconciled → likely-FP.
-- **Next (no fixes):** P4-GENERAL (§5.1–5.3), then companion parts P5/P8/P11/P12/P14 — 3-AI pattern.
+- **P4-GENERAL done (3-of-3):** important behaviours HONORED (ServiceFault, BadNothingToDo, decode
+  errors, timeoutHint ceiling). 3 S3 gaps: P4-GEN-01 returnDiagnostics never populated, P4-GEN-02
+  client MaxResponseMessageSize not enforced, P4-GEN-03 locale negotiation Discovery-only + mul/qst.
+  **Part 4 audit COMPLETE.**
+- **Next (no fixes):** companion parts P5-NODESET / P8-DA / P11-HIST / P12-GDS / P14-PUBSUB — 3-AI.
+  Then FIX PHASE.

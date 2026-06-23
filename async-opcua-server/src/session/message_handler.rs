@@ -28,9 +28,10 @@ use crate::{
     subscriptions::{PendingPublish, SubscriptionCache},
 };
 use opcua_types::{
-    AttributeId, DataValue, DiagnosticBits, DiagnosticInfo, NamespaceMap, PublishRequest,
-    ReadRequest, ReadResponse, ReadValueId, ResponseHeader, ServiceFault, SetTriggeringRequest,
-    SetTriggeringResponse, StatusCode, TimestampsToReturn, WriteRequest, WriteResponse,
+    AttributeId, CancelResponse, DataValue, DiagnosticBits, DiagnosticInfo, NamespaceMap,
+    PublishRequest, ReadRequest, ReadResponse, ReadValueId, ResponseHeader, ServiceFault,
+    SetTriggeringRequest, SetTriggeringResponse, StatusCode, TimestampsToReturn, WriteRequest,
+    WriteResponse,
 };
 
 use super::{actor::SessionMessage, controller::Response, instance::Session};
@@ -350,6 +351,20 @@ impl MessageHandler {
 
             RequestMessage::DeleteReferences(request) => {
                 async_service_call!(services::delete_references, self, request, data)
+            }
+
+            RequestMessage::Cancel(request) => {
+                // Part 4 §5.7.5: Cancel cancels outstanding requests for the Session and returns the
+                // number cancelled. This server processes requests without a cancellable queue, so
+                // there is nothing outstanding to cancel; respond Good with cancelCount = 0.
+                HandleMessageResult::SyncMessage(Response {
+                    message: CancelResponse {
+                        response_header: ResponseHeader::new_good(&request.request_header),
+                        cancel_count: 0,
+                    }
+                    .into(),
+                    request_id,
+                })
             }
 
             message => {

@@ -49,6 +49,10 @@ pub struct SessionSubscriptions {
     subscriptions: HashMap<u32, Subscription>,
     /// Publish request queue (requests by the client on the session)
     publish_request_queue: VecDeque<PendingPublish>,
+    /// Status-change notifications owed to this session for subscriptions that have been
+    /// transferred away (Part 4 §5.14.7.1: the old session receives Good_SubscriptionTransferred).
+    /// Delivered on the next available publish request, even with no remaining subscriptions.
+    pending_status_changes: VecDeque<(u32, Arc<NotificationMessage>)>,
     /// Notifications that have been sent but have yet to be acknowledged (retransmission queue).
     retransmission_queue: RetransmissionQueue,
     /// Reusable storage for data-change notifications reclaimed from acknowledged publishes.
@@ -73,6 +77,7 @@ impl SessionSubscriptions {
             user_token,
             subscriptions: HashMap::new(),
             publish_request_queue: VecDeque::new(),
+            pending_status_changes: VecDeque::new(),
             retransmission_queue: RetransmissionQueue::new(),
             data_change_notification_pool: DataChangeNotificationVecPool::default(),
             limits,
@@ -89,7 +94,9 @@ impl SessionSubscriptions {
     }
 
     pub(super) fn is_ready_to_delete(&self) -> bool {
-        self.subscriptions.is_empty() && self.publish_request_queue.is_empty()
+        self.subscriptions.is_empty()
+            && self.publish_request_queue.is_empty()
+            && self.pending_status_changes.is_empty()
     }
 
     #[allow(clippy::result_large_err)]
@@ -657,6 +664,54 @@ impl SessionSubscriptions {
         );
     }
 
+    /// Queue a StatusChangeNotification to be delivered to this session on the next
+    /// available publish request. Used when a subscription is transferred away
+    /// (Part 4 §5.14.7.1).
+    pub(super) fn queue_status_change(
+        &mut self,
+        subscription_id: u32,
+        sequence_number: u32,
+        publish_time: DateTime,
+        status: StatusCode,
+    ) {
+        self.pending_status_changes.push_back((
+            subscription_id,
+            Arc::new(NotificationMessage::status_change(
+                sequence_number,
+                publish_time,
+                status,
+            )),
+        ));
+    }
+
+    /// Deliver queued transfer status-change notifications, one per available publish
+    /// request. Runs before the no-subscriptions early-out so the old session still
+    /// receives Good_SubscriptionTransferred after its last subscription has moved.
+    fn deliver_pending_status_changes(&mut self, now: &DateTimeUtc) {
+        while !self.pending_status_changes.is_empty() {
+            let Some(publish_request) = self.publish_request_queue.pop_front() else {
+                break;
+            };
+            let (subscription_id, notification) = self.pending_status_changes.pop_front().unwrap();
+            let _ = publish_request.response.send(
+                PublishResponseShared {
+                    response_header: ResponseHeader::new_timestamped_service_result(
+                        DateTime::from(*now),
+                        &publish_request.request.request_header,
+                        StatusCode::Good,
+                    ),
+                    subscription_id,
+                    available_sequence_numbers: None,
+                    more_notifications: false,
+                    notification_message: notification,
+                    results: publish_request.ack_results,
+                    diagnostic_infos: None,
+                }
+                .into(),
+            );
+        }
+    }
+
     pub(super) fn tick(
         &mut self,
         now: &DateTimeUtc,
@@ -664,6 +719,8 @@ impl SessionSubscriptions {
         tick_reason: TickReason,
         buffer: &mut NotificationBuffer,
     ) -> Vec<RemovedSubscription> {
+        self.deliver_pending_status_changes(now);
+
         if self.subscriptions.is_empty() {
             self.reject_publish_requests_without_subscriptions();
             return Vec::new();

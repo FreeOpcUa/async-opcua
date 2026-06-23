@@ -1,36 +1,39 @@
-# Feature 029 — STATUS: spec'd + scoped; implementation PAUSED for awake review
+# Feature 029 — STATUS
 
-**Date**: 2026-06-23 (overnight). Spec/plan/tasks committed on branch
-`029-reliable-delivery-hardening`. **Not implemented, not merged.**
+Spec is authoritative (user decision 2026-06-23): where the implementation diverges from OPC UA Part
+4 1.05.07 §5.13, the implementation is wrong and is fixed to conform.
 
-## Why paused
-Implementation began with the MonitoredItem queue-overflow characterization (§5.13.1.5). Driving the
-overflow logic surfaced more subtlety than the assessment implied — enough that rushing it overnight
-risked shipping confused tests/findings on a safety-relevant path. Stopping was the
-correctness-over-completion call.
+## US1 — MonitoredItem queue overflow (§5.13.1.5): DONE (3 bugs fixed + 1 dead-state removed)
 
-## What was learned (must verify when resuming, NOT yet conclusions)
-1. **MonitoredItem queues do not start empty** — a freshly built item already holds an initial entry,
-   so any "fill to capacity then overflow" test must account for the actual starting queue state
-   (an off-by-one over-fills and triggers an extra overflow). The clean way to characterise
-   §5.13.1.5 is to drive `monitored_item.rs::enqueue_notification` directly with a KNOWN starting
-   state, not via `notify_data_value` (whose sampling/skip logic confounds the queue contents).
-2. **Two CANDIDATE conformance questions vs Part 4 1.05.07 §5.13.1.5** (need confirmation + are
-   interop-affecting BEHAVIOR-CHANGE decisions, so they are USER decisions, not auto-fixes):
-   - **discardOldest=TRUE overflow-bit placement**: spec says "the oldest is deleted and the NEXT
-     value in the queue gets the flag" (the new front); the impl (`enqueue_notification` ~line 608)
-     sets the Overflow bit on the newly appended value (the back). The existing test
-     `monitored_item_overflow` encodes the impl's placement.
-   - **QueueSize==1**: spec sets the Overflow bit only when "the size of the queue is larger than
-     one"; the impl computes `overflow = len == queue_size` and sets the bit at size 1 too.
-   Both must be re-verified with a correct known-start-state harness before deciding to change shipped
-   behavior (changing overflow semantics affects every subscribing client / interop).
+How deep the hole went, all confirmed with spec-anchored tests driving `enqueue_notification` with a
+known-empty start, and fixed in `async-opcua-server/src/subscriptions/monitored_item.rs`:
 
-## How to resume
-- Write §5.13.1.5 tests against `enqueue_notification` directly, seeding a known queue state.
-- Confirm/deny the two findings; if confirmed, treat the fixes as conformance behavior changes for
-  explicit approval (they break the existing `monitored_item_overflow` test, which must then be
-  corrected to the spec, not weakened).
-- Then proceed to US2 (republish/ack/sequence — much of this is testable via the existing
-  `async-opcua/tests/integration/subscriptions.rs` harness) and US3 (lifecycle/request-queue).
-- The retransmission queue + sequence-number Handle already have good coverage (027 + handle.rs).
+- **A — overflow-bit placement (FIXED)**: with `discardOldest=TRUE` the impl flagged the *newest*
+  appended value (and accumulated flags across repeated overflows). Spec: delete the oldest and flag
+  "the NEXT value in the queue" (the new front); only the current front is ever flagged. Fixed.
+- **B — QueueSize==1 (FIXED)**: the impl set the Overflow bit at queue size 1. Spec sets it only when
+  "the size of the queue is larger than one"; at size 1 the discard policy is ignored and no bit is
+  set. Fixed (bit gated on `queue_size > 1`).
+- **C — `modify()` queue-shrink discarded the WRONG end (FIXED)**: the shrink loop's discard
+  direction was INVERTED vs `enqueue_notification` — `discardOldest=TRUE` dropped the newest and vice
+  versa. A client resizing a monitored-item queue smaller would lose the wrong values. Fixed to match
+  enqueue (`discardOldest=TRUE → pop_front`).
+- **E — dead `queue_overflow` field (REMOVED)**: written on overflow but never read anywhere;
+  removed so the state isn't misleading.
+- `discardOldest=FALSE` overflow ("replace last-added, flag the new value") was already correct —
+  locked with a regression test.
+- The pre-existing `monitored_item_overflow` test encoded bug A; corrected to the spec (flag on the
+  front), not weakened.
+
+Tests: 4 new `part4_overflow_*` tests + corrected existing test; full `async-opcua-server` suite and
+9 end-to-end `async-opcua` integration subscription tests green.
+
+## Remaining in this feature
+- **D — EventQueueOverflowEventType (NOT done; documented gap)**: §5.13.1.5 requires, on the first
+  event discard, an `EventQueueOverflowEventType` Event placed in the queue *in addition to* QueueSize
+  (at the front if `discardOldest`, else the end). The impl has no event-overflow indicator at all.
+  This is a missing FEATURE (needs constructing the event), separable from the overflow bug fixes —
+  next increment.
+- **US2** (republish/ack/sequence-number live behavior incl. roll-over to 1) and **US3**
+  (lifetime→Bad_Timeout, publish-request-queue overflow) characterization — next increments,
+  testable via `async-opcua/tests/integration/subscriptions.rs`.

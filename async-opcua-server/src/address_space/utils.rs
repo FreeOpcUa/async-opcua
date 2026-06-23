@@ -132,10 +132,43 @@ pub fn validate_value_to_write(
     variable: &Variable,
     value: &Variant,
     type_tree: &dyn TypeTree,
+    has_index_range: bool,
 ) -> Result<(), StatusCode> {
     let node_data_type = variable.data_type();
 
-    validate_value_data_type_to_write(&node_data_type, variable.value_rank(), value, type_tree)
+    validate_value_data_type_to_write(
+        &node_data_type,
+        variable.value_rank(),
+        value,
+        type_tree,
+        has_index_range,
+    )
+}
+
+// Part 4 §5.10.4 / Part 3 §5.6: the written value's array-ness must match the node's ValueRank.
+// Skipped when an index range is present, since that writes a sub-section (e.g. a scalar element
+// of an array) rather than replacing the whole value.
+fn validate_value_rank_to_write(
+    value_rank: i32,
+    is_array: bool,
+    has_index_range: bool,
+) -> Result<(), StatusCode> {
+    if has_index_range {
+        return Ok(());
+    }
+    let ok = match value_rank {
+        // ScalarOrOneDimension / Any: either a scalar or an array is acceptable.
+        -3 | -2 => true,
+        // Scalar: the value must not be an array.
+        -1 => !is_array,
+        // 0 (OneOrMoreDimensions), 1, 2, ...: an array is required.
+        _ => is_array,
+    };
+    if ok {
+        Ok(())
+    } else {
+        Err(StatusCode::BadTypeMismatch)
+    }
 }
 
 fn validate_value_data_type_to_write(
@@ -143,6 +176,7 @@ fn validate_value_data_type_to_write(
     value_rank: i32,
     value: &Variant,
     type_tree: &dyn TypeTree,
+    has_index_range: bool,
 ) -> Result<(), StatusCode> {
     if matches!(value, Variant::Empty) {
         return Ok(());
@@ -181,7 +215,8 @@ fn validate_value_data_type_to_write(
                 _ => Err(StatusCode::BadTypeMismatch),
             }
         } else {
-            Ok(())
+            // Data type matches; the value's array-ness must also match the node's ValueRank.
+            validate_value_rank_to_write(value_rank, value.is_array(), has_index_range)
         }
     } else {
         Err(StatusCode::BadTypeMismatch)
@@ -275,12 +310,18 @@ pub fn validate_node_write(
 
     if node_to_write.attribute_id == AttributeId::Value {
         match node {
-            NodeType::Variable(var) => validate_value_to_write(var, value, type_tree)?,
+            NodeType::Variable(var) => validate_value_to_write(
+                var,
+                value,
+                type_tree,
+                node_to_write.index_range.has_range(),
+            )?,
             NodeType::VariableType(var_type) => validate_value_data_type_to_write(
                 var_type.data_type(),
                 var_type.value_rank(),
                 value,
                 type_tree,
+                node_to_write.index_range.has_range(),
             )?,
             _ => {}
         }

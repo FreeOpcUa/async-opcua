@@ -916,3 +916,73 @@ async fn history_update_fail() {
 
     assert_eq!(r[0].status_code, StatusCode::BadNodeIdUnknown);
 }
+
+#[tokio::test]
+async fn write_value_rank_mismatch_is_rejected() {
+    // Part 4 §5.10.4 / Part 3 §5.6: the written value's array-ness must match the node's
+    // ValueRank. Previously only the data type was checked, so an array written to a scalar node
+    // (or a scalar to an array node) was silently accepted. Sibling of the scalar-type bug above.
+    let (tester, nm, session) = setup().await;
+
+    let scalar = nm.inner().next_node_id();
+    nm.inner().add_node(
+        nm.address_space(),
+        tester.handle.type_tree(),
+        VariableBuilder::new(&scalar, "ScalarI32", "ScalarI32")
+            .data_type(DataTypeId::Int32)
+            .value_rank(-1)
+            .value(0i32)
+            .access_level(AccessLevel::CURRENT_READ | AccessLevel::CURRENT_WRITE)
+            .user_access_level(AccessLevel::CURRENT_READ | AccessLevel::CURRENT_WRITE)
+            .build()
+            .into(),
+        &ObjectId::ObjectsFolder.into(),
+        &ReferenceTypeId::Organizes.into(),
+        Some(&VariableTypeId::BaseDataVariableType.into()),
+        Vec::new(),
+    );
+
+    let arr = nm.inner().next_node_id();
+    nm.inner().add_node(
+        nm.address_space(),
+        tester.handle.type_tree(),
+        VariableBuilder::new(&arr, "ArrI32", "ArrI32")
+            .data_type(DataTypeId::Int32)
+            .value_rank(1)
+            .value(vec![1i32, 2, 3])
+            .access_level(AccessLevel::CURRENT_READ | AccessLevel::CURRENT_WRITE)
+            .user_access_level(AccessLevel::CURRENT_READ | AccessLevel::CURRENT_WRITE)
+            .build()
+            .into(),
+        &ObjectId::ObjectsFolder.into(),
+        &ReferenceTypeId::Organizes.into(),
+        Some(&VariableTypeId::BaseDataVariableType.into()),
+        Vec::new(),
+    );
+
+    // Array written to a scalar node -> rejected.
+    let r = session
+        .write(&[write_value(AttributeId::Value, vec![1i32, 2, 3], &scalar)])
+        .await
+        .unwrap();
+    assert_eq!(r[0], StatusCode::BadTypeMismatch, "array -> scalar node");
+
+    // Scalar written to an array node -> rejected.
+    let r = session
+        .write(&[write_value(AttributeId::Value, 5i32, &arr)])
+        .await
+        .unwrap();
+    assert_eq!(r[0], StatusCode::BadTypeMismatch, "scalar -> array node");
+
+    // Correctly-shaped writes still succeed.
+    let r = session
+        .write(&[write_value(AttributeId::Value, 7i32, &scalar)])
+        .await
+        .unwrap();
+    assert_eq!(r[0], StatusCode::Good, "scalar -> scalar node");
+    let r = session
+        .write(&[write_value(AttributeId::Value, vec![9i32, 8], &arr)])
+        .await
+        .unwrap();
+    assert_eq!(r[0], StatusCode::Good, "array -> array node");
+}

@@ -72,9 +72,9 @@ FINDINGS for the verified-conformant carryover).
 ### Part 6 — Mappings (encoding / transport)
 | Unit | Area (Part 6 §) | Priority | Status | Prior |
 |---|---|---|---|---|
-| **P6-BIN** | Binary encoding/decoding (§5.2): all built-ins, NodeId forms, Variant, arrays, ExtensionObject, DataValue; decoder DoS bounds | P1 | ⬜ | 017/018/025 |
-| **P6-JSON** | JSON encoding (§5.4): reversible/non-reversible, edges, DateTime precision | P2 | ⬜ | 018/019 |
-| **P6-TCP** | opc.tcp secure conversation (§6/§7): Hello/Ack/Error, chunking, message/chunk size limits, sequence headers, abort | P1 | ⬜ | 025 (max_message_size) |
+| **P6-BIN** | Binary encoding/decoding (§5.2): all built-ins, NodeId forms, Variant, arrays, ExtensionObject, DataValue; decoder DoS bounds | P1 | ✅ | 017/018/025 |
+| **P6-JSON** | JSON encoding (§5.4): reversible/non-reversible, edges, DateTime precision | P2 | ✅ | 018/019 |
+| **P6-TCP** | opc.tcp secure conversation (§6/§7): Hello/Ack/Error, chunking, message/chunk size limits, sequence headers, abort | P1 | ✅ | 025 (max_message_size) |
 
 ### Part 3 — Address Space Model
 | Unit | Area | Priority | Status | Prior |
@@ -143,5 +143,7 @@ commit per user-story; PR to fork `occamsshavingkit/async-opcua`; wait for full 
   (`FINDINGS-antigravity.md`, `FINDINGS-codex.md`); all 7 inter-model conflicts resolved by
   verification; everything consolidated into FINDINGS.md (~30 findings, source-tagged C/A/X). Pattern
   for remaining units: Claude audit → AG + Codex passes → resolve conflicts → consolidate.
-- **Next (no fixes):** P4-GENERAL (§5.1–5.3), then P6-BIN/JSON/TCP, P3-NODES, P2-SEC, P5/P8/P11/P12/P14
-  — each via the 3-AI pattern.
+- **P6 done (2-of-3):** binary solid; key finds — **P6-JSON-01 S1 DoS** (JSON array unbounded alloc),
+  P6-BIN-01 S2 (bool decode), + interop/version cluster (P6-JSON-02/03/04) & transport (P6-TCP-01..04).
+  **Antigravity timed out on P6 — retry to complete the 3-AI set.**
+- **Next (no fixes):** retry AG-P6; then P4-GENERAL (§5.1–5.3), P3-NODES, P2-SEC, P5/P8/P11/P12/P14 — 3-AI pattern.

@@ -712,3 +712,18 @@ async fn translate_browse_path_null_target_name_is_bad_browse_name_invalid() {
     assert_eq!(1, r.len());
     assert_eq!(r[0].status_code, StatusCode::BadBrowseNameInvalid);
 }
+
+#[tokio::test]
+async fn browse_invalid_reference_type_is_bad_reference_type_id_invalid() {
+    // P4-VIEW-01 — OPC UA Part 4 §5.9.2 Table 36: a non-null referenceTypeId that is not a
+    // ReferenceType must yield operation-level Bad_ReferenceTypeIdInvalid, not an empty Good result.
+    let (_tester, _nm, session) = setup().await;
+
+    let mut desc = hierarchical_desc(ObjectId::ObjectsFolder.into());
+    // ObjectsFolder is an Object node, NOT a ReferenceType.
+    desc.reference_type_id = ObjectId::ObjectsFolder.into();
+
+    let r = session.browse(&[desc], 100, None).await.unwrap();
+    assert_eq!(1, r.len());
+    assert_eq!(r[0].status_code, StatusCode::BadReferenceTypeIdInvalid);
+}

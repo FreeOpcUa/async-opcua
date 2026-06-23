@@ -1311,3 +1311,12 @@ async fn read_invalid_index_range_is_per_operation() {
         "valid read after the bad range must succeed"
     );
 }
+
+#[tokio::test]
+async fn cancel_returns_cancel_count_zero() {
+    // P4-SESS-01 — OPC UA Part 4 §5.7.5: Cancel is a supported Session service. With no cancellable
+    // outstanding requests it returns Good with cancelCount = 0 (not BadServiceUnsupported).
+    let (_tester, _nm, session) = setup().await;
+    let count = session.cancel(1).await.unwrap();
+    assert_eq!(0, count);
+}

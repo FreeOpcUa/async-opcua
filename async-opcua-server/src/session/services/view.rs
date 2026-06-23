@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
-use opcua_core::trace_write_lock;
+use opcua_core::{trace_read_lock, trace_write_lock};
+use opcua_nodes::TypeTree;
 use tracing::{debug_span, error, info};
 use tracing_futures::Instrument;
 
@@ -13,8 +14,8 @@ use crate::{
 };
 use opcua_types::{
     BrowseNextRequest, BrowseNextResponse, BrowsePathResult, BrowsePathTarget, BrowseRequest,
-    BrowseResponse, BrowseResult, ByteString, RegisterNodesRequest, RegisterNodesResponse,
-    ResponseHeader, StatusCode, TranslateBrowsePathsToNodeIdsRequest,
+    BrowseResponse, BrowseResult, ByteString, NodeClass, RegisterNodesRequest,
+    RegisterNodesResponse, ResponseHeader, StatusCode, TranslateBrowsePathsToNodeIdsRequest,
     TranslateBrowsePathsToNodeIdsResponse, UnregisterNodesRequest, UnregisterNodesResponse,
 };
 
@@ -46,13 +47,30 @@ pub(crate) async fn browse(
             .min(request.request.requested_max_references_per_node as usize)
     };
 
-    let mut nodes: Vec<_> = nodes_to_browse
-        .into_iter()
-        .enumerate()
-        .map(|(idx, r)| BrowseNode::new(r, max_references_per_node, idx))
-        .collect();
-
-    let mut results: Vec<_> = (0..nodes.len()).map(|_| None).collect();
+    // Part 4 §5.9.2 Table 36: a non-null referenceTypeId that is not a ReferenceType is rejected
+    // with operation-level Bad_ReferenceTypeIdInvalid, rather than silently returning no references.
+    let mut nodes = Vec::with_capacity(nodes_to_browse.len());
+    let mut results: Vec<Option<BrowseResult>> = Vec::with_capacity(nodes_to_browse.len());
+    {
+        let type_tree = trace_read_lock!(context.type_tree);
+        for (idx, r) in nodes_to_browse.into_iter().enumerate() {
+            if !r.reference_type_id.is_null()
+                && !matches!(
+                    type_tree.get(&r.reference_type_id),
+                    Some(NodeClass::ReferenceType)
+                )
+            {
+                results.push(Some(BrowseResult {
+                    status_code: StatusCode::BadReferenceTypeIdInvalid,
+                    continuation_point: ByteString::null(),
+                    references: None,
+                }));
+            } else {
+                results.push(None);
+                nodes.push(BrowseNode::new(r, max_references_per_node, idx));
+            }
+        }
+    }
     let node_manager_count = node_managers.len();
 
     for (node_manager_index, node_manager) in node_managers.iter().enumerate() {

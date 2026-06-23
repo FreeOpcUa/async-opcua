@@ -17,6 +17,9 @@ import {
   TimestampsToReturn,
   ClientSubscription,
   ClientMonitoredItem,
+  UserTokenType,
+  DataType,
+  makeBrowsePath,
 } from "node-opcua";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -80,11 +83,13 @@ function newClient(opts = {}) {
   });
 }
 
-async function withSession(label, opts, fn) {
+async function withSession(label, opts, fn, userIdentity) {
   const client = newClient(opts);
   try {
     await client.connect(endpoint);
-    const session = await client.createSession();
+    const session = userIdentity
+      ? await client.createSession(userIdentity)
+      : await client.createSession();
     try {
       await fn(session);
     } finally {
@@ -102,6 +107,11 @@ async function withSession(label, opts, fn) {
     return false;
   }
 }
+
+const SECURED = {
+  securityMode: MessageSecurityMode.SignAndEncrypt,
+  securityPolicy: SecurityPolicy.Basic256Sha256,
+};
 
 async function testDiscovery() {
   console.log("\n[discovery] GetEndpoints");
@@ -225,12 +235,84 @@ async function testSecuredSession() {
   if (!ok) check("Secured read is Good", false, "session not established");
 }
 
+async function testSecurityPolicyMatrix() {
+  console.log("\n[security matrix] connect + read across policies");
+  const policies = [
+    ["Basic256Sha256 / Sign", MessageSecurityMode.Sign, SecurityPolicy.Basic256Sha256],
+    ["Basic256Sha256 / SignAndEncrypt", MessageSecurityMode.SignAndEncrypt, SecurityPolicy.Basic256Sha256],
+    ["Aes128Sha256RsaOaep / SignAndEncrypt", MessageSecurityMode.SignAndEncrypt, SecurityPolicy.Aes128_Sha256_RsaOaep],
+    ["Aes256Sha256RsaPss / SignAndEncrypt", MessageSecurityMode.SignAndEncrypt, SecurityPolicy.Aes256_Sha256_RsaPss],
+  ];
+  for (const [label, securityMode, securityPolicy] of policies) {
+    let read = false;
+    await withSession(label, { securityMode, securityPolicy }, async (session) => {
+      const dv = await session.read({ nodeId: CURRENT_TIME, attributeId: AttributeIds.Value });
+      read = dv.statusCode.isGood();
+    });
+    check(`${label}: connect + read`, read);
+  }
+}
+
+async function testWriteAndTranslate() {
+  console.log("\n[Basic256Sha256 / SignAndEncrypt] write / read-back + TranslateBrowsePath");
+  await withSession("Write", SECURED, async (session) => {
+    const nsArray = await session.readNamespaceArray();
+    const nsIdx = nsArray.indexOf(DEMO_NS);
+
+    // Write a value to a writable demo variable and read it back.
+    if (nsIdx > 0) {
+      const nodeId = `ns=${nsIdx};s=Int32`;
+      const target = 1234567;
+      const status = await session.write({
+        nodeId,
+        attributeId: AttributeIds.Value,
+        value: { value: { dataType: DataType.Int32, value: target } },
+      });
+      check("Write to writable Int32 is Good", status.isGood(), status.toString());
+      const dv = await session.read({ nodeId, attributeId: AttributeIds.Value });
+      check("Read-back returns the written value", dv.value && dv.value.value === target, `got ${dv.value && dv.value.value}`);
+    }
+
+    // TranslateBrowsePathsToNodeIds: Server -> ServerStatus -> CurrentTime resolves to i=2258.
+    const browsePath = makeBrowsePath(
+      "RootFolder",
+      "/Objects/Server.ServerStatus.CurrentTime",
+    );
+    const res = await session.translateBrowsePath(browsePath);
+    check("TranslateBrowsePath is Good", res.statusCode.isGood(), res.statusCode.toString());
+    const target = res.targets && res.targets[0] && res.targets[0].targetId;
+    check(
+      "TranslateBrowsePath resolves CurrentTime (i=2258)",
+      target && target.toString() === "ns=0;i=2258",
+      `got ${target && target.toString()}`,
+    );
+  });
+}
+
+async function testUsernamePassword() {
+  console.log("\n[Basic256Sha256 / SignAndEncrypt] username/password identity token");
+  const ok = await withSession(
+    "UserName",
+    SECURED,
+    async (session) => {
+      check("Username/password session established", true);
+      const dv = await session.read({ nodeId: CURRENT_TIME, attributeId: AttributeIds.Value });
+      check("Authenticated read is Good", dv.statusCode.isGood(), dv.statusCode.toString());
+    },
+    { type: UserTokenType.UserName, userName: "sample1", password: "sample1_password" },
+  );
+  if (!ok) check("Authenticated read is Good", false, "session not established");
+}
+
 async function main() {
   console.log(`async-opcua interop smoke test against ${endpoint}`);
   await setupClientCertificate();
   await testDiscovery();
   await testUnsecuredServices();
   await testSecuredSession();
+  await testSecurityPolicyMatrix();
+  await testWriteAndTranslate();
+  await testUsernamePassword();
   console.log(
     `\n${failures === 0 ? "\x1b[32mPASS\x1b[0m" : "\x1b[31mFAIL\x1b[0m"}: ${checks - failures}/${checks} checks passed`,
   );

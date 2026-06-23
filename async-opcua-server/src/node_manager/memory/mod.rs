@@ -654,6 +654,11 @@ impl<TImpl: InMemoryNodeManagerImpl> InMemoryNodeManager<TImpl> {
                 method.set_status(StatusCode::BadTooManyArguments);
                 continue;
             }
+            // Part 4 §5.11.2: fewer supplied arguments than the method declares is Bad_ArgumentsMissing.
+            if arguments.len() > method.arguments().len() {
+                method.set_status(StatusCode::BadArgumentsMissing);
+                continue;
+            }
 
             valid.push(method);
         }

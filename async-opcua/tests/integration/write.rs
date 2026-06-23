@@ -538,6 +538,45 @@ async fn write_invalid() {
 }
 
 #[tokio::test]
+async fn write_wrong_scalar_type_is_rejected() {
+    // Part 4 §5.10.4: writing a value whose data type is neither the node's data type nor a
+    // subtype of it must return Bad_TypeMismatch. Previously a mismatched scalar was silently
+    // accepted (only arrays were checked). Found by the node-opcua interop harness.
+    let (tester, nm, session) = setup().await;
+
+    let id = nm.inner().next_node_id();
+    nm.inner().add_node(
+        nm.address_space(),
+        tester.handle.type_tree(),
+        VariableBuilder::new(&id, "TypedInt32", "TypedInt32")
+            .data_type(DataTypeId::Int32)
+            .value(0i32)
+            .access_level(AccessLevel::CURRENT_READ | AccessLevel::CURRENT_WRITE)
+            .user_access_level(AccessLevel::CURRENT_READ | AccessLevel::CURRENT_WRITE)
+            .build()
+            .into(),
+        &ObjectId::ObjectsFolder.into(),
+        &ReferenceTypeId::Organizes.into(),
+        Some(&VariableTypeId::BaseDataVariableType.into()),
+        Vec::new(),
+    );
+
+    // A String written to an Int32 node is a type mismatch...
+    let r = session
+        .write(&[write_value(AttributeId::Value, "not-an-int", &id)])
+        .await
+        .unwrap();
+    assert_eq!(r[0], StatusCode::BadTypeMismatch);
+
+    // ...while a correctly-typed Int32 write succeeds.
+    let r = session
+        .write(&[write_value(AttributeId::Value, 42i32, &id)])
+        .await
+        .unwrap();
+    assert_eq!(r[0], StatusCode::Good);
+}
+
+#[tokio::test]
 async fn write_limits() {
     let (tester, _nm, session) = setup().await;
 

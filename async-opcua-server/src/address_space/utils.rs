@@ -176,7 +176,9 @@ fn validate_value_data_type_to_write(
                         Err(StatusCode::BadTypeMismatch)
                     }
                 }
-                _ => Ok(()),
+                // Part 4 §5.10.4: a scalar value whose data type is neither the node's
+                // data type nor a subtype of it is a type mismatch.
+                _ => Err(StatusCode::BadTypeMismatch),
             }
         } else {
             Ok(())

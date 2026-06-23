@@ -96,6 +96,7 @@ where
                     .map(|v| v.get_value(attribute_id, &NumericRange::None, &[]))
                     .collect()
             }
+            NumericRange::Invalid(_) => return Variant::Empty,
             NumericRange::MultipleRanges(r) => {
                 let mut values = Vec::new();
                 for range in r {
@@ -119,6 +120,7 @@ where
                                     .map(|v| v.get_value(attribute_id, &NumericRange::None, &[])),
                             )
                         }
+                        NumericRange::Invalid(_) => return Variant::Empty,
                         _ => return Variant::Empty,
                     }
                 }

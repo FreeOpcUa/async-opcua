@@ -397,7 +397,7 @@ impl Subscription {
         match (self.state, tick_reason) {
             (SubscriptionState::Creating, _) => HandledState::Create3,
             (SubscriptionState::Normal, TickReason::ReceivePublishRequest)
-                if self.publishing_enabled || !self.publishing_enabled && !p.more_notifications =>
+                if !self.publishing_enabled || self.publishing_enabled && !p.more_notifications =>
             {
                 HandledState::Normal4
             }
@@ -1013,8 +1013,8 @@ mod tests {
     };
 
     use super::{
-        reclaim_data_change_notification_vecs, DataChangeNotificationVecPool, Subscription,
-        TickReason,
+        reclaim_data_change_notification_vecs, DataChangeNotificationVecPool, HandledState,
+        Subscription, SubscriptionStateParams, TickReason, UpdateStateAction,
     };
 
     #[global_allocator]
@@ -1655,6 +1655,54 @@ mod tests {
             .inner_as::<StatusChangeNotification>()
             .unwrap();
         assert_eq!(status_change.status, StatusCode::BadTimeout);
+    }
+
+    // Part 4 1.05.07 §5.14.1.2 Table 79, NORMAL + "Receive Publish Request":
+    //   row 4 (stay NORMAL, enqueue only — no lifetime reset, no notifications):
+    //          PublishingEnabled == FALSE || (PublishingEnabled == TRUE && MoreNotifications == FALSE)
+    //   row 5 (ResetLifetimeCounter() + ReturnNotifications()):
+    //          PublishingEnabled == TRUE && MoreNotifications == TRUE
+    // The two rows partition exactly on (PublishingEnabled && MoreNotifications). Anchored to the
+    // spec table, not the code: row 5 must be reachable for the enabled+more case.
+    #[test]
+    fn part4_table79_normal_publish_rows_4_5() {
+        let mut sub = Subscription::new(1, true, Duration::from_millis(100), 100, 20, 1, 100, 1000);
+        sub.state = SubscriptionState::Normal;
+
+        // notifications_available is irrelevant to rows 4/5; publishing_req_queued likewise. Vary only
+        // the two parameters the spec rows test.
+        let transition = |sub: &Subscription, more_notifications: bool| {
+            sub.get_state_transition(
+                TickReason::ReceivePublishRequest,
+                SubscriptionStateParams {
+                    notifications_available: false,
+                    more_notifications,
+                    publishing_req_queued: true,
+                },
+            )
+        };
+
+        // Row 5: enabled && more.
+        sub.publishing_enabled = true;
+        assert_eq!(transition(&sub, true), HandledState::Normal5);
+        // Row 4: the three remaining combinations.
+        assert_eq!(transition(&sub, false), HandledState::Normal4);
+        sub.publishing_enabled = false;
+        assert_eq!(transition(&sub, true), HandledState::Normal4);
+        assert_eq!(transition(&sub, false), HandledState::Normal4);
+
+        // Row 5's action: ResetLifetimeCounter() (back to max) + ReturnNotifications.
+        sub.publishing_enabled = true;
+        sub.lifetime_counter = 1; // starved
+        let action = sub.handle_state_transition(transition(&sub, true));
+        assert!(matches!(action, UpdateStateAction::ReturnNotifications));
+        assert_eq!(sub.lifetime_counter, sub.max_lifetime_counter);
+
+        // Row 4's action: stay put, no lifetime reset, no notifications returned.
+        sub.lifetime_counter = 1;
+        let action = sub.handle_state_transition(transition(&sub, false));
+        assert!(matches!(action, UpdateStateAction::None));
+        assert_eq!(sub.lifetime_counter, 1);
     }
 
     #[test]

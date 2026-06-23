@@ -345,11 +345,13 @@ async fn browse_release_continuation_point() {
         .browse_next(true, std::slice::from_ref(&cp))
         .await
         .unwrap();
-    assert_eq!(1, r.len());
-    let it = &r[0];
-    assert_eq!(StatusCode::Good, it.status_code);
-    let refs = it.references.clone().unwrap_or_default();
-    assert!(refs.is_empty());
+    // P4-VIEW-03 — Part 4 §5.9.3.2 Table 37: with releaseContinuationPoints == TRUE the points are
+    // released and the results (and diagnosticInfos) arrays are empty.
+    assert!(
+        r.is_empty(),
+        "BrowseNext release must return an empty results array, got {}",
+        r.len()
+    );
 }
 
 #[tokio::test]
@@ -664,4 +666,49 @@ async fn test_recursive_browser_multi_hit() {
 
     // Note: This value is expected to change with new versions of the standard.
     assert_eq!(rs.len(), 2247);
+}
+
+#[tokio::test]
+async fn register_nodes_echoes_every_input_node() {
+    // P4-VIEW-04 — OPC UA Part 4 §5.9.5: RegisterNodes does not validate NodeIds; the response
+    // size/order matches nodesToRegister, and a node no manager optimizes is echoed as its input
+    // NodeId (it must NOT be dropped). Anchored to the spec.
+    let (_tester, _nm, session) = setup().await;
+
+    // A node in a namespace no node manager owns -> never marked "registered" by a manager.
+    let unowned = NodeId::new(100, "no-manager-owns-this");
+    let res = session
+        .register_nodes(std::slice::from_ref(&unowned))
+        .await
+        .unwrap();
+    assert_eq!(
+        res.len(),
+        1,
+        "RegisterNodes response size must match the request"
+    );
+    assert_eq!(res[0], unowned);
+}
+
+#[tokio::test]
+async fn translate_browse_path_null_target_name_is_bad_browse_name_invalid() {
+    // P4-VIEW-02 — OPC UA Part 4 §5.9.4.2: the last RelativePath element shall have a targetName;
+    // a missing targetName is Bad_BrowseNameInvalid (not a wildcard match). Anchored to the spec.
+    let (_tester, _nm, session) = setup().await;
+
+    let r = session
+        .translate_browse_paths_to_node_ids(&[BrowsePath {
+            starting_node: ObjectId::ObjectsFolder.into(),
+            relative_path: RelativePath {
+                elements: Some(vec![RelativePathElement {
+                    reference_type_id: ReferenceTypeId::HierarchicalReferences.into(),
+                    is_inverse: false,
+                    include_subtypes: true,
+                    target_name: opcua::types::QualifiedName::null(),
+                }]),
+            },
+        }])
+        .await
+        .unwrap();
+    assert_eq!(1, r.len());
+    assert_eq!(r[0].status_code, StatusCode::BadBrowseNameInvalid);
 }

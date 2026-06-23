@@ -197,16 +197,11 @@ pub(crate) async fn browse_next(
     };
 
     let results = if request.request.release_continuation_points {
-        results
-            .into_iter()
-            .map(|r| {
-                r.unwrap_or_else(|| BrowseResult {
-                    status_code: StatusCode::Good,
-                    continuation_point: ByteString::null(),
-                    references: None,
-                })
-            })
-            .collect()
+        // Part 4 §5.9.3.2 Table 37: when releaseContinuationPoints == TRUE the continuation points
+        // are released (done above via remove_browse_continuation_point) and the results and
+        // diagnosticInfos arrays are empty.
+        drop(results);
+        Vec::new()
     } else {
         let node_manager_count = node_managers.len();
 
@@ -518,7 +513,7 @@ pub(crate) async fn register_nodes(
         }
     }
 
-    let registered_node_ids: Vec<_> = items.into_iter().filter_map(|n| n.into_result()).collect();
+    let registered_node_ids: Vec<_> = items.into_iter().map(|n| n.into_result()).collect();
 
     Response {
         message: RegisterNodesResponse {

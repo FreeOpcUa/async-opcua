@@ -462,3 +462,35 @@ async fn call_typed_method_with_context() {
         "context session id should be threaded through, got {v}"
     );
 }
+
+#[tokio::test]
+async fn call_non_executable_method_is_bad_not_executable() {
+    // P4-METHOD-01 — OPC UA Part 4 §5.12 Table 61: when the Executable attribute does not allow
+    // execution, Call returns Bad_NotExecutable. This is distinct from Bad_UserAccessDenied (the
+    // UserExecutable / permission case). Anchored to the spec.
+    let (_tester, nm, session) = setup().await;
+
+    let id = nm.inner().next_node_id();
+    let input_id = nm.inner().next_node_id();
+    let output_id = nm.inner().next_node_id();
+    {
+        let mut sp = nm.address_space().write();
+        MethodBuilder::new(&id, "NonExec", "NonExec")
+            .executable(false)
+            .component_of(ObjectId::ObjectsFolder)
+            .input_args(&mut *sp, &input_id, &[])
+            .output_args(&mut *sp, &output_id, &[])
+            .insert(&mut *sp);
+    }
+    nm.inner().add_method_cb(id.clone(), move |_| Ok(vec![]));
+
+    let r = session
+        .call_one(CallMethodRequest {
+            object_id: ObjectId::ObjectsFolder.into(),
+            method_id: id.clone(),
+            input_arguments: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(r.status_code, StatusCode::BadNotExecutable);
+}

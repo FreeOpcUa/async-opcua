@@ -151,6 +151,10 @@ pub(crate) async fn create_monitored_items(
     request: Request<CreateMonitoredItemsRequest>,
 ) -> Response {
     let context = request.context();
+    if request.request.timestamps_to_return == TimestampsToReturn::Invalid {
+        return service_fault!(request, StatusCode::BadTimestampsToReturnInvalid);
+    }
+
     let items_to_create = take_service_items!(
         request,
         request.request.items_to_create,
@@ -307,6 +311,10 @@ pub(crate) async fn modify_monitored_items(
     request: Request<ModifyMonitoredItemsRequest>,
 ) -> Response {
     let context = request.context();
+    if request.request.timestamps_to_return == TimestampsToReturn::Invalid {
+        return service_fault!(request, StatusCode::BadTimestampsToReturnInvalid);
+    }
+
     let items_to_modify = take_service_items!(
         request,
         request.request.items_to_modify,

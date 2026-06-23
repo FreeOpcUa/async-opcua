@@ -1111,3 +1111,58 @@ async fn test_event_subscriptions() {
 }
 
 // TODO: Add more detailed high level tests on subscriptions.
+
+#[tokio::test]
+async fn monitored_items_reject_invalid_timestamps_to_return() {
+    // P4-MONITEM-01/02 — OPC UA Part 4 §5.13.2.3 Table 64 / §5.13.3.3 Table 67:
+    // Create/ModifyMonitoredItems with an invalid TimestampsToReturn must return
+    // Bad_TimestampsToReturnInvalid (the same rule the Read service enforces). Spec-anchored.
+    let (_tester, _nm, session) = setup().await;
+
+    let (notifs, _data, _) = ChannelNotifications::new();
+    let sub_id = session
+        .create_subscription(Duration::from_millis(100), 100, 20, 1000, 0, true, notifs)
+        .await
+        .unwrap();
+
+    let e = session
+        .create_monitored_items(
+            sub_id,
+            TimestampsToReturn::Invalid,
+            vec![MonitoredItemCreateRequest {
+                item_to_monitor: ReadValueId {
+                    node_id: opcua::types::VariableId::Server_ServerStatus_CurrentTime.into(),
+                    attribute_id: AttributeId::Value as u32,
+                    ..Default::default()
+                },
+                monitoring_mode: MonitoringMode::Reporting,
+                requested_parameters: MonitoringParameters {
+                    sampling_interval: 0.0,
+                    queue_size: 10,
+                    discard_oldest: true,
+                    ..Default::default()
+                },
+            }],
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(e.status(), StatusCode::BadTimestampsToReturnInvalid);
+
+    let e = session
+        .modify_monitored_items(
+            sub_id,
+            TimestampsToReturn::Invalid,
+            &[MonitoredItemModifyRequest {
+                monitored_item_id: 1,
+                requested_parameters: MonitoringParameters {
+                    sampling_interval: 100.0,
+                    queue_size: 5,
+                    discard_oldest: false,
+                    ..Default::default()
+                },
+            }],
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(e.status(), StatusCode::BadTimestampsToReturnInvalid);
+}

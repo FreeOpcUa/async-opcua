@@ -43,7 +43,8 @@ impl SimpleBinaryDecodable for bool {
         stream: &mut S,
         _decoding_options: &DecodingOptions,
     ) -> EncodingResult<Self> {
-        Ok(read_u8(stream)? == 1)
+        // Part 6 §5.2.2.1: decoders shall treat any non-zero value as true.
+        Ok(read_u8(stream)? != 0)
     }
 }
 

@@ -886,3 +886,18 @@ fn test_xml_in_binary() {
     let decoded = ExtensionObject::decode(&mut stream, &ctx).unwrap();
     assert_eq!(decoded.inner_as::<EUInformation>().unwrap(), &rf);
 }
+
+#[test]
+fn decode_bool_any_nonzero_is_true() {
+    // P6-BIN-01 — OPC UA Part 6 §5.2.2.1 (line 1543): "Encoders shall use the value of 1
+    // to indicate a true value; however, decoders shall treat any non-zero value as true."
+    let opts = DecodingOptions::default();
+    for byte in [0x01u8, 0x02, 0x7f, 0xff] {
+        let mut stream = Cursor::new(vec![byte]);
+        let v = <bool as crate::SimpleBinaryDecodable>::decode(&mut stream, &opts).unwrap();
+        assert!(v, "byte 0x{byte:02x} must decode as true (any non-zero is true)");
+    }
+    let mut stream = Cursor::new(vec![0x00u8]);
+    let v = <bool as crate::SimpleBinaryDecodable>::decode(&mut stream, &opts).unwrap();
+    assert!(!v, "byte 0x00 must decode as false");
+}

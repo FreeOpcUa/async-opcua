@@ -24,37 +24,43 @@ cd "$here/.."
 conf="interop/interop.server.conf"
 pki="interop/pki-interop"
 cert="$pki/own/cert.der"
+# A companion server that does NOT auto-trust client certs, for the discarded-certificate test.
+nt_conf="interop/interop.server.notrust.conf"
+nt_pki="interop/pki-notrust"
+nt_cert="$nt_pki/own/cert.der"
+nt_endpoint="opc.tcp://${host}:4856/"
 
 echo "==> cleaning PKI directories"
-rm -rf "$pki" "$here/client-pki"
+rm -rf "$pki" "$nt_pki" "$here/client-pki"
 
 echo "==> building demo server"
 cargo build -q -p async-opcua-demo-server
-echo "==> starting demo server (config: $conf)"
+echo "==> starting demo servers (trust-all :4855, no-trust :4856)"
 cargo run -q -p async-opcua-demo-server -- --config "$conf" &
 srv_pid=$!
+cargo run -q -p async-opcua-demo-server -- --config "$nt_conf" &
+srv_pid2=$!
 # shellcheck disable=SC2064
-trap "kill ${srv_pid} 2>/dev/null || true" INT TERM EXIT
+trap "kill ${srv_pid} ${srv_pid2} 2>/dev/null || true" INT TERM EXIT
 
-# Wait for the server to generate its certificate (up to ~60s).
+# Wait for both servers to generate their certificates (up to ~60s).
 for _ in $(seq 1 120); do
-  [ -f "$cert" ] && break
-  if ! kill -0 "$srv_pid" 2>/dev/null; then
-    echo "server exited before writing $cert" >&2
-    wait "$srv_pid" || true
+  [ -f "$cert" ] && [ -f "$nt_cert" ] && break
+  if ! kill -0 "$srv_pid" 2>/dev/null || ! kill -0 "$srv_pid2" 2>/dev/null; then
+    echo "a server exited before writing its certificate" >&2
     exit 1
   fi
   sleep 0.5
 done
-# Give the listener a moment after the cert appears.
+# Give the listeners a moment after the certs appear.
 sleep 2
 
 echo "==> running interop smoke test against ${endpoint}"
 set +e
-node "$here/interop-test.mjs" "$endpoint"
+NOTRUST_ENDPOINT="$nt_endpoint" node "$here/interop-test.mjs" "$endpoint"
 rc=$?
 set -e
 
-echo "==> stopping demo server"
-kill "$srv_pid" 2>/dev/null || true
+echo "==> stopping demo servers"
+kill "$srv_pid" "$srv_pid2" 2>/dev/null || true
 exit "$rc"

@@ -15,6 +15,7 @@ import {
   SecurityPolicy,
   AttributeIds,
   TimestampsToReturn,
+  MonitoringMode,
   ClientSubscription,
   ClientMonitoredItem,
   UserTokenType,
@@ -669,6 +670,69 @@ async function testFailureModes() {
         bnsc.equals(StatusCodes.BadContinuationPointInvalid),
         bnsc.toString(),
       );
+
+      // --- Independent confirmation of this session's server-side fixes (#82/#83/#84). ---
+
+      // Calling a method with fewer arguments than it declares returns Bad_ArgumentsMissing.
+      // Add declares two Int64 inputs; we supply one.
+      const am = await session.call({
+        objectId: `ns=${ns};s=Functions`,
+        methodId: `ns=${ns};s=Add`,
+        inputArguments: [{ dataType: DataType.Int64, value: 1 }],
+      });
+      check(
+        "Method call with missing arguments -> BadArgumentsMissing",
+        am.statusCode.equals(StatusCodes.BadArgumentsMissing),
+        am.statusCode.toString(),
+      );
+
+      // Writing a scalar to an array node (ValueRank mismatch) returns Bad_TypeMismatch.
+      const vr = await session.write({
+        nodeId: `ns=${ns};s=Int32Array`,
+        attributeId: AttributeIds.Value,
+        value: {
+          value: { dataType: DataType.Int32, arrayType: VariantArrayType.Scalar, value: 5 },
+        },
+      });
+      check(
+        "Scalar written to an array node -> BadTypeMismatch",
+        vr.equals(StatusCodes.BadTypeMismatch),
+        vr.toString(),
+      );
+
+      // Creating a monitored item on a non-existent node returns Bad_NodeIdUnknown.
+      const sub = ClientSubscription.create(session, {
+        requestedPublishingInterval: 200,
+        requestedLifetimeCount: 100,
+        requestedMaxKeepAliveCount: 10,
+        maxNotificationsPerPublish: 100,
+        publishingEnabled: true,
+        priority: 1,
+      });
+      await new Promise((res) => sub.on("started", res));
+      const mi = await session.createMonitoredItems({
+        subscriptionId: sub.subscriptionId,
+        timestampsToReturn: TimestampsToReturn.Both,
+        itemsToCreate: [
+          {
+            itemToMonitor: { nodeId: `ns=${ns};s=NoSuchNodeXYZ`, attributeId: AttributeIds.Value },
+            monitoringMode: MonitoringMode.Reporting,
+            requestedParameters: {
+              clientHandle: 1,
+              samplingInterval: 200,
+              queueSize: 10,
+              discardOldest: true,
+            },
+          },
+        ],
+      });
+      const misc = mi.results[0].statusCode;
+      check(
+        "Monitored item on unknown node -> BadNodeIdUnknown",
+        misc.equals(StatusCodes.BadNodeIdUnknown),
+        misc.toString(),
+      );
+      await sub.terminate();
     },
   );
 }

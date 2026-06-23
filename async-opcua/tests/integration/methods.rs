@@ -563,7 +563,8 @@ async fn call_with_missing_arguments() {
             )
             .insert(&mut *sp);
     }
-    nm.inner().add_method_cb(id.clone(), |_args| Ok(vec![Variant::Int64(0)]));
+    nm.inner()
+        .add_method_cb(id.clone(), |_args| Ok(vec![Variant::Int64(0)]));
 
     let r = session
         .call_one(CallMethodRequest {

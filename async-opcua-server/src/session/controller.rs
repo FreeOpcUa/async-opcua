@@ -527,7 +527,10 @@ impl<T: ConnectionTransport> SessionController<T> {
             }
             RequestMessage::RegisterServer(request) => {
                 let _h = span.enter();
-                let status = self.info.apply_register_server(request.server.clone());
+                let status = match self.register_server_caller_status(&request.server.server_uri) {
+                    StatusCode::Good => self.info.apply_register_server(request.server.clone()),
+                    e => e,
+                };
                 if let Err(e) = self.transport.enqueue_message_for_send(
                     &mut self.channel,
                     RegisterServerResponse {
@@ -547,7 +550,10 @@ impl<T: ConnectionTransport> SessionController<T> {
             }
             RequestMessage::RegisterServer2(request) => {
                 let _h = span.enter();
-                let status = self.info.apply_register_server(request.server.clone());
+                let status = match self.register_server_caller_status(&request.server.server_uri) {
+                    StatusCode::Good => self.info.apply_register_server(request.server.clone()),
+                    e => e,
+                };
                 let configuration_results =
                     request
                         .discovery_configuration
@@ -726,6 +732,25 @@ impl<T: ConnectionTransport> SessionController<T> {
                 }
             }
         }
+    }
+
+    /// OPC UA Part 12 §7.5 / Part 4 §5.4.5: a RegisterServer(2) call must be authenticated.
+    /// The SecureChannel must be secured and its client ApplicationInstanceCertificate must
+    /// belong to the server being registered (its applicationUri must match the serverUri),
+    /// otherwise any client could register or unregister arbitrary servers (spoofing or a
+    /// discovery denial-of-service by unregistering a victim). Returns `Good` when the caller
+    /// is allowed to (un)register `server_uri`.
+    fn register_server_caller_status(&self, server_uri: &UAString) -> StatusCode {
+        if self.channel.security_policy() == SecurityPolicy::None {
+            return StatusCode::BadSecurityChecksFailed;
+        }
+        let Some(cert) = self.channel.remote_cert() else {
+            return StatusCode::BadSecurityChecksFailed;
+        };
+        if cert.is_application_uri_valid(server_uri.as_ref()).is_err() {
+            return StatusCode::BadServerUriInvalid;
+        }
+        StatusCode::Good
     }
 
     fn process_service_result(

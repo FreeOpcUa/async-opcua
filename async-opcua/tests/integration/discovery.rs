@@ -1,18 +1,23 @@
 //! Feature 024 — RegisterServer (LDS registration) end-to-end via the existing client
-//! register_server() / find_servers(). Anchored to OPC UA Part 4 §5.4.5.
+//! register_server() / find_servers(). Anchored to OPC UA Part 4 §5.4.5 / Part 12 §7.5.
 
 use super::utils::Tester;
 use opcua::types::{
-    ApplicationType, ExtensionObject, LocalizedText, MdnsDiscoveryConfiguration, RegisteredServer,
-    StatusCode, UAString,
+    ApplicationType, EndpointDescription, ExtensionObject, LocalizedText,
+    MdnsDiscoveryConfiguration, MessageSecurityMode, RegisteredServer, StatusCode, UAString,
 };
 
-const REG_URI: &str = "urn:registered-test-server";
+// Part 12 §7.5: a server may only register itself — the registration's serverUri must match the
+// applicationUri in the SecureChannel client certificate. The integration client's certificate
+// uses "urn:integration_server", so that is the URI a registration is allowed to use. The
+// registered entry is told apart from the server's own FindServers description by its productUri.
+const REGISTERING_URI: &str = "urn:integration_server";
+const REG_PRODUCT: &str = "urn:registered-test-product";
 
 fn registered_server(is_online: bool) -> RegisteredServer {
     RegisteredServer {
-        server_uri: REG_URI.into(),
-        product_uri: "urn:registered-test-product".into(),
+        server_uri: REGISTERING_URI.into(),
+        product_uri: REG_PRODUCT.into(),
         server_names: Some(vec![LocalizedText::new("en", "Registered Test Server")]),
         server_type: ApplicationType::Server,
         gateway_server_uri: UAString::null(),
@@ -22,12 +27,26 @@ fn registered_server(is_online: bool) -> RegisteredServer {
     }
 }
 
+/// RegisterServer must run over a secured channel (Part 12 §7.5), so pick a SignAndEncrypt
+/// endpoint to register over.
+async fn secured_endpoint(tester: &Tester) -> EndpointDescription {
+    tester
+        .client
+        .get_endpoints(tester.endpoint(), &[], &[])
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|e| e.security_mode == MessageSecurityMode::SignAndEncrypt)
+        .expect("the test server should offer a SignAndEncrypt endpoint")
+}
+
 #[tokio::test]
 async fn register_server_appears_in_find_servers() {
     let tester = Tester::new_default_server(true).await;
     let url = tester.endpoint();
+    let endpoint = secured_endpoint(&tester).await;
 
-    // Baseline: only the server's own description.
+    // Baseline: the registered entry (identified by its productUri) is not present yet.
     let before = tester
         .client
         .find_servers(url.clone(), None, None)
@@ -35,26 +54,19 @@ async fn register_server_appears_in_find_servers() {
         .unwrap();
     let baseline = before.len();
     assert!(
-        !before.iter().any(|s| s.application_uri.as_ref() == REG_URI),
+        !before.iter().any(|s| s.product_uri.as_ref() == REG_PRODUCT),
         "registered server must not be present before registration"
     );
 
-    // An endpoint to register over.
-    let endpoints = tester
-        .client
-        .get_endpoints(url.clone(), &[], &[])
-        .await
-        .unwrap();
-    let endpoint = endpoints.first().expect("at least one endpoint").clone();
-
-    // Register (online).
+    // Register (online) over the secured channel.
     tester
         .client
         .register_server(url.clone(), &endpoint, registered_server(true))
         .await
         .unwrap();
 
-    // FindServers now includes it, with the mapped ApplicationDescription fields.
+    // FindServers now includes it (it shares the applicationUri with the server's own
+    // description, so it is identified by its productUri / name).
     let after = tester
         .client
         .find_servers(url.clone(), None, None)
@@ -63,11 +75,11 @@ async fn register_server_appears_in_find_servers() {
     assert_eq!(after.len(), baseline + 1);
     let reg = after
         .iter()
-        .find(|s| s.application_uri.as_ref() == REG_URI)
+        .find(|s| s.product_uri.as_ref() == REG_PRODUCT)
         .expect("registered server must appear in FindServers");
+    assert_eq!(reg.application_uri.as_ref(), REGISTERING_URI);
     assert_eq!(reg.application_type, ApplicationType::Server);
     assert_eq!(reg.application_name.text.as_ref(), "Registered Test Server");
-    assert_eq!(reg.product_uri.as_ref(), "urn:registered-test-product");
     assert!(reg
         .discovery_urls
         .as_ref()
@@ -90,21 +102,14 @@ async fn register_server_appears_in_find_servers() {
     assert_eq!(after_unreg.len(), baseline);
     assert!(!after_unreg
         .iter()
-        .any(|s| s.application_uri.as_ref() == REG_URI));
+        .any(|s| s.product_uri.as_ref() == REG_PRODUCT));
 }
 
 #[tokio::test]
 async fn register_server_update_is_idempotent() {
     let tester = Tester::new_default_server(true).await;
     let url = tester.endpoint();
-    let endpoint = tester
-        .client
-        .get_endpoints(url.clone(), &[], &[])
-        .await
-        .unwrap()
-        .first()
-        .expect("endpoint")
-        .clone();
+    let endpoint = secured_endpoint(&tester).await;
 
     // Register twice with the same server_uri → single entry, updated (no duplicate).
     tester
@@ -127,7 +132,7 @@ async fn register_server_update_is_idempotent() {
         .unwrap();
     let matches: Vec<_> = servers
         .iter()
-        .filter(|s| s.application_uri.as_ref() == REG_URI)
+        .filter(|s| s.product_uri.as_ref() == REG_PRODUCT)
         .collect();
     assert_eq!(
         matches.len(),
@@ -141,14 +146,7 @@ async fn register_server_update_is_idempotent() {
 async fn register_server2_mdns_config_unsupported_but_registers() {
     let tester = Tester::new_default_server(true).await;
     let url = tester.endpoint();
-    let endpoint = tester
-        .client
-        .get_endpoints(url.clone(), &[], &[])
-        .await
-        .unwrap()
-        .first()
-        .expect("endpoint")
-        .clone();
+    let endpoint = secured_endpoint(&tester).await;
 
     // RegisterServer2 with an mDNS discovery configuration: the per-config result is "not supported",
     // but the server is still registered (Part 4 §5.4.6).
@@ -177,7 +175,7 @@ async fn register_server2_mdns_config_unsupported_but_registers() {
     assert!(
         servers
             .iter()
-            .any(|s| s.application_uri.as_ref() == REG_URI),
+            .any(|s| s.product_uri.as_ref() == REG_PRODUCT),
         "RegisterServer2 must still register the server despite the unsupported mdns config"
     );
 
@@ -194,7 +192,7 @@ async fn register_server2_mdns_config_unsupported_but_registers() {
         .unwrap();
     assert!(!servers
         .iter()
-        .any(|s| s.application_uri.as_ref() == REG_URI));
+        .any(|s| s.product_uri.as_ref() == REG_PRODUCT));
 }
 
 #[tokio::test]
@@ -212,15 +210,11 @@ async fn find_servers_on_network_is_unsupported() {
 #[tokio::test]
 async fn register_server_missing_name_or_url_is_rejected() {
     // P4-DISC-01 — OPC UA Part 4 §5.4.5: an online RegisterServer with no ServerName must return
-    // Bad_ServerNameMissing, and with no discoveryUrl, Bad_DiscoveryUrlMissing. Anchored to the spec.
+    // Bad_ServerNameMissing, and with no discoveryUrl, Bad_DiscoveryUrlMissing. Registered over a
+    // secured channel with a matching URI so it reaches the field validation (Part 12 §7.5).
     let tester = Tester::new_default_server(true).await;
     let url = tester.endpoint();
-    let endpoints = tester
-        .client
-        .get_endpoints(url.clone(), &[], &[])
-        .await
-        .unwrap();
-    let endpoint = endpoints.first().expect("at least one endpoint").clone();
+    let endpoint = secured_endpoint(&tester).await;
 
     let mut no_name = registered_server(true);
     no_name.server_names = None;
@@ -239,4 +233,43 @@ async fn register_server_missing_name_or_url_is_rejected() {
         .await
         .unwrap_err();
     assert_eq!(e.status(), StatusCode::BadDiscoveryUrlMissing);
+}
+
+#[tokio::test]
+async fn register_server_rejects_uri_not_bound_to_caller_certificate() {
+    // P4-DISC-03 — OPC UA Part 12 §7.5: a RegisterServer call must be authenticated. The
+    // registration's serverUri must match the applicationUri in the SecureChannel client
+    // certificate, and the channel must be secured. Otherwise any client could register or
+    // (worse) unregister arbitrary servers.
+    let tester = Tester::new_default_server(true).await;
+    let url = tester.endpoint();
+
+    // A registration whose serverUri does not belong to the caller's certificate is rejected.
+    let secured = secured_endpoint(&tester).await;
+    let mut spoofed = registered_server(true);
+    spoofed.server_uri = "urn:some-other-server".into();
+    let e = tester
+        .client
+        .register_server(url.clone(), &secured, spoofed)
+        .await
+        .unwrap_err();
+    assert_eq!(e.status(), StatusCode::BadServerUriInvalid);
+
+    // A registration over an unsecured (None) channel is rejected, even with a matching URI.
+    let endpoints = tester
+        .client
+        .get_endpoints(url.clone(), &[], &[])
+        .await
+        .unwrap();
+    let none_endpoint = endpoints
+        .iter()
+        .find(|e| e.security_mode == MessageSecurityMode::None)
+        .expect("the test server should offer a None endpoint")
+        .clone();
+    let e = tester
+        .client
+        .register_server(url.clone(), &none_endpoint, registered_server(true))
+        .await
+        .unwrap_err();
+    assert_eq!(e.status(), StatusCode::BadSecurityChecksFailed);
 }

@@ -28,11 +28,12 @@ use opcua_core::sync::{Mutex, RwLock};
 use opcua_types::{
     node_id::{IdentifierRef, NodeIdRef},
     AttributeId, CreateSubscriptionRequest, CreateSubscriptionResponse, DataEncoding, DataValue,
-    DateTimeUtc, MessageSecurityMode, ModifySubscriptionRequest, ModifySubscriptionResponse,
-    MonitoredItemCreateResult, MonitoredItemModifyRequest, MonitoringMode, NodeId,
-    NotificationMessage, NumericRange, PublishRequest, RepublishRequest, ResponseHeader,
-    SetPublishingModeRequest, SetPublishingModeResponse, StatusCode, TimestampsToReturn,
-    TransferResult, TransferSubscriptionsRequest, TransferSubscriptionsResponse,
+    DateTime, DateTimeUtc, MessageSecurityMode, ModifySubscriptionRequest,
+    ModifySubscriptionResponse, MonitoredItemCreateResult, MonitoredItemModifyRequest,
+    MonitoringMode, NodeId, NotificationMessage, NumericRange, PublishRequest, RepublishRequest,
+    ResponseHeader, SetPublishingModeRequest, SetPublishingModeResponse, StatusCode,
+    TimestampsToReturn, TransferResult, TransferSubscriptionsRequest,
+    TransferSubscriptionsResponse,
 };
 
 use crate::node_manager::RequestContextInner;
@@ -814,6 +815,10 @@ impl SubscriptionCache {
                     res.available_sequence_numbers =
                         Some(notifs.iter().map(|n| n.message.sequence_number).collect());
 
+                    // Capture the next sequence number before the subscription moves out, to
+                    // label the final status-change delivered to the old session.
+                    let next_seq = sub.peek_next_sequence_number();
+
                     if let Err((e, sub, notifs)) = session_subs_lck.insert(sub, notifs) {
                         res.status_code = e;
                         let _ = session_lck.insert(sub, notifs);
@@ -825,6 +830,14 @@ impl SubscriptionCache {
                         }
                         lck.subscription_to_session
                             .insert(*sub_id, context.session_id);
+                        // Part 4 §5.14.7.1: the old session shall receive a
+                        // Good_SubscriptionTransferred StatusChangeNotification.
+                        session_lck.queue_status_change(
+                            *sub_id,
+                            next_seq,
+                            DateTime::now(),
+                            StatusCode::GoodSubscriptionTransferred,
+                        );
                     }
                 }
             }

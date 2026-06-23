@@ -607,6 +607,82 @@ async fn transfer_subscriptions() {
     assert_eq!(-1, val);
 }
 
+// Part 4 §5.14.7.1: when a Subscription is transferred to a new Session, the Server
+// shall issue a StatusChangeNotification with Good_SubscriptionTransferred to the OLD
+// Session. Here the old session stays connected and must receive that notification.
+#[tokio::test]
+async fn transfer_subscriptions_notifies_old_session() {
+    struct StatusCapture(tokio::sync::mpsc::UnboundedSender<StatusCode>);
+    impl opcua_client::OnSubscriptionNotification for StatusCapture {
+        fn on_subscription_status_change(
+            &mut self,
+            notification: opcua_types::StatusChangeNotification,
+        ) {
+            let _ = self.0.send(notification.status);
+        }
+    }
+    let (status_tx, mut status_rx) = tokio::sync::mpsc::unbounded_channel();
+
+    let server = test_server();
+    let mut tester = Tester::new(server, false).await;
+
+    // Old session A (transfer requires a secure channel).
+    let (session_a, lp_a) = tester
+        .connect(
+            SecurityPolicy::Aes256Sha256RsaPss,
+            MessageSecurityMode::SignAndEncrypt,
+            IdentityToken::Anonymous,
+        )
+        .await
+        .unwrap();
+    lp_a.spawn();
+    timeout(Duration::from_secs(10), session_a.wait_for_connection())
+        .await
+        .unwrap();
+
+    let sub_id = session_a
+        .create_subscription(
+            Duration::from_millis(100),
+            100,
+            20,
+            1000,
+            0,
+            true,
+            StatusCapture(status_tx),
+        )
+        .await
+        .unwrap();
+
+    // New session B with an equivalent identity, so the transfer is permitted.
+    let (session_b, lp_b) = tester
+        .connect(
+            SecurityPolicy::Aes256Sha256RsaPss,
+            MessageSecurityMode::SignAndEncrypt,
+            IdentityToken::Anonymous,
+        )
+        .await
+        .unwrap();
+    lp_b.spawn();
+    timeout(Duration::from_secs(10), session_b.wait_for_connection())
+        .await
+        .unwrap();
+
+    let r = TransferSubscriptions::new(&session_b)
+        .subscription(sub_id)
+        .send_initial_values(false)
+        .send(session_b.channel())
+        .await
+        .unwrap();
+    assert_eq!(r.results.unwrap()[0].status_code, StatusCode::Good);
+
+    // The still-connected old session A must receive Good_SubscriptionTransferred.
+    let status = timeout(Duration::from_secs(2), status_rx.recv())
+        .await
+        .expect("old session did not receive a status change notification")
+        .unwrap();
+    assert_eq!(status, StatusCode::GoodSubscriptionTransferred);
+}
+
 #[tokio::test]
 async fn test_data_change_filters() {
     let (tester, nm, session) = setup().await;

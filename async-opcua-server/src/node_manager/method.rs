@@ -97,7 +97,13 @@ impl IntoResult for MethodCall {
                 } else {
                     None
                 },
-                output_arguments: Some(self.outputs),
+                // Part 4 §5.12 (line 3953): outputArguments shall be empty if the statusCode
+                // severity is Bad.
+                output_arguments: if self.status.is_bad() {
+                    None
+                } else {
+                    Some(self.outputs)
+                },
             },
             self.diagnostic_info,
         )

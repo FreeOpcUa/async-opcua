@@ -329,6 +329,12 @@ impl Subscription {
         self.monitored_items.remove(id)
     }
 
+    /// The sequence number that would be assigned to the next notification message,
+    /// without consuming it. Used to label the final status-change on transfer.
+    pub(super) fn peek_next_sequence_number(&self) -> u32 {
+        self.sequence_number.peek_next()
+    }
+
     pub(super) fn insert(&mut self, id: u32, item: MonitoredItem) {
         self.monitored_items.insert(id, item);
         self.notified_monitored_items.insert(id);

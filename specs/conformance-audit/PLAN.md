@@ -164,6 +164,7 @@ commit per user-story; PR to fork `occamsshavingkit/async-opcua`; wait for full 
   cross-checked. ~64 findings in FINDINGS.md, source-tagged C/A/X, severity-graded.
 - **Next: FIX PHASE.** Triage the register by severity (user gates the order). Suggested first wave:
   P6-JSON-01 (S1 DoS) → P4-ATTR-01 (indexRange, fixes Read/Write/Query) → P2-SEC-01 (OSC trust) →
-  P4-SESS-01 (Cancel) → P6-BIN-01 (bool) → P4-MONITEM cluster. **Open question for the user: target
-  JSON 1.04 vs 1.05** (gates P6-JSON-02/03/04). Locked protocol: codex-prod / Claude-tests, one
-  commit per fix, PR to fork.
+  P4-SESS-01 (Cancel) → P6-BIN-01 (bool) → P4-MONITEM cluster. **JSON version DECIDED (user 2026-06-23):
+  target the specs on disk (Part 6 = 1.05.07)** → P6-JSON-02/03/04 are confirmed real (wire-format +
+  interop; coordinate client+server, sequence after safe fixes). Locked protocol: codex-prod /
+  Claude-tests (red-first), one commit per fix, PR to fork.

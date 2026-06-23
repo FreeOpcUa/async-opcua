@@ -64,8 +64,8 @@ reassembly (verify; codex marked abort handling HONORED → soft-conflict).
 | P6-BIN-02 | S2 | A,X | ⚠ | §5.2.2.16 (2005) | Variant decode rejects reserved built-in type IDs 26–31 with `BadDecodingError`; spec: accept as ByteString(s) and pass to app. | open |
 | P6-BIN-03 | S3 | X | ⚠ | §5.2.2.17 (2077) | DataValue picoseconds not clamped — spec: values ≥10000 decode as 9999. | open |
 | P6-JSON-02 | S2 | X | ⚠ | §5.4.2.3 (3032) | JSON Int64/UInt64 emitted as JSON numbers; spec requires decimal **strings** (precision/interop). | open |
-| P6-JSON-03 | S2 | X | ⚠ | §5.4.2.10/.11 | JSON NodeId/ExpandedNodeId use object form, not the 1.05.07 string form. **Caveat: may be deliberate 1.04-JSON compat — verify target version before "fixing".** | open |
-| P6-JSON-04 | S2 | X | ⚠ | §5.4.2.17 | JSON Variant uses `Type`/`Body`, spec 1.05.07 uses `UaType`/`Value`. **Same 1.04-vs-1.05 version caveat.** | open |
+| P6-JSON-03 | S2 | X | ⚠ | §5.4.2.10/.11 | JSON NodeId/ExpandedNodeId use 1.04 object form, not the on-disk **1.05.07 string form**. *Version decided 2026-06-23: target specs-on-disk → confirmed real fix (interop-affecting; coordinate with client side).* | open |
+| P6-JSON-04 | S2 | X | ⚠ | §5.4.2.17 | JSON Variant uses 1.04 `Type`/`Body`; on-disk 1.05.07 uses `UaType`/`Value`. *Target = specs-on-disk → confirmed real fix.* | open |
 | P6-JSON-05 | S3 | X | ⚠ | §5.4.2.16 | JSON ExtensionObject `UaBody`/null handling diverges; duplicate JSON field names not rejected (spec: decode error). | open |
 | P6-TCP-01 | S2 | A,X | ⚠ | §7.1.2.3 (5275) | `MaxChunkCount==0` (= unlimited per spec) computes an effective inbound limit of **1** when max_message_size is also 0 → rejects legit multi-chunk messages. (`transport/tcp.rs:116`) | open |
 | P6-TCP-02 | S3 | C,X | ⚠ | §7.1.2.3 (5262) | Hello buffer-size min always 8192; spec allows 1024 when an ECC SecurityPolicy is intended. | open |
@@ -75,8 +75,10 @@ reassembly (verify; codex marked abort handling HONORED → soft-conflict).
 
 > Binary path is otherwise solid (String/ByteString/Array/ExtensionObject bounds all enforced; NodeId
 > 4-encodings, Variant matrix dims, DiagnosticInfo/DataValue depth-locks HONORED — 017/018/025 paid off).
-> The DoS gap migrated to the **JSON** path (P6-JSON-01). Codex's JSON field-name findings (P6-JSON-03/04)
-> hinge on whether async-opcua targets 1.04 or 1.05 JSON — decide that first.
+> The DoS gap migrated to the **JSON** path (P6-JSON-01). **Version decision (user, 2026-06-23): target
+> the specs on disk** (Part 6 = 1.05.07) → the JSON field-form findings P6-JSON-02/03/04 are confirmed
+> real fixes (the repo currently emits 1.04 forms). These are wire-format + interop-affecting, so they
+> need coordinated client+server changes and likely a compat note — sequence after the safe fixes.
 
 ## Part 3 — Address Space Model
 **3-of-3 pass:** Claude (attributes + references) + Codex (`FINDINGS-codex-p3.md`, 5) + Antigravity

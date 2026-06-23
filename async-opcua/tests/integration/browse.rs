@@ -677,7 +677,10 @@ async fn register_nodes_echoes_every_input_node() {
 
     // A node in a namespace no node manager owns -> never marked "registered" by a manager.
     let unowned = NodeId::new(100, "no-manager-owns-this");
-    let res = session.register_nodes(&[unowned.clone()]).await.unwrap();
+    let res = session
+        .register_nodes(std::slice::from_ref(&unowned))
+        .await
+        .unwrap();
     assert_eq!(
         res.len(),
         1,

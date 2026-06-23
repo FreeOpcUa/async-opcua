@@ -79,7 +79,7 @@ FINDINGS for the verified-conformant carryover).
 ### Part 3 — Address Space Model
 | Unit | Area | Priority | Status | Prior |
 |---|---|---|---|---|
-| **P3-NODES** | Node classes + mandatory attributes per class, references, modelling rules, ValueRank/ArrayDimensions semantics | P2 | ⬜ | — |
+| **P3-NODES** | Node classes + mandatory attributes per class, references, modelling rules, ValueRank/ArrayDimensions semantics | P2 | ✅ | — |
 
 ### Part 2 — Security Model
 | Unit | Area | Priority | Status | Prior |
@@ -143,7 +143,9 @@ commit per user-story; PR to fork `occamsshavingkit/async-opcua`; wait for full 
   (`FINDINGS-antigravity.md`, `FINDINGS-codex.md`); all 7 inter-model conflicts resolved by
   verification; everything consolidated into FINDINGS.md (~30 findings, source-tagged C/A/X). Pattern
   for remaining units: Claude audit → AG + Codex passes → resolve conflicts → consolidate.
-- **P6 done (2-of-3):** binary solid; key finds — **P6-JSON-01 S1 DoS** (JSON array unbounded alloc),
-  P6-BIN-01 S2 (bool decode), + interop/version cluster (P6-JSON-02/03/04) & transport (P6-TCP-01..04).
-  **Antigravity timed out on P6 — retry to complete the 3-AI set.**
-- **Next (no fixes):** retry AG-P6; then P4-GENERAL (§5.1–5.3), P3-NODES, P2-SEC, P5/P8/P11/P12/P14 — 3-AI pattern.
+- **P6 done (3-of-3):** AG retry succeeded (16; timeout was infra). Binary solid; **P6-JSON-01 S1 DoS**
+  + bool/type-id/picos correctness + JSON 1.04-vs-1.05 interop cluster + transport (chunk-count 0→1,
+  ECC buffer, abort-chunk pre-verify clear). High confidence (3-way corroboration).
+- **P3 done (3-of-3):** model sound; gaps are missing mutation-validation (ValueRank/ArrayDimensions
+  semantics, abstract-type & symmetric-ref instantiation) — mostly the opt-in AddNodes surface.
+- **Next (no fixes):** P4-GENERAL (§5.1–5.3), **P2-SEC** (Security — high-stakes), then P5/P8/P11/P12/P14 — 3-AI.

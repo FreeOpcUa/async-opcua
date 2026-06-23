@@ -46,28 +46,55 @@ model(s) surfaced it.
 | P4-ATTR-04 | S3 | C | ✅ | §5.11.4 T55 | No enum/range validation on writes → `Bad_OutOfRange` never returned (spec permits). | deferred |
 
 ## Part 6 — Mappings (encoding + transport)
-Multi-AI pass: Claude (binary/JSON DoS + transport) + Codex (`FINDINGS-codex-p6.md`, encoding
-correctness/interop). **Antigravity timed out — P6 pass is 2-of-3; retry AG to complete.**
+**3-of-3 pass:** Claude (binary/JSON DoS + transport) + Codex (`FINDINGS-codex-p6.md`) + Antigravity
+(`FINDINGS-antigravity-p6.md`, 16 findings — retry succeeded; original timeout was infra). All three
+independently corroborate the headline items (JSON array DoS, bool decode, type IDs 26-31, picoseconds,
+JSON Type/Body + NodeId object form, MaxChunkCount 0→1, ECC buffer, SecurityPolicyUri/reason size) →
+high confidence. AG-unique add: **P6-TCP-05** — abort (FinalError) chunk clears `pending_chunks` before
+security is verified (`transport/tcp.rs:473`) — lets an unauthenticated peer drop a victim's in-progress
+reassembly (verify; codex marked abort handling HONORED → soft-conflict).
 
 | ID | Sev | Found | Verify | Part 6 § | Divergence | Status |
 |---|---|---|---|---|---|---|
-| P6-JSON-01 | **S1** | C | ✅ | §5.4.5 | `Vec<T>::JsonDecodable` (json.rs:113) loops `res.push()` with NO `max_array_length` bound (binary path has it) → unbounded allocation / OOM from a malicious JSON array (reachable via JSON PubSub). | open |
-| P6-BIN-01 | S2 | X | ✅ | §5.2.2.1 (1543) | Boolean decode `read_u8()? == 1` → bytes 2–255 decode as **false**; spec: decoders shall treat any non-zero as true. (`basic_types.rs:46`) | open |
-| P6-BIN-02 | S2 | X | ⚠ | §5.2.2.16 (2005) | Variant decode rejects reserved built-in type IDs 26–31 with `BadDecodingError`; spec: accept as ByteString(s) and pass to app. | open |
+| P6-JSON-01 | **S1** | C,A | ✅ | §5.4.5 | `Vec<T>::JsonDecodable` (json.rs:113) loops `res.push()` with NO `max_array_length` bound (binary path has it) → unbounded allocation / OOM from a malicious JSON array (reachable via JSON PubSub). | open |
+| P6-BIN-01 | S2 | A,X | ✅ | §5.2.2.1 (1543) | Boolean decode `read_u8()? == 1` → bytes 2–255 decode as **false**; spec: decoders shall treat any non-zero as true. (`basic_types.rs:46`) | open |
+| P6-BIN-02 | S2 | A,X | ⚠ | §5.2.2.16 (2005) | Variant decode rejects reserved built-in type IDs 26–31 with `BadDecodingError`; spec: accept as ByteString(s) and pass to app. | open |
 | P6-BIN-03 | S3 | X | ⚠ | §5.2.2.17 (2077) | DataValue picoseconds not clamped — spec: values ≥10000 decode as 9999. | open |
 | P6-JSON-02 | S2 | X | ⚠ | §5.4.2.3 (3032) | JSON Int64/UInt64 emitted as JSON numbers; spec requires decimal **strings** (precision/interop). | open |
 | P6-JSON-03 | S2 | X | ⚠ | §5.4.2.10/.11 | JSON NodeId/ExpandedNodeId use object form, not the 1.05.07 string form. **Caveat: may be deliberate 1.04-JSON compat — verify target version before "fixing".** | open |
 | P6-JSON-04 | S2 | X | ⚠ | §5.4.2.17 | JSON Variant uses `Type`/`Body`, spec 1.05.07 uses `UaType`/`Value`. **Same 1.04-vs-1.05 version caveat.** | open |
 | P6-JSON-05 | S3 | X | ⚠ | §5.4.2.16 | JSON ExtensionObject `UaBody`/null handling diverges; duplicate JSON field names not rejected (spec: decode error). | open |
-| P6-TCP-01 | S2 | X | ⚠ | §7.1.2.3 (5275) | `MaxChunkCount==0` (= unlimited per spec) computes an effective inbound limit of **1** when max_message_size is also 0 → rejects legit multi-chunk messages. (`transport/tcp.rs:116`) | open |
+| P6-TCP-01 | S2 | A,X | ⚠ | §7.1.2.3 (5275) | `MaxChunkCount==0` (= unlimited per spec) computes an effective inbound limit of **1** when max_message_size is also 0 → rejects legit multi-chunk messages. (`transport/tcp.rs:116`) | open |
 | P6-TCP-02 | S3 | C,X | ⚠ | §7.1.2.3 (5262) | Hello buffer-size min always 8192; spec allows 1024 when an ECC SecurityPolicy is intended. | open |
 | P6-TCP-03 | S3 | X | ⚠ | §6.7.2.3 (4222) | Asymmetric SecurityHeader `SecurityPolicyUri` decoded as general UAString; spec caps at 255 bytes (invalid → close channel). | open |
 | P6-TCP-04 | S2 | C | ⚠ | §7.1.2.2 | Pre-Hello / ERR / ACK frames may not be bounded by `max_message_size` at the TcpCodec layer (pre-negotiation allocation). **Soft-conflict: Codex marked the codec size-check HONORED (tcp_codec.rs:93) — reconcile.** | conflict |
+| P6-TCP-05 | S2 | A | ⚠ | §6.7.3 (4412) | Abort (FinalError) chunk clears `pending_chunks` before its security is verified (`transport/tcp.rs:473`) → an unauthenticated/forged abort could drop a victim's in-progress reassembly. **Soft-conflict: Codex marked abort handling HONORED — reconcile.** | conflict |
 
 > Binary path is otherwise solid (String/ByteString/Array/ExtensionObject bounds all enforced; NodeId
 > 4-encodings, Variant matrix dims, DiagnosticInfo/DataValue depth-locks HONORED — 017/018/025 paid off).
 > The DoS gap migrated to the **JSON** path (P6-JSON-01). Codex's JSON field-name findings (P6-JSON-03/04)
 > hinge on whether async-opcua targets 1.04 or 1.05 JSON — decide that first.
+
+## Part 3 — Address Space Model
+**3-of-3 pass:** Claude (attributes + references) + Codex (`FINDINGS-codex-p3.md`, 5) + Antigravity
+(`FINDINGS-antigravity-p3.md`, 8). The model is largely sound — Base mandatory attrs, standard
+ReferenceType hierarchy, `includeSubtypes`/`is_subtype_of`, no-self-reference, Method
+`user_executable()=executable&&user_executable`, AccessLevel bits all HONORED. The gaps are **missing
+validation on mutation** (ValueRank/ArrayDimensions/abstract/symmetric), mostly reachable via the
+opt-in writable address space (AddNodes, default OFF) or programmatic node construction → overlaps
+P4-NODEMGMT-01.
+
+| ID | Sev | Found | Verify | Part 3 § | Divergence | Status |
+|---|---|---|---|---|---|---|
+| P3-01 | S2 | C,A,X | ✅ | §5.6 (2704) | ValueRank setters (`set_value_rank`, variable.rs:805 / variable_type.rs:275) store any i32 — no check against {-3,-2,-1,0,≥1}. A `value_rank.rs::new_checked` helper exists but the node setters bypass it. | open |
+| P3-02 | S2 | C,A,X | ⚠ | §5.6 (2719) | ArrayDimensions↔ValueRank consistency not enforced: spec requires `len==ValueRank` when ValueRank>0 and null when ≤0; setters + AddNodes builder accept them independently. | open |
+| P3-03 | S2 | C,A,X | ✅ | §5.6/§6 (3091) | AddNodes does not check the typeDefinition's `IsAbstract` → abstract ObjectType/VariableType can be instantiated (no `is_abstract` anywhere in memory_mgr_impl.rs). Overlaps P4-NODEMGMT-01. | open |
+| P3-04 | S2 | C,A,X | ⚠ | §5.3.1 (2227) | AddReferences does not check the ReferenceType's `IsAbstract` → abstract ReferenceTypes usable directly. | open |
+| P3-05 | S3 | C,A | ✅ | §5.3.2 (2274) | Symmetric ReferenceType + InverseName not prohibited (independent `symmetric`/`inverse_name` fields, no validation); spec: symmetric → InverseName omitted. (Standard generated nodes are correct; affects custom ref types.) | open |
+| P3-06 | S3 | C | ⚠ | §7.13 (5317) | `HasTypeDefinition` exactly-one-per-Object/Variable not enforced on insert. | open |
+| P3-07 | S3 | C | ⚠ | §6.2.8 | Type-refinement subtype rules not enforced: a subtype's DataType/ValueRank may only further-restrict the supertype's; setters accept arbitrary changes. | open |
+| P3-08 | S3 | A | ⚠ | §5.2 | Base optional attrs `RolePermissions`/`UserRolePermissions`/`AccessRestrictions` un-modeled (relevant to Part 18 role security). | open |
+| P3-09 | S3 | C | ⚠ | §5.6 | Variable `AccessLevelEx` optional attribute not modeled. | open |
 
 ## Conflict log (resolved + open)
 - **DeleteNodes target refs** (A:DIVERGENCE / X:HONORED) → **resolved partial:** within-manager cleanup

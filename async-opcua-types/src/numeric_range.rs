@@ -63,6 +63,8 @@ pub enum NumericRange {
     Range(u32, u32),
     /// Multiple ranges contains any mix of Index, Range values - a multiple range containing multiple ranges is invalid
     MultipleRanges(Vec<NumericRange>),
+    /// Raw range string that could not be parsed during decode.
+    Invalid(UAString),
 }
 
 impl NumericRange {
@@ -88,18 +90,21 @@ impl NumericRange {
                 numeric_ranges.iter().map(|r| r.byte_len()).sum::<usize>() + numeric_ranges.len()
                     - 1
             }
+            NumericRange::Invalid(s) => s.as_ref().len(),
         }
     }
 
     fn from_ua_string(str: UAString) -> Result<Self, Error> {
-        str.as_ref()
-            .parse::<NumericRange>()
-            .map_err(Error::decoding)
+        match str.as_ref().parse::<NumericRange>() {
+            Ok(range) => Ok(range),
+            Err(_) => Ok(NumericRange::Invalid(str)),
+        }
     }
 
     fn to_ua_string(&self) -> Result<UAString, Error> {
         match self {
             NumericRange::None => Ok(UAString::null()),
+            NumericRange::Invalid(s) => Ok(s.clone()),
             _ => Ok(UAString::from(self.to_string())),
         }
     }
@@ -272,6 +277,7 @@ impl Display for NumericRange {
                 }
                 Ok(())
             }
+            NumericRange::Invalid(s) => write!(f, "{}", s.as_ref()),
         }
     }
 }
@@ -348,6 +354,7 @@ impl NumericRange {
                 });
                 !found_invalid
             }
+            NumericRange::Invalid(_) => false,
         }
     }
 }

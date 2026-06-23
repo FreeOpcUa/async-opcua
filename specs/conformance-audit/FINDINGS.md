@@ -13,7 +13,7 @@ model(s) surfaced it.
 | ID | Sev | Found | Verify | Part/§ | Divergence | Status |
 |---|---|---|---|---|---|---|
 | P4-SUB-01 | — | C | ✅ | §5.14.1.2 T79 r4/5 | Normal4/5 Publish guard flipped; Normal5 was dead | **FIXED** |
-| P4-ATTR-01 | S2 | C,A | ✅ | §5.11.2/.4 T49/55 | Malformed `indexRange` → whole-message `BadDecodingError`, not per-op `Bad_IndexRangeInvalid` (NumericRange eager decode). Also hits Query/Write. *Codex missed.* | open |
+| P4-ATTR-01 | S2 | C,A | ✅ | §5.11.2/.4 T49/55 | Malformed `indexRange` → whole-message `BadDecodingError`, not per-op `Bad_IndexRangeInvalid` (NumericRange eager decode). Also hits Query/Write. *Codex missed.* | **FIXED** (lenient `NumericRange::Invalid(raw)` decode; range_of/set_range_of → `BadIndexRangeInvalid` per-op; tests `malformed_numeric_range_decodes_leniently…` (red-first) + e2e `read_invalid_index_range_is_per_operation`. Also resolves the Query-side indexRange abort.) |
 | P4-ATTR-05 | S2 | C | ✅ | §5.11.3.2 | HistoryRead never validates `timestampsToReturn==NEITHER` → `Bad_TimestampsToReturnInvalid` (10000-11 exceptions). *Codex UNCERTAIN; AG missed.* | open |
 | P4-VIEW-01 | S2 | C | ✅ | §5.9.2 T36 | Browse with non-ReferenceType `referenceTypeId` → empty+Good, not `Bad_ReferenceTypeIdInvalid` | open |
 | P4-VIEW-02 | S3 | X | ✅ | §5.9.4.2 (3227) | TranslateBrowsePaths treats null final `targetName` as wildcard; spec: last element shall have targetName → `Bad_BrowseNameInvalid`. *Conflict resolved: Codex right, Claude agent wrong.* | open |

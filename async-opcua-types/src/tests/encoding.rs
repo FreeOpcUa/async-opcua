@@ -13,7 +13,8 @@ use crate::{
     tests::*,
     write_u8, Array, ByteString, ContextOwned, DataValue, DateTime, DepthGauge, DiagnosticInfo,
     EUInformation, EncodingMask, ExpandedNodeId, ExtensionObject, Guid, LocalizedText,
-    NamespaceMap, NodeId, ObjectId, QualifiedName, Variant, VariantScalarTypeId, XmlElement,
+    NamespaceMap, NodeId, NumericRange, ObjectId, QualifiedName, Variant, VariantScalarTypeId,
+    XmlElement,
 };
 
 #[global_allocator]
@@ -895,9 +896,36 @@ fn decode_bool_any_nonzero_is_true() {
     for byte in [0x01u8, 0x02, 0x7f, 0xff] {
         let mut stream = Cursor::new(vec![byte]);
         let v = <bool as crate::SimpleBinaryDecodable>::decode(&mut stream, &opts).unwrap();
-        assert!(v, "byte 0x{byte:02x} must decode as true (any non-zero is true)");
+        assert!(
+            v,
+            "byte 0x{byte:02x} must decode as true (any non-zero is true)"
+        );
     }
     let mut stream = Cursor::new(vec![0x00u8]);
     let v = <bool as crate::SimpleBinaryDecodable>::decode(&mut stream, &opts).unwrap();
     assert!(!v, "byte 0x00 must decode as false");
+}
+
+#[test]
+fn malformed_numeric_range_decodes_leniently_and_errors_on_apply() {
+    // P4-ATTR-01 — OPC UA Part 4 §5.11.2/.4 Tables 49/55: a malformed indexRange must NOT fail the
+    // whole message decode (which would abort the entire Read/Write batch with BadDecodingError).
+    // It must decode leniently and surface as operation-level Bad_IndexRangeInvalid when applied.
+    // Anchored to the spec, not the code (does not name the new variant).
+    let ctx_f = ContextOwned::default();
+    let ctx = ctx_f.context();
+
+    // Encode a malformed range string ("abc") as the wire UAString, then decode it as NumericRange.
+    let mut buf = Vec::new();
+    crate::BinaryEncodable::encode(&UAString::from("abc"), &mut buf, &ctx).unwrap();
+    let mut stream = Cursor::new(buf);
+    let nr = <NumericRange as BinaryDecodable>::decode(&mut stream, &ctx)
+        .expect("a malformed indexRange must decode leniently, not fail the message");
+
+    // Applying the (invalid) range to an array must yield operation-level BadIndexRangeInvalid.
+    let arr = Variant::from(vec![1i32, 2, 3]);
+    let err = arr
+        .range_of(&nr)
+        .expect_err("an invalid range must not select data");
+    assert_eq!(err, crate::StatusCode::BadIndexRangeInvalid);
 }

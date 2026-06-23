@@ -1252,3 +1252,62 @@ async fn test_read_timeout() {
         .await
         .unwrap();
 }
+
+#[tokio::test]
+async fn read_invalid_index_range_is_per_operation() {
+    // P4-ATTR-01 — OPC UA Part 4 §5.11.2 Table 49: a malformed indexRange must yield operation-level
+    // Bad_IndexRangeInvalid for THAT node only; the rest of the batch must still succeed. A malformed
+    // range must NOT fail the whole Read (which previously aborted the batch with BadDecodingError).
+    let (tester, nm, session) = setup().await;
+
+    let id = nm.inner().next_node_id();
+    nm.inner().add_node(
+        nm.address_space(),
+        tester.handle.type_tree(),
+        VariableBuilder::new(&id, "StrVar", "StrVar")
+            .value("value")
+            .value_rank(-1)
+            .data_type(DataTypeId::String)
+            .access_level(AccessLevel::CURRENT_READ)
+            .user_access_level(AccessLevel::CURRENT_READ)
+            .build()
+            .into(),
+        &ObjectId::ObjectsFolder.into(),
+        &ReferenceTypeId::Organizes.into(),
+        Some(&VariableTypeId::BaseDataVariableType.into()),
+        Vec::new(),
+    );
+
+    let r = session
+        .read(
+            &[
+                // Valid plain read.
+                read_value_id(AttributeId::Value, &id),
+                // Malformed indexRange -> per-node BadIndexRangeInvalid (not a whole-batch fault).
+                ReadValueId {
+                    node_id: id.clone(),
+                    attribute_id: AttributeId::Value as u32,
+                    index_range: opcua_types::NumericRange::Invalid("not-a-range".into()),
+                    ..Default::default()
+                },
+                // Another valid read -> proves the bad range did not poison the batch.
+                read_value_id(AttributeId::DisplayName, &id),
+            ],
+            TimestampsToReturn::Both,
+            0.0,
+        )
+        .await
+        // The whole Read must succeed (no ServiceFault) -- the bad range is per-operation.
+        .unwrap();
+
+    assert!(
+        r[0].value.is_some(),
+        "valid read before the bad range must succeed"
+    );
+    assert_eq!(r[1].status, Some(StatusCode::BadIndexRangeInvalid));
+    assert_eq!(r[1].value, None);
+    assert!(
+        r[2].value.is_some(),
+        "valid read after the bad range must succeed"
+    );
+}

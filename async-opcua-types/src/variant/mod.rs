@@ -1484,7 +1484,7 @@ impl Variant {
                 Some((i, i))
             }
             NumericRange::Range(min, max) => Some(((*min) as usize, (*max) as usize)),
-            NumericRange::None | NumericRange::MultipleRanges(_) => None,
+            NumericRange::None | NumericRange::MultipleRanges(_) | NumericRange::Invalid(_) => None,
         }
     }
 
@@ -1594,6 +1594,9 @@ impl Variant {
         let mut selections = Vec::with_capacity(ranges.len());
         let mut extents = Vec::with_capacity(ranges.len());
         for (range, dim) in ranges.iter().zip(stored_dims.iter()) {
+            if matches!(range, NumericRange::Invalid(_)) {
+                return Err(StatusCode::BadIndexRangeInvalid);
+            }
             let (lo, hi) = Self::range_bounds(range).ok_or(StatusCode::BadIndexRangeNoData)?;
             if lo >= *dim {
                 return Err(StatusCode::BadIndexRangeNoData);
@@ -1649,6 +1652,7 @@ impl Variant {
             Variant::Array(ref mut array) => {
                 match range {
                     NumericRange::None => Err(StatusCode::BadIndexRangeNoData),
+                    NumericRange::Invalid(_) => Err(StatusCode::BadIndexRangeInvalid),
                     NumericRange::Index(idx) => {
                         let values = &mut array.values;
                         let idx = (*idx) as usize;
@@ -1710,6 +1714,9 @@ impl Variant {
 
                         let mut selections = Vec::with_capacity(ranges.len());
                         for (range, dim) in ranges.iter().zip(dest_dims.iter()) {
+                            if matches!(range, NumericRange::Invalid(_)) {
+                                return Err(StatusCode::BadIndexRangeInvalid);
+                            }
                             let (lo, hi) =
                                 Self::range_bounds(range).ok_or(StatusCode::BadIndexRangeNoData)?;
                             if hi < lo {
@@ -1766,6 +1773,7 @@ impl Variant {
     pub fn range_of(&self, range: &NumericRange) -> Result<Variant, StatusCode> {
         match range {
             NumericRange::None => Ok(self.clone()),
+            NumericRange::Invalid(_) => Err(StatusCode::BadIndexRangeInvalid),
             NumericRange::Index(idx) => {
                 let idx = (*idx) as usize;
                 match self {
@@ -1828,6 +1836,9 @@ impl Variant {
                     let substring_range = substring_range
                         .first()
                         .ok_or(StatusCode::BadIndexRangeNoData)?;
+                    if matches!(substring_range, NumericRange::Invalid(_)) {
+                        return Err(StatusCode::BadIndexRangeInvalid);
+                    }
                     let (s_lo, s_hi) = Self::range_bounds(substring_range)
                         .ok_or(StatusCode::BadIndexRangeNoData)?;
                     let (source_indices, dimensions) =

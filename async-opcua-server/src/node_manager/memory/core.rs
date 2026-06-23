@@ -327,7 +327,9 @@ impl CoreNodeManagerImpl {
                 (limits.max_string_length as u32).into()
             }
             VariableId::Server_ServerCapabilities_MinSupportedSampleRate => {
-                (limits.subscriptions.min_sampling_interval_ms as u32).into()
+                // Part 5 §6.3.2: MinSupportedSampleRate is a Duration (Double), not a UInt32 — the
+                // value is already an f64, so expose it directly (the old `as u32` truncated it).
+                limits.subscriptions.min_sampling_interval_ms.into()
             }
             VariableId::Server_ServerCapabilities_OperationLimits_MaxMonitoredItemsPerCall => {
                 (limits.operational.max_monitored_items_per_call as u32).into()

@@ -1356,3 +1356,42 @@ async fn server_capabilities_locale_id_array_is_populated() {
         arr.values
     );
 }
+
+#[tokio::test]
+async fn min_supported_sample_rate_value_matches_duration_datatype() {
+    // P5-02 — OPC UA Part 5 §6.3.2: MinSupportedSampleRate is a Duration (Double). The exposed Value
+    // must therefore be a Double, matching the node's DataType attribute (not a UInt32).
+    let (_tester, _nm, session) = setup().await;
+    let r = session
+        .read(
+            &[
+                ReadValueId {
+                    node_id:
+                        opcua::types::VariableId::Server_ServerCapabilities_MinSupportedSampleRate
+                            .into(),
+                    attribute_id: AttributeId::Value as u32,
+                    ..Default::default()
+                },
+                ReadValueId {
+                    node_id:
+                        opcua::types::VariableId::Server_ServerCapabilities_MinSupportedSampleRate
+                            .into(),
+                    attribute_id: AttributeId::DataType as u32,
+                    ..Default::default()
+                },
+            ],
+            TimestampsToReturn::Both,
+            0.0,
+        )
+        .await
+        .unwrap();
+    println!(
+        "MinSupportedSampleRate Value={:?} DataType={:?}",
+        r[0].value, r[1].value
+    );
+    assert!(
+        matches!(r[0].value, Some(Variant::Double(_))),
+        "Value must be a Double (Duration), got {:?}",
+        r[0].value
+    );
+}

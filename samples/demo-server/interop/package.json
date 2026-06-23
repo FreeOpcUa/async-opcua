@@ -1,0 +1,13 @@
+{
+  "name": "async-opcua-interop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "node-opcua interop conformance smoke test against the async-opcua demo server",
+  "scripts": {
+    "test": "node interop-test.mjs"
+  },
+  "dependencies": {
+    "node-opcua": "^2.120.0"
+  }
+}

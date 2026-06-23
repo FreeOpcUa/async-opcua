@@ -1142,59 +1142,40 @@ impl X509 {
 
     /// Tests if the supplied application uri matches the uri alt subject name entry on the cert
     pub fn is_application_uri_valid(&self, application_uri: &str) -> Result<(), Error> {
-        // Expecting the first subject alternative name to be a uri that matches with the supplied
-        // application uri
-        if let Some(alt_names) = self.get_alternate_names() {
-            if !alt_names.is_empty() {
-                let Some(first_alt_name) = alt_names.first() else {
-                    error!("Cert has zero subject alt names");
-                    return Err(Error::new(
-                        StatusCode::BadCertificateUriInvalid,
-                        "Certificate has no subject alt names",
-                    ));
-                };
-                match AlternateNames::convert_name(first_alt_name) {
-                    Some(val) => {
-                        if val == application_uri {
-                            Ok(())
-                        } else {
-                            error!(
-                                "Application uri {} does not match first alt name {}",
-                                application_uri, val
-                            );
-                            Err(Error::new(
-                                StatusCode::BadCertificateUriInvalid,
-                                format!(
-                                    "Application uri {application_uri} does not match first alt name {val}"
-                                ),
-                            ))
-                        }
-                    }
-
-                    _ => {
-                        error!("Alternate name {:?} cannot be converted", first_alt_name);
-                        Err(Error::new(
-                            StatusCode::BadCertificateUriInvalid,
-                            format!(
-                                "Failed to convert certificate alt name {:?} to string",
-                                first_alt_name
-                            ),
-                        ))
-                    }
-                }
-            } else {
-                error!("Cert has zero subject alt names");
-                Err(Error::new(
-                    StatusCode::BadCertificateUriInvalid,
-                    "Certificate has no subject alt names",
-                ))
-            }
-        } else {
+        // OPC UA Part 6 §6.2.2: the applicationUri is carried as a uniformResourceIdentifier
+        // entry in the certificate's subjectAltName. The specification does not require it to
+        // be the *first* alternative name, and other stacks (e.g. node-opcua) order DNS / IP
+        // entries ahead of the URI, so match the applicationUri against every alternative name
+        // rather than only the first.
+        let Some(alt_names) = self.get_alternate_names() else {
             error!("Cert has no subject alt names at all");
-            // No alt names
-            Err(Error::new(
+            return Err(Error::new(
                 StatusCode::BadCertificateUriInvalid,
                 "Certificate has no subject alt names",
+            ));
+        };
+        if alt_names.is_empty() {
+            error!("Cert has zero subject alt names");
+            return Err(Error::new(
+                StatusCode::BadCertificateUriInvalid,
+                "Certificate has no subject alt names",
+            ));
+        }
+        if alt_names
+            .iter()
+            .filter_map(AlternateNames::convert_name)
+            .any(|name| name == application_uri)
+        {
+            Ok(())
+        } else {
+            error!(
+                "Application uri {application_uri} does not match any certificate subject alt name"
+            );
+            Err(Error::new(
+                StatusCode::BadCertificateUriInvalid,
+                format!(
+                    "Application uri {application_uri} does not match any certificate subject alt name"
+                ),
             ))
         }
     }
@@ -1649,5 +1630,33 @@ mod tests {
         args.alt_host_names.iter().skip(1).for_each(|n| {
             assert!(x509.is_hostname_valid(n.as_str()).is_ok());
         })
+    }
+
+    #[test]
+    fn application_uri_valid_in_any_san_position() {
+        // OPC UA Part 6 §6.2.2: the applicationUri may appear in any subjectAltName position.
+        // node-opcua emits DNS / IP entries before the URI, so the validator must not assume
+        // the applicationUri is the first alternative name.
+        let mut alt_host_names = AlternateNames::new();
+        alt_host_names.add_dns("localhost"); // DNS first, as node-opcua emits
+        alt_host_names.add_address("127.0.0.1"); // IP second
+        alt_host_names.add_uri("urn:async-opcua-interop-client"); // applicationUri last
+
+        let args = X509Data {
+            key_size: 2048,
+            common_name: "interop-client".to_string(),
+            organization: "async-opcua".to_string(),
+            organizational_unit: "test".to_string(),
+            country: "EN".to_string(),
+            state: "London".to_string(),
+            alt_host_names,
+            certificate_duration_days: 60,
+        };
+        let (x509, _pkey) = X509::cert_and_pkey(&args).unwrap();
+
+        assert!(x509
+            .is_application_uri_valid("urn:async-opcua-interop-client")
+            .is_ok());
+        assert!(x509.is_application_uri_valid("urn:not-this-uri").is_err());
     }
 }

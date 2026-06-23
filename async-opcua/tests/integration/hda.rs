@@ -130,3 +130,98 @@ async fn test_hda_integration() {
         assert_eq!(val, i as f64);
     }
 }
+
+// A historizing, readable node used by the history error-mode tests.
+fn insert_hist_node(nm: &SimpleNodeManager, id: &NodeId) {
+    let mut space = nm.address_space().write();
+    let var = VariableBuilder::new(id, "HistVar", "HistVar")
+        .data_type(DataTypeId::Double)
+        .historizing(true)
+        .value(0.0f64)
+        .user_access_level(AccessLevel::HISTORY_READ | AccessLevel::CURRENT_READ)
+        .access_level(AccessLevel::HISTORY_READ | AccessLevel::CURRENT_READ)
+        .build();
+    space.insert(var, None::<&[(_, &NodeId, _)]>);
+}
+
+#[tokio::test]
+async fn history_read_unknown_node_is_rejected() {
+    // Part 11 / Part 4 §5.10.3: HistoryRead on a node that does not exist -> Bad_NodeIdUnknown.
+    let (_tester, _nm, session, _backend) = setup_hda().await;
+    let now = DateTime::now();
+    let start = DateTime::from(now.ticks() - 10_000_000);
+    let end = DateTime::from(now.ticks() + 10_000_000);
+    let e = session
+        .history_read_raw(NodeId::new(2, "NoSuchNode"), start, end, 3, false, None)
+        .await
+        .unwrap_err();
+    assert_eq!(StatusCode::BadNodeIdUnknown, e.status());
+}
+
+#[tokio::test]
+async fn history_read_without_history_access_is_denied() {
+    // A node lacking the HISTORY_READ access bit cannot be history-read -> Bad_UserAccessDenied.
+    let (_tester, nm, session, _backend) = setup_hda().await;
+    let plain = NodeId::new(2, "PlainVar");
+    {
+        let mut space = nm.address_space().write();
+        let var = VariableBuilder::new(&plain, "PlainVar", "PlainVar")
+            .data_type(DataTypeId::Double)
+            .value(0.0f64)
+            .user_access_level(AccessLevel::CURRENT_READ)
+            .access_level(AccessLevel::CURRENT_READ)
+            .build();
+        space.insert(var, None::<&[(_, &NodeId, _)]>);
+    }
+    let now = DateTime::now();
+    let start = DateTime::from(now.ticks() - 10_000_000);
+    let end = DateTime::from(now.ticks() + 10_000_000);
+    let e = session
+        .history_read_raw(plain, start, end, 3, false, None)
+        .await
+        .unwrap_err();
+    assert_eq!(StatusCode::BadUserAccessDenied, e.status());
+}
+
+#[tokio::test]
+async fn history_read_invalid_continuation_point_is_rejected() {
+    // Part 4 §5.10.3: an unrecognised history continuation point -> Bad_ContinuationPointInvalid.
+    let (_tester, nm, session, _backend) = setup_hda().await;
+    let hist = NodeId::new(2, "HistVarCp");
+    insert_hist_node(&nm, &hist);
+    let now = DateTime::now();
+    let start = DateTime::from(now.ticks() - 10_000_000);
+    let end = DateTime::from(now.ticks() + 10_000_000);
+    let e = session
+        .history_read_raw(
+            hist,
+            start,
+            end,
+            3,
+            false,
+            Some(opcua::types::ByteString::from(vec![9u8, 9, 9, 9])),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(StatusCode::BadContinuationPointInvalid, e.status());
+}
+
+#[tokio::test]
+async fn history_update_unknown_node_is_rejected() {
+    // Part 11 / Part 4 §5.10.5: HistoryUpdate on a node that does not exist -> Bad_NodeIdUnknown.
+    let (_tester, _nm, session, _backend) = setup_hda().await;
+    let now = DateTime::now();
+    let mut dv = DataValue::value_only(Variant::from(1.0f64));
+    dv.source_timestamp = Some(now);
+    dv.server_timestamp = Some(now);
+    dv.status = Some(StatusCode::Good);
+    let e = session
+        .history_update_data(
+            NodeId::new(2, "NoSuchHistNode"),
+            PerformUpdateType::Update,
+            vec![dv],
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(StatusCode::BadNodeIdUnknown, e.status());
+}

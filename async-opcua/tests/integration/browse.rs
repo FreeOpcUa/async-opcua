@@ -345,11 +345,13 @@ async fn browse_release_continuation_point() {
         .browse_next(true, std::slice::from_ref(&cp))
         .await
         .unwrap();
-    assert_eq!(1, r.len());
-    let it = &r[0];
-    assert_eq!(StatusCode::Good, it.status_code);
-    let refs = it.references.clone().unwrap_or_default();
-    assert!(refs.is_empty());
+    // P4-VIEW-03 — Part 4 §5.9.3.2 Table 37: with releaseContinuationPoints == TRUE the points are
+    // released and the results (and diagnosticInfos) arrays are empty.
+    assert!(
+        r.is_empty(),
+        "BrowseNext release must return an empty results array, got {}",
+        r.len()
+    );
 }
 
 #[tokio::test]

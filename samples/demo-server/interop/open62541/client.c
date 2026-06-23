@@ -249,6 +249,73 @@ static void test_service_breadth(void) {
         UA_Array_delete(out, outSize, &UA_TYPES[UA_TYPES_VARIANT]);
     }
 
+    /* --- Failure modes / error status codes (parity with the node-opcua harness, plus
+     * independent confirmation of this session's server-side fixes #82/#83/#84). --- */
+    if(ns > 0) {
+        /* Writing the wrong data type to a typed scalar is rejected (Bad_TypeMismatch). */
+        UA_String badStr = UA_STRING("not-an-int");
+        UA_Variant wtv;
+        UA_Variant_init(&wtv);
+        UA_Variant_setScalar(&wtv, &badStr, &UA_TYPES[UA_TYPES_STRING]);
+        UA_StatusCode wtrc =
+            UA_Client_writeValueAttribute(client, UA_NODEID_STRING(ns, "Int32"), &wtv);
+        check("Wrong-type write -> BadTypeMismatch", wtrc == UA_STATUSCODE_BADTYPEMISMATCH,
+              UA_StatusCode_name(wtrc));
+
+        /* Calling a non-existent method is rejected. */
+        size_t uoSize = 0;
+        UA_Variant *uo = NULL;
+        UA_StatusCode umrc =
+            UA_Client_call(client, UA_NODEID_STRING(ns, "Functions"),
+                           UA_NODEID_STRING(ns, "NoSuchMethod"), 0, NULL, &uoSize, &uo);
+        check("Call of unknown method is rejected", umrc != UA_STATUSCODE_GOOD,
+              UA_StatusCode_name(umrc));
+        UA_Array_delete(uo, uoSize, &UA_TYPES[UA_TYPES_VARIANT]);
+
+        /* #82: a method called with fewer arguments than it declares returns
+         * Bad_ArgumentsMissing. Add declares two Int64 inputs; we supply one. */
+        UA_Int64 one = 1;
+        UA_Variant amArg;
+        UA_Variant_init(&amArg);
+        UA_Variant_setScalar(&amArg, &one, &UA_TYPES[UA_TYPES_INT64]);
+        size_t amoSize = 0;
+        UA_Variant *amo = NULL;
+        UA_StatusCode amrc = UA_Client_call(client, UA_NODEID_STRING(ns, "Functions"),
+                                            UA_NODEID_STRING(ns, "Add"), 1, &amArg, &amoSize, &amo);
+        check("Method call with missing arguments -> BadArgumentsMissing",
+              amrc == UA_STATUSCODE_BADARGUMENTSMISSING, UA_StatusCode_name(amrc));
+        UA_Array_delete(amo, amoSize, &UA_TYPES[UA_TYPES_VARIANT]);
+
+        /* #83: writing a scalar to an array node (ValueRank mismatch) returns Bad_TypeMismatch. */
+        UA_Int32 scalarVal = 5;
+        UA_Variant vrv;
+        UA_Variant_init(&vrv);
+        UA_Variant_setScalar(&vrv, &scalarVal, &UA_TYPES[UA_TYPES_INT32]);
+        UA_StatusCode vrrc =
+            UA_Client_writeValueAttribute(client, UA_NODEID_STRING(ns, "Int32Array"), &vrv);
+        check("Scalar written to an array node -> BadTypeMismatch",
+              vrrc == UA_STATUSCODE_BADTYPEMISMATCH, UA_StatusCode_name(vrrc));
+
+        /* #84: creating a monitored item on a non-existent node returns Bad_NodeIdUnknown. */
+        UA_CreateSubscriptionRequest sreq = UA_CreateSubscriptionRequest_default();
+        UA_CreateSubscriptionResponse sresp =
+            UA_Client_Subscriptions_create(client, sreq, NULL, NULL, NULL);
+        if(sresp.responseHeader.serviceResult == UA_STATUSCODE_GOOD) {
+            UA_MonitoredItemCreateRequest mreq =
+                UA_MonitoredItemCreateRequest_default(UA_NODEID_STRING(ns, "NoSuchNodeXYZ"));
+            UA_MonitoredItemCreateResult mres = UA_Client_MonitoredItems_createDataChange(
+                client, sresp.subscriptionId, UA_TIMESTAMPSTORETURN_BOTH, mreq, NULL, NULL, NULL);
+            check("Monitored item on unknown node -> BadNodeIdUnknown",
+                  mres.statusCode == UA_STATUSCODE_BADNODEIDUNKNOWN,
+                  UA_StatusCode_name(mres.statusCode));
+            UA_MonitoredItemCreateResult_clear(&mres);
+            UA_Client_Subscriptions_deleteSingle(client, sresp.subscriptionId);
+        } else {
+            check("Monitored item on unknown node -> BadNodeIdUnknown", 0,
+                  "subscription create failed");
+        }
+    }
+
     UA_Client_disconnect(client);
     UA_Client_delete(client);
 }

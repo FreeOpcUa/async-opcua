@@ -1,71 +1,77 @@
-# Conformance audit — findings register (the fix list)
+# Conformance audit — consolidated findings register (the fix list)
 
-The running, ID'd list of spec-vs-impl divergences produced by the [audit units](./PLAN.md). One row
-per finding; each row feeds a fix. Severity **S1** security/silent-data-loss · **S2** observable
-conformance · **S3** cosmetic/dead-code/doc-drift. Status: open · fixing(feat#) · fixed(feat#) ·
-deferred(reason) · verified-conformant.
+Merged register of spec-vs-impl divergences from the multi-AI audit: **[C]** = Claude (main audit),
+**[A]** = Antigravity/Gemini (`FINDINGS-antigravity.md`), **[X]** = Codex (`FINDINGS-codex.md`). The
+per-model raw files are kept alongside for provenance; this file is the deduped, source-tagged,
+verification-graded fix list.
 
-| ID | Part/§ | Impl location | Divergence | Sev | Fix | Status |
+**Severity:** S1 security/silent-data-loss · S2 observable conformance · S3 cosmetic/dead-code/narrow.
+**Verify:** ✅ = independently verified against spec+code by Claude · ⚠ = model-cited, NOT yet
+independently verified (re-verify before fixing — verify-before-fix is mandatory). Found-by lists which
+model(s) surfaced it.
+
+| ID | Sev | Found | Verify | Part/§ | Divergence | Status |
 |---|---|---|---|---|---|---|
-| P4-SUB-01 | 4 §5.14.1.2 Table 79 rows 4/5 | `subscription.rs:400` | Normal4 guard's first disjunct is `publishing_enabled`; spec says `PublishingEnabled==FALSE`. Flips the test → `Normal5` (ReturnNotifications + ResetLifetimeCounter for enabled+more) is dead code. Masked today by the `IntervalElapsed6` timer tick. | S2 | S | **fixed** (guard → `!publishing_enabled …`; test `part4_table79_normal_publish_rows_4_5`, red-first) |
-| P4-SUB-02 | 4 §5.14.7 Table 79 rows 22/23 | `mod.rs::transfer` | TransferSubscriptions never (a) issues `Good_SubscriptionTransferred` StatusChangeNotification to the OLD session, nor (b) resets the lifetime counter. (b) one-liner; (a) needs an old-session delivery mechanism for a sub it no longer holds. | S2 | L | open |
-| P4-SUB-03 | 4 §5.13.1.5 | `monitored_item.rs::enqueue_notification` | On first Event discard, no `EventQueueOverflowEventType` Event is placed in the queue (front if discardOldest else end; never itself discarded). Feature missing entirely. | S2 | M | open |
+| P4-SUB-01 | — | C | ✅ | §5.14.1.2 T79 r4/5 | Normal4/5 Publish guard flipped; Normal5 was dead | **FIXED** |
+| P4-ATTR-01 | S2 | C,A | ✅ | §5.11.2/.4 T49/55 | Malformed `indexRange` → whole-message `BadDecodingError`, not per-op `Bad_IndexRangeInvalid` (NumericRange eager decode). Also hits Query/Write. *Codex missed.* | open |
+| P4-ATTR-05 | S2 | C | ✅ | §5.11.3.2 | HistoryRead never validates `timestampsToReturn==NEITHER` → `Bad_TimestampsToReturnInvalid` (10000-11 exceptions). *Codex UNCERTAIN; AG missed.* | open |
+| P4-VIEW-01 | S2 | C | ✅ | §5.9.2 T36 | Browse with non-ReferenceType `referenceTypeId` → empty+Good, not `Bad_ReferenceTypeIdInvalid` | open |
+| P4-VIEW-02 | S3 | X | ✅ | §5.9.4.2 (3227) | TranslateBrowsePaths treats null final `targetName` as wildcard; spec: last element shall have targetName → `Bad_BrowseNameInvalid`. *Conflict resolved: Codex right, Claude agent wrong.* | open |
+| P4-VIEW-03 | S3 | X | ✅ | §5.9.3.2 T37 (3133) | BrowseNext `releaseContinuationPoints=TRUE` returns one BrowseResult per CP; spec: results & diagnosticInfos arrays empty. *Conflict resolved: Codex right.* | open |
+| P4-VIEW-04 | S2 | A | ✅ | §5.9.5.2 | RegisterNodes drops unregistered nodes (`into_result()→None`, `filter_map`) → response array shorter than request; spec: size/order matches `nodesToRegister`. *Conflict resolved: AG right, Codex wrong.* | open |
+| P4-SESS-01 | S2 | C,A | ✅ | §5.7.5 | Cancel unimplemented → `BadServiceUnsupported`; compatibility.md claims it (doc drift). Min fix: `cancelCount=0`. *Codex UNCERTAIN.* | open |
+| P4-SESS-02 | S2 | C,X | ✅ | §5.7.2 (2417) | CreateSession enforces only clientNonce min, not the `>128` max. *AG missed.* | open |
+| P4-SESS-03 | S2 | X | ⚠ | §5.6.2.2 T11 | OpenSecureChannel can return `revisedLifetime==0`; spec requires >0 (`min(max,requested)` no lower bound). | open |
+| P4-SESS-04 | S3 | X | ⚠ | §5.6.2.3 T12 | OSC Renew before any Issue → `BadUnexpectedError` not `BadSecureChannelIdInvalid`. | open |
+| P4-SESS-05 | S2 | A | ⚠ | §5.7.2.1 | Client-cert app-URI check (`is_application_uri_valid`) only inspects the FIRST SAN → false denials / missed URI. | open |
+| P4-SESS-06 | S3 | A | ⚠ | §5.7.3.1 | Request on an unactivated session returns a fault but does not close the session. | open |
+| P4-SESS-07 | S3 | A | ✅ | §5.7.3.1 | Cross-channel transfer enforces client-cert match (HONORED) but NOT SecurityPolicy/SecurityMode equality (`is_cross_channel_transfer_forbidden` only special-cases None); ClientUserId is re-authed (moot). *Conflict resolved: narrowed to policy/mode equality.* | open |
+| P4-SESS-08 | S2 | A | ⚠ | §5.7.3.1 | Anonymous token over a new SecureChannel using Sign mode not rejected. *Claude agent UNCERTAIN.* | open |
+| P4-METHOD-01 | S2 | C,X | ✅ | §5.12 T61 | Call checks only `user_executable()` → `BadUserAccessDenied`; base `Executable` attr never checked → non-executable method still callable (should be `Bad_NotExecutable`). *AG missed.* | open |
+| P4-METHOD-02 | S3 | C,A | ✅ | §5.12 (3953) | `output_arguments` returned unconditionally; spec: empty when status severity Bad. (AG framed as inputArgumentResults never populated.) | open |
+| P4-QUERY-01 | S2 | C,A,X | ✅ | Annex B T B.6 | QueryFirst doesn't validate `typeDefinitionNode` → silent full-traversal vs `Bad_NodeIdInvalid`/`Bad_NotTypeDefinition` in parsingResults. *3-way agreement.* | open |
+| P4-NODEMGMT-01 | S3 | C,A | ⚠ | §5.8 T24/27 | AddNodes/AddReferences validation cluster: `Bad_BrowseNameDuplicated`, typeDef existence, hierarchical-ref constraint, targetNodeClass match, duplicate-ref, user-privilege (`Bad_UserAccessDenied` vs global flag). Opt-in surface (default OFF). | open |
+| P4-NODEMGMT-02 | S3 | A | ✅ | §5.8.4 | `NodeManager::delete_node_references` trait hook (cross-manager cleanup, node_management.rs:255) is an EMPTY stub in the memory manager → dangling cross-manager refs. *Conflict resolved: within-manager deletion IS honored (Codex right); only the cross-manager hook is stubbed (AG right). Narrow.* | open |
+| P4-MONITEM-01 | S2 | X | ⚠ | §5.13.2.3 T64 | CreateMonitoredItems accepts `TimestampsToReturn::Invalid` (no `Bad_TimestampsToReturnInvalid`; treated as Neither). | open |
+| P4-MONITEM-02 | S2 | X | ⚠ | §5.13.3.3 T67 | ModifyMonitoredItems accepts `TimestampsToReturn::Invalid`. | open |
+| P4-MONITEM-03 | S2 | X | ⚠ | §5.13.4.3 T70 | SetMonitoringMode accepts an invalid MonitoringMode (no `Bad_MonitoringModeInvalid`). | open |
+| P4-DISC-01 | S3 | C,X | ✅ | §5.5.5 T7 | RegisterServer/2 validate only `Bad_ServerUriInvalid`+limit; missing `Bad_ServerNameMissing`/`Bad_DiscoveryUrlMissing`/`Bad_SemaphoreFileMissing`. | open |
+| P4-DISC-02 | S3 | A | ⚠ | §5.5.2/.4 | GetEndpoints/FindServers return configured `host`, ignoring the client's connect-URL hostname. | open |
+| P4-DISC-03 | S2 | A | ⚠ | §5.5.5.1 | RegisterServer accepts registrations without client-cert auth / serverUri↔applicationUri binding. | open |
+| P4-ATTR-06 | S3 | A | ⚠ | §5.11.2 | IndexRange parsing hard-capped at 10 dimensions → decode error for higher-dim arrays. | open |
+| P4-SUB-02 | S2 | C,A | ✅ | §5.14.7 T79 r22/23 | TransferSubscriptions issues no `Good_SubscriptionTransferred` to old session and doesn't reset lifetime. *Conflict resolved: confirmed (Codex marked HONORED = miss).* | open |
+| P4-SUB-03 | S2 | C | ✅ | §5.13.1.5 | First Event discard places no `EventQueueOverflowEventType` in the queue (feature 030 gap). | open |
+| P4-ATTR-02 | S3 | C | ✅ | §5.11.2 T47 | `maxAge` (0=fresh, ≥maxInt32=cached) ignored — fine for in-memory; matters for slow external sources. | deferred |
+| P4-ATTR-03 | S3 | C | ✅ | §5.11.4 | LocalizedText write locale semantics / `Bad_LocaleNotSupported` not implemented. | deferred |
+| P4-ATTR-04 | S3 | C | ✅ | §5.11.4 T55 | No enum/range validation on writes → `Bad_OutOfRange` never returned (spec permits). | deferred |
 
-| P4-ATTR-01 | 4 §5.11.2/.4 Tables 49 & 55 | `async-opcua-types/src/numeric_range.rs` (`impl_encoded_as!` / `from_ua_string`) | A malformed `indexRange` string fails **whole-message decode** → `BadDecodingError` ServiceFault for the entire Read/Write. Spec lists `Bad_IndexRangeInvalid` as an **operation-level** code (per-node DataValue.status); one bad range should fail only its own operation, not the batch. `NumericRange` is decoded eagerly and returns a decoding error on parse failure. | S2 | M | open |
-| P4-ATTR-02 | 4 §5.11.2 Table 47 (maxAge) | `address_space/utils.rs`, `nodes/src/variable.rs` | `maxAge` (0=read fresh, ≥maxInt32=cached) is ignored — always returns the stored value. Conformant for the in-memory CoreNodeManager (stored value *is* the data source); only matters for a node manager backing a slow external source. | S3 | — | deferred (architecture-dependent; document) |
-| P4-ATTR-03 | 4 §5.11.4 (LocalizedText write) | `address_space/utils.rs` write validation | No LocalizedText locale semantics: null-text-deletes-locale, invalid/unsupported locale → `Bad_LocaleNotSupported` not implemented (LocalizedText written as opaque value). Spec marks the deletion rules "Server specific but recommended"; the invalid-locale code is firmer. | S3 | M | deferred (low value) |
-| P4-ATTR-04 | 4 §5.11.4 Table 55 (`Bad_OutOfRange`) | write validation | No enumeration/range validation on writes → `Bad_OutOfRange` never returned. Spec permits server-defined restrictions (not mandatory when none defined), so not strictly non-conformant. | S3 | — | deferred (permitted) |
+## Conflict log (resolved + open)
+- **DeleteNodes target refs** (A:DIVERGENCE / X:HONORED) → **resolved partial:** within-manager cleanup
+  honored via `address_space.delete`→`references.delete_node_references`; only the cross-manager trait
+  hook is stubbed → **P4-NODEMGMT-02** (S3 narrow).
+- **TransferSubscriptions** (C,A:DIVERGENCE / X:HONORED) → **resolved:** divergence confirmed
+  (**P4-SUB-02**); Codex false-negative.
+- **TranslateBrowsePaths targetName** (X:DIVERGENCE / C-agent:HONORED) → **resolved:** Codex right
+  (§5.9.4.2 line 3227) → **P4-VIEW-02**.
+- **BrowseNext release empties** (X:DIVERGENCE / C-agent:HONORED) → **resolved:** Codex right (line 3133)
+  → **P4-VIEW-03**.
+- **P4-ATTR-01 indexRange** (C,A:DIVERGENCE / X:HONORED) → **resolved:** confirmed earlier; Codex
+  false-negative.
+- **RegisterNodes array** (A:DIVERGENCE / X:HONORED) → **resolved:** AG right — `into_result()→None`
+  filtered out, array shrinks (§5.9.5.2) → **P4-VIEW-04** (S2).
+- **Cross-channel re-validation** (A:DIVERGENCE / C-agent:HONORED) → **resolved partial:** cert match
+  enforced (C-agent right); SecurityPolicy/SecurityMode equality NOT enforced (AG right) → **P4-SESS-07**
+  (S3, narrowed). All 7 conflicts now resolved.
 
-| P4-ATTR-05 | 4 §5.11.3.2 | `session/services/attribute.rs` history_read entry | HistoryRead does NOT validate `timestampsToReturn`. Spec: NEITHER "is not valid… shall return `Bad_TimestampsToReturnInvalid`" (OPC 10000-11 defines exceptions where it's ignored). The Read path validates `Invalid`; HistoryRead validates nothing and passes through to node managers. | S2 | S | open |
-| P4-VIEW-01 | 4 §5.9.2 Table 36 | `node_manager/view.rs:291` `allows_reference_type` | Browse with a non-null `referenceTypeId` that is not a ReferenceType returns `false` → result is empty + `Good`, instead of operation-level `Bad_ReferenceTypeIdInvalid`. Silently hides a client error. | S2 | S | open |
-| P4-SESS-01 | 4 §5.7.5 (Cancel) | `session/message_handler.rs` catch-all (no Cancel arm); `controller.rs` | Cancel service is unimplemented → falls through to `BadServiceUnsupported`. `docs/compatibility.md` **claims Cancel is supported** (doc drift). Conformant minimal behaviour: return a `CancelResponse` with `cancelCount=0`. | S2 | S | open |
-| P4-SESS-02 | 4 §5.7.2 (line 2417) | `session/manager.rs:250` | CreateSession checks only clientNonce *minimum* length; spec requires `Bad_NonceInvalid` if length `< 32` **or `> 128`** bytes. No upper bound enforced (bounded only by max message size). | S2 | S | open |
-
-| P4-METHOD-01 | 4 §5.12 Table 61 | `node_manager/memory/mod.rs:573` | Call checks only `user_executable()` (+ authenticator) → `BadUserAccessDenied`; the base **`Executable`** attribute is never checked. A method with `Executable=false` but user-executable is still callable; spec requires `Bad_NotExecutable`. ✅verified | S2 | S | open |
-| P4-METHOD-02 | 4 §5.12 (line 3953) | `node_manager/method.rs:100` | `output_arguments: Some(self.outputs)` returned unconditionally; spec: outputArguments shall be empty when the operation statusCode severity is Bad. ✅verified | S3 | S | open |
-| P4-QUERY-01 | 4 Annex B.2.3 Table B.6 | `node_manager/query.rs:59`, `services/query/handlers.rs:153` | QueryFirst does not validate `typeDefinitionNode`; an invalid/non-TypeDefinition node is silently skipped (falls back to full traversal) instead of reporting `Bad_NodeIdInvalid`/`Bad_NodeIdUnknown`/`Bad_NotTypeDefinition` in `parsingResults`. ⚠agent-cited | S2 | M | open |
-| P4-NODEMGMT-01 | 4 §5.8 Tables 24/27 | `node_manager/node_management.rs`, `memory/memory_mgr_impl.rs` | Cluster of missing AddNodes/AddReferences validations: hierarchical-ref-type constraint, `typeDefinition` node existence, `Bad_BrowseNameDuplicated`, AddReferences `targetNodeClass` match, duplicate-reference (`Bad_DuplicateReferenceNotAllowed`), `Bad_ReferenceNotAllowed`. Opt-in surface (`clients_can_modify_address_space` default OFF). ⚠agent-cited | S3 | M | open |
-| P4-DISC-01 | 4 §5.5.5 Table 7 | `info.rs:209` `apply_register_server` | RegisterServer/RegisterServer2 validate only `Bad_ServerUriInvalid` + `BadTooManyOperations`; missing `Bad_ServerNameMissing`, `Bad_DiscoveryUrlMissing`, `Bad_SemaphoreFileMissing`. LDS-side registry hygiene. ⚠agent-cited | S3 | S | open |
-
-> **Cross-cutting confirmation:** the Query audit independently re-surfaced the NumericRange lazy/lenient
-> parse — `Bad_IndexRangeInvalid` deferred to read-time (same root cause as **P4-ATTR-01**). Fixing
-> P4-ATTR-01 in the codec should resolve both. Also noted (S3): Query never returns `Bad_QueryTooComplex`
-> (no complexity limit — mild DoS-adjacent for a public-ish service).
->
-> **Audited:** Read/Write (R1–R6, W1–W9), HistoryRead/HistoryUpdate (§5.11.3/.5 — variants & CP handling
-> mostly HONORED), View §5.9 (Browse/BrowseNext/Translate/Register/Unregister), SecureChannel §5.6 +
-> Session §5.7 (013/014/025 already hardened most; nonce rotation, sig verify, channel binding HONORED),
-> NodeManagement §5.8, Method §5.12, Query Annex B, Discovery §5.5 (mostly HONORED; GetEndpoints/
-> FindServers conformant; FindServersOnNetwork = known mDNS stub).
->
-> **Unverified candidates** (surfaced by audit agents, NOT yet confirmed against code — verify before
-> acting): Browse `browseDirection` out-of-range masked via `from_bits_truncate` instead of
-> `Bad_BrowseDirectionInvalid`; CreateSession `Bad_TooManySessions` returned immediately rather than
-> closing the oldest unactivated session first (§5.7.2.1); RegisterNodes no up-front structural NodeId
-> validation; TranslateBrowsePaths target ordering (type-definition node first); `remainingPathIndex`
-> always MAX (external-server refs unsupported — known limitation); maxResponseMessageSize enforcement
-> location unconfirmed; Anonymous-token + Sign-mode + new-channel rejection not located. **Cross-cutting
-> (→ P4-GENERAL):** `diagnosticInfos` never populated even when `returnDiagnostics` is requested.
-
-## Detail
-
-### P4-SUB-01 — Normal4/Normal5 Publish guard
-First disjunct `self.publishing_enabled` → `!self.publishing_enabled` so `(enabled, more)` reaches
-Normal5 (row 5: `reset_lifetime_counter()` + `ReturnNotifications`). State-machine change — must
-re-verify existing lifetime/keep-alive tests (`subscription.rs` ~1538-1639) and add a focused test:
-enabled subscription with queued notifications returns them + resets the counter on a Publish request.
-
-### P4-SUB-02 — TransferSubscriptions Good_SubscriptionTransferred + lifetime reset
-(b) reset lifetime counter on transfer. (a) per-session list of pending "departed-subscription" status
-notifications, drained on the old session's next Publish (the sub + its queued messages have already
-moved to the new session). §5.14.7 body: "the Server shall issue a StatusChangeNotification …
-Good_SubscriptionTransferred to the old Session." Design the mechanism before coding.
-
-### P4-SUB-03 — EventQueueOverflowEventType
-Build the `EventQueueOverflowEventType` EventFieldList per the subscription's event filter; enqueue on
-first discard with correct placement; exempt it from discard. Additive, self-contained.
+## Detail (key items)
+- **P4-SUB-01** (FIXED): `subscription.rs:400` first disjunct `publishing_enabled`→`!publishing_enabled`;
+  test `part4_table79_normal_publish_rows_4_5` (red-first). Closed the Table 79 audit.
+- **P4-ATTR-01**: `NumericRange` decoded eagerly via `impl_encoded_as!`/`from_ua_string` (numeric_range.rs);
+  malformed string → decoding error fails the whole message. Fix is in the codec (lazy/lenient parse →
+  per-op `Bad_IndexRangeInvalid`); resolves Read, Write, and Query (P4-QUERY indexRange) together.
+- **P4-SUB-02**: `mod.rs::transfer` does remove→insert with no lifetime reset / no StatusChangeNotification.
+  (a) reset is a one-liner; (b) needs an old-session "departed-subscription" status delivery mechanism.
+- **P4-SUB-03**: build `EventQueueOverflowEventType` EventFieldList, enqueue on first discard, exempt from discard.
 
 ---
-
-*Findings P4-SUB-01..03 carried over from feature 030's AUDIT.md (were #1/#2/D). New findings land here
-as each unit is audited.*
+*Per-model raw audits: `FINDINGS-antigravity.md` (17), `FINDINGS-codex.md` (11). Union ≈ this table.*

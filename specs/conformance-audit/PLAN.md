@@ -139,5 +139,9 @@ commit per user-story; PR to fork `occamsshavingkit/async-opcua`; wait for full 
 - **Later findings (P2 batch):** P4-METHOD-01 (S2 Executable not checked), P4-METHOD-02 (S3), P4-QUERY-01
   (S2 typeDef not validated), P4-NODEMGMT-01 (S3 cluster), P4-DISC-01 (S3). ⚠ = agent-cited, re-verify
   at fix time.
-- **Next (no fixes):** P4-GENERAL (§5.1–5.3 common behaviour), then P6-BIN/P6-JSON/P6-TCP, P3-NODES,
-  P2-SEC, then P5/P8/P11/P12/P14.
+- **Multi-AI cross-check done for Part 4:** Antigravity (17) + Codex (11) ran the same audit
+  (`FINDINGS-antigravity.md`, `FINDINGS-codex.md`); all 7 inter-model conflicts resolved by
+  verification; everything consolidated into FINDINGS.md (~30 findings, source-tagged C/A/X). Pattern
+  for remaining units: Claude audit → AG + Codex passes → resolve conflicts → consolidate.
+- **Next (no fixes):** P4-GENERAL (§5.1–5.3), then P6-BIN/JSON/TCP, P3-NODES, P2-SEC, P5/P8/P11/P12/P14
+  — each via the 3-AI pattern.

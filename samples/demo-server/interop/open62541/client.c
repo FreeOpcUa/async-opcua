@@ -11,6 +11,7 @@
  */
 #include <open62541.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static int g_checks = 0;
@@ -28,6 +29,7 @@ static void check(const char *name, int ok, const char *detail) {
 
 static const char *DEMO_NS = "urn:DemoServer";
 static const char *endpoint = "opc.tcp://127.0.0.1:4855";
+static const char *notrust_endpoint = NULL; /* set from NOTRUST_ENDPOINT for the untrusted-cert test */
 
 /* Resolve the demo namespace index by reading the server NamespaceArray (i=2255). */
 static int resolve_demo_namespace(UA_Client *client) {
@@ -316,6 +318,87 @@ static void test_service_breadth(void) {
         }
     }
 
+    /* Reading an invalid attribute id is a per-operation Bad_AttributeIdInvalid. */
+    {
+        UA_ReadValueId rvid;
+        UA_ReadValueId_init(&rvid);
+        rvid.nodeId = UA_NODEID_NUMERIC(0, 2258);
+        rvid.attributeId = 999;
+        UA_ReadRequest rreq;
+        UA_ReadRequest_init(&rreq);
+        rreq.nodesToRead = &rvid;
+        rreq.nodesToReadSize = 1;
+        UA_ReadResponse rresp = UA_Client_Service_read(client, rreq);
+        UA_StatusCode iarc = rresp.resultsSize == 1 ? rresp.results[0].status
+                                                    : rresp.responseHeader.serviceResult;
+        check("Read invalid attribute id -> BadAttributeIdInvalid",
+              iarc == UA_STATUSCODE_BADATTRIBUTEIDINVALID, UA_StatusCode_name(iarc));
+        UA_ReadResponse_clear(&rresp);
+    }
+
+    /* Browsing with a referenceTypeId that is not a ReferenceType -> Bad_ReferenceTypeIdInvalid. */
+    {
+        UA_BrowseRequest brq;
+        UA_BrowseRequest_init(&brq);
+        brq.nodesToBrowse = UA_BrowseDescription_new();
+        brq.nodesToBrowseSize = 1;
+        brq.nodesToBrowse[0].nodeId = UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER);
+        brq.nodesToBrowse[0].referenceTypeId = UA_NODEID_NUMERIC(0, 2253); /* Server: an Object */
+        brq.nodesToBrowse[0].includeSubtypes = false;
+        brq.nodesToBrowse[0].resultMask = UA_BROWSERESULTMASK_ALL;
+        UA_BrowseResponse brsp = UA_Client_Service_browse(client, brq);
+        UA_StatusCode brrc = brsp.resultsSize == 1 ? brsp.results[0].statusCode
+                                                   : brsp.responseHeader.serviceResult;
+        check("Browse with a non-ReferenceType refType -> BadReferenceTypeIdInvalid",
+              brrc == UA_STATUSCODE_BADREFERENCETYPEIDINVALID, UA_StatusCode_name(brrc));
+        UA_BrowseResponse_clear(&brsp);
+        UA_BrowseRequest_clear(&brq);
+    }
+
+    /* A browse path that resolves to nothing -> Bad_NoMatch. */
+    {
+        UA_RelativePathElement el;
+        memset(&el, 0, sizeof(el));
+        el.referenceTypeId = UA_NODEID_NUMERIC(0, UA_NS0ID_HIERARCHICALREFERENCES);
+        el.includeSubtypes = true;
+        el.targetName = UA_QUALIFIEDNAME(0, "NoSuchChildXYZ");
+        UA_BrowsePath bp;
+        UA_BrowsePath_init(&bp);
+        bp.startingNode = UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER);
+        bp.relativePath.elements = &el;
+        bp.relativePath.elementsSize = 1;
+        UA_TranslateBrowsePathsToNodeIdsRequest treq2;
+        UA_TranslateBrowsePathsToNodeIdsRequest_init(&treq2);
+        treq2.browsePaths = &bp;
+        treq2.browsePathsSize = 1;
+        UA_TranslateBrowsePathsToNodeIdsResponse tresp2 =
+            UA_Client_Service_translateBrowsePathsToNodeIds(client, treq2);
+        UA_StatusCode nmrc = tresp2.resultsSize == 1 ? tresp2.results[0].statusCode
+                                                     : tresp2.responseHeader.serviceResult;
+        check("TranslateBrowsePath with no match -> BadNoMatch",
+              nmrc == UA_STATUSCODE_BADNOMATCH, UA_StatusCode_name(nmrc));
+        UA_TranslateBrowsePathsToNodeIdsResponse_clear(&tresp2);
+    }
+
+    /* BrowseNext with an unrecognised continuation point -> Bad_ContinuationPointInvalid. */
+    {
+        UA_Byte cpbytes[4] = {1, 2, 3, 4};
+        UA_ByteString cp;
+        cp.length = 4;
+        cp.data = cpbytes;
+        UA_BrowseNextRequest bnreq;
+        UA_BrowseNextRequest_init(&bnreq);
+        bnreq.continuationPoints = &cp;
+        bnreq.continuationPointsSize = 1;
+        bnreq.releaseContinuationPoints = false;
+        UA_BrowseNextResponse bnresp = UA_Client_Service_browseNext(client, bnreq);
+        UA_StatusCode bnrc = bnresp.resultsSize == 1 ? bnresp.results[0].statusCode
+                                                     : bnresp.responseHeader.serviceResult;
+        check("BrowseNext with an invalid continuation point -> BadContinuationPointInvalid",
+              bnrc == UA_STATUSCODE_BADCONTINUATIONPOINTINVALID, UA_StatusCode_name(bnrc));
+        UA_BrowseNextResponse_clear(&bnresp);
+    }
+
     UA_Client_disconnect(client);
     UA_Client_delete(client);
 }
@@ -388,14 +471,78 @@ static void test_secured(void) {
     UA_ByteString_clear(&privateKey);
 }
 
+/* Authentication failure modes: wrong password and unknown user are both rejected. */
+static void test_auth_failures(void) {
+    printf("\n[None] authentication failure modes\n");
+
+    UA_Client *c1 = UA_Client_new();
+    UA_ClientConfig_setDefault(UA_Client_getConfig(c1));
+    UA_StatusCode r1 = UA_Client_connectUsername(c1, endpoint, "sample1", "wrong-password");
+    check("Wrong password is rejected", r1 != UA_STATUSCODE_GOOD, UA_StatusCode_name(r1));
+    if(r1 == UA_STATUSCODE_GOOD)
+        UA_Client_disconnect(c1);
+    UA_Client_delete(c1);
+
+    UA_Client *c2 = UA_Client_new();
+    UA_ClientConfig_setDefault(UA_Client_getConfig(c2));
+    UA_StatusCode r2 = UA_Client_connectUsername(c2, endpoint, "no-such-user", "whatever");
+    check("Unknown user is rejected", r2 != UA_STATUSCODE_GOOD, UA_StatusCode_name(r2));
+    if(r2 == UA_STATUSCODE_GOOD)
+        UA_Client_disconnect(c2);
+    UA_Client_delete(c2);
+}
+
+/* A server that does not auto-trust client certs must reject an unknown ("discarded") client
+ * certificate on a secured handshake. Requires NOTRUST_ENDPOINT (the :4856 no-trust server). */
+static void test_untrusted_cert(void) {
+    if(!notrust_endpoint)
+        return;
+    printf("\n[Basic256Sha256 / SignAndEncrypt] untrusted client cert is rejected\n");
+    UA_ByteString certificate = UA_BYTESTRING_NULL, privateKey = UA_BYTESTRING_NULL;
+    UA_String subject[3] = {UA_STRING_STATIC("C=EN"), UA_STRING_STATIC("O=async-opcua"),
+                            UA_STRING_STATIC("CN=open62541-untrusted-client")};
+    UA_String subjectAltName[2] = {UA_STRING_STATIC("DNS:localhost"),
+                                   UA_STRING_STATIC("URI:urn:open62541-untrusted-client")};
+    UA_StatusCode rc = UA_CreateCertificate(
+        UA_Log_Stdout, subject, 3, subjectAltName, 2, UA_CERTIFICATEFORMAT_DER, NULL,
+        &privateKey, &certificate);
+    if(rc != UA_STATUSCODE_GOOD) {
+        check("Untrusted: client certificate generated", 0, UA_StatusCode_name(rc));
+        return;
+    }
+
+    UA_Client *client = UA_Client_new();
+    UA_ClientConfig *cc = UA_Client_getConfig(client);
+    UA_ClientConfig_setDefaultEncryption(cc, certificate, privateKey, NULL, 0, NULL, 0);
+    UA_CertificateVerification_AcceptAll(&cc->certificateVerification);
+    cc->securityMode = UA_MESSAGESECURITYMODE_SIGNANDENCRYPT;
+    UA_String_clear(&cc->securityPolicyUri);
+    cc->securityPolicyUri =
+        UA_STRING_ALLOC("http://opcfoundation.org/UA/SecurityPolicy#Basic256Sha256");
+    UA_String_clear(&cc->clientDescription.applicationUri);
+    cc->clientDescription.applicationUri = UA_STRING_ALLOC("urn:open62541-untrusted-client");
+
+    rc = UA_Client_connect(client, notrust_endpoint);
+    check("Untrusted client cert is rejected by the no-trust server", rc != UA_STATUSCODE_GOOD,
+          rc == UA_STATUSCODE_GOOD ? "connection unexpectedly succeeded" : UA_StatusCode_name(rc));
+    if(rc == UA_STATUSCODE_GOOD)
+        UA_Client_disconnect(client);
+    UA_Client_delete(client);
+    UA_ByteString_clear(&certificate);
+    UA_ByteString_clear(&privateKey);
+}
+
 int main(int argc, char **argv) {
     if(argc > 1)
         endpoint = argv[1];
+    notrust_endpoint = getenv("NOTRUST_ENDPOINT");
     printf("open62541 interop smoke test against %s\n", endpoint);
     test_unsecured_services();
     test_service_breadth();
     test_username();
+    test_auth_failures();
     test_secured();
+    test_untrusted_cert();
     printf("\n%s: %d/%d checks passed\n",
            g_failures == 0 ? "\x1b[32mPASS\x1b[0m" : "\x1b[31mFAIL\x1b[0m",
            g_checks - g_failures, g_checks);

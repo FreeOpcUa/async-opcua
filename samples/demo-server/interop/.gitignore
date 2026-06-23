@@ -4,3 +4,5 @@ pki-interop/
 client-pki/
 pki-notrust/
 probe-pki/
+asyncua/.venv/
+asyncua/__pycache__/

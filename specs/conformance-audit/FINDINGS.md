@@ -112,8 +112,8 @@ validation is invoked**, not the crypto itself:
 
 | ID | Sev | Found | Verify | § | Divergence | Status |
 |---|---|---|---|---|---|---|
-| P2-SEC-01 | S2 | X | ✅ | P4 §6.1.4/§6.1.3 | OpenSecureChannel verifies proof-of-possession (asym signature) + nonce length but does NOT run §6.1.3 trust-chain validation; `validate_or_reject_application_instance_cert` is called only at CreateSession (manager.rs:268). An untrusted/expired/revoked cert can establish a SecureChannel. | open |
-| P2-SEC-02 | S3 | X | ⚠ | P4 §6.1.7 | SecureChannel Renew does not re-run ApplicationInstanceCertificate verification; §6.1.7 says cert checks shall run on every token renewal (catches mid-session expiry/revocation). | open |
+| P2-SEC-01 | S2 | X | ✅ | P4 §6.1.4/§6.1.3 | OpenSecureChannel verifies proof-of-possession (asym signature) + nonce length but does NOT run §6.1.3 trust-chain validation; `validate_or_reject_application_instance_cert` is called only at CreateSession (manager.rs:268). An untrusted/expired/revoked cert can establish a SecureChannel. | **FIXED** (OSC now validates client-cert trust for secured policies → `BadSecurityChecksFailed`; applicationUri stays a CreateSession check. Verified: full RSA+ECC secured matrix incl. renewal still connects.) |
+| P2-SEC-02 | S3 | X | ✅ | P4 §6.1.7 | SecureChannel Renew does not re-run ApplicationInstanceCertificate verification. | **FIXED** (with P2-SEC-01: `open_secure_channel` handles both Issue and Renew, so the new validation runs on every renewal; `ecc_nistp256_channel_renewal` confirms renewal still works). |
 | P2-SEC-03 | S3 | X | ⚠ | P4 §6.1.3 | Suppressed cert-validation failures are logged `warn!` but emit no `AuditCertificate*` event; §6.1.3 says suppressed errors are always reported via auditing. *Matches the known feature-013 deferral (typed AuditCertificate events).* | open |
 | P2-SEC-04 | S2 | X | ⚠ | P4 §6.1.8 | X.509 user-token signature is verified before any §6.1.3 validation of the user signing certificate; authentication then checks only the configured thumbprint. Spec: don't verify a signature before validating the signing cert. | open |
 

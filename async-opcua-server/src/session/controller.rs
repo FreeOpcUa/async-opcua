@@ -878,6 +878,32 @@ impl<T: ConnectionTransport> SessionController<T> {
         self.channel
             .set_remote_cert_from_byte_string(&security_header.sender_certificate)?;
 
+        // Validate the client's ApplicationInstanceCertificate trust (Part 4 §6.1.3) when the
+        // SecureChannel is created/renewed, not only at CreateSession (§6.1.4/§6.1.7). An
+        // untrusted/expired/revoked certificate must be rejected here. The applicationUri match is a
+        // CreateSession-level check (the clientDescription is not available yet), so pass None for it;
+        // CreateSession still performs the URI check. Failures map to Bad_SecurityChecksFailed for the
+        // client (per §6.1.3).
+        if self.channel.security_policy() != SecurityPolicy::None {
+            if let Some(cert) = self.channel.remote_cert() {
+                let security_policy = self.channel.security_policy();
+                let store = trace_read_lock!(self.certificate_store);
+                if let Err(e) = store.validate_or_reject_application_instance_cert(
+                    &cert,
+                    security_policy,
+                    None,
+                    None,
+                ) {
+                    error!("OpenSecureChannel rejected: client certificate failed validation: {e}");
+                    return Ok(ServiceFault::new(
+                        &request.request_header,
+                        StatusCode::BadSecurityChecksFailed,
+                    )
+                    .into());
+                }
+            }
+        }
+
         let revised_lifetime = self
             .info
             .config

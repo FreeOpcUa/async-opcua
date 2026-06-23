@@ -534,3 +534,45 @@ async fn failed_method_call_has_no_output_arguments() {
         r.output_arguments
     );
 }
+
+#[tokio::test]
+async fn call_with_missing_arguments() {
+    // Part 4 §5.11.2: a Call that omits a declared input argument returns Bad_ArgumentsMissing.
+    // The callback ignores its arguments, so the status reflects the server's own validation.
+    let (_tester, nm, session) = setup().await;
+
+    let id = nm.inner().next_node_id();
+    let input_id = nm.inner().next_node_id();
+    let output_id = nm.inner().next_node_id();
+    {
+        let mut sp = nm.address_space().write();
+        MethodBuilder::new(&id, "MethodAdd2", "MethodAdd2")
+            .component_of(ObjectId::ObjectsFolder)
+            .input_args(
+                &mut *sp,
+                &input_id,
+                &[
+                    ("Lhs", DataTypeId::Int64).into(),
+                    ("Rhs", DataTypeId::Int64).into(),
+                ],
+            )
+            .output_args(
+                &mut *sp,
+                &output_id,
+                &[("Result", DataTypeId::Int64).into()],
+            )
+            .insert(&mut *sp);
+    }
+    nm.inner()
+        .add_method_cb(id.clone(), |_args| Ok(vec![Variant::Int64(0)]));
+
+    let r = session
+        .call_one(CallMethodRequest {
+            object_id: ObjectId::ObjectsFolder.into(),
+            method_id: id.clone(),
+            input_arguments: Some(vec![Variant::Int64(3)]), // only 1 of the 2 declared args
+        })
+        .await
+        .unwrap();
+    assert_eq!(r.status_code, StatusCode::BadArgumentsMissing);
+}

@@ -727,3 +727,38 @@ async fn browse_invalid_reference_type_is_bad_reference_type_id_invalid() {
     assert_eq!(1, r.len());
     assert_eq!(r[0].status_code, StatusCode::BadReferenceTypeIdInvalid);
 }
+
+#[tokio::test]
+async fn translate_browse_path_no_match() {
+    // Part 4 §5.8.4: a browse path that resolves to nothing returns Bad_NoMatch.
+    let (_tester, _nm, session) = setup().await;
+    let r = session
+        .translate_browse_paths_to_node_ids(&[BrowsePath {
+            starting_node: ObjectId::ObjectsFolder.into(),
+            relative_path: RelativePath {
+                elements: Some(vec![RelativePathElement {
+                    reference_type_id: ReferenceTypeId::HierarchicalReferences.into(),
+                    is_inverse: false,
+                    include_subtypes: true,
+                    target_name: "NoSuchChildXYZ".into(),
+                }]),
+            },
+        }])
+        .await
+        .unwrap();
+    assert_eq!(1, r.len());
+    assert_eq!(StatusCode::BadNoMatch, r[0].status_code);
+}
+
+#[tokio::test]
+async fn browse_next_invalid_continuation_point() {
+    // Part 4 §5.8.3: a BrowseNext with an unrecognised continuation point returns
+    // Bad_ContinuationPointInvalid (distinct from the empty -> BadNothingToDo case).
+    let (_tester, _nm, session) = setup().await;
+    let r = session
+        .browse_next(false, &[ByteString::from(vec![1u8, 2, 3, 4])])
+        .await
+        .unwrap();
+    assert_eq!(1, r.len());
+    assert_eq!(StatusCode::BadContinuationPointInvalid, r[0].status_code);
+}

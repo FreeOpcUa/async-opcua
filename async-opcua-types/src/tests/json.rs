@@ -1084,3 +1084,25 @@ fn json_datetime_full_precision_round_trip() {
         assert_eq!(r, d, "round-trip of {v}");
     }
 }
+
+#[test]
+fn json_array_decode_is_bounded_by_max_array_length() {
+    // P6-JSON-01 — OPC UA Part 6 §5.4: JSON array decoding MUST honour
+    // DecodingOptions.max_array_length, exactly as the binary path does
+    // (variant/mod.rs returns BadEncodingLimitsExceeded when array length exceeds the
+    // limit), so a malicious JSON array cannot drive unbounded allocation. Anchored to
+    // the binary-path bound, not to the current JSON code.
+    let mut ctx_owned = ContextOwned::default();
+    ctx_owned.options_mut().max_array_length = 4;
+    let ctx = ctx_owned.context();
+
+    // A JSON array with more elements (10) than the configured limit (4).
+    let payload = "[1,2,3,4,5,6,7,8,9,10]";
+    let res: EncodingResult<Vec<i32>> = crate::json::from_bytes(payload.as_bytes(), &ctx);
+    let err = res.expect_err("JSON array of 10 elements must be rejected when max_array_length=4");
+    assert_eq!(
+        err.status(),
+        StatusCode::BadEncodingLimitsExceeded,
+        "JSON array bound should report BadEncodingLimitsExceeded like the binary path, got {err:?}"
+    );
+}

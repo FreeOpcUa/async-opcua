@@ -12,7 +12,7 @@ pub use struson::{
     writer::{JsonStreamWriter, JsonWriter},
 };
 
-use crate::{EncodingResult, Error, UaNullable};
+use crate::{EncodingResult, Error, StatusCode, UaNullable};
 
 /// Trait for OPC-UA json encoding.
 pub trait JsonEncodable: UaNullable {
@@ -121,6 +121,15 @@ where
         let mut res = Vec::new();
         stream.begin_array()?;
         while stream.has_next()? {
+            if res.len() >= ctx.options().max_array_length {
+                return Err(Error::new(
+                    StatusCode::BadEncodingLimitsExceeded,
+                    format!(
+                        "JSON array exceeds configured max array length {}",
+                        ctx.options().max_array_length
+                    ),
+                ));
+            }
             res.push(T::decode(stream, ctx)?);
         }
         stream.end_array()?;

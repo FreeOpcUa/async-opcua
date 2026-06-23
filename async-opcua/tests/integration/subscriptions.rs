@@ -1186,6 +1186,93 @@ async fn test_event_subscriptions() {
     );
 }
 
+// Part 4 §5.13.2: when events are lost because the queue is full, the Server places a
+// single EventQueueOverflowEventType in the queue as an extra entry — at the front of
+// the queue when discardOldest is TRUE.
+#[tokio::test]
+async fn event_queue_overflow_inserts_overflow_event() {
+    let (tester, _nm, session) = setup().await;
+
+    let (notifs, _, mut events) = ChannelNotifications::new();
+    let sub_id = session
+        .create_subscription(Duration::from_millis(100), 100, 20, 1000, 0, true, notifs)
+        .await
+        .unwrap();
+
+    session
+        .create_monitored_items(
+            sub_id,
+            TimestampsToReturn::Both,
+            vec![MonitoredItemCreateRequest {
+                item_to_monitor: ReadValueId {
+                    node_id: ObjectId::Server.into(),
+                    attribute_id: AttributeId::EventNotifier as u32,
+                    ..Default::default()
+                },
+                monitoring_mode: MonitoringMode::Reporting,
+                requested_parameters: MonitoringParameters {
+                    sampling_interval: 0.0,
+                    queue_size: 2,
+                    discard_oldest: true,
+                    filter: ExtensionObject::new(EventFilter {
+                        select_clauses: Some(vec![SimpleAttributeOperand::new_value(
+                            ObjectTypeId::BaseEventType,
+                            "EventType",
+                        )]),
+                        where_clause: ContentFilterBuilder::new().build(),
+                    }),
+                    ..Default::default()
+                },
+            }],
+        )
+        .await
+        .unwrap();
+
+    // Fire four events in one batch (queue size 2) so two events are discarded before
+    // the publishing interval drains the queue.
+    let server_id: NodeId = ObjectId::Server.into();
+    let evts: Vec<ProgressEventType> = {
+        let tt = tester.handle.type_tree();
+        let guard = tt.read();
+        let ns = guard.namespaces();
+        (1..=4)
+            .map(|i| {
+                ProgressEventType::new_event_now(
+                    ProgressEventType::event_type_id(),
+                    random::byte_string(6),
+                    format!("E{i}"),
+                    ns,
+                )
+            })
+            .collect()
+    };
+    tester
+        .handle
+        .subscriptions()
+        .notify_events(evts.iter().map(|e| (e as &dyn Event, &server_id)));
+
+    // With discardOldest=TRUE the overflow indicator is delivered first, ahead of the
+    // two retained events.
+    let mut types = Vec::new();
+    for _ in 0..3 {
+        let (_r, v) = timeout(Duration::from_millis(800), events.recv())
+            .await
+            .expect("expected an event notification")
+            .unwrap();
+        let fields = v.unwrap();
+        types.push(fields[0].clone());
+    }
+    let overflow_type = Variant::from(NodeId::from(ObjectTypeId::EventQueueOverflowEventType));
+    assert_eq!(
+        types[0], overflow_type,
+        "overflow event should arrive first (discardOldest=TRUE)"
+    );
+    assert!(
+        types[1..].iter().all(|t| *t != overflow_type),
+        "exactly one overflow event expected"
+    );
+}
+
 // TODO: Add more detailed high level tests on subscriptions.
 
 #[tokio::test]

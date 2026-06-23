@@ -1320,3 +1320,39 @@ async fn cancel_returns_cancel_count_zero() {
     let count = session.cancel(1).await.unwrap();
     assert_eq!(0, count);
 }
+
+#[tokio::test]
+async fn server_capabilities_locale_id_array_is_populated() {
+    // P5-01 — OPC UA Part 5 §6.3.2: ServerCapabilities.LocaleIdArray is a mandatory property and must
+    // reflect the server's configured locales, not a static empty array.
+    let (_tester, _nm, session) = setup().await;
+    let r = session
+        .read(
+            &[ReadValueId {
+                node_id: VariableId::Server_ServerCapabilities_LocaleIdArray.into(),
+                attribute_id: AttributeId::Value as u32,
+                ..Default::default()
+            }],
+            TimestampsToReturn::Both,
+            0.0,
+        )
+        .await
+        .unwrap();
+    let Some(Variant::Array(arr)) = r[0].value.clone() else {
+        panic!(
+            "LocaleIdArray must be a populated array, got {:?}",
+            r[0].value
+        );
+    };
+    assert!(
+        !arr.values.is_empty(),
+        "LocaleIdArray must reflect configured locales, not be empty"
+    );
+    assert!(
+        arr.values
+            .iter()
+            .any(|x| matches!(x, Variant::String(s) if s.as_ref() == "en")),
+        "LocaleIdArray should contain the configured locale 'en', got {:?}",
+        arr.values
+    );
+}

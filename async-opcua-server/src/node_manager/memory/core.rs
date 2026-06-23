@@ -368,6 +368,11 @@ impl CoreNodeManagerImpl {
             VariableId::Server_ServerCapabilities_ServerProfileArray => {
                 context.info.capabilities.profiles.clone().into()
             }
+            // Part 5 §6.3.2: LocaleIdArray is a mandatory ServerCapabilities property; expose the
+            // server's configured locales rather than the static (empty) node value.
+            VariableId::Server_ServerCapabilities_LocaleIdArray => {
+                context.info.config.locale_ids.clone().into()
+            }
 
             // History capabilities
             VariableId::HistoryServerCapabilities_AccessHistoryDataCapability => {

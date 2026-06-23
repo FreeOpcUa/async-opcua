@@ -102,6 +102,9 @@ jobs:
   verify-clean-codegen:
     uses: ./.github/workflows/ci_verify_clean_codegen.yml
 
+  interop:
+    uses: ./.github/workflows/ci_interop.yml
+
   check_for_release:
     runs-on: ubuntu-latest
     outputs:

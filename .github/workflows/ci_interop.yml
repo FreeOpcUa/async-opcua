@@ -1,0 +1,29 @@
+name: Interop conformance harness
+
+# Drives the demo server with two independent OPC UA stacks (node-opcua and open62541)
+# across the conformance surface — the repeatable substitute for the official UACTT.
+'on':
+  workflow_call: null
+
+jobs:
+  interop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Provision toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1
+        with:
+          toolchain: stable
+
+      # libssl-dev + cmake + a C toolchain are needed to build open62541 with OpenSSL
+      # encryption; libelf-dev is pulled in by the demo server's --all-features build.
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev cmake build-essential libelf-dev
+
+      # Node.js / npm are preinstalled on ubuntu-latest runners.
+      - name: node-opcua interop harness
+        run: ./samples/demo-server/interop/run-interop.sh
+
+      - name: open62541 interop harness
+        run: ./samples/demo-server/interop/open62541/run-open62541.sh

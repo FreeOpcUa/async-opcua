@@ -60,14 +60,14 @@ FINDINGS for the verified-conformant carryover).
 | Unit | Area (Part 4 §) | Priority | Status | Prior |
 |---|---|---|---|---|
 | **P4-SUB** | Subscription + MonitoredItem delivery (§5.13/§5.14) — [detail](./unit-P4-SUB.md) | P1 | ◑ | 027/029/030 |
-| **P4-ATTR** | Attribute set: Read/Write/HistoryRead/HistoryUpdate (§5.10), IndexRange/NumericRange, DataValue, timestamps, write masks | P1 | ⬜ | 017 (NumericRange) |
+| **P4-ATTR** | Attribute set: Read/Write/HistoryRead/HistoryUpdate (§5.11), IndexRange/NumericRange, DataValue, timestamps, write masks | P1 | ◑ | 017 (NumericRange) |
 | **P4-VIEW** | View set: Browse/BrowseNext/TranslateBrowsePaths/Register/Unregister (§5.9), continuation points, ref/nodeclass filtering, BrowseDirection | P1 | ⬜ | — |
-| **P4-SESS** | Session + SecureChannel: Create/Activate/Close/Cancel, Open/CloseSecureChannel (§5.5/§5.6), nonce, cert binding, token renewal, timeouts | P1 | ⬜ | 013/014 |
+| **P4-SESS** | SecureChannel (§5.6) + Session (§5.7): Open/Close, Create/Activate/Close/Cancel, nonce, cert binding, token renewal, timeouts | P1 | ⬜ | 013/014 |
 | **P4-GENERAL** | General service behaviour (§5.1–5.3): request/response headers, diagnostics, OperationLimits, service-result vs operation-level status, per-service security checks | P1 | ⬜ | 011/025 |
-| **P4-NODEMGMT** | NodeManagement set (§5.7): Add/Delete Nodes+References, status codes, gating | P2 | ⬜ | 022 |
-| **P4-METHOD** | Method Call (§5.11): argument validation, status codes, output mapping | P2 | ⬜ | 021 |
-| **P4-QUERY** | Query set (§5.8): QueryFirst/Next, content filter, continuation points | P2 | ⬜ | 023 |
-| **P4-DISC** | Discovery set (§5.4): GetEndpoints, FindServers, RegisterServer/2; FindServersOnNetwork (deferred, mDNS) | P2 | ⬜ | 024 |
+| **P4-NODEMGMT** | NodeManagement set (§5.8): Add/Delete Nodes+References, status codes, gating | P2 | ⬜ | 022 |
+| **P4-METHOD** | Method Call (§5.12): argument validation, status codes, output mapping | P2 | ⬜ | 021 |
+| **P4-QUERY** | Query set (§5.10): QueryFirst/Next, content filter, continuation points | P2 | ⬜ | 023 |
+| **P4-DISC** | Discovery set (§5.5): GetEndpoints, FindServers, RegisterServer/2; FindServersOnNetwork (deferred, mDNS) | P2 | ⬜ | 024 |
 
 ### Part 6 — Mappings (encoding / transport)
 | Unit | Area (Part 6 §) | Priority | Status | Prior |
@@ -124,4 +124,7 @@ stale list and zero shipped fixes). Each unit:
 ## Status board
 - **Done units:** none fully closed yet. P4-SUB partway (027/029/030 merged; **P4-SUB-01 fixed**; 2 gaps open).
 - **Carry-over open findings:** P4-SUB-02 (transfer), P4-SUB-03 (event overflow) — see FINDINGS.md.
-- **Next:** P4-ATTR (Attribute set audit).
+- **P4-ATTR:** Read + Write audited → 1 real finding (**P4-ATTR-01**, S2: malformed indexRange sinks
+  the whole batch instead of per-node `Bad_IndexRangeInvalid`) + 3 low-severity/deferred. HistoryRead/
+  HistoryUpdate still to audit.
+- **Next:** fix P4-ATTR-01 (own feature — touches the NumericRange codec), then finish P4-ATTR history.

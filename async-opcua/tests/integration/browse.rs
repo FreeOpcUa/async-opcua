@@ -665,3 +665,21 @@ async fn test_recursive_browser_multi_hit() {
     // Note: This value is expected to change with new versions of the standard.
     assert_eq!(rs.len(), 2247);
 }
+
+#[tokio::test]
+async fn register_nodes_echoes_every_input_node() {
+    // P4-VIEW-04 — OPC UA Part 4 §5.9.5: RegisterNodes does not validate NodeIds; the response
+    // size/order matches nodesToRegister, and a node no manager optimizes is echoed as its input
+    // NodeId (it must NOT be dropped). Anchored to the spec.
+    let (_tester, _nm, session) = setup().await;
+
+    // A node in a namespace no node manager owns -> never marked "registered" by a manager.
+    let unowned = NodeId::new(100, "no-manager-owns-this");
+    let res = session.register_nodes(&[unowned.clone()]).await.unwrap();
+    assert_eq!(
+        res.len(),
+        1,
+        "RegisterNodes response size must match the request"
+    );
+    assert_eq!(res[0], unowned);
+}

@@ -18,7 +18,7 @@ model(s) surfaced it.
 | P4-VIEW-01 | S2 | C | ✅ | §5.9.2 T36 | Browse with non-ReferenceType `referenceTypeId` → empty+Good, not `Bad_ReferenceTypeIdInvalid` | open |
 | P4-VIEW-02 | S3 | X | ✅ | §5.9.4.2 (3227) | TranslateBrowsePaths treats null final `targetName` as wildcard; spec: last element shall have targetName → `Bad_BrowseNameInvalid`. *Conflict resolved: Codex right, Claude agent wrong.* | open |
 | P4-VIEW-03 | S3 | X | ✅ | §5.9.3.2 T37 (3133) | BrowseNext `releaseContinuationPoints=TRUE` returns one BrowseResult per CP; spec: results & diagnosticInfos arrays empty. *Conflict resolved: Codex right.* | open |
-| P4-VIEW-04 | S2 | A | ✅ | §5.9.5.2 | RegisterNodes drops unregistered nodes (`into_result()→None`, `filter_map`) → response array shorter than request; spec: size/order matches `nodesToRegister`. *Conflict resolved: AG right, Codex wrong.* | open |
+| P4-VIEW-04 | S2 | A | ✅ | §5.9.5.2 | RegisterNodes drops unregistered nodes (`into_result()→None`, `filter_map`) → response array shorter than request; spec: size/order matches `nodesToRegister`. *Conflict resolved: AG right, Codex wrong.* | **FIXED** (`into_result` echoes every input NodeId; `filter_map`→`map`; test `register_nodes_echoes_every_input_node`, red-first) |
 | P4-SESS-01 | S2 | C,A | ✅ | §5.7.5 | Cancel unimplemented → `BadServiceUnsupported`; compatibility.md claims it (doc drift). Min fix: `cancelCount=0`. *Codex UNCERTAIN.* | open |
 | P4-SESS-02 | S2 | C,X | ✅ | §5.7.2 (2417) | CreateSession enforces only clientNonce min, not the `>128` max. *AG missed.* | open |
 | P4-SESS-03 | S2 | X | ⚠ | §5.6.2.2 T11 | OpenSecureChannel can return `revisedLifetime==0`; spec requires >0 (`min(max,requested)` no lower bound). | open |

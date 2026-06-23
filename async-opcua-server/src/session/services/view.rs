@@ -518,7 +518,7 @@ pub(crate) async fn register_nodes(
         }
     }
 
-    let registered_node_ids: Vec<_> = items.into_iter().filter_map(|n| n.into_result()).collect();
+    let registered_node_ids: Vec<_> = items.into_iter().map(|n| n.into_result()).collect();
 
     Response {
         message: RegisterNodesResponse {

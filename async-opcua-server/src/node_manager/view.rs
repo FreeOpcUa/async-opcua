@@ -736,17 +736,17 @@ impl RegisterNodeItem {
         &self.node_id
     }
 
-    /// Set the node registered status. This is returned to the client.
+    /// Mark whether a node manager optimized (registered) this node. Informational only:
+    /// per Part 4 §5.9.5 the response echoes the input NodeId regardless.
     pub fn set_registered(&mut self, registered: bool) {
         self.registered = registered;
     }
 
-    pub(crate) fn into_result(self) -> Option<NodeId> {
-        if self.registered {
-            Some(self.node_id)
-        } else {
-            None
-        }
+    pub(crate) fn into_result(self) -> NodeId {
+        // Part 4 §5.9.5: RegisterNodes echoes every input NodeId (the optimized alias if a node
+        // manager produced one, otherwise the original); nodes are never dropped, so the response
+        // size/order matches nodesToRegister.
+        self.node_id
     }
 }
 

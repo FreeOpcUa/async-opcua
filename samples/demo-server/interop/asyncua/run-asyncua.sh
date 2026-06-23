@@ -20,7 +20,8 @@ else
   echo "==> installing asyncua into a virtualenv (first run only)"
   python3 -m venv "$here/.venv"
   "$here/.venv/bin/pip" install --quiet --upgrade pip
-  "$here/.venv/bin/pip" install --quiet asyncua
+  # Pin the major version so a future breaking asyncua release can't silently break CI.
+  "$here/.venv/bin/pip" install --quiet 'asyncua==2.0.*'
   PY="$here/.venv/bin/python"
 fi
 

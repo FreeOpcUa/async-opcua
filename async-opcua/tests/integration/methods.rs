@@ -494,3 +494,43 @@ async fn call_non_executable_method_is_bad_not_executable() {
         .unwrap();
     assert_eq!(r.status_code, StatusCode::BadNotExecutable);
 }
+
+#[tokio::test]
+async fn failed_method_call_has_no_output_arguments() {
+    // P4-METHOD-02 — OPC UA Part 4 §5.12 (line 3953): outputArguments shall be empty when the call
+    // statusCode severity is Bad. A method that fails validation must not return output arguments.
+    let (_tester, nm, session) = setup().await;
+    let id = nm.inner().next_node_id();
+    let input_id = nm.inner().next_node_id();
+    let output_id = nm.inner().next_node_id();
+    {
+        let mut sp = nm.address_space().write();
+        MethodBuilder::new(&id, "NoPerm", "NoPerm")
+            .user_executable(false)
+            .component_of(ObjectId::ObjectsFolder)
+            .input_args(&mut *sp, &input_id, &[])
+            .output_args(
+                &mut *sp,
+                &output_id,
+                &[("Result", DataTypeId::Int64).into()],
+            )
+            .insert(&mut *sp);
+    }
+    nm.inner()
+        .add_method_cb(id.clone(), |_| Ok(vec![Variant::Int64(1)]));
+
+    let r = session
+        .call_one(CallMethodRequest {
+            object_id: ObjectId::ObjectsFolder.into(),
+            method_id: id.clone(),
+            input_arguments: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(r.status_code, StatusCode::BadUserAccessDenied);
+    assert!(
+        r.output_arguments.is_none(),
+        "outputArguments must be empty when the call status is Bad, got {:?}",
+        r.output_arguments
+    );
+}

@@ -224,8 +224,10 @@ impl BinaryDecodable for DataValue {
         } else {
             None
         };
+        // Part 6 §5.2.2.17: "The Picoseconds fields shall contain values less than 10 000. The
+        // decoder shall treat values greater than or equal to 10 000 as the value '9999'."
         let source_picoseconds = if encoding_mask.contains(DataValueFlags::HAS_SOURCE_PICOSECONDS) {
-            Some(u16::decode(stream, ctx)?)
+            Some(u16::decode(stream, ctx)?.min(9999))
         } else {
             None
         };
@@ -236,7 +238,7 @@ impl BinaryDecodable for DataValue {
             None
         };
         let server_picoseconds = if encoding_mask.contains(DataValueFlags::HAS_SERVER_PICOSECONDS) {
-            Some(u16::decode(stream, ctx)?)
+            Some(u16::decode(stream, ctx)?.min(9999))
         } else {
             None
         };

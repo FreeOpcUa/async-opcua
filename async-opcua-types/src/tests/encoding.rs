@@ -665,6 +665,30 @@ fn variant_decode_rejects_oversized_argument_value_rank() {
 }
 
 #[test]
+fn datavalue_decode_clamps_out_of_range_picoseconds() {
+    // Part 6 §5.2.2.17: "The Picoseconds fields shall contain values less than 10 000. The
+    // decoder shall treat values greater than or equal to 10 000 as the value '9999'."
+    let ctx_f = ContextOwned::default();
+    let ctx = ctx_f.context();
+
+    let dv = DataValue {
+        value: Some(Variant::from(1i32)),
+        status: Some(StatusCode::Good),
+        source_timestamp: Some(DateTime::now()),
+        source_picoseconds: Some(10_000),
+        server_timestamp: Some(DateTime::now()),
+        server_picoseconds: Some(u16::MAX),
+    };
+    let mut buf = Vec::new();
+    dv.encode(&mut buf, &ctx).unwrap();
+
+    let mut stream = Cursor::new(buf);
+    let decoded = DataValue::decode(&mut stream, &ctx).unwrap();
+    assert_eq!(decoded.source_picoseconds, Some(9999));
+    assert_eq!(decoded.server_picoseconds, Some(9999));
+}
+
+#[test]
 fn variant_decode_reserved_builtin_ids_as_bytestring() {
     // Part 6 §5.2.2.16: built-in type IDs 26-31 are reserved; decoders shall accept them,
     // assume the value is a ByteString (or array of ByteStrings), and pass it on.

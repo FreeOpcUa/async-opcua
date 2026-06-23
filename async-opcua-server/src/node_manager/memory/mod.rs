@@ -898,7 +898,14 @@ impl<TImpl: InMemoryNodeManagerImpl> MonitoredItemProvider for InMemoryNodeManag
             let address_space = trace_read_lock!(self.address_space);
             for node in items {
                 if node.item_to_monitor().attribute_id == AttributeId::Value {
-                    value_items.push(node);
+                    // Part 4 §5.12.2: a monitored item on an unknown node (or one the user is not
+                    // allowed to read) must be rejected, not silently created. The value-item
+                    // implementations below read the value but report Good regardless of the read
+                    // status, so validate existence/access here before delegating.
+                    match address_space.validate_node_read(context, node.item_to_monitor()) {
+                        Ok(_) => value_items.push(node),
+                        Err(e) => node.set_status(e),
+                    }
                     continue;
                 }
 

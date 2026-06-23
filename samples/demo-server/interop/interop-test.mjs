@@ -22,6 +22,7 @@ import {
   VariantArrayType,
   NodeClass,
   StatusCodes,
+  BrowseDirection,
   makeBrowsePath,
 } from "node-opcua";
 import { fileURLToPath } from "node:url";
@@ -370,6 +371,245 @@ async function testServiceBreadth() {
   );
 }
 
+function int64Eq(a, target) {
+  if (Array.isArray(a)) return a[0] * 4294967296 + (a[1] >>> 0) === target;
+  return Number(a) === target;
+}
+
+// Round-trip every primitive scalar type the demo exposes (ns;s=<TypeName>).
+async function testScalarTypes() {
+  console.log("\n[None] scalar type round-trips");
+  const scalars = [
+    ["Boolean", DataType.Boolean, true, (a, b) => a === b],
+    ["Byte", DataType.Byte, 200, (a, b) => a === b],
+    ["SByte", DataType.SByte, -50, (a, b) => a === b],
+    ["Int16", DataType.Int16, -1234, (a, b) => a === b],
+    ["UInt16", DataType.UInt16, 60000, (a, b) => a === b],
+    ["Int32", DataType.Int32, -100000, (a, b) => a === b],
+    ["UInt32", DataType.UInt32, 4000000000, (a, b) => a === b],
+    ["Int64", DataType.Int64, 1234567890, (a, b) => int64Eq(a, b)],
+    ["UInt64", DataType.UInt64, 9876543210, (a, b) => int64Eq(a, b)],
+    ["Float", DataType.Float, 3.5, (a, b) => a === b],
+    ["Double", DataType.Double, 2.71828, (a, b) => Math.abs(a - b) < 1e-9],
+    ["String", DataType.String, "interop-string-✓", (a, b) => a === b],
+    ["DateTime", DataType.DateTime, new Date(1700000000000),
+      (a, b) => a instanceof Date && a.getTime() === b.getTime()],
+    ["Guid", DataType.Guid, "72962B91-FA75-4AE6-8D28-B404DC7DAF63",
+      (a, b) => String(a).toUpperCase() === String(b).toUpperCase()],
+  ];
+  await withSession(
+    "Scalars",
+    { securityMode: MessageSecurityMode.None, securityPolicy: SecurityPolicy.None },
+    async (session) => {
+      const nsArray = await session.readNamespaceArray();
+      const ns = nsArray.indexOf(DEMO_NS);
+      for (const [name, dataType, value, eq] of scalars) {
+        const nodeId = `ns=${ns};s=${name}`;
+        const status = await session.write({
+          nodeId,
+          attributeId: AttributeIds.Value,
+          value: { value: { dataType, value } },
+        });
+        const dv = await session.read({ nodeId, attributeId: AttributeIds.Value });
+        const got = dv.value && dv.value.value;
+        check(
+          `${name} write + read-back round-trips`,
+          status.isGood() && dv.statusCode.isGood() && eq(got, value),
+          `wrote ${JSON.stringify(value)} got ${JSON.stringify(got)} (${status.toString()})`,
+        );
+      }
+    },
+  );
+}
+
+// Breadth of the Read service: many attributes, a multi-node request, and timestamps.
+async function testReadBreadth() {
+  console.log("\n[None] read breadth: attributes / multi-node / timestamps");
+  await withSession(
+    "ReadBreadth",
+    { securityMode: MessageSecurityMode.None, securityPolicy: SecurityPolicy.None },
+    async (session) => {
+      const nsArray = await session.readNamespaceArray();
+      const ns = nsArray.indexOf(DEMO_NS);
+      const v = `ns=${ns};s=Double`;
+
+      // Read a spread of attributes of a Variable node in one request.
+      const ids = [
+        AttributeIds.NodeId,
+        AttributeIds.NodeClass,
+        AttributeIds.BrowseName,
+        AttributeIds.DisplayName,
+        AttributeIds.DataType,
+        AttributeIds.ValueRank,
+        AttributeIds.AccessLevel,
+        AttributeIds.UserAccessLevel,
+      ];
+      const attrs = await session.read(ids.map((attributeId) => ({ nodeId: v, attributeId })));
+      check(
+        "Read 8 attributes of a Variable all Good",
+        attrs.length === ids.length && attrs.every((a) => a.statusCode.isGood()),
+        attrs.map((a) => a.statusCode.toString()).join(","),
+      );
+      check(
+        "Variable NodeClass = Variable",
+        attrs[1].value.value === NodeClass.Variable,
+        `got ${attrs[1].value && attrs[1].value.value}`,
+      );
+
+      // Read multiple distinct nodes in one request.
+      const multi = await session.read([
+        { nodeId: CURRENT_TIME, attributeId: AttributeIds.Value },
+        { nodeId: "i=2255", attributeId: AttributeIds.Value }, // NamespaceArray
+        { nodeId: v, attributeId: AttributeIds.Value },
+      ]);
+      check(
+        "Read of 3 distinct nodes all Good",
+        multi.length === 3 && multi.every((d) => d.statusCode.isGood()),
+      );
+
+      // A value read carries source and server timestamps.
+      const dv = await session.read({ nodeId: CURRENT_TIME, attributeId: AttributeIds.Value });
+      check(
+        "Read returns source + server timestamps",
+        dv.sourceTimestamp instanceof Date && dv.serverTimestamp instanceof Date,
+      );
+    },
+  );
+}
+
+// Browse variations: inverse direction and a NodeClass-filtered browse.
+async function testBrowseBreadth() {
+  console.log("\n[None] browse variations");
+  await withSession(
+    "BrowseBreadth",
+    { securityMode: MessageSecurityMode.None, securityPolicy: SecurityPolicy.None },
+    async (session) => {
+      // Inverse browse from the Server object finds its parent (Objects folder).
+      const inv = await session.browse({
+        nodeId: "i=2253",
+        browseDirection: BrowseDirection.Inverse,
+        resultMask: 63,
+      });
+      check(
+        "Inverse browse of Server returns a parent reference",
+        inv.statusCode.isGood() && inv.references && inv.references.length > 0,
+        inv.statusCode.toString(),
+      );
+
+      // Forward browse filtered to Object nodes only.
+      const objs = await session.browse({
+        nodeId: "i=85",
+        browseDirection: BrowseDirection.Forward,
+        nodeClassMask: 1, // Object
+        resultMask: 63,
+      });
+      check(
+        "NodeClass-filtered browse returns only Objects",
+        objs.statusCode.isGood() &&
+          objs.references &&
+          objs.references.length > 0 &&
+          objs.references.every((r) => r.nodeClass === NodeClass.Object),
+      );
+    },
+  );
+}
+
+// Services the demo does not implement must fail cleanly rather than hang or misreport.
+async function testUnsupportedServices() {
+  console.log("\n[None] unsupported services fail cleanly");
+  await withSession(
+    "Unsupported",
+    { securityMode: MessageSecurityMode.None, securityPolicy: SecurityPolicy.None },
+    async (session) => {
+      // HistoryRead on a non-historizing server returns a Bad status, not Good.
+      try {
+        const start = new Date(Date.now() - 60000);
+        const end = new Date();
+        const r = await session.readHistoryValue(CURRENT_TIME, start, end);
+        const sc = Array.isArray(r) ? r[0] && r[0].statusCode : r.statusCode;
+        check(
+          "HistoryRead on non-historizing node is rejected",
+          sc && !sc.isGood(),
+          sc ? sc.toString() : "no status",
+        );
+      } catch (e) {
+        // A thrown service fault is also an acceptable rejection.
+        check("HistoryRead on non-historizing node is rejected", true, e.message);
+      }
+    },
+  );
+}
+
+// Failure modes: the server must reject bad requests with the right status codes.
+async function testFailureModes() {
+  console.log("\n[None] failure modes / error status codes");
+
+  // A wrong password is rejected (we test the success path separately).
+  {
+    const client = newClient(SECURED);
+    try {
+      await client.connect(endpoint);
+      await client.createSession({
+        type: UserTokenType.UserName,
+        userName: "sample1",
+        password: "wrong-password",
+      });
+      check("Wrong password is rejected", false, "session unexpectedly created");
+      await client.disconnect();
+    } catch (e) {
+      check(
+        "Wrong password is rejected",
+        /BadUserAccessDenied|BadIdentityTokenRejected|rejected|denied/i.test(e.message),
+        e.message,
+      );
+      try {
+        await client.disconnect();
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  await withSession(
+    "Failures",
+    { securityMode: MessageSecurityMode.None, securityPolicy: SecurityPolicy.None },
+    async (session) => {
+      const ns = (await session.readNamespaceArray()).indexOf(DEMO_NS);
+
+      // Writing the wrong data type to a typed variable is rejected.
+      const wt = await session.write({
+        nodeId: `ns=${ns};s=Int32`,
+        attributeId: AttributeIds.Value,
+        value: { value: { dataType: DataType.String, value: "not-an-int" } },
+      });
+      check("Wrong-type write is rejected", !wt.isGood(), wt.toString());
+
+      // Calling a non-existent method is rejected.
+      const um = await session.call({
+        objectId: `ns=${ns};s=Functions`,
+        methodId: `ns=${ns};s=NoSuchMethod`,
+        inputArguments: [],
+      });
+      check("Call of unknown method is rejected", !um.statusCode.isGood(), um.statusCode.toString());
+
+      // Browsing with a referenceTypeId that is not a ReferenceType must return
+      // Bad_ReferenceTypeIdInvalid — an independent-client check of the server's P4-VIEW-01 fix.
+      const bad = await session.browse({
+        nodeId: "i=85",
+        referenceTypeId: "i=2253", // the Server object — an Object, not a ReferenceType
+        browseDirection: BrowseDirection.Forward,
+        includeSubtypes: false,
+        resultMask: 63,
+      });
+      check(
+        "Browse with a non-ReferenceType referenceTypeId -> BadReferenceTypeIdInvalid",
+        bad.statusCode.equals(StatusCodes.BadReferenceTypeIdInvalid),
+        bad.statusCode.toString(),
+      );
+    },
+  );
+}
+
 async function testUsernamePassword() {
   console.log("\n[Basic256Sha256 / SignAndEncrypt] username/password identity token");
   const ok = await withSession(
@@ -394,6 +634,11 @@ async function main() {
   await testSecurityPolicyMatrix();
   await testWriteAndTranslate();
   await testServiceBreadth();
+  await testScalarTypes();
+  await testReadBreadth();
+  await testBrowseBreadth();
+  await testUnsupportedServices();
+  await testFailureModes();
   await testUsernamePassword();
   console.log(
     `\n${failures === 0 ? "\x1b[32mPASS\x1b[0m" : "\x1b[31mFAIL\x1b[0m"}: ${checks - failures}/${checks} checks passed`,

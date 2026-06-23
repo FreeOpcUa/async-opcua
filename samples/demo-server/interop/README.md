@@ -26,25 +26,36 @@ Requires `cargo`, `node` (>= 18) and `npm`. The script:
 
 Exit code is the number of failed checks (`0` = all passed).
 
-## What it checks
+## What it checks (22 checks)
 
 | Area | Checks |
 | --- | --- |
 | Discovery | `GetEndpoints` returns endpoints; `None` and `Basic256Sha256/SignAndEncrypt` are advertised |
 | Unsecured session | Browse `Objects`, read `Server/CurrentTime`, resolve the `urn:DemoServer` namespace, call the `HelloWorld` method, and receive subscription data-change notifications |
-| Secured session | Establish a `Basic256Sha256` `SignAndEncrypt` channel + session (auto-trusted both ways) and read a value |
+| Secured session | Establish a `Basic256Sha256` `SignAndEncrypt` channel + session and read a value |
+| Security matrix | Connect + read across `Basic256Sha256` (Sign and SignAndEncrypt), `Aes128Sha256RsaOaep` and `Aes256Sha256RsaPss` (SignAndEncrypt) |
+| Write + Translate | Write to a writable demo variable and read the value back; `TranslateBrowsePathsToNodeIds` resolves `Server/ServerStatus/CurrentTime` to `i=2258` |
+| User token | Username/password identity token (`sample1` / `sample1_password`) over a secured channel |
 
 The server auto-trusts client certs (`trust_client_certs: true`) and the node-opcua client
 auto-accepts the server cert, so the secured handshake completes unattended. The client
 certificate is generated with a matching `applicationUri` so the server's
 `Bad_CertificateUriInvalid` check is satisfied.
 
+## Adding a second independent stack
+
+Two independently-written stacks agreeing is a strong conformance signal; disagreement is
+high-signal. node-opcua (JavaScript) is the primary stack here. A good second stack is
+**open62541** (C, MPL-2.0) — it builds from source with `cmake` + a C compiler (no Windows
+needed) and is a completely different implementation lineage. For the strongest signal, the
+OPC Foundation **UA-.NETStandard** reference stack is what the UACTT itself is built on
+(needs the .NET SDK). **UaExpert** (free GUI) is handy for manual exploration.
+
 ## Extending it
 
-Add checks to `interop-test.mjs` — e.g. Write services, additional security policies
-(`Aes256Sha256RsaPss`), username/password and X.509 user tokens, `TranslateBrowsePathsToNodeIds`,
-or `RegisterServer`. To test the **client** side too, point a node-opcua *server* at the
-async-opcua client. node-opcua's API docs: <https://node-opcua.github.io/>.
+Add checks to `interop-test.mjs` — e.g. X.509 user tokens, `RegisterServer`, Query, History,
+or additional Write/array round-trips. To test the **client** side too, point a node-opcua
+*server* at the async-opcua client. node-opcua's API docs: <https://node-opcua.github.io/>.
 
 ## Notes
 

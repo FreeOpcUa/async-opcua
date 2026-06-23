@@ -272,8 +272,11 @@ impl VariableType {
     }
 
     /// Set the value rank of this variable type.
+    ///
+    /// Part 3 §5.6: the valid ValueRank values are -3, -2, -1, 0, or n >= 1. Values below
+    /// -3 are invalid and are normalised to ANY (-2) rather than stored verbatim.
     pub fn set_value_rank(&mut self, value_rank: i32) {
-        self.value_rank = value_rank;
+        self.value_rank = if value_rank < -3 { -2 } else { value_rank };
     }
 
     /// Get the array dimensions of this type.

@@ -91,7 +91,7 @@ P4-NODEMGMT-01.
 
 | ID | Sev | Found | Verify | Part 3 § | Divergence | Status |
 |---|---|---|---|---|---|---|
-| P3-01 | S2 | C,A,X | ✅ | §5.6 (2704) | ValueRank setters (`set_value_rank`, variable.rs:805 / variable_type.rs:275) store any i32 — no check against {-3,-2,-1,0,≥1}. A `value_rank.rs::new_checked` helper exists but the node setters bypass it. | open |
+| P3-01 | S2 | C,A,X | ✅ | §5.6 (2704) | ValueRank setters (`set_value_rank`, variable.rs:805 / variable_type.rs:275) store any i32 — no check against {-3,-2,-1,0,≥1}. A `value_rank.rs::new_checked` helper exists but the node setters bypass it. | **FIXED** (set_value_rank on Variable + VariableType normalises ranks < -3 to ANY (-2) per Part 3 §5.6; was storing raw i32. Test `set_value_rank_normalises_invalid_ranks`, red-first.) |
 | P3-02 | S2 | C,A,X | ⚠ | §5.6 (2719) | ArrayDimensions↔ValueRank consistency not enforced: spec requires `len==ValueRank` when ValueRank>0 and null when ≤0; setters + AddNodes builder accept them independently. | open |
 | P3-03 | S2 | C,A,X | ✅ | §5.6/§6 (3091) | AddNodes does not check the typeDefinition's `IsAbstract` → abstract ObjectType/VariableType can be instantiated (no `is_abstract` anywhere in memory_mgr_impl.rs). Overlaps P4-NODEMGMT-01. | open |
 | P3-04 | S2 | C,A,X | ⚠ | §5.3.1 (2227) | AddReferences does not check the ReferenceType's `IsAbstract` → abstract ReferenceTypes usable directly. | open |

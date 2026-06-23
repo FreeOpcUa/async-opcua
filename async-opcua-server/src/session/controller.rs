@@ -127,6 +127,30 @@ fn effective_request_timeout(timeout_hint: u32, max_timeout_ms: u32) -> u32 {
     }
 }
 
+/// Backstop SecureChannel token lifetime used when neither the client nor the server
+/// supplies a usable value (5 minutes).
+pub(crate) const DEFAULT_SECURE_CHANNEL_LIFETIME_BACKSTOP_MS: u32 = 300_000;
+
+/// Revise the requested SecureChannel token lifetime within the configured maximum.
+/// OPC UA Part 4 §5.6.2.2: "The Server shall provide a lifetime greater than 0." A client
+/// that requests 0 (no preference) gets the configured maximum rather than a zero-length
+/// token that would expire immediately; the result is always greater than 0.
+fn revise_secure_channel_lifetime(requested_lifetime: u32, max_lifetime_ms: u32) -> u32 {
+    let revised = if max_lifetime_ms == 0 {
+        requested_lifetime
+    } else if requested_lifetime == 0 {
+        max_lifetime_ms
+    } else {
+        requested_lifetime.min(max_lifetime_ms)
+    };
+
+    if revised == 0 {
+        DEFAULT_SECURE_CHANNEL_LIFETIME_BACKSTOP_MS
+    } else {
+        revised
+    }
+}
+
 pub(crate) struct SessionStarter<T> {
     connector: T,
     info: Arc<ServerInfo>,
@@ -873,7 +897,9 @@ impl<T: ConnectionTransport> SessionController<T> {
                 // check to see if the secure channel has been issued before or not
                 if !self.secure_channel_state.issued {
                     error!("Asked to renew token on session that has never issued token");
-                    return Err(StatusCode::BadUnexpectedError);
+                    // Part 4 §5.6.2 Table 12: a Renew with no valid SecureChannel returns
+                    // Bad_SecureChannelIdInvalid, not the generic Bad_UnexpectedError.
+                    return Err(StatusCode::BadSecureChannelIdInvalid);
                 }
                 self.secure_channel_state.renew_count += 1;
                 self.channel.secure_channel_id()
@@ -929,11 +955,10 @@ impl<T: ConnectionTransport> SessionController<T> {
             }
         }
 
-        let revised_lifetime = self
-            .info
-            .config
-            .max_secure_channel_token_lifetime_ms
-            .min(request.requested_lifetime);
+        let revised_lifetime = revise_secure_channel_lifetime(
+            request.requested_lifetime,
+            self.info.config.max_secure_channel_token_lifetime_ms,
+        );
         self.channel.set_token_lifetime(revised_lifetime);
 
         self.channel
@@ -1009,7 +1034,31 @@ impl SecureChannelState {
 
 #[cfg(test)]
 mod tests {
-    use super::{effective_request_timeout, DEFAULT_REQUEST_TIMEOUT_BACKSTOP_MS};
+    use super::{
+        effective_request_timeout, revise_secure_channel_lifetime,
+        DEFAULT_REQUEST_TIMEOUT_BACKSTOP_MS, DEFAULT_SECURE_CHANNEL_LIFETIME_BACKSTOP_MS,
+    };
+
+    /// OPC UA Part 4 §5.6.2.2: "The Server shall provide a lifetime greater than 0."
+    /// The revised SecureChannel token lifetime must never be 0, even when the client
+    /// requests 0 (no preference).
+    #[test]
+    fn revised_secure_channel_lifetime_is_never_zero() {
+        // Client requests 0 -> use the configured maximum (the bug being fixed: min(max, 0) = 0).
+        assert_eq!(revise_secure_channel_lifetime(0, 300_000), 300_000);
+        // Client below the cap -> honored.
+        assert_eq!(revise_secure_channel_lifetime(60_000, 300_000), 60_000);
+        // Client exceeds the cap -> capped.
+        assert_eq!(revise_secure_channel_lifetime(600_000, 300_000), 300_000);
+        // No configured cap -> honor the client's value.
+        assert_eq!(revise_secure_channel_lifetime(60_000, 0), 60_000);
+        // Neither side supplies a usable value -> bounded backstop, still > 0.
+        assert_eq!(
+            revise_secure_channel_lifetime(0, 0),
+            DEFAULT_SECURE_CHANNEL_LIFETIME_BACKSTOP_MS
+        );
+        assert!(revise_secure_channel_lifetime(0, 300_000) > 0);
+    }
 
     /// H2: `max_timeout_ms` must act as a CEILING on the client's `timeout_hint`,
     /// never a floor.

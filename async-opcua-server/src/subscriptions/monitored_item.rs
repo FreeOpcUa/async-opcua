@@ -1,7 +1,8 @@
 use std::collections::{BTreeSet, VecDeque};
 
 use chrono::TimeDelta;
-use opcua_nodes::{Event, TypeTree};
+use opcua_crypto::random;
+use opcua_nodes::{BaseEventType, Event, TypeTree};
 use tracing::{error, warn};
 
 use super::MonitoredItemHandle;
@@ -13,7 +14,7 @@ use opcua_types::{
     match_extension_object_owned, DataChangeFilter, DataValue, DateTime, EventFieldList,
     EventFilter, EventFilterResult, ExtensionObject, MonitoredItemCreateRequest,
     MonitoredItemModifyRequest, MonitoredItemNotification, MonitoringMode, NumericRange,
-    ParsedDataChangeFilter, StatusCode, TimestampsToReturn, Variant,
+    ObjectTypeId, ParsedDataChangeFilter, StatusCode, TimestampsToReturn, Variant,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -301,6 +302,10 @@ pub struct MonitoredItem {
     discard_oldest: bool,
     queue_size: usize,
     notification_queue: VecDeque<Notification>,
+    /// Pending EventQueueOverflowEventType indicator (Part 4 §5.13.2): set when the
+    /// first event is discarded due to a full queue. Kept outside `notification_queue`
+    /// (it is an extra entry, never itself discarded) and delivered by `pop_notification`.
+    overflow_event: Option<EventFieldList>,
     timestamps_to_return: TimestampsToReturn,
     last_data_value: Option<DataValue>,
     /// Value skipped due to sampling interval, we keep these
@@ -333,6 +338,7 @@ impl MonitoredItem {
             sample_skipped_data_value: None,
             queue_size: request.queue_size,
             notification_queue: VecDeque::new(),
+            overflow_event: None,
             any_new_notification: false,
             eu_range: request.eu_range,
         };
@@ -586,6 +592,28 @@ impl MonitoredItem {
             return false;
         };
 
+        // Part 4 §5.13.2: if this event will be enqueued into a full queue, an event is
+        // lost. On the first such loss, place a single EventQueueOverflowEventType in the
+        // queue as an extra entry. Ignored when queue_size <= 1 (newest-only buffer).
+        let overflow_event = if self.notification_queue.len() >= self.queue_size
+            && self.queue_size > 1
+            && self.overflow_event.is_none()
+        {
+            let overflow = BaseEventType::new(
+                ObjectTypeId::EventQueueOverflowEventType,
+                random::byte_string(16),
+                "Events were lost due to a full MonitoredItem queue.",
+                DateTime::now(),
+            );
+            filter.evaluate(&overflow, self.client_handle, type_tree)
+        } else {
+            None
+        };
+
+        if let Some(ev) = overflow_event {
+            self.overflow_event = Some(ev);
+            self.any_new_notification = true;
+        }
         self.enqueue_notification(notif);
 
         true
@@ -659,7 +687,15 @@ impl MonitoredItem {
     }
 
     pub(super) fn pop_notification(&mut self) -> Option<Notification> {
-        self.notification_queue.pop_front()
+        // The overflow indicator (Part 4 §5.13.2) sits at the front of the queue when
+        // discardOldest is TRUE, otherwise at the end.
+        if self.overflow_event.is_some() && self.discard_oldest {
+            return self.overflow_event.take().map(Notification::Event);
+        }
+        if let Some(notif) = self.notification_queue.pop_front() {
+            return Some(notif);
+        }
+        self.overflow_event.take().map(Notification::Event)
     }
 
     /// Adds or removes other monitored items which will be triggered when this monitored item changes
@@ -697,7 +733,7 @@ impl MonitoredItem {
 
     /// Whether this monitored item has enqueued notifications.
     pub fn has_notifications(&self) -> bool {
-        !self.notification_queue.is_empty()
+        !self.notification_queue.is_empty() || self.overflow_event.is_some()
     }
 
     /// Monitored item ID.
@@ -793,6 +829,7 @@ pub(super) mod tests {
             discard_oldest,
             queue_size: 10,
             notification_queue: Default::default(),
+            overflow_event: None,
             timestamps_to_return: opcua_types::TimestampsToReturn::Both,
             last_data_value: None,
             sample_skipped_data_value: None,

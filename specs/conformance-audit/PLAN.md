@@ -60,9 +60,9 @@ FINDINGS for the verified-conformant carryover).
 | Unit | Area (Part 4 §) | Priority | Status | Prior |
 |---|---|---|---|---|
 | **P4-SUB** | Subscription + MonitoredItem delivery (§5.13/§5.14) — [detail](./unit-P4-SUB.md) | P1 | ◑ | 027/029/030 |
-| **P4-ATTR** | Attribute set: Read/Write/HistoryRead/HistoryUpdate (§5.11), IndexRange/NumericRange, DataValue, timestamps, write masks | P1 | ◑ | 017 (NumericRange) |
-| **P4-VIEW** | View set: Browse/BrowseNext/TranslateBrowsePaths/Register/Unregister (§5.9), continuation points, ref/nodeclass filtering, BrowseDirection | P1 | ⬜ | — |
-| **P4-SESS** | SecureChannel (§5.6) + Session (§5.7): Open/Close, Create/Activate/Close/Cancel, nonce, cert binding, token renewal, timeouts | P1 | ⬜ | 013/014 |
+| **P4-ATTR** | Attribute set: Read/Write/HistoryRead/HistoryUpdate (§5.11), IndexRange/NumericRange, DataValue, timestamps, write masks | P1 | ✅ | 017 (NumericRange) |
+| **P4-VIEW** | View set: Browse/BrowseNext/TranslateBrowsePaths/Register/Unregister (§5.9), continuation points, ref/nodeclass filtering, BrowseDirection | P1 | ✅ | — |
+| **P4-SESS** | SecureChannel (§5.6) + Session (§5.7): Open/Close, Create/Activate/Close/Cancel, nonce, cert binding, token renewal, timeouts | P1 | ✅ | 013/014 |
 | **P4-GENERAL** | General service behaviour (§5.1–5.3): request/response headers, diagnostics, OperationLimits, service-result vs operation-level status, per-service security checks | P1 | ⬜ | 011/025 |
 | **P4-NODEMGMT** | NodeManagement set (§5.8): Add/Delete Nodes+References, status codes, gating | P2 | ⬜ | 022 |
 | **P4-METHOD** | Method Call (§5.12): argument validation, status codes, output mapping | P2 | ⬜ | 021 |
@@ -97,21 +97,27 @@ FINDINGS for the verified-conformant carryover).
 
 ---
 
-## Per-unit workflow (the wave)
-Audit and fix are **interleaved per unit** — never audit-everything-then-fix (that yields one giant
-stale list and zero shipped fixes). Each unit:
+## Workflow — audit ALL units first, then fix (user decision 2026-06-23)
+**Do NOT interleave.** Complete the entire audit (every unit, all findings logged) before any fix
+work begins. Rationale: the user wants the full divergence picture before committing to a fix order;
+fixes get planned against the complete register, not discovered piecemeal.
 
-1. **Extract** the unit's normative requirements from the local PDF to a working text file; list every
-   "shall" / status-code table / state rule that applies to the claimed surface.
-2. **Map → impl**, recording each divergence as a finding in [FINDINGS.md](./FINDINGS.md) (fixed
-   schema below). **Do not fix during the read** — separate discovery from change.
-3. **Triage** findings by severity. Real ones (S1/S2) become a speckit feature (or fold into an
-   existing one). S3/cosmetic batched or noted.
-4. **Fix** with the locked protocol: **codex implements one task per dispatch (no tests, no git);
-   Claude authors all tests, anchored to the cited spec text, never to the code.** One commit per
-   unit/user-story. PR to fork `occamsshavingkit/async-opcua`; wait for full Actions CI.
-5. **Close** the unit: mark ✅, record verified-conformant carryover so it isn't re-audited, refresh
-   `docs/compatibility.md` for any drift found.
+**Audit phase (now) — per unit:**
+1. **Extract** the unit's normative requirements from the local PDF; list every "shall" / status-code
+   table / state rule that applies to the claimed surface.
+2. **Map → impl**, recording each divergence as a finding in [FINDINGS.md](./FINDINGS.md) (schema
+   below). **Discovery only — change nothing.** Candidate findings from agents are VERIFIED against
+   spec+code before logging (audits produce false positives).
+3. **Close** the unit: mark ✅, record verified-conformant carryover so it isn't re-audited, note any
+   `docs/compatibility.md` drift.
+
+**Fix phase (later, after the audit is complete):** triage the full register by severity; S1/S2 become
+speckit features in a deliberate order. Locked protocol: **codex implements one task per dispatch (no
+tests, no git); Claude authors all tests anchored to the cited spec text, never to the code.** One
+commit per user-story; PR to fork `occamsshavingkit/async-opcua`; wait for full Actions CI.
+
+> Exception already taken: P4-SUB-01 was fixed during setup (one-line guard, closed the Table 79
+> audit). No further fixes until the audit phase completes.
 
 ## Finding schema (FINDINGS.md rows)
 `ID · Part/§/Table · impl location · divergence (spec says X / impl does Y) · severity · fix-size · status`
@@ -124,7 +130,9 @@ stale list and zero shipped fixes). Each unit:
 ## Status board
 - **Done units:** none fully closed yet. P4-SUB partway (027/029/030 merged; **P4-SUB-01 fixed**; 2 gaps open).
 - **Carry-over open findings:** P4-SUB-02 (transfer), P4-SUB-03 (event overflow) — see FINDINGS.md.
-- **P4-ATTR:** Read + Write audited → 1 real finding (**P4-ATTR-01**, S2: malformed indexRange sinks
-  the whole batch instead of per-node `Bad_IndexRangeInvalid`) + 3 low-severity/deferred. HistoryRead/
-  HistoryUpdate still to audit.
-- **Next:** fix P4-ATTR-01 (own feature — touches the NumericRange codec), then finish P4-ATTR history.
+- **Confirmed findings so far:** P4-SUB-01 (fixed) · P4-ATTR-01 (S2 indexRange decode) · P4-ATTR-05
+  (S2 HistoryRead NEITHER) · P4-VIEW-01 (S2 invalid referenceTypeId) · P4-SESS-01 (S2 Cancel
+  unimplemented + doc drift) · P4-SESS-02 (S2 nonce max-len) · plus P4-ATTR-02/03/04 deferred S3.
+  Several unverified candidates parked in FINDINGS.md.
+- **Audited units:** P4-SUB (partial), P4-ATTR ✅, P4-VIEW ✅, P4-SESS ✅.
+- **Next (no fixes):** P4-GENERAL, P4-NODEMGMT, P4-METHOD, P4-QUERY, P4-DISC, then P6/P3/P2/rest.

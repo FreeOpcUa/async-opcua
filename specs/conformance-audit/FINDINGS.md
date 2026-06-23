@@ -16,8 +16,23 @@ deferred(reason) · verified-conformant.
 | P4-ATTR-03 | 4 §5.11.4 (LocalizedText write) | `address_space/utils.rs` write validation | No LocalizedText locale semantics: null-text-deletes-locale, invalid/unsupported locale → `Bad_LocaleNotSupported` not implemented (LocalizedText written as opaque value). Spec marks the deletion rules "Server specific but recommended"; the invalid-locale code is firmer. | S3 | M | deferred (low value) |
 | P4-ATTR-04 | 4 §5.11.4 Table 55 (`Bad_OutOfRange`) | write validation | No enumeration/range validation on writes → `Bad_OutOfRange` never returned. Spec permits server-defined restrictions (not mandatory when none defined), so not strictly non-conformant. | S3 | — | deferred (permitted) |
 
-> Read/Write audited (R1–R6, W1–W9 mapped; rest HONORED). **Not yet audited:** HistoryRead (§5.11.3),
-> HistoryUpdate (§5.11.5) — the history path delegates to node managers; audit separately.
+| P4-ATTR-05 | 4 §5.11.3.2 | `session/services/attribute.rs` history_read entry | HistoryRead does NOT validate `timestampsToReturn`. Spec: NEITHER "is not valid… shall return `Bad_TimestampsToReturnInvalid`" (OPC 10000-11 defines exceptions where it's ignored). The Read path validates `Invalid`; HistoryRead validates nothing and passes through to node managers. | S2 | S | open |
+| P4-VIEW-01 | 4 §5.9.2 Table 36 | `node_manager/view.rs:291` `allows_reference_type` | Browse with a non-null `referenceTypeId` that is not a ReferenceType returns `false` → result is empty + `Good`, instead of operation-level `Bad_ReferenceTypeIdInvalid`. Silently hides a client error. | S2 | S | open |
+| P4-SESS-01 | 4 §5.7.5 (Cancel) | `session/message_handler.rs` catch-all (no Cancel arm); `controller.rs` | Cancel service is unimplemented → falls through to `BadServiceUnsupported`. `docs/compatibility.md` **claims Cancel is supported** (doc drift). Conformant minimal behaviour: return a `CancelResponse` with `cancelCount=0`. | S2 | S | open |
+| P4-SESS-02 | 4 §5.7.2 (line 2417) | `session/manager.rs:250` | CreateSession checks only clientNonce *minimum* length; spec requires `Bad_NonceInvalid` if length `< 32` **or `> 128`** bytes. No upper bound enforced (bounded only by max message size). | S2 | S | open |
+
+> **Audited:** Read/Write (R1–R6, W1–W9), HistoryRead/HistoryUpdate (§5.11.3/.5 — variants & CP handling
+> mostly HONORED), View §5.9 (Browse/BrowseNext/Translate/Register/Unregister), SecureChannel §5.6 +
+> Session §5.7 (013/014/025 already hardened most; nonce rotation, sig verify, channel binding HONORED).
+>
+> **Unverified candidates** (surfaced by audit agents, NOT yet confirmed against code — verify before
+> acting): Browse `browseDirection` out-of-range masked via `from_bits_truncate` instead of
+> `Bad_BrowseDirectionInvalid`; CreateSession `Bad_TooManySessions` returned immediately rather than
+> closing the oldest unactivated session first (§5.7.2.1); RegisterNodes no up-front structural NodeId
+> validation; TranslateBrowsePaths target ordering (type-definition node first); `remainingPathIndex`
+> always MAX (external-server refs unsupported — known limitation); maxResponseMessageSize enforcement
+> location unconfirmed; Anonymous-token + Sign-mode + new-channel rejection not located. **Cross-cutting
+> (→ P4-GENERAL):** `diagnosticInfos` never populated even when `returnDiagnostics` is requested.
 
 ## Detail
 

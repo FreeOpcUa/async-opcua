@@ -89,11 +89,11 @@ FINDINGS for the verified-conformant carryover).
 ### Parts 5 / 8 / 11 / 12 / 14 — as claimed
 | Unit | Area | Priority | Status | Prior |
 |---|---|---|---|---|
-| **P5-NODESET** | Standard address space (Part 5): mandatory nodes/types, ServerStatus, ServerCapabilities, namespaces | P3 | ⬜ | — |
-| **P8-DA** | DataAccess (Part 8): AnalogItem/EURange, deadband types referenced by DataChangeFilter | P3 | ⬜ | — |
-| **P11-HIST** | Historical Access (Part 11): HistoryRead/Update detail behind the Attribute service | P3 | ⬜ | — |
-| **P12-GDS** | Discovery/GDS (Part 12): RegisterServer registry, GetSecurityKeys/SKS | P3 | ⬜ | 024/026 |
-| **P14-PUBSUB** | PubSub (Part 14): secured UADP NetworkMessage, SecurityHeader, anti-replay | P3 | ⬜ | 026 |
+| **P5-NODESET** | Standard address space (Part 5): mandatory nodes/types, ServerStatus, ServerCapabilities, namespaces | P3 | ✅ | — |
+| **P8-DA** | DataAccess (Part 8): AnalogItem/EURange, deadband types referenced by DataChangeFilter | P3 | ✅ | — |
+| **P11-HIST** | Historical Access (Part 11): HistoryRead/Update detail behind the Attribute service | P3 | ✅* | P4-ATTR |
+| **P12-GDS** | Discovery/GDS (Part 12): RegisterServer registry, GetSecurityKeys/SKS | P3 | ✅* | 024/026/P4-DISC |
+| **P14-PUBSUB** | PubSub (Part 14): secured UADP NetworkMessage, SecurityHeader, anti-replay | P3 | ✅* | 026/P6-JSON |
 
 ---
 
@@ -156,5 +156,14 @@ commit per user-story; PR to fork `occamsshavingkit/async-opcua`; wait for full 
   errors, timeoutHint ceiling). 3 S3 gaps: P4-GEN-01 returnDiagnostics never populated, P4-GEN-02
   client MaxResponseMessageSize not enforced, P4-GEN-03 locale negotiation Discovery-only + mul/qst.
   **Part 4 audit COMPLETE.**
-- **Next (no fixes):** companion parts P5-NODESET / P8-DA / P11-HIST / P12-GDS / P14-PUBSUB — 3-AI.
-  Then FIX PHASE.
+- **P5+P8 done (3-of-3):** ServerStatus/OperationLimits(consistent w/ enforcement)/NamespaceArray +
+  DataAccess deadband (Absolute+Percent, EURange-required) all HONORED. Low-sev: P5-01 LocaleIdArray/
+  SoftwareCertificates unpopulated, P8-01 (S2) modify-path no EURange fetch, +P5-02/03/04. P11/P12/P14
+  covered by prior features (cross-referenced).
+- **🏁 AUDIT COMPLETE** — all claimed units (Parts 2/3/4/5/6/8 + 11/12/14-by-reference) audited &
+  cross-checked. ~64 findings in FINDINGS.md, source-tagged C/A/X, severity-graded.
+- **Next: FIX PHASE.** Triage the register by severity (user gates the order). Suggested first wave:
+  P6-JSON-01 (S1 DoS) → P4-ATTR-01 (indexRange, fixes Read/Write/Query) → P2-SEC-01 (OSC trust) →
+  P4-SESS-01 (Cancel) → P6-BIN-01 (bool) → P4-MONITEM cluster. **Open question for the user: target
+  JSON 1.04 vs 1.05** (gates P6-JSON-02/03/04). Locked protocol: codex-prod / Claude-tests, one
+  commit per fix, PR to fork.

@@ -118,6 +118,29 @@ validation is invoked**, not the crypto itself:
 > Net: security is the strongest area audited — no crypto/algorithm/key-derivation gaps. The four
 > findings are validation-invocation/ordering + audit-event emission. P2-SEC-01 is the notable one.
 
+## Parts 5 / 8 / 11 / 12 / 14 — companion / claimed surface
+**P5 + P8 audited 3-of-3** (Claude ×2, Codex `FINDINGS-codex-p58.md` 6, Antigravity
+`FINDINGS-antigravity-p58.md` 7). Strongly conformant: **ServerStatus** (all fields, live),
+**ServerCapabilities OperationLimits** (exposed AND consistent with the limits services actually
+enforce — verified), **NamespaceArray**, and **DataAccess deadband** (Absolute + Percent fully
+implemented, EURange correctly required → `BadDeadbandFilterInvalid` when absent, array + non-numeric
+handling, integration-tested — compatibility.md claim accurate). Findings are low-severity:
+
+| ID | Sev | Found | Verify | § | Divergence | Status |
+|---|---|---|---|---|---|---|
+| P8-01 | S2 | A | ⚠ | P8 §7.2 | `modify_monitored_items` doesn't fetch the node's EURange (only the create path does) → modifying a monitored item to add a Percent deadband fails with `BadDeadbandFilterInvalid` even on a valid AnalogItem. | open |
+| P8-02 | S3 | A | ⚠ | P8 §5.3.2 | No `SemanticsChanged` status bit / no dynamic EURange refresh — monitored items cache EURange at create and don't update if EURange changes. | open |
+| P5-01 | S3 | C,A | ✅ | P5 §6.3.2 | Mandatory `ServerCapabilities.LocaleIdArray` and `SoftwareCertificates` are not populated (return static empty); LocaleIdArray should reflect configured locale_ids. | open |
+| P5-02 | S3 | A | ⚠ | P5 §6.3.2 | `MinSupportedSampleRate` returned as u32; spec datatype is `Duration` (Double). *Claude agent marked it HONORED — soft-conflict, re-verify the Variant type.* | conflict |
+| P5-03 | S3 | A | ⚠ | P5 §6.3.14 | NamespaceMetadata property nodes report `NodeClass::Object` instead of `Variable` on the NodeClass attribute read. | open |
+| P5-04 | S3 | A | ⚠ | P5 §6.3.7 | `ServerDiagnosticsType` missing mandatory `EnabledFlag` / `SubscriptionDiagnosticsArray` / `SessionsDiagnosticsSummary` (only if the server claims the diagnostics facet). | open |
+
+> **P11 (Historical Access):** covered by the P4-ATTR HistoryRead/Update pass (variants + CP handling
+> HONORED; gap P4-ATTR-05 NEITHER). **P12 (Discovery/GDS):** covered by P4-DISC (RegisterServer
+> findings) + feature 026 (GetSecurityKeys/SKS). **P14 (PubSub):** covered by feature 026 (secured
+> UADP) + the **P6-JSON-01 S1 DoS lands on the JSON PubSub path**. No separate deep pass — these are
+> already-implemented features with their gaps captured above.
+
 ## Conflict log (resolved + open)
 - **DeleteNodes target refs** (A:DIVERGENCE / X:HONORED) → **resolved partial:** within-manager cleanup
   honored via `address_space.delete`→`references.delete_node_references`; only the cross-manager trait

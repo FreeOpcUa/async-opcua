@@ -301,7 +301,6 @@ pub struct MonitoredItem {
     discard_oldest: bool,
     queue_size: usize,
     notification_queue: VecDeque<Notification>,
-    queue_overflow: bool,
     timestamps_to_return: TimestampsToReturn,
     last_data_value: Option<DataValue>,
     /// Value skipped due to sampling interval, we keep these
@@ -334,7 +333,6 @@ impl MonitoredItem {
             sample_skipped_data_value: None,
             queue_size: request.queue_size,
             notification_queue: VecDeque::new(),
-            queue_overflow: false,
             any_new_notification: false,
             eu_range: request.eu_range,
         };
@@ -391,9 +389,9 @@ impl MonitoredItem {
             let discard = self.notification_queue.len() - self.queue_size;
             for _ in 0..discard {
                 if self.discard_oldest {
-                    let _ = self.notification_queue.pop_back();
-                } else {
                     let _ = self.notification_queue.pop_front();
+                } else {
+                    let _ = self.notification_queue.pop_back();
                 }
             }
             // Shrink the queue
@@ -596,23 +594,33 @@ impl MonitoredItem {
     fn enqueue_notification(&mut self, notification: impl Into<Notification>) {
         self.any_new_notification = true;
         let overflow = self.notification_queue.len() == self.queue_size;
-        if overflow {
-            if self.discard_oldest {
-                self.notification_queue.pop_front();
-            } else {
-                self.notification_queue.pop_back();
-            }
+        let notification = notification.into();
+        if !overflow {
+            self.notification_queue.push_back(notification);
+            return;
         }
 
-        let mut notification = notification.into();
-        if overflow {
-            if let Notification::MonitoredItemNotification(n) = &mut notification {
-                n.value.status = Some(n.value.status().set_overflow(true));
+        let set_bit = self.queue_size > 1;
+        if self.discard_oldest {
+            self.notification_queue.pop_front();
+            self.notification_queue.push_back(notification);
+            if set_bit {
+                if let Some(Notification::MonitoredItemNotification(n)) =
+                    self.notification_queue.front_mut()
+                {
+                    n.value.status = Some(n.value.status().set_overflow(true));
+                }
             }
-            self.queue_overflow = true;
+        } else {
+            self.notification_queue.pop_back();
+            let mut notification = notification;
+            if set_bit {
+                if let Notification::MonitoredItemNotification(n) = &mut notification {
+                    n.value.status = Some(n.value.status().set_overflow(true));
+                }
+            }
+            self.notification_queue.push_back(notification);
         }
-
-        self.notification_queue.push_back(notification);
     }
 
     pub(super) fn add_current_value_to_queue(&mut self) {
@@ -785,7 +793,6 @@ pub(super) mod tests {
             discard_oldest,
             queue_size: 10,
             notification_queue: Default::default(),
-            queue_overflow: false,
             timestamps_to_return: opcua_types::TimestampsToReturn::Both,
             last_data_value: None,
             sample_skipped_data_value: None,
@@ -1047,13 +1054,123 @@ pub(super) mod tests {
             };
             // Values should be 1, 2, 3, 4, 5, since the first value 0 was dropped.
             assert_eq!(*v, idx as i32 + 1);
-            // Last status code should have the overflow flag set.
-            if idx == 4 {
+            // Part 4 §5.13.1.5: with discardOldest=TRUE the oldest is deleted and the NEXT value in
+            // the queue (the new front, value 1 at idx 0) carries the Overflow bit — not the newest.
+            if idx == 0 {
                 assert_eq!(n.value.status, Some(StatusCode::Good.set_overflow(true)));
             } else {
                 assert_eq!(n.value.status, Some(StatusCode::Good));
             }
         }
+    }
+
+    // Feature 029 — OPC UA Part 4 1.05.07 §5.13.1.5 queue-overflow conformance (local spec
+    // ~/opcua-specs). These drive `enqueue_notification` directly with a KNOWN-EMPTY start
+    // (MonitoredItem::new seeds one entry, so the helper clears it) to isolate the §5.13.1.5 rule.
+    fn cleared_item(discard_oldest: bool, queue_size: usize) -> MonitoredItem {
+        let mut item = new_monitored_item(
+            1,
+            ReadValueId {
+                node_id: NodeId::null(),
+                attribute_id: AttributeId::Value as u32,
+                ..Default::default()
+            },
+            MonitoringMode::Reporting,
+            FilterType::None,
+            SamplingInterval::NonZero(TimeDelta::milliseconds(100)),
+            discard_oldest,
+            None,
+        );
+        item.queue_size = queue_size;
+        item.notification_queue.clear();
+        item
+    }
+
+    fn ov_notif(v: i32) -> opcua_types::MonitoredItemNotification {
+        opcua_types::MonitoredItemNotification {
+            client_handle: 0,
+            value: DataValue::new_at(v, Utc::now().into()),
+        }
+    }
+
+    // (value, overflow-bit) per queued notification, in queue order.
+    fn ov_drained(item: &mut MonitoredItem) -> Vec<(i32, bool)> {
+        item.notification_queue
+            .drain(..)
+            .map(|notif| {
+                let Notification::MonitoredItemNotification(n) = notif else {
+                    panic!("Wrong notification type");
+                };
+                let Some(Variant::Int32(v)) = &n.value.value else {
+                    panic!("Wrong value type");
+                };
+                (*v, n.value.status.unwrap_or(StatusCode::Good).overflow())
+            })
+            .collect()
+    }
+
+    // §5.13.1.5: discardOldest=FALSE replaces the last-added value with the new one; the NEW value
+    // carries the Overflow bit. (This case the implementation already gets right — regression lock.)
+    #[test]
+    fn part4_overflow_discard_newest_replaces_last_and_flags_new() {
+        let mut item = cleared_item(false, 4);
+        for v in 0..4 {
+            item.enqueue_notification(ov_notif(v));
+        }
+        // [0,1,2,3]; overflow with 4 -> replace last-added (3) -> [0,1,2,4], flag on 4.
+        item.enqueue_notification(ov_notif(4));
+        assert_eq!(
+            ov_drained(&mut item),
+            vec![(0, false), (1, false), (2, false), (4, true)]
+        );
+    }
+
+    // §5.13.1.5: discardOldest=TRUE deletes the oldest and "the NEXT value in the queue gets the flag"
+    // (the new front), NOT the newest.
+    #[test]
+    fn part4_overflow_discard_oldest_flags_next_queued_value() {
+        let mut item = cleared_item(true, 4);
+        for v in 0..4 {
+            item.enqueue_notification(ov_notif(v));
+        }
+        // [0,1,2,3]; overflow with 4 -> drop 0 -> [1,2,3,4]; flag on the new front (1).
+        item.enqueue_notification(ov_notif(4));
+        assert_eq!(
+            ov_drained(&mut item),
+            vec![(1, true), (2, false), (3, false), (4, false)]
+        );
+    }
+
+    // §5.13.1.5: across repeated overflows with discardOldest=TRUE, only the current front (oldest
+    // remaining) carries the Overflow flag — exactly one flagged value, not one per overflow.
+    #[test]
+    fn part4_overflow_discard_oldest_flags_only_current_front() {
+        let mut item = cleared_item(true, 4);
+        for v in 0..4 {
+            item.enqueue_notification(ov_notif(v));
+        }
+        item.enqueue_notification(ov_notif(4)); // [1,2,3,4]
+        item.enqueue_notification(ov_notif(5)); // [2,3,4,5]
+        let flagged: Vec<i32> = ov_drained(&mut item)
+            .into_iter()
+            .filter(|(_, f)| *f)
+            .map(|(v, _)| v)
+            .collect();
+        assert_eq!(
+            flagged,
+            vec![2],
+            "only the current front carries the Overflow flag"
+        );
+    }
+
+    // §5.13.1.5: the Overflow bit is set only when "the size of the queue is larger than one"; at
+    // QueueSize==1 the discard policy is ignored and no Overflow bit is set.
+    #[test]
+    fn part4_overflow_queue_size_one_sets_no_overflow_bit() {
+        let mut item = cleared_item(true, 1);
+        item.enqueue_notification(ov_notif(0));
+        item.enqueue_notification(ov_notif(1)); // overflow at size 1
+        assert_eq!(ov_drained(&mut item), vec![(1, false)]);
     }
 
     #[test]

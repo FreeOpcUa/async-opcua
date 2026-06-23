@@ -29,7 +29,10 @@ pub(crate) async fn browse(
         request.request.nodes_to_browse,
         request.info.operational_limits.max_nodes_per_browse
     );
-    if !request.request.view.view_id.is_null() || !request.request.view.timestamp.is_null() {
+    // Part 4 §7.39: a null ViewId addresses the whole AddressSpace; the Timestamp/ViewVersion
+    // only qualify a versioned view, so they must be ignored when ViewId is null. Only a non-null
+    // ViewId means a (here unsupported) View was requested.
+    if !request.request.view.view_id.is_null() {
         info!("Browse request ignored because view was specified (views not supported)");
         return service_fault!(request, StatusCode::BadViewIdUnknown);
     }

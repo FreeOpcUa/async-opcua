@@ -34,8 +34,10 @@ pub(crate) async fn query_first(
     } else {
         references_limit.min(request.request.max_references_to_return as usize)
     };
-    if !request.request.view.view_id.is_null() || !request.request.view.timestamp.is_null() {
-        info!("Browse request ignored because view was specified (views not supported)");
+    // Part 4 §7.39: a null ViewId addresses the whole AddressSpace; the Timestamp/ViewVersion
+    // only qualify a versioned view, so they must be ignored when ViewId is null.
+    if !request.request.view.view_id.is_null() {
+        info!("Query request ignored because view was specified (views not supported)");
         return service_fault!(request, StatusCode::BadViewIdUnknown);
     }
 

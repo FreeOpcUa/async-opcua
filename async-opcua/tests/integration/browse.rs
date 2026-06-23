@@ -10,7 +10,9 @@ use opcua::{
 };
 use opcua_client::browser::BrowseFilter;
 use opcua_nodes::DefaultTypeTree;
-use opcua_types::{AttributeId, ReadValueId, TimestampsToReturn, VariableId, Variant};
+use opcua_types::{
+    AttributeId, DateTime, ReadValueId, TimestampsToReturn, VariableId, Variant, ViewDescription,
+};
 
 fn hierarchical_desc(node_id: NodeId) -> BrowseDescription {
     BrowseDescription {
@@ -761,4 +763,36 @@ async fn browse_next_invalid_continuation_point() {
         .unwrap();
     assert_eq!(1, r.len());
     assert_eq!(StatusCode::BadContinuationPointInvalid, r[0].status_code);
+}
+
+#[tokio::test]
+async fn browse_with_null_view_id_but_timestamp_is_allowed() {
+    // Part 4 §7.39: a ViewDescription with a null ViewId addresses the whole AddressSpace; the
+    // Timestamp/ViewVersion only qualify a versioned view and must be ignored when ViewId is null.
+    // A client that populates Timestamp (e.g. asyncua defaults it to "now") must not be rejected
+    // with Bad_ViewIdUnknown. Found by the asyncua interop stack.
+    let (_tester, _nm, session) = setup().await;
+
+    let view = ViewDescription {
+        view_id: NodeId::null(),
+        timestamp: DateTime::now(),
+        view_version: 0,
+    };
+    let r = session
+        .browse(
+            &[hierarchical_desc(ObjectId::Server.into())],
+            1000,
+            Some(view),
+        )
+        .await
+        // Must NOT be a Bad_ViewIdUnknown service fault.
+        .unwrap();
+    assert_eq!(1, r.len());
+    assert_eq!(StatusCode::Good, r[0].status_code);
+    assert!(
+        r[0].references
+            .as_ref()
+            .is_some_and(|refs| !refs.is_empty()),
+        "browse with a null ViewId must return references"
+    );
 }

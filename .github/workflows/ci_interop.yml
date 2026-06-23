@@ -1,6 +1,6 @@
 name: Interop conformance harness
 
-# Drives the demo server with two independent OPC UA stacks (node-opcua and open62541)
+# Drives the demo server with three independent OPC UA stacks (node-opcua, open62541, asyncua)
 # across the conformance surface — the repeatable substitute for the official UACTT.
 'on':
   workflow_call: null
@@ -17,9 +17,10 @@ jobs:
           toolchain: stable
 
       # libssl-dev + cmake + a C toolchain are needed to build open62541 with OpenSSL
-      # encryption; libelf-dev is pulled in by the demo server's --all-features build.
+      # encryption; libelf-dev is pulled in by the demo server's --all-features build;
+      # python3-venv lets the asyncua harness pip-install asyncua into a local venv.
       - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y libssl-dev cmake build-essential libelf-dev
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev cmake build-essential libelf-dev python3-venv
 
       # Node.js / npm are preinstalled on ubuntu-latest runners.
       - name: node-opcua interop harness
@@ -27,3 +28,7 @@ jobs:
 
       - name: open62541 interop harness
         run: ./samples/demo-server/interop/open62541/run-open62541.sh
+
+      # Python 3 is preinstalled; asyncua is installed into a venv by the runner.
+      - name: asyncua interop harness
+        run: ./samples/demo-server/interop/asyncua/run-asyncua.sh

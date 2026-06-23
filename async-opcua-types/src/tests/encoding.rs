@@ -665,6 +665,53 @@ fn variant_decode_rejects_oversized_argument_value_rank() {
 }
 
 #[test]
+fn variant_decode_reserved_builtin_ids_as_bytestring() {
+    // Part 6 §5.2.2.16: built-in type IDs 26-31 are reserved; decoders shall accept them,
+    // assume the value is a ByteString (or array of ByteStrings), and pass it on.
+    let ctx_f = ContextOwned::default();
+    let ctx = ctx_f.context();
+
+    // Scalar: encoding mask 26, ByteString body [0xAA, 0xBB, 0xCC].
+    let mut stream = Cursor::new(vec![26u8, 3, 0, 0, 0, 0xAA, 0xBB, 0xCC]);
+    let v = Variant::decode(&mut stream, &ctx).unwrap();
+    assert_eq!(
+        v,
+        Variant::ByteString(ByteString::from([0xAAu8, 0xBB, 0xCC].as_slice()))
+    );
+
+    // Array (mask 26 | array-values bit): two single-byte ByteStrings.
+    let mut stream = Cursor::new(vec![
+        26u8 | 0x80,
+        2,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0x01,
+        1,
+        0,
+        0,
+        0,
+        0x02,
+    ]);
+    let v = Variant::decode(&mut stream, &ctx).unwrap();
+    let Variant::Array(arr) = v else {
+        panic!("expected a ByteString array, got {v:?}");
+    };
+    assert_eq!(arr.value_type, VariantScalarTypeId::ByteString);
+    assert_eq!(
+        arr.values,
+        vec![
+            Variant::ByteString(ByteString::from([0x01u8].as_slice())),
+            Variant::ByteString(ByteString::from([0x02u8].as_slice())),
+        ]
+    );
+}
+
+#[test]
 fn argument_decode_pads_valid_small_value_rank() {
     let ctx_f = ContextOwned::default();
     let ctx = ctx_f.context();

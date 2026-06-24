@@ -1,3 +1,4 @@
+mod conformance_vectors;
 mod date_time;
 mod encoding;
 mod fallback;

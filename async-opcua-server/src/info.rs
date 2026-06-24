@@ -1042,6 +1042,68 @@ mod tests {
         );
     }
 
+    // C6 (multi-AI cross-check): concurrent online/offline RegisterServer for the same URIs must leave
+    // a consistent registry — no duplicate and no half-deleted entries. The registry is an
+    // RwLock<HashMap> keyed by server URI, so this pins that race-safety.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn concurrent_register_unregister_keeps_registry_consistent() {
+        let (_server, handle) = ServerBuilder::new()
+            .without_node_managers()
+            .application_name("Registry Race Test")
+            .application_uri("urn:registry-race-test")
+            .product_uri("urn:registry-race-test")
+            .discovery_urls(vec!["opc.tcp://127.0.0.1:4840/".to_string()])
+            .host("127.0.0.1")
+            .port(4840)
+            .add_endpoint(
+                "root",
+                (
+                    "/",
+                    SecurityPolicy::None,
+                    MessageSecurityMode::None,
+                    &[ANONYMOUS_USER_TOKEN_ID] as &[&str],
+                ),
+            )
+            .build()
+            .expect("server should build");
+        let info = handle.info().clone();
+
+        // Hammer 4 URIs with interleaved online/offline registrations from many tasks.
+        let mut tasks = Vec::new();
+        for t in 0..16u32 {
+            let info = info.clone();
+            tasks.push(tokio::spawn(async move {
+                for i in 0..200u32 {
+                    let uri = format!("urn:race-{}", i % 4);
+                    let online = (t + i) % 2 == 0;
+                    info.apply_register_server(reg(&uri, online));
+                }
+            }));
+        }
+        for task in tasks {
+            task.await.unwrap();
+        }
+
+        // Deterministic settle: register all four online.
+        for i in 0..4 {
+            assert_eq!(
+                info.apply_register_server(reg(&format!("urn:race-{i}"), true)),
+                StatusCode::Good
+            );
+        }
+
+        // Each URI must appear exactly once — no duplicates, none lost.
+        let descs = info.registered_application_descriptions(&UAString::null(), &None);
+        for i in 0..4 {
+            let uri: UAString = format!("urn:race-{i}").into();
+            assert_eq!(
+                descs.iter().filter(|d| d.application_uri == uri).count(),
+                1,
+                "URI urn:race-{i} must be present exactly once after the concurrent storm"
+            );
+        }
+    }
+
     #[tokio::test]
     async fn endpoints_filter_by_requested_endpoint_url() {
         let user_token_ids = [ANONYMOUS_USER_TOKEN_ID];

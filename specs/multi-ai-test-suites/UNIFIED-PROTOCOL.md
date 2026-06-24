@@ -42,7 +42,10 @@ itself (it confirms the coverage and avoids redundant work):
   (`async-opcua-types/.../variant/mod.rs`): a single Index/Range against a multi-dimensional array was
   flattened into a 1-D slice instead of being rejected; Part 4 §7.27 says "all dimensions shall be
   specified", so it now returns BadIndexRangeNoData. (Read/write OOB, rank-mismatch-too-many,
-  oversized-clamp were already covered by feature-017.) C6–C7 remain.
+  oversized-clamp were already covered by feature-017.) C6 concurrent RegisterServer DONE (`info.rs`):
+  the registry is an RwLock<HashMap> keyed by URI, so concurrent online/offline leaves no
+  duplicate/half-deleted entries; lock-in, no bug. C7 remains. (Separately, the interop subscription
+  check was de-flaked in PR #110 — client-driven writes instead of CurrentTime's server timer.)
 
 ## Tier A — potential REAL BUGS (probe first; this is where the cross-check pays off)
 | # | Case | Source | Why high-signal |

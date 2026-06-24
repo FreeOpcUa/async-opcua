@@ -758,7 +758,7 @@ impl<T: ConnectionTransport> SessionController<T> {
         }
     }
 
-    /// OPC UA Part 12 §7.5 / Part 4 §5.4.5: a RegisterServer(2) call must be authenticated.
+    /// OPC UA Part 12 §7.5 / Part 4 §5.5.5: a RegisterServer(2) call must be authenticated.
     /// The SecureChannel must be secured and its client ApplicationInstanceCertificate must
     /// belong to the server being registered (its applicationUri must match the serverUri),
     /// otherwise any client could register or unregister arbitrary servers (spoofing or a

@@ -1,5 +1,5 @@
 //! Write + HistoryUpdate integration tests — OPC UA Part 4 v1.05 §5.11.4 (Attribute Service Set /
-//! Write); HistoryUpdate is §5.11.6.
+//! Write); HistoryUpdate is §5.11.5.
 
 use chrono::TimeDelta;
 use opcua::{
@@ -542,7 +542,7 @@ async fn write_invalid() {
 
 #[tokio::test]
 async fn write_wrong_scalar_type_is_rejected() {
-    // Part 4 §5.10.4: writing a value whose data type is neither the node's data type nor a
+    // Part 4 §5.11.4: writing a value whose data type is neither the node's data type nor a
     // subtype of it must return Bad_TypeMismatch. Previously a mismatched scalar was silently
     // accepted (only arrays were checked). Found by the node-opcua interop harness.
     let (tester, nm, session) = setup().await;
@@ -922,7 +922,7 @@ async fn history_update_fail() {
 
 #[tokio::test]
 async fn write_value_rank_mismatch_is_rejected() {
-    // Part 4 §5.10.4 / Part 3 §5.6: the written value's array-ness must match the node's
+    // Part 4 §5.11.4 / Part 3 §5.6: the written value's array-ness must match the node's
     // ValueRank. Previously only the data type was checked, so an array written to a scalar node
     // (or a scalar to an array node) was silently accepted. Sibling of the scalar-type bug above.
     let (tester, nm, session) = setup().await;

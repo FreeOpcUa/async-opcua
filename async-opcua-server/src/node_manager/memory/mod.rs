@@ -654,7 +654,7 @@ impl<TImpl: InMemoryNodeManagerImpl> InMemoryNodeManager<TImpl> {
                 method.set_status(StatusCode::BadTooManyArguments);
                 continue;
             }
-            // Part 4 §5.11.2: fewer supplied arguments than the method declares is Bad_ArgumentsMissing.
+            // Part 4 §5.12.2: fewer supplied arguments than the method declares is Bad_ArgumentsMissing.
             if arguments.len() > method.arguments().len() {
                 method.set_status(StatusCode::BadArgumentsMissing);
                 continue;
@@ -898,7 +898,7 @@ impl<TImpl: InMemoryNodeManagerImpl> MonitoredItemProvider for InMemoryNodeManag
             let address_space = trace_read_lock!(self.address_space);
             for node in items {
                 if node.item_to_monitor().attribute_id == AttributeId::Value {
-                    // Part 4 §5.12.2: a monitored item on an unknown node (or one the user is not
+                    // Part 4 §5.13.2: a monitored item on an unknown node (or one the user is not
                     // allowed to read) must be rejected, not silently created. The value-item
                     // implementations below read the value but report Good regardless of the read
                     // status, so validate existence/access here before delegating.

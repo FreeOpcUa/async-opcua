@@ -2087,7 +2087,7 @@ mod secure_message_range_tests {
 mod token_grace_tests {
     //! B4 (multi-AI cross-check, `specs/multi-ai-test-suites/UNIFIED-PROTOCOL.md`): on SecureChannel
     //! renewal the previous token's keys must remain usable during the overlap window and be pruned
-    //! once it has elapsed (Part 4 §5.5.2 — accept the previous token for up to 125% of its lifetime).
+    //! once it has elapsed (Part 4 §5.6.2 — accept the previous token for up to 125% of its lifetime).
     use super::SecureChannel;
     use chrono::Duration;
     use opcua_crypto::SecurityPolicy;

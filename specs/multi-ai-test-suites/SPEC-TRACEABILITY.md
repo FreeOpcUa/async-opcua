@@ -85,11 +85,15 @@ Legend: ✅ interop-grounded · 🔵 self-grounded (clause-anchored) · 🟡 sel
 
 ## Gaps & actions (prioritized)
 
-> **Numbering note:** the repo's spec citations mix versions — the on-disk 1.05.07 PDFs put Read at
-> §5.11.2, Write §5.11.4, Method §5.12, MonitoredItem §5.13, Subscription §5.14, Session §5.7,
-> NodeManagement §5.8; but several older tests use the earlier scheme (Attribute §5.10, Method §5.11,
-> MonitoredItem §5.12, Subscription §5.13). New annotations use the 1.05.07 numbers + the (stable)
-> service-set name. A standardization pass over the old citations is a future cleanup.
+> **Numbering — standardized to Part 4 v1.05.07.** All Part-4 §5 service citations across the codebase
+> now use the on-disk 1.05.07 numbering: Discovery §5.5, SecureChannel §5.6, Session §5.7,
+> NodeManagement §5.8, View §5.9, Query §5.10, Attribute §5.11 (Read .2 / HistoryRead .3 / Write .4 /
+> HistoryUpdate .5), Method §5.12, MonitoredItem §5.13 (model §5.13.1: Monitoring-mode .3, Queue .5,
+> Triggering .6), Subscription §5.14. A prior pass converted the older scheme (Attribute §5.10, Method
+> §5.11, MonitoredItem §5.12, Subscription §5.13, Discovery §5.4, NodeManagement §5.7) — including a
+> stray `HistoryUpdate §5.11.6` (correct is §5.11.5). Bare `§5.6` refs in `nodes/`/`address_space` are
+> **Part 3 Variables/ValueRank**, not Part 4, and are left as-is. (The frozen `codex/` candidate
+> snapshots keep their original numbers.)
 
 ### A. Untested implemented features (write tests)
 1. **Cancel** (§5.7.5) — ✅ DONE: `core_tests.rs::cancel_is_a_clean_noop` asserts cancelCount 0 +

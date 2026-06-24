@@ -24,6 +24,11 @@ enum Attack {
     ReplayFirstMsg,
     /// Flip a byte in the chunk body before forwarding — corrupts the signature/ciphertext.
     TamperFirstMsg,
+    /// Rewrite the `message_size` header field to a value larger than the negotiated maximum —
+    /// a resource-exhaustion attempt the server must reject up front.
+    OversizeFirstMsg,
+    /// Corrupt the 3-byte message-type code so the framing is no longer a known message kind.
+    BadMessageType,
 }
 
 /// Read one full OPC UA TCP message (8-byte header + body; `message_size` at bytes 4..8 covers
@@ -101,6 +106,20 @@ async fn handle_conn(client_conn: TcpStream, server_conn: TcpStream, attack: Att
                     let _ = server_w.write_all(&m).await;
                     continue;
                 }
+                Attack::OversizeFirstMsg => {
+                    let mut m = msg.clone();
+                    // Claim a message far larger than any negotiated buffer; the real (short) body
+                    // follows, but the server must reject on the declared size before reading it.
+                    m[4..8].copy_from_slice(&u32::MAX.to_le_bytes());
+                    let _ = server_w.write_all(&m).await;
+                    continue;
+                }
+                Attack::BadMessageType => {
+                    let mut m = msg.clone();
+                    m[0..3].copy_from_slice(b"XXX");
+                    let _ = server_w.write_all(&m).await;
+                    continue;
+                }
             }
         }
 
@@ -143,19 +162,18 @@ async fn read_service_level(session: &opcua::client::Session) -> Result<(), opcu
         .map(|_| ())
 }
 
-/// A replayed secure-channel chunk (duplicate sequence number) must be rejected, tearing the
-/// channel down so the client can never establish a session; the server must survive.
-#[tokio::test]
-async fn replayed_chunk_is_rejected() {
+/// Drive `attack` through the proxy on a `policy`/`mode` channel and assert two things: the
+/// quick-retry client never establishes a session (the server tears down every poisoned channel,
+/// so the event loop gives up with a bad status), and the server survives — a normal direct
+/// connection of the same `policy`/`mode` still works afterward.
+async fn assert_attack_rejected_and_server_survives(
+    attack: Attack,
+    policy: SecurityPolicy,
+    mode: MessageSecurityMode,
+) {
     let mut tester = Tester::new(test_server(), true).await;
-    let proxy_addr = start_attack_proxy(tester.addr, Attack::ReplayFirstMsg).await;
-    let ep = proxied_endpoint(
-        &tester,
-        proxy_addr,
-        SecurityPolicy::None,
-        MessageSecurityMode::None,
-    )
-    .await;
+    let proxy_addr = start_attack_proxy(tester.addr, attack).await;
+    let ep = proxied_endpoint(&tester, proxy_addr, policy, mode).await;
 
     let (_session, lp) = tester
         .client
@@ -163,24 +181,15 @@ async fn replayed_chunk_is_rejected() {
         .unwrap();
     let handle = lp.spawn();
 
-    // Every connection's first MSG is replayed; the server rejects the duplicate (stale sequence
-    // number) and tears down the channel, so the quick-retry event loop gives up with a bad status.
     let status = tokio::time::timeout(Duration::from_secs(30), handle)
         .await
         .expect("event loop should give up once the channel keeps being torn down")
         .expect("event loop task should not panic");
-    assert!(
-        status.is_bad(),
-        "a replayed chunk must be rejected, got {status}"
-    );
+    assert!(status.is_bad(), "attack must be rejected, got {status}");
 
     // The server must survive the attack: a normal direct connection still works.
     let (session, lp) = tester
-        .connect(
-            SecurityPolicy::None,
-            MessageSecurityMode::None,
-            IdentityToken::Anonymous,
-        )
+        .connect(policy, mode, IdentityToken::Anonymous)
         .await
         .unwrap();
     lp.spawn();
@@ -190,47 +199,50 @@ async fn replayed_chunk_is_rejected() {
     read_service_level(&session).await.unwrap();
 }
 
+/// A replayed secure-channel chunk (duplicate sequence number) must be rejected
+/// (Bad_SequenceNumberInvalid), tearing the channel down; the server must survive.
+#[tokio::test]
+async fn replayed_chunk_is_rejected() {
+    assert_attack_rejected_and_server_survives(
+        Attack::ReplayFirstMsg,
+        SecurityPolicy::None,
+        MessageSecurityMode::None,
+    )
+    .await;
+}
+
 /// A tampered (bit-flipped) chunk on a Sign-and-Encrypt channel must fail integrity verification
-/// and be rejected; the server must survive.
+/// (Bad_SecurityChecksFailed) and be rejected; the server must survive.
 #[tokio::test]
 async fn tampered_chunk_is_rejected() {
-    let mut tester = Tester::new(test_server(), true).await;
-    let proxy_addr = start_attack_proxy(tester.addr, Attack::TamperFirstMsg).await;
-    let ep = proxied_endpoint(
-        &tester,
-        proxy_addr,
+    assert_attack_rejected_and_server_survives(
+        Attack::TamperFirstMsg,
         SecurityPolicy::Basic256Sha256,
         MessageSecurityMode::SignAndEncrypt,
     )
     .await;
+}
 
-    let (_session, lp) = tester
-        .client
-        .connect_to_endpoint_directly(ep, IdentityToken::Anonymous)
-        .unwrap();
-    let handle = lp.spawn();
+/// A chunk declaring a message size larger than the negotiated maximum must be rejected up front
+/// (resource-exhaustion guard) rather than allocated; the server must survive.
+#[tokio::test]
+async fn oversized_message_is_rejected() {
+    assert_attack_rejected_and_server_survives(
+        Attack::OversizeFirstMsg,
+        SecurityPolicy::None,
+        MessageSecurityMode::None,
+    )
+    .await;
+}
 
-    let status = tokio::time::timeout(Duration::from_secs(30), handle)
-        .await
-        .expect("event loop should give up once the channel keeps being torn down")
-        .expect("event loop task should not panic");
-    assert!(
-        status.is_bad(),
-        "a tampered chunk must be rejected, got {status}"
-    );
-
-    // The server must survive the attack.
-    let (session, lp) = tester
-        .connect(
-            SecurityPolicy::Basic256Sha256,
-            MessageSecurityMode::SignAndEncrypt,
-            IdentityToken::Anonymous,
-        )
-        .await
-        .unwrap();
-    lp.spawn();
-    tokio::time::timeout(Duration::from_secs(10), session.wait_for_connection())
-        .await
-        .unwrap();
-    read_service_level(&session).await.unwrap();
+/// A chunk with an unknown message-type code must be rejected as a framing error; the server
+/// must survive.
+#[tokio::test]
+async fn invalid_message_type_is_rejected() {
+    assert_attack_rejected_and_server_survives(
+        Attack::BadMessageType,
+        SecurityPolicy::None,
+        MessageSecurityMode::None,
+    )
+    .await;
 }

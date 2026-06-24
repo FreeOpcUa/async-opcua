@@ -156,21 +156,35 @@ static void test_unsecured_services(void) {
     check("TranslateBrowsePath resolves CurrentTime (i=2258)", translated, NULL);
     UA_TranslateBrowsePathsToNodeIdsResponse_clear(&tresp);
 
-    /* Subscribe to CurrentTime and require at least two data changes. */
+    /* Subscribe to a writable node we control (s=Int32) and DRIVE the data-changes by writing to
+     * it, rather than the server-timer-driven CurrentTime. CurrentTime only ticks on the server's
+     * own publish cadence, which is racy under CI load (the previous flake); client-driven writes
+     * make delivery deterministic. */
     UA_CreateSubscriptionRequest sreq = UA_CreateSubscriptionRequest_default();
-    sreq.requestedPublishingInterval = 250.0;
+    sreq.requestedPublishingInterval = 100.0;
     UA_CreateSubscriptionResponse sresp =
         UA_Client_Subscriptions_create(client, sreq, NULL, NULL, NULL);
     if(sresp.responseHeader.serviceResult == UA_STATUSCODE_GOOD) {
         UA_MonitoredItemCreateRequest mreq =
-            UA_MonitoredItemCreateRequest_default(UA_NODEID_NUMERIC(0, 2258));
-        mreq.requestedParameters.samplingInterval = 250.0;
+            UA_MonitoredItemCreateRequest_default(UA_NODEID_STRING(ns, "Int32"));
+        mreq.requestedParameters.samplingInterval = 100.0;
         UA_MonitoredItemCreateResult mres = UA_Client_MonitoredItems_createDataChange(
             client, sresp.subscriptionId, UA_TIMESTAMPSTORETURN_BOTH, mreq, NULL,
             onDataChange, NULL);
         (void)mres;
-        for(int i = 0; i < 30 && g_dataChanges < 2; i++)
-            UA_Client_run_iterate(client, 200);
+        /* Let the subscription establish and the initial value arrive. */
+        for(int i = 0; i < 20 && g_dataChanges < 1; i++)
+            UA_Client_run_iterate(client, 100);
+        /* Write distinct values; each is a data-change. Pump between writes so they are sampled. */
+        for(UA_Int32 v = 700001; v <= 700004 && g_dataChanges < 2; v++) {
+            UA_Variant sv;
+            UA_Variant_init(&sv);
+            UA_Variant_setScalar(&sv, &v, &UA_TYPES[UA_TYPES_INT32]);
+            UA_Client_writeValueAttribute(client, UA_NODEID_STRING(ns, "Int32"), &sv);
+            for(int i = 0; i < 20 && g_dataChanges < 2; i++)
+                UA_Client_run_iterate(client, 100);
+        }
+        UA_Client_Subscriptions_deleteSingle(client, sresp.subscriptionId);
     }
     check("Subscription delivers data-change notifications", g_dataChanges >= 2, NULL);
 

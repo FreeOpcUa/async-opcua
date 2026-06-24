@@ -307,6 +307,20 @@ async fn alarm_acknowledge_confirm_error_paths() {
         }
     };
 
+    // An unknown EventId is rejected with Bad_EventIdUnknown, before the state guards (Part 9 §5.5.2).
+    let bogus = session
+        .call_one(CallMethodRequest {
+            object_id: state_machine.condition_id.clone(),
+            method_id: ack_id.clone(),
+            input_arguments: Some(vec![
+                Variant::from(opcua::types::ByteString::from(vec![0xAAu8; 16])),
+                Variant::from(LocalizedText::new("en", "wrong id")),
+            ]),
+        })
+        .await
+        .unwrap();
+    assert_eq!(bogus.status_code, StatusCode::BadEventIdUnknown);
+
     // Confirm before Acknowledge -> Bad_InvalidState (not yet acknowledged).
     assert_eq!(call(confirm_id.clone()).await, StatusCode::BadInvalidState);
 

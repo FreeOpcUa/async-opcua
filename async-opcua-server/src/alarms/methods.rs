@@ -81,6 +81,11 @@ impl AlarmMethodHandler {
             _ => return Err(StatusCode::BadTypeMismatch),
         };
 
+        // Part 9 §5.5.2: the EventId must identify the condition's current reportable state.
+        if !self.state_machine.current_event_id_matches(event_id) {
+            return Err(StatusCode::BadEventIdUnknown);
+        }
+
         let comment = match &args[1] {
             Variant::LocalizedText(ref t) => (**t).clone(),
             _ => return Err(StatusCode::BadTypeMismatch),
@@ -154,10 +159,15 @@ impl AlarmMethodHandler {
             return Err(StatusCode::BadArgumentsMissing);
         }
 
-        let _event_id = match &args[0] {
+        let event_id = match &args[0] {
             Variant::ByteString(ref b) => b.as_ref(),
             _ => return Err(StatusCode::BadTypeMismatch),
         };
+
+        // Part 9 §5.5.2: the EventId must identify the condition's current reportable state.
+        if !self.state_machine.current_event_id_matches(event_id) {
+            return Err(StatusCode::BadEventIdUnknown);
+        }
 
         let comment = match &args[1] {
             Variant::LocalizedText(ref t) => (**t).clone(),

@@ -4,6 +4,7 @@
 use crate::address_space::{AddressSpace, ObjectBuilder, VariableBuilder};
 use opcua_nodes::NodeType;
 use opcua_types::{LocalizedText, NodeId, Variant};
+use std::sync::{Arc, Mutex};
 
 /// Manages an OPC-UA Alarm Condition instance and its state variables.
 #[derive(Debug, Clone)]
@@ -28,6 +29,9 @@ pub struct ConditionStateMachine {
     pub message_id: NodeId,
     /// NodeId of the Retain variable.
     pub retain_id: NodeId,
+    /// EventId of the condition's current (most recent) reportable state, shared across clones.
+    /// Acknowledge/Confirm validate the client-supplied EventId against this (Part 9 §5.5.2).
+    current_event_id: Arc<Mutex<Vec<u8>>>,
 }
 
 impl ConditionStateMachine {
@@ -179,7 +183,20 @@ impl ConditionStateMachine {
             severity_id,
             message_id,
             retain_id,
+            current_event_id: Arc::new(Mutex::new(Vec::new())),
         }
+    }
+
+    /// Records the EventId of the most recent reportable state (set when an event is generated).
+    pub fn set_current_event_id(&self, event_id: &[u8]) {
+        *self.current_event_id.lock().unwrap() = event_id.to_vec();
+    }
+
+    /// Whether `event_id` matches the condition's current reportable EventId. A condition that has not
+    /// yet emitted an event (empty) matches nothing — Acknowledge/Confirm then fail Bad_EventIdUnknown.
+    pub fn current_event_id_matches(&self, event_id: &[u8]) -> bool {
+        let current = self.current_event_id.lock().unwrap();
+        !current.is_empty() && current.as_slice() == event_id
     }
 
     /// Gets whether the condition is enabled.

@@ -40,6 +40,10 @@ pub fn trigger_alarm_transition(
     state_machine.set_retain(address_space, retain);
 
     let event_id = uuid::Uuid::new_v4().as_bytes().to_vec();
+    // This EventId identifies the condition's current acknowledgeable state; Acknowledge/Confirm
+    // validate the client-supplied EventId against it (Part 9 §5.5.2). The ack/confirm notifications
+    // reuse this same EventId, so it stays current until the next transition.
+    state_machine.set_current_event_id(&event_id);
     let event = AlarmEvent {
         event_id,
         event_type: NodeId::new(0, 2915), // AlarmConditionType

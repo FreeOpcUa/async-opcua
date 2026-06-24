@@ -223,25 +223,24 @@ async function testUnsecuredServices() {
           setTimeout(res, 5000);
         });
 
-        const changes = await new Promise((res) => {
-          let n = 0;
+        let changes = 0;
+        const gotTwo = new Promise((res) => {
           item.on("changed", () => {
-            if (++n >= 2) res(n);
+            if (++changes >= 2) res();
           });
-          // Write distinct values spaced beyond the sampling interval; each is a separate data change.
-          (async () => {
-            for (let v = 1; v <= 5; v++) {
-              await session.write({
-                nodeId: subNodeId,
-                attributeId: AttributeIds.Value,
-                value: { value: { dataType: DataType.Int32, value: v } },
-              });
-              await new Promise((r) => setTimeout(r, 300));
-            }
-            // Fallback once the writes are done; resolves early when two changes have arrived.
-            setTimeout(() => res(n), 5000);
-          })();
         });
+        // Write distinct values spaced beyond the sampling interval; each is a separate data change.
+        // Fully await the writes (no write must outlive the session, or node-opcua throws once it is
+        // closed below), then wait for the notifications to land — most arrive during the writes.
+        for (let v = 1; v <= 5; v++) {
+          await session.write({
+            nodeId: subNodeId,
+            attributeId: AttributeIds.Value,
+            value: { value: { dataType: DataType.Int32, value: v } },
+          });
+          await new Promise((r) => setTimeout(r, 300));
+        }
+        await Promise.race([gotTwo, new Promise((r) => setTimeout(r, 3000))]);
         check("Subscription delivers data-change notifications", changes >= 2, `got ${changes}`);
         await sub.terminate();
       }

@@ -13,6 +13,13 @@ itself (it confirms the coverage and avoids redundant work):
 - **EventQueueOverflowEventType** (Antigravity #8, citing 029 Gap D) — already covered by
   `event_queue_overflow_inserts_overflow_event` (SelectClause-filtering expansion still optional).
 
+## Status
+- **Tier A — DONE** (`async-opcua/tests/integration/tier_a.rs`). Probed all four; none was a crash/bypass.
+  A2/A3/A4 locked in as regression tests; A1 confirmed (deliberate EURange cache) and documented at the
+  `eu_range` field in `subscriptions/monitored_item.rs` — no live-refresh fix (would be a redesign).
+- **Tier B** — B1/B2/B6 done (`adversarial.rs` / `hardening.rs`); B3/B4/B5 remain.
+- **Tier C** — not started.
+
 ## Tier A — potential REAL BUGS (probe first; this is where the cross-check pays off)
 | # | Case | Source | Why high-signal |
 |---|------|--------|-----------------|

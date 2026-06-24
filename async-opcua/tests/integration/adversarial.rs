@@ -15,7 +15,7 @@ use opcua::types::{MessageSecurityMode, NodeId, ReadValueId, TimestampsToReturn,
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
-use crate::utils::{test_server, Tester};
+use crate::utils::{client_x509_token, test_server, Tester};
 
 /// How the proxy corrupts the first service (`MSG`) chunk of each connection.
 #[derive(Clone, Copy)]
@@ -275,6 +275,93 @@ async fn wrong_secure_channel_id_is_rejected() {
         MessageSecurityMode::None,
     )
     .await;
+}
+
+/// A4 proxy (deferred Tier-A item, now ripe on the MITM platform): forward everything, but flip the
+/// last byte of the *second* client→server `MSG` chunk. On a `None`-mode channel the service body is
+/// plaintext, the second MSG is the ActivateSession request, and its trailing field is the
+/// `userTokenSignature` — so this corrupts an X509 user-token signature specifically, proving the
+/// server verifies the *user* signature (not just the channel).
+async fn start_activate_tamper_proxy(server_addr: SocketAddr) -> SocketAddr {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let proxy_addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((client_conn, _)) = listener.accept().await {
+            let Ok(server_conn) = TcpStream::connect(server_addr).await else {
+                continue;
+            };
+            tokio::spawn(async move {
+                let (mut client_r, mut client_w) = client_conn.into_split();
+                let (mut server_r, mut server_w) = server_conn.into_split();
+                tokio::spawn(async move {
+                    let _ = tokio::io::copy(&mut server_r, &mut client_w).await;
+                });
+                let mut msg_count = 0u32;
+                while let Ok(mut msg) = read_ua_message(&mut client_r).await {
+                    if msg.len() >= 3 && &msg[0..3] == b"MSG" {
+                        msg_count += 1;
+                        // MSG #1 is CreateSession (must pass to reach ActivateSession); flip the final
+                        // body byte of every MSG from #2 on so each ActivateSession attempt — including
+                        // retries on this connection — stays corrupted in its trailing userTokenSignature.
+                        if msg_count >= 2 {
+                            let last = msg.len() - 1;
+                            msg[last] ^= 0xFF;
+                        }
+                    }
+                    if server_w.write_all(&msg).await.is_err() {
+                        break;
+                    }
+                }
+            });
+        }
+    });
+    proxy_addr
+}
+
+/// A4 (multi-AI cross-check, deferred until the MITM harness made it cheap): a tampered X509
+/// user-token signature in ActivateSession must be rejected, and the server must survive. Complements
+/// `tier_a::empty_password_username_token_is_rejected` — that covers UserName, this covers X509.
+#[tokio::test]
+async fn tampered_x509_user_token_signature_is_rejected() {
+    let mut tester = Tester::new(test_server(), true).await;
+    let proxy_addr = start_activate_tamper_proxy(tester.addr).await;
+    // None mode so the ActivateSession body is plaintext and the tamper reaches the user signature.
+    let ep = proxied_endpoint(
+        &tester,
+        proxy_addr,
+        SecurityPolicy::None,
+        MessageSecurityMode::None,
+    )
+    .await;
+
+    let (_session, lp) = tester
+        .client
+        .connect_to_endpoint_directly(ep, client_x509_token().expect("x509 token"))
+        .unwrap();
+    let handle = lp.spawn();
+    let status = tokio::time::timeout(Duration::from_secs(30), handle)
+        .await
+        .expect("event loop should give up once the tampered ActivateSession is rejected")
+        .expect("event loop task should not panic");
+    assert!(
+        status.is_bad(),
+        "a tampered X509 user-token signature must be rejected, got {status}"
+    );
+
+    // The server must survive: a normal X509 connection still activates.
+    let (session, lp) = tester
+        .connect(
+            SecurityPolicy::None,
+            MessageSecurityMode::None,
+            client_x509_token().expect("x509 token"),
+        )
+        .await
+        .unwrap();
+    lp.spawn();
+    tokio::time::timeout(Duration::from_secs(10), session.wait_for_connection())
+        .await
+        .unwrap();
+    read_service_level(&session).await.unwrap();
 }
 
 /// B3 proxy: forward everything, but the first time we see an *intermediate* chunk (chunk-type byte

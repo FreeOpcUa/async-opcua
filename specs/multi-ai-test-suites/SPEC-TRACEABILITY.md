@@ -72,7 +72,7 @@ Legend: ✅ interop-grounded · 🔵 self-grounded (clause-anchored) · 🟡 sel
 | Decoding-depth DoS | Part 6 (limits) | ✅ | types/recursion_dos.rs | — | 🔵 |
 | SecureChannel / chunking | Part 6 §6.7, §6.7.2 | ✅ | core/secure_channel.rs, chunk.rs; adversarial (B1-B5) | all 3 (secured sessions) | ✅ |
 | Token renewal grace | Part 4 §5.6.2 | ✅ | core/secure_channel.rs (B4) | — | 🔵 |
-| Cert-chain validation | Part 4 §6.1.3 Table 100 | ✅ | crypto/cert_chain.rs (RFC 5280) | open62541/node-opcua (trust/untrust) | ✅ |
+| Cert-chain validation (CRL + OCSP) | Part 4 §6.1.3 Table 100 | ✅ | crypto/cert_chain.rs (RFC 5280; OCSP good/revoked/forged fixtures) | open62541/node-opcua (trust/untrust) | ✅ |
 | ECC ephemeral/secret | Part 6 §6.8.2/3 | ✅ | crypto/ecc_* (RFC 5869/5903) | ecc.rs e2e | ✅ |
 | Identity tokens (user/pass, X509, ECC) | Part 4 §7.41/Table 179 | ✅ | crypto/authentication.rs, conformance, tier_a | all 3 (user/pass + fail) | ✅ |
 | PubSub UADP + security | Part 14 §7.2.4 | ✅ | pubsub.rs, crypto/pubsub_ctr.rs (RFC 3686) | **— (no independent stack)** | 🔵 |

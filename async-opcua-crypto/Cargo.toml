@@ -48,6 +48,7 @@ sha2 = { workspace = true }
 subtle = "2.6.1"
 x509-cert = { workspace = true }
 zeroize = { workspace = true }
+x509-ocsp = { version = "0.2.1", default-features = false }
 
 [dev-dependencies]
 tempfile = "3"

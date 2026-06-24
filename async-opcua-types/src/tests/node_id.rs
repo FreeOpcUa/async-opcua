@@ -105,7 +105,6 @@ fn expanded_node_id() {
         "svr=5;ns=5;",
         "svr=5;ns=5;x=",
         "svr=5;ns u=foo;s=Hello World",
-        "nsu=foo;s=Hello World",
         "svr=5;nsu=foo;ns=5;s=Hello World",
         "svr=5;ns=5;nsu=foo;s=Hello World",
     ]
@@ -119,6 +118,32 @@ fn expanded_node_id() {
 
     assert!(ExpandedNodeId::from_str("svr=5;ns=22;s=Hello World").is_ok());
     assert!(ExpandedNodeId::from_str("svr=5;nsu=foo;s=Hello World").is_ok());
+
+    // Part 6 §5.1.12 Table 6: the ServerIndex and NamespaceUri prefixes are optional, so a bare
+    // NodeId and a NamespaceUri-without-ServerIndex are both valid ExpandedNodeId strings.
+    assert_eq!(
+        ExpandedNodeId::from_str("i=85").unwrap(),
+        ExpandedNodeId {
+            node_id: NodeId::from_str("i=85").unwrap(),
+            namespace_uri: UAString::null(),
+            server_index: 0,
+        }
+    );
+    assert_eq!(
+        ExpandedNodeId::from_str("ns=2;s=Demo").unwrap(),
+        ExpandedNodeId {
+            node_id: NodeId::from_str("ns=2;s=Demo").unwrap(),
+            namespace_uri: UAString::null(),
+            server_index: 0,
+        }
+    );
+    let no_server = ExpandedNodeId::from_str("nsu=foo;s=Hello World").unwrap();
+    assert_eq!(no_server.server_index, 0);
+    assert_eq!(no_server.namespace_uri.as_ref(), "foo");
+    assert_eq!(
+        no_server.node_id,
+        NodeId::from_str("s=Hello World").unwrap()
+    );
 
     // Test escaping from a string
     let node_id = ExpandedNodeId::from_str("svr=5;nsu=foo%3b%25;i=22").unwrap();

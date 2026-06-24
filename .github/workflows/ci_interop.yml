@@ -1,7 +1,8 @@
 name: Interop conformance harness
 
-# Drives the demo server with three independent OPC UA stacks (node-opcua, open62541, asyncua)
-# across the conformance surface — the repeatable substitute for the official UACTT.
+# Drives the demo server with four independent OPC UA stacks (node-opcua, open62541, asyncua and
+# the OPC Foundation .NET Standard reference stack) across the conformance surface — the repeatable
+# substitute for the official UACTT.
 'on':
   workflow_call: null
 
@@ -15,6 +16,11 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1
         with:
           toolchain: stable
+
+      - name: Provision .NET 8 SDK
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: '8.0.x'
 
       # libssl-dev + cmake + a C toolchain are needed to build open62541 with OpenSSL
       # encryption; libelf-dev is pulled in by the demo server's --all-features build;
@@ -32,3 +38,8 @@ jobs:
       # Python 3 is preinstalled; asyncua is installed into a venv by the runner.
       - name: asyncua interop harness
         run: ./samples/demo-server/interop/asyncua/run-asyncua.sh
+
+      # The OPC Foundation reference stack (OPC UA .NET Standard) — the implementation the UACTT
+      # is built on; the most comprehensive of the four harnesses (~65 checks).
+      - name: .NET (OPC Foundation reference) interop harness
+        run: ./samples/demo-server/interop/dotnet/run-dotnet.sh

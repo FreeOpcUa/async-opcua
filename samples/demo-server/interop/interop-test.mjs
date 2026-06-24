@@ -191,36 +191,59 @@ async function testUnsecuredServices() {
         );
       }
 
-      // Subscribe to CurrentTime and require at least two data changes.
-      const sub = ClientSubscription.create(session, {
-        requestedPublishingInterval: 250,
-        requestedMaxKeepAliveCount: 10,
-        requestedLifetimeCount: 100,
-        maxNotificationsPerPublish: 10,
-        publishingEnabled: true,
-        priority: 1,
-      });
-      await new Promise((res, rej) => {
-        sub.on("started", res);
-        sub.on("internal_error", rej);
-        setTimeout(() => rej(new Error("subscription start timeout")), 5000);
-      }).catch((e) => check("Subscription started", false, e.message));
+      // Subscription data-change delivery. Drive the changes from the client by writing distinct
+      // values to a writable variable rather than relying on CurrentTime: CurrentTime only ticks on
+      // the server's ~1 s ServerStatus update, whose cadence under CI load made this flake even with a
+      // 20 s window. A client-driven write is deterministic — each write is its own change to deliver.
+      if (nsIdx > 0) {
+        const subNodeId = `ns=${nsIdx};s=Int32`;
+        const sub = ClientSubscription.create(session, {
+          requestedPublishingInterval: 200,
+          requestedMaxKeepAliveCount: 10,
+          requestedLifetimeCount: 100,
+          maxNotificationsPerPublish: 10,
+          publishingEnabled: true,
+          priority: 1,
+        });
+        await new Promise((res, rej) => {
+          sub.on("started", res);
+          sub.on("internal_error", rej);
+          setTimeout(() => rej(new Error("subscription start timeout")), 15000);
+        }).catch((e) => check("Subscription started", false, e.message));
 
-      const changes = await new Promise((res) => {
-        let n = 0;
         const item = ClientMonitoredItem.create(
           sub,
-          { nodeId: CURRENT_TIME, attributeId: AttributeIds.Value },
-          { samplingInterval: 250, discardOldest: true, queueSize: 10 },
+          { nodeId: subNodeId, attributeId: AttributeIds.Value },
+          { samplingInterval: 100, discardOldest: true, queueSize: 10 },
           TimestampsToReturn.Both,
         );
-        item.on("changed", () => {
-          if (++n >= 2) res(n);
+        // Wait until the item is monitoring server-side so the writes below are captured.
+        await new Promise((res) => {
+          item.on("initialized", res);
+          setTimeout(res, 5000);
         });
-        setTimeout(() => res(n), 4000);
-      });
-      check("Subscription delivers data-change notifications", changes >= 2, `got ${changes}`);
-      await sub.terminate();
+
+        let changes = 0;
+        const gotTwo = new Promise((res) => {
+          item.on("changed", () => {
+            if (++changes >= 2) res();
+          });
+        });
+        // Write distinct values spaced beyond the sampling interval; each is a separate data change.
+        // Fully await the writes (no write must outlive the session, or node-opcua throws once it is
+        // closed below), then wait for the notifications to land — most arrive during the writes.
+        for (let v = 1; v <= 5; v++) {
+          await session.write({
+            nodeId: subNodeId,
+            attributeId: AttributeIds.Value,
+            value: { value: { dataType: DataType.Int32, value: v } },
+          });
+          await new Promise((r) => setTimeout(r, 300));
+        }
+        await Promise.race([gotTwo, new Promise((r) => setTimeout(r, 3000))]);
+        check("Subscription delivers data-change notifications", changes >= 2, `got ${changes}`);
+        await sub.terminate();
+      }
     },
   );
 }

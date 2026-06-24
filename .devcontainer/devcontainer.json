@@ -1,0 +1,33 @@
+{
+  // Dev container for async-opcua. Used by GitHub Codespaces and "Dev Containers" in VS Code.
+  //
+  // The point: a Codespaces *prebuild* runs `updateContentCommand` ahead of time and bakes the result
+  // into the image, so a new codespace (or a rebuilt one) starts with the cargo target cache warm and
+  // the interop harness deps installed — no cold full compile on first use.
+  //
+  // To get the "already compiled" benefit, enable a prebuild once in the repo:
+  //   GitHub repo → Settings → Codespaces → "Set up prebuild" → branch master, this devcontainer.
+  // Without a prebuild the container still works; the first `cargo build` just runs normally.
+  "name": "async-opcua",
+  "image": "mcr.microsoft.com/devcontainers/rust:1-bookworm",
+
+  "features": {
+    // The interop harness (samples/demo-server/interop) drives the server with node-opcua.
+    "ghcr.io/devcontainers/features/node:1": { "version": "lts" }
+  },
+
+  // System libs the workspace + interop harnesses need (mirrors .github/workflows/ci_interop.yml):
+  // libssl/cmake/build-essential for the build, libelf for open62541, python3-venv for asyncua.
+  "onCreateCommand": "sudo apt-get update && sudo apt-get install -y libssl-dev cmake build-essential libelf-dev pkg-config python3-venv",
+
+  // Heavy, cacheable work — runs during prebuild so the image ships warm:
+  //   - compile the whole workspace incl. test binaries (the slow part we keep repeating)
+  //   - install node-opcua for the interop harness
+  "updateContentCommand": "cargo fetch && cargo build --workspace --all-targets && (cd samples/demo-server/interop && npm install --no-audit --no-fund)",
+
+  "customizations": {
+    "vscode": {
+      "extensions": ["rust-lang.rust-analyzer", "tamasfe.even-better-toml"]
+    }
+  }
+}

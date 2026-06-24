@@ -55,6 +55,8 @@ mod ecc_encrypted_secret;
 #[cfg(feature = "ecc")]
 mod ecc_ephemeral_key;
 #[cfg(feature = "ecc")]
+mod ecc_signature_vectors;
+#[cfg(feature = "ecc")]
 mod ecc_token_header;
 mod identity;
 mod pubsub_ctr;

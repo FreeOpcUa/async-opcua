@@ -8,10 +8,11 @@ use std::time::Duration;
 use opcua::{
     client::{ClientBuilder, IdentityToken},
     crypto::SecurityPolicy,
-    types::{MessageSecurityMode, StatusCode},
+    types::{MessageSecurityMode, NodeId, ReadValueId, StatusCode, VariableId},
 };
+use opcua_client::{services::Read, UARequest};
 
-use crate::utils::{default_server, hostname, Tester};
+use crate::utils::{default_server, hostname, setup, Tester};
 
 /// H5 / L9: the server must reject a `CreateSession` whose client-certificate
 /// SubjectAltName URI does not match the declared `applicationUri`. The harness
@@ -146,4 +147,57 @@ async fn too_many_sessions_is_rejected() {
             );
         }
     }
+}
+
+/// Anti-hijack (Part 4 §5.6): every request is bound to its session's secure channel
+/// (`validate_secure_channel_id`). A request bearing one session's authentication token but
+/// arriving on a DIFFERENT secure channel must be rejected with `Bad_SecureChannelIdInvalid`, so a
+/// stolen or sniffed token cannot be replayed over an attacker's own channel.
+#[tokio::test]
+async fn session_token_used_on_another_channel_is_rejected() {
+    let (mut tester, _nm, session_a) = setup().await;
+
+    // A second, independent session on its own secure channel.
+    let (session_b, lp_b) = tester
+        .connect(
+            SecurityPolicy::None,
+            MessageSecurityMode::None,
+            IdentityToken::Anonymous,
+        )
+        .await
+        .unwrap();
+    lp_b.spawn();
+    tokio::time::timeout(Duration::from_secs(10), session_b.wait_for_connection())
+        .await
+        .unwrap();
+
+    let service_level = ReadValueId::from(<VariableId as Into<NodeId>>::into(
+        VariableId::Server_ServiceLevel,
+    ));
+
+    // A Read carrying session A's authentication token, but sent over session B's channel.
+    let hijack = Read::new(&session_a)
+        .node(service_level.clone())
+        .send(session_b.channel())
+        .await;
+    match hijack {
+        Err(e) => assert_eq!(
+            e.status(),
+            StatusCode::BadSecureChannelIdInvalid,
+            "cross-channel token use must be rejected, got {e:?}"
+        ),
+        Ok(_) => panic!("a session token replayed on another channel was wrongly accepted"),
+    }
+
+    // Each session still works correctly on its own channel.
+    Read::new(&session_a)
+        .node(service_level.clone())
+        .send(session_a.channel())
+        .await
+        .unwrap();
+    Read::new(&session_b)
+        .node(service_level)
+        .send(session_b.channel())
+        .await
+        .unwrap();
 }

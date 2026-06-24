@@ -1,3 +1,4 @@
+mod address_space_oracle;
 mod adversarial;
 mod alarms;
 mod browse;

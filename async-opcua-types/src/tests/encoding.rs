@@ -1000,3 +1000,90 @@ fn malformed_numeric_range_decodes_leniently_and_errors_on_apply() {
         .expect_err("an invalid range must not select data");
     assert_eq!(err, crate::StatusCode::BadIndexRangeInvalid);
 }
+
+// C4 (multi-AI cross-check, specs/multi-ai-test-suites/UNIFIED-PROTOCOL.md): structured ExtensionObject
+// binary round-trip matrix — a structured body wrapped in an ExtensionObject, arrays containing null
+// ExtensionObjects (null vs empty), null/partial LocalizedText, and deeply nested DiagnosticInfo.
+#[test]
+fn extension_object_structured_roundtrip_matrix() {
+    // Structured body wrapped in an ExtensionObject (the default context can load it back by NodeId).
+    serialize_test(ExtensionObject::from_message(EUInformation {
+        namespace_uri: UAString::from("urn:x"),
+        unit_id: 7,
+        display_name: LocalizedText::new("en", "m/s"),
+        description: LocalizedText::null(),
+    }));
+    // Populated multi-dim array field inside a structured body.
+    serialize_test(ExtensionObject::from_message(crate::Argument {
+        name: UAString::from("a"),
+        data_type: NodeId::null(),
+        value_rank: 2,
+        array_dimensions: Some(vec![3, 4]),
+        description: LocalizedText::null(),
+    }));
+    // Null array field: Argument's custom encoding normalizes a None `array_dimensions` to an empty
+    // array on decode (it does not preserve the null/empty distinction for this field). Pin that.
+    serialize_test_expected(
+        crate::Argument {
+            name: UAString::from("a"),
+            data_type: NodeId::null(),
+            value_rank: -1,
+            array_dimensions: None,
+            description: LocalizedText::null(),
+        },
+        crate::Argument {
+            name: UAString::from("a"),
+            data_type: NodeId::null(),
+            value_rank: -1,
+            array_dimensions: Some(vec![]),
+            description: LocalizedText::null(),
+        },
+    );
+
+    // LocalizedText: null and fully-populated round-trip as-is; an empty-string locale/text is encoded
+    // as absent (mask bit cleared) and decodes back to null — pin that normalization.
+    serialize_test(LocalizedText::null());
+    serialize_test(LocalizedText::new("en", "hello"));
+    serialize_test_expected(
+        LocalizedText::new("", "only-text"),
+        LocalizedText {
+            locale: UAString::null(),
+            text: UAString::from("only-text"),
+        },
+    );
+    serialize_test_expected(
+        LocalizedText::new("only-locale", ""),
+        LocalizedText {
+            locale: UAString::from("only-locale"),
+            text: UAString::null(),
+        },
+    );
+
+    // Deeply nested DiagnosticInfo (3 levels).
+    let deep = DiagnosticInfo {
+        symbolic_id: Some(1),
+        namespace_uri: None,
+        locale: None,
+        localized_text: None,
+        additional_info: Some(UAString::from("L1")),
+        inner_status_code: None,
+        inner_diagnostic_info: Some(Box::new(DiagnosticInfo {
+            symbolic_id: Some(2),
+            namespace_uri: None,
+            locale: None,
+            localized_text: None,
+            additional_info: Some(UAString::from("L2")),
+            inner_status_code: Some(StatusCode::BadInternalError),
+            inner_diagnostic_info: Some(Box::new(DiagnosticInfo {
+                symbolic_id: Some(3),
+                namespace_uri: Some(9),
+                locale: Some(8),
+                localized_text: Some(7),
+                additional_info: Some(UAString::from("L3")),
+                inner_status_code: Some(StatusCode::Good),
+                inner_diagnostic_info: None,
+            })),
+        })),
+    };
+    serialize_test(deep);
+}

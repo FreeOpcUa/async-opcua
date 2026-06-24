@@ -32,7 +32,10 @@ itself (it confirms the coverage and avoids redundant work):
   uses the 100 ms minimum + spaced writes. C3 Sampling→Reporting transition DONE
   (`sampling_transition.rs`): a Sampling item accumulates samples; on transition to Reporting the queue
   is flushed in order (initial create-value then the change) — `set_monitoring_mode` doesn't clear the
-  queue; no stale/duplicated value, none lost; no server bug. C4–C7 remain.
+  queue; no stale/duplicated value, none lost; no server bug. C4 ExtensionObject round-trip DONE
+  (`async-opcua-types/.../tests/encoding.rs`): structured EO (EUInformation/Argument) + nested
+  DiagnosticInfo + LocalizedText edges round-trip; pinned two expected normalizations — Argument None
+  array_dimensions → Some([]), and empty-string LocalizedText locale/text → null. C5–C7 remain.
 
 ## Tier A — potential REAL BUGS (probe first; this is where the cross-check pays off)
 | # | Case | Source | Why high-signal |

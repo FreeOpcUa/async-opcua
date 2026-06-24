@@ -242,6 +242,33 @@ async function testUnsecuredServices() {
         }
         await Promise.race([gotTwo, new Promise((r) => setTimeout(r, 3000))]);
         check("Subscription delivers data-change notifications", changes >= 2, `got ${changes}`);
+
+        // SetTriggering interop: link a second monitored item to the first and confirm the service
+        // round-trips with a Good result across the independent stack (server-side behaviour is
+        // covered by the Rust triggering tests; this grounds the request/response interop).
+        const linked = ClientMonitoredItem.create(
+          sub,
+          { nodeId: CURRENT_TIME, attributeId: AttributeIds.Value },
+          { samplingInterval: 250, discardOldest: true, queueSize: 10 },
+          TimestampsToReturn.Both,
+        );
+        await new Promise((res) => {
+          linked.on("initialized", res);
+          setTimeout(res, 5000);
+        });
+        const st = await session.setTriggering({
+          subscriptionId: sub.subscriptionId,
+          triggeringItemId: item.monitoredItemId,
+          linksToAdd: [linked.monitoredItemId],
+          linksToRemove: [],
+        });
+        const addResults = st.addResults || [];
+        check(
+          "SetTriggering links a monitored item (Good)",
+          addResults.length === 1 && addResults[0].isGood(),
+          `addResults=${addResults.map((s) => s.toString()).join(",")}`,
+        );
+
         await sub.terminate();
       }
     },

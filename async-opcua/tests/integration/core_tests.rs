@@ -224,6 +224,16 @@ async fn connect_basic128rsa15_with_username_password() {
 }
 
 #[tokio::test]
+async fn connect_basic256sha256_with_username_password() {
+    conn_test(
+        SecurityPolicy::Basic256Sha256,
+        MessageSecurityMode::SignAndEncrypt,
+        client_user_token(),
+    )
+    .await;
+}
+
+#[tokio::test]
 async fn connect_basic128rsa15_with_x509_token() {
     conn_test(
         SecurityPolicy::Basic128Rsa15,

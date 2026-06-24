@@ -1360,6 +1360,42 @@ async fn server_capabilities_locale_id_array_is_populated() {
 }
 
 #[tokio::test]
+async fn server_array_is_populated_string_array() {
+    // P5-03 — OPC UA Part 5 §5.3.2: Server_ServerArray (i=2254) is a mandatory String[] listing the
+    // Server URIs in this server (at minimum its own ApplicationUri). It must be a non-null, non-empty
+    // array: the OPC UA .NET reference stack validates the DataType of ServerArray during session
+    // setup and rejects a null/scalar value with Bad_TypeMismatch (found via the .NET interop harness).
+    let (_tester, _nm, session) = setup().await;
+    let r = session
+        .read(
+            &[ReadValueId {
+                node_id: VariableId::Server_ServerArray.into(),
+                attribute_id: AttributeId::Value as u32,
+                ..Default::default()
+            }],
+            TimestampsToReturn::Both,
+            0.0,
+        )
+        .await
+        .unwrap();
+    let Some(Variant::Array(arr)) = r[0].value.clone() else {
+        panic!(
+            "ServerArray must be a populated array, got {:?}",
+            r[0].value
+        );
+    };
+    assert!(
+        !arr.values.is_empty(),
+        "ServerArray must list at least the server's own URI"
+    );
+    assert!(
+        arr.values.iter().all(|x| matches!(x, Variant::String(_))),
+        "ServerArray entries must be Strings, got {:?}",
+        arr.values
+    );
+}
+
+#[tokio::test]
 async fn min_supported_sample_rate_value_matches_duration_datatype() {
     // P5-02 — OPC UA Part 5 §6.3.2: MinSupportedSampleRate is a Duration (Double). The exposed Value
     // must therefore be a Double, matching the node's DataType attribute (not a UInt32).

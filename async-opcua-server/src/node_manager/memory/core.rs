@@ -495,6 +495,14 @@ impl CoreNodeManagerImpl {
                 namespaces.into()
             }
 
+            VariableId::Server_ServerArray => {
+                // Part 5 §5.3.2 (ServerArray): the list of Server URIs in this Server, as String[].
+                // For a single server that is just its own application URI. Must be a (non-null)
+                // array — strict clients (e.g. the OPC UA .NET Standard reference stack) validate
+                // the DataType during session setup and reject a null/scalar value.
+                vec![context.info.application_uri.clone()].into()
+            }
+
             r if context.info.diagnostics.is_mapped(r) => {
                 let perms = context.info.authenticator.core_permissions(&context.token);
                 if !perms.read_diagnostics {

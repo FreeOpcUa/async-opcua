@@ -312,6 +312,9 @@ pub struct MonitoredItem {
     /// so that we can generate a new notification later.
     sample_skipped_data_value: Option<DataValue>,
     any_new_notification: bool,
+    // ponytail: EURange for PercentDeadband is read once at create-time and cached here; rewriting the
+    // variable's EURange node mid-life is NOT picked up. Deliberate (avoids a node read per sample). If
+    // live EURange tracking is ever needed, re-resolve in `modify()`/on sample. (cross-check A1)
     eu_range: Option<(f64, f64)>,
 }
 

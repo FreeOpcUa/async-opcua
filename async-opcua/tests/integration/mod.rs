@@ -18,6 +18,7 @@ mod query;
 mod read;
 mod reverse_connect;
 mod subscriptions;
+mod tier_a;
 mod write;
 #[cfg(feature = "wss")]
 mod wss;

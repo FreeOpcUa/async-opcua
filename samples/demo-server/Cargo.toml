@@ -14,6 +14,9 @@ rand = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 
+[dependencies.async-opcua-history-sqlite]
+path = "../../async-opcua-history-sqlite"
+
 [dependencies.async-opcua]
 path = "../../async-opcua"
 # `ecc` is required so the server can negotiate the ECC_nistP256/P384 security

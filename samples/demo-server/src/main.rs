@@ -31,6 +31,7 @@ use opcua::server::{
 
 mod control;
 mod customs;
+mod history;
 mod machine;
 mod methods;
 mod scalar;
@@ -231,7 +232,13 @@ async fn main() {
         );
 
         // Add some methods
-        methods::add_methods(node_manager, ns);
+        methods::add_methods(node_manager.clone(), ns);
+
+        // Add a historizing variable backed by in-memory SQLite, seeded with sample values, so
+        // HistoryRead returns real data (exercised by the interop harness).
+        let history_backend =
+            Arc::new(opcua_history_sqlite::SqliteHistoryBackend::new_in_memory().unwrap());
+        history::add_history(node_manager, history_backend, ns).await;
 
         server.run().await.unwrap();
     }

@@ -589,6 +589,29 @@ async function testUnsupportedServices() {
         // A thrown service fault is also an acceptable rejection.
         check("HistoryRead on non-historizing node is rejected", true, e.message);
       }
+
+      // HistoryRead on the demo's seeded historizing variable returns real values.
+      const nsArray = await session.readNamespaceArray();
+      const nsIdx = nsArray.indexOf(DEMO_NS);
+      if (nsIdx > 0) {
+        const histNode = `ns=${nsIdx};s=HistoricalDouble`;
+        const start = new Date(Date.now() - 5 * 60 * 1000);
+        const end = new Date(Date.now() + 60 * 1000);
+        try {
+          const r = await session.readHistoryValue(histNode, start, end);
+          const res = Array.isArray(r) ? r[0] : r;
+          const values =
+            (res && res.historyData && res.historyData.dataValues) || [];
+          const sc = res && res.statusCode;
+          check(
+            "HistoryRead on a historizing node returns values",
+            (!sc || sc.isGood()) && values.length > 0,
+            `status=${sc ? sc.toString() : "?"} count=${values.length}`,
+          );
+        } catch (e) {
+          check("HistoryRead on a historizing node returns values", false, e.message);
+        }
+      }
     },
   );
 }

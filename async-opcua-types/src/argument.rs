@@ -18,7 +18,7 @@ use crate::{
     localized_text::LocalizedText,
     node_id::NodeId,
     string::UAString,
-    write_u32, Context, DataTypeId, Error, MessageInfo, ObjectId,
+    write_i32, Context, DataTypeId, Error, MessageInfo, ObjectId,
 };
 
 // From OPC UA Part 3 - Address Space Model 1.03 Specification
@@ -73,7 +73,12 @@ impl BinaryEncodable for Argument {
         size += self.name.byte_len(ctx);
         size += self.data_type.byte_len(ctx);
         size += self.value_rank.byte_len(ctx);
-        size += self.array_dimensions.byte_len(ctx);
+        // Part 3 Table 28: ArrayDimensions shall be null when valueRank <= 0 (a 4-byte null length).
+        if self.value_rank > 0 {
+            size += self.array_dimensions.byte_len(ctx);
+        } else {
+            size += 4;
+        }
         size += self.description.byte_len(ctx);
         size
     }
@@ -94,7 +99,9 @@ impl BinaryEncodable for Argument {
                 return Err(Error::encoding(format!("The array dimensions are expected in the Argument matching value rank {} and they aren't", self.value_rank)));
             }
         } else {
-            write_u32(stream, 0u32)?;
+            // Part 3 Table 28: "This field shall be null if valueRank <= 0." Emit a null array
+            // (length -1), not an empty one.
+            write_i32(stream, -1)?;
         }
 
         self.description.encode(stream, ctx)?;
@@ -130,6 +137,10 @@ impl BinaryDecodable for Argument {
                     }
                 }
             }
+        } else {
+            // Part 3 Table 28: ArrayDimensions shall be null when valueRank <= 0. Normalize a null or
+            // (non-conformant) empty array from the wire to None.
+            array_dimensions = None;
         }
         let description = LocalizedText::decode(stream, ctx)?;
         Ok(Argument {

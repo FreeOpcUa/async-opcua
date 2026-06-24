@@ -32,7 +32,13 @@ itself (it confirms the coverage and avoids redundant work):
   uses the 100 ms minimum + spaced writes. C3 Sampling→Reporting transition DONE
   (`sampling_transition.rs`): a Sampling item accumulates samples; on transition to Reporting the queue
   is flushed in order (initial create-value then the change) — `set_monitoring_mode` doesn't clear the
-  queue; no stale/duplicated value, none lost; no server bug. C4–C7 remain.
+  queue; no stale/duplicated value, none lost; no server bug. C4 ExtensionObject round-trip DONE
+  (`async-opcua-types/.../tests/encoding.rs`): structured EO (EUInformation/Argument) + nested
+  DiagnosticInfo + LocalizedText edges round-trip. Spec-checked both normalizations against the PDFs:
+  empty-string LocalizedText locale/text → null is spec-correct (Part 6 Table 24); but Argument None
+  array_dimensions → Some([]) was a DEVIATION — Part 3 Table 28 says ArrayDimensions "shall be null if
+  valueRank <= 0" — so FIXED the Argument encode (emit null, not empty) + normalize on decode; scalar
+  Argument now round-trips None→None. C5–C7 remain.
 
 ## Tier A — potential REAL BUGS (probe first; this is where the cross-check pays off)
 | # | Case | Source | Why high-signal |

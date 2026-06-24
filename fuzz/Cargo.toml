@@ -20,7 +20,7 @@ x509-cert = { workspace = true }
 
 [dependencies.async-opcua]
 path = "../async-opcua"
-features = ["ecc", "json"]
+features = ["ecc", "json", "xml"]
 
 [[bin]]
 name = "fuzz_comms"
@@ -67,6 +67,13 @@ bench = false
 [[bin]]
 name = "fuzz_json"
 path = "fuzz_targets/fuzz_json.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_xml"
+path = "fuzz_targets/fuzz_xml.rs"
 test = false
 doc = false
 bench = false

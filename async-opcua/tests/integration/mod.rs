@@ -18,6 +18,7 @@ mod pubsub;
 mod query;
 mod read;
 mod reverse_connect;
+mod sampling_transition;
 mod subscriptions;
 mod tier_a;
 mod triggering;

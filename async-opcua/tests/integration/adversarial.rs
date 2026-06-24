@@ -29,6 +29,11 @@ enum Attack {
     OversizeFirstMsg,
     /// Corrupt the 3-byte message-type code so the framing is no longer a known message kind.
     BadMessageType,
+    /// Rewrite the SecureChannelId (bytes 8..12, after the 8-byte TCP header) so the chunk names a
+    /// different secure channel than the one the connection established — a routing/auth confusion.
+    WrongSecureChannelId,
+    /// Change the chunk-type byte (index 3) from final `F` to abort `A`, aborting request assembly.
+    AbortFirstMsg,
 }
 
 /// Read one full OPC UA TCP message (8-byte header + body; `message_size` at bytes 4..8 covers
@@ -117,6 +122,19 @@ async fn handle_conn(client_conn: TcpStream, server_conn: TcpStream, attack: Att
                 Attack::BadMessageType => {
                     let mut m = msg.clone();
                     m[0..3].copy_from_slice(b"XXX");
+                    let _ = server_w.write_all(&m).await;
+                    continue;
+                }
+                Attack::WrongSecureChannelId => {
+                    let mut m = msg.clone();
+                    // SecureChannelId follows the 8-byte TCP message header.
+                    m[8..12].copy_from_slice(&u32::MAX.to_le_bytes());
+                    let _ = server_w.write_all(&m).await;
+                    continue;
+                }
+                Attack::AbortFirstMsg => {
+                    let mut m = msg.clone();
+                    m[3] = b'A'; // F (final) -> A (abort)
                     let _ = server_w.write_all(&m).await;
                     continue;
                 }
@@ -245,4 +263,57 @@ async fn invalid_message_type_is_rejected() {
         MessageSecurityMode::None,
     )
     .await;
+}
+
+/// A chunk that names a different SecureChannelId than the connection's own channel must be
+/// rejected (routing/authentication confusion); the server must survive.
+#[tokio::test]
+async fn wrong_secure_channel_id_is_rejected() {
+    assert_attack_rejected_and_server_survives(
+        Attack::WrongSecureChannelId,
+        SecurityPolicy::None,
+        MessageSecurityMode::None,
+    )
+    .await;
+}
+
+/// An Abort chunk in place of a final service chunk must be absorbed without killing the server.
+/// Unlike the other attacks the server does not surface an error (it abandons the request and the
+/// client simply never establishes), so this only asserts the safety property that matters: the
+/// server stays healthy and still serves other clients.
+#[tokio::test]
+async fn abort_chunk_is_absorbed_and_server_survives() {
+    let mut tester = Tester::new(test_server(), true).await;
+    let proxy_addr = start_attack_proxy(tester.addr, Attack::AbortFirstMsg).await;
+    let ep = proxied_endpoint(
+        &tester,
+        proxy_addr,
+        SecurityPolicy::None,
+        MessageSecurityMode::None,
+    )
+    .await;
+
+    // One poisoned connection attempt; do not wait on it (an absorbed abort yields no error to act
+    // on, so the event loop would just keep retrying).
+    let (_session, lp) = tester
+        .client
+        .connect_to_endpoint_directly(ep, IdentityToken::Anonymous)
+        .unwrap();
+    let _h = lp.spawn();
+    tokio::time::sleep(Duration::from_millis(500)).await; // let the abort reach the server
+
+    // The server must survive: a normal direct connection still works.
+    let (session, lp) = tester
+        .connect(
+            SecurityPolicy::None,
+            MessageSecurityMode::None,
+            IdentityToken::Anonymous,
+        )
+        .await
+        .unwrap();
+    lp.spawn();
+    tokio::time::timeout(Duration::from_secs(10), session.wait_for_connection())
+        .await
+        .unwrap();
+    read_service_level(&session).await.unwrap();
 }

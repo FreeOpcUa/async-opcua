@@ -27,7 +27,7 @@ Legend: ✅ interop-grounded · 🔵 self-grounded (clause-anchored) · 🟡 sel
 |---|---|---|---|---|---|---|
 | GetEndpoints | §5.5.4 | ✅ | core_tests, discovery | node-opcua | ✅ | only node-opcua drives it |
 | FindServers | §5.5.2 | ✅ | core_tests, discovery | — | 🔵 | self only |
-| FindServersOnNetwork | §5.5.3 | deferred (mDNS) | discovery (rejects) | — | 🔵 | documented gap |
+| FindServersOnNetwork | §5.5.3 | ✅ (pull, no mDNS) | discovery (returns registered) | — | 🔵 | mDNS LDS-ME multicast deferred |
 | RegisterServer / 2 | §5.5.5/.6 / Part 12 §7.5 | ✅ | discovery, info.rs unit (C6 race) | — | 🔵 | self only; cited |
 | CreateSession | §5.7.2 | ✅ | conformance, core_tests, hardening | all 3 | ✅ | error: hardening/adversarial |
 | ActivateSession | §5.7.3 | ✅ | conformance, hardening, tier_a, adversarial | all 3 | ✅ | error: cross-channel, empty pw, X509 tamper |

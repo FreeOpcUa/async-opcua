@@ -24,7 +24,9 @@ itself (it confirms the coverage and avoids redundant work):
   (`adversarial.rs`, rejected `BadSequenceNumberInvalid`); B4 renewal token-grace
   (`async-opcua-core/.../secure_channel.rs` unit tests — overlap kept, expired pruned); B5 slow-loris
   half-open handshake (`adversarial.rs`, `hello_timeout`).
-- **Tier C** — not started.
+- **Tier C** — in progress (one PR per item). C1 SetTriggering DONE (`triggering.rs`): positive
+  delivery + link removal; confirmed the linked Sampling item's queue also holds its initial sample
+  (the stale-create-value question is C3's scope). C2–C7 remain.
 
 ## Tier A — potential REAL BUGS (probe first; this is where the cross-check pays off)
 | # | Case | Source | Why high-signal |

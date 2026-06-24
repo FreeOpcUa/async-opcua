@@ -10,8 +10,8 @@ use crate::{
 };
 use opcua_core::ResponseMessage;
 use opcua_types::{
-    CallMethodRequest, CallMethodResult, CallRequest, CallResponse, Error, IntegerId, MethodId,
-    NodeId, ObjectId, StatusCode, TryFromVariant, Variant,
+    ByteString, CallMethodRequest, CallMethodResult, CallRequest, CallResponse, Error, IntegerId,
+    LocalizedText, MethodId, NodeId, ObjectId, ObjectTypeId, StatusCode, TryFromVariant, Variant,
 };
 use tracing::{debug_span, Instrument};
 
@@ -182,6 +182,124 @@ impl Session {
             .unwrap())
     }
 
+    /// Calls the ConditionRefresh method for an event subscription.
+    ///
+    /// This asks the server to resend the current retained condition state for all event monitored
+    /// items in the subscription.
+    ///
+    /// # Arguments
+    ///
+    /// * `subscription_id` - Server allocated identifier for the subscription to refresh.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the Call service fails or if the method operation status is not Good.
+    pub async fn refresh_conditions(&self, subscription_id: u32) -> Result<(), Error> {
+        let result = self
+            .call_one((
+                NodeId::from(ObjectTypeId::ConditionType),
+                NodeId::from(MethodId::ConditionType_ConditionRefresh),
+                Some(vec![Variant::from(subscription_id)]),
+            ))
+            .await?;
+
+        method_status_to_result(
+            result.status_code,
+            "ConditionRefresh returned bad status code",
+        )
+    }
+
+    /// Calls the ConditionRefresh2 method for one event monitored item.
+    ///
+    /// This asks the server to resend the current retained condition state for a single event
+    /// monitored item in the subscription.
+    ///
+    /// # Arguments
+    ///
+    /// * `subscription_id` - Server allocated identifier for the subscription to refresh.
+    /// * `monitored_item_id` - Server allocated identifier for the monitored item to refresh.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the Call service fails or if the method operation status is not Good.
+    pub async fn refresh_conditions_for_item(
+        &self,
+        subscription_id: u32,
+        monitored_item_id: u32,
+    ) -> Result<(), Error> {
+        let result = self
+            .call_one((
+                NodeId::from(ObjectTypeId::ConditionType),
+                NodeId::from(MethodId::ConditionType_ConditionRefresh2),
+                Some(vec![
+                    Variant::from(subscription_id),
+                    Variant::from(monitored_item_id),
+                ]),
+            ))
+            .await?;
+
+        method_status_to_result(
+            result.status_code,
+            "ConditionRefresh2 returned bad status code",
+        )
+    }
+
+    /// Calls the Acknowledge method on an AcknowledgeableCondition instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `condition_id` - NodeId of the condition instance to acknowledge.
+    /// * `event_id` - EventId of the condition event being acknowledged.
+    /// * `comment` - Human-readable acknowledgement comment.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the Call service fails or if the method operation status is not Good.
+    pub async fn acknowledge_condition(
+        &self,
+        condition_id: &NodeId,
+        event_id: ByteString,
+        comment: impl Into<LocalizedText>,
+    ) -> Result<(), Error> {
+        let result = self
+            .call_one((
+                condition_id.clone(),
+                NodeId::from(MethodId::AcknowledgeableConditionType_Acknowledge),
+                Some(vec![Variant::from(event_id), Variant::from(comment.into())]),
+            ))
+            .await?;
+
+        method_status_to_result(result.status_code, "Acknowledge returned bad status code")
+    }
+
+    /// Calls the Confirm method on an AcknowledgeableCondition instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `condition_id` - NodeId of the condition instance to confirm.
+    /// * `event_id` - EventId of the condition event being confirmed.
+    /// * `comment` - Human-readable confirmation comment.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Error`] if the Call service fails or if the method operation status is not Good.
+    pub async fn confirm_condition(
+        &self,
+        condition_id: &NodeId,
+        event_id: ByteString,
+        comment: impl Into<LocalizedText>,
+    ) -> Result<(), Error> {
+        let result = self
+            .call_one((
+                condition_id.clone(),
+                NodeId::from(MethodId::AcknowledgeableConditionType_Confirm),
+                Some(vec![Variant::from(event_id), Variant::from(comment.into())]),
+            ))
+            .await?;
+
+        method_status_to_result(result.status_code, "Confirm returned bad status code")
+    }
+
     /// Calls GetMonitoredItems via call_method(), putting a sane interface on the input / output.
     ///
     /// # Arguments
@@ -225,5 +343,13 @@ impl Session {
                 "Expected 2 output arguments but got null",
             ))
         }
+    }
+}
+
+fn method_status_to_result(status_code: StatusCode, context: &'static str) -> Result<(), Error> {
+    if status_code.is_good() {
+        Ok(())
+    } else {
+        Err(Error::new(status_code, context))
     }
 }

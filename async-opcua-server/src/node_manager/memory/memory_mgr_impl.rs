@@ -500,6 +500,13 @@ pub trait InMemoryNodeManagerImpl: Send + Sync + 'static {
         false
     }
 
+    /// Return `true` when this implementation can handle `method_id` even if the call object does
+    /// not expose that exact method node as a component (e.g. a cross-node-manager shared method that
+    /// validates its own object). Default false.
+    fn accepts_method_without_object_component(&self, _method_id: &NodeId) -> bool {
+        false
+    }
+
     /// Return `true` if a node with no requested node ID and parent `parent_id`
     /// should be created using this node manager.
     ///

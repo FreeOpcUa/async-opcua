@@ -365,6 +365,11 @@ impl MonitoredItem {
         v
     }
 
+    #[allow(dead_code)]
+    pub(crate) fn is_event_item(&self) -> bool {
+        matches!(self.filter, FilterType::EventFilter(_))
+    }
+
     /// Modifies the existing item with the values of the modify request. On success, the result
     /// holds the filter result.
     pub(super) fn modify(

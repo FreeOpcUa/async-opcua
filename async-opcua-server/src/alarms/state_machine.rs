@@ -160,7 +160,7 @@ impl ConditionStateMachine {
         // 8. Create Retain variable
         let retain_var = VariableBuilder::new(&retain_id, "Retain", "Retain")
             .data_type(opcua_types::DataTypeId::Boolean)
-            .value(true)
+            .value(false)
             .writable()
             .build();
         address_space.insert(
@@ -197,6 +197,11 @@ impl ConditionStateMachine {
     pub fn current_event_id_matches(&self, event_id: &[u8]) -> bool {
         let current = self.current_event_id.lock().unwrap();
         !current.is_empty() && current.as_slice() == event_id
+    }
+
+    /// Returns the EventId of the condition's current reportable state.
+    pub fn current_event_id(&self) -> Vec<u8> {
+        self.current_event_id.lock().unwrap().clone()
     }
 
     /// Gets whether the condition is enabled.

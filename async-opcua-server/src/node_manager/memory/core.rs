@@ -15,7 +15,7 @@ use crate::{
     subscriptions::CreateMonitoredItem,
     ServerCapabilities, ServerStatusWrapper,
 };
-use opcua_core::{sync::RwLock, trace_lock};
+use opcua_core::{sync::RwLock, trace_lock, trace_read_lock, trace_write_lock};
 use opcua_types::{
     DataValue, DateTime, ExtensionObject, IdType, Identifier, MethodId, MonitoringMode, NodeId,
     NumericRange, ObjectId, ReferenceTypeId, StatusCode, TimeZoneDataType, TimestampsToReturn,
@@ -24,11 +24,19 @@ use opcua_types::{
 
 use super::{InMemoryNodeManager, InMemoryNodeManagerImpl, InMemoryNodeManagerImplBuilder};
 
+type MethodWithContextCB = Arc<
+    dyn Fn(&RequestContext, &NodeId, &[Variant]) -> Result<Vec<Variant>, StatusCode>
+        + Send
+        + Sync
+        + 'static,
+>;
+
 /// Node manager impl for the core namespace.
 pub struct CoreNodeManagerImpl {
     sampler: SyncSampler,
     node_managers: NodeManagersRef,
     status: Arc<ServerStatusWrapper>,
+    method_with_context_cbs: Arc<RwLock<std::collections::HashMap<NodeId, MethodWithContextCB>>>,
 }
 
 /// Node manager for the core namespace.
@@ -94,6 +102,10 @@ impl InMemoryNodeManagerImpl for CoreNodeManagerImpl {
 
     fn name(&self) -> &str {
         "core"
+    }
+
+    fn accepts_method_without_object_component(&self, method_id: &NodeId) -> bool {
+        trace_read_lock!(self.method_with_context_cbs).contains_key(method_id)
     }
 
     async fn read_values(
@@ -221,6 +233,7 @@ impl CoreNodeManagerImpl {
             sampler: SyncSampler::new(),
             status,
             node_managers,
+            method_with_context_cbs: Default::default(),
         }
     }
 
@@ -550,6 +563,19 @@ impl CoreNodeManagerImpl {
         }
     }
 
+    /// Add a callback for `Call` on the method given by `id` that has access to the RequestContext.
+    pub fn add_method_callback_with_context(
+        &self,
+        id: NodeId,
+        cb: impl Fn(&RequestContext, &NodeId, &[Variant]) -> Result<Vec<Variant>, StatusCode>
+            + Send
+            + Sync
+            + 'static,
+    ) {
+        let mut cbs = trace_write_lock!(self.method_with_context_cbs);
+        cbs.insert(id, Arc::new(cb));
+    }
+
     fn call_builtin_method(
         &self,
         call: &mut MethodCall,
@@ -586,7 +612,21 @@ impl CoreNodeManagerImpl {
                 sub.set_resend_data();
                 call.set_status(StatusCode::Good);
             }
-            _ => return Err(StatusCode::BadNotSupported),
+            _ => {
+                let cbs = trace_read_lock!(self.method_with_context_cbs);
+                if let Some(cb) = cbs.get(call.method_id()) {
+                    match cb(context, call.object_id(), call.arguments()) {
+                        Ok(r) => {
+                            call.set_outputs(r);
+                            call.set_status(StatusCode::Good);
+                        }
+                        Err(e) => call.set_status(e),
+                    }
+                    return Ok(());
+                }
+
+                return Err(StatusCode::BadNotSupported);
+            }
         }
         Ok(())
     }

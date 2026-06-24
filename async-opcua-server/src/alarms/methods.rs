@@ -2,12 +2,18 @@
 
 use crate::address_space::AddressSpace;
 use crate::alarms::dispatch::ServerAlarmEvent;
+use crate::alarms::refresh_events::{RefreshEndEvent, RefreshStartEvent};
+use crate::alarms::registry::ConditionRegistry;
 use crate::alarms::state_machine::ConditionStateMachine;
 use crate::alarms::transitions::{acknowledge_alarm, confirm_alarm};
 use crate::node_manager::RequestContext;
+use crate::MonitoredItemHandle;
+use opcua_core::events::AlarmEvent;
 use opcua_core::traits::ConditionMethodHandler;
 use opcua_nodes::Event;
-use opcua_types::{DateTime, LocalizedText, NodeId, StatusCode, Variant};
+#[cfg(feature = "generated-address-space")]
+use opcua_types::MethodId;
+use opcua_types::{DateTime, LocalizedText, NodeId, StatusCode, TryFromVariant, Variant};
 use std::sync::Arc;
 
 /// Handler for Alarm Acknowledge/Confirm method calls.
@@ -185,5 +191,190 @@ impl AlarmMethodHandler {
             Ok(None) => Ok(vec![]),
             Err(e) => Err(e),
         }
+    }
+}
+
+/// Handler for OPC UA Part 9 condition method calls on standard namespace method ids.
+pub struct ConditionRefreshHandler {
+    /// Shared registry of condition state machines to replay.
+    pub registry: ConditionRegistry,
+    /// Thread-safe reference to the AddressSpace.
+    pub address_space: Arc<opcua_core::sync::RwLock<AddressSpace>>,
+}
+
+impl ConditionRefreshHandler {
+    /// Creates a new `ConditionRefreshHandler` instance.
+    pub fn new(
+        registry: ConditionRegistry,
+        address_space: Arc<opcua_core::sync::RwLock<AddressSpace>>,
+    ) -> Self {
+        Self {
+            registry,
+            address_space,
+        }
+    }
+
+    /// Callback executed when the ConditionRefresh method is called by a client.
+    pub fn handle_condition_refresh(
+        &self,
+        context: &RequestContext,
+        args: &[Variant],
+    ) -> Result<Vec<Variant>, StatusCode> {
+        let subscription_id = parse_u32_arg(args, 0)?;
+        self.refresh_events(context, subscription_id, None)
+    }
+
+    /// Callback executed when the ConditionRefresh2 method is called by a client.
+    pub fn handle_condition_refresh2(
+        &self,
+        context: &RequestContext,
+        args: &[Variant],
+    ) -> Result<Vec<Variant>, StatusCode> {
+        let subscription_id = parse_u32_arg(args, 0)?;
+        let monitored_item_id = parse_u32_arg(args, 1)?;
+        let monitored_item = MonitoredItemHandle {
+            subscription_id,
+            monitored_item_id,
+        };
+        self.refresh_events(context, subscription_id, Some(monitored_item))
+    }
+
+    /// Callback executed when the standard Acknowledge method is called by a client.
+    pub fn handle_condition_acknowledge(
+        &self,
+        context: &RequestContext,
+        object_id: &NodeId,
+        args: &[Variant],
+    ) -> Result<Vec<Variant>, StatusCode> {
+        let condition = self
+            .registry
+            .get(object_id)
+            .ok_or(StatusCode::BadNodeIdUnknown)?;
+        AlarmMethodHandler::new(condition, self.address_space.clone())
+            .handle_ack_method(context, args)
+    }
+
+    /// Callback executed when the standard Confirm method is called by a client.
+    pub fn handle_condition_confirm(
+        &self,
+        context: &RequestContext,
+        object_id: &NodeId,
+        args: &[Variant],
+    ) -> Result<Vec<Variant>, StatusCode> {
+        let condition = self
+            .registry
+            .get(object_id)
+            .ok_or(StatusCode::BadNodeIdUnknown)?;
+        AlarmMethodHandler::new(condition, self.address_space.clone())
+            .handle_confirm_method(context, args)
+    }
+
+    fn refresh_events(
+        &self,
+        context: &RequestContext,
+        subscription_id: u32,
+        monitored_item: Option<MonitoredItemHandle>,
+    ) -> Result<Vec<Variant>, StatusCode> {
+        let address_space = opcua_core::trace_read_lock!(self.address_space);
+        let alarm_events: Vec<AlarmEvent> = self
+            .registry
+            .iter_retained(&address_space)
+            .into_iter()
+            .map(|condition| build_current_alarm_event(&condition, &address_space))
+            .collect();
+        drop(address_space);
+
+        let start = RefreshStartEvent::new();
+        let end = RefreshEndEvent::new();
+        let alarm_wrappers: Vec<ServerAlarmEvent<'_>> = alarm_events
+            .iter()
+            .map(|event| ServerAlarmEvent { event })
+            .collect();
+
+        let mut event_refs: Vec<&dyn Event> = Vec::with_capacity(alarm_wrappers.len() + 2);
+        event_refs.push(&start);
+        for wrapper in &alarm_wrappers {
+            event_refs.push(wrapper);
+        }
+        event_refs.push(&end);
+
+        let type_tree = context.get_type_tree_for_user();
+        context.subscriptions.refresh_subscription_events(
+            context.session_id,
+            subscription_id,
+            monitored_item,
+            &event_refs,
+            type_tree.get(),
+        )?;
+
+        Ok(vec![])
+    }
+}
+
+/// Registers standard ConditionRefresh, ConditionRefresh2, Acknowledge, and Confirm method callbacks.
+#[cfg(feature = "generated-address-space")]
+pub fn register_condition_methods(
+    core_node_manager: &crate::node_manager::memory::CoreNodeManager,
+    registry: ConditionRegistry,
+    address_space: Arc<opcua_core::sync::RwLock<AddressSpace>>,
+) {
+    let handler = Arc::new(ConditionRefreshHandler::new(registry, address_space));
+
+    let refresh_handler = handler.clone();
+    core_node_manager.inner().add_method_callback_with_context(
+        MethodId::ConditionType_ConditionRefresh.into(),
+        move |ctx, _object_id, args| refresh_handler.handle_condition_refresh(ctx, args),
+    );
+
+    let refresh2_handler = handler.clone();
+    core_node_manager.inner().add_method_callback_with_context(
+        MethodId::ConditionType_ConditionRefresh2.into(),
+        move |ctx, _object_id, args| refresh2_handler.handle_condition_refresh2(ctx, args),
+    );
+
+    let acknowledge_handler = handler.clone();
+    core_node_manager.inner().add_method_callback_with_context(
+        MethodId::AcknowledgeableConditionType_Acknowledge.into(),
+        move |ctx, object_id, args| {
+            acknowledge_handler.handle_condition_acknowledge(ctx, object_id, args)
+        },
+    );
+
+    core_node_manager.inner().add_method_callback_with_context(
+        MethodId::AcknowledgeableConditionType_Confirm.into(),
+        move |ctx, object_id, args| handler.handle_condition_confirm(ctx, object_id, args),
+    );
+}
+
+fn parse_u32_arg(args: &[Variant], index: usize) -> Result<u32, StatusCode> {
+    let Some(arg) = args.get(index) else {
+        return Err(StatusCode::BadInvalidArgument);
+    };
+    u32::try_from_variant(arg.clone()).map_err(|_| StatusCode::BadInvalidArgument)
+}
+
+fn build_current_alarm_event(
+    state_machine: &ConditionStateMachine,
+    address_space: &AddressSpace,
+) -> AlarmEvent {
+    let mut event_id = state_machine.current_event_id();
+    if event_id.is_empty() {
+        event_id = uuid::Uuid::new_v4().as_bytes().to_vec();
+    }
+
+    AlarmEvent {
+        event_id,
+        event_type: NodeId::new(0, 2915),
+        source_node: state_machine.source_node_id.clone(),
+        source_name: state_machine.condition_name.clone(),
+        time: DateTime::now(),
+        message: state_machine.get_message(address_space),
+        severity: state_machine.get_severity(address_space),
+        condition_id: state_machine.condition_id.clone(),
+        condition_name: state_machine.condition_name.clone(),
+        active_state: state_machine.get_active(address_space),
+        acked_state: state_machine.get_acked(address_space),
+        confirmed_state: state_machine.get_confirmed(address_space),
+        retain: state_machine.get_retain(address_space),
     }
 }

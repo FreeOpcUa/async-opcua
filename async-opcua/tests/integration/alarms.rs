@@ -4,16 +4,17 @@ use crate::utils::{default_server, ChannelNotifications, Tester};
 use opcua::{
     server::{
         address_space::AddressSpace,
-        node_manager::memory::{simple_node_manager, SimpleNodeManager},
+        node_manager::memory::{simple_node_manager, CoreNodeManager, SimpleNodeManager},
     },
     types::{
-        AttributeId, CallMethodRequest, LocalizedText, MonitoredItemCreateRequest, MonitoringMode,
-        MonitoringParameters, NodeId, ObjectId, ReadValueId, StatusCode, TimestampsToReturn,
-        Variant,
+        AttributeId, ByteString, CallMethodRequest, LocalizedText, MethodId,
+        MonitoredItemCreateRequest, MonitoringMode, MonitoringParameters, NodeId, ObjectId,
+        ObjectTypeId, ReadValueId, StatusCode, TimestampsToReturn, Variant,
     },
 };
 use opcua_client::alarms::client::{get_alarm_event_select_clauses, parse_alarm_event};
 use opcua_core::events::AlarmEvent;
+use opcua_server::alarms::{register_condition_methods, ConditionRegistry};
 use opcua_server::namespace::register_alarm_condition;
 use opcua_types::{EventFilter, ExtensionObject};
 use tokio::time::timeout;
@@ -60,7 +61,13 @@ async fn test_alarm_trigger_and_acknowledge() {
         space.insert::<_, NodeId>(source_node, None);
     }
 
-    // 2. Register the Alarm Condition state machine
+    // 2. Register the Alarm Condition state machine, and wire the standard ns0 Acknowledge/Confirm
+    //    (i=9111/i=9113) on the core node manager via the condition registry.
+    let core_nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<CoreNodeManager>()
+        .expect("CoreNodeManager not found");
     let state_machine = register_alarm_condition(
         nm.address_space(),
         &nm,
@@ -69,6 +76,9 @@ async fn test_alarm_trigger_and_acknowledge() {
         source_node_id.clone(),
         "Temperature alarm",
     );
+    let registry = ConditionRegistry::new();
+    registry.register(state_machine.clone());
+    register_condition_methods(&core_nm, registry, nm.address_space().clone());
 
     // 3. Create client-side subscription for events
     let (notifs, _, mut events) = ChannelNotifications::new();
@@ -146,14 +156,11 @@ async fn test_alarm_trigger_and_acknowledge() {
     assert_eq!(alarm_event.severity, 800);
     assert_eq!(alarm_event.message.text.as_ref(), "High temperature!");
 
-    // 7. Acknowledge the alarm via Method call
-    let base_s = format!("Alarm_{}_{}", "Device1", "Temperature");
-    let ack_method_id = NodeId::new(2, format!("{}_Acknowledge", base_s));
-
+    // 7. Acknowledge the alarm via the standard type Method (i=9111) on the condition instance.
     let response = session
         .call_one(CallMethodRequest {
             object_id: state_machine.condition_id.clone(),
-            method_id: ack_method_id,
+            method_id: MethodId::AcknowledgeableConditionType_Acknowledge.into(),
             input_arguments: Some(vec![
                 Variant::from(opcua::types::ByteString::from(alarm_event.event_id.clone())),
                 Variant::from(LocalizedText::new("en", "Acknowledged by integration test")),
@@ -183,13 +190,11 @@ async fn test_alarm_trigger_and_acknowledge() {
     assert!(ack_event.acked_state);
     assert!(!ack_event.confirmed_state);
 
-    // 9. Confirm the alarm via Method call
-    let confirm_method_id = NodeId::new(2, format!("{}_Confirm", base_s));
-
+    // 9. Confirm the alarm via the standard type Method (i=9113).
     let response2 = session
         .call_one(CallMethodRequest {
             object_id: state_machine.condition_id.clone(),
-            method_id: confirm_method_id,
+            method_id: MethodId::AcknowledgeableConditionType_Confirm.into(),
             input_arguments: Some(vec![
                 Variant::from(opcua::types::ByteString::from(ack_event.event_id.clone())),
                 Variant::from(LocalizedText::new("en", "Confirmed by integration test")),
@@ -243,7 +248,12 @@ fn trigger_alarm_transition(
 /// (Note: the server does not validate the EventId argument, so these are pure state-machine guards.)
 #[tokio::test]
 async fn alarm_acknowledge_confirm_error_paths() {
-    let (_tester, nm, session) = setup_alarms().await;
+    let (tester, nm, session) = setup_alarms().await;
+    let core_nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<CoreNodeManager>()
+        .expect("CoreNodeManager not found");
 
     let source_node_id = NodeId::new(2, "ErrDevice");
     {
@@ -267,6 +277,9 @@ async fn alarm_acknowledge_confirm_error_paths() {
         source_node_id.clone(),
         "alarm",
     );
+    let registry = ConditionRegistry::new();
+    registry.register(state_machine.clone());
+    register_condition_methods(&core_nm, registry, nm.address_space().clone());
 
     // Drive the condition to Active so it is acknowledgeable.
     let event = {
@@ -283,9 +296,8 @@ async fn alarm_acknowledge_confirm_error_paths() {
     };
     let event_id = opcua::types::ByteString::from(event.event_id.clone());
 
-    let base_s = "Alarm_ErrDev_Temp";
-    let ack_id = NodeId::new(2, format!("{base_s}_Acknowledge"));
-    let confirm_id = NodeId::new(2, format!("{base_s}_Confirm"));
+    let ack_id: NodeId = MethodId::AcknowledgeableConditionType_Acknowledge.into();
+    let confirm_id: NodeId = MethodId::AcknowledgeableConditionType_Confirm.into();
 
     let call = |method_id: NodeId| {
         let session = session.clone();
@@ -337,4 +349,365 @@ async fn alarm_acknowledge_confirm_error_paths() {
         call(confirm_id).await,
         StatusCode::BadConditionBranchAlreadyConfirmed
     );
+}
+
+// ---------------------------------------------------------------------------
+// ConditionRefresh (Part 9 §5.5.7) / ConditionRefresh2 (§5.5.8) — A&C subscriber
+// end-to-end. Independent of the implementation; anchored to the spec behavior:
+// a refresh delivers RefreshStartEvent (i=2787) -> the current event of every
+// retained condition -> RefreshEndEvent (i=2788), to the requesting subscription.
+// ---------------------------------------------------------------------------
+
+const REFRESH_START_EVENT_TYPE: u32 = 2787;
+const REFRESH_END_EVENT_TYPE: u32 = 2788;
+
+fn make_event_source(nm: &SimpleNodeManager, id: &str) -> NodeId {
+    let source_node_id = NodeId::new(2, id);
+    let mut space = nm.address_space().write();
+    let source = opcua::server::address_space::ObjectBuilder::new(&source_node_id, id, id)
+        .component_of(ObjectId::ObjectsFolder)
+        .event_notifier(opcua::server::address_space::EventNotifier::SUBSCRIBE_TO_EVENTS)
+        .build();
+    space.insert::<_, NodeId>(source, None);
+    source_node_id
+}
+
+async fn add_event_item(session: &opcua_client::Session, sub_id: u32, source: &NodeId) -> u32 {
+    let res = session
+        .create_monitored_items(
+            sub_id,
+            TimestampsToReturn::Both,
+            vec![MonitoredItemCreateRequest {
+                item_to_monitor: ReadValueId {
+                    node_id: source.clone(),
+                    attribute_id: AttributeId::EventNotifier as u32,
+                    ..Default::default()
+                },
+                monitoring_mode: MonitoringMode::Reporting,
+                requested_parameters: MonitoringParameters {
+                    sampling_interval: 0.0,
+                    queue_size: 100,
+                    discard_oldest: true,
+                    filter: ExtensionObject::new(EventFilter {
+                        select_clauses: Some(get_alarm_event_select_clauses()),
+                        where_clause: opcua_types::ContentFilter::default(),
+                    }),
+                    ..Default::default()
+                },
+            }],
+        )
+        .await
+        .unwrap();
+    assert_eq!(res[0].result.status_code, StatusCode::Good);
+    res[0].result.monitored_item_id
+}
+
+/// Drain events until the RefreshEndEvent marker, returning every parsed event in order
+/// together with the ReadValueId identifying which monitored item received it.
+async fn collect_until_refresh_end(
+    events: &mut tokio::sync::mpsc::UnboundedReceiver<(ReadValueId, Option<Vec<Variant>>)>,
+) -> Vec<(ReadValueId, AlarmEvent)> {
+    let mut out = Vec::new();
+    loop {
+        let (rvid, fields) = timeout(Duration::from_secs(3), events.recv())
+            .await
+            .expect("timed out waiting for refresh burst")
+            .expect("event channel closed");
+        let parsed =
+            parse_alarm_event(&fields.expect("event without fields")).expect("parse event");
+        let is_end = parsed.event_type == NodeId::new(0, REFRESH_END_EVENT_TYPE);
+        out.push((rvid, parsed));
+        if is_end {
+            break;
+        }
+    }
+    out
+}
+
+fn is_marker(e: &AlarmEvent) -> bool {
+    e.event_type == NodeId::new(0, REFRESH_START_EVENT_TYPE)
+        || e.event_type == NodeId::new(0, REFRESH_END_EVENT_TYPE)
+}
+
+/// The key proof: a client that subscribes AFTER an alarm is already active still learns about it,
+/// because ConditionRefresh replays the retained condition. No broadcast is done before subscribing.
+#[tokio::test]
+async fn condition_refresh_delivers_retained_alarm_to_late_subscriber() {
+    let (tester, nm, session) = setup_alarms().await;
+    let core_nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<CoreNodeManager>()
+        .expect("CoreNodeManager not found");
+    let source = make_event_source(&nm, "RefreshDevice");
+    let sm = register_alarm_condition(
+        nm.address_space(),
+        &nm,
+        "RefDev",
+        "Temp",
+        source.clone(),
+        "alarm",
+    );
+
+    let registry = ConditionRegistry::new();
+    registry.register(sm.clone());
+    register_condition_methods(&core_nm, registry, nm.address_space().clone());
+
+    // Alarm becomes Active BEFORE the client subscribes, and we deliberately do NOT broadcast it.
+    {
+        let mut space = nm.address_space().write();
+        trigger_alarm_transition(&mut space, &sm, true, 700, LocalizedText::new("en", "high"))
+            .unwrap()
+            .expect("transition should produce an event");
+    }
+    {
+        let space = nm.address_space().read();
+        assert!(
+            sm.get_retain(&space),
+            "an active condition must be retained"
+        );
+    }
+
+    let (notifs, _dv, mut events) = ChannelNotifications::new();
+    let sub_id = session
+        .create_subscription(Duration::from_millis(100), 100, 20, 1000, 0, true, notifs)
+        .await
+        .unwrap();
+    let _item = add_event_item(&session, sub_id, &source).await;
+
+    // Late subscriber catches up via ConditionRefresh.
+    session
+        .refresh_conditions(sub_id)
+        .await
+        .expect("refresh_conditions should succeed");
+
+    let burst = collect_until_refresh_end(&mut events).await;
+    assert_eq!(
+        burst.first().unwrap().1.event_type,
+        NodeId::new(0, REFRESH_START_EVENT_TYPE),
+        "first event must be RefreshStart"
+    );
+    assert_eq!(
+        burst.last().unwrap().1.event_type,
+        NodeId::new(0, REFRESH_END_EVENT_TYPE),
+        "last event must be RefreshEnd"
+    );
+    let cond = burst
+        .iter()
+        .find(|(_, e)| !is_marker(e))
+        .expect("the retained condition must be replayed between the markers");
+    assert!(cond.1.active_state, "replayed condition should be active");
+    assert_eq!(
+        cond.1.severity, 700,
+        "replayed condition keeps its severity"
+    );
+}
+
+/// ConditionRefresh2 delivers the burst to ONE monitored item, not the whole subscription.
+#[tokio::test]
+async fn condition_refresh2_targets_a_single_monitored_item() {
+    let (tester, nm, session) = setup_alarms().await;
+    let core_nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<CoreNodeManager>()
+        .expect("CoreNodeManager not found");
+    let source_a = make_event_source(&nm, "Dev2A");
+    let source_b = make_event_source(&nm, "Dev2B");
+    let sm = register_alarm_condition(
+        nm.address_space(),
+        &nm,
+        "Dev2A",
+        "Temp",
+        source_a.clone(),
+        "alarm",
+    );
+    let registry = ConditionRegistry::new();
+    registry.register(sm.clone());
+    register_condition_methods(&core_nm, registry, nm.address_space().clone());
+
+    {
+        let mut space = nm.address_space().write();
+        trigger_alarm_transition(&mut space, &sm, true, 500, LocalizedText::new("en", "a"))
+            .unwrap()
+            .expect("transition event");
+    }
+
+    let (notifs, _dv, mut events) = ChannelNotifications::new();
+    let sub_id = session
+        .create_subscription(Duration::from_millis(100), 100, 20, 1000, 0, true, notifs)
+        .await
+        .unwrap();
+    let _item_a = add_event_item(&session, sub_id, &source_a).await;
+    let item_b = add_event_item(&session, sub_id, &source_b).await;
+
+    session
+        .refresh_conditions_for_item(sub_id, item_b)
+        .await
+        .expect("refresh_conditions_for_item should succeed");
+
+    let burst = collect_until_refresh_end(&mut events).await;
+    assert!(
+        burst.iter().any(|(_, e)| !is_marker(e)),
+        "the retained condition should be replayed"
+    );
+    for (rvid, _e) in &burst {
+        assert_eq!(
+            rvid.node_id, source_b,
+            "ConditionRefresh2 must deliver only to the targeted monitored item (source B)"
+        );
+    }
+}
+
+/// An unknown SubscriptionId is rejected per Part 9 §5.5.7.
+#[tokio::test]
+async fn condition_refresh_rejects_unknown_subscription() {
+    let (tester, nm, session) = setup_alarms().await;
+    let core_nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<CoreNodeManager>()
+        .expect("CoreNodeManager not found");
+    register_condition_methods(
+        &core_nm,
+        ConditionRegistry::new(),
+        nm.address_space().clone(),
+    );
+
+    let resp = session
+        .call_one(CallMethodRequest {
+            object_id: ObjectTypeId::ConditionType.into(),
+            method_id: MethodId::ConditionType_ConditionRefresh.into(),
+            input_arguments: Some(vec![Variant::from(999_999u32)]),
+        })
+        .await
+        .unwrap();
+    assert_eq!(resp.status_code, StatusCode::BadSubscriptionIdInvalid);
+}
+
+/// With no retained conditions, refresh still brackets an (empty) burst with Start/End markers,
+/// so the client learns "nothing currently retained".
+#[tokio::test]
+async fn condition_refresh_with_no_retained_conditions_is_empty() {
+    let (tester, nm, session) = setup_alarms().await;
+    let core_nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<CoreNodeManager>()
+        .expect("CoreNodeManager not found");
+    let source = make_event_source(&nm, "QuietDevice");
+    // Empty registry: no conditions to replay, so the burst is just the Start/End brackets.
+    register_condition_methods(
+        &core_nm,
+        ConditionRegistry::new(),
+        nm.address_space().clone(),
+    );
+
+    let (notifs, _dv, mut events) = ChannelNotifications::new();
+    let sub_id = session
+        .create_subscription(Duration::from_millis(100), 100, 20, 1000, 0, true, notifs)
+        .await
+        .unwrap();
+    let _item = add_event_item(&session, sub_id, &source).await;
+
+    session.refresh_conditions(sub_id).await.expect("refresh");
+
+    let burst = collect_until_refresh_end(&mut events).await;
+    assert_eq!(burst.len(), 2, "only RefreshStart + RefreshEnd expected");
+    assert_eq!(
+        burst[0].1.event_type,
+        NodeId::new(0, REFRESH_START_EVENT_TYPE)
+    );
+    assert_eq!(
+        burst[1].1.event_type,
+        NodeId::new(0, REFRESH_END_EVENT_TYPE)
+    );
+}
+
+/// The thin client helpers acknowledge_condition / confirm_condition drive the same transitions
+/// as the raw Call path.
+#[tokio::test]
+async fn alarm_client_helpers_acknowledge_and_confirm() {
+    let (tester, nm, session) = setup_alarms().await;
+    let core_nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<CoreNodeManager>()
+        .expect("CoreNodeManager not found");
+    let source = make_event_source(&nm, "HelperDevice");
+    let sm = register_alarm_condition(
+        nm.address_space(),
+        &nm,
+        "Helper",
+        "Temp",
+        source.clone(),
+        "alarm",
+    );
+    // Wire the standard ns0 Acknowledge/Confirm (i=9111/i=9113) on the core node manager so the thin
+    // client helpers (which call the standard type method ids) resolve this condition by object id.
+    let registry = ConditionRegistry::new();
+    registry.register(sm.clone());
+    register_condition_methods(&core_nm, registry, nm.address_space().clone());
+
+    let (notifs, _dv, mut events) = ChannelNotifications::new();
+    let sub_id = session
+        .create_subscription(Duration::from_millis(100), 100, 20, 1000, 0, true, notifs)
+        .await
+        .unwrap();
+    let _item = add_event_item(&session, sub_id, &source).await;
+
+    let event = {
+        let mut space = nm.address_space().write();
+        trigger_alarm_transition(&mut space, &sm, true, 600, LocalizedText::new("en", "x"))
+            .unwrap()
+            .expect("transition event")
+    };
+    {
+        let wrapper = opcua::server::alarms::ServerAlarmEvent { event: &event };
+        tester
+            .handle
+            .subscriptions()
+            .notify_events(std::iter::once((
+                &wrapper as &dyn opcua::nodes::Event,
+                &event.source_node,
+            )));
+    }
+
+    let (_r, v) = timeout(Duration::from_secs(2), events.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    let ae = parse_alarm_event(&v.unwrap()).unwrap();
+
+    session
+        .acknowledge_condition(
+            &sm.condition_id,
+            ByteString::from(ae.event_id.clone()),
+            LocalizedText::new("en", "ack via helper"),
+        )
+        .await
+        .expect("acknowledge_condition should succeed");
+    {
+        let space = nm.address_space().read();
+        assert!(sm.get_acked(&space), "helper should have acknowledged");
+    }
+
+    let (_r2, v2) = timeout(Duration::from_secs(2), events.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    let ack = parse_alarm_event(&v2.unwrap()).unwrap();
+
+    session
+        .confirm_condition(
+            &sm.condition_id,
+            ByteString::from(ack.event_id.clone()),
+            LocalizedText::new("en", "confirm via helper"),
+        )
+        .await
+        .expect("confirm_condition should succeed");
+    {
+        let space = nm.address_space().read();
+        assert!(sm.get_confirmed(&space), "helper should have confirmed");
+    }
 }

@@ -65,6 +65,21 @@ As a system administrator running a server for extended periods (months/years), 
 1. **Given** a subscription monitoring high-frequency value updates, **When** values change and notifications are generated, **Then** the server reuses pre-allocated notification message structures instead of allocating new memory on the heap.
 2. **Given** a steady-state operation of value updates, **When** notifications are sent to the client, **Then** the memory allocated for these notifications is recycled back into the pool.
 
+### User Story 5 - Non-Blocking, Bounded Notification Delivery (Priority: P2)
+
+As an operator of a large, alarm-heavy DCS, I want notification and event delivery (data changes, events, and ConditionRefresh replays) to never hold a session-wide lock across an *unbounded* amount of work, so that one large burst — e.g. a ConditionRefresh that replays thousands of retained alarms — cannot stall other clients' or subscriptions' operations on that session.
+
+**Why this priority**: This is an **async-invariant** concern, not merely throughput. The library's name promises non-blocking behaviour on the hot path. Brief sync locks over short, non-awaiting sections are acceptable and deliberate (see the project's lock discipline), but holding the per-session subscription lock while building and enqueuing O(retained conditions × matching items) events defeats that guarantee. **ConditionRefresh** (Part 9 §5.5.7, implemented 2026-06-24) introduced the acute instance: its replay loop runs entirely under `SubscriptionCache`'s per-session `cache.lock()`. The same shape applies to any large event/data-change burst. Left unaddressed, "async" is aspirational on the delivery path under load.
+
+**Independent Test**: Drive a server to a state with thousands of retained alarms; issue a ConditionRefresh from one subscription; measure the lock-hold duration and the 99th-percentile latency of unrelated subscription operations on the same session during the refresh.
+
+**Acceptance Scenarios**:
+
+1. **Given** thousands of retained conditions, **When** a client issues ConditionRefresh, **Then** refresh-event production does not hold the session subscription lock for the full build/enqueue duration, and other operations on the session proceed without a proportional latency spike.
+2. **Given** a sustained high-rate event/data-change stream, **When** producers outrun the client's Publish consumption, **Then** delivery applies bounded backpressure (ring capacity) rather than unbounded buffering, surfacing overflow via the existing queue-overflow semantics.
+
+**Approach sketch**: per-subscription (or per-source) **bounded SPSC rings** drained by a single **"majordomo"** coordinator task that fans them into Publish responses, preserving per-subscription ordering so `RefreshStart → events → RefreshEnd` stay contiguous. Aligns with the SPSC-ring + majordomo pattern used elsewhere in the consuming PLC ecosystem. **Cheap interim mitigation** (without the full redesign): construct the replay events *outside* the subscription lock — hold only the address-space read lock for construction — and/or chunk the enqueue with cooperative yields.
+
 ### Edge Cases
 
 - **Session Closure during Queued Requests**: What happens if a session is closed or times out while requests are actively queued for it? The system must reject the queued requests with a closed session status and discard the queue.
@@ -84,6 +99,8 @@ As a system administrator running a server for extended periods (months/years), 
 - **FR-006**: The session message processor MUST process queued operations sequentially and support cancellation of pending operations upon session termination.
 - **FR-007**: The subscription engine MUST reuse pre-allocated memory structures for value change notifications using a lock-free recycle pool.
 - **FR-008**: The notification object pool MUST automatically grow under high demand and return resources to the operating system or reset them to a clean state when idle.
+- **FR-009**: Notification/event delivery (data changes, events, and ConditionRefresh replays) MUST NOT hold a session-wide or subscription-wide lock across an unbounded number of items; per-delivery lock-hold time MUST be bounded independent of the number of retained conditions or queued notifications.
+- **FR-010**: When producers outrun the client's Publish consumption, the delivery path MUST apply bounded backpressure (fixed-capacity buffering) rather than unbounded growth, surfacing loss through the existing queue-overflow event semantics while preserving per-subscription event ordering.
 
 ### Key Entities
 
@@ -91,6 +108,7 @@ As a system administrator running a server for extended periods (months/years), 
 - **Session Actor**: A single-threaded logical actor managing session state, processing incoming request messages sequentially.
 - **Serialized Outbound Buffer**: A pre-allocated memory buffer that receives encoded protocol frames directly.
 - **Notification Pool**: A collection of reusable data change notification objects that are recycled to avoid heap allocation.
+- **Delivery Ring + Majordomo**: Per-subscription/per-source bounded SPSC rings feeding a single coordinator task that drains them into Publish responses, decoupling unbounded event production from the lock-held delivery path while preserving per-subscription ordering.
 
 ## Success Criteria *(mandatory)*
 
@@ -100,6 +118,7 @@ As a system administrator running a server for extended periods (months/years), 
 - **SC-002**: Outbound packet preparation achieves zero new heap memory allocations on the hot path (steady state).
 - **SC-003**: Average response latency for concurrent session operations is reduced by at least 40% compared to a globally locked session structure under high task contention.
 - **SC-004**: Heap memory allocation frequency during subscription updates is reduced by at least 95% under a continuous load of 50,000 monitored items.
+- **SC-005**: A ConditionRefresh replaying 10,000 retained conditions holds the session subscription lock for a bounded slice (independent of condition count), and unrelated subscription operations on the same session see no more than a small constant 99th-percentile latency increase during the refresh.
 
 ## Assumptions
 

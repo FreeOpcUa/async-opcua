@@ -528,6 +528,26 @@ impl SubscriptionCache {
         }
     }
 
+    #[allow(dead_code)]
+    pub(crate) fn refresh_subscription_events(
+        &self,
+        session_id: u32,
+        subscription_id: u32,
+        monitored_item: Option<MonitoredItemHandle>,
+        events: &[&dyn Event],
+        type_tree: &dyn TypeTree,
+    ) -> Result<(), StatusCode> {
+        let Some(cache) = ({
+            let lck = trace_read_lock!(self.inner);
+            lck.session_subscriptions.get(&session_id).cloned()
+        }) else {
+            return Err(StatusCode::BadSubscriptionIdInvalid);
+        };
+
+        let mut cache_lck = cache.lock();
+        cache_lck.refresh_subscription_events(subscription_id, monitored_item, events, type_tree)
+    }
+
     pub(crate) fn create_monitored_items(
         &self,
         session_id: u32,

@@ -1027,6 +1027,22 @@ impl SessionSubscriptions {
         }
     }
 
+    #[allow(dead_code)]
+    pub(crate) fn refresh_subscription_events(
+        &mut self,
+        subscription_id: u32,
+        monitored_item: Option<MonitoredItemHandle>,
+        events: &[&dyn Event],
+        type_tree: &dyn TypeTree,
+    ) -> Result<(), StatusCode> {
+        // ponytail: If refresh ever becomes async/throttled, add a per-subscription in-progress flag + StatusCode::BadRefreshInProgress here.
+        let Some(sub) = self.subscriptions.get_mut(&subscription_id) else {
+            return Err(StatusCode::BadSubscriptionIdInvalid);
+        };
+
+        sub.refresh_events(monitored_item, events, type_tree)
+    }
+
     pub(super) fn user_token(&self) -> &PersistentSessionKey {
         &self.user_token
     }

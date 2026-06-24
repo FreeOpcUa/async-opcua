@@ -547,20 +547,31 @@ impl<TImpl: InMemoryNodeManagerImpl> InMemoryNodeManager<TImpl> {
         let mut valid = Vec::with_capacity(methods.len());
 
         for method in methods {
-            let Some(method_ref) = address_space
-                .find_references(
-                    method.object_id(),
-                    Some((ReferenceTypeId::HasComponent, false)),
-                    &*type_tree,
-                    BrowseDirection::Forward,
-                )
-                .find(|r| r.target_node == method.method_id())
-            else {
+            let component_method_id = {
+                address_space
+                    .find_references(
+                        method.object_id(),
+                        Some((ReferenceTypeId::HasComponent, false)),
+                        &*type_tree,
+                        BrowseDirection::Forward,
+                    )
+                    .find(|r| r.target_node == method.method_id())
+                    .map(|r| r.target_node.clone())
+            };
+
+            let method_node_id = if let Some(method_node_id) = component_method_id {
+                method_node_id
+            } else if self
+                .inner
+                .accepts_method_without_object_component(method.method_id())
+            {
+                method.method_id().clone()
+            } else {
                 method.set_status(StatusCode::BadMethodInvalid);
                 continue;
             };
 
-            let Some(method_ref_guard) = address_space.find(method_ref.target_node) else {
+            let Some(method_ref_guard) = address_space.find(&method_node_id) else {
                 method.set_status(StatusCode::BadMethodInvalid);
                 continue;
             };

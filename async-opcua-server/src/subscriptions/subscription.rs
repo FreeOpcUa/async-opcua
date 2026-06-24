@@ -376,6 +376,45 @@ impl Subscription {
         }
     }
 
+    #[allow(dead_code)]
+    pub(crate) fn refresh_events(
+        &mut self,
+        monitored_item: Option<MonitoredItemHandle>,
+        events: &[&dyn Event],
+        type_tree: &dyn TypeTree,
+    ) -> Result<(), StatusCode> {
+        if let Some(handle) = monitored_item {
+            if handle.subscription_id != self.id {
+                return Err(StatusCode::BadMonitoredItemIdInvalid);
+            }
+
+            let Some(item) = self.monitored_items.get_mut(&handle.monitored_item_id) else {
+                return Err(StatusCode::BadMonitoredItemIdInvalid);
+            };
+            if !item.is_event_item() {
+                return Err(StatusCode::BadMonitoredItemIdInvalid);
+            }
+
+            for event in events {
+                if item.notify_event(*event, type_tree) {
+                    self.notified_monitored_items
+                        .insert(handle.monitored_item_id);
+                }
+            }
+            return Ok(());
+        }
+
+        for event in events {
+            for (id, item) in &mut self.monitored_items {
+                if item.is_event_item() && item.notify_event(*event, type_tree) {
+                    self.notified_monitored_items.insert(*id);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     /// Tests if the publishing interval has elapsed since the last time this function in which case
     /// it returns `true` and updates its internal state.
     fn test_and_set_publishing_interval_elapsed(&mut self, now: Instant) -> bool {

@@ -25,10 +25,11 @@ use opcua::crypto::ecc::EccCurve as CryptoEccCurve;
 use opcua::crypto::{X509Data, X509};
 use opcua::server::{
     diagnostics::NamespaceMetadata,
-    node_manager::memory::{simple_node_manager, SimpleNodeManager},
+    node_manager::memory::{simple_node_manager, CoreNodeManager, SimpleNodeManager},
     Server, ServerBuilder, ServerConfig, ServerHandle,
 };
 
+mod alarms;
 mod control;
 mod customs;
 mod history;
@@ -201,6 +202,10 @@ async fn main() {
             .node_managers()
             .get_of_type::<SimpleNodeManager>()
             .unwrap();
+        let core_node_manager = handle
+            .node_managers()
+            .get_of_type::<CoreNodeManager>()
+            .unwrap();
         let ns = handle.get_namespace_index(NAMESPACE_URI).unwrap();
 
         let token = handle.token();
@@ -227,6 +232,15 @@ async fn main() {
         control::add_control_switches(
             ns,
             node_manager.clone(),
+            handle.subscriptions().clone(),
+            token.clone(),
+        );
+
+        // Add an Alarms & Conditions demo condition with Ack/Confirm and ConditionRefresh methods.
+        alarms::add_alarm_demo(
+            ns,
+            node_manager.clone(),
+            core_node_manager,
             handle.subscriptions().clone(),
             token.clone(),
         );

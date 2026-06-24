@@ -93,15 +93,20 @@ async def test_happy_path(client, ns):
     check("TranslateBrowsePath resolves CurrentTime (i=2258)",
           resolved.nodeid == ua.NodeId(2258, 0), str(resolved.nodeid))
 
-    # Subscribe to CurrentTime and require at least one data change.
+    # Subscribe to the writable Int32 node and DRIVE the data-changes by writing to it, rather than
+    # the server-timer-driven CurrentTime (which is racy under CI load). Deterministic delivery.
     handler = SubHandler()
     sub = await client.create_subscription(200, handler)
-    await sub.subscribe_data_change(ct)
+    await sub.subscribe_data_change(int32)
+    await asyncio.sleep(0.3)  # let the subscription establish + the initial value arrive
+    for v in (700001, 700002, 700003):
+        await int32.write_value(ua.Variant(v, ua.VariantType.Int32))
+        await asyncio.sleep(0.2)
     for _ in range(20):
-        if handler.count >= 1:
+        if handler.count >= 2:
             break
         await asyncio.sleep(0.1)
-    check("Subscription delivers data-change notifications", handler.count >= 1,
+    check("Subscription delivers data-change notifications", handler.count >= 2,
           f"count={handler.count}")
     await sub.delete()
 

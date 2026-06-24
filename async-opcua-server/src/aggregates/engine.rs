@@ -5,24 +5,31 @@ use crate::aggregates::quality::compute_aggregate_quality;
 use chrono::Duration as ChronoDuration;
 use opcua_types::{DataValue, DateTime, NodeId, StatusCode, Variant};
 
-/// Helper function to return the NodeId for Average aggregate.
+// Standard AggregateFunction NodeIds (Part 13 / Part 6 NodeIds.csv). The implemented average is
+// interpolated/time-weighted, so it maps to TimeAverage (2343), NOT simple Average (2342).
+const AGG_TIME_AVERAGE: u32 = 2343;
+const AGG_MINIMUM: u32 = 2346;
+const AGG_MAXIMUM: u32 = 2347;
+const AGG_STANDARD_DEVIATION_SAMPLE: u32 = 11426;
+
+/// NodeId for the TimeAverage aggregate (interpolated, time-weighted — Part 13 §5.4.3.2).
 pub fn aggregate_average() -> NodeId {
-    NodeId::new(0, 2352)
+    NodeId::new(0, AGG_TIME_AVERAGE)
 }
 
-/// Helper function to return the NodeId for Minimum aggregate.
+/// NodeId for the Minimum aggregate.
 pub fn aggregate_minimum() -> NodeId {
-    NodeId::new(0, 2353)
+    NodeId::new(0, AGG_MINIMUM)
 }
 
-/// Helper function to return the NodeId for Maximum aggregate.
+/// NodeId for the Maximum aggregate.
 pub fn aggregate_maximum() -> NodeId {
-    NodeId::new(0, 2354)
+    NodeId::new(0, AGG_MAXIMUM)
 }
 
-/// Helper function to return the NodeId for StandardDeviationSample aggregate.
+/// NodeId for the StandardDeviationSample aggregate.
 pub fn aggregate_std_dev() -> NodeId {
-    NodeId::new(0, 2359)
+    NodeId::new(0, AGG_STANDARD_DEVIATION_SAMPLE)
 }
 
 /// Converts a Variant to f64 if it represents a numeric value.
@@ -203,18 +210,18 @@ pub fn calculate_aggregate(
     }
 
     let result_value = match aggregate_type.identifier {
-        opcua_types::Identifier::Numeric(2352) => {
+        opcua_types::Identifier::Numeric(AGG_TIME_AVERAGE) => {
             calculate_time_weighted_average(&numeric_points, interval_start, interval_end)
         }
-        opcua_types::Identifier::Numeric(2353) => numeric_points
+        opcua_types::Identifier::Numeric(AGG_MINIMUM) => numeric_points
             .iter()
             .map(|(_, v)| *v)
             .min_by(|a, b| a.partial_cmp(b).unwrap()),
-        opcua_types::Identifier::Numeric(2354) => numeric_points
+        opcua_types::Identifier::Numeric(AGG_MAXIMUM) => numeric_points
             .iter()
             .map(|(_, v)| *v)
             .max_by(|a, b| a.partial_cmp(b).unwrap()),
-        opcua_types::Identifier::Numeric(2359) => {
+        opcua_types::Identifier::Numeric(AGG_STANDARD_DEVIATION_SAMPLE) => {
             let raw_values: Vec<f64> = numeric_points.iter().map(|(_, v)| *v).collect();
             calculate_std_dev_sample(&raw_values)
         }

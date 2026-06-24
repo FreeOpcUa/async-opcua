@@ -1,11 +1,42 @@
 //! Integration and unit tests for OPC-UA mathematical aggregates (time-weighted average, min, max, std dev) and quality calculations.
 
 use opcua_server::aggregates::engine::{
-    aggregate_average, aggregate_maximum, aggregate_minimum, calculate_aggregate,
-    calculate_std_dev_sample, calculate_time_weighted_average, partition_intervals,
+    aggregate_average, aggregate_maximum, aggregate_minimum, aggregate_std_dev,
+    calculate_aggregate, calculate_std_dev_sample, calculate_time_weighted_average,
+    partition_intervals,
 };
 use opcua_server::aggregates::quality::compute_aggregate_quality;
-use opcua_types::{DataValue, DateTime, StatusCode, Variant};
+use opcua_types::{DataValue, DateTime, NodeId, StatusCode, Variant};
+
+#[test]
+fn aggregate_node_ids_match_the_standard_registry() {
+    // Conformance: the aggregate NodeIds must be the canonical Part 6 AggregateFunction ids, not
+    // arbitrary numbers. The implemented average is time-weighted, so it is TimeAverage (2343), not
+    // simple Average (2342). Minimum=2346, Maximum=2347, StandardDeviationSample=11426.
+    assert_eq!(aggregate_average(), NodeId::new(0u16, 2343u32));
+    assert_eq!(aggregate_minimum(), NodeId::new(0u16, 2346u32));
+    assert_eq!(aggregate_maximum(), NodeId::new(0u16, 2347u32));
+    assert_eq!(aggregate_std_dev(), NodeId::new(0u16, 11426u32));
+
+    // A request for the correct standard id is computed; the previously-mis-used id 2352 (which is
+    // actually AggregateFunction_Count, not implemented) must report BadAggregateNotSupported.
+    let start = DateTime::from((2026, 6, 6, 12, 0, 0));
+    let end = DateTime::from((2026, 6, 6, 12, 0, 10));
+    let v = DataValue {
+        value: Some(Variant::Double(10.0)),
+        source_timestamp: Some(start),
+        status: Some(StatusCode::Good),
+        ..Default::default()
+    };
+    assert_eq!(
+        calculate_aggregate(&[&v], &aggregate_minimum(), start, end).status,
+        Some(StatusCode::Good)
+    );
+    assert_eq!(
+        calculate_aggregate(&[&v], &NodeId::new(0u16, 2352u32), start, end).status,
+        Some(StatusCode::BadAggregateNotSupported)
+    );
+}
 
 #[test]
 fn test_partition_intervals_forward() {

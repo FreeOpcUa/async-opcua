@@ -94,3 +94,56 @@ async fn connect_to_black_holed_address_times_out() {
         "connecting to a black-holed address must return an error"
     );
 }
+
+/// DoS protection: the server caps the number of concurrent sessions. A `CreateSession`
+/// beyond `max_sessions` must be rejected with `Bad_TooManySessions` rather than exhausting
+/// server resources.
+#[tokio::test]
+async fn too_many_sessions_is_rejected() {
+    let mut server = default_server();
+    server.limits_mut().max_sessions = 2;
+    let mut tester = Tester::new(server, false).await;
+
+    // Hold two live sessions so they stay registered on the server.
+    let mut held = Vec::new();
+    for _ in 0..2 {
+        let (session, handle) = tester
+            .connect(
+                SecurityPolicy::None,
+                MessageSecurityMode::None,
+                IdentityToken::Anonymous,
+            )
+            .await
+            .unwrap();
+        let h = handle.spawn();
+        tokio::time::timeout(Duration::from_secs(10), session.wait_for_connection())
+            .await
+            .unwrap();
+        held.push((session, h));
+    }
+
+    // The third session must be rejected with BadTooManySessions.
+    let result = tester
+        .connect(
+            SecurityPolicy::None,
+            MessageSecurityMode::None,
+            IdentityToken::Anonymous,
+        )
+        .await;
+    match result {
+        Err(e) => assert_eq!(
+            e.status(),
+            StatusCode::BadTooManySessions,
+            "expected BadTooManySessions, got {e:?}"
+        ),
+        Ok((session, handle)) => {
+            let _h = handle.spawn();
+            assert!(
+                tokio::time::timeout(Duration::from_secs(3), session.wait_for_connection())
+                    .await
+                    .is_err(),
+                "third session wrongly connected past max_sessions"
+            );
+        }
+    }
+}

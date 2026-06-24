@@ -1,3 +1,4 @@
+mod adversarial;
 mod alarms;
 mod browse;
 mod conformance;

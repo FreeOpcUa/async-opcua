@@ -15,7 +15,8 @@ use opcua::{
 use opcua_client::{
     services::{
         CreateMonitoredItems, CreateSubscription, DeleteMonitoredItems, ModifyMonitoredItems,
-        ModifySubscription, Publish, Republish, SetMonitoringMode, TransferSubscriptions,
+        ModifySubscription, Publish, Republish, SetMonitoringMode, SetPublishingMode,
+        TransferSubscriptions,
     },
     IdentityToken, Subscription, UARequest,
 };
@@ -1555,4 +1556,137 @@ async fn modify_unknown_monitored_item_is_rejected() {
         StatusCode::BadMonitoredItemIdInvalid,
         results[0].status_code
     );
+}
+
+#[tokio::test]
+async fn subscription_lifetime_expiry_sends_status_change() {
+    // Part 4 §5.13.1.5: when no Publish requests arrive for max_lifetime_count publishing cycles
+    // the subscription's lifetime counter expires, the subscription is closed, and a
+    // StatusChangeNotification with Bad_Timeout is delivered. End-to-end check of the state-machine
+    // terminal transition (Closed27); the high-level client auto-publishes, so this drives the raw
+    // services and deliberately withholds Publish requests.
+    let (_tester, _nm, session) = setup().await;
+
+    let res = CreateSubscription::new(&session)
+        .publishing_interval(Duration::from_millis(50))
+        .max_lifetime_count(3)
+        .max_keep_alive_count(1)
+        .max_notifications_per_publish(1000)
+        .priority(0)
+        .publishing_enabled(true)
+        .send(session.channel())
+        .await
+        .unwrap();
+    let sub_id = res.subscription_id;
+
+    // Let the lifetime expire without sending any Publish requests.
+    tokio::time::sleep(Duration::from_millis(800)).await;
+
+    // The next Publish must deliver the expiry StatusChangeNotification with Bad_Timeout.
+    let pubres = Publish::new(&session)
+        .timeout(Duration::from_millis(2000))
+        .send(session.channel())
+        .await
+        .unwrap();
+    assert_eq!(pubres.subscription_id, sub_id);
+    let nd = pubres
+        .notification_message
+        .notification_data
+        .expect("expected a StatusChangeNotification");
+    assert_eq!(1, nd.len());
+    let sc = nd[0]
+        .inner_as::<opcua_types::StatusChangeNotification>()
+        .expect("notification was not a StatusChangeNotification");
+    assert_eq!(StatusCode::BadTimeout, sc.status);
+}
+
+#[tokio::test]
+async fn publishing_disabled_withholds_data_until_enabled() {
+    // Part 4 §5.13.1.4: with PublishingEnabled false the subscription does not deliver data
+    // changes (a Publish is answered with a keep-alive); enabling publishing then delivers them.
+    let (tester, nm, session) = setup().await;
+
+    let id = nm.inner().next_node_id();
+    nm.inner().add_node(
+        nm.address_space(),
+        tester.handle.type_tree(),
+        VariableBuilder::new(&id, "PubModeVar", "PubModeVar")
+            .value(7i32)
+            .data_type(DataTypeId::Int32)
+            .access_level(AccessLevel::CURRENT_READ)
+            .user_access_level(AccessLevel::CURRENT_READ)
+            .build()
+            .into(),
+        &ObjectId::ObjectsFolder.into(),
+        &ReferenceTypeId::Organizes.into(),
+        Some(&VariableTypeId::BaseDataVariableType.into()),
+        Vec::new(),
+    );
+
+    // Subscription with publishing DISABLED.
+    let res = CreateSubscription::new(&session)
+        .publishing_interval(Duration::from_millis(50))
+        .max_lifetime_count(1000)
+        .max_keep_alive_count(5)
+        .max_notifications_per_publish(1000)
+        .priority(0)
+        .publishing_enabled(false)
+        .send(session.channel())
+        .await
+        .unwrap();
+    let sub_id = res.subscription_id;
+
+    CreateMonitoredItems::new(sub_id, &session)
+        .item(MonitoredItemCreateRequest {
+            item_to_monitor: ReadValueId {
+                node_id: id.clone(),
+                attribute_id: AttributeId::Value as u32,
+                ..Default::default()
+            },
+            monitoring_mode: MonitoringMode::Reporting,
+            requested_parameters: MonitoringParameters {
+                sampling_interval: 0.0,
+                queue_size: 10,
+                discard_oldest: true,
+                ..Default::default()
+            },
+        })
+        .timestamps_to_return(TimestampsToReturn::Both)
+        .send(session.channel())
+        .await
+        .unwrap();
+
+    // While publishing is disabled, a Publish must be a keep-alive (no data change notifications).
+    let pubres = Publish::new(&session)
+        .timeout(Duration::from_millis(500))
+        .send(session.channel())
+        .await
+        .unwrap();
+    let data = pubres.notification_message.into_notifications();
+    assert!(
+        data.is_none() || data.unwrap().0.is_empty(),
+        "publishing disabled must not deliver data changes"
+    );
+
+    // Enable publishing; the queued monitored-item value must now be delivered.
+    SetPublishingMode::new(true, &session)
+        .subscription_ids(vec![sub_id])
+        .send(session.channel())
+        .await
+        .unwrap();
+
+    let pubres = Publish::new(&session)
+        .timeout(Duration::from_millis(2000))
+        .send(session.channel())
+        .await
+        .unwrap();
+    let notifs = pubres
+        .notification_message
+        .into_notifications()
+        .expect("expected a data change after enabling publishing")
+        .0;
+    assert_eq!(1, notifs.len());
+    let items = notifs[0].monitored_items.as_ref().unwrap();
+    assert_eq!(1, items.len());
+    assert_eq!(Some(Variant::Int32(7)), items[0].value.value);
 }

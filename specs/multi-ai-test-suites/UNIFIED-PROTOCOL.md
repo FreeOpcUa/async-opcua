@@ -17,6 +17,9 @@ itself (it confirms the coverage and avoids redundant work):
 - **Tier A — DONE** (`async-opcua/tests/integration/tier_a.rs`). Probed all four; none was a crash/bypass.
   A2/A3/A4 locked in as regression tests; A1 confirmed (deliberate EURange cache) and documented at the
   `eu_range` field in `subscriptions/monitored_item.rs` — no live-refresh fix (would be a redesign).
+  A4 X509 user-token-signature tamper (`adversarial.rs`, rejected `BadSecurityChecksFailed: Signature
+  mismatch`) added once the MITM harness made it cheap. Still deferred: A1 live-refresh; A4 wrong-policyId
+  (client auto-picks the policyId — needs raw request construction, marginal over the audit + tamper test).
 - **Tier B — DONE.** B1/B2/B6 (`adversarial.rs` / `hardening.rs`); B3 duplicated-reassembly-chunk
   (`adversarial.rs`, rejected `BadSequenceNumberInvalid`); B4 renewal token-grace
   (`async-opcua-core/.../secure_channel.rs` unit tests — overlap kept, expired pruned); B5 slow-loris

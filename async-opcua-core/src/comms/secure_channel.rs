@@ -2082,3 +2082,74 @@ mod secure_message_range_tests {
         assert_eq!(encrypted, 8..100);
     }
 }
+
+#[cfg(test)]
+mod token_grace_tests {
+    //! B4 (multi-AI cross-check, `specs/multi-ai-test-suites/UNIFIED-PROTOCOL.md`): on SecureChannel
+    //! renewal the previous token's keys must remain usable during the overlap window and be pruned
+    //! once it has elapsed (Part 4 §5.5.2 — accept the previous token for up to 125% of its lifetime).
+    use super::SecureChannel;
+    use chrono::Duration;
+    use opcua_crypto::SecurityPolicy;
+    use opcua_types::{ChannelSecurityToken, DateTime};
+
+    fn token(id: u32, created_at: DateTime, revised_lifetime: u32) -> ChannelSecurityToken {
+        ChannelSecurityToken {
+            channel_id: 1,
+            token_id: id,
+            created_at,
+            revised_lifetime,
+        }
+    }
+
+    /// A SecureChannel on a real (key-deriving) policy with valid-length nonces, so `derive_keys`
+    /// actually populates the per-token remote-keys map.
+    fn channel() -> SecureChannel {
+        let mut sc = SecureChannel::new_no_certificate_store();
+        sc.security_policy = SecurityPolicy::Basic256Sha256;
+        sc.local_nonce = vec![1u8; 32];
+        sc.remote_nonce = vec![2u8; 32];
+        sc
+    }
+
+    #[test]
+    fn previous_token_keys_remain_usable_during_renewal_overlap() {
+        let mut sc = channel();
+
+        // Token #1, fresh with a long lifetime.
+        sc.set_security_token(token(1, DateTime::now(), 60_000));
+        sc.derive_keys();
+        assert!(sc.get_remote_keys(1).is_some());
+
+        // Renew to #2 while #1 is still well inside its 125% grace window: BOTH must stay available.
+        sc.set_security_token(token(2, DateTime::now(), 60_000));
+        sc.derive_keys();
+        assert!(
+            sc.get_remote_keys(1).is_some(),
+            "previous token's keys must survive during the renewal overlap"
+        );
+        assert!(sc.get_remote_keys(2).is_some());
+    }
+
+    #[test]
+    fn expired_token_keys_are_pruned_on_next_renewal() {
+        let mut sc = channel();
+
+        // Token #1 created far enough in the past that its 125% window (here ~75s) has fully elapsed.
+        sc.set_security_token(token(1, DateTime::now() + Duration::seconds(-100), 60_000));
+        sc.derive_keys();
+        assert!(
+            sc.get_remote_keys(1).is_some(),
+            "current token is always inserted"
+        );
+
+        // Renewing inserts #2 and prunes the now-expired #1 — a stale token must no longer verify.
+        sc.set_security_token(token(2, DateTime::now(), 60_000));
+        sc.derive_keys();
+        assert!(
+            sc.get_remote_keys(1).is_none(),
+            "an expired previous token must be pruned after the grace window"
+        );
+        assert!(sc.get_remote_keys(2).is_some());
+    }
+}

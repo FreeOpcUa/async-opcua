@@ -602,6 +602,8 @@ impl NodeSetImport for NodeSet2Import {
             DecodingOptions::default(),
         );
         ctx.set_aliases(&self.aliases);
+        // Remap NodeSet-local namespace indexes to the registered address-space indexes.
+        ctx.set_index_map(namespaces.index_map());
 
         // First pass to find all DataTypes that have a HasEncoding reference to a "Default Binary" encoding object,
         // so we can set the default_encoding_id correctly when loading DataType nodes in the second pass.

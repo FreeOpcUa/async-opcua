@@ -103,3 +103,32 @@ model is present after load. No separate test layer is needed.
 3. A written record of what the C2C path required and where the subscriber/reader gap is, to seed the
    real FX sub-projects (info model → C2C data exchange → online connection management → control
    groups/health).
+
+## Findings (spike result)
+
+1. **Does the FX info model load cleanly?** Yes — once a real library bug was fixed. Loading the
+   chain (DI → FX/Data → FX/AC → FX/CM) via the runtime `NodeSetLoader` + `import_node_set` works,
+   and `AutomationComponentType`/`FunctionalEntityType`/`AcDescriptorType` resolve as ObjectTypes in
+   the FX/AC namespace. The spike's independent test caught a namespace-remapping bug in
+   `NodeSet2Import::load` (it never installed the namespace index map on its decoding `Context`, so
+   any nodeset listing its own namespace before its dependencies — as all the FX nodesets do — had
+   its nodes placed under the wrong namespace index). Fixed by `ctx.set_index_map(namespaces.index_map())`
+   (implementation by codex, validated by the Claude-authored test). This bug affected *all* runtime
+   companion-nodeset loading, not just FX.
+2. **What did the C2C publish path require?** Nothing new — it reused `UdpPublisher` + `PubSubBridge`
+   + `PubSubConnectionConfig`/`WriterGroupConfig`/`DataSetWriterConfig` unchanged, publishing a plain
+   Double variable from AC1's address space over loopback UDP. AC2 received the datagram and decoded
+   it with `UadpNetworkMessage::decode` (the codec hardened in PR #123). It worked on the first run.
+3. **Where is the subscriber/reader gap?** There is no production `DataSetReader`/ReaderGroup
+   abstraction for UADP — the spike decodes raw bytes via `UadpNetworkMessage::decode`. Building a
+   real subscriber (DataSetReader binding incoming fields into a target address space) is the first
+   task of the follow-on "C2C data exchange" sub-project.
+
+**Incidental notes for the real FX work:** `AddressSpace::add_namespace(uri, index)` takes an
+explicit index and returns `()` (the FX chain occupies the low indices, so instance namespaces must
+use a free index); the FX/AC namespace resolves to global index 3 in this setup.
+
+**Decomposition confirmed for the real FX implementation (codex implements, Claude validates):**
+info model (done by this spike) → C2C data exchange (production DataSetReader + AutomationComponent
+instance objects) → online connection management (`EstablishConnections`/Connection) → ControlGroups
+/ Health / capabilities / PubSub security.

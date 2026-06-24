@@ -196,15 +196,48 @@ async fn register_server2_mdns_config_unsupported_but_registers() {
 }
 
 #[tokio::test]
-async fn find_servers_on_network_is_unsupported() {
+async fn find_servers_on_network_returns_registered_servers() {
+    // Part 4 §5.5.3: pull-based FindServersOnNetwork — servers registered via RegisterServer(2) are
+    // reported as ServerOnNetwork records. (Full mDNS LDS-ME multicast discovery is deferred.)
     let tester = Tester::new_default_server(true).await;
-    // mDNS / multicast discovery is intentionally out of scope.
-    let res = tester
+    let url = tester.endpoint();
+    let endpoint = secured_endpoint(&tester).await;
+
+    // Nothing registered yet -> no records.
+    let before = tester
         .client
-        .find_servers_on_network(tester.endpoint(), 0, 0, None)
-        .await;
-    let status = res.err().map(|e| e.status());
-    assert_eq!(status, Some(StatusCode::BadServiceUnsupported));
+        .find_servers_on_network(url.clone(), 0, 0, None)
+        .await
+        .unwrap();
+    assert!(before.servers.unwrap_or_default().is_empty());
+
+    tester
+        .client
+        .register_server(url.clone(), &endpoint, registered_server(true))
+        .await
+        .unwrap();
+
+    // The registered server now appears as a ServerOnNetwork record.
+    let after = tester
+        .client
+        .find_servers_on_network(url.clone(), 0, 0, None)
+        .await
+        .unwrap();
+    let servers = after.servers.unwrap_or_default();
+    assert_eq!(servers.len(), 1);
+    assert_eq!(
+        servers[0].discovery_url.as_ref(),
+        "opc.tcp://registered-host:4840/"
+    );
+    assert_eq!(servers[0].server_name.as_ref(), "Registered Test Server");
+
+    // A non-empty capability filter matches nothing (we do not track per-server capabilities).
+    let filtered = tester
+        .client
+        .find_servers_on_network(url.clone(), 0, 0, Some(vec!["DA".into()]))
+        .await
+        .unwrap();
+    assert!(filtered.servers.unwrap_or_default().is_empty());
 }
 
 #[tokio::test]

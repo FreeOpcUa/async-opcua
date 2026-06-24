@@ -27,10 +27,10 @@ use opcua_core::{
 };
 use opcua_crypto::{CertificateStore, SecurityPolicy};
 use opcua_types::{
-    ChannelSecurityToken, DateTime, FindServersResponse, GetEndpointsResponse, MessageSecurityMode,
-    NodeId, OpenSecureChannelRequest, OpenSecureChannelResponse, RegisterServer2Response,
-    RegisterServerResponse, ResponseHeader, SecurityTokenRequestType, ServiceFault, StatusCode,
-    UAString,
+    ChannelSecurityToken, DateTime, FindServersOnNetworkResponse, FindServersResponse,
+    GetEndpointsResponse, MessageSecurityMode, NodeId, OpenSecureChannelRequest,
+    OpenSecureChannelResponse, RegisterServer2Response, RegisterServerResponse, ResponseHeader,
+    SecurityTokenRequestType, ServiceFault, StatusCode, UAString,
 };
 use tokio_util::sync::CancellationToken;
 use tracing_futures::Instrument;
@@ -525,29 +525,22 @@ impl<T: ConnectionTransport> SessionController<T> {
             }
             RequestMessage::FindServersOnNetwork(request) => {
                 let _h = span.enter();
-                let audit_context = AuditEventContext::new(
-                    "FindServersOnNetwork",
-                    &request.request_header,
-                    None,
-                    None,
+                // Pull-based (no-mDNS) FindServersOnNetwork (Part 4 §5.5.3): report servers registered
+                // via RegisterServer(2). Full LDS-ME multicast discovery is deferred.
+                let servers = self.info.find_servers_on_network(
+                    request.starting_record_id,
+                    request.max_records_to_return,
+                    &request.server_capability_filter,
                 );
-                dispatch_service_failure(
-                    &self.subscriptions,
-                    &self.info,
-                    &audit_context,
-                    StatusCode::BadServiceUnsupported,
-                );
-                if let Err(e) = self.transport.enqueue_message_for_send(
-                    &mut self.channel,
-                    ServiceFault::new(&request.request_header, StatusCode::BadServiceUnsupported)
-                        .into(),
+                self.process_service_result(
+                    Ok(FindServersOnNetworkResponse {
+                        response_header: ResponseHeader::new_good(&request.request_header),
+                        last_counter_reset_time: DateTime::null(),
+                        servers: Some(servers),
+                    }),
+                    request.request_header.request_handle,
                     id,
-                ) {
-                    error!("Failed to send request response: {e}");
-                    RequestProcessResult::Close
-                } else {
-                    RequestProcessResult::Ok
-                }
+                )
             }
             RequestMessage::RegisterServer(request) => {
                 let _h = span.enter();

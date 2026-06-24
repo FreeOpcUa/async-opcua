@@ -237,6 +237,56 @@ impl ServerInfo {
         StatusCode::Good
     }
 
+    /// Returns the registered servers as `ServerOnNetwork` records for FindServersOnNetwork
+    /// (Part 4 §5.5.3). This is the pull-based (no-mDNS) form: it reports servers that have registered
+    /// via RegisterServer(2), applying the record-id offset, max-records limit, and capability filter.
+    /// Records are assigned stable ids by sorting on server URI. Because RegisterServer does not carry
+    /// server capabilities, a non-empty `capability_filter` matches nothing (mDNS LDS-ME is deferred).
+    pub(crate) fn find_servers_on_network(
+        &self,
+        starting_record_id: u32,
+        max_records_to_return: u32,
+        capability_filter: &Option<Vec<UAString>>,
+    ) -> Vec<opcua_types::ServerOnNetwork> {
+        let want_caps = capability_filter
+            .as_ref()
+            .is_some_and(|f| f.iter().any(|c| !c.is_null() && !c.is_empty()));
+
+        let registered = self.registered_servers.read();
+        let mut servers: Vec<_> = registered.values().collect();
+        servers.sort_by(|a, b| a.server_uri.as_ref().cmp(b.server_uri.as_ref()));
+
+        servers
+            .into_iter()
+            .enumerate()
+            .map(|(i, server)| (i as u32, server))
+            .filter(|(record_id, _)| *record_id >= starting_record_id)
+            // We do not track per-server capabilities, so we can only satisfy an empty filter.
+            .filter(|_| !want_caps)
+            .map(|(record_id, server)| opcua_types::ServerOnNetwork {
+                record_id,
+                server_name: server
+                    .server_names
+                    .as_ref()
+                    .and_then(|n| n.first())
+                    .map(|n| n.text.clone())
+                    .unwrap_or_else(|| server.server_uri.clone()),
+                discovery_url: server
+                    .discovery_urls
+                    .as_ref()
+                    .and_then(|u| u.first())
+                    .cloned()
+                    .unwrap_or_default(),
+                server_capabilities: None,
+            })
+            .take(if max_records_to_return == 0 {
+                usize::MAX
+            } else {
+                max_records_to_return as usize
+            })
+            .collect()
+    }
+
     /// Returns registered servers as application descriptions for FindServers.
     pub(crate) fn registered_application_descriptions(
         &self,

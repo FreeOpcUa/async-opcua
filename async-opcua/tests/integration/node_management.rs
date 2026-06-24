@@ -667,3 +667,105 @@ async fn add_delete_reference_limits() {
         .unwrap_err();
     assert_eq!(e.status(), StatusCode::BadTooManyOperations);
 }
+
+/// C7 (multi-AI cross-check, `specs/multi-ai-test-suites/UNIFIED-PROTOCOL.md`): AddNodes processes a
+/// batch per-operation (Part 4 §5.7.2) — there is no all-or-nothing rollback. A mixed batch of
+/// [good, bad-type, dependent-on-the-good] must: succeed the good one, reject the bad one with a
+/// per-node status (leaving no trace), and succeed the dependent one whose parent was added *earlier
+/// in the same batch*. The good/dependent nodes persist despite the bad sibling.
+#[tokio::test]
+async fn add_nodes_mixed_batch_is_per_operation_with_in_batch_dependency() {
+    let (_tester, _nm, ns, parent, session) = setup_simple(true).await;
+
+    let good = NodeId::new(ns, "BatchGood");
+    let bad = NodeId::new(ns, "BatchBad");
+    let dependent = NodeId::new(ns, "BatchDependent");
+
+    // A "bad-type" item: node_class says Variable but the attributes are Object — a class/attributes
+    // mismatch the server must reject with BadNodeAttributesInvalid.
+    let mut mistyped = object_item(parent.clone(), ns, "BatchBad", bad.clone().into());
+    mistyped.node_class = NodeClass::Variable;
+
+    let r = session
+        .add_nodes(&[
+            // good: child of the existing parent
+            object_item(parent.clone(), ns, "BatchGood", good.clone().into()),
+            // bad: class/attributes mismatch
+            mistyped,
+            // dependent: child of `good`, which is added earlier in THIS same batch
+            object_item(good.clone(), ns, "BatchDependent", dependent.clone().into()),
+        ])
+        .await
+        .unwrap();
+    assert_eq!(r.len(), 3);
+    assert_eq!(r[0].status_code, StatusCode::Good, "good node");
+    assert_eq!(
+        r[1].status_code,
+        StatusCode::BadNodeAttributesInvalid,
+        "bad-type node must be rejected per-operation"
+    );
+    assert_eq!(
+        r[2].status_code,
+        StatusCode::Good,
+        "dependent node must resolve its in-batch parent"
+    );
+
+    // The good and dependent nodes persist (no rollback); the bad one left no trace.
+    let reads = session
+        .read(
+            &[
+                ReadValueId {
+                    node_id: good.clone(),
+                    attribute_id: AttributeId::BrowseName as u32,
+                    ..Default::default()
+                },
+                ReadValueId {
+                    node_id: dependent.clone(),
+                    attribute_id: AttributeId::BrowseName as u32,
+                    ..Default::default()
+                },
+                ReadValueId {
+                    node_id: bad.clone(),
+                    attribute_id: AttributeId::BrowseName as u32,
+                    ..Default::default()
+                },
+            ],
+            TimestampsToReturn::Neither,
+            0.0,
+        )
+        .await
+        .unwrap();
+    assert_eq!(reads[0].status(), StatusCode::Good, "good node persists");
+    assert_eq!(
+        reads[1].status(),
+        StatusCode::Good,
+        "dependent node persists"
+    );
+    assert_ne!(
+        reads[2].status(),
+        StatusCode::Good,
+        "rejected node must not exist"
+    );
+
+    // Reference consistency: browsing the good node shows the dependent child.
+    let br = session
+        .browse(
+            &[BrowseDescription {
+                node_id: good.clone(),
+                browse_direction: BrowseDirection::Forward,
+                reference_type_id: ReferenceTypeId::HasComponent.into(),
+                include_subtypes: true,
+                node_class_mask: 0,
+                result_mask: 0x3f,
+            }],
+            1000,
+            None,
+        )
+        .await
+        .unwrap();
+    let refs = br[0].references.clone().unwrap_or_default();
+    assert!(
+        refs.iter().any(|rf| rf.node_id.node_id == dependent),
+        "the dependent child must be referenced from its in-batch parent"
+    );
+}

@@ -44,8 +44,11 @@ itself (it confirms the coverage and avoids redundant work):
   specified", so it now returns BadIndexRangeNoData. (Read/write OOB, rank-mismatch-too-many,
   oversized-clamp were already covered by feature-017.) C6 concurrent RegisterServer DONE (`info.rs`):
   the registry is an RwLock<HashMap> keyed by URI, so concurrent online/offline leaves no
-  duplicate/half-deleted entries; lock-in, no bug. C7 remains. (Separately, the interop subscription
-  check was de-flaked in PR #110 — client-driven writes instead of CurrentTime's server timer.)
+  duplicate/half-deleted entries; lock-in, no bug. C7 AddNodes mixed-batch DONE
+  (`node_management.rs`): per-operation (no rollback), in-batch parent dependency resolves, the
+  bad-type node is rejected (BadNodeAttributesInvalid) leaving no trace, references stay consistent;
+  lock-in, no bug. **TIER C COMPLETE.** (Interop subscription check de-flaked in PR #110 — client-driven
+  writes instead of CurrentTime's server timer.)
 
 ## Tier A — potential REAL BUGS (probe first; this is where the cross-check pays off)
 | # | Case | Source | Why high-signal |

@@ -1,3 +1,6 @@
+//! Subscription + MonitoredItem service integration tests — OPC UA Part 4 v1.05 §5.14 (Subscription
+//! Service Set) and §5.13 (MonitoredItem Service Set).
+
 use std::{collections::HashMap, time::Duration};
 
 use crate::utils::{test_server, ChannelNotifications, TestNodeManager, Tester};

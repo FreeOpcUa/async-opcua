@@ -1,3 +1,6 @@
+//! Write + HistoryUpdate integration tests — OPC UA Part 4 v1.05 §5.11.4 (Attribute Service Set /
+//! Write); HistoryUpdate is §5.11.6.
+
 use chrono::TimeDelta;
 use opcua::{
     client::{HistoryReadAction, HistoryUpdateAction, Session},

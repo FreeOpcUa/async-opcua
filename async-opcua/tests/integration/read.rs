@@ -1,3 +1,5 @@
+//! Read service integration tests — OPC UA Part 4 v1.05 §5.11.2 (Attribute Service Set / Read).
+
 use std::{sync::atomic::Ordering, time::Duration};
 
 use crate::utils::{client_user_token, default_server, Tester};

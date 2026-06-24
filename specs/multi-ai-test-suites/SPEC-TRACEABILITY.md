@@ -98,10 +98,15 @@ Legend: ✅ interop-grounded · 🔵 self-grounded (clause-anchored) · 🟡 sel
 ### A. Untested implemented features (write tests)
 1. **Cancel** (§5.7.5) — ✅ DONE: `core_tests.rs::cancel_is_a_clean_noop` asserts cancelCount 0 +
    session stays usable (server is a no-op, Part 4 §5.7.5).
-2. **Alarms/Conditions error paths** (Part 9) — `alarms.rs` is happy-only and uncited. Add: acknowledge
-   an already-confirmed/unknown condition → proper Bad status; anchor each test to a Part 9 clause. *Self.*
-3. **Programs error paths** (Part 10) — `programs.rs` happy-only/uncited. Add an invalid state-transition
-   (e.g. Resume while Halted) → Bad status; cite Part 10. *Self.*
+2. **Alarms/Conditions error paths** (Part 9) — ✅ DONE: `alarms.rs::alarm_acknowledge_confirm_error_paths`
+   covers the Acknowledge/Confirm guards (Confirm-before-Ack → Bad_InvalidState, double-Ack →
+   Bad_ConditionBranchAlreadyAcked, double-Confirm → Bad_ConditionBranchAlreadyConfirmed).
+   **Known Part 9 gap:** the server does *not* validate the EventId argument — a stale/unknown EventId is
+   accepted rather than rejected with Bad_EventIdUnknown (the guards are pure state-machine). Worth a
+   follow-up fix if strict Part 9 §5.5.2 conformance is needed.
+3. **Programs error paths** (Part 10) — ✅ DONE: `programs.rs::program_invalid_transitions_return_bad_state`
+   covers the state guards (Start/Suspend/Resume/Halt from Halted, Reset/Suspend/Resume from Ready → all
+   Bad_StateNotActive).
 
 ### B. Annotate foundational tests with their clause (grounding hygiene, no new coverage)
 ✅ DONE: `read.rs` (§5.11.2), `write.rs` (§5.11.4), `subscriptions.rs` (§5.14 + §5.13) now carry a
@@ -109,13 +114,16 @@ module-level service-set citation. Remaining 🟡: `core_tests.rs` is a session/
 single clause); `xml.rs`, `reverse_connect.rs`, `wss.rs` are happy-only transport/encoding.
 
 ### C. Interop opportunities (upgrade 🔵 self → ✅ interop)
-These are self-only today but the harness stacks support them — cross-checking would harden them:
-- **AddNodes/DeleteNodes** — node-opcua + asyncua both implement client-side NodeManagement.
-- **SetTriggering** — node-opcua `setTriggering`.
+Self-only today; harness stacks that support the service can cross-check them:
+- **SetTriggering** — ✅ feasible: node-opcua exposes `session.setTriggering`; no server-config change.
+  (Being added next.)
+- **HistoryRead** (actual reads, not just rejection) — feasible across all three stacks.
 - **Query** — node-opcua / asyncua client query.
-- **HistoryRead** (actual reads, not just rejection) — all three can read history.
-Each is a handful of `check(...)` lines added to the existing harnesses, gated on the writable/feature
-config. Highest value: AddNodes (we found a real audit-class area there) and SetTriggering.
+- **AddNodes/DeleteNodes** — ❌ NOT feasible via node-opcua: it has the request types but does **not**
+  expose `session.addNodes` on the client API. Would also need the interop server's
+  `clients_can_modify_address_space` gate (off by default). Stays self-grounded (`node_management.rs`,
+  `tier_a`) unless we drive it with the async-opcua client (loses the independent-stack value).
+Highest near-term value: SetTriggering.
 
 ### D. Known hard gaps (need infrastructure, document only)
 - **PubSub end-to-end interop** — no independent PubSub stack wired (would need .NET/open62541 pubsub).

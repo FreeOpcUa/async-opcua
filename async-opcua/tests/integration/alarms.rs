@@ -235,3 +235,92 @@ fn trigger_alarm_transition(
         message,
     )
 }
+
+/// Part 9 AcknowledgeableConditionType: the Acknowledge/Confirm state guards. The happy-path test
+/// covers the valid Active -> Ack -> Confirm flow; this locks in the error paths:
+/// Confirm-before-Acknowledge -> Bad_InvalidState, double-Acknowledge ->
+/// Bad_ConditionBranchAlreadyAcked, double-Confirm -> Bad_ConditionBranchAlreadyConfirmed.
+/// (Note: the server does not validate the EventId argument, so these are pure state-machine guards.)
+#[tokio::test]
+async fn alarm_acknowledge_confirm_error_paths() {
+    let (_tester, nm, session) = setup_alarms().await;
+
+    let source_node_id = NodeId::new(2, "ErrDevice");
+    {
+        let mut space = nm.address_space().write();
+        let source = opcua::server::address_space::ObjectBuilder::new(
+            &source_node_id,
+            "ErrDevice",
+            "ErrDevice",
+        )
+        .component_of(ObjectId::ObjectsFolder)
+        .event_notifier(opcua::server::address_space::EventNotifier::SUBSCRIBE_TO_EVENTS)
+        .build();
+        space.insert::<_, NodeId>(source, None);
+    }
+
+    let state_machine = register_alarm_condition(
+        nm.address_space(),
+        &nm,
+        "ErrDev",
+        "Temp",
+        source_node_id.clone(),
+        "alarm",
+    );
+
+    // Drive the condition to Active so it is acknowledgeable.
+    let event = {
+        let mut space = nm.address_space().write();
+        trigger_alarm_transition(
+            &mut space,
+            &state_machine,
+            true,
+            800,
+            LocalizedText::new("en", "active"),
+        )
+        .unwrap()
+        .expect("transition should generate an event")
+    };
+    let event_id = opcua::types::ByteString::from(event.event_id.clone());
+
+    let base_s = "Alarm_ErrDev_Temp";
+    let ack_id = NodeId::new(2, format!("{base_s}_Acknowledge"));
+    let confirm_id = NodeId::new(2, format!("{base_s}_Confirm"));
+
+    let call = |method_id: NodeId| {
+        let session = session.clone();
+        let condition_id = state_machine.condition_id.clone();
+        let event_id = event_id.clone();
+        async move {
+            session
+                .call_one(CallMethodRequest {
+                    object_id: condition_id,
+                    method_id,
+                    input_arguments: Some(vec![
+                        Variant::from(event_id),
+                        Variant::from(LocalizedText::new("en", "c")),
+                    ]),
+                })
+                .await
+                .unwrap()
+                .status_code
+        }
+    };
+
+    // Confirm before Acknowledge -> Bad_InvalidState (not yet acknowledged).
+    assert_eq!(call(confirm_id.clone()).await, StatusCode::BadInvalidState);
+
+    // Acknowledge once -> Good; acknowledging again -> Bad_ConditionBranchAlreadyAcked.
+    assert_eq!(call(ack_id.clone()).await, StatusCode::Good);
+    assert_eq!(
+        call(ack_id.clone()).await,
+        StatusCode::BadConditionBranchAlreadyAcked
+    );
+
+    // Confirm once -> Good; confirming again -> Bad_ConditionBranchAlreadyConfirmed.
+    assert_eq!(call(confirm_id.clone()).await, StatusCode::Good);
+    assert_eq!(
+        call(confirm_id).await,
+        StatusCode::BadConditionBranchAlreadyConfirmed
+    );
+}

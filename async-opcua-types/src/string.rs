@@ -371,3 +371,19 @@ fn string_substring() {
 
     assert!(UAString::null().substring(0, 0).is_err());
 }
+
+#[test]
+fn string_substring_multibyte_utf8() {
+    // Regression for the NumericRange substring remote-panic DoS (feature 017): `substring` must
+    // index by CHARACTER, not byte. A byte-index slice of a multi-byte UTF-8 string would land on a
+    // non-char boundary and panic; an all-ASCII test cannot catch a regression to byte slicing, so
+    // this exercises 2-byte and 4-byte code points explicitly.
+    let v = UAString::from("héllo🦀wörld"); // chars: h é l l o 🦀 w ö r l d  (0..=10)
+    assert_eq!(v.substring(1, 1).unwrap().as_ref(), "é");
+    assert_eq!(v.substring(5, 5).unwrap().as_ref(), "🦀");
+    assert_eq!(v.substring(0, 2).unwrap().as_ref(), "hél");
+    assert_eq!(v.substring(7, 7).unwrap().as_ref(), "ö");
+    // `max` past the end returns the remainder; `min` past the end errors — neither may panic.
+    assert_eq!(v.substring(5, 999).unwrap().as_ref(), "🦀wörld");
+    assert!(v.substring(11, 11).is_err());
+}

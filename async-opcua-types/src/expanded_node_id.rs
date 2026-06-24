@@ -10,7 +10,6 @@ use std::{
     fmt,
     io::{Read, Write},
     str::FromStr,
-    sync::LazyLock,
 };
 
 use crate::{
@@ -472,64 +471,45 @@ impl fmt::Display for ExpandedNodeId {
 impl FromStr for ExpandedNodeId {
     type Err = StatusCode;
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        use regex::Regex;
-
-        // Parses a node from a string using the format specified in 5.3.1.11 part 6
+        // Parses an ExpandedNodeId from its string form (Part 6 §5.1.12, Table 6). The ServerIndex
+        // and NamespaceUri prefixes are BOTH optional; a bare NodeId is itself a valid ExpandedNodeId:
         //
-        // svr=<serverindex>;ns=<namespaceindex>;<type>=<value>
-        // or
-        // svr=<serverindex>;nsu=<uri>;<type>=<value>
+        //   <node-id>
+        //   svr=<serverindex>;<node-id>
+        //   [svr=<serverindex>;]nsu=<uri>;<node-id>
+        //
+        // where <node-id> is "[ns=<namespaceindex>;]<type>=<value>" (parsed by NodeId::from_str).
+        let mut rest = s;
+        let mut server_index = 0u32;
+        let mut namespace_uri = UAString::null();
 
-        #[allow(clippy::unwrap_used)]
-        static RE: LazyLock<Regex> = LazyLock::new(|| {
-            // Constant regex is validated by tests and cannot fail due to runtime input.
-            Regex::new(
-                r"^svr=(?P<svr>[0-9]+);(ns=(?P<ns>[0-9]+)|nsu=(?P<nsu>[^;]+));(?P<t>[isgb]=.+)$",
-            )
-            .unwrap()
-        });
+        if let Some(after) = rest.strip_prefix("svr=") {
+            let (digits, tail) = after.split_once(';').ok_or(StatusCode::BadNodeIdInvalid)?;
+            server_index = digits
+                .parse::<u32>()
+                .map_err(|_| StatusCode::BadNodeIdInvalid)?;
+            rest = tail;
+        }
 
-        let captures = RE.captures(s).ok_or(StatusCode::BadNodeIdInvalid)?;
+        if let Some(after) = rest.strip_prefix("nsu=") {
+            let (uri, tail) = after.split_once(';').ok_or(StatusCode::BadNodeIdInvalid)?;
+            if uri.is_empty() {
+                return Err(StatusCode::BadNodeIdInvalid);
+            }
+            // The % and ; chars are escaped inside the URI; unescape %3b before %25.
+            namespace_uri = UAString::from(uri.replace("%3b", ";").replace("%25", "%"));
+            // When a NamespaceUri is given, the NodeId must not also carry a NamespaceIndex.
+            if tail.starts_with("ns=") {
+                return Err(StatusCode::BadNodeIdInvalid);
+            }
+            rest = tail;
+        }
 
-        // Server index
-        let server_index = captures
-            .name("svr")
-            .ok_or(StatusCode::BadNodeIdInvalid)
-            .and_then(|server_index| {
-                server_index
-                    .as_str()
-                    .parse::<u32>()
-                    .map_err(|_| StatusCode::BadNodeIdInvalid)
-            })?;
-
-        // Check for namespace uri
-        let namespace_uri = if let Some(nsu) = captures.name("nsu") {
-            // The % and ; chars need to be unescaped
-            let nsu = String::from(nsu.as_str())
-                .replace("%3b", ";")
-                .replace("%25", "%");
-            UAString::from(nsu)
-        } else {
-            UAString::null()
-        };
-
-        let namespace = if let Some(ns) = captures.name("ns") {
-            ns.as_str()
-                .parse::<u16>()
-                .map_err(|_| StatusCode::BadNodeIdInvalid)?
-        } else {
-            0
-        };
-
-        // Type identifier
-        let t = captures.name("t").ok_or(StatusCode::BadNodeIdInvalid)?;
-        Identifier::from_str(t.as_str())
-            .map(|t| ExpandedNodeId {
-                server_index,
-                namespace_uri,
-                node_id: NodeId::new(namespace, t),
-            })
-            .map_err(|_| StatusCode::BadNodeIdInvalid)
+        Ok(ExpandedNodeId {
+            server_index,
+            namespace_uri,
+            node_id: NodeId::from_str(rest)?,
+        })
     }
 }
 

@@ -63,3 +63,54 @@ vector_test!(
     ExtensionObject,
     "extensionobject"
 );
+
+// --- String-parser conformance ---------------------------------------------------------------
+//
+// The OPC Foundation reference stack's parser fuzz corpus (`Testcases.Parsers/`) seeds each parser
+// with a canonical, valid string. async-opcua must parse the exact same syntax (Part 6 §5.3.1.x for
+// NodeId/ExpandedNodeId; Part 4 §7.27 for NumericRange). These are the canonical valid forms, so
+// parsing MUST succeed and (where a Display inverse exists) round-trip. Strings inlined verbatim from
+// the corpus (commit 147c287, BOM stripped — it is a file-encoding artifact, not part of the value).
+
+use crate::{Guid, NumericRange};
+use std::str::FromStr;
+
+#[test]
+fn opcf_parse_nodeid() {
+    // nodeid_numeric / nodeid_string / nodeid_guid
+    assert_eq!(NodeId::from_str("i=85").unwrap(), NodeId::new(0u16, 85u32));
+    assert_eq!(
+        NodeId::from_str("ns=2;s=Demo.Node").unwrap(),
+        NodeId::new(2u16, "Demo.Node")
+    );
+    let guid = NodeId::from_str("ns=2;g=00000000-0000-0000-0000-000000000001").unwrap();
+    assert_eq!(guid.namespace, 2);
+    // Display must round-trip back to the same NodeId.
+    assert_eq!(NodeId::from_str(&guid.to_string()).unwrap(), guid);
+}
+
+#[test]
+fn opcf_parse_expanded_nodeid() {
+    // expandednodeid_string / expandednodeid_uri — both canonical valid forms must parse.
+    let by_uri = ExpandedNodeId::from_str("nsu=urn:example:namespace;s=Demo").unwrap();
+    assert_eq!(by_uri.namespace_uri.as_ref(), "urn:example:namespace");
+    let with_server =
+        ExpandedNodeId::from_str("svr=1;nsu=http://opcfoundation.org/UA/;i=85").unwrap();
+    assert_eq!(with_server.server_index, 1);
+}
+
+#[test]
+fn opcf_parse_numeric_range() {
+    // numericrange_single ("0") / numericrange_matrix ("0:10,1:2")
+    NumericRange::from_str("0").expect("single index range must parse");
+    let matrix = NumericRange::from_str("0:10,1:2").expect("multi-dimension range must parse");
+    // Display must round-trip back to an equal range.
+    assert_eq!(NumericRange::from_str(&matrix.to_string()).unwrap(), matrix);
+}
+
+#[test]
+fn opcf_parse_guid() {
+    // uuid
+    let g = Guid::from_str("00000000-0000-0000-0000-000000000001").unwrap();
+    assert_eq!(Guid::from_str(&g.to_string()).unwrap(), g);
+}

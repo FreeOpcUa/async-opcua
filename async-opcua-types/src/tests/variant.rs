@@ -322,6 +322,31 @@ fn index_of_string() {
     assert_eq!(r, StatusCode::BadIndexRangeNoData);
 }
 
+#[test]
+fn index_of_multibyte_string() {
+    // Regression for the substring remote-panic DoS (feature 017) at the remote-reachable entry
+    // point: a client reading a NumericRange of a String value with multi-byte UTF-8 code points.
+    // The range must be applied per-character, never slicing a byte index mid-code-point.
+    let v: Variant = "héllo🦀wörld".into(); // chars: h é l l o 🦀 w ö r l d (0..=10)
+
+    assert_eq!(
+        v.range_of(&NumericRange::Index(5)).unwrap(),
+        Variant::from("🦀")
+    );
+    assert_eq!(
+        v.range_of(&NumericRange::Index(1)).unwrap(),
+        Variant::from("é")
+    );
+    assert_eq!(
+        v.range_of(&NumericRange::Range(5, 100)).unwrap(),
+        Variant::from("🦀wörld")
+    );
+    assert_eq!(
+        v.range_of(&NumericRange::Range(11, 200)).unwrap_err(),
+        StatusCode::BadIndexRangeNoData
+    );
+}
+
 fn ensure_conversion_fails<'a>(v: &Variant, convert_to: Vec<impl Into<VariantTypeId<'a>>>) {
     convert_to.into_iter().for_each(|vt| {
         let t: VariantTypeId = vt.into();

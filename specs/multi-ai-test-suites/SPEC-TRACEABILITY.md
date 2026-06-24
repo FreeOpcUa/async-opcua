@@ -76,7 +76,7 @@ Legend: ✅ interop-grounded · 🔵 self-grounded (clause-anchored) · 🟡 sel
 | ECC ephemeral/secret | Part 6 §6.8.2/3 | ✅ | crypto/ecc_* (RFC 5869/5903) | ecc.rs e2e | ✅ |
 | Identity tokens (user/pass, X509, ECC) | Part 4 §7.41/Table 179 | ✅ | crypto/authentication.rs, conformance, tier_a | all 3 (user/pass + fail) | ✅ |
 | PubSub UADP + security | Part 14 §7.2.4 | ✅ | pubsub.rs, crypto/pubsub_ctr.rs (RFC 3686) | **— (no independent stack)** | 🔵 |
-| Alarms & Conditions | Part 9 | ✅ | alarms.rs (happy + ack/confirm error paths) | — | 🔵 (EventId not validated — known gap) |
+| Alarms & Conditions | Part 9 | ✅ | alarms.rs (happy + ack/confirm error paths incl. Bad_EventIdUnknown) | — | 🔵 |
 | Programs | Part 10 | ✅ | programs.rs (lifecycle + invalid transitions) | — | 🔵 |
 | Transport: reverse connect | Part 6 §7.1.3 | ✅ | reverse_connect.rs | — | 🟡 happy-only |
 | Transport: WSS | Part 6 §7.x | ✅ | wss.rs | — | 🟡 happy-only |
@@ -101,9 +101,9 @@ Legend: ✅ interop-grounded · 🔵 self-grounded (clause-anchored) · 🟡 sel
 2. **Alarms/Conditions error paths** (Part 9) — ✅ DONE: `alarms.rs::alarm_acknowledge_confirm_error_paths`
    covers the Acknowledge/Confirm guards (Confirm-before-Ack → Bad_InvalidState, double-Ack →
    Bad_ConditionBranchAlreadyAcked, double-Confirm → Bad_ConditionBranchAlreadyConfirmed).
-   **Known Part 9 gap:** the server does *not* validate the EventId argument — a stale/unknown EventId is
-   accepted rather than rejected with Bad_EventIdUnknown (the guards are pure state-machine). Worth a
-   follow-up fix if strict Part 9 §5.5.2 conformance is needed.
+   **Part 9 EventId validation — FIXED:** the condition now records the EventId of its current reportable
+   state (set at trigger) and Acknowledge/Confirm reject a non-matching EventId with Bad_EventIdUnknown
+   before the state guards (Part 9 §5.5.2). Test covers the wrong-EventId case.
 3. **Programs error paths** (Part 10) — ✅ DONE: `programs.rs::program_invalid_transitions_return_bad_state`
    covers the state guards (Start/Suspend/Resume/Halt from Halted, Reset/Suspend/Resume from Ready → all
    Bad_StateNotActive).

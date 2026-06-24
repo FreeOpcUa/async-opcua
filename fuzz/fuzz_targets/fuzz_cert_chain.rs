@@ -41,6 +41,7 @@ libfuzzer_sys::fuzz_target!(|data: &[u8]| {
         trusted_certs: &trusted,
         issuer_certs: &issuers,
         crls: &crls,
+        ocsp_responses: &[],
         security_policy: SecurityPolicy::Basic256Sha256,
         purpose: CertificatePurpose::ServerApplication,
         options: &options,

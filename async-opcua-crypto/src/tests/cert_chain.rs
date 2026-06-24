@@ -286,6 +286,29 @@ fn server_ctx<'a>(
         trusted_certs: trusted,
         issuer_certs: issuers,
         crls,
+        ocsp_responses: &[],
+        security_policy: SecurityPolicy::Basic256Sha256,
+        purpose: CertificatePurpose::ServerApplication,
+        options,
+        now,
+    }
+}
+
+/// Like `server_ctx` but with supplied OCSP responses (DER) for the revocation tests.
+#[allow(clippy::too_many_arguments)]
+fn server_ctx_ocsp<'a>(
+    trusted: &'a [X509],
+    issuers: &'a [X509],
+    crls: &'a [CertificateList],
+    ocsp_responses: &'a [Vec<u8>],
+    options: &'a ValidationOptions,
+    now: &'a DateTime<Utc>,
+) -> ChainValidationContext<'a> {
+    ChainValidationContext {
+        trusted_certs: trusted,
+        issuer_certs: issuers,
+        crls,
+        ocsp_responses,
         security_policy: SecurityPolicy::Basic256Sha256,
         purpose: CertificatePurpose::ServerApplication,
         options,
@@ -535,6 +558,7 @@ fn valid_chain_validates_for_client_application_purpose() {
         trusted_certs: &trusted,
         issuer_certs: &issuers,
         crls: &crls,
+        ocsp_responses: &[],
         security_policy: SecurityPolicy::Basic256Sha256,
         purpose: CertificatePurpose::ClientApplication,
         options: &options,
@@ -1322,4 +1346,148 @@ fn store_lenient_default_accepts_ca_signed_leaf_without_crl() {
             None,
         )
         .expect("the default lenient policy accepts a CA-signed leaf with no CRL present");
+}
+
+// --- OCSP revocation (supplied/stapled responses) -----------------------------------------------
+
+/// Build a DER OCSPResponse signed by `issuer_key`, asserting `revoked`/good for `serial`. Mirrors
+/// `make_crl`: manual assembly + SHA256-RSA signing with the issuer key (no x509-ocsp builder).
+fn make_ocsp_response(
+    issuer_cn: &str,
+    issuer_key: &PrivateKey,
+    serial: u32,
+    revoked: bool,
+    this_update: DateTime<Utc>,
+    next_update: DateTime<Utc>,
+) -> Vec<u8> {
+    use x509_ocsp::{
+        BasicOcspResponse, CertId, CertStatus, OcspGeneralizedTime, OcspResponse, ResponderId,
+        ResponseData, RevokedInfo, SingleResponse,
+    };
+
+    let issuer = Name::from_str(&format!("CN={issuer_cn}")).expect("ocsp issuer name");
+    // The hash algorithm / issuer hashes in CertId are not used by our matcher (we require an
+    // issuer-signed response + matching serial), so any well-formed values suffice.
+    let sha1_oid = const_oid::ObjectIdentifier::new_unwrap("1.3.14.3.2.26");
+    let cert_id = CertId {
+        hash_algorithm: AlgorithmIdentifierOwned {
+            oid: sha1_oid,
+            parameters: Some(Any::from(Null)),
+        },
+        issuer_name_hash: OctetString::new(vec![0u8; 20]).expect("name hash"),
+        issuer_key_hash: OctetString::new(vec![0u8; 20]).expect("key hash"),
+        serial_number: SerialNumber::from(serial),
+    };
+    let cert_status = if revoked {
+        CertStatus::revoked(RevokedInfo {
+            revocation_time: OcspGeneralizedTime::from(to_time(this_update)),
+            revocation_reason: None,
+        })
+    } else {
+        CertStatus::good()
+    };
+    let single = SingleResponse {
+        cert_id,
+        cert_status,
+        this_update: OcspGeneralizedTime::from(to_time(this_update)),
+        next_update: Some(OcspGeneralizedTime::from(to_time(next_update))),
+        single_extensions: None,
+    };
+    let tbs = ResponseData {
+        version: Default::default(),
+        responder_id: ResponderId::ByName(issuer),
+        produced_at: OcspGeneralizedTime::from(to_time(this_update)),
+        responses: vec![single],
+        response_extensions: None,
+    };
+    let tbs_der = tbs.to_der().expect("ocsp tbs der");
+    let signing_key = SigningKey::<Sha256>::new(
+        issuer_key
+            .rsa_key_for_x509()
+            .expect("ocsp signer key")
+            .clone(),
+    );
+    let signature: Signature = signing_key.sign(&tbs_der);
+    let basic = BasicOcspResponse {
+        tbs_response_data: tbs,
+        signature_algorithm: AlgorithmIdentifierOwned {
+            oid: SHA_256_WITH_RSA_ENCRYPTION,
+            parameters: Some(Any::from(Null)),
+        },
+        signature: BitString::from_bytes(&signature.to_vec()).expect("ocsp signature bits"),
+        certs: None,
+    };
+    OcspResponse::successful(basic)
+        .expect("ocsp response")
+        .to_der()
+        .expect("ocsp response der")
+}
+
+#[test]
+fn ocsp_good_response_satisfies_required_mode() {
+    // Part 4 §6.1.3: a valid (issuer-signed, fresh) "good" OCSP response is a definitive revocation
+    // source — it satisfies Required mode even with no CRL present.
+    let k = keys();
+    let root = root_ca();
+    let leaf = leaf_signed_by_root(700, t(2030, 1, 1));
+    let ocsp = make_ocsp_response(ROOT_CN, &k.root, 700, false, t(2024, 1, 1), t(2030, 1, 1));
+
+    let trusted = [root];
+    let issuers: [X509; 0] = [];
+    let crls = empty_crls();
+    let ocsp_responses = [ocsp];
+    let options = ValidationOptions {
+        revocation_mode: RevocationMode::Required,
+        ..Default::default()
+    };
+    let now = now_valid();
+    let ctx = server_ctx_ocsp(&trusted, &issuers, &crls, &ocsp_responses, &options, &now);
+    validate_certificate_chain(&leaf, &ctx)
+        .expect("a good OCSP response should satisfy Required-mode revocation");
+}
+
+#[test]
+fn ocsp_revoked_response_rejects_leaf() {
+    // A valid OCSP response marking the leaf's serial revoked must reject it.
+    let k = keys();
+    let root = root_ca();
+    let leaf = leaf_signed_by_root(701, t(2030, 1, 1));
+    let ocsp = make_ocsp_response(ROOT_CN, &k.root, 701, true, t(2024, 1, 1), t(2030, 1, 1));
+
+    let trusted = [root];
+    let issuers: [X509; 0] = [];
+    let crls = empty_crls();
+    let ocsp_responses = [ocsp];
+    let options = ValidationOptions::default();
+    let now = now_valid();
+    let ctx = server_ctx_ocsp(&trusted, &issuers, &crls, &ocsp_responses, &options, &now);
+    let err = validate_certificate_chain(&leaf, &ctx)
+        .expect_err("a leaf revoked by a valid OCSP response must be rejected");
+    assert_eq!(err.status(), StatusCode::BadCertificateRevoked);
+}
+
+#[test]
+fn ocsp_response_signed_by_non_issuer_is_ignored() {
+    // An OCSP response NOT signed by the issuer (here the leaf key) must be ignored, not honoured.
+    // With no CRL in Required mode, that leaves revocation unknown — proving the forged response did
+    // not take effect (otherwise the leaf would be wrongly "revoked").
+    let k = keys();
+    let root = root_ca();
+    let leaf = leaf_signed_by_root(702, t(2030, 1, 1));
+    // Signed with the leaf key, which is not the issuer (root).
+    let forged = make_ocsp_response(ROOT_CN, &k.leaf, 702, true, t(2024, 1, 1), t(2030, 1, 1));
+
+    let trusted = [root];
+    let issuers: [X509; 0] = [];
+    let crls = empty_crls();
+    let ocsp_responses = [forged];
+    let options = ValidationOptions {
+        revocation_mode: RevocationMode::Required,
+        ..Default::default()
+    };
+    let now = now_valid();
+    let ctx = server_ctx_ocsp(&trusted, &issuers, &crls, &ocsp_responses, &options, &now);
+    let err = validate_certificate_chain(&leaf, &ctx)
+        .expect_err("a non-issuer-signed OCSP response must not be honoured");
+    assert_eq!(err.status(), StatusCode::BadCertificateRevocationUnknown);
 }

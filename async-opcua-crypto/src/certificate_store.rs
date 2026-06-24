@@ -411,6 +411,8 @@ impl CertificateStore {
             trusted_certs: &trusted,
             issuer_certs: &issuers,
             crls: &crls,
+            // No live OCSP fetch; the store has no out-of-band/stapled responses to supply.
+            ocsp_responses: &[],
             security_policy,
             purpose,
             options: &options,

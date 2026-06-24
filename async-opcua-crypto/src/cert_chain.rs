@@ -7,10 +7,12 @@ use const_oid::db::rfc5912::{ECDSA_WITH_SHA_256, ECDSA_WITH_SHA_384};
 use const_oid::db::rfc5912::{
     ID_RSASSA_PSS, SHA_1_WITH_RSA_ENCRYPTION, SHA_256_WITH_RSA_ENCRYPTION,
 };
+use const_oid::db::rfc6960::ID_PKIX_OCSP_BASIC;
 use opcua_types::{status_code::StatusCode, Error};
 use x509_cert::crl::{CertificateList, RevokedCert};
-use x509_cert::der::Encode;
+use x509_cert::der::{Decode, Encode};
 use x509_cert::ext::pkix::KeyUsages;
+use x509_ocsp::{BasicOcspResponse, CertStatus, OcspResponse, OcspResponseStatus};
 
 use crate::{PublicKey, SecurityPolicy, X509};
 
@@ -107,6 +109,11 @@ pub struct ChainValidationContext<'a> {
     pub issuer_certs: &'a [X509],
     /// CRLs loaded from the trusted/issuer CRL stores.
     pub crls: &'a [CertificateList],
+    /// Stapled/supplied OCSP responses (DER-encoded OCSPResponse). Checked alongside CRLs: a
+    /// Successful basic response signed by the issuer CA that covers a certificate's serial yields a
+    /// definitive good/revoked verdict. Live AIA fetch is not performed (so the common source is an
+    /// out-of-band/stapled response); an empty slice falls back to CRL-only revocation.
+    pub ocsp_responses: &'a [Vec<u8>],
     /// The negotiated security policy (drives the Security-Policy Check).
     pub security_policy: SecurityPolicy,
     /// The use the leaf certificate is being validated for.
@@ -590,25 +597,122 @@ fn validate_chain_revocation(
             continue;
         };
 
+        let revoked_status = if index == 0 {
+            StatusCode::BadCertificateRevoked
+        } else {
+            StatusCode::BadCertificateIssuerRevoked
+        };
+
+        // A valid OCSP response (signed by the issuer, covering this serial) is a definitive source:
+        // revoked -> fail; good -> revocation is known, no CRL needed. Otherwise fall back to CRL.
+        match ocsp_status(context.ocsp_responses, cert, issuer_ca, context.now) {
+            Some(OcspVerdict::Revoked) => {
+                return Err(validation_error(
+                    revoked_status,
+                    "certificate serial number is revoked by a valid OCSP response",
+                ));
+            }
+            Some(OcspVerdict::Good) => continue,
+            None => {}
+        }
+
         let Some(crl) = find_valid_crl(context.crls, issuer_ca, context.now) else {
             handle_revocation_unknown(context, findings, index)?;
             continue;
         };
 
         if crl_revokes(crl, &cert.serial_number()) {
-            let status = if index == 0 {
-                StatusCode::BadCertificateRevoked
-            } else {
-                StatusCode::BadCertificateIssuerRevoked
-            };
             return Err(validation_error(
-                status,
+                revoked_status,
                 "certificate serial number is listed in a valid CRL",
             ));
         }
     }
 
     Ok(())
+}
+
+/// Definitive revocation verdict from a valid OCSP response.
+enum OcspVerdict {
+    Good,
+    Revoked,
+}
+
+/// Returns a definitive OCSP verdict for `cert` from the supplied responses, or `None` if no valid,
+/// issuer-signed, fresh response covers the certificate's serial (caller then falls back to CRL).
+/// Only responses signed directly by `issuer_ca` are accepted (delegated responders are not
+/// supported); `Unknown` status is treated as non-definitive.
+fn ocsp_status(
+    ocsp_responses: &[Vec<u8>],
+    cert: &X509,
+    issuer_ca: &X509,
+    now: &DateTime<Utc>,
+) -> Option<OcspVerdict> {
+    let ca_public_key = issuer_ca.public_key().ok()?;
+    let serial = cert.serial_number();
+
+    for der in ocsp_responses {
+        let Ok(response) = OcspResponse::from_der(der) else {
+            continue;
+        };
+        if response.response_status != OcspResponseStatus::Successful {
+            continue;
+        }
+        let Some(bytes) = response.response_bytes else {
+            continue;
+        };
+        if bytes.response_type != ID_PKIX_OCSP_BASIC {
+            continue;
+        }
+        let Ok(basic) = BasicOcspResponse::from_der(bytes.response.as_bytes()) else {
+            continue;
+        };
+        if !ocsp_signature_verifies(&basic, &ca_public_key) {
+            continue;
+        }
+
+        for single in &basic.tbs_response_data.responses {
+            if single.cert_id.serial_number.as_bytes() != serial.as_slice() {
+                continue;
+            }
+            if !ocsp_single_is_fresh(single, now) {
+                continue;
+            }
+            match single.cert_status {
+                CertStatus::Revoked(_) => return Some(OcspVerdict::Revoked),
+                CertStatus::Good(_) => return Some(OcspVerdict::Good),
+                // Unknown is not a definitive answer; keep scanning for a usable response.
+                CertStatus::Unknown(_) => continue,
+            }
+        }
+    }
+
+    None
+}
+
+fn ocsp_signature_verifies(basic: &BasicOcspResponse, issuer_public_key: &PublicKey) -> bool {
+    let Ok(tbs) = basic.tbs_response_data.to_der() else {
+        return false;
+    };
+    let Some(signature) = basic.signature.as_bytes() else {
+        return false;
+    };
+    der_signature_verifies(
+        issuer_public_key,
+        &tbs,
+        signature,
+        basic.signature_algorithm.oid,
+    )
+}
+
+fn ocsp_single_is_fresh(single: &x509_ocsp::SingleResponse, now: &DateTime<Utc>) -> bool {
+    let now_sys: std::time::SystemTime = (*now).into();
+    let this_ok = single.this_update.0.to_system_time() <= now_sys;
+    let next_ok = single
+        .next_update
+        .as_ref()
+        .is_none_or(|next| next.0.to_system_time() >= now_sys);
+    this_ok && next_ok
 }
 
 fn find_valid_crl<'a>(
@@ -642,31 +746,41 @@ fn crl_signature_verifies(crl: &CertificateList, issuer_public_key: &PublicKey) 
     let Some(signature) = crl.signature.as_bytes() else {
         return false;
     };
-
-    if crl.signature_algorithm.oid == SHA_256_WITH_RSA_ENCRYPTION {
-        return issuer_public_key
-            .verify_sha256(&tbs, signature)
-            .is_ok_and(|verified| verified);
-    }
-
-    if crl.signature_algorithm.oid == ID_RSASSA_PSS {
-        return issuer_public_key
-            .verify_sha256_pss(&tbs, signature)
-            .is_ok_and(|verified| verified);
-    }
-
-    if crl.signature_algorithm.oid == SHA_1_WITH_RSA_ENCRYPTION {
-        return issuer_public_key
-            .verify_sha1(&tbs, signature)
-            .is_ok_and(|verified| verified);
-    }
-
-    crl_ec_signature_verifies(
+    der_signature_verifies(
         issuer_public_key,
         &tbs,
         signature,
         crl.signature_algorithm.oid,
     )
+}
+
+/// Verify a DER `tbs`/`signature` pair (CRL TBSCertList or OCSP ResponseData) against the issuer
+/// public key, dispatching on the signature algorithm OID. Shared by CRL and OCSP verification.
+fn der_signature_verifies(
+    issuer_public_key: &PublicKey,
+    tbs: &[u8],
+    signature: &[u8],
+    algorithm_oid: const_oid::ObjectIdentifier,
+) -> bool {
+    if algorithm_oid == SHA_256_WITH_RSA_ENCRYPTION {
+        return issuer_public_key
+            .verify_sha256(tbs, signature)
+            .is_ok_and(|verified| verified);
+    }
+
+    if algorithm_oid == ID_RSASSA_PSS {
+        return issuer_public_key
+            .verify_sha256_pss(tbs, signature)
+            .is_ok_and(|verified| verified);
+    }
+
+    if algorithm_oid == SHA_1_WITH_RSA_ENCRYPTION {
+        return issuer_public_key
+            .verify_sha1(tbs, signature)
+            .is_ok_and(|verified| verified);
+    }
+
+    crl_ec_signature_verifies(issuer_public_key, tbs, signature, algorithm_oid)
 }
 
 #[cfg(feature = "ecc")]

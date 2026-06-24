@@ -291,13 +291,17 @@ namespace DotnetInterop
             sub.Create();
             Check("CreateSubscription", sub.Created);
 
-            // Data-change monitored item on CurrentTime.
+            // Data-change monitored item on the writable Int32 node; the change is DRIVEN by a
+            // client write (deterministic) rather than the server-timer-driven CurrentTime.
             var got = new SemaphoreSlim(0, 1);
-            var mi = new MonitoredItem(sub.DefaultItem) { StartNodeId = new NodeId(2258u), AttributeId = Attributes.Value, SamplingInterval = 200 };
+            var mi = new MonitoredItem(sub.DefaultItem) { StartNodeId = new NodeId("Int32", nsi), AttributeId = Attributes.Value, SamplingInterval = 200 };
             mi.Notification += (i, e) => { if (got.CurrentCount == 0) got.Release(); };
             sub.AddItem(mi);
             sub.ApplyChanges();
             Check("CreateMonitoredItems (data change)", mi.Status.Created && StatusCode.IsGood(mi.Status.Error?.StatusCode ?? StatusCodes.Good));
+            session.Write(null, new WriteValueCollection { new WriteValue {
+                NodeId = new NodeId("Int32", nsi), AttributeId = Attributes.Value, Value = new DataValue(new Variant(700001)) } },
+                out _, out _);
             Check("subscription delivers a data-change notification", await got.WaitAsync(TimeSpan.FromSeconds(10)));
 
             // ModifyMonitoredItems: change the sampling interval.

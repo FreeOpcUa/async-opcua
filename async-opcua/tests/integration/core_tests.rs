@@ -549,3 +549,38 @@ async fn issued_token_test() {
         .await
         .unwrap();
 }
+
+/// Cancel service (OPC UA Part 4 v1.05 §5.7.5, Session Service Set). This server processes requests
+/// without a cancellable queue, so Cancel of any handle is a clean no-op: cancelCount 0, and the
+/// session stays fully usable afterwards.
+#[tokio::test]
+async fn cancel_is_a_clean_noop() {
+    let mut tester = Tester::new_default_server(false).await;
+    let (session, handle) = tester
+        .connect(
+            SecurityPolicy::None,
+            MessageSecurityMode::None,
+            IdentityToken::Anonymous,
+        )
+        .await
+        .unwrap();
+    let _h = handle.spawn();
+    tokio::time::timeout(Duration::from_secs(20), session.wait_for_connection())
+        .await
+        .unwrap();
+
+    let cancelled = session.cancel(42).await.unwrap();
+    assert_eq!(cancelled, 0, "no outstanding requests to cancel");
+
+    // The session is still usable after Cancel.
+    session
+        .read(
+            &[ReadValueId::from(<VariableId as Into<NodeId>>::into(
+                VariableId::Server_ServiceLevel,
+            ))],
+            TimestampsToReturn::Both,
+            0.0,
+        )
+        .await
+        .unwrap();
+}

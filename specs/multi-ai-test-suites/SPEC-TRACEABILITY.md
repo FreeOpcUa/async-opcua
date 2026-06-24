@@ -85,17 +85,24 @@ Legend: ✅ interop-grounded · 🔵 self-grounded (clause-anchored) · 🟡 sel
 
 ## Gaps & actions (prioritized)
 
+> **Numbering note:** the repo's spec citations mix versions — the on-disk 1.05.07 PDFs put Read at
+> §5.11.2, Write §5.11.4, Method §5.12, MonitoredItem §5.13, Subscription §5.14, Session §5.7,
+> NodeManagement §5.8; but several older tests use the earlier scheme (Attribute §5.10, Method §5.11,
+> MonitoredItem §5.12, Subscription §5.13). New annotations use the 1.05.07 numbers + the (stable)
+> service-set name. A standardization pass over the old citations is a future cleanup.
+
 ### A. Untested implemented features (write tests)
-1. **Cancel** (§5.6.5) — implemented as a spec-conformant no-op, **zero tests**. Add a self-test:
-   Cancel of an unknown request handle returns `Good` (cancelCount 0), server survives. *Self.*
+1. **Cancel** (§5.7.5) — ✅ DONE: `core_tests.rs::cancel_is_a_clean_noop` asserts cancelCount 0 +
+   session stays usable (server is a no-op, Part 4 §5.7.5).
 2. **Alarms/Conditions error paths** (Part 9) — `alarms.rs` is happy-only and uncited. Add: acknowledge
    an already-confirmed/unknown condition → proper Bad status; anchor each test to a Part 9 clause. *Self.*
 3. **Programs error paths** (Part 10) — `programs.rs` happy-only/uncited. Add an invalid state-transition
    (e.g. Resume while Halted) → Bad status; cite Part 10. *Self.*
 
 ### B. Annotate foundational tests with their clause (grounding hygiene, no new coverage)
-`read.rs`, `write.rs`, `subscriptions.rs`, `core_tests.rs` carry no spec citation. Add a one-line
-`// Part 4 §…` header to each so the suite is traceable. Cheap; closes the 🟡 → 🔵 gap for core services.
+✅ DONE: `read.rs` (§5.11.2), `write.rs` (§5.11.4), `subscriptions.rs` (§5.14 + §5.13) now carry a
+module-level service-set citation. Remaining 🟡: `core_tests.rs` is a session/connection grab-bag (no
+single clause); `xml.rs`, `reverse_connect.rs`, `wss.rs` are happy-only transport/encoding.
 
 ### C. Interop opportunities (upgrade 🔵 self → ✅ interop)
 These are self-only today but the harness stacks support them — cross-checking would harden them:

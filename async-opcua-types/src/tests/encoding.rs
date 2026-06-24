@@ -1021,21 +1021,29 @@ fn extension_object_structured_roundtrip_matrix() {
         array_dimensions: Some(vec![3, 4]),
         description: LocalizedText::null(),
     }));
-    // Null array field: Argument's custom encoding normalizes a None `array_dimensions` to an empty
-    // array on decode (it does not preserve the null/empty distinction for this field). Pin that.
+    // Null array field: Part 3 Table 28 — "ArrayDimensions shall be null if valueRank <= 0" — so a
+    // scalar Argument round-trips with array_dimensions == None (encoded as a null array, not empty).
+    serialize_test(crate::Argument {
+        name: UAString::from("a"),
+        data_type: NodeId::null(),
+        value_rank: -1,
+        array_dimensions: None,
+        description: LocalizedText::null(),
+    });
+    // A non-conformant empty array for a scalar is normalized back to null on decode.
     serialize_test_expected(
         crate::Argument {
             name: UAString::from("a"),
             data_type: NodeId::null(),
             value_rank: -1,
-            array_dimensions: None,
+            array_dimensions: Some(vec![]),
             description: LocalizedText::null(),
         },
         crate::Argument {
             name: UAString::from("a"),
             data_type: NodeId::null(),
             value_rank: -1,
-            array_dimensions: Some(vec![]),
+            array_dimensions: None,
             description: LocalizedText::null(),
         },
     );

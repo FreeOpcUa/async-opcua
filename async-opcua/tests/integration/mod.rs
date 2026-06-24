@@ -23,6 +23,7 @@ mod sampling_transition;
 mod subscriptions;
 mod tier_a;
 mod triggering;
+mod walk_runner;
 mod write;
 #[cfg(feature = "wss")]
 mod wss;

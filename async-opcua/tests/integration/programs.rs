@@ -3,7 +3,7 @@ use std::{sync::Arc, time::Duration};
 use crate::utils::{default_server, Tester};
 use opcua::{
     server::node_manager::memory::{simple_node_manager, SimpleNodeManager},
-    types::NodeId,
+    types::{NodeId, StatusCode},
 };
 use opcua_client::program_client::*;
 use opcua_server::programs::{register_program, ProgramEngine};
@@ -128,4 +128,34 @@ async fn test_program_halt() {
     halt_program(&session, &program_id).await.unwrap();
     let state = read_program_state(&session, &program_id).await.unwrap();
     assert_eq!(state, "Halted");
+}
+
+/// Part 10 ProgramStateMachineType: a control method invoked from a state that does not permit it
+/// returns Bad_StateNotActive. The lifecycle tests cover the valid transitions; this locks in the
+/// guards (the error paths the happy-path tests skip).
+#[tokio::test]
+async fn program_invalid_transitions_return_bad_state() {
+    let (_tester, _nm, session, _engine) = setup_programs().await;
+    let id = NodeId::new(2, "Program_Device1_TestProgram");
+
+    // Initial state is Halted: only Reset is valid — Start/Suspend/Resume/Halt are all rejected.
+    for r in [
+        start_program(&session, &id).await,
+        suspend_program(&session, &id).await,
+        resume_program(&session, &id).await,
+        halt_program(&session, &id).await,
+    ] {
+        assert_eq!(r.unwrap_err().status(), StatusCode::BadStateNotActive);
+    }
+
+    // Reset -> Ready. From Ready only Start/Halt are valid — Reset/Suspend/Resume are rejected.
+    reset_program(&session, &id).await.unwrap();
+    assert_eq!(read_program_state(&session, &id).await.unwrap(), "Ready");
+    for r in [
+        reset_program(&session, &id).await,
+        suspend_program(&session, &id).await,
+        resume_program(&session, &id).await,
+    ] {
+        assert_eq!(r.unwrap_err().status(), StatusCode::BadStateNotActive);
+    }
 }

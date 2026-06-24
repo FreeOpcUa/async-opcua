@@ -38,7 +38,11 @@ itself (it confirms the coverage and avoids redundant work):
   empty-string LocalizedText locale/text → null is spec-correct (Part 6 Table 24); but Argument None
   array_dimensions → Some([]) was a DEVIATION — Part 3 Table 28 says ArrayDimensions "shall be null if
   valueRank <= 0" — so FIXED the Argument encode (emit null, not empty) + normalize on decode; scalar
-  Argument now round-trips None→None. C5–C7 remain.
+  Argument now round-trips None→None. C5 NumericRange fewer-dims DONE + FIXED
+  (`async-opcua-types/.../variant/mod.rs`): a single Index/Range against a multi-dimensional array was
+  flattened into a 1-D slice instead of being rejected; Part 4 §7.27 says "all dimensions shall be
+  specified", so it now returns BadIndexRangeNoData. (Read/write OOB, rank-mismatch-too-many,
+  oversized-clamp were already covered by feature-017.) C6–C7 remain.
 
 ## Tier A — potential REAL BUGS (probe first; this is where the cross-check pays off)
 | # | Case | Source | Why high-signal |

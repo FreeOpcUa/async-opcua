@@ -1972,3 +1972,25 @@ fn range_of_string_substring_non_char_boundary_no_panic() {
     ));
     let _ = arr.range_of(&"0:1,0:1".parse::<NumericRange>().unwrap());
 }
+
+/// C5 (multi-AI cross-check): Part 4 §7.27 "All dimensions shall be specified for a NumericRange to be
+/// valid." A single Range that specifies fewer dimensions than a multi-dimensional array's rank must be
+/// rejected with Bad_IndexRangeNoData (valid syntax), not flattened into a 1-D slice of the backing vec.
+#[test]
+fn range_of_multidim_single_range_fewer_dims_is_nodata() {
+    let v = multidim_i32(&[0, 1, 2, 3, 4, 5, 6, 7, 8], &[3, 3]);
+    assert_eq!(
+        v.range_of(&nr("0:1")).unwrap_err(),
+        StatusCode::BadIndexRangeNoData
+    );
+}
+
+/// C5: likewise a single Index against a multi-dimensional array does not specify all dimensions.
+#[test]
+fn range_of_multidim_single_index_fewer_dims_is_nodata() {
+    let v = multidim_i32(&[0, 1, 2, 3, 4, 5, 6, 7, 8], &[3, 3]);
+    assert_eq!(
+        v.range_of(&nr("1")).unwrap_err(),
+        StatusCode::BadIndexRangeNoData
+    );
+}

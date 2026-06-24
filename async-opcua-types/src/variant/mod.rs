@@ -1788,6 +1788,11 @@ impl Variant {
                 match self {
                     Variant::String(_) | Variant::ByteString(_) => self.substring(idx, idx),
                     Variant::Array(array) => {
+                        // Part 4 §7.27: all dimensions must be specified — a single index cannot
+                        // address a multi-dimensional array.
+                        if array.dimensions.as_ref().is_some_and(|d| d.len() > 1) {
+                            return Err(StatusCode::BadIndexRangeNoData);
+                        }
                         // Get value at the index (or not)
                         let values = &array.values;
                         if let Some(v) = values.get(idx) {
@@ -1805,6 +1810,11 @@ impl Variant {
                 match self {
                     Variant::String(_) | Variant::ByteString(_) => self.substring(min, max),
                     Variant::Array(array) => {
+                        // Part 4 §7.27: all dimensions must be specified — a single range cannot
+                        // address a multi-dimensional array.
+                        if array.dimensions.as_ref().is_some_and(|d| d.len() > 1) {
+                            return Err(StatusCode::BadIndexRangeNoData);
+                        }
                         let values = &array.values;
                         if min >= values.len() {
                             // Min must be in range

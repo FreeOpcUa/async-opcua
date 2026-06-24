@@ -277,6 +277,154 @@ async fn wrong_secure_channel_id_is_rejected() {
     .await;
 }
 
+/// B3 proxy: forward everything, but the first time we see an *intermediate* chunk (chunk-type byte
+/// `C` at index 3) from client to server, forward it twice — a duplicated reassembly chunk carrying a
+/// now-stale sequence number. Handshake messages are single (`F`) chunks, so they pass through and the
+/// session establishes; only a large multi-chunk request trips the attack.
+async fn start_dup_chunk_proxy(server_addr: SocketAddr) -> SocketAddr {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let proxy_addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((client_conn, _)) = listener.accept().await {
+            let Ok(server_conn) = TcpStream::connect(server_addr).await else {
+                continue;
+            };
+            tokio::spawn(async move {
+                let (mut client_r, mut client_w) = client_conn.into_split();
+                let (mut server_r, mut server_w) = server_conn.into_split();
+                tokio::spawn(async move {
+                    let _ = tokio::io::copy(&mut server_r, &mut client_w).await;
+                });
+                let mut duped = false;
+                while let Ok(msg) = read_ua_message(&mut client_r).await {
+                    let is_intermediate_chunk = msg.len() >= 4 && msg[3] == b'C';
+                    if is_intermediate_chunk && !duped {
+                        duped = true;
+                        if server_w.write_all(&msg).await.is_err() {
+                            break;
+                        }
+                        // The duplicate: same bytes, same (now consumed) sequence number.
+                        let _ = server_w.write_all(&msg).await;
+                        continue;
+                    }
+                    if server_w.write_all(&msg).await.is_err() {
+                        break;
+                    }
+                }
+            });
+        }
+    });
+    proxy_addr
+}
+
+/// B3 (multi-AI cross-check): a duplicated chunk in a multi-chunk message's reassembly must be rejected
+/// (stale sequence number) and tear the channel down; the server must survive.
+#[tokio::test]
+async fn duplicated_reassembly_chunk_is_rejected_and_server_survives() {
+    // A client forced to chunk at the 8192-byte minimum, so a large request spans multiple chunks.
+    let client = crate::utils::default_client(0, true).max_chunk_size(8192);
+    let mut tester = Tester::new_custom_client(test_server(), client).await;
+    let proxy_addr = start_dup_chunk_proxy(tester.addr).await;
+    let ep = proxied_endpoint(
+        &tester,
+        proxy_addr,
+        SecurityPolicy::None,
+        MessageSecurityMode::None,
+    )
+    .await;
+
+    let (session, lp) = tester
+        .client
+        .connect_to_endpoint_directly(ep, IdentityToken::Anonymous)
+        .unwrap();
+    let _h = lp.spawn();
+    // Handshake is single-chunk, so the session establishes normally.
+    tokio::time::timeout(Duration::from_secs(10), session.wait_for_connection())
+        .await
+        .expect("handshake (single-chunk) must complete through the proxy");
+
+    // A Read whose single node id is a ~30 KB string forces the request body across several 8192-byte
+    // chunks; the proxy duplicates the first intermediate one.
+    let big_id = NodeId::new(2, "X".repeat(30_000));
+    let res = tokio::time::timeout(
+        Duration::from_secs(10),
+        session.read(&[ReadValueId::from(big_id)], TimestampsToReturn::Both, 0.0),
+    )
+    .await
+    .expect("the poisoned read must not hang");
+    assert!(
+        res.is_err(),
+        "a duplicated reassembly chunk must not yield a successful read"
+    );
+
+    // The server must survive: a normal direct connection still works.
+    let (session, lp) = tester
+        .connect(
+            SecurityPolicy::None,
+            MessageSecurityMode::None,
+            IdentityToken::Anonymous,
+        )
+        .await
+        .unwrap();
+    lp.spawn();
+    tokio::time::timeout(Duration::from_secs(10), session.wait_for_connection())
+        .await
+        .unwrap();
+    read_service_level(&session).await.unwrap();
+}
+
+/// B5 (multi-AI cross-check): a slow-loris half-open handshake — TCP connections that connect but
+/// never finish sending a Hello (or dribble a partial one and stall) — must be timed out and closed
+/// by the server's `hello_timeout`, and must not exhaust or wedge it: a normal client still connects
+/// afterward.
+#[tokio::test]
+async fn half_open_handshakes_time_out_and_server_survives() {
+    // Short hello timeout so the test is fast; 1s is the minimum granularity (seconds).
+    let mut tester = Tester::new(test_server().hello_timeout(1), true).await;
+
+    // Open a batch of half-open connections: most send nothing, one dribbles a partial Hello prefix
+    // then stalls. The server must close every one of them on the hello timeout.
+    let mut conns = Vec::new();
+    for i in 0..16u8 {
+        let mut s = TcpStream::connect(tester.addr).await.unwrap();
+        if i == 0 {
+            // Dribble an incomplete (3-byte) message header, then stall — the classic slow-loris.
+            let _ = s.write_all(b"HEL").await;
+        }
+        conns.push(s);
+    }
+
+    // The server must close each one within the hello-timeout window. Drain to EOF (the server may
+    // emit a small error frame first); the timeout is the real assertion that it does not hang open.
+    for mut s in conns {
+        tokio::time::timeout(Duration::from_secs(5), async move {
+            let mut buf = [0u8; 64];
+            while let Ok(n) = s.read(&mut buf).await {
+                if n == 0 {
+                    break; // EOF — server closed the connection
+                }
+            }
+        })
+        .await
+        .expect("server must close a half-open connection within the hello timeout");
+    }
+
+    // The server survived the slow-loris: a normal direct connection still works.
+    let (session, lp) = tester
+        .connect(
+            SecurityPolicy::None,
+            MessageSecurityMode::None,
+            IdentityToken::Anonymous,
+        )
+        .await
+        .unwrap();
+    lp.spawn();
+    tokio::time::timeout(Duration::from_secs(10), session.wait_for_connection())
+        .await
+        .unwrap();
+    read_service_level(&session).await.unwrap();
+}
+
 /// An Abort chunk in place of a final service chunk must be absorbed without killing the server.
 /// Unlike the other attacks the server does not surface an error (it abandons the request and the
 /// client simply never establishes), so this only asserts the safety property that matters: the

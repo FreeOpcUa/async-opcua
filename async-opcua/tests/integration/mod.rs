@@ -9,6 +9,7 @@ mod datachange_overflow;
 mod discovery;
 #[cfg(feature = "ecc")]
 mod ecc;
+mod fx_spike;
 mod hardening;
 mod hda;
 mod legacy_crypto;

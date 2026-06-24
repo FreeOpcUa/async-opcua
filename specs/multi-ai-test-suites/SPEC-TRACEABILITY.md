@@ -75,7 +75,8 @@ Legend: ✅ interop-grounded · 🔵 self-grounded (clause-anchored) · 🟡 sel
 | Cert-chain validation (CRL + OCSP) | Part 4 §6.1.3 Table 100 | ✅ | crypto/cert_chain.rs (RFC 5280; OCSP good/revoked/forged fixtures) | open62541/node-opcua (trust/untrust) | ✅ |
 | ECC ephemeral/secret | Part 6 §6.8.2/3 | ✅ | crypto/ecc_* (RFC 5869/5903) | ecc.rs e2e | ✅ |
 | Identity tokens (user/pass, X509, ECC) | Part 4 §7.41/Table 179 | ✅ | crypto/authentication.rs, conformance, tier_a | all 3 (user/pass + fail) | ✅ |
-| PubSub UADP + security | Part 14 §7.2.4 | ✅ | pubsub.rs, crypto/pubsub_ctr.rs (RFC 3686) | **— (no independent stack)** | 🔵 |
+| PubSub UADP NetworkMessage | Part 14 §7.2.2.2.2 / §7.2.4.5.4 | ✅ | codec/uadp.rs (golden vector) | **open62541 decodes our fixture** (decode-uadp.c) | ✅ |
+| PubSub UADP + security | Part 14 §7.2.4 | ✅ | pubsub.rs, crypto/pubsub_ctr.rs (RFC 3686) | — (security layer self-grounded) | 🔵 |
 | Alarms & Conditions | Part 9 | ✅ | alarms.rs (happy + ack/confirm error paths incl. Bad_EventIdUnknown) | — | 🔵 |
 | Programs | Part 10 | ✅ | programs.rs (lifecycle + invalid transitions) | — | 🔵 |
 | Transport: reverse connect | Part 6 §7.1.3 | ✅ | reverse_connect.rs | — | 🟡 happy-only |
@@ -127,8 +128,11 @@ Self-only today; harness stacks that support the service can cross-check them:
 Highest near-term value: SetTriggering.
 
 ### D. Known hard gaps (need infrastructure, document only)
-- **PubSub end-to-end interop** — no independent PubSub stack wired (would need .NET/open62541 pubsub).
-  Stays self-grounded (UADP + AES-CTR are RFC/clause-anchored). 
+- **PubSub UADP NetworkMessage interop** — DONE: open62541 (with UA_ENABLE_PUBSUB) decodes an
+  async-opcua-produced UADP NetworkMessage fixture (open62541/decode-uadp.c, run in CI). This caught
+  three real Part-14 wire-format bugs (PublisherId type belongs in ExtendedFlags1 not an inline byte;
+  DataSetWriterId must not be repeated in the DataSetMessage body; Status is UInt16 not UInt32).
+  The secured-message layer (AES-CTR) is still self-grounded (RFC 3686).
 - **FindServersOnNetwork** — needs mDNS; deferred.
 - **OCSP revocation**, **legacy validate_chain=false** — deferred from feature 013.
 

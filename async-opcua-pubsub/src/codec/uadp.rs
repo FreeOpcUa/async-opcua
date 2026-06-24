@@ -10,6 +10,7 @@ const UADP_FLAG_GROUP_HEADER: u8 = 0x20;
 const UADP_FLAG_PAYLOAD_HEADER: u8 = 0x40;
 const UADP_FLAG_EXTENDED_FLAGS1: u8 = 0x80;
 const UADP_EXTENDED_FLAGS1_SECURITY_HEADER: u8 = 0x10;
+const UADP_EXTENDED_FLAGS1_PUBLISHER_ID_TYPE: u8 = 0x07; // bits 0-2: PublisherId DataType
 const SECURITY_FLAG_ENCRYPTED: u8 = 0x02;
 const SECURITY_FLAG_FOOTER: u8 = 0x04;
 const SECURITY_FLAGS_RESERVED: u8 = 0xF0;
@@ -32,63 +33,63 @@ pub enum PublisherId {
     String(String),
 }
 
-impl BinaryEncodable for PublisherId {
-    fn byte_len(&self, ctx: &Context<'_>) -> usize {
+impl PublisherId {
+    /// PublisherId DataType code carried in ExtendedFlags1 bits 0-2 (Part 14 §7.2.2.2.2):
+    /// 000 Byte, 001 UInt16, 010 UInt32, 011 UInt64, 100 String. The spec encodes the type in
+    /// the header flags, not inline before the value; `None` has no value and the code is unused.
+    fn ext1_type_bits(&self) -> u8 {
         match self {
-            PublisherId::None => 1,
-            PublisherId::Byte(v) => 1 + v.byte_len(ctx),
-            PublisherId::UInt16(v) => 1 + v.byte_len(ctx),
-            PublisherId::UInt32(v) => 1 + v.byte_len(ctx),
-            PublisherId::UInt64(v) => 1 + v.byte_len(ctx),
-            PublisherId::String(v) => {
-                let ua_str = UAString::from(v.clone());
-                1 + ua_str.byte_len(ctx)
-            }
+            PublisherId::None | PublisherId::Byte(_) => 0b000,
+            PublisherId::UInt16(_) => 0b001,
+            PublisherId::UInt32(_) => 0b010,
+            PublisherId::UInt64(_) => 0b011,
+            PublisherId::String(_) => 0b100,
         }
     }
 
-    fn encode<S: Write + ?Sized>(&self, stream: &mut S, ctx: &Context<'_>) -> EncodingResult<()> {
+    /// Byte length of the PublisherId value only (the type lives in ExtendedFlags1, not the body).
+    fn value_byte_len(&self, ctx: &Context<'_>) -> usize {
         match self {
-            PublisherId::None => 0u8.encode(stream, ctx),
-            PublisherId::Byte(v) => {
-                1u8.encode(stream, ctx)?;
-                v.encode(stream, ctx)
-            }
-            PublisherId::UInt16(v) => {
-                2u8.encode(stream, ctx)?;
-                v.encode(stream, ctx)
-            }
-            PublisherId::UInt32(v) => {
-                3u8.encode(stream, ctx)?;
-                v.encode(stream, ctx)
-            }
-            PublisherId::UInt64(v) => {
-                4u8.encode(stream, ctx)?;
-                v.encode(stream, ctx)
-            }
-            PublisherId::String(v) => {
-                5u8.encode(stream, ctx)?;
-                let ua_str = UAString::from(v.clone());
-                ua_str.encode(stream, ctx)
-            }
+            PublisherId::None => 0,
+            PublisherId::Byte(v) => v.byte_len(ctx),
+            PublisherId::UInt16(v) => v.byte_len(ctx),
+            PublisherId::UInt32(v) => v.byte_len(ctx),
+            PublisherId::UInt64(v) => v.byte_len(ctx),
+            PublisherId::String(v) => UAString::from(v.clone()).byte_len(ctx),
         }
     }
-}
 
-impl BinaryDecodable for PublisherId {
-    fn decode<S: Read + ?Sized>(stream: &mut S, ctx: &Context<'_>) -> EncodingResult<Self> {
-        let ty = u8::decode(stream, ctx)?;
-        match ty {
-            0 => Ok(PublisherId::None),
-            1 => Ok(PublisherId::Byte(u8::decode(stream, ctx)?)),
-            2 => Ok(PublisherId::UInt16(u16::decode(stream, ctx)?)),
-            3 => Ok(PublisherId::UInt32(u32::decode(stream, ctx)?)),
-            4 => Ok(PublisherId::UInt64(u64::decode(stream, ctx)?)),
-            5 => {
-                let ua_str = UAString::decode(stream, ctx)?;
-                Ok(PublisherId::String(ua_str.to_string()))
-            }
-            _ => Err(Error::decoding("Invalid PublisherId type")),
+    /// Encode the PublisherId value only (no inline type byte; the type is in ExtendedFlags1).
+    fn encode_value<S: Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &Context<'_>,
+    ) -> EncodingResult<()> {
+        match self {
+            PublisherId::None => Ok(()),
+            PublisherId::Byte(v) => v.encode(stream, ctx),
+            PublisherId::UInt16(v) => v.encode(stream, ctx),
+            PublisherId::UInt32(v) => v.encode(stream, ctx),
+            PublisherId::UInt64(v) => v.encode(stream, ctx),
+            PublisherId::String(v) => UAString::from(v.clone()).encode(stream, ctx),
+        }
+    }
+
+    /// Decode a PublisherId value of the type given by ExtendedFlags1 bits 0-2.
+    fn decode_value<S: Read + ?Sized>(
+        type_bits: u8,
+        stream: &mut S,
+        ctx: &Context<'_>,
+    ) -> EncodingResult<Self> {
+        match type_bits {
+            0b000 => Ok(PublisherId::Byte(u8::decode(stream, ctx)?)),
+            0b001 => Ok(PublisherId::UInt16(u16::decode(stream, ctx)?)),
+            0b010 => Ok(PublisherId::UInt32(u32::decode(stream, ctx)?)),
+            0b011 => Ok(PublisherId::UInt64(u64::decode(stream, ctx)?)),
+            0b100 => Ok(PublisherId::String(
+                UAString::decode(stream, ctx)?.to_string(),
+            )),
+            _ => Err(Error::decoding("Reserved UADP PublisherId type")),
         }
     }
 }
@@ -180,15 +181,16 @@ impl BinaryDecodable for SecurityHeader {
 }
 
 impl BinaryEncodable for UadpDataSetMessage {
+    // The DataSetWriterId is carried only in the NetworkMessage PayloadHeader, never repeated in
+    // the DataSetMessage body, which begins with DataSetFlags1 (Part 14 §7.2.4.5.4, Table 162).
     fn byte_len(&self, ctx: &Context<'_>) -> usize {
-        let mut len = 2; // dataset_writer_id
-        len += 1; // flags1
+        let mut len = 1; // flags1
         len += 2; // sequence_number
         if self.timestamp.is_some() {
             len += 8; // DateTime ticks
         }
         if self.status.is_some() {
-            len += 4; // StatusCode bits
+            len += 2; // Status is UInt16 (the high 16 bits of the StatusCode)
         }
         len += 2; // field count
         for field in &self.fields {
@@ -198,8 +200,6 @@ impl BinaryEncodable for UadpDataSetMessage {
     }
 
     fn encode<S: Write + ?Sized>(&self, stream: &mut S, ctx: &Context<'_>) -> EncodingResult<()> {
-        self.dataset_writer_id.encode(stream, ctx)?;
-
         let mut flags1: u8 = 0x01; // message valid
         flags1 |= 0x08; // SequenceNumber enabled (always on in our implementation)
         if self.timestamp.is_some() {
@@ -216,7 +216,8 @@ impl BinaryEncodable for UadpDataSetMessage {
             timestamp.encode(stream, ctx)?;
         }
         if let Some(status) = self.status {
-            status.bits().encode(stream, ctx)?;
+            // Part 14 Table 162: the Status field is the high-order 16 bits of the StatusCode.
+            ((status.bits() >> 16) as u16).encode(stream, ctx)?;
         }
 
         let field_count = self.fields.len() as u16;
@@ -229,8 +230,10 @@ impl BinaryEncodable for UadpDataSetMessage {
 }
 
 impl BinaryDecodable for UadpDataSetMessage {
+    // The DataSetWriterId is not in the body (see encode); the caller fills it from the
+    // PayloadHeader. Until then it is left as 0.
     fn decode<S: Read + ?Sized>(stream: &mut S, ctx: &Context<'_>) -> EncodingResult<Self> {
-        let dataset_writer_id = u16::decode(stream, ctx)?;
+        let dataset_writer_id = 0;
         let flags1 = u8::decode(stream, ctx)?;
 
         let sequence_number = if (flags1 & 0x08) != 0 {
@@ -246,7 +249,8 @@ impl BinaryDecodable for UadpDataSetMessage {
         };
 
         let status = if (flags1 & 0x10) != 0 {
-            Some(StatusCode::from(u32::decode(stream, ctx)?))
+            // Part 14 Table 162: Status is the high-order 16 bits of the StatusCode.
+            Some(StatusCode::from((u16::decode(stream, ctx)? as u32) << 16))
         } else {
             None
         };
@@ -305,11 +309,13 @@ impl UadpNetworkMessage {
         security_header: Option<&SecurityHeader>,
     ) -> usize {
         let mut len = 1; // UADPFlags
-        if security_header.is_some() {
+                         // ExtendedFlags1 is present whenever any of its bits is set: a non-Byte PublisherId type
+                         // (bits 0-2) or the SecurityHeader (bit 4). Part 14 §7.2.2.2.2.
+        if self.extended_flags1(security_header.is_some()) != 0 {
             len += 1; // ExtendedFlags1
         }
         if self.publisher_id != PublisherId::None {
-            len += self.publisher_id.byte_len(ctx);
+            len += self.publisher_id.value_byte_len(ctx); // type is in ExtendedFlags1, not inline
         }
         len += 1; // group_flags
         len += 2; // writer_group_id
@@ -331,28 +337,43 @@ impl UadpNetworkMessage {
             .sum()
     }
 
+    /// ExtendedFlags1 byte for this message: PublisherId DataType in bits 0-2 and the SecurityHeader
+    /// flag in bit 4. Zero means ExtendedFlags1 is omitted entirely. Part 14 §7.2.2.2.2.
+    fn extended_flags1(&self, has_security_header: bool) -> u8 {
+        let mut ext1 = 0u8;
+        if self.publisher_id != PublisherId::None {
+            ext1 |= self.publisher_id.ext1_type_bits();
+        }
+        if has_security_header {
+            ext1 |= UADP_EXTENDED_FLAGS1_SECURITY_HEADER;
+        }
+        ext1
+    }
+
     pub(crate) fn encode_header_region<S: Write + ?Sized>(
         &self,
         stream: &mut S,
         ctx: &Context<'_>,
         security_header: Option<&SecurityHeader>,
     ) -> EncodingResult<()> {
+        let extended_flags1 = self.extended_flags1(security_header.is_some());
+
         let mut flags = UADP_VERSION;
         if self.publisher_id != PublisherId::None {
             flags |= UADP_FLAG_PUBLISHER_ID;
         }
         flags |= UADP_FLAG_GROUP_HEADER | UADP_FLAG_PAYLOAD_HEADER;
-        if security_header.is_some() {
+        if extended_flags1 != 0 {
             flags |= UADP_FLAG_EXTENDED_FLAGS1;
         }
         flags.encode(stream, ctx)?;
 
-        if security_header.is_some() {
-            UADP_EXTENDED_FLAGS1_SECURITY_HEADER.encode(stream, ctx)?;
+        if extended_flags1 != 0 {
+            extended_flags1.encode(stream, ctx)?;
         }
 
         if self.publisher_id != PublisherId::None {
-            self.publisher_id.encode(stream, ctx)?;
+            self.publisher_id.encode_value(stream, ctx)?;
         }
 
         0b0000_1111u8.encode(stream, ctx)?;
@@ -399,15 +420,21 @@ impl UadpNetworkMessage {
             return Err(Error::decoding("Unsupported UADP version"));
         }
 
-        let security_header_present = if (flags & UADP_FLAG_EXTENDED_FLAGS1) != 0 {
-            let extended_flags1 = u8::decode(stream, ctx)?;
-            (extended_flags1 & UADP_EXTENDED_FLAGS1_SECURITY_HEADER) != 0
+        // ExtendedFlags1 carries the PublisherId DataType (bits 0-2) and the SecurityHeader flag
+        // (bit 4); omitted means all-false, i.e. a Byte PublisherId and no SecurityHeader.
+        let extended_flags1 = if (flags & UADP_FLAG_EXTENDED_FLAGS1) != 0 {
+            u8::decode(stream, ctx)?
         } else {
-            false
+            0
         };
+        let security_header_present = (extended_flags1 & UADP_EXTENDED_FLAGS1_SECURITY_HEADER) != 0;
 
         let publisher_id = if (flags & UADP_FLAG_PUBLISHER_ID) != 0 {
-            PublisherId::decode(stream, ctx)?
+            PublisherId::decode_value(
+                extended_flags1 & UADP_EXTENDED_FLAGS1_PUBLISHER_ID_TYPE,
+                stream,
+                ctx,
+            )?
         } else {
             PublisherId::None
         };
@@ -482,8 +509,10 @@ impl UadpNetworkMessage {
         ctx: &Context<'_>,
     ) -> EncodingResult<Vec<UadpDataSetMessage>> {
         let mut dataset_messages = Vec::with_capacity(header.dataset_writer_ids.len());
-        for _ in &header.dataset_writer_ids {
-            dataset_messages.push(UadpDataSetMessage::decode(stream, ctx)?);
+        for &dataset_writer_id in &header.dataset_writer_ids {
+            let mut msg = UadpDataSetMessage::decode(stream, ctx)?;
+            msg.dataset_writer_id = dataset_writer_id; // carried in the PayloadHeader, not the body
+            dataset_messages.push(msg);
         }
         Ok(dataset_messages)
     }
@@ -559,6 +588,40 @@ mod tests {
         assert_eq!(
             msg.dataset_messages[0].fields,
             decoded.dataset_messages[0].fields
+        );
+    }
+
+    // Deterministic UADP NetworkMessage used as the cross-stack interop fixture: an independent
+    // C stack (open62541's internal UA_NetworkMessage_decodeBinary) decodes these exact bytes and
+    // recovers the same publisher/group/writer IDs and f64 value. Kept byte-stable (no timestamp,
+    // status, or DateTime::now) so the wire format is pinned. Part 14 §7.2.2 (UADP NetworkMessage).
+    // The committed fixture is samples/demo-server/interop/open62541/uadp-fixture.bin.
+    fn interop_golden_message() -> UadpNetworkMessage {
+        UadpNetworkMessage {
+            publisher_id: PublisherId::UInt16(2025),
+            writer_group_id: 7,
+            network_message_number: 0,
+            sequence_number: 1,
+            dataset_messages: vec![UadpDataSetMessage {
+                dataset_writer_id: 10,
+                sequence_number: 0,
+                timestamp: None,
+                // High-order 16 bits 0x8002 (BadInternalError) exercise the UInt16 Status field.
+                status: Some(StatusCode::BadInternalError),
+                fields: vec![Variant::from(72.5f64)],
+            }],
+        }
+    }
+
+    #[test]
+    fn interop_golden_uadp_vector_is_byte_stable() {
+        let ctx_owned = ContextOwned::default();
+        let ctx = ctx_owned.context();
+        let encoded = interop_golden_message().encode_to_vec(&ctx);
+        let hex: String = encoded.iter().map(|b| format!("{b:02x}")).collect();
+        assert_eq!(
+            hex, "f101e9070f07000000000000000100010a00190000028001000b0000000000205240",
+            "UADP wire format drifted; regenerate open62541/uadp-fixture.bin to match"
         );
     }
 

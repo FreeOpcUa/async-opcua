@@ -22,9 +22,22 @@ if [ ! -f "$here/build/open62541.c" ]; then
   echo "==> building open62541 (amalgamation + OpenSSL encryption)"
   cmake -S "$here/src" -B "$here/build" \
     -DUA_ENABLE_AMALGAMATION=ON -DUA_ENABLE_ENCRYPTION=OPENSSL \
-    -DUA_ENABLE_SUBSCRIPTIONS=ON -DUA_BUILD_EXAMPLES=OFF -DCMAKE_BUILD_TYPE=Release >/dev/null
+    -DUA_ENABLE_SUBSCRIPTIONS=ON -DUA_ENABLE_PUBSUB=ON \
+    -DUA_BUILD_EXAMPLES=OFF -DCMAKE_BUILD_TYPE=Release >/dev/null
   make -C "$here/build" -j"$(nproc)" >/dev/null
 fi
+
+# 1b. Cross-stack PubSub check: open62541's own decoder reads an async-opcua-produced UADP
+# NetworkMessage and confirms the publisher/group/writer IDs, the UInt16 Status and the payload
+# value (Part 14 §7.2.2.2.2 / §7.2.4.5.4). File-based, so no server is needed. The fixture is
+# byte-pinned by the Rust test interop_golden_uadp_vector_is_byte_stable.
+if [ ! -x "$here/decode-uadp" ] || [ "$here/decode-uadp.c" -nt "$here/decode-uadp" ]; then
+  echo "==> compiling open62541 UADP decoder"
+  gcc -O2 "$here/decode-uadp.c" "$here/build/open62541.c" -I"$here/build" \
+    -lssl -lcrypto -lpthread -o "$here/decode-uadp"
+fi
+echo "==> open62541 PubSub UADP decode check"
+"$here/decode-uadp" "$here/uadp-fixture.bin"
 
 # 2. Compile the conformance client against the amalgamation (if missing or stale).
 if [ ! -x "$here/client" ] || [ "$here/client.c" -nt "$here/client" ]; then

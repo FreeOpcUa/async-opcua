@@ -1,5 +1,5 @@
 //! C3 (multi-AI cross-check, `specs/multi-ai-test-suites/UNIFIED-PROTOCOL.md`): Sampling -> Reporting
-//! monitoring-mode transition queue semantics (Part 4 §5.12.1.3). A MonitoredItem created in Sampling
+//! monitoring-mode transition queue semantics (Part 4 §5.13.1.3). A MonitoredItem created in Sampling
 //! mode samples and queues values without reporting; transitioning it to Reporting must deliver the
 //! queued samples in order — the initial create-value followed by subsequent changes — with none lost
 //! and no duplicated/stale value. `set_monitoring_mode` does not clear the queue, so the accumulated

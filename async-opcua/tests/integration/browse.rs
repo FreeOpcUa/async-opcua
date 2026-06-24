@@ -732,7 +732,7 @@ async fn browse_invalid_reference_type_is_bad_reference_type_id_invalid() {
 
 #[tokio::test]
 async fn translate_browse_path_no_match() {
-    // Part 4 §5.8.4: a browse path that resolves to nothing returns Bad_NoMatch.
+    // Part 4 §5.9.4: a browse path that resolves to nothing returns Bad_NoMatch.
     let (_tester, _nm, session) = setup().await;
     let r = session
         .translate_browse_paths_to_node_ids(&[BrowsePath {
@@ -754,7 +754,7 @@ async fn translate_browse_path_no_match() {
 
 #[tokio::test]
 async fn browse_next_invalid_continuation_point() {
-    // Part 4 §5.8.3: a BrowseNext with an unrecognised continuation point returns
+    // Part 4 §5.9.3: a BrowseNext with an unrecognised continuation point returns
     // Bad_ContinuationPointInvalid (distinct from the empty -> BadNothingToDo case).
     let (_tester, _nm, session) = setup().await;
     let r = session

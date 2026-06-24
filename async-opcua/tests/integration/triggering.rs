@@ -1,5 +1,5 @@
 //! C1 (multi-AI cross-check, `specs/multi-ai-test-suites/UNIFIED-PROTOCOL.md`): SetTriggering positive
-//! delivery + link removal (Part 4 §5.12.1.6). A Reporting item, when it reports, flushes the queued
+//! delivery + link removal (Part 4 §5.13.1.6). A Reporting item, when it reports, flushes the queued
 //! notifications of linked Sampling items; removing the link stops that. Adapted from the Codex
 //! candidate against the existing server implementation (`triggered_items` / `set_triggering`).
 
@@ -41,7 +41,7 @@ fn int32_item(
 
 #[tokio::test]
 async fn set_triggering_delivers_queued_sampling_item() {
-    // Part 4 §5.12.5: a Reporting item can trigger a linked Sampling item, causing
+    // Part 4 §5.13.5: a Reporting item can trigger a linked Sampling item, causing
     // queued linked notifications to be sent when the trigger item reports.
     let (tester, nm, session) = setup().await;
 
@@ -158,7 +158,7 @@ async fn set_triggering_delivers_queued_sampling_item() {
 
 #[tokio::test]
 async fn set_triggering_remove_link_stops_triggered_delivery() {
-    // Part 4 §5.12.5: removing a trigger link must remove the server-side link,
+    // Part 4 §5.13.5: removing a trigger link must remove the server-side link,
     // not only the client's local subscription cache.
     let (tester, nm, session) = setup().await;
 

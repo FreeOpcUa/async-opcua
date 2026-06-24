@@ -146,7 +146,7 @@ fn insert_hist_node(nm: &SimpleNodeManager, id: &NodeId) {
 
 #[tokio::test]
 async fn history_read_unknown_node_is_rejected() {
-    // Part 11 / Part 4 §5.10.3: HistoryRead on a node that does not exist -> Bad_NodeIdUnknown.
+    // Part 11 / Part 4 §5.11.3: HistoryRead on a node that does not exist -> Bad_NodeIdUnknown.
     let (_tester, _nm, session, _backend) = setup_hda().await;
     let now = DateTime::now();
     let start = DateTime::from(now.ticks() - 10_000_000);
@@ -185,7 +185,7 @@ async fn history_read_without_history_access_is_denied() {
 
 #[tokio::test]
 async fn history_read_invalid_continuation_point_is_rejected() {
-    // Part 4 §5.10.3: an unrecognised history continuation point -> Bad_ContinuationPointInvalid.
+    // Part 4 §5.11.3: an unrecognised history continuation point -> Bad_ContinuationPointInvalid.
     let (_tester, nm, session, _backend) = setup_hda().await;
     let hist = NodeId::new(2, "HistVarCp");
     insert_hist_node(&nm, &hist);
@@ -208,7 +208,7 @@ async fn history_read_invalid_continuation_point_is_rejected() {
 
 #[tokio::test]
 async fn history_update_unknown_node_is_rejected() {
-    // Part 11 / Part 4 §5.10.5: HistoryUpdate on a node that does not exist -> Bad_NodeIdUnknown.
+    // Part 11 / Part 4 §5.11.5: HistoryUpdate on a node that does not exist -> Bad_NodeIdUnknown.
     let (_tester, _nm, session, _backend) = setup_hda().await;
     let now = DateTime::now();
     let mut dv = DataValue::value_only(Variant::from(1.0f64));

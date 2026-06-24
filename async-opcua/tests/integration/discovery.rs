@@ -1,5 +1,5 @@
 //! Feature 024 — RegisterServer (LDS registration) end-to-end via the existing client
-//! register_server() / find_servers(). Anchored to OPC UA Part 4 §5.4.5 / Part 12 §7.5.
+//! register_server() / find_servers(). Anchored to OPC UA Part 4 §5.5.5 / Part 12 §7.5.
 
 use super::utils::Tester;
 use opcua::types::{
@@ -149,7 +149,7 @@ async fn register_server2_mdns_config_unsupported_but_registers() {
     let endpoint = secured_endpoint(&tester).await;
 
     // RegisterServer2 with an mDNS discovery configuration: the per-config result is "not supported",
-    // but the server is still registered (Part 4 §5.4.6).
+    // but the server is still registered (Part 4 §5.5.6).
     let mdns = ExtensionObject::from_message(MdnsDiscoveryConfiguration {
         mdns_server_name: "registered-test".into(),
         server_capabilities: Some(vec!["DA".into()]),
@@ -209,7 +209,7 @@ async fn find_servers_on_network_is_unsupported() {
 
 #[tokio::test]
 async fn register_server_missing_name_or_url_is_rejected() {
-    // P4-DISC-01 — OPC UA Part 4 §5.4.5: an online RegisterServer with no ServerName must return
+    // P4-DISC-01 — OPC UA Part 4 §5.5.5: an online RegisterServer with no ServerName must return
     // Bad_ServerNameMissing, and with no discoveryUrl, Bad_DiscoveryUrlMissing. Registered over a
     // secured channel with a matching URI so it reaches the field validation (Part 12 §7.5).
     let tester = Tester::new_default_server(true).await;

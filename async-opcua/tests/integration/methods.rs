@@ -537,7 +537,7 @@ async fn failed_method_call_has_no_output_arguments() {
 
 #[tokio::test]
 async fn call_with_missing_arguments() {
-    // Part 4 §5.11.2: a Call that omits a declared input argument returns Bad_ArgumentsMissing.
+    // Part 4 §5.12.2: a Call that omits a declared input argument returns Bad_ArgumentsMissing.
     // The callback ignores its arguments, so the status reflects the server's own validation.
     let (_tester, nm, session) = setup().await;
 

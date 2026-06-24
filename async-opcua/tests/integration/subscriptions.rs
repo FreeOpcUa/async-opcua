@@ -1337,7 +1337,7 @@ async fn monitored_items_reject_invalid_timestamps_to_return() {
 
 #[tokio::test]
 async fn modify_unknown_subscription_is_rejected() {
-    // Part 4 §5.13.5: ModifySubscription on a subscription id the session does not own
+    // Part 4 §5.14.3: ModifySubscription on a subscription id the session does not own
     // returns Bad_SubscriptionIdInvalid. Uses the raw service builder so the request reaches
     // the server (the high-level helper short-circuits client-side).
     let (_tester, _nm, session) = setup().await;
@@ -1363,7 +1363,7 @@ async fn modify_unknown_subscription_is_rejected() {
 
 #[tokio::test]
 async fn delete_unknown_monitored_item_is_rejected() {
-    // Part 4 §5.12.6: DeleteMonitoredItems for a monitored item id that does not exist on the
+    // Part 4 §5.13.6: DeleteMonitoredItems for a monitored item id that does not exist on the
     // subscription returns Bad_MonitoredItemIdInvalid as the per-operation result.
     let (_tester, _nm, session) = setup().await;
 
@@ -1391,7 +1391,7 @@ async fn delete_unknown_monitored_item_is_rejected() {
 
 #[tokio::test]
 async fn create_monitored_item_on_unknown_node_is_rejected() {
-    // Part 4 §5.12.2: a monitored item on a non-existent node must be rejected with
+    // Part 4 §5.13.2: a monitored item on a non-existent node must be rejected with
     // Bad_NodeIdUnknown, not silently created as Good. A valid node still succeeds.
     let (tester, nm, session) = setup().await;
 
@@ -1519,7 +1519,7 @@ async fn sub_with_one_item(
 
 #[tokio::test]
 async fn set_monitoring_mode_unknown_item_is_rejected() {
-    // Part 4 §5.12.4: SetMonitoringMode for an unknown monitored item id -> Bad_MonitoredItemIdInvalid.
+    // Part 4 §5.13.4: SetMonitoringMode for an unknown monitored item id -> Bad_MonitoredItemIdInvalid.
     let (tester, nm, session) = setup().await;
     let (sub_id, item_id) = sub_with_one_item(&session, &nm, &tester).await;
 
@@ -1535,7 +1535,7 @@ async fn set_monitoring_mode_unknown_item_is_rejected() {
 
 #[tokio::test]
 async fn modify_unknown_monitored_item_is_rejected() {
-    // Part 4 §5.12.3: ModifyMonitoredItems for an unknown monitored item id -> Bad_MonitoredItemIdInvalid.
+    // Part 4 §5.13.3: ModifyMonitoredItems for an unknown monitored item id -> Bad_MonitoredItemIdInvalid.
     let (tester, nm, session) = setup().await;
     let (sub_id, item_id) = sub_with_one_item(&session, &nm, &tester).await;
 
@@ -1563,7 +1563,7 @@ async fn modify_unknown_monitored_item_is_rejected() {
 
 #[tokio::test]
 async fn subscription_lifetime_expiry_sends_status_change() {
-    // Part 4 §5.13.1.5: when no Publish requests arrive for max_lifetime_count publishing cycles
+    // Part 4 §5.14.1.2: when no Publish requests arrive for max_lifetime_count publishing cycles
     // the subscription's lifetime counter expires, the subscription is closed, and a
     // StatusChangeNotification with Bad_Timeout is delivered. End-to-end check of the state-machine
     // terminal transition (Closed27); the high-level client auto-publishes, so this drives the raw
@@ -1605,7 +1605,7 @@ async fn subscription_lifetime_expiry_sends_status_change() {
 
 #[tokio::test]
 async fn publishing_disabled_withholds_data_until_enabled() {
-    // Part 4 §5.13.1.4: with PublishingEnabled false the subscription does not deliver data
+    // Part 4 §5.14.1.2: with PublishingEnabled false the subscription does not deliver data
     // changes (a Publish is answered with a keep-alive); enabling publishing then delivers them.
     let (tester, nm, session) = setup().await;
 

@@ -1,5 +1,5 @@
 //! C2 (multi-AI cross-check, `specs/multi-ai-test-suites/UNIFIED-PROTOCOL.md`): DataChange queue
-//! overflow observed end-to-end via raw Publish (Part 4 §5.12.1.5). With discardOldest=TRUE and a full
+//! overflow observed end-to-end via raw Publish (Part 4 §5.13.1.5). With discardOldest=TRUE and a full
 //! queue, the oldest *retained* value carries the Overflow info bit. Publishing is disabled so the
 //! queue accumulates, and the client uses raw Publish so it does not drain before the overflow is
 //! observable.

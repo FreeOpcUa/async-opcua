@@ -22,7 +22,7 @@ use opcua::{
 // exercise its own impl, gate-independent. The new gated default (memory_mgr_impl.rs) is reached only by
 // in-memory managers that do NOT override — e.g. SimpleNodeManager. These tests stand up a
 // SimpleNodeManager server and drive AddNodes/DeleteNodes through the real service to verify the default
-// + the `clients_can_modify_address_space` gate, anchored to OPC UA Part 4 §5.7.
+// + the `clients_can_modify_address_space` gate, anchored to OPC UA Part 4 §5.8.
 
 const WRITABLE_NS: &str = "urn:writable-address-space-test";
 
@@ -87,7 +87,7 @@ fn object_item(parent: NodeId, ns: u16, name: &str, requested: ExpandedNodeId) -
 async fn simple_writable_add_browse_read_delete() {
     let (_tester, _nm, ns, parent, session) = setup_simple(true).await;
 
-    // AddNodes -> Good + assigned id (Part 4 §5.7). The new node id is client-specified in a namespace
+    // AddNodes -> Good + assigned id (Part 4 §5.8). The new node id is client-specified in a namespace
     // the manager owns (server-assigned/null ids require the manager to implement `handle_new_node`).
     let r = session
         .add_nodes(&[object_item(
@@ -669,7 +669,7 @@ async fn add_delete_reference_limits() {
 }
 
 /// C7 (multi-AI cross-check, `specs/multi-ai-test-suites/UNIFIED-PROTOCOL.md`): AddNodes processes a
-/// batch per-operation (Part 4 §5.7.2) — there is no all-or-nothing rollback. A mixed batch of
+/// batch per-operation (Part 4 §5.8.2) — there is no all-or-nothing rollback. A mixed batch of
 /// [good, bad-type, dependent-on-the-good] must: succeed the good one, reject the bad one with a
 /// per-node status (leaving no trace), and succeed the dependent one whose parent was added *earlier
 /// in the same batch*. The good/dependent nodes persist despite the bad sibling.

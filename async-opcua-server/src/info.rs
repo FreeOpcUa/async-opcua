@@ -219,7 +219,7 @@ impl ServerInfo {
             return StatusCode::Good;
         }
 
-        // Part 4 §5.4.5: an online registration must provide a ServerName and a DiscoveryUrl.
+        // Part 4 §5.5.5: an online registration must provide a ServerName and a DiscoveryUrl.
         if server.server_names.as_ref().is_none_or(|n| n.is_empty()) {
             return StatusCode::BadServerNameMissing;
         }
@@ -963,12 +963,12 @@ mod tests {
     use crate::{ServerBuilder, ANONYMOUS_USER_TOKEN_ID};
 
     // Feature 024 (Claude, independent): the LDS registry is bounded and rejects/validates crafted
-    // input without panic (FR-004), and online/offline registration semantics are correct (§5.4.5).
+    // input without panic (FR-004), and online/offline registration semantics are correct (§5.5.5).
     fn reg(uri: &str, is_online: bool) -> RegisteredServer {
         RegisteredServer {
             server_uri: uri.into(),
             product_uri: UAString::null(),
-            // ServerName + DiscoveryUrl are required for an online registration (Part 4 §5.4.5).
+            // ServerName + DiscoveryUrl are required for an online registration (Part 4 §5.5.5).
             server_names: Some(vec![opcua_types::LocalizedText::new("en", "Test")]),
             server_type: ApplicationType::Server,
             gateway_server_uri: UAString::null(),

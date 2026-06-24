@@ -145,7 +145,7 @@ pub fn validate_value_to_write(
     )
 }
 
-// Part 4 §5.10.4 / Part 3 §5.6: the written value's array-ness must match the node's ValueRank.
+// Part 4 §5.11.4 / Part 3 §5.6: the written value's array-ness must match the node's ValueRank.
 // Skipped when an index range is present, since that writes a sub-section (e.g. a scalar element
 // of an array) rather than replacing the whole value.
 fn validate_value_rank_to_write(
@@ -210,7 +210,7 @@ fn validate_value_data_type_to_write(
                         Err(StatusCode::BadTypeMismatch)
                     }
                 }
-                // Part 4 §5.10.4: a scalar value whose data type is neither the node's
+                // Part 4 §5.11.4: a scalar value whose data type is neither the node's
                 // data type nor a subtype of it is a type mismatch.
                 _ => Err(StatusCode::BadTypeMismatch),
             }

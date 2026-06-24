@@ -203,7 +203,9 @@ async function testUnsecuredServices() {
       await new Promise((res, rej) => {
         sub.on("started", res);
         sub.on("internal_error", rej);
-        setTimeout(() => rej(new Error("subscription start timeout")), 5000);
+        // Generous start timeout; resolves as soon as "started" fires, so this only adds slack on a
+        // loaded CI runner (see the data-change wait below).
+        setTimeout(() => rej(new Error("subscription start timeout")), 15000);
       }).catch((e) => check("Subscription started", false, e.message));
 
       const changes = await new Promise((res) => {
@@ -217,7 +219,10 @@ async function testUnsecuredServices() {
         item.on("changed", () => {
           if (++n >= 2) res(n);
         });
-        setTimeout(() => res(n), 4000);
+        // The promise resolves immediately once two changes arrive (~1-2 sampling intervals on the
+        // happy path), so this long fallback is pure margin for a slow/contended runner — it does not
+        // slow a passing run. The previous 4 s window flaked under CI load.
+        setTimeout(() => res(n), 20000);
       });
       check("Subscription delivers data-change notifications", changes >= 2, `got ${changes}`);
       await sub.terminate();

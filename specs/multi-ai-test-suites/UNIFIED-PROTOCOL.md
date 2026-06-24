@@ -26,7 +26,10 @@ itself (it confirms the coverage and avoids redundant work):
   half-open handshake (`adversarial.rs`, `hello_timeout`).
 - **Tier C** — in progress (one PR per item). C1 SetTriggering DONE (`triggering.rs`): positive
   delivery + link removal; confirmed the linked Sampling item's queue also holds its initial sample
-  (the stale-create-value question is C3's scope). C2–C7 remain.
+  (the stale-create-value question is C3's scope). C2 DataChange queue overflow DONE
+  (`datachange_overflow.rs`): oldest retained value carries the Overflow bit; no server bug — the
+  candidate's sampling_interval=0.0 coalesces writes (maps to "use subscription interval"), so the test
+  uses the 100 ms minimum + spaced writes. C3–C7 remain.
 
 ## Tier A — potential REAL BUGS (probe first; this is where the cross-check pays off)
 | # | Case | Source | Why high-signal |

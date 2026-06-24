@@ -191,41 +191,60 @@ async function testUnsecuredServices() {
         );
       }
 
-      // Subscribe to CurrentTime and require at least two data changes.
-      const sub = ClientSubscription.create(session, {
-        requestedPublishingInterval: 250,
-        requestedMaxKeepAliveCount: 10,
-        requestedLifetimeCount: 100,
-        maxNotificationsPerPublish: 10,
-        publishingEnabled: true,
-        priority: 1,
-      });
-      await new Promise((res, rej) => {
-        sub.on("started", res);
-        sub.on("internal_error", rej);
-        // Generous start timeout; resolves as soon as "started" fires, so this only adds slack on a
-        // loaded CI runner (see the data-change wait below).
-        setTimeout(() => rej(new Error("subscription start timeout")), 15000);
-      }).catch((e) => check("Subscription started", false, e.message));
+      // Subscription data-change delivery. Drive the changes from the client by writing distinct
+      // values to a writable variable rather than relying on CurrentTime: CurrentTime only ticks on
+      // the server's ~1 s ServerStatus update, whose cadence under CI load made this flake even with a
+      // 20 s window. A client-driven write is deterministic — each write is its own change to deliver.
+      if (nsIdx > 0) {
+        const subNodeId = `ns=${nsIdx};s=Int32`;
+        const sub = ClientSubscription.create(session, {
+          requestedPublishingInterval: 200,
+          requestedMaxKeepAliveCount: 10,
+          requestedLifetimeCount: 100,
+          maxNotificationsPerPublish: 10,
+          publishingEnabled: true,
+          priority: 1,
+        });
+        await new Promise((res, rej) => {
+          sub.on("started", res);
+          sub.on("internal_error", rej);
+          setTimeout(() => rej(new Error("subscription start timeout")), 15000);
+        }).catch((e) => check("Subscription started", false, e.message));
 
-      const changes = await new Promise((res) => {
-        let n = 0;
         const item = ClientMonitoredItem.create(
           sub,
-          { nodeId: CURRENT_TIME, attributeId: AttributeIds.Value },
-          { samplingInterval: 250, discardOldest: true, queueSize: 10 },
+          { nodeId: subNodeId, attributeId: AttributeIds.Value },
+          { samplingInterval: 100, discardOldest: true, queueSize: 10 },
           TimestampsToReturn.Both,
         );
-        item.on("changed", () => {
-          if (++n >= 2) res(n);
+        // Wait until the item is monitoring server-side so the writes below are captured.
+        await new Promise((res) => {
+          item.on("initialized", res);
+          setTimeout(res, 5000);
         });
-        // The promise resolves immediately once two changes arrive (~1-2 sampling intervals on the
-        // happy path), so this long fallback is pure margin for a slow/contended runner — it does not
-        // slow a passing run. The previous 4 s window flaked under CI load.
-        setTimeout(() => res(n), 20000);
-      });
-      check("Subscription delivers data-change notifications", changes >= 2, `got ${changes}`);
-      await sub.terminate();
+
+        const changes = await new Promise((res) => {
+          let n = 0;
+          item.on("changed", () => {
+            if (++n >= 2) res(n);
+          });
+          // Write distinct values spaced beyond the sampling interval; each is a separate data change.
+          (async () => {
+            for (let v = 1; v <= 5; v++) {
+              await session.write({
+                nodeId: subNodeId,
+                attributeId: AttributeIds.Value,
+                value: { value: { dataType: DataType.Int32, value: v } },
+              });
+              await new Promise((r) => setTimeout(r, 300));
+            }
+            // Fallback once the writes are done; resolves early when two changes have arrived.
+            setTimeout(() => res(n), 5000);
+          })();
+        });
+        check("Subscription delivers data-change notifications", changes >= 2, `got ${changes}`);
+        await sub.terminate();
+      }
     },
   );
 }

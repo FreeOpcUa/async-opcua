@@ -132,3 +132,36 @@ use a free index); the FX/AC namespace resolves to global index 3 in this setup.
 info model (done by this spike) → C2C data exchange (production DataSetReader + AutomationComponent
 instance objects) → online connection management (`EstablishConnections`/Connection) → ControlGroups
 / Health / capabilities / PubSub security.
+
+## Probe 2 — FX ↔ PubSub mapping (deeper information pass)
+
+The first spike proved the *substrate* (nodeset loads, generic UADP publish works) but was shallow on
+the FX-specific data path. This probe inspected the FX `cm`/`data` nodesets + Part 81 §6.2.4 to answer
+"how does an FX Connection actually drive data?", and it changes the C2C sub-project scope.
+
+**Finding 1 — FX orchestrates standard Part 14 PubSub; it defines no new transport.** A Connection's
+`CommunicationLinks` (`PubSubCommunicationLinkConfigurationDataType`) carry `DataSetWriterRef` /
+`DataSetReaderRef` (`PubSubConfigurationRefDataType` — i.e. **references to PubSub configuration
+objects by NodeId**) plus expected Published/Subscribed `ConfigurationVersionDataType`. `ReserveCommunicationIds`
+hands out `DefaultPublisherId` / `WriterGroupIds` / `DataSetWriterIds`. So FX = a control layer that
+points two ACs' DataSetWriter/DataSetReader objects at each other.
+
+**Finding 2 — the real gap: async-opcua has NO Part 14 PubSub *information model*.** The PubSub engine
+is driven entirely by Rust `PubSubConnectionConfig` structs; there are no `PublishSubscribeType` /
+`PubSubConnectionType` / `WriterGroupType` / `DataSetWriterType` / `DataSetReaderType` /
+`PublishedDataSetType` **objects in the address space**. FX cannot reference PubSub config that does
+not exist as nodes. This — not "write a DataSetReader" — is the foundational C2C work.
+
+**Finding 3 — AC instance-building is not the hard part.** The generic address space already supports
+instantiating typed objects, so standing up an `AutomationComponent`/`FunctionalEntity` instance is
+routine. The hard part is the PubSub model + engine binding above.
+
+**Revised C2C "data exchange" decomposition (each: brainstorm → plan → codex implements / Claude validates):**
+1. **PubSub information model** — expose the Part 14 PubSub object model in the address space and bind
+   it bidirectionally to the existing `PubSubEngine` (address-space config drives the engine; runtime
+   state surfaces back). Prereq for everything FX-PubSub.
+2. **Production UADP `DataSetReader`** — a subscriber that binds incoming DataSetMessage fields into a
+   `SubscribedDataSet`/target variables (today the spike only raw-decodes bytes).
+3. **`ReserveCommunicationIds` + DataSet `ConfigurationVersion`** — ID reservation + version checks FX needs.
+4. **Then** online connection management (`fx.cm` `ConnectionManagerType` / `EstablishConnections`,
+   `NodeIdTranslation`) layers references on top of (1)–(3).

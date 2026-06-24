@@ -81,6 +81,20 @@ RUSTSEC-2023-0071) — irrelevant for `SecurityPolicy::None`/trusted-network dep
 endpoints on untrusted networks should keep the default. The misleading `categories = ["embedded"]`
 was also removed.
 
+**Note (2026-06-24):** `aws-lc-rs` is now the **accepted** default for consumers (it provides
+constant-time crypto, preferable for SignAndEncrypt endpoints), so the C-free path is an *option*,
+not a requirement. The pure-Rust path still works when wanted: `cargo build --target
+aarch64-unknown-linux-musl -p async-opcua --no-default-features --features client,ecc` cross-compiles
+C-free (pure `rsa`/`p256`/`p384`) — subject to the `rsa` non-constant-time caveat above.
+
+### 4.2b PubSub `lapin` pulled an unused `rustls`/`ring` TLS stack — ✅ FIXED (2026-06-24)
+Independent of the C-toolchain question, `async-opcua-pubsub` compiled a transport stack it never
+used: `lapin` (AMQP) shipped with default features on, dragging in `rustls` → `ring` (and a
+`rustls-webpki` with prior CVE history) even though the transport is **plaintext AMQP only**. Set
+`lapin = { default-features = false }` — the same hygiene fix already applied to `rumqttc` in that
+manifest — dropping `rustls`/`ring` entirely (`Cargo.lock` -285 lines, smaller binary, fewer CVE
+surfaces, faster builds). Still compiles; plaintext AMQP unchanged.
+
 ### 4.3 Per-chunk RX decrypt allocation (multi-core jitter) — ✅ FIXED (PR #19)
 `decrypt_chunk` allocated `vec![0u8; …]` for **every received secured chunk**, then dropped it. On a
 multi-core SBC this is the worst kind of churn: with `tokio`'s work-stealing the free can land on a

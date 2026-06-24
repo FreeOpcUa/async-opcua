@@ -11,8 +11,10 @@ Severity note: the one default worth fixing in **every** tier is
 
 ## 1. `micro` — Pi Zero W class (≤512 MB, 1–2 PLCs, isolated OT network)
 
-Build: `cargo build --profile embedded --no-default-features --features <server + non-aws-lc-rs crypto>`
-(see `docs/EMBEDDED_AUDIT_2026-06-18.md` §4.2 / `Cargo.toml` for the C-toolchain-free crypto feature).
+Build: `cargo build --profile embedded --no-default-features --features server,ecc`
+(turning off the default `aws-lc-rs` selects the C-toolchain-free pure-Rust `rsa` path — a fit for
+this tier's isolated `SecurityPolicy::None` endpoint; see `docs/EMBEDDED_AUDIT_2026-06-18.md` §4.2.
+Keep the default `aws-lc-rs` for secured endpoints — its RSA decrypt is constant-time).
 Runtime: `#[tokio::main(flavor = "current_thread")]`; system allocator (no jemalloc/mimalloc).
 Security: on a physically-isolated segment, expose only a `security_policy: None` endpoint to avoid
 the RSA-handshake CPU spiral on the ARMv6 core. Otherwise raise client handshake timeouts.

@@ -33,7 +33,10 @@ tokio-tungstenite = "0.21.0"
 tracing = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-lapin = "2.3.1"
+# default features disabled to drop the unused rustls TLS stack, which
+# transitively pulls ring. This transport uses plaintext AMQP only; re-enable
+# a TLS feature if AMQP-over-TLS is wired up.
+lapin = { version = "2.3.1", default-features = false }
 # default features disabled to drop the unused rustls TLS stack, which pulls a
 # vulnerable rustls-webpki 0.102.8 (GHSA-82j2-j2ch-gfr8, CRL-parse DoS). This
 # transport uses plaintext MQTT only; re-add "use-rustls" if TLS is wired up.

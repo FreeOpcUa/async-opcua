@@ -508,6 +508,7 @@ name = "async-opcua-demo-server"
 version = "0.13.0"
 dependencies = [
  "async-opcua",
+ "async-opcua-history-sqlite",
  "chrono",
  "log",
  "log4rs",

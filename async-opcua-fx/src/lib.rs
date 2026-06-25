@@ -9,6 +9,7 @@ pub mod methods;
 pub mod node_identifier;
 pub mod portable_node_identifier;
 pub mod pub_sub_connection_endpoint_mode_enum;
+pub mod translation;
 
 pub use connection_endpoint_definition_data_type::ConnectionEndpointDefinitionDataType;
 pub use establish::{
@@ -24,6 +25,7 @@ pub use methods::{
 pub use node_identifier::NodeIdentifier;
 pub use portable_node_identifier::PortableNodeIdentifier;
 pub use pub_sub_connection_endpoint_mode_enum::PubSubConnectionEndpointModeEnum;
+pub use translation::{resolve_portable_node, translate, translate_to_node_id};
 
 const FX_CM_NAMESPACE: &str = "http://opcfoundation.org/UA/FX/CM/";
 const FX_DATA_NAMESPACE: &str = "http://opcfoundation.org/UA/FX/Data/";

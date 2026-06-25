@@ -1,5 +1,7 @@
 //! Pure OPC UA FX EstablishConnections/CloseConnections command dispatch core.
 
+use std::{fmt, sync::Arc};
+
 use opcua_pubsub::{
     ConnectionManager, DataSetReaderConfig, DataSetWriterConfig, IdReservation, MessageEncoding,
     PubSubConnectionConfig, PublishedDataSetConfig, ReaderGroupConfig, WriterGroupConfig,
@@ -7,7 +9,7 @@ use opcua_pubsub::{
 use opcua_types::{ConfigurationVersionDataType, NodeId, StatusCode, UAString, Variant};
 
 use crate::{
-    AssetVerificationDataType, AssetVerificationResultDataType,
+    AssetVerificationDataType, AssetVerificationResultDataType, AssetVerificationResultEnum,
     ConnectionEndpointConfigurationDataType, ConnectionEndpointConfigurationResultDataType,
     FxCommandMask, NodeIdValuePair, PubSubCommunicationConfigurationDataType,
     PubSubCommunicationConfigurationResultDataType, PubSubReserveCommunicationIds2DataType,
@@ -26,14 +28,48 @@ const COMMANDS_IN_SPEC_ORDER: [FxCommandMask; 9] = [
     FxCommandMask::EnableCommunicationCmd,
 ];
 
+/// Address-space backed verifier for OPC UA FX verification commands.
+pub trait FxVerifier: Send + Sync {
+    /// Execute `IAssetRevisionType.VerifyAsset` for an asset verification request.
+    fn verify_asset(&self, request: &AssetVerificationDataType) -> AssetVerificationResultDataType;
+
+    /// Execute `FunctionalEntityType.Verify` for a connection endpoint configuration.
+    fn verify_functional_entity(
+        &self,
+        endpoint: &ConnectionEndpointConfigurationDataType,
+    ) -> opcua_types::StatusCode;
+}
+
 /// Pure in-memory FX connection state used by command dispatch.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct FxConnectionState {
     /// Current PubSub connection configurations.
     pub connections: Vec<PubSubConnectionConfig>,
     reservation: IdReservation,
     manager: ConnectionManager,
     endpoints: Vec<EstablishedEndpoint>,
+    verifier: Option<Arc<dyn FxVerifier>>,
+}
+
+struct VerifierDebug(bool);
+
+impl fmt::Debug for VerifierDebug {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(if self.0 { "<set>" } else { "<unset>" })
+    }
+}
+
+impl fmt::Debug for FxConnectionState {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("FxConnectionState")
+            .field("connections", &self.connections)
+            .field("reservation", &self.reservation)
+            .field("manager", &self.manager)
+            .field("endpoints", &self.endpoints)
+            .field("verifier", &VerifierDebug(self.verifier.is_some()))
+            .finish()
+    }
 }
 
 /// Created ConnectionEndpoint state tracked by the pure dispatch layer.
@@ -94,6 +130,11 @@ impl FxConnectionState {
     pub fn endpoints(&self) -> &[EstablishedEndpoint] {
         &self.endpoints
     }
+
+    /// Install the address-space verifier used by FX verification commands.
+    pub fn set_verifier(&mut self, verifier: Arc<dyn FxVerifier>) {
+        self.verifier = Some(verifier);
+    }
 }
 
 /// Process a pure EstablishConnections command bundle.
@@ -115,13 +156,9 @@ pub fn process_establish_connections(
         }
 
         let command_result = if command == FxCommandMask::VerifyAssetCmd {
-            unsupported_asset_verification(asset_verifications, &mut results)
+            verify_assets(state, asset_verifications, &mut results)
         } else if command == FxCommandMask::VerifyFunctionalEntityCmd {
-            unsupported_endpoint_command(
-                endpoint_configs,
-                &mut results,
-                EndpointResultField::Verification,
-            )
+            verify_functional_entities(state, endpoint_configs, &mut results)
         } else if command == FxCommandMask::CreateConnectionEndpointCmd {
             create_connection_endpoints(state, endpoint_configs, &mut results)
         } else if command == FxCommandMask::EstablishControlCmd {
@@ -167,16 +204,96 @@ pub fn process_close_connections(
         .collect()
 }
 
-fn unsupported_asset_verification(
+fn verify_assets(
+    state: &FxConnectionState,
     asset_verifications: &[AssetVerificationDataType],
     results: &mut EstablishResults,
 ) -> Result<(), StatusCode> {
-    // ponytail: filled by FX pieces 2b/3/4.
-    let count = result_count(asset_verifications.len());
-    results
-        .asset_verification_results
-        .extend((0..count).map(|_| asset_verification_result(StatusCode::BadNotSupported)));
-    Err(StatusCode::BadNotSupported)
+    let Some(verifier) = state.verifier.clone() else {
+        // ponytail: server operators must call FxConnectionState::set_verifier
+        // to wire address-space backed VerifyAsset calls.
+        results.asset_verification_results.extend(
+            asset_verifications
+                .iter()
+                .map(|_| asset_verification_result(StatusCode::BadNotSupported)),
+        );
+        return Err(StatusCode::BadNotSupported);
+    };
+
+    for request in asset_verifications {
+        let result = verifier.verify_asset(request);
+        let abort_status = asset_verification_abort_status(request, &result);
+        results.asset_verification_results.push(result);
+
+        if let Some(status) = abort_status {
+            return Err(status);
+        }
+    }
+
+    Ok(())
+}
+
+fn asset_verification_abort_status(
+    request: &AssetVerificationDataType,
+    result: &AssetVerificationResultDataType,
+) -> Option<StatusCode> {
+    if result.verification_status.is_bad() {
+        Some(result.verification_status)
+    } else if request.expected_verification_result == AssetVerificationResultEnum::Match
+        && result.verification_result != AssetVerificationResultEnum::Match
+    {
+        Some(StatusCode::Uncertain)
+    } else {
+        None
+    }
+}
+
+fn verify_functional_entities(
+    state: &FxConnectionState,
+    endpoint_configs: &[ConnectionEndpointConfigurationDataType],
+    results: &mut EstablishResults,
+) -> Result<(), StatusCode> {
+    let Some(verifier) = state.verifier.clone() else {
+        // ponytail: server operators must call FxConnectionState::set_verifier
+        // to wire address-space backed FunctionalEntity Verify calls.
+        for endpoint_config in endpoint_configs
+            .iter()
+            .filter(|endpoint_config| has_expected_verification_variables(endpoint_config))
+        {
+            let mut result = endpoint_result_with_status(
+                StatusCode::BadNotSupported,
+                EndpointResultField::Verification,
+            );
+            result.connection_endpoint_id = endpoint_config.connection_endpoint_node_id();
+            results.connection_endpoint_results.push(result);
+        }
+        return Err(StatusCode::BadNotSupported);
+    };
+
+    for endpoint_config in endpoint_configs
+        .iter()
+        .filter(|endpoint_config| has_expected_verification_variables(endpoint_config))
+    {
+        let status = verifier.verify_functional_entity(endpoint_config);
+        let mut result = endpoint_result_with_status(status, EndpointResultField::Verification);
+        result.connection_endpoint_id = endpoint_config.connection_endpoint_node_id();
+        results.connection_endpoint_results.push(result);
+
+        if status.is_bad() {
+            return Err(status);
+        }
+    }
+
+    Ok(())
+}
+
+fn has_expected_verification_variables(
+    endpoint_config: &ConnectionEndpointConfigurationDataType,
+) -> bool {
+    endpoint_config
+        .expected_verification_variables
+        .as_ref()
+        .is_some_and(|variables| !variables.is_empty())
 }
 
 #[derive(Debug, Copy, Clone)]

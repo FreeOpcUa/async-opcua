@@ -9,7 +9,7 @@ pub mod pub_sub_connection_endpoint_mode_enum;
 pub use connection_endpoint_definition_data_type::ConnectionEndpointDefinitionDataType;
 pub use establish::{
     process_close_connections, process_establish_connections, EstablishResults,
-    EstablishedEndpoint, FxConnectionState,
+    EstablishedEndpoint, FxConnectionState, FxVerifier,
 };
 pub use generated::types::*;
 pub use methods::{

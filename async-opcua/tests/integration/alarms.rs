@@ -20,7 +20,7 @@ use opcua_client::alarms::client::{get_alarm_event_select_clauses, parse_alarm_e
 use opcua_core::events::AlarmEvent;
 use opcua_server::alarms::{
     register_condition_methods, ConditionRegistry, DiscreteAlarm, DiscreteAlarmKind, LimitAlarm,
-    LimitConfig, LimitDef, LimitMode,
+    LimitConfig, LimitDef, LimitMode, ShelvingState,
 };
 use opcua_server::namespace::{
     register_alarm_condition, register_discrete_alarm, register_limit_alarm,
@@ -1160,4 +1160,114 @@ async fn offnormal_alarm_activates_off_normal_and_acks() {
     drive_discrete(&alarm, &nm, &tester, Variant::Boolean(false));
     let e = recv_alarm(&mut events).await;
     assert!(!e.active_state, "value back to normal clears the alarm");
+}
+
+// ---------------------------------------------------------------------------
+// AC2: ShelvedStateMachine — operator shelving via Call methods, and the
+// SuppressedOrShelved gating flag (Part 9 §5.8.17 / §5.8.2).
+// ---------------------------------------------------------------------------
+
+async fn call_shelve(
+    session: &opcua_client::Session,
+    shelving_id: &NodeId,
+    method: MethodId,
+    args: Option<Vec<Variant>>,
+) -> StatusCode {
+    session
+        .call_one(CallMethodRequest {
+            object_id: shelving_id.clone(),
+            method_id: method.into(),
+            input_arguments: args,
+        })
+        .await
+        .unwrap()
+        .status_code
+}
+
+#[tokio::test]
+async fn shelving_transitions_and_suppressed_or_shelved() {
+    let (tester, nm, session) = setup_alarms().await;
+    let core_nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<CoreNodeManager>()
+        .expect("CoreNodeManager not found");
+    let source = make_event_source(&nm, "Dev");
+    let sm = register_alarm_condition(nm.address_space(), &nm, "Dev", "Temp", source, "Temp alarm");
+    let registry = ConditionRegistry::new();
+    registry.register(sm.clone());
+    register_condition_methods(&core_nm, registry, nm.address_space().clone());
+    let shelving_id = sm.shelving_state_id.clone();
+
+    let state = |sm: &opcua_server::alarms::ConditionStateMachine| {
+        let space = nm.address_space().read();
+        (
+            sm.get_shelving_state(&space),
+            sm.get_suppressed_or_shelved(&space),
+        )
+    };
+
+    // Initially Unshelved; Unshelve is invalid -> BadConditionNotShelved.
+    assert_eq!(state(&sm), (ShelvingState::Unshelved, false));
+    assert_eq!(
+        call_shelve(
+            &session,
+            &shelving_id,
+            MethodId::ShelvedStateMachineType_Unshelve,
+            None
+        )
+        .await,
+        StatusCode::BadConditionNotShelved
+    );
+
+    // OneShotShelve -> Good; state OneShotShelved; SuppressedOrShelved = true.
+    assert_eq!(
+        call_shelve(
+            &session,
+            &shelving_id,
+            MethodId::ShelvedStateMachineType_OneShotShelve,
+            None
+        )
+        .await,
+        StatusCode::Good
+    );
+    assert_eq!(state(&sm), (ShelvingState::OneShotShelved, true));
+
+    // OneShotShelve again -> BadConditionAlreadyShelved.
+    assert_eq!(
+        call_shelve(
+            &session,
+            &shelving_id,
+            MethodId::ShelvedStateMachineType_OneShotShelve,
+            None
+        )
+        .await,
+        StatusCode::BadConditionAlreadyShelved
+    );
+
+    // TimedShelve with a valid duration -> Good; state TimedShelved.
+    assert_eq!(
+        call_shelve(
+            &session,
+            &shelving_id,
+            MethodId::ShelvedStateMachineType_TimedShelve,
+            Some(vec![Variant::Double(5_000.0)]),
+        )
+        .await,
+        StatusCode::Good
+    );
+    assert_eq!(state(&sm).0, ShelvingState::TimedShelved);
+
+    // Unshelve -> Good; back to Unshelved; SuppressedOrShelved clears.
+    assert_eq!(
+        call_shelve(
+            &session,
+            &shelving_id,
+            MethodId::ShelvedStateMachineType_Unshelve,
+            None
+        )
+        .await,
+        StatusCode::Good
+    );
+    assert_eq!(state(&sm), (ShelvingState::Unshelved, false));
 }

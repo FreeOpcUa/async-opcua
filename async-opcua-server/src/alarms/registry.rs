@@ -39,6 +39,19 @@ impl ConditionRegistry {
         self.conditions.read().get(condition_id).cloned()
     }
 
+    /// Look up a condition by its ShelvingState object id (shelve methods target that object).
+    pub fn get_by_shelving_state(
+        &self,
+        shelving_state_id: &NodeId,
+    ) -> Option<ConditionStateMachine> {
+        // ponytail: add a per-shelving-state-id index if condition registries ever grow large.
+        self.conditions
+            .read()
+            .values()
+            .find(|condition| condition.shelving_state_id == *shelving_state_id)
+            .cloned()
+    }
+
     /// Returns registered conditions whose Retain property currently reads true.
     pub fn iter_retained(&self, address_space: &AddressSpace) -> Vec<ConditionStateMachine> {
         self.conditions

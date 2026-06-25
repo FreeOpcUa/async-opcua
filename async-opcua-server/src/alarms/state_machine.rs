@@ -3,8 +3,29 @@
 
 use crate::address_space::{AddressSpace, ObjectBuilder, VariableBuilder};
 use opcua_nodes::NodeType;
-use opcua_types::{LocalizedText, NodeId, Variant};
+use opcua_types::{DataTypeId, LocalizedText, NodeId, StatusCode, VariableTypeId, Variant};
 use std::sync::{Arc, Mutex};
+
+/// Current state of an AlarmCondition ShelvedStateMachineType instance.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShelvingState {
+    /// Alarm is not shelved.
+    Unshelved,
+    /// Alarm is shelved until it next becomes inactive.
+    OneShotShelved,
+    /// Alarm is shelved until its timer expires or it is explicitly unshelved.
+    TimedShelved,
+}
+
+impl ShelvingState {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Unshelved => "Unshelved",
+            Self::OneShotShelved => "OneShotShelved",
+            Self::TimedShelved => "TimedShelved",
+        }
+    }
+}
 
 /// Manages an OPC-UA Alarm Condition instance and its state variables.
 #[derive(Debug, Clone)]
@@ -29,6 +50,18 @@ pub struct ConditionStateMachine {
     pub message_id: NodeId,
     /// NodeId of the Retain variable.
     pub retain_id: NodeId,
+    /// NodeId of the SuppressedState variable.
+    pub suppressed_state_id: NodeId,
+    /// NodeId of the OutOfServiceState variable.
+    pub out_of_service_state_id: NodeId,
+    /// NodeId of the SuppressedOrShelved variable.
+    pub suppressed_or_shelved_id: NodeId,
+    /// NodeId of the ShelvingState object.
+    pub shelving_state_id: NodeId,
+    /// NodeId of the ShelvingState.CurrentState variable.
+    pub shelving_current_state_id: NodeId,
+    /// NodeId of the ShelvingState.UnshelveTime property.
+    pub unshelve_time_id: NodeId,
     /// EventId of the condition's current (most recent) reportable state, shared across clones.
     /// Acknowledge/Confirm validate the client-supplied EventId against this (Part 9 §5.5.2).
     current_event_id: Arc<Mutex<Vec<u8>>>,
@@ -54,6 +87,15 @@ impl ConditionStateMachine {
         let severity_id = NodeId::new(ns_idx, format!("{}_Severity", base_s));
         let message_id = NodeId::new(ns_idx, format!("{}_Message", base_s));
         let retain_id = NodeId::new(ns_idx, format!("{}_Retain", base_s));
+        let suppressed_state_id = NodeId::new(ns_idx, format!("{}_SuppressedState", base_s));
+        let out_of_service_state_id = NodeId::new(ns_idx, format!("{}_OutOfServiceState", base_s));
+        let suppressed_or_shelved_id =
+            NodeId::new(ns_idx, format!("{}_SuppressedOrShelved", base_s));
+        let shelving_state_id = NodeId::new(ns_idx, format!("{}_ShelvingState", base_s));
+        let shelving_current_state_id =
+            NodeId::new(ns_idx, format!("{}_ShelvingState_CurrentState", base_s));
+        let unshelve_time_id =
+            NodeId::new(ns_idx, format!("{}_ShelvingState_UnshelveTime", base_s));
 
         // 1. Create Condition Object (AlarmConditionType i=2915)
         let alarm_obj = ObjectBuilder::new(
@@ -172,6 +214,104 @@ impl ConditionStateMachine {
             )]),
         );
 
+        // 9. Create display-suppression state nodes.
+        let suppressed_var =
+            VariableBuilder::new(&suppressed_state_id, "SuppressedState", "SuppressedState")
+                .data_type(DataTypeId::Boolean)
+                .has_type_definition(VariableTypeId::TwoStateVariableType)
+                .value(false)
+                .writable()
+                .build();
+        address_space.insert(
+            suppressed_var,
+            Some(&[(
+                &condition_id,
+                &NodeId::new(0, 47),
+                opcua_nodes::ReferenceDirection::Inverse,
+            )]),
+        );
+
+        let out_of_service_var = VariableBuilder::new(
+            &out_of_service_state_id,
+            "OutOfServiceState",
+            "OutOfServiceState",
+        )
+        .data_type(DataTypeId::Boolean)
+        .has_type_definition(VariableTypeId::TwoStateVariableType)
+        .value(false)
+        .writable()
+        .build();
+        address_space.insert(
+            out_of_service_var,
+            Some(&[(
+                &condition_id,
+                &NodeId::new(0, 47),
+                opcua_nodes::ReferenceDirection::Inverse,
+            )]),
+        );
+
+        let suppressed_or_shelved_var = VariableBuilder::new(
+            &suppressed_or_shelved_id,
+            "SuppressedOrShelved",
+            "SuppressedOrShelved",
+        )
+        .data_type(DataTypeId::Boolean)
+        .value(false)
+        .writable()
+        .build();
+        address_space.insert(
+            suppressed_or_shelved_var,
+            Some(&[(
+                &condition_id,
+                &NodeId::new(0, 47),
+                opcua_nodes::ReferenceDirection::Inverse,
+            )]),
+        );
+
+        let shelving_obj = ObjectBuilder::new(&shelving_state_id, "ShelvingState", "ShelvingState")
+            .has_type_definition(NodeId::new(0, 2929))
+            .build();
+        address_space.insert(
+            shelving_obj,
+            Some(&[(
+                &condition_id,
+                &NodeId::new(0, 47),
+                opcua_nodes::ReferenceDirection::Inverse,
+            )]),
+        );
+
+        let shelving_current_state_var =
+            VariableBuilder::new(&shelving_current_state_id, "CurrentState", "CurrentState")
+                .data_type(DataTypeId::LocalizedText)
+                .has_type_definition(VariableTypeId::StateVariableType)
+                .value(LocalizedText::new("en", ShelvingState::Unshelved.as_str()))
+                .writable()
+                .build();
+        address_space.insert(
+            shelving_current_state_var,
+            Some(&[(
+                &shelving_state_id,
+                &NodeId::new(0, 47),
+                opcua_nodes::ReferenceDirection::Inverse,
+            )]),
+        );
+
+        let unshelve_time_var =
+            VariableBuilder::new(&unshelve_time_id, "UnshelveTime", "UnshelveTime")
+                .data_type(DataTypeId::Double)
+                .has_type_definition(VariableTypeId::PropertyType)
+                .value(0.0f64)
+                .writable()
+                .build();
+        address_space.insert(
+            unshelve_time_var,
+            Some(&[(
+                &shelving_state_id,
+                &NodeId::new(0, 46),
+                opcua_nodes::ReferenceDirection::Inverse,
+            )]),
+        );
+
         Self {
             condition_id,
             source_node_id,
@@ -183,6 +323,12 @@ impl ConditionStateMachine {
             severity_id,
             message_id,
             retain_id,
+            suppressed_state_id,
+            out_of_service_state_id,
+            suppressed_or_shelved_id,
+            shelving_state_id,
+            shelving_current_state_id,
+            unshelve_time_id,
             current_event_id: Arc::new(Mutex::new(Vec::new())),
         }
     }
@@ -310,6 +456,157 @@ impl ConditionStateMachine {
     /// Sets whether the condition is retained.
     pub fn set_retain(&self, address_space: &mut AddressSpace, retain: bool) {
         self.set_bool_value(address_space, &self.retain_id, retain);
+    }
+
+    /// Gets whether the condition is system-suppressed.
+    pub fn get_suppressed(&self, address_space: &AddressSpace) -> bool {
+        self.get_bool_value(address_space, &self.suppressed_state_id)
+    }
+
+    /// Sets whether the condition is system-suppressed.
+    pub fn set_suppressed(&self, address_space: &mut AddressSpace, suppressed: bool) {
+        self.set_bool_value(address_space, &self.suppressed_state_id, suppressed);
+        self.recompute_suppressed_or_shelved(address_space);
+    }
+
+    /// Gets whether the condition is maintenance-suppressed.
+    pub fn get_out_of_service(&self, address_space: &AddressSpace) -> bool {
+        self.get_bool_value(address_space, &self.out_of_service_state_id)
+    }
+
+    /// Sets whether the condition is maintenance-suppressed.
+    pub fn set_out_of_service(&self, address_space: &mut AddressSpace, out_of_service: bool) {
+        self.set_bool_value(address_space, &self.out_of_service_state_id, out_of_service);
+        self.recompute_suppressed_or_shelved(address_space);
+    }
+
+    /// Gets whether the condition is suppressed or shelved.
+    pub fn get_suppressed_or_shelved(&self, address_space: &AddressSpace) -> bool {
+        self.get_bool_value(address_space, &self.suppressed_or_shelved_id)
+    }
+
+    /// Gets the current shelving state.
+    pub fn get_shelving_state(&self, address_space: &AddressSpace) -> ShelvingState {
+        if let Some(node) = address_space.find(&self.shelving_current_state_id) {
+            if let NodeType::Variable(ref var) = *node {
+                if let Some(Variant::LocalizedText(ref text)) = var
+                    .value(
+                        opcua_types::TimestampsToReturn::Neither,
+                        &opcua_types::NumericRange::None,
+                        &opcua_types::DataEncoding::Binary,
+                        0.0,
+                    )
+                    .value
+                {
+                    return match text.text.value().as_deref() {
+                        Some("OneShotShelved") => ShelvingState::OneShotShelved,
+                        Some("TimedShelved") => ShelvingState::TimedShelved,
+                        _ => ShelvingState::Unshelved,
+                    };
+                }
+            }
+        };
+        ShelvingState::Unshelved
+    }
+
+    /// Sets the current shelving state.
+    pub fn set_shelving_state(&self, address_space: &mut AddressSpace, state: ShelvingState) {
+        if let Some(mut node) = address_space.find_mut(&self.shelving_current_state_id) {
+            if let NodeType::Variable(ref mut var) = &mut *node {
+                let _ = var.set_value(
+                    &opcua_types::NumericRange::None,
+                    Variant::from(LocalizedText::new("en", state.as_str())),
+                );
+            }
+        };
+        self.recompute_suppressed_or_shelved(address_space);
+    }
+
+    /// Gets the remaining timed-shelve duration in milliseconds.
+    pub fn get_unshelve_time(&self, address_space: &AddressSpace) -> f64 {
+        if let Some(node) = address_space.find(&self.unshelve_time_id) {
+            if let NodeType::Variable(ref var) = *node {
+                if let Some(Variant::Double(v)) = var
+                    .value(
+                        opcua_types::TimestampsToReturn::Neither,
+                        &opcua_types::NumericRange::None,
+                        &opcua_types::DataEncoding::Binary,
+                        0.0,
+                    )
+                    .value
+                {
+                    return v;
+                }
+            }
+        };
+        0.0
+    }
+
+    /// Sets the remaining timed-shelve duration in milliseconds.
+    pub fn set_unshelve_time(&self, address_space: &mut AddressSpace, unshelve_time_ms: f64) {
+        if let Some(mut node) = address_space.find_mut(&self.unshelve_time_id) {
+            if let NodeType::Variable(ref mut var) = &mut *node {
+                let _ = var.set_value(
+                    &opcua_types::NumericRange::None,
+                    Variant::from(unshelve_time_ms),
+                );
+            }
+        };
+    }
+
+    /// Recomputes SuppressedOrShelved from suppression and shelving state.
+    pub fn recompute_suppressed_or_shelved(&self, address_space: &mut AddressSpace) {
+        let suppressed_or_shelved = self.get_suppressed(address_space)
+            || self.get_out_of_service(address_space)
+            || self.get_shelving_state(address_space) != ShelvingState::Unshelved;
+        self.set_bool_value(
+            address_space,
+            &self.suppressed_or_shelved_id,
+            suppressed_or_shelved,
+        );
+    }
+
+    /// Shelves the condition until the alarm next goes inactive.
+    pub fn one_shot_shelve(&self, address_space: &mut AddressSpace) -> StatusCode {
+        if self.get_shelving_state(address_space) == ShelvingState::OneShotShelved {
+            return StatusCode::BadConditionAlreadyShelved;
+        }
+
+        self.set_shelving_state(address_space, ShelvingState::OneShotShelved);
+        self.set_unshelve_time(address_space, 0.0);
+        self.recompute_suppressed_or_shelved(address_space);
+        StatusCode::Good
+    }
+
+    /// Shelves the condition for the supplied duration in milliseconds.
+    pub fn timed_shelve(
+        &self,
+        address_space: &mut AddressSpace,
+        shelving_time_ms: f64,
+    ) -> StatusCode {
+        if shelving_time_ms <= 0.0 {
+            return StatusCode::BadShelvingTimeOutOfRange;
+        }
+        if self.get_shelving_state(address_space) == ShelvingState::TimedShelved {
+            return StatusCode::BadConditionAlreadyShelved;
+        }
+
+        self.set_shelving_state(address_space, ShelvingState::TimedShelved);
+        self.set_unshelve_time(address_space, shelving_time_ms);
+        self.recompute_suppressed_or_shelved(address_space);
+        StatusCode::Good
+    }
+
+    /// Returns a shelved condition to Unshelved.
+    pub fn unshelve(&self, address_space: &mut AddressSpace) -> StatusCode {
+        if self.get_shelving_state(address_space) == ShelvingState::Unshelved {
+            return StatusCode::BadConditionNotShelved;
+        }
+
+        self.set_shelving_state(address_space, ShelvingState::Unshelved);
+        self.set_unshelve_time(address_space, 0.0);
+        self.recompute_suppressed_or_shelved(address_space);
+        StatusCode::Good
     }
 
     fn get_bool_value(&self, address_space: &AddressSpace, id: &NodeId) -> bool {

@@ -272,6 +272,67 @@ impl ConditionRefreshHandler {
             .handle_confirm_method(context, args)
     }
 
+    /// Callback executed when the standard OneShotShelve method is called by a client.
+    pub fn handle_condition_one_shot_shelve(
+        &self,
+        _context: &RequestContext,
+        object_id: &NodeId,
+        _args: &[Variant],
+    ) -> Result<Vec<Variant>, StatusCode> {
+        let condition = self
+            .registry
+            .get_by_shelving_state(object_id)
+            .ok_or(StatusCode::BadNodeIdUnknown)?;
+        let mut address_space = opcua_core::trace_write_lock!(self.address_space);
+        let status_code = condition.one_shot_shelve(&mut address_space);
+        if status_code.is_good() {
+            Ok(vec![])
+        } else {
+            Err(status_code)
+        }
+    }
+
+    /// Callback executed when the standard TimedShelve method is called by a client.
+    pub fn handle_condition_timed_shelve(
+        &self,
+        _context: &RequestContext,
+        object_id: &NodeId,
+        args: &[Variant],
+    ) -> Result<Vec<Variant>, StatusCode> {
+        let shelving_time_ms = parse_f64_arg(args, 0)?;
+        let condition = self
+            .registry
+            .get_by_shelving_state(object_id)
+            .ok_or(StatusCode::BadNodeIdUnknown)?;
+        let mut address_space = opcua_core::trace_write_lock!(self.address_space);
+        let status_code = condition.timed_shelve(&mut address_space, shelving_time_ms);
+        if status_code.is_good() {
+            Ok(vec![])
+        } else {
+            Err(status_code)
+        }
+    }
+
+    /// Callback executed when the standard Unshelve method is called by a client.
+    pub fn handle_condition_unshelve(
+        &self,
+        _context: &RequestContext,
+        object_id: &NodeId,
+        _args: &[Variant],
+    ) -> Result<Vec<Variant>, StatusCode> {
+        let condition = self
+            .registry
+            .get_by_shelving_state(object_id)
+            .ok_or(StatusCode::BadNodeIdUnknown)?;
+        let mut address_space = opcua_core::trace_write_lock!(self.address_space);
+        let status_code = condition.unshelve(&mut address_space);
+        if status_code.is_good() {
+            Ok(vec![])
+        } else {
+            Err(status_code)
+        }
+    }
+
     fn refresh_events(
         &self,
         context: &RequestContext,
@@ -431,9 +492,31 @@ pub fn register_condition_methods(
         },
     );
 
+    let confirm_handler = handler.clone();
     core_node_manager.inner().add_method_callback_with_context(
         MethodId::AcknowledgeableConditionType_Confirm.into(),
-        move |ctx, object_id, args| handler.handle_condition_confirm(ctx, object_id, args),
+        move |ctx, object_id, args| confirm_handler.handle_condition_confirm(ctx, object_id, args),
+    );
+
+    let one_shot_shelve_handler = handler.clone();
+    core_node_manager.inner().add_method_callback_with_context(
+        MethodId::ShelvedStateMachineType_OneShotShelve.into(),
+        move |ctx, object_id, args| {
+            one_shot_shelve_handler.handle_condition_one_shot_shelve(ctx, object_id, args)
+        },
+    );
+
+    let timed_shelve_handler = handler.clone();
+    core_node_manager.inner().add_method_callback_with_context(
+        MethodId::ShelvedStateMachineType_TimedShelve.into(),
+        move |ctx, object_id, args| {
+            timed_shelve_handler.handle_condition_timed_shelve(ctx, object_id, args)
+        },
+    );
+
+    core_node_manager.inner().add_method_callback_with_context(
+        MethodId::ShelvedStateMachineType_Unshelve.into(),
+        move |ctx, object_id, args| handler.handle_condition_unshelve(ctx, object_id, args),
     );
 }
 
@@ -442,6 +525,13 @@ fn parse_u32_arg(args: &[Variant], index: usize) -> Result<u32, StatusCode> {
         return Err(StatusCode::BadInvalidArgument);
     };
     u32::try_from_variant(arg.clone()).map_err(|_| StatusCode::BadInvalidArgument)
+}
+
+fn parse_f64_arg(args: &[Variant], index: usize) -> Result<f64, StatusCode> {
+    let Some(arg) = args.get(index) else {
+        return Err(StatusCode::BadInvalidArgument);
+    };
+    f64::try_from_variant(arg.clone()).map_err(|_| StatusCode::BadInvalidArgument)
 }
 
 fn build_current_alarm_event(

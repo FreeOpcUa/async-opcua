@@ -10,8 +10,8 @@ The implement will **never** implement OPC UA over XML. XML hasn't see much adop
 
 The server shall implement the OPC UA capabilities:
 
-* http://opcfoundation.org/UA-Profile/Server/Behaviour - base server profile
-* http://opcfoundation.org/UA-Profile/Server/EmbeddedUA - embedded UA profile
+* <http://opcfoundation.org/UA-Profile/Server/Behaviour> - base server profile
+* <http://opcfoundation.org/UA-Profile/Server/EmbeddedUA> - embedded UA profile
 
 ### Services
 

@@ -15,7 +15,7 @@ Currently defines:
  - `BinaryDecodable`, derives streaming deserialization using OPC-UA Binary.
  - `UaEnum`, derives the `UaEnum` and a few other traits to make it easier to define custom OPC-UA enums.
 
- ## Features
+## Features
 
  - `json`, adds the `JsonEncodable` and `JsonDecodable` macros.
  - `xml`, adds the `FromXml` macro.

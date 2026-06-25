@@ -6,6 +6,27 @@ use opcua_nodes::NodeType;
 use opcua_types::{DataTypeId, LocalizedText, NodeId, StatusCode, VariableTypeId, Variant};
 use std::sync::{Arc, Mutex};
 
+/// Preserved prior state of an OPC UA Condition branch.
+#[derive(Debug, Clone)]
+pub struct Branch {
+    /// Unique non-null BranchId for this preserved condition state.
+    pub branch_id: NodeId,
+    /// EventId used to acknowledge or confirm this branch.
+    pub event_id: Vec<u8>,
+    /// Preserved ActiveState value.
+    pub active: bool,
+    /// Preserved AckedState value.
+    pub acked: bool,
+    /// Preserved ConfirmedState value.
+    pub confirmed: bool,
+    /// Whether this branch is retained for refresh and operator action.
+    pub retain: bool,
+    /// Preserved Severity value.
+    pub severity: u16,
+    /// Preserved Message value.
+    pub message: LocalizedText,
+}
+
 /// Current state of an AlarmCondition ShelvedStateMachineType instance.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShelvingState {
@@ -50,6 +71,8 @@ pub struct ConditionStateMachine {
     pub message_id: NodeId,
     /// NodeId of the Retain variable.
     pub retain_id: NodeId,
+    /// NodeId of the BranchId property.
+    pub branch_id_id: NodeId,
     /// NodeId of the SuppressedState variable.
     pub suppressed_state_id: NodeId,
     /// NodeId of the OutOfServiceState variable.
@@ -65,6 +88,8 @@ pub struct ConditionStateMachine {
     /// EventId of the condition's current (most recent) reportable state, shared across clones.
     /// Acknowledge/Confirm validate the client-supplied EventId against this (Part 9 §5.5.2).
     current_event_id: Arc<Mutex<Vec<u8>>>,
+    /// Active condition branches, shared across clones.
+    branches: Arc<opcua_core::sync::RwLock<Vec<Branch>>>,
 }
 
 impl ConditionStateMachine {
@@ -87,6 +112,7 @@ impl ConditionStateMachine {
         let severity_id = NodeId::new(ns_idx, format!("{}_Severity", base_s));
         let message_id = NodeId::new(ns_idx, format!("{}_Message", base_s));
         let retain_id = NodeId::new(ns_idx, format!("{}_Retain", base_s));
+        let branch_id_id = NodeId::new(ns_idx, format!("{}_BranchId", base_s));
         let suppressed_state_id = NodeId::new(ns_idx, format!("{}_SuppressedState", base_s));
         let out_of_service_state_id = NodeId::new(ns_idx, format!("{}_OutOfServiceState", base_s));
         let suppressed_or_shelved_id =
@@ -214,6 +240,21 @@ impl ConditionStateMachine {
             )]),
         );
 
+        let branch_id_var = VariableBuilder::new(&branch_id_id, "BranchId", "BranchId")
+            .data_type(DataTypeId::NodeId)
+            .has_type_definition(VariableTypeId::PropertyType)
+            .value(NodeId::null())
+            .writable()
+            .build();
+        address_space.insert(
+            branch_id_var,
+            Some(&[(
+                &condition_id,
+                &NodeId::new(0, 46),
+                opcua_nodes::ReferenceDirection::Inverse,
+            )]),
+        );
+
         // 9. Create display-suppression state nodes.
         let suppressed_var =
             VariableBuilder::new(&suppressed_state_id, "SuppressedState", "SuppressedState")
@@ -323,6 +364,7 @@ impl ConditionStateMachine {
             severity_id,
             message_id,
             retain_id,
+            branch_id_id,
             suppressed_state_id,
             out_of_service_state_id,
             suppressed_or_shelved_id,
@@ -330,6 +372,7 @@ impl ConditionStateMachine {
             shelving_current_state_id,
             unshelve_time_id,
             current_event_id: Arc::new(Mutex::new(Vec::new())),
+            branches: Arc::new(opcua_core::sync::RwLock::new(Vec::new())),
         }
     }
 
@@ -348,6 +391,64 @@ impl ConditionStateMachine {
     /// Returns the EventId of the condition's current reportable state.
     pub fn current_event_id(&self) -> Vec<u8> {
         self.current_event_id.lock().unwrap().clone()
+    }
+
+    /// Creates a branch by snapshotting the condition's current trunk state.
+    pub fn create_branch(&self, address_space: &AddressSpace) -> NodeId {
+        let branch_id = NodeId::new(
+            2,
+            format!(
+                "{}_Branch_{}",
+                self.condition_id,
+                uuid::Uuid::new_v4().simple()
+            ),
+        );
+        let branch = Branch {
+            branch_id: branch_id.clone(),
+            event_id: uuid::Uuid::new_v4().as_bytes().to_vec(),
+            active: self.get_active(address_space),
+            acked: self.get_acked(address_space),
+            confirmed: self.get_confirmed(address_space),
+            retain: true,
+            severity: self.get_severity(address_space),
+            message: self.get_message(address_space),
+        };
+        self.branches.write().push(branch);
+        branch_id
+    }
+
+    /// Returns a snapshot of all condition branches.
+    pub fn branches(&self) -> Vec<Branch> {
+        self.branches.read().clone()
+    }
+
+    /// Finds a branch by its EventId.
+    pub fn branch_by_event_id(&self, event_id: &[u8]) -> Option<Branch> {
+        self.branches
+            .read()
+            .iter()
+            .find(|branch| branch.event_id.as_slice() == event_id)
+            .cloned()
+    }
+
+    /// Acknowledges a branch by EventId.
+    pub fn ack_branch(&self, event_id: &[u8]) -> bool {
+        self.update_branch_ack_state(event_id, true, false)
+    }
+
+    /// Confirms a branch by EventId.
+    pub fn confirm_branch(&self, event_id: &[u8]) -> bool {
+        self.update_branch_ack_state(event_id, false, true)
+    }
+
+    /// Returns retained condition branches.
+    pub fn retained_branches(&self) -> Vec<Branch> {
+        self.branches
+            .read()
+            .iter()
+            .filter(|branch| branch.retain)
+            .cloned()
+            .collect()
     }
 
     /// Gets whether the condition is enabled.
@@ -634,5 +735,32 @@ impl ConditionStateMachine {
                 let _ = var.set_value(&opcua_types::NumericRange::None, Variant::from(value));
             }
         };
+    }
+
+    fn update_branch_ack_state(&self, event_id: &[u8], acked: bool, confirmed: bool) -> bool {
+        let mut branches = self.branches.write();
+        let Some(index) = branches
+            .iter()
+            .position(|branch| branch.event_id.as_slice() == event_id)
+        else {
+            return false;
+        };
+
+        let branch = &mut branches[index];
+        if acked {
+            branch.acked = true;
+        }
+        if confirmed {
+            branch.confirmed = true;
+        }
+        // A branch is a preserved PRIOR state: it is dropped once the operator has both
+        // acknowledged and confirmed it. Its `active` is historical and (unlike the trunk, where an
+        // active condition is always retained) does not keep the branch retained.
+        branch.retain = !branch.acked || !branch.confirmed;
+
+        if !branch.retain {
+            branches.remove(index);
+        }
+        true
     }
 }

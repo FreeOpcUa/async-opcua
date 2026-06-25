@@ -20,4 +20,4 @@ pub use methods::register_condition_methods;
 pub use methods::{AlarmMethodHandler, ConditionRefreshHandler};
 pub use refresh_events::{RefreshEndEvent, RefreshStartEvent};
 pub use registry::ConditionRegistry;
-pub use state_machine::{ConditionStateMachine, ShelvingState};
+pub use state_machine::{Branch, ConditionStateMachine, ShelvingState};

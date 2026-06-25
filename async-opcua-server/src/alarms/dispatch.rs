@@ -83,6 +83,9 @@ impl EventField for ServerAlarmEvent<'_> {
                 "Message" => return Variant::from(self.event.message.clone()),
                 "Severity" => return Variant::from(self.event.severity),
                 "ConditionId" => return Variant::from(self.event.condition_id.clone()),
+                "BranchId" => {
+                    return Variant::NodeId(Box::new(self.event.branch_id.clone()));
+                }
                 "ConditionName" => {
                     return Variant::from(UAString::from(self.event.condition_name.clone()));
                 }

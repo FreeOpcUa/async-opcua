@@ -110,6 +110,11 @@ impl DiscreteAlarm {
         };
         let message = LocalizedText::new("en", if active { "Off-normal state" } else { "Normal" });
 
+        let was_active = self.condition.get_active(address_space);
+        let was_acked = self.condition.get_acked(address_space);
+        if was_active && !was_acked && !active {
+            self.condition.create_branch(address_space);
+        }
         self.condition.set_active(address_space, active);
         self.condition.set_severity(address_space, severity);
         self.condition.set_message(address_space, message.clone());
@@ -136,6 +141,7 @@ impl DiscreteAlarm {
             message,
             severity,
             condition_id: self.condition.condition_id.clone(),
+            branch_id: NodeId::null(),
             condition_name: self.condition.condition_name.clone(),
             active_state: active,
             acked_state: acked,

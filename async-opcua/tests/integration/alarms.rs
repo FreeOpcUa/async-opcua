@@ -1271,3 +1271,119 @@ async fn shelving_transitions_and_suppressed_or_shelved() {
     );
     assert_eq!(state(&sm), (ShelvingState::Unshelved, false));
 }
+
+// ---------------------------------------------------------------------------
+// AC3: condition branching (Part 9 §5.5 / §B.1.3) — an Active+Unacked condition
+// that deactivates spawns a branch preserving the unacked state, which is
+// replayed by ConditionRefresh and acknowledged/confirmed by its own EventId.
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn condition_branch_preserves_unacked_state_and_resolves_independently() {
+    let (tester, nm, session) = setup_alarms().await;
+    let core_nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<CoreNodeManager>()
+        .expect("CoreNodeManager not found");
+    let source = make_event_source(&nm, "Branchy");
+    let alarm = register_discrete_alarm(
+        nm.address_space(),
+        &nm,
+        "Branchy",
+        "State",
+        source.clone(),
+        DiscreteAlarmKind::OffNormal,
+        Variant::Boolean(false),
+    );
+    let sm = alarm.condition_state_machine();
+    let registry = ConditionRegistry::new();
+    registry.register(sm.clone());
+    register_condition_methods(&core_nm, registry, nm.address_space().clone());
+
+    let (notifs, _dv, mut events) = ChannelNotifications::new();
+    let sub_id = session
+        .create_subscription(Duration::from_millis(100), 100, 20, 1000, 0, true, notifs)
+        .await
+        .unwrap();
+    let _item = add_event_item(&session, sub_id, &source).await;
+
+    // Active (and left unacknowledged).
+    drive_discrete(&alarm, &nm, &tester, Variant::Boolean(true));
+    let active = recv_alarm(&mut events).await;
+    assert!(active.active_state && !active.acked_state);
+
+    // Deactivate while still unacked -> a branch preserves the prior active-unacked state.
+    drive_discrete(&alarm, &nm, &tester, Variant::Boolean(false));
+    let _trunk_inactive = recv_alarm(&mut events).await;
+
+    let branch = {
+        let branches = sm.retained_branches();
+        assert_eq!(
+            branches.len(),
+            1,
+            "a branch should preserve the unacked activation"
+        );
+        assert!(
+            branches[0].active && !branches[0].acked,
+            "branch holds the active, unacked state"
+        );
+        branches[0].clone()
+    };
+
+    // ConditionRefresh replays BOTH the inactive trunk and the active branch.
+    session
+        .refresh_conditions(sub_id)
+        .await
+        .expect("refresh_conditions should succeed");
+    let burst = collect_until_refresh_end(&mut events).await;
+    let body: Vec<&AlarmEvent> = burst
+        .iter()
+        .map(|(_, e)| e)
+        .filter(|e| {
+            e.event_type != NodeId::new(0, REFRESH_START_EVENT_TYPE)
+                && e.event_type != NodeId::new(0, REFRESH_END_EVENT_TYPE)
+        })
+        .collect();
+    assert!(
+        body.iter().any(|e| e.active_state),
+        "branch (active) replayed"
+    );
+    assert!(
+        body.iter().any(|e| !e.active_state),
+        "trunk (inactive) replayed"
+    );
+
+    // Acknowledge the BRANCH by its own EventId -> acked, still retained (unconfirmed).
+    session
+        .acknowledge_condition(
+            &sm.condition_id,
+            ByteString::from(branch.event_id.clone()),
+            LocalizedText::new("en", "ack branch"),
+        )
+        .await
+        .expect("acknowledge of a branch should succeed");
+    {
+        let b = sm.retained_branches();
+        assert_eq!(b.len(), 1);
+        assert!(b[0].acked && !b[0].confirmed);
+    }
+
+    // Confirm the branch -> fully resolved -> dropped.
+    let confirm = session
+        .call_one(CallMethodRequest {
+            object_id: sm.condition_id.clone(),
+            method_id: MethodId::AcknowledgeableConditionType_Confirm.into(),
+            input_arguments: Some(vec![
+                Variant::from(ByteString::from(branch.event_id.clone())),
+                Variant::from(LocalizedText::new("en", "confirm branch")),
+            ]),
+        })
+        .await
+        .unwrap();
+    assert_eq!(confirm.status_code, StatusCode::Good);
+    assert!(
+        sm.retained_branches().is_empty(),
+        "a fully acked+confirmed branch is dropped"
+    );
+}

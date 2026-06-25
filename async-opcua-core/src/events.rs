@@ -23,6 +23,8 @@ pub struct AlarmEvent {
     pub severity: u16,
     /// NodeId of the condition instance in the address space.
     pub condition_id: NodeId,
+    /// BranchId of this event: NULL for the current/trunk state, non-null for a condition branch.
+    pub branch_id: NodeId,
     /// Human-readable name of the condition.
     pub condition_name: String,
     /// Current active state (true = active/exceeded, false = normal).
@@ -58,6 +60,7 @@ impl AlarmEvent {
             message,
             severity,
             condition_id,
+            branch_id: NodeId::null(),
             condition_name,
             active_state: false,
             acked_state: false,

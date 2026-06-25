@@ -26,3 +26,20 @@ retained branches. (Ground §5.5.2 fully when starting AC3.)
 ## AC4: AnalogItem/EURange
 AnalogItemType EURange property (i=?) -> limit alarm sources its range from the AnalogItem instead of
 hard-coded config. (Ground AnalogItemType_EURange id when starting AC4.)
+
+## AC3 branching — DETAIL (OPC 10000-9, grounded 2026-06-25)
+- ConditionType has `BranchId` (NodeId Property, Mandatory). Trunk/current state => BranchId NULL.
+  A ConditionBranch preserves a PREVIOUS state independently of the current state; unique BranchId
+  per active branch (§5.5.2/5.5.3/§4.2). Server emits separate Event Notifications per branch.
+- Creation trigger (canonical, §B.1.3 Table B.2): a condition goes Active(unacked) -> Inactive while
+  still unacked -> the server SPAWNS a branch capturing the (prior Active, unacked) state with a new
+  BranchId + EventId, so the operator can still Acknowledge that activation; the trunk follows the new
+  (Inactive) state. Branch Retain stays true until it is acked+confirmed, then it is dropped.
+- Acknowledge/Confirm (§5.7.3/5.7.4) by EventId: if EventId matches a branch, that branch is acked/
+  confirmed and reported with its BranchId + values; else the trunk. A branch fully acked+confirmed+
+  inactive => Retain=false => removed.
+- ConditionRefresh replays the trunk + every retained branch (each as its own event with its BranchId).
+- ORACLE: §B.1.3 Table B.2 (EventId/BranchId/Active/Acked/Confirmed/Retain rows).
+- Design (Claude-owned): a Branch snapshot { branch_id, event_id, active, acked, confirmed, retain,
+  severity, message } stored per-condition (registry/condition); branch creation in the shared alarm
+  update path; ack/confirm-by-EventId routes to branch or trunk; refresh iterates trunk+branches.

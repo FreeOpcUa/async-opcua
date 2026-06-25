@@ -4,7 +4,7 @@ use crate::address_space::AddressSpace;
 use crate::alarms::dispatch::ServerAlarmEvent;
 use crate::alarms::refresh_events::{RefreshEndEvent, RefreshStartEvent};
 use crate::alarms::registry::ConditionRegistry;
-use crate::alarms::state_machine::ConditionStateMachine;
+use crate::alarms::state_machine::{Branch, ConditionStateMachine};
 use crate::alarms::transitions::{acknowledge_alarm, confirm_alarm};
 use crate::node_manager::RequestContext;
 use crate::MonitoredItemHandle;
@@ -90,6 +90,11 @@ impl AlarmMethodHandler {
             _ => return Err(StatusCode::BadTypeMismatch),
         };
 
+        if self.state_machine.branch_by_event_id(event_id).is_some() {
+            self.state_machine.ack_branch(event_id);
+            return Ok(vec![]);
+        }
+
         // Part 9 §5.5.2: the EventId must identify the condition's current reportable state.
         if !self.state_machine.current_event_id_matches(event_id) {
             return Err(StatusCode::BadEventIdUnknown);
@@ -129,6 +134,7 @@ impl AlarmMethodHandler {
             message: comment,
             severity,
             condition_id: self.state_machine.condition_id.clone(),
+            branch_id: NodeId::null(),
             condition_name: self.state_machine.condition_name.clone(),
             active_state: active,
             acked_state: true,
@@ -172,6 +178,11 @@ impl AlarmMethodHandler {
             Variant::ByteString(ref b) => b.as_ref(),
             _ => return Err(StatusCode::BadTypeMismatch),
         };
+
+        if self.state_machine.branch_by_event_id(event_id).is_some() {
+            self.state_machine.confirm_branch(event_id);
+            return Ok(vec![]);
+        }
 
         // Part 9 §5.5.2: the EventId must identify the condition's current reportable state.
         if !self.state_machine.current_event_id_matches(event_id) {
@@ -340,12 +351,18 @@ impl ConditionRefreshHandler {
         monitored_item: Option<MonitoredItemHandle>,
     ) -> Result<Vec<Variant>, StatusCode> {
         let address_space = opcua_core::trace_read_lock!(self.address_space);
-        let alarm_events: Vec<AlarmEvent> = self
-            .registry
-            .iter_retained(&address_space)
-            .into_iter()
-            .map(|condition| build_current_alarm_event(&condition, &address_space))
-            .collect();
+        let conditions = self.registry.iter_retained(&address_space);
+        let mut alarm_events = Vec::with_capacity(conditions.len());
+        for condition in conditions {
+            alarm_events.push(build_current_alarm_event(&condition, &address_space));
+            for branch in condition.retained_branches() {
+                alarm_events.push(build_branch_alarm_event(
+                    &condition,
+                    &branch,
+                    &address_space,
+                ));
+            }
+        }
         drop(address_space);
 
         let mut events: Vec<Box<dyn Event + Send>> = Vec::with_capacity(alarm_events.len() + 2);
@@ -447,6 +464,9 @@ impl EventField for OwnedAlarmEvent {
                 "Message" => return Variant::from(self.event.message.clone()),
                 "Severity" => return Variant::from(self.event.severity),
                 "ConditionId" => return Variant::from(self.event.condition_id.clone()),
+                "BranchId" => {
+                    return Variant::NodeId(Box::new(self.event.branch_id.clone()));
+                }
                 "ConditionName" => {
                     return Variant::from(UAString::from(self.event.condition_name.clone()));
                 }
@@ -552,10 +572,34 @@ fn build_current_alarm_event(
         message: state_machine.get_message(address_space),
         severity: state_machine.get_severity(address_space),
         condition_id: state_machine.condition_id.clone(),
+        branch_id: NodeId::null(),
         condition_name: state_machine.condition_name.clone(),
         active_state: state_machine.get_active(address_space),
         acked_state: state_machine.get_acked(address_space),
         confirmed_state: state_machine.get_confirmed(address_space),
         retain: state_machine.get_retain(address_space),
+    }
+}
+
+fn build_branch_alarm_event(
+    state_machine: &ConditionStateMachine,
+    branch: &Branch,
+    _address_space: &AddressSpace,
+) -> AlarmEvent {
+    AlarmEvent {
+        event_id: branch.event_id.clone(),
+        event_type: NodeId::new(0, 2915),
+        source_node: state_machine.source_node_id.clone(),
+        source_name: state_machine.condition_name.clone(),
+        time: DateTime::now(),
+        message: branch.message.clone(),
+        severity: branch.severity,
+        condition_id: state_machine.condition_id.clone(),
+        branch_id: branch.branch_id.clone(),
+        condition_name: state_machine.condition_name.clone(),
+        active_state: branch.active,
+        acked_state: branch.acked,
+        confirmed_state: branch.confirmed,
+        retain: branch.retain,
     }
 }

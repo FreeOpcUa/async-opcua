@@ -447,6 +447,11 @@ impl LimitAlarm {
         }
 
         let message = LocalizedText::new("en", &outcome.message);
+        let was_active = self.condition.get_active(address_space);
+        let was_acked = self.condition.get_acked(address_space);
+        if was_active && !was_acked && !outcome.active {
+            self.condition.create_branch(address_space);
+        }
         self.condition.set_active(address_space, outcome.active);
         self.condition.set_severity(address_space, outcome.severity);
         self.condition.set_message(address_space, message.clone());
@@ -474,6 +479,7 @@ impl LimitAlarm {
             message,
             severity: outcome.severity,
             condition_id: self.condition.condition_id.clone(),
+            branch_id: NodeId::null(),
             condition_name: self.condition.condition_name.clone(),
             active_state: outcome.active,
             acked_state: acked,

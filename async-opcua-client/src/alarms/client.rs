@@ -25,6 +25,7 @@ pub fn get_alarm_event_select_clauses() -> Vec<SimpleAttributeOperand> {
         (base_event_type.clone(), vec!["AckedState", "Id"]),
         (base_event_type.clone(), vec!["ConfirmedState", "Id"]),
         (base_event_type.clone(), vec!["Retain"]),
+        (base_event_type.clone(), vec!["BranchId"]),
     ];
 
     fields
@@ -102,6 +103,14 @@ pub fn parse_alarm_event(event_fields: &[Variant]) -> Option<AlarmEvent> {
     } else {
         true
     };
+    let branch_id = if event_fields.len() > 13 {
+        match &event_fields[13] {
+            Variant::NodeId(ref id) => (**id).clone(),
+            _ => NodeId::null(),
+        }
+    } else {
+        NodeId::null()
+    };
 
     Some(AlarmEvent {
         event_id,
@@ -112,6 +121,7 @@ pub fn parse_alarm_event(event_fields: &[Variant]) -> Option<AlarmEvent> {
         message,
         severity,
         condition_id,
+        branch_id,
         condition_name,
         active_state,
         acked_state,

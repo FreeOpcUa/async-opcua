@@ -562,3 +562,91 @@ fn phase_d_no_prior_degrades_to_in_interval() {
     );
     assert_eq!(out[0].value, Some(Variant::Double(10.0)));
 }
+
+// ---------------------------------------------------------------------------
+// Phase E: status/duration aggregates. Driven through compute_processed_intervals
+// with a prior bound. Interval [12:00:02, 12:00:12) = 10000 ms.
+// Hand-computed exact regions, cross-checked vs OPC 10000-13 §5.4.3.22-24/31-34.
+// ---------------------------------------------------------------------------
+
+fn dv(value: f64, sec: u16, status: StatusCode) -> DataValue {
+    DataValue {
+        value: Some(Variant::Double(value)),
+        source_timestamp: Some(DateTime::from((2026, 6, 6, 12, 0, sec))),
+        status: Some(status),
+        ..Default::default()
+    }
+}
+
+fn phase_e_eval(series: &[DataValue], id: u32) -> DataValue {
+    let start = DateTime::from((2026, 6, 6, 12, 0, 2));
+    let end = DateTime::from((2026, 6, 6, 12, 0, 12));
+    let cfg = AggregateConfiguration::default();
+    let mut out =
+        compute_processed_intervals(series, &NodeId::new(0u16, id), &cfg, start, end, 10_000.0);
+    assert_eq!(out.len(), 1, "expected one interval for id {id}");
+    out.remove(0)
+}
+
+#[test]
+fn phase_e_duration_and_percent_good_bad() {
+    // prior Good@0s held over [2,6); Bad@6s over [6,9); Good@9s over [9,12).
+    // Good = 4000 + 3000 = 7000 ms; Bad = 3000 ms; interval = 10000 ms.
+    let series = vec![
+        dv(1.0, 0, StatusCode::Good),
+        dv(2.0, 6, StatusCode::BadDataUnavailable),
+        dv(3.0, 9, StatusCode::Good),
+    ];
+    assert_eq!(
+        phase_e_eval(&series, 2360).value,
+        Some(Variant::Double(7000.0))
+    );
+    assert_eq!(
+        phase_e_eval(&series, 2361).value,
+        Some(Variant::Double(3000.0))
+    );
+    match phase_e_eval(&series, 2362).value {
+        Some(Variant::Double(v)) => assert!((v - 70.0).abs() < 1e-9, "PercentGood got {v}"),
+        other => panic!("expected Double, got {other:?}"),
+    }
+    match phase_e_eval(&series, 2363).value {
+        Some(Variant::Double(v)) => assert!((v - 30.0).abs() < 1e-9, "PercentBad got {v}"),
+        other => panic!("expected Double, got {other:?}"),
+    }
+}
+
+#[test]
+fn phase_e_duration_in_state_and_transitions() {
+    // prior 0@0s held over [2,6); 5@6s over [6,10); 0@10s over [10,12).
+    // InStateZero = 4000 + 2000 = 6000 ms; InStateNonZero = 4000 ms.
+    let series = vec![
+        dv(0.0, 0, StatusCode::Good),
+        dv(5.0, 6, StatusCode::Good),
+        dv(0.0, 10, StatusCode::Good),
+    ];
+    assert_eq!(
+        phase_e_eval(&series, 11307).value,
+        Some(Variant::Double(6000.0))
+    );
+    assert_eq!(
+        phase_e_eval(&series, 11308).value,
+        Some(Variant::Double(4000.0))
+    );
+    // NumberOfTransitions over [0, 5, 0] = 0->5 and 5->0 = 2 zero/non-zero changes.
+    assert_eq!(phase_e_eval(&series, 2355).value, Some(Variant::Int32(2)));
+}
+
+#[test]
+fn phase_e_empty_interval() {
+    let empty: Vec<DataValue> = vec![];
+    // Durations/percents have no data -> BadNoData.
+    for id in [2360, 2361, 2362, 2363, 11307, 11308] {
+        assert_eq!(
+            phase_e_eval(&empty, id).status,
+            Some(StatusCode::BadNoData),
+            "id {id}"
+        );
+    }
+    // NumberOfTransitions of nothing -> 0.
+    assert_eq!(phase_e_eval(&empty, 2355).value, Some(Variant::Int32(0)));
+}

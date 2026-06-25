@@ -17,7 +17,12 @@ const AGG_MINIMUM_ACTUAL_TIME: u32 = 2348;
 const AGG_MAXIMUM_ACTUAL_TIME: u32 = 2349;
 const AGG_RANGE: u32 = 2350;
 const AGG_COUNT: u32 = 2352;
+const AGG_NUMBER_OF_TRANSITIONS: u32 = 2355;
 const AGG_DELTA: u32 = 2359;
+const AGG_DURATION_GOOD: u32 = 2360;
+const AGG_DURATION_BAD: u32 = 2361;
+const AGG_PERCENT_GOOD: u32 = 2362;
+const AGG_PERCENT_BAD: u32 = 2363;
 const AGG_WORST_QUALITY: u32 = 2364;
 const AGG_TIME_AVERAGE2: u32 = 11285;
 const AGG_MINIMUM2: u32 = 11286;
@@ -27,6 +32,8 @@ const AGG_WORST_QUALITY2: u32 = 11292;
 const AGG_TOTAL2: u32 = 11304;
 const AGG_MINIMUM_ACTUAL_TIME2: u32 = 11305;
 const AGG_MAXIMUM_ACTUAL_TIME2: u32 = 11306;
+const AGG_DURATION_IN_STATE_ZERO: u32 = 11307;
+const AGG_DURATION_IN_STATE_NON_ZERO: u32 = 11308;
 const AGG_START_BOUND: u32 = 11505;
 const AGG_END_BOUND: u32 = 11506;
 const AGG_DELTA_BOUNDS: u32 = 11507;
@@ -214,6 +221,12 @@ struct AggregatePreamble {
     numeric_points: Vec<(DateTime, f64)>,
 }
 
+struct StateRegion {
+    duration_ms: f64,
+    status: StatusCode,
+    value: Option<f64>,
+}
+
 fn bad_no_data(interval_start: DateTime) -> DataValue {
     DataValue {
         value: None,
@@ -292,6 +305,70 @@ fn simple_bounded_points(input: &AggregateInput<'_>) -> Vec<(DateTime, f64)> {
             .map(|(timestamp, value, _)| (timestamp, value)),
     );
     points
+}
+
+/// Partition [interval_start, interval_end] into held regions via simple bounds.
+fn state_regions(input: &AggregateInput<'_>) -> Vec<StateRegion> {
+    if input.interval_end <= input.interval_start {
+        return Vec::new();
+    }
+
+    let mut values = input.values.to_vec();
+    values.sort_by_key(|value| get_value_timestamp(value));
+
+    let mut knots = Vec::with_capacity(values.len() + usize::from(input.prior.is_some()));
+    if let Some(prior) = input.prior {
+        knots.push((
+            input.interval_start,
+            prior.status.unwrap_or(StatusCode::Good),
+            prior.value.as_ref().and_then(variant_to_f64),
+        ));
+    }
+
+    knots.extend(values.into_iter().filter_map(|value| {
+        let timestamp = get_value_timestamp(value);
+        if timestamp > input.interval_start && timestamp < input.interval_end {
+            Some((
+                timestamp,
+                value.status.unwrap_or(StatusCode::Good),
+                value.value.as_ref().and_then(variant_to_f64),
+            ))
+        } else {
+            None
+        }
+    }));
+
+    if knots.is_empty() {
+        return Vec::new();
+    }
+
+    let mut regions = Vec::with_capacity(knots.len());
+    for window in knots.windows(2) {
+        let (left_time, status, value) = window[0];
+        let (right_time, _, _) = window[1];
+        let duration_ms = (right_time.ticks() - left_time.ticks()) as f64 / 1e4;
+        if duration_ms > 0.0 {
+            regions.push(StateRegion {
+                duration_ms,
+                status,
+                value,
+            });
+        }
+    }
+
+    let (last_time, status, value) = knots[knots.len() - 1];
+    let duration_ms = (input.interval_end.ticks() - last_time.ticks()) as f64 / 1e4;
+    if duration_ms > 0.0 {
+        regions.push(StateRegion {
+            duration_ms,
+            status,
+            value,
+        });
+    }
+
+    // ponytail: No Start Bound means the leading interval before the first raw knot is Bad_NoData,
+    // so this helper leaves that leading time uncounted until full status calculus is implemented.
+    regions
 }
 
 fn aggregate_result(
@@ -737,6 +814,158 @@ fn agg_count(input: &AggregateInput<'_>) -> DataValue {
     }
 }
 
+fn good_double_result(value: f64, interval_start: DateTime) -> DataValue {
+    DataValue {
+        value: Some(Variant::Double(value)),
+        status: Some(StatusCode::Good),
+        source_timestamp: Some(interval_start),
+        server_timestamp: Some(DateTime::now()),
+        ..Default::default()
+    }
+}
+
+fn state_duration(input: &AggregateInput<'_>, include: impl Fn(&StateRegion) -> bool) -> DataValue {
+    let regions = state_regions(input);
+    if regions.is_empty() {
+        return bad_no_data(input.interval_start);
+    }
+
+    good_double_result(
+        regions
+            .iter()
+            .filter(|region| include(region))
+            .map(|region| region.duration_ms)
+            .sum(),
+        input.interval_start,
+    )
+}
+
+fn duration_good_ms(input: &AggregateInput<'_>) -> Option<f64> {
+    let regions = state_regions(input);
+    if regions.is_empty() {
+        return None;
+    }
+
+    Some(
+        regions
+            .iter()
+            .filter(|region| region.status.is_good())
+            .map(|region| region.duration_ms)
+            .sum(),
+    )
+}
+
+fn duration_bad_ms(input: &AggregateInput<'_>) -> Option<f64> {
+    let regions = state_regions(input);
+    if regions.is_empty() {
+        return None;
+    }
+
+    Some(
+        regions
+            .iter()
+            .filter(|region| region.status.is_bad())
+            .map(|region| region.duration_ms)
+            .sum(),
+    )
+}
+
+fn agg_duration_good(input: &AggregateInput<'_>) -> DataValue {
+    match duration_good_ms(input) {
+        Some(duration_ms) => good_double_result(duration_ms, input.interval_start),
+        None => bad_no_data(input.interval_start),
+    }
+}
+
+fn agg_duration_bad(input: &AggregateInput<'_>) -> DataValue {
+    match duration_bad_ms(input) {
+        Some(duration_ms) => good_double_result(duration_ms, input.interval_start),
+        None => bad_no_data(input.interval_start),
+    }
+}
+
+fn agg_percent_good(input: &AggregateInput<'_>) -> DataValue {
+    let total_ms = (input.interval_end.ticks() - input.interval_start.ticks()) as f64 / 1e4;
+    if total_ms <= 0.0 {
+        return bad_no_data(input.interval_start);
+    }
+
+    match duration_good_ms(input) {
+        Some(duration_ms) => {
+            good_double_result(duration_ms / total_ms * 100.0, input.interval_start)
+        }
+        None => bad_no_data(input.interval_start),
+    }
+}
+
+fn agg_percent_bad(input: &AggregateInput<'_>) -> DataValue {
+    let total_ms = (input.interval_end.ticks() - input.interval_start.ticks()) as f64 / 1e4;
+    if total_ms <= 0.0 {
+        return bad_no_data(input.interval_start);
+    }
+
+    match duration_bad_ms(input) {
+        Some(duration_ms) => {
+            good_double_result(duration_ms / total_ms * 100.0, input.interval_start)
+        }
+        None => bad_no_data(input.interval_start),
+    }
+}
+
+fn agg_duration_in_state_zero(input: &AggregateInput<'_>) -> DataValue {
+    state_duration(input, |region| region.value == Some(0.0))
+}
+
+fn agg_duration_in_state_non_zero(input: &AggregateInput<'_>) -> DataValue {
+    state_duration(input, |region| {
+        region.value.is_some_and(|value| value != 0.0)
+    })
+}
+
+fn agg_number_of_transitions(input: &AggregateInput<'_>) -> DataValue {
+    let mut points = Vec::with_capacity(input.values.len() + usize::from(input.prior.is_some()));
+    if let Some(prior_value) = input.prior.and_then(|value| {
+        if value.status.is_none_or(|status| status.is_good()) {
+            value.value.as_ref().and_then(variant_to_f64)
+        } else {
+            None
+        }
+    }) {
+        points.push((input.interval_start, prior_value));
+    }
+
+    let mut values = input.values.to_vec();
+    values.sort_by_key(|value| get_value_timestamp(value));
+    points.extend(values.into_iter().filter_map(|value| {
+        let timestamp = get_value_timestamp(value);
+        if timestamp >= input.interval_start
+            && timestamp < input.interval_end
+            && value.status.is_none_or(|status| status.is_good())
+        {
+            value
+                .value
+                .as_ref()
+                .and_then(variant_to_f64)
+                .map(|numeric| (timestamp, numeric))
+        } else {
+            None
+        }
+    }));
+
+    let count = points
+        .windows(2)
+        .filter(|window| (window[0].1 == 0.0) != (window[1].1 == 0.0))
+        .count() as i32;
+
+    DataValue {
+        value: Some(Variant::Int32(count)),
+        status: Some(StatusCode::Good),
+        source_timestamp: Some(input.interval_start),
+        server_timestamp: Some(DateTime::now()),
+        ..Default::default()
+    }
+}
+
 fn agg_worst_quality(input: &AggregateInput<'_>) -> DataValue {
     let Some(worst) = input
         .values
@@ -933,8 +1162,21 @@ pub fn dispatch_aggregate(aggregate_type: &NodeId, input: &AggregateInput<'_>) -
         }
         // AnnotationCount (2351) is intentionally unsupported until annotations are modeled.
         opcua_types::Identifier::Numeric(AGG_COUNT) => agg_count(input),
+        opcua_types::Identifier::Numeric(AGG_NUMBER_OF_TRANSITIONS) => {
+            agg_number_of_transitions(input)
+        }
         opcua_types::Identifier::Numeric(AGG_DELTA) => agg_delta(input),
+        opcua_types::Identifier::Numeric(AGG_DURATION_GOOD) => agg_duration_good(input),
+        opcua_types::Identifier::Numeric(AGG_DURATION_BAD) => agg_duration_bad(input),
+        opcua_types::Identifier::Numeric(AGG_PERCENT_GOOD) => agg_percent_good(input),
+        opcua_types::Identifier::Numeric(AGG_PERCENT_BAD) => agg_percent_bad(input),
         opcua_types::Identifier::Numeric(AGG_WORST_QUALITY) => agg_worst_quality(input),
+        opcua_types::Identifier::Numeric(AGG_DURATION_IN_STATE_ZERO) => {
+            agg_duration_in_state_zero(input)
+        }
+        opcua_types::Identifier::Numeric(AGG_DURATION_IN_STATE_NON_ZERO) => {
+            agg_duration_in_state_non_zero(input)
+        }
         opcua_types::Identifier::Numeric(AGG_START_BOUND) => agg_start_bound(input),
         opcua_types::Identifier::Numeric(AGG_END_BOUND) => agg_end_bound(input),
         opcua_types::Identifier::Numeric(AGG_DELTA_BOUNDS) => agg_delta_bounds(input),

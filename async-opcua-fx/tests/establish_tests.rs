@@ -60,20 +60,22 @@ fn reserve_communication_ids_returns_unused_ids() {
 #[test]
 fn atomic_abort_skips_later_commands_on_first_error() {
     let mut state = FxConnectionState::new();
-    // CreateConnectionEndpointCmd (bit 4) is not yet supported -> errors; it runs BEFORE
+    // VerifyAssetCmd (bit 1) is not yet supported -> errors; it runs BEFORE
     // ReserveCommunicationIdsCmd (bit 64), so reserve must be skipped entirely.
-    let mask =
-        FxCommandMask::CreateConnectionEndpointCmd | FxCommandMask::ReserveCommunicationIdsCmd;
-    let results =
-        process_establish_connections(&mut state, mask, &[], &[], &[reserve_request(1, 1)], &[]);
-
-    assert!(
-        !results.connection_endpoint_results.is_empty(),
-        "the create command should have produced a (BadNotSupported) result"
+    let mask = FxCommandMask::VerifyAssetCmd | FxCommandMask::ReserveCommunicationIdsCmd;
+    let results = process_establish_connections(
+        &mut state,
+        mask,
+        &[AssetVerificationDataType::default()],
+        &[],
+        &[reserve_request(1, 1)],
+        &[],
     );
+
     assert_eq!(
-        results.connection_endpoint_results[0].connection_endpoint_result,
-        StatusCode::BadNotSupported
+        results.asset_verification_results[0].verification_status,
+        StatusCode::BadNotSupported,
+        "the verify command should have produced the aborting (BadNotSupported) result"
     );
     assert!(
         results.reserve_results.is_empty(),

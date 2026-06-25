@@ -9,7 +9,7 @@ use opcua_types::{ConfigurationVersionDataType, NodeId, StatusCode, UAString, Va
 use crate::{
     AssetVerificationDataType, AssetVerificationResultDataType,
     ConnectionEndpointConfigurationDataType, ConnectionEndpointConfigurationResultDataType,
-    FxCommandMask, PubSubCommunicationConfigurationDataType,
+    FxCommandMask, NodeIdValuePair, PubSubCommunicationConfigurationDataType,
     PubSubCommunicationConfigurationResultDataType, PubSubReserveCommunicationIds2DataType,
     PubSubReserveCommunicationIdsResult2DataType,
 };
@@ -49,6 +49,8 @@ pub struct EstablishedEndpoint {
     pub reserved_data_set_writer_ids: Vec<u16>,
     /// ConfigurationVersion values recorded at establishment time.
     pub configuration_versions: Vec<ConfigurationVersionDataType>,
+    /// ConfigurationData values applied to this endpoint.
+    pub configuration_data: Vec<NodeIdValuePair>,
     /// Whether communication for the endpoint is enabled in this pure state.
     pub enabled: bool,
     /// PubSub connection IDs associated with the endpoint.
@@ -121,11 +123,7 @@ pub fn process_establish_connections(
                 EndpointResultField::Verification,
             )
         } else if command == FxCommandMask::CreateConnectionEndpointCmd {
-            unsupported_endpoint_command(
-                endpoint_configs,
-                &mut results,
-                EndpointResultField::ConnectionEndpoint,
-            )
+            create_connection_endpoints(state, endpoint_configs, &mut results)
         } else if command == FxCommandMask::EstablishControlCmd {
             unsupported_endpoint_command(
                 endpoint_configs,
@@ -133,11 +131,7 @@ pub fn process_establish_connections(
                 EndpointResultField::EstablishControl,
             )
         } else if command == FxCommandMask::SetConfigurationDataCmd {
-            unsupported_endpoint_command(
-                endpoint_configs,
-                &mut results,
-                EndpointResultField::ConfigurationData,
-            )
+            set_configuration_data(state, endpoint_configs, &mut results)
         } else if command == FxCommandMask::ReassignControlCmd {
             unsupported_endpoint_command(
                 endpoint_configs,
@@ -205,6 +199,112 @@ fn unsupported_endpoint_command(
         (0..count).map(|_| endpoint_result_with_status(StatusCode::BadNotSupported, field)),
     );
     Err(StatusCode::BadNotSupported)
+}
+
+fn create_connection_endpoints(
+    state: &mut FxConnectionState,
+    endpoint_configs: &[ConnectionEndpointConfigurationDataType],
+    results: &mut EstablishResults,
+) -> Result<(), StatusCode> {
+    for endpoint_config in endpoint_configs {
+        let node_id = endpoint_config.connection_endpoint_node_id();
+        let status = validate_connection_endpoint_config(endpoint_config);
+        let mut result =
+            endpoint_result_with_status(status, EndpointResultField::ConnectionEndpoint);
+        result.connection_endpoint_id = node_id.clone();
+
+        if !status.is_good() {
+            results.connection_endpoint_results.push(result);
+            return Err(status);
+        }
+
+        if let Some(endpoint) = state
+            .endpoints
+            .iter_mut()
+            .find(|endpoint| endpoint.node_id == node_id)
+        {
+            endpoint.config = endpoint_config.clone();
+        } else {
+            state.endpoints.push(EstablishedEndpoint {
+                node_id,
+                config: endpoint_config.clone(),
+                reserved_writer_group_ids: Vec::new(),
+                reserved_data_set_writer_ids: Vec::new(),
+                configuration_versions: Vec::new(),
+                configuration_data: Vec::new(),
+                enabled: false,
+                connection_ids: Vec::new(),
+            });
+        }
+
+        results.connection_endpoint_results.push(result);
+    }
+
+    Ok(())
+}
+
+fn set_configuration_data(
+    state: &mut FxConnectionState,
+    endpoint_configs: &[ConnectionEndpointConfigurationDataType],
+    results: &mut EstablishResults,
+) -> Result<(), StatusCode> {
+    for endpoint_config in endpoint_configs {
+        let node_id = endpoint_config.connection_endpoint_node_id();
+        let configuration_data = endpoint_config
+            .configuration_data
+            .as_deref()
+            .unwrap_or_default();
+        let mut result =
+            endpoint_result_with_status(StatusCode::Good, EndpointResultField::ConfigurationData);
+        result.connection_endpoint_id = node_id.clone();
+        result.configuration_data_result = endpoint_config
+            .configuration_data
+            .as_ref()
+            .map(|data| vec![StatusCode::Good; data.len()]);
+
+        let Some(endpoint) = state
+            .endpoints
+            .iter_mut()
+            .find(|endpoint| endpoint.node_id == node_id)
+        else {
+            let status = StatusCode::BadNotFound;
+            result.configuration_data_result = endpoint_config
+                .configuration_data
+                .as_ref()
+                .map(|data| vec![status; data.len()]);
+            results.connection_endpoint_results.push(result);
+            return Err(status);
+        };
+
+        merge_configuration_data(&mut endpoint.configuration_data, configuration_data);
+        results.connection_endpoint_results.push(result);
+    }
+
+    Ok(())
+}
+
+fn validate_connection_endpoint_config(
+    endpoint_config: &ConnectionEndpointConfigurationDataType,
+) -> StatusCode {
+    if matches!(
+        endpoint_config.connection_endpoint,
+        crate::ConnectionEndpointDefinitionDataType::Null
+    ) && endpoint_config.functional_entity_node.is_null()
+    {
+        StatusCode::BadInvalidArgument
+    } else {
+        StatusCode::Good
+    }
+}
+
+fn merge_configuration_data(existing: &mut Vec<NodeIdValuePair>, updates: &[NodeIdValuePair]) {
+    for update in updates {
+        if let Some(existing_pair) = existing.iter_mut().find(|pair| pair.key == update.key) {
+            *existing_pair = update.clone();
+        } else {
+            existing.push(update.clone());
+        }
+    }
 }
 
 fn reserve_communication_ids(

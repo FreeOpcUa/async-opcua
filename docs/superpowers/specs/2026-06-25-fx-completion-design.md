@@ -57,3 +57,34 @@ FX spike (#135) `docs/.../2026-06-24-fx-spike-design.md` (Probe 2 decomposition)
 (DataSetReader/SubscribedDataSet), Part 81 §6.2.4 (Connection/CommunicationLinks), grounded via the
 `opc-ua-reference` MCP. Builds on [[feature-fx-spike]] + [[feature-pubsub-uadp-interop]] +
 the PubSub info-model (#151).
+
+## FX piece 2 — EstablishConnections / CloseConnections Methods (grounding 2026-06-25)
+
+Method NodeIds (FX/AC nodeset): EstablishConnections = ns(FX/AC);i=292, CloseConnections = i=293,
+on AutomationComponentType (i=2). Registration mechanism: `SimpleNodeManager::
+add_method_callback_with_context` + the typed `method_typed.rs` framework (feature 021).
+
+EstablishConnections args (from nodeset): IN = CommandMask (FxCommandMask), AssetVerifications[],
+ConnectionEndpointConfigurations[], ReserveCommunicationIds[], CommunicationConfigurations[];
+OUT = AssetVerificationResults[], ConnectionEndpointConfigurationResults[],
+ReserveCommunicationIdsResults[], CommunicationConfigurationResults[]. CloseConnections: IN =
+ConnectionEndpoints[], Remove(Boolean); OUT = Results[].
+
+FxCommandMask bits (process in this order, atomic-abort on first error per §6.2.4.3.11):
+VerifyAssetCmd=1, VerifyFunctionalEntityCmd=2, CreateConnectionEndpointCmd=4, EstablishControlCmd=8,
+SetConfigurationDataCmd=16, ReassignControlCmd=32, ReserveCommunicationIdsCmd=64,
+SetCommunicationConfigurationCmd=128, EnableCommunicationCmd=256.
+
+**Architecture:** pure logic over an `FxConnectionState` (PubSub config + FX3 IdReservation +
+ConnectionManager + created-endpoint registry), so the dispatch + atomic-abort are unit-testable
+without a server; a thin Method-callback adapter decodes/encodes the ExtensionObject arrays.
+
+**Sub-pieces:**
+- **2a (this):** `FxConnectionState` + `process_establish_connections` dispatch loop + atomic abort +
+  `process_close_connections`; implement ReserveCommunicationIdsCmd (FX3) + SetCommunicationConfiguration
+  Cmd + EnableCommunicationCmd (the core C2C path). Verify*/Control*/CreateConnectionEndpoint/
+  SetConfigurationData command bits return Bad_NotSupported for now.
+- **2b:** CreateConnectionEndpointCmd + SetConfigurationDataCmd + the Method-callback adapter registering
+  292/293 on a SimpleNodeManager-hosted AutomationComponent.
+- **Piece 3** fills VerifyAssetCmd + VerifyFunctionalEntityCmd; **Piece 4** fills EstablishControlCmd +
+  ReassignControlCmd. Bad_NotSupported is incremental delivery, not a YAGNI deferral.

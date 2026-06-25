@@ -1,10 +1,15 @@
 //! OPC UA FX generated data types.
 
 pub mod connection_endpoint_definition_data_type;
+pub mod establish;
 pub mod generated;
 pub mod pub_sub_connection_endpoint_mode_enum;
 
 pub use connection_endpoint_definition_data_type::ConnectionEndpointDefinitionDataType;
+pub use establish::{
+    process_close_connections, process_establish_connections, EstablishResults,
+    EstablishedEndpoint, FxConnectionState,
+};
 pub use generated::types::*;
 pub use pub_sub_connection_endpoint_mode_enum::PubSubConnectionEndpointModeEnum;
 

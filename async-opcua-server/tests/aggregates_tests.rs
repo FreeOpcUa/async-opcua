@@ -3,7 +3,7 @@
 use opcua_server::aggregates::engine::{
     aggregate_average, aggregate_maximum, aggregate_minimum, aggregate_std_dev,
     calculate_std_dev_sample, calculate_time_weighted_average, compute_processed_intervals,
-    dispatch_aggregate, partition_intervals, AggregateInput,
+    dispatch_aggregate, partition_intervals, supported_aggregates, AggregateInput,
 };
 use opcua_server::aggregates::quality::compute_aggregate_quality;
 use opcua_types::{AggregateConfiguration, DataValue, DateTime, NodeId, StatusCode, Variant};
@@ -649,4 +649,27 @@ fn phase_e_empty_interval() {
     }
     // NumberOfTransitions of nothing -> 0.
     assert_eq!(phase_e_eval(&empty, 2355).value, Some(Variant::Int32(0)));
+}
+
+#[test]
+fn supported_aggregates_matches_dispatch() {
+    // The advertised set must equal what dispatch_aggregate actually implements.
+    let start = DateTime::from((2026, 6, 6, 12, 0, 0));
+    let end = DateTime::from((2026, 6, 6, 12, 0, 10));
+    let ids = supported_aggregates();
+    assert_eq!(ids.len(), 34, "advertised aggregate count");
+    for id in &ids {
+        let status = calculate_aggregate(&[], id, start, end).status;
+        assert_ne!(
+            status,
+            Some(StatusCode::BadAggregateNotSupported),
+            "advertised aggregate {id} must be dispatched (got {status:?})"
+        );
+    }
+    // AnnotationCount (2351) is deliberately unsupported and must NOT be advertised.
+    assert!(!ids.contains(&NodeId::new(0u16, 2351u32)));
+    assert_eq!(
+        calculate_aggregate(&[], &NodeId::new(0u16, 2351u32), start, end).status,
+        Some(StatusCode::BadAggregateNotSupported)
+    );
 }

@@ -42,6 +42,51 @@ const AGG_STANDARD_DEVIATION_POPULATION: u32 = 11427;
 const AGG_VARIANCE_SAMPLE: u32 = 11428;
 const AGG_VARIANCE_POPULATION: u32 = 11429;
 
+const SUPPORTED_AGGREGATE_IDS: &[u32] = &[
+    AGG_INTERPOLATIVE,
+    AGG_AVERAGE,
+    AGG_TIME_AVERAGE,
+    AGG_TOTAL,
+    AGG_MINIMUM,
+    AGG_MAXIMUM,
+    AGG_MINIMUM_ACTUAL_TIME,
+    AGG_MAXIMUM_ACTUAL_TIME,
+    AGG_RANGE,
+    AGG_TIME_AVERAGE2,
+    AGG_MINIMUM2,
+    AGG_MAXIMUM2,
+    AGG_RANGE2,
+    AGG_WORST_QUALITY2,
+    AGG_TOTAL2,
+    AGG_MINIMUM_ACTUAL_TIME2,
+    AGG_MAXIMUM_ACTUAL_TIME2,
+    AGG_COUNT,
+    AGG_NUMBER_OF_TRANSITIONS,
+    AGG_DELTA,
+    AGG_DURATION_GOOD,
+    AGG_DURATION_BAD,
+    AGG_PERCENT_GOOD,
+    AGG_PERCENT_BAD,
+    AGG_WORST_QUALITY,
+    AGG_DURATION_IN_STATE_ZERO,
+    AGG_DURATION_IN_STATE_NON_ZERO,
+    AGG_START_BOUND,
+    AGG_END_BOUND,
+    AGG_DELTA_BOUNDS,
+    AGG_STANDARD_DEVIATION_SAMPLE,
+    AGG_STANDARD_DEVIATION_POPULATION,
+    AGG_VARIANCE_SAMPLE,
+    AGG_VARIANCE_POPULATION,
+];
+
+/// All aggregate NodeIds the built-in engine implements (every id `dispatch_aggregate` handles).
+pub fn supported_aggregates() -> Vec<NodeId> {
+    SUPPORTED_AGGREGATE_IDS
+        .iter()
+        .map(|id| NodeId::new(0, *id))
+        .collect()
+}
+
 /// NodeId for the TimeAverage aggregate (interpolated, time-weighted — Part 13 §5.4.3.2).
 pub fn aggregate_average() -> NodeId {
     NodeId::new(0, AGG_TIME_AVERAGE)

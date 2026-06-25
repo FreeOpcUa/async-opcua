@@ -9,7 +9,8 @@ pub mod middleware;
 pub mod quality;
 
 pub use engine::{
-    compute_processed_intervals, dispatch_aggregate, partition_intervals, AggregateInput,
+    compute_processed_intervals, dispatch_aggregate, partition_intervals, supported_aggregates,
+    AggregateInput,
 };
 pub use middleware::read_processed_aggregates;
 pub use quality::compute_aggregate_quality;

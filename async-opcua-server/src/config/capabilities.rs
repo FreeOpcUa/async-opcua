@@ -1,6 +1,6 @@
 use opcua_types::NodeId;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 /// History capabilities.
 /// As all history is implemented by custom node managers,
 /// this should be set according to what your node managers support.
@@ -36,8 +36,32 @@ pub struct HistoryServerCapabilities {
     pub update_data: bool,
     /// Able to update historical events.
     pub update_event: bool,
-    /// Supported history aggregates
+    /// Supported history aggregates. Defaults to the built-in engine's full Part-13 set; override
+    /// (e.g. set empty) if your history node manager does not use the built-in aggregate engine.
     pub aggregates: Vec<NodeId>,
+}
+
+impl Default for HistoryServerCapabilities {
+    fn default() -> Self {
+        Self {
+            access_history_data: false,
+            access_history_events: false,
+            delete_at_time: false,
+            delete_event: false,
+            delete_raw: false,
+            insert_annotation: false,
+            insert_data: false,
+            insert_event: false,
+            max_return_data_values: 0,
+            max_return_event_values: 0,
+            replace_data: false,
+            replace_event: false,
+            server_timestamp_supported: false,
+            update_data: false,
+            update_event: false,
+            aggregates: crate::aggregates::engine::supported_aggregates(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default)]

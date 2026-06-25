@@ -796,3 +796,34 @@ async fn browse_with_null_view_id_but_timestamp_is_allowed() {
         "browse with a null ViewId must return references"
     );
 }
+
+#[tokio::test]
+async fn browse_advertised_aggregate_functions() {
+    // The server must advertise the aggregates its built-in engine supports under
+    // HistoryServerCapabilities/AggregateFunctions (Part 13 §4.2 / discovery).
+    let (_tester, _nm, session) = setup().await;
+
+    let r = session
+        .browse(
+            &[hierarchical_desc(
+                ObjectId::HistoryServerCapabilities_AggregateFunctions.into(),
+            )],
+            1000,
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(r.len(), 1);
+    let refs = r[0].references.clone().unwrap_or_default();
+
+    let ids: Vec<NodeId> = refs.iter().map(|f| f.node_id.node_id.clone()).collect();
+    // A representative aggregate from each phase must be advertised.
+    for id in [2341u32, 2343, 2352, 11286, 2360, 2355] {
+        assert!(
+            ids.contains(&NodeId::new(0u16, id)),
+            "aggregate i={id} should be advertised; got {ids:?}"
+        );
+    }
+    // The full built-in set (34 aggregates) is advertised.
+    assert_eq!(ids.len(), 34, "advertised aggregate function count");
+}

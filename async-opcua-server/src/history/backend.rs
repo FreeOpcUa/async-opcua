@@ -78,6 +78,7 @@ pub trait HistoryStorageBackend: Send + Sync {
         processing_interval: f64,
         aggregate_type: &NodeId,
         aggregate_configuration: &AggregateConfiguration,
+        stepped: bool,
         continuation_point: Option<Vec<u8>>,
     ) -> Result<(Vec<DataValue>, Option<Vec<u8>>), StatusCode> {
         if continuation_point.is_some() {
@@ -107,6 +108,7 @@ pub trait HistoryStorageBackend: Send + Sync {
             start_time,
             end_time,
             processing_interval,
+            stepped,
         );
 
         Ok((processed_values, None))

@@ -80,6 +80,34 @@ impl SqliteHistoryBackend {
         self.connection.clone()
     }
 
+    /// Reads processed aggregate values using the Part 13 default stepped interpolation.
+    // Keep the concrete backend source-compatible for direct callers; the trait method carries
+    // the per-variable Stepped value resolved by the server middleware.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn read_processed(
+        &self,
+        node_id: &NodeId,
+        start_time: DateTime,
+        end_time: DateTime,
+        processing_interval: f64,
+        aggregate_type: &NodeId,
+        aggregate_configuration: &AggregateConfiguration,
+        continuation_point: Option<Vec<u8>>,
+    ) -> Result<(Vec<DataValue>, Option<Vec<u8>>), StatusCode> {
+        <Self as HistoryStorageBackend>::read_processed(
+            self,
+            node_id,
+            start_time,
+            end_time,
+            processing_interval,
+            aggregate_type,
+            aggregate_configuration,
+            true,
+            continuation_point,
+        )
+        .await
+    }
+
     fn prune_continuation_points(&self) {
         let mut cps = self.continuation_points.lock();
         cps.retain(|_, cp| cp.created_at.elapsed() < CONTINUATION_POINT_MAX_AGE);
@@ -306,6 +334,7 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
         processing_interval: f64,
         aggregate_type: &NodeId,
         aggregate_configuration: &AggregateConfiguration,
+        stepped: bool,
         continuation_point: Option<Vec<u8>>,
     ) -> Result<(Vec<DataValue>, Option<Vec<u8>>), StatusCode> {
         if continuation_point.is_some() {
@@ -335,6 +364,7 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
             start_time,
             end_time,
             processing_interval,
+            stepped,
         );
 
         Ok((processed_values, None))

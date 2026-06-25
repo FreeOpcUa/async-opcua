@@ -259,6 +259,8 @@ pub struct AggregateInput<'a> {
     pub interval_end: DateTime,
     /// Aggregate configuration supplied by the ReadProcessed request.
     pub config: &'a AggregateConfiguration,
+    /// True = stepped interpolation (hold each value); false = sloped (straight lines between Good values).
+    pub stepped: bool,
 }
 
 struct AggregatePreamble {
@@ -534,7 +536,7 @@ fn percent_time_status(regions: &[StateRegion], config: &AggregateConfiguration)
     aggregate_status_calc(good, uncertain, bad, config)
 }
 
-/// Area under the stepped curve over [interval_start, interval_end] and the covered duration (seconds).
+/// Area under the time-weighted curve over [interval_start, interval_end] and the covered duration (seconds).
 /// Returns None if there is no usable value. Stepped: each knot's value is held until the next knot.
 fn stepped_area_seconds(input: &AggregateInput<'_>) -> Option<(f64 /*area*/, f64 /*seconds*/)> {
     if input.interval_end <= input.interval_start {
@@ -546,13 +548,34 @@ fn stepped_area_seconds(input: &AggregateInput<'_>) -> Option<(f64 /*area*/, f64
     values.sort_by_key(|value| get_value_timestamp(value));
 
     let mut knots = Vec::with_capacity(values.len() + 1);
-    if let Some((status, value)) = input.prior.and_then(|prior| {
+    let first_good_in_interval = values
+        .iter()
+        .find(|value| {
+            let timestamp = get_value_timestamp(value);
+            timestamp >= input.interval_start
+                && timestamp <= input.interval_end
+                && value.status.is_none_or(|status| status.is_good())
+                && value.value.as_ref().and_then(variant_to_f64).is_some()
+        })
+        .copied();
+
+    if let Some((status, mut value)) = input.prior.and_then(|prior| {
         prior
             .value
             .as_ref()
             .and_then(variant_to_f64)
             .map(|value| (prior.status.unwrap_or(StatusCode::Good), value))
     }) {
+        if !input.stepped {
+            if let Some((interpolated, _)) = interpolated_bound_at(
+                input.interval_start,
+                input.prior,
+                first_good_in_interval,
+                input.config.use_sloped_extrapolation,
+            ) {
+                value = interpolated;
+            }
+        }
         knots.push((input.interval_start, status, value));
     } else if let Some((status, value)) = values.iter().find_map(|value| {
         let timestamp = get_value_timestamp(value);
@@ -594,7 +617,15 @@ fn stepped_area_seconds(input: &AggregateInput<'_>) -> Option<(f64 /*area*/, f64
             .unwrap_or(input.interval_end);
         let duration_seconds = (right_time.ticks() - left_time.ticks()) as f64 / 10_000_000.0;
         if duration_seconds > 0.0 && status.is_good() {
-            area += value * duration_seconds;
+            if input.stepped {
+                area += value * duration_seconds;
+            } else {
+                let right_value = knots
+                    .get(index + 1)
+                    .map(|(_, _, value)| *value)
+                    .unwrap_or(value);
+                area += (value + right_value) / 2.0 * duration_seconds;
+            }
             good_seconds += duration_seconds;
         }
     }
@@ -1385,6 +1416,7 @@ pub fn compute_processed_intervals(
     start_time: DateTime,
     end_time: DateTime,
     processing_interval: f64,
+    stepped: bool,
 ) -> Vec<DataValue> {
     partition_intervals(start_time, end_time, processing_interval)
         .into_iter()
@@ -1418,6 +1450,7 @@ pub fn compute_processed_intervals(
                 interval_start,
                 interval_end,
                 config,
+                stepped,
             };
 
             dispatch_aggregate(aggregate_type, &input)

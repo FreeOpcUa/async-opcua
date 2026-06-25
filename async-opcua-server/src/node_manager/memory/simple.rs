@@ -393,6 +393,7 @@ impl InMemoryNodeManagerImpl for SimpleNodeManagerImpl {
     async fn history_read_processed(
         &self,
         context: &RequestContext,
+        address_space: &RwLock<AddressSpace>,
         details: &opcua_types::ReadProcessedDetails,
         nodes: &mut [&mut &mut crate::node_manager::history::HistoryNode],
         timestamps_to_return: TimestampsToReturn,
@@ -402,12 +403,21 @@ impl InMemoryNodeManagerImpl for SimpleNodeManagerImpl {
             guard.clone()
         };
         if let Some(backend) = backend {
+            let stepped: Vec<bool> = {
+                let space = trace_read_lock!(address_space);
+                nodes
+                    .iter()
+                    .map(|n| crate::aggregates::resolve_stepped(&space, n.node_id()))
+                    .collect()
+            };
+
             crate::aggregates::read_processed_aggregates(
                 &backend,
                 context,
                 details,
                 nodes,
                 timestamps_to_return,
+                &stepped,
             )
             .await
         } else {

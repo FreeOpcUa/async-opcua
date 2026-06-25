@@ -27,6 +27,7 @@ fn calculate_aggregate(
             interval_start: start,
             interval_end: end,
             config: &config,
+            stepped: true,
         },
     )
 }
@@ -400,8 +401,15 @@ fn phase_c_one_interval(id: u32) -> DataValue {
     let start = DateTime::from((2026, 6, 6, 12, 0, 2));
     let end = DateTime::from((2026, 6, 6, 12, 0, 12));
     let cfg = AggregateConfiguration::default();
-    let mut out =
-        compute_processed_intervals(&series, &NodeId::new(0u16, id), &cfg, start, end, 10_000.0);
+    let mut out = compute_processed_intervals(
+        &series,
+        &NodeId::new(0u16, id),
+        &cfg,
+        start,
+        end,
+        10_000.0,
+        true,
+    );
     assert_eq!(out.len(), 1, "expected exactly one interval for id {id}");
     out.remove(0)
 }
@@ -461,8 +469,15 @@ fn phase_c_interpolative_before_data_is_bad_no_data() {
     let start = DateTime::from((2026, 6, 6, 12, 0, 2));
     let end = DateTime::from((2026, 6, 6, 12, 0, 12));
     let cfg = AggregateConfiguration::default();
-    let out =
-        compute_processed_intervals(&empty, &NodeId::new(0u16, 2341), &cfg, start, end, 10_000.0);
+    let out = compute_processed_intervals(
+        &empty,
+        &NodeId::new(0u16, 2341),
+        &cfg,
+        start,
+        end,
+        10_000.0,
+        true,
+    );
     assert_eq!(out[0].status, Some(StatusCode::BadNoData));
 }
 
@@ -478,8 +493,15 @@ fn phase_d_one_interval(id: u32) -> DataValue {
     let start = DateTime::from((2026, 6, 6, 12, 0, 2));
     let end = DateTime::from((2026, 6, 6, 12, 0, 12));
     let cfg = AggregateConfiguration::default();
-    let mut out =
-        compute_processed_intervals(&series, &NodeId::new(0u16, id), &cfg, start, end, 10_000.0);
+    let mut out = compute_processed_intervals(
+        &series,
+        &NodeId::new(0u16, id),
+        &cfg,
+        start,
+        end,
+        10_000.0,
+        true,
+    );
     assert_eq!(out.len(), 1, "expected one interval for id {id}");
     out.remove(0)
 }
@@ -559,6 +581,7 @@ fn phase_d_no_prior_degrades_to_in_interval() {
         start,
         end,
         10_000.0,
+        true,
     );
     assert_eq!(out[0].value, Some(Variant::Double(10.0)));
 }
@@ -582,8 +605,15 @@ fn phase_e_eval(series: &[DataValue], id: u32) -> DataValue {
     let start = DateTime::from((2026, 6, 6, 12, 0, 2));
     let end = DateTime::from((2026, 6, 6, 12, 0, 12));
     let cfg = AggregateConfiguration::default();
-    let mut out =
-        compute_processed_intervals(series, &NodeId::new(0u16, id), &cfg, start, end, 10_000.0);
+    let mut out = compute_processed_intervals(
+        series,
+        &NodeId::new(0u16, id),
+        &cfg,
+        start,
+        end,
+        10_000.0,
+        true,
+    );
     assert_eq!(out.len(), 1, "expected one interval for id {id}");
     out.remove(0)
 }
@@ -695,6 +725,7 @@ fn phase_f_time_average_excludes_bad_regions() {
         start,
         end,
         10_000.0,
+        true,
     );
     match &ta[0].value {
         Some(Variant::Double(v)) => assert!((v - 100.0 / 7.0).abs() < 1e-9, "TimeAverage got {v}"),
@@ -711,6 +742,7 @@ fn phase_f_time_average_excludes_bad_regions() {
         start,
         end,
         10_000.0,
+        true,
     );
     match &total[0].value {
         Some(Variant::Double(v)) => assert!((v - 100.0).abs() < 1e-9, "Total got {v}"),
@@ -733,7 +765,7 @@ fn phase_g_status_honors_custom_aggregate_configuration() {
 
     // Default config (100/100): 66.7% good < 100 -> Uncertain_DataSubNormal.
     let default_cfg = AggregateConfiguration::default();
-    let r = compute_processed_intervals(&series, &avg_id, &default_cfg, start, end, 10_000.0);
+    let r = compute_processed_intervals(&series, &avg_id, &default_cfg, start, end, 10_000.0, true);
     assert_eq!(r[0].value, Some(Variant::Double(15.0)));
     assert_eq!(r[0].status, Some(StatusCode::UncertainDataSubNormal));
 
@@ -745,7 +777,7 @@ fn phase_g_status_honors_custom_aggregate_configuration() {
         percent_data_good: 50,
         use_sloped_extrapolation: false,
     };
-    let r = compute_processed_intervals(&series, &avg_id, &cfg_good50, start, end, 10_000.0);
+    let r = compute_processed_intervals(&series, &avg_id, &cfg_good50, start, end, 10_000.0, true);
     assert_eq!(r[0].status, Some(StatusCode::Good));
 
     // percent_data_bad = 30: 33.3% bad >= 30 -> Bad.
@@ -754,12 +786,13 @@ fn phase_g_status_honors_custom_aggregate_configuration() {
         percent_data_good: 100,
         ..cfg_good50
     };
-    let r = compute_processed_intervals(&series, &avg_id, &cfg_bad30, start, end, 10_000.0);
+    let r = compute_processed_intervals(&series, &avg_id, &cfg_bad30, start, end, 10_000.0, true);
     assert_eq!(r[0].status, Some(StatusCode::Bad));
 
     // TreatUncertainAsBad: an Uncertain value counts as Good by default (-> Good), as Bad when set.
     let series_u = vec![good(10.0, 2), dv(20.0, 4, StatusCode::Uncertain)];
-    let r = compute_processed_intervals(&series_u, &avg_id, &default_cfg, start, end, 10_000.0);
+    let r =
+        compute_processed_intervals(&series_u, &avg_id, &default_cfg, start, end, 10_000.0, true);
     assert_eq!(r[0].status, Some(StatusCode::Good)); // uncertain folded into good, no bad -> Good
     let cfg_uab = AggregateConfiguration {
         treat_uncertain_as_bad: true,
@@ -767,6 +800,31 @@ fn phase_g_status_honors_custom_aggregate_configuration() {
         percent_data_good: 100,
         ..cfg_good50
     };
-    let r = compute_processed_intervals(&series_u, &avg_id, &cfg_uab, start, end, 10_000.0);
+    let r = compute_processed_intervals(&series_u, &avg_id, &cfg_uab, start, end, 10_000.0, true);
     assert_eq!(r[0].status, Some(StatusCode::UncertainDataSubNormal));
+}
+
+#[test]
+fn phase_h_sloped_interpolation_differs_from_stepped() {
+    // Series 10@0s, 20@5s over [0,10): stepped holds each value (rectangular),
+    // sloped draws a line between them (trapezoidal).
+    // stepped: 10*5 + 20*5 = 150 -> 15.0.
+    // sloped:  (10+20)/2*5 + 20*5 = 75 + 100 = 175 -> 17.5.
+    let series = vec![good(10.0, 0), good(20.0, 5)];
+    let start = DateTime::from((2026, 6, 6, 12, 0, 0));
+    let end = DateTime::from((2026, 6, 6, 12, 0, 10));
+    let cfg = AggregateConfiguration::default();
+    let ta = NodeId::new(0u16, 2343);
+
+    let stepped = compute_processed_intervals(&series, &ta, &cfg, start, end, 10_000.0, true);
+    match &stepped[0].value {
+        Some(Variant::Double(v)) => assert!((v - 15.0).abs() < 1e-9, "stepped got {v}"),
+        other => panic!("expected Double, got {other:?}"),
+    }
+
+    let sloped = compute_processed_intervals(&series, &ta, &cfg, start, end, 10_000.0, false);
+    match &sloped[0].value {
+        Some(Variant::Double(v)) => assert!((v - 17.5).abs() < 1e-9, "sloped got {v}"),
+        other => panic!("expected Double, got {other:?}"),
+    }
 }

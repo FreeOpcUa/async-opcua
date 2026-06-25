@@ -108,6 +108,7 @@ async fn fx_c2c_process_value_flows_ac1_to_ac2() {
                 dataset_name: "FxDataset".to_string(),
                 published_dataset: PublishedDataSetConfig {
                     published_variables: vec![value_node.clone()],
+                    configuration_version: Default::default(),
                 },
             }],
         }],

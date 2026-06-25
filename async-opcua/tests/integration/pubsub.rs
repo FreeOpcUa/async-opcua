@@ -48,6 +48,7 @@ async fn test_udp_multicast_pubsub() {
                 dataset_name: "UdpDataset".to_string(),
                 published_dataset: PublishedDataSetConfig {
                     published_variables: vec![node_id.clone()],
+                    configuration_version: Default::default(),
                 },
             }],
         }],
@@ -257,6 +258,7 @@ async fn test_mqtt_broker_pubsub() {
                 dataset_name: "MqttDataset".to_string(),
                 published_dataset: PublishedDataSetConfig {
                     published_variables: vec![node_id.clone()],
+                    configuration_version: Default::default(),
                 },
             }],
         }],

@@ -31,6 +31,7 @@ fn reflect_pubsub_config_materializes_referenceable_instances() {
                 dataset_name: "DS".into(),
                 published_dataset: PublishedDataSetConfig {
                     published_variables: vec![],
+                    configuration_version: Default::default(),
                 },
             }],
         }],

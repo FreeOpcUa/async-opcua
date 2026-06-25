@@ -1,4 +1,4 @@
-use opcua_types::NodeId;
+use opcua_types::{ConfigurationVersionDataType, NodeId};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::str::FromStr;
 
@@ -43,7 +43,7 @@ where
 }
 
 /// The collection of variables grouped together in a single payload.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PublishedDataSetConfig {
     /// List of published variable NodeIds.
     #[serde(
@@ -51,7 +51,12 @@ pub struct PublishedDataSetConfig {
         serialize_with = "serialize_node_ids"
     )]
     pub published_variables: Vec<NodeId>,
+    /// Configuration version for the DataSet metadata.
+    #[serde(default, with = "configuration_version_serde")]
+    pub configuration_version: ConfigurationVersionDataType,
 }
+
+impl Eq for PublishedDataSetConfig {}
 
 /// Maps specific variable NodeIds to outbound DataSets.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -117,4 +122,42 @@ pub struct PubSubConnectionConfig {
     /// List of reader groups associated with this connection.
     #[serde(default)]
     pub reader_groups: Vec<ReaderGroupConfig>,
+}
+
+mod configuration_version_serde {
+    use opcua_types::ConfigurationVersionDataType;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    #[derive(Serialize, Deserialize)]
+    struct ConfigurationVersionSerde {
+        major_version: u32,
+        minor_version: u32,
+    }
+
+    pub(super) fn serialize<S>(
+        version: &ConfigurationVersionDataType,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        ConfigurationVersionSerde {
+            major_version: version.major_version,
+            minor_version: version.minor_version,
+        }
+        .serialize(serializer)
+    }
+
+    pub(super) fn deserialize<'de, D>(
+        deserializer: D,
+    ) -> Result<ConfigurationVersionDataType, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let version = ConfigurationVersionSerde::deserialize(deserializer)?;
+        Ok(ConfigurationVersionDataType {
+            major_version: version.major_version,
+            minor_version: version.minor_version,
+        })
+    }
 }

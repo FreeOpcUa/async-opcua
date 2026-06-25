@@ -39,6 +39,7 @@ async fn main() {
                 dataset_name: "TemperatureDataset".to_string(),
                 published_dataset: PublishedDataSetConfig {
                     published_variables: vec![node_id.clone()],
+                    configuration_version: Default::default(),
                 },
             }],
         }],

@@ -19,9 +19,12 @@ use opcua::{
 use opcua_client::alarms::client::{get_alarm_event_select_clauses, parse_alarm_event};
 use opcua_core::events::AlarmEvent;
 use opcua_server::alarms::{
-    register_condition_methods, ConditionRegistry, LimitAlarm, LimitConfig, LimitDef, LimitMode,
+    register_condition_methods, ConditionRegistry, DiscreteAlarm, DiscreteAlarmKind, LimitAlarm,
+    LimitConfig, LimitDef, LimitMode,
 };
-use opcua_server::namespace::{register_alarm_condition, register_limit_alarm};
+use opcua_server::namespace::{
+    register_alarm_condition, register_discrete_alarm, register_limit_alarm,
+};
 use opcua_types::{EventFilter, ExtensionObject};
 use tokio::time::timeout;
 
@@ -1077,4 +1080,84 @@ async fn bench_condition_refresh_lock_hold_scaling() {
         );
     }
     println!("--- end ---\n");
+}
+
+// ---------------------------------------------------------------------------
+// AC1: DiscreteAlarm / OffNormalAlarm — active when the value deviates from the
+// configured normal state, composing the same condition lifecycle as limit alarms.
+// ---------------------------------------------------------------------------
+
+/// Apply a discrete value to an OffNormal/Trip alarm and dispatch the resulting event (if any).
+fn drive_discrete(alarm: &DiscreteAlarm, nm: &SimpleNodeManager, tester: &Tester, value: Variant) {
+    let event = {
+        let mut space = nm.address_space().write();
+        alarm.update_value(&mut space, value)
+    };
+    if let Some(ev) = event {
+        let wrapper = opcua::server::alarms::ServerAlarmEvent { event: &ev };
+        tester
+            .handle
+            .subscriptions()
+            .notify_events(std::iter::once((
+                &wrapper as &dyn opcua::nodes::Event,
+                &ev.source_node,
+            )));
+    }
+}
+
+#[tokio::test]
+async fn offnormal_alarm_activates_off_normal_and_acks() {
+    let (tester, nm, session) = setup_alarms().await;
+    let core_nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<CoreNodeManager>()
+        .expect("CoreNodeManager not found");
+    let source = make_event_source(&nm, "Pump");
+    // Normal state = false (e.g. "not tripped").
+    let alarm = register_discrete_alarm(
+        nm.address_space(),
+        &nm,
+        "Pump",
+        "State",
+        source.clone(),
+        DiscreteAlarmKind::OffNormal,
+        Variant::Boolean(false),
+    );
+    let condition_id = alarm.condition_state_machine().condition_id.clone();
+    let registry = ConditionRegistry::new();
+    registry.register(alarm.condition_state_machine());
+    register_condition_methods(&core_nm, registry, nm.address_space().clone());
+
+    let (notifs, _dv, mut events) = ChannelNotifications::new();
+    let sub_id = session
+        .create_subscription(Duration::from_millis(100), 100, 20, 1000, 0, true, notifs)
+        .await
+        .unwrap();
+    let _item = add_event_item(&session, sub_id, &source).await;
+
+    // Deviate from normal -> Active, typed as OffNormalAlarmType (i=10637).
+    drive_discrete(&alarm, &nm, &tester, Variant::Boolean(true));
+    let e = recv_alarm(&mut events).await;
+    assert!(e.active_state, "off-normal value should activate the alarm");
+    assert!(!e.acked_state);
+    assert_eq!(e.event_type, NodeId::new(0, 10637));
+    assert!(e.severity > 0);
+
+    // Acknowledge via the standard type method.
+    session
+        .acknowledge_condition(
+            &condition_id,
+            ByteString::from(e.event_id.clone()),
+            LocalizedText::new("en", "ack off-normal"),
+        )
+        .await
+        .expect("acknowledge_condition on an off-normal alarm should succeed");
+    let ack_ev = recv_alarm(&mut events).await;
+    assert!(ack_ev.active_state && ack_ev.acked_state);
+
+    // Return to normal -> Inactive.
+    drive_discrete(&alarm, &nm, &tester, Variant::Boolean(false));
+    let e = recv_alarm(&mut events).await;
+    assert!(!e.active_state, "value back to normal clears the alarm");
 }

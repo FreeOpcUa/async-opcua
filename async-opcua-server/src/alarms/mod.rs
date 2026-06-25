@@ -1,5 +1,6 @@
 //! Alarms and Conditions (Part 9) module for the OPC-UA server.
 
+pub mod discrete;
 pub mod dispatch;
 pub mod limit;
 pub mod methods;
@@ -8,6 +9,7 @@ pub mod registry;
 pub mod state_machine;
 pub mod transitions;
 
+pub use discrete::{DiscreteAlarm, DiscreteAlarmKind};
 pub use dispatch::{dispatch_alarm_event, ServerAlarmEvent};
 pub use limit::{
     ActiveLimits, LimitAlarm, LimitConfig, LimitDef, LimitEvaluator, LimitLevel, LimitMode,

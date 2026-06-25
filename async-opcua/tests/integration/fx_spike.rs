@@ -95,6 +95,7 @@ async fn fx_c2c_process_value_flows_ac1_to_ac2() {
     let local_addr = receiver.local_addr().unwrap();
 
     let connection_config = PubSubConnectionConfig {
+        reader_groups: Vec::new(),
         connection_id: "Ac1Publisher".to_string(),
         name: "Ac1Publisher".to_string(),
         address: format!("udp://{local_addr}"),

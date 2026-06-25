@@ -17,7 +17,7 @@ const SECURITY_FLAGS_RESERVED: u8 = 0xF0;
 const ENCRYPTED_MESSAGE_NONCE_LEN: u8 = 8;
 
 /// The PublisherId type in a UADP NetworkMessage.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum PublisherId {
     /// No PublisherId is present.
     None,

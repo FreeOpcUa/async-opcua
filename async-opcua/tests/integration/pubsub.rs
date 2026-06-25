@@ -35,6 +35,7 @@ async fn test_udp_multicast_pubsub() {
     let udp_publisher = Arc::new(UdpPublisher::new(address_space.clone()));
 
     let connection_config = PubSubConnectionConfig {
+        reader_groups: Vec::new(),
         connection_id: "UdpPublisher1".to_string(),
         name: "UdpPublisher".to_string(),
         address: format!("udp://{}", local_addr),
@@ -243,6 +244,7 @@ async fn test_mqtt_broker_pubsub() {
     let mqtt_publisher = Arc::new(MqttPublisher::new(address_space.clone()));
 
     let connection_config = PubSubConnectionConfig {
+        reader_groups: Vec::new(),
         connection_id: "MqttPublisher1".to_string(),
         name: "MqttPublisher".to_string(),
         address: format!("mqtt://127.0.0.1:{}", port),

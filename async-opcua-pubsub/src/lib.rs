@@ -15,6 +15,9 @@ pub mod engine;
 /// Read-only PubSub information-model reflection.
 pub mod pubsub_model;
 
+/// Subscriber helpers for applying received PubSub DataSets.
+pub mod subscriber;
+
 /// PubSub security key management and OPC UA Part 14 secured-NetworkMessage codec.
 ///
 /// Secured UADP NetworkMessages use the Part 14 (§7.2.4.4) wire format: the real SecurityHeader
@@ -24,8 +27,8 @@ pub mod pubsub_model;
 pub mod security;
 
 pub use config::{
-    DataSetWriterConfig, MessageEncoding, PubSubConnectionConfig, PublishedDataSetConfig,
-    WriterGroupConfig,
+    DataSetReaderConfig, DataSetWriterConfig, MessageEncoding, PubSubConnectionConfig,
+    PublishedDataSetConfig, ReaderGroupConfig, WriterGroupConfig,
 };
 
 pub use engine::{PubSubEngine, TransportKind};
@@ -42,6 +45,7 @@ pub use transport::websocket::WebSocketPublisher;
 
 pub use codec::json::{json_value_to_opcua, JsonDataSetMessage, JsonNetworkMessage};
 pub use codec::uadp::{PublisherId, UadpDataSetMessage, UadpNetworkMessage};
+pub use subscriber::{apply_network_message, decode_and_apply};
 
 /// Bridge module to monitor AddressSpace changes and publish events.
 pub mod bridge;

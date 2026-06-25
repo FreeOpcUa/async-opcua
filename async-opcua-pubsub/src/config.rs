@@ -2,6 +2,8 @@ use opcua_types::NodeId;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::str::FromStr;
 
+use crate::codec::uadp::PublisherId;
+
 /// Message encoding formats supported by the PubSub implementation.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum MessageEncoding {
@@ -75,6 +77,32 @@ pub struct WriterGroupConfig {
     pub dataset_writers: Vec<DataSetWriterConfig>,
 }
 
+/// Maps received DataSet fields to target variables.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DataSetReaderConfig {
+    /// Unique identifier for the dataset reader.
+    pub dataset_reader_id: u16,
+    /// The dataset writer ID this reader consumes.
+    pub dataset_writer_id: u16,
+    /// Optional PublisherId filter for incoming NetworkMessages.
+    pub publisher_id: Option<PublisherId>,
+    /// Target variable NodeIds in received field order.
+    #[serde(
+        deserialize_with = "deserialize_node_ids",
+        serialize_with = "serialize_node_ids"
+    )]
+    pub subscribed_variables: Vec<NodeId>,
+}
+
+/// Groups configured DataSetReaders for inbound PubSub traffic.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ReaderGroupConfig {
+    /// Unique identifier for the reader group.
+    pub reader_group_id: u16,
+    /// List of dataset readers in this reader group.
+    pub dataset_readers: Vec<DataSetReaderConfig>,
+}
+
 /// Represents dataset publishing structures.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PubSubConnectionConfig {
@@ -86,4 +114,7 @@ pub struct PubSubConnectionConfig {
     pub address: String,
     /// List of writer groups associated with this connection.
     pub writer_groups: Vec<WriterGroupConfig>,
+    /// List of reader groups associated with this connection.
+    #[serde(default)]
+    pub reader_groups: Vec<ReaderGroupConfig>,
 }

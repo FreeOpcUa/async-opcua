@@ -16,6 +16,7 @@ use opcua_types::{
 
 fn empty_connection(connection_id: &str, address: &str) -> PubSubConnectionConfig {
     PubSubConnectionConfig {
+        reader_groups: Vec::new(),
         connection_id: connection_id.to_string(),
         name: connection_id.to_string(),
         address: address.to_string(),

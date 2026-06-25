@@ -26,6 +26,7 @@ async fn main() {
     let udp_publisher = Arc::new(UdpPublisher::new(address_space.clone()));
 
     let connection_config = PubSubConnectionConfig {
+        reader_groups: Vec::new(),
         connection_id: "UdpPublisher1".to_string(),
         name: "UdpPublisher".to_string(),
         address: "opc.udp://192.168.150.203:4840".to_string(), // Send to PLC02 WG IP

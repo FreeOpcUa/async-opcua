@@ -278,6 +278,7 @@ mod tests {
             name: "all-transports".to_string(),
             address: "udp://127.0.0.1:4840".to_string(),
             writer_groups: Vec::new(),
+            reader_groups: Vec::new(),
         };
 
         let bridge = PubSubBridge::with_publishers(

@@ -18,6 +18,7 @@ fn reflect_pubsub_config_materializes_referenceable_instances() {
     space.add_namespace("urn:test", 1);
 
     let cfg = PubSubConnectionConfig {
+        reader_groups: Vec::new(),
         connection_id: "conn1".into(),
         name: "Conn 1".into(),
         address: "udp://239.0.0.1:4840".into(),

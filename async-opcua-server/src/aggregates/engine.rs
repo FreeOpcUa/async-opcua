@@ -781,7 +781,7 @@ fn agg_minimum2(input: &AggregateInput<'_>) -> DataValue {
 
 fn agg_minimum_actual_time(input: &AggregateInput<'_>) -> DataValue {
     let points = good_numeric_points(input);
-    let Some((timestamp, _, source)) =
+    let Some((timestamp, min_value, source)) =
         points
             .iter()
             .min_by(|(left_time, left_value, _), (right_time, right_value, _)| {
@@ -793,14 +793,27 @@ fn agg_minimum_actual_time(input: &AggregateInput<'_>) -> DataValue {
         return bad_no_data(input.interval_start);
     };
 
-    // ponytail: MultipleValues aggregate-bit is not set yet when duplicate minima exist.
+    // Part 13 §A.2: set the MultipleValues bit when more than one point shares the extremum.
+    let mut status = aggregate_quality(input);
+    if extremum_count(&points, *min_value) > 1 {
+        status = status.set_multi_value(true);
+    }
     DataValue {
         value: source.value.clone(),
-        status: Some(aggregate_quality(input)),
+        status: Some(status),
         source_timestamp: Some(*timestamp),
         server_timestamp: Some(DateTime::now()),
         ..Default::default()
     }
+}
+
+/// Counts how many numeric points share `extremum` (exact total-order equality) — used to flag the
+/// MultipleValues aggregate status bit for Minimum/Maximum (Part 13 §A.2).
+fn extremum_count(points: &[(DateTime, f64, &DataValue)], extremum: f64) -> usize {
+    points
+        .iter()
+        .filter(|(_, value, _)| value.total_cmp(&extremum) == std::cmp::Ordering::Equal)
+        .count()
 }
 
 fn agg_minimum_actual_time2(input: &AggregateInput<'_>) -> DataValue {
@@ -864,7 +877,7 @@ fn agg_maximum2(input: &AggregateInput<'_>) -> DataValue {
 
 fn agg_maximum_actual_time(input: &AggregateInput<'_>) -> DataValue {
     let points = good_numeric_points(input);
-    let Some((timestamp, _, source)) =
+    let Some((timestamp, max_value, source)) =
         points
             .iter()
             .max_by(|(left_time, left_value, _), (right_time, right_value, _)| {
@@ -876,10 +889,14 @@ fn agg_maximum_actual_time(input: &AggregateInput<'_>) -> DataValue {
         return bad_no_data(input.interval_start);
     };
 
-    // ponytail: MultipleValues aggregate-bit is not set yet when duplicate maxima exist.
+    // Part 13 §A.2: set the MultipleValues bit when more than one point shares the extremum.
+    let mut status = aggregate_quality(input);
+    if extremum_count(&points, *max_value) > 1 {
+        status = status.set_multi_value(true);
+    }
     DataValue {
         value: source.value.clone(),
-        status: Some(aggregate_quality(input)),
+        status: Some(status),
         source_timestamp: Some(*timestamp),
         server_timestamp: Some(DateTime::now()),
         ..Default::default()

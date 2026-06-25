@@ -828,3 +828,34 @@ fn phase_h_sloped_interpolation_differs_from_stepped() {
         other => panic!("expected Double, got {other:?}"),
     }
 }
+
+#[test]
+fn min_max_actual_time_set_multiple_values_bit_on_duplicate_extrema() {
+    let (start, end) = phase_b_interval();
+    // Two points share the minimum (5.0) and two share the maximum (30.0).
+    let (a, b, c, d) = (good(5.0, 0), good(30.0, 2), good(5.0, 5), good(30.0, 7));
+    let vals = [&a, &b, &c, &d];
+
+    let min = calculate_aggregate(&vals, &NodeId::new(0u16, ID_MIN_ACTUAL_TIME), start, end);
+    assert_eq!(min.value, Some(Variant::Double(5.0)));
+    assert!(
+        min.status.unwrap().multi_value(),
+        "duplicate minima must set the MultipleValues bit (Part 13 §A.2)"
+    );
+
+    let max = calculate_aggregate(&vals, &NodeId::new(0u16, ID_MAX_ACTUAL_TIME), start, end);
+    assert_eq!(max.value, Some(Variant::Double(30.0)));
+    assert!(
+        max.status.unwrap().multi_value(),
+        "duplicate maxima must set the MultipleValues bit"
+    );
+
+    // Control: a unique extremum leaves the bit clear.
+    let (e, f, g) = (good(1.0, 0), good(2.0, 2), good(3.0, 5));
+    let uniq = [&e, &f, &g];
+    let min_uniq = calculate_aggregate(&uniq, &NodeId::new(0u16, ID_MIN_ACTUAL_TIME), start, end);
+    assert!(
+        !min_uniq.status.unwrap().multi_value(),
+        "a unique minimum must not set the MultipleValues bit"
+    );
+}

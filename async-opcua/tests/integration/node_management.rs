@@ -10,9 +10,10 @@ use opcua::{
     },
     types::{
         AddNodeAttributes, AddNodesItem, AddReferencesItem, AttributeId, BrowseDescription,
-        BrowseDirection, DeleteNodesItem, DeleteReferencesItem, ExpandedNodeId, NodeClass, NodeId,
-        ObjectAttributes, ObjectId, ObjectTypeId, QualifiedName, ReadValueId, ReferenceTypeId,
-        StatusCode, TimestampsToReturn,
+        BrowseDirection, DataTypeAttributes, DeleteNodesItem, DeleteReferencesItem, ExpandedNodeId,
+        MethodAttributes, NodeClass, NodeId, ObjectAttributes, ObjectId, ObjectTypeAttributes,
+        ObjectTypeId, QualifiedName, ReadValueId, ReferenceTypeAttributes, ReferenceTypeId,
+        StatusCode, TimestampsToReturn, VariableTypeAttributes, ViewAttributes,
     },
 };
 
@@ -768,4 +769,142 @@ async fn add_nodes_mixed_batch_is_per_operation_with_in_batch_dependency() {
         refs.iter().any(|rf| rf.node_id.node_id == dependent),
         "the dependent child must be referenced from its in-batch parent"
     );
+}
+
+/// Part 4 §5.7: AddNodes supports all node classes. Feature 022 added Object+Variable; this verifies
+/// the remaining six (Method, ObjectType, VariableType, ReferenceType, DataType, View) are created.
+#[tokio::test]
+async fn simple_writable_adds_all_node_classes() {
+    let (_tester, _nm, ns, parent, session) = setup_simple(true).await;
+    const DN: u32 = 1 << 6; // DisplayName specified
+
+    fn item(
+        parent: &NodeId,
+        ns: u16,
+        name: &str,
+        node_class: NodeClass,
+        attrs: AddNodeAttributes,
+    ) -> AddNodesItem {
+        AddNodesItem {
+            parent_node_id: parent.clone().into(),
+            reference_type_id: ReferenceTypeId::HasComponent.into(),
+            requested_new_node_id: NodeId::new(ns, name).into(),
+            browse_name: QualifiedName::new(ns, name),
+            node_class,
+            node_attributes: attrs.as_extension_object(),
+            type_definition: ExpandedNodeId::null(),
+        }
+    }
+
+    let items = vec![
+        item(
+            &parent,
+            ns,
+            "Meth",
+            NodeClass::Method,
+            AddNodeAttributes::Method(MethodAttributes {
+                specified_attributes: DN,
+                display_name: "Meth".into(),
+                ..Default::default()
+            }),
+        ),
+        item(
+            &parent,
+            ns,
+            "ObjT",
+            NodeClass::ObjectType,
+            AddNodeAttributes::ObjectType(ObjectTypeAttributes {
+                specified_attributes: DN,
+                display_name: "ObjT".into(),
+                ..Default::default()
+            }),
+        ),
+        item(
+            &parent,
+            ns,
+            "VarT",
+            NodeClass::VariableType,
+            AddNodeAttributes::VariableType(VariableTypeAttributes {
+                specified_attributes: DN,
+                display_name: "VarT".into(),
+                ..Default::default()
+            }),
+        ),
+        item(
+            &parent,
+            ns,
+            "RefT",
+            NodeClass::ReferenceType,
+            AddNodeAttributes::ReferenceType(ReferenceTypeAttributes {
+                specified_attributes: DN,
+                display_name: "RefT".into(),
+                ..Default::default()
+            }),
+        ),
+        item(
+            &parent,
+            ns,
+            "DatT",
+            NodeClass::DataType,
+            AddNodeAttributes::DataType(DataTypeAttributes {
+                specified_attributes: DN,
+                display_name: "DatT".into(),
+                ..Default::default()
+            }),
+        ),
+        item(
+            &parent,
+            ns,
+            "Viw",
+            NodeClass::View,
+            AddNodeAttributes::View(ViewAttributes {
+                specified_attributes: DN,
+                display_name: "Viw".into(),
+                ..Default::default()
+            }),
+        ),
+    ];
+    let expected = [
+        NodeClass::Method,
+        NodeClass::ObjectType,
+        NodeClass::VariableType,
+        NodeClass::ReferenceType,
+        NodeClass::DataType,
+        NodeClass::View,
+    ];
+
+    let r = session.add_nodes(&items).await.unwrap();
+    assert_eq!(r.len(), 6);
+    for (i, res) in r.iter().enumerate() {
+        assert_eq!(
+            res.status_code,
+            StatusCode::Good,
+            "class {:?} should add",
+            expected[i]
+        );
+        assert!(!res.added_node_id.is_null());
+    }
+
+    // Read NodeClass back through the service for each.
+    let reads: Vec<ReadValueId> = r
+        .iter()
+        .map(|res| ReadValueId {
+            node_id: res.added_node_id.clone(),
+            attribute_id: AttributeId::NodeClass as u32,
+            ..Default::default()
+        })
+        .collect();
+    let vals = session
+        .read(&reads, TimestampsToReturn::Neither, 0.0)
+        .await
+        .unwrap();
+    for (i, v) in vals.iter().enumerate() {
+        assert_eq!(v.status(), StatusCode::Good);
+        let nc = v.value.clone().unwrap();
+        assert_eq!(
+            nc,
+            opcua::types::Variant::Int32(expected[i] as i32),
+            "NodeClass of item {i}"
+        );
+    }
 }

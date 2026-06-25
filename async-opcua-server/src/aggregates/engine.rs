@@ -8,9 +8,19 @@ use opcua_types::{AggregateConfiguration, DataValue, DateTime, NodeId, StatusCod
 // Standard AggregateFunction NodeIds (Part 13 / Part 6 NodeIds.csv). The implemented average is
 // interpolated/time-weighted, so it maps to TimeAverage (2343), NOT simple Average (2342).
 const AGG_TIME_AVERAGE: u32 = 2343;
+const AGG_AVERAGE: u32 = 2342;
 const AGG_MINIMUM: u32 = 2346;
 const AGG_MAXIMUM: u32 = 2347;
+const AGG_MINIMUM_ACTUAL_TIME: u32 = 2348;
+const AGG_MAXIMUM_ACTUAL_TIME: u32 = 2349;
+const AGG_RANGE: u32 = 2350;
+const AGG_COUNT: u32 = 2352;
+const AGG_DELTA: u32 = 2359;
+const AGG_WORST_QUALITY: u32 = 2364;
 const AGG_STANDARD_DEVIATION_SAMPLE: u32 = 11426;
+const AGG_STANDARD_DEVIATION_POPULATION: u32 = 11427;
+const AGG_VARIANCE_SAMPLE: u32 = 11428;
+const AGG_VARIANCE_POPULATION: u32 = 11429;
 
 /// NodeId for the TimeAverage aggregate (interpolated, time-weighted — Part 13 §5.4.3.2).
 pub fn aggregate_average() -> NodeId {
@@ -239,6 +249,22 @@ fn aggregate_preamble(input: &AggregateInput<'_>) -> Result<AggregatePreamble, D
     })
 }
 
+fn good_numeric_points<'a>(input: &AggregateInput<'a>) -> Vec<(DateTime, f64, &'a DataValue)> {
+    input
+        .values
+        .iter()
+        .filter_map(|v| {
+            if v.status.is_none_or(|status| status.is_good()) {
+                let t = get_value_timestamp(v);
+                let val = v.value.as_ref().and_then(variant_to_f64)?;
+                Some((t, val, *v))
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
 fn aggregate_result(
     result_value: Option<f64>,
     quality: StatusCode,
@@ -262,6 +288,21 @@ fn aggregate_result(
     }
 }
 
+fn aggregate_quality(input: &AggregateInput<'_>) -> StatusCode {
+    let statuses: Vec<Option<StatusCode>> = input.values.iter().map(|v| v.status).collect();
+    compute_aggregate_quality(&statuses)
+}
+
+fn agg_average(input: &AggregateInput<'_>) -> DataValue {
+    let points = good_numeric_points(input);
+    if points.is_empty() {
+        return bad_no_data(input.interval_start);
+    }
+
+    let mean = points.iter().map(|(_, value, _)| value).sum::<f64>() / points.len() as f64;
+    aggregate_result(Some(mean), aggregate_quality(input), input.interval_start)
+}
+
 fn agg_time_average(input: &AggregateInput<'_>) -> DataValue {
     let preamble = match aggregate_preamble(input) {
         Ok(preamble) => preamble,
@@ -275,6 +316,41 @@ fn agg_time_average(input: &AggregateInput<'_>) -> DataValue {
             input.interval_end,
         ),
         preamble.quality,
+        input.interval_start,
+    )
+}
+
+fn agg_range(input: &AggregateInput<'_>) -> DataValue {
+    let points = good_numeric_points(input);
+    if points.is_empty() {
+        return bad_no_data(input.interval_start);
+    }
+
+    let (min, max) = points
+        .iter()
+        .map(|(_, value, _)| *value)
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(min, max), value| {
+            (min.min(value), max.max(value))
+        });
+    aggregate_result(
+        Some(max - min),
+        aggregate_quality(input),
+        input.interval_start,
+    )
+}
+
+fn agg_delta(input: &AggregateInput<'_>) -> DataValue {
+    let points = good_numeric_points(input);
+    let Some((_, first, _)) = points.first() else {
+        return bad_no_data(input.interval_start);
+    };
+    let Some((_, last, _)) = points.last() else {
+        return bad_no_data(input.interval_start);
+    };
+
+    aggregate_result(
+        Some(last - first),
+        aggregate_quality(input),
         input.interval_start,
     )
 }
@@ -296,6 +372,30 @@ fn agg_minimum(input: &AggregateInput<'_>) -> DataValue {
     )
 }
 
+fn agg_minimum_actual_time(input: &AggregateInput<'_>) -> DataValue {
+    let points = good_numeric_points(input);
+    let Some((timestamp, _, source)) =
+        points
+            .iter()
+            .min_by(|(left_time, left_value, _), (right_time, right_value, _)| {
+                left_value
+                    .total_cmp(right_value)
+                    .then_with(|| left_time.cmp(right_time))
+            })
+    else {
+        return bad_no_data(input.interval_start);
+    };
+
+    // ponytail: MultipleValues aggregate-bit is not set yet when duplicate minima exist.
+    DataValue {
+        value: source.value.clone(),
+        status: Some(aggregate_quality(input)),
+        source_timestamp: Some(*timestamp),
+        server_timestamp: Some(DateTime::now()),
+        ..Default::default()
+    }
+}
+
 fn agg_maximum(input: &AggregateInput<'_>) -> DataValue {
     let preamble = match aggregate_preamble(input) {
         Ok(preamble) => preamble,
@@ -313,6 +413,30 @@ fn agg_maximum(input: &AggregateInput<'_>) -> DataValue {
     )
 }
 
+fn agg_maximum_actual_time(input: &AggregateInput<'_>) -> DataValue {
+    let points = good_numeric_points(input);
+    let Some((timestamp, _, source)) =
+        points
+            .iter()
+            .max_by(|(left_time, left_value, _), (right_time, right_value, _)| {
+                left_value
+                    .total_cmp(right_value)
+                    .then_with(|| right_time.cmp(left_time))
+            })
+    else {
+        return bad_no_data(input.interval_start);
+    };
+
+    // ponytail: MultipleValues aggregate-bit is not set yet when duplicate maxima exist.
+    DataValue {
+        value: source.value.clone(),
+        status: Some(aggregate_quality(input)),
+        source_timestamp: Some(*timestamp),
+        server_timestamp: Some(DateTime::now()),
+        ..Default::default()
+    }
+}
+
 fn agg_std_dev_sample(input: &AggregateInput<'_>) -> DataValue {
     let preamble = match aggregate_preamble(input) {
         Ok(preamble) => preamble,
@@ -327,15 +451,137 @@ fn agg_std_dev_sample(input: &AggregateInput<'_>) -> DataValue {
     )
 }
 
+fn sample_variance(values: &[f64]) -> Option<f64> {
+    let n = values.len();
+    if n < 2 {
+        return None;
+    }
+
+    let mean = values.iter().sum::<f64>() / n as f64;
+    Some(
+        values
+            .iter()
+            .map(|value| (value - mean).powi(2))
+            .sum::<f64>()
+            / (n - 1) as f64,
+    )
+}
+
+fn population_variance(values: &[f64]) -> Option<f64> {
+    let n = values.len();
+    if n == 0 {
+        return None;
+    }
+
+    let mean = values.iter().sum::<f64>() / n as f64;
+    Some(
+        values
+            .iter()
+            .map(|value| (value - mean).powi(2))
+            .sum::<f64>()
+            / n as f64,
+    )
+}
+
+fn agg_variance_sample(input: &AggregateInput<'_>) -> DataValue {
+    let values: Vec<f64> = good_numeric_points(input)
+        .iter()
+        .map(|(_, value, _)| *value)
+        .collect();
+    aggregate_result(
+        sample_variance(&values),
+        aggregate_quality(input),
+        input.interval_start,
+    )
+}
+
+fn agg_std_dev_population(input: &AggregateInput<'_>) -> DataValue {
+    let values: Vec<f64> = good_numeric_points(input)
+        .iter()
+        .map(|(_, value, _)| *value)
+        .collect();
+    aggregate_result(
+        population_variance(&values).map(f64::sqrt),
+        aggregate_quality(input),
+        input.interval_start,
+    )
+}
+
+fn agg_variance_population(input: &AggregateInput<'_>) -> DataValue {
+    let values: Vec<f64> = good_numeric_points(input)
+        .iter()
+        .map(|(_, value, _)| *value)
+        .collect();
+    aggregate_result(
+        population_variance(&values),
+        aggregate_quality(input),
+        input.interval_start,
+    )
+}
+
+fn quality_rank(status: StatusCode) -> u8 {
+    if status.is_bad() {
+        2
+    } else if status.is_uncertain() {
+        1
+    } else {
+        0
+    }
+}
+
+fn agg_count(input: &AggregateInput<'_>) -> DataValue {
+    let good_count = good_numeric_points(input).len() as i32;
+    // ponytail: Count's before-start/after-end BadNoData nuance needs historian range metadata.
+    DataValue {
+        value: Some(Variant::Int32(good_count)),
+        status: Some(StatusCode::Good),
+        source_timestamp: Some(input.interval_start),
+        server_timestamp: Some(DateTime::now()),
+        ..Default::default()
+    }
+}
+
+fn agg_worst_quality(input: &AggregateInput<'_>) -> DataValue {
+    let Some(worst) = input
+        .values
+        .iter()
+        .map(|value| value.status.unwrap_or(StatusCode::Good))
+        .max_by_key(|status| quality_rank(*status))
+    else {
+        return bad_no_data(input.interval_start);
+    };
+
+    DataValue {
+        value: Some(Variant::StatusCode(worst)),
+        status: Some(StatusCode::Good),
+        source_timestamp: Some(input.interval_start),
+        server_timestamp: Some(DateTime::now()),
+        ..Default::default()
+    }
+}
+
 /// Dispatches an aggregate calculation to the implementation for the requested aggregate NodeId.
 pub fn dispatch_aggregate(aggregate_type: &NodeId, input: &AggregateInput<'_>) -> DataValue {
     match aggregate_type.identifier {
+        opcua_types::Identifier::Numeric(AGG_AVERAGE) => agg_average(input),
         opcua_types::Identifier::Numeric(AGG_TIME_AVERAGE) => agg_time_average(input),
         opcua_types::Identifier::Numeric(AGG_MINIMUM) => agg_minimum(input),
         opcua_types::Identifier::Numeric(AGG_MAXIMUM) => agg_maximum(input),
+        opcua_types::Identifier::Numeric(AGG_MINIMUM_ACTUAL_TIME) => agg_minimum_actual_time(input),
+        opcua_types::Identifier::Numeric(AGG_MAXIMUM_ACTUAL_TIME) => agg_maximum_actual_time(input),
+        opcua_types::Identifier::Numeric(AGG_RANGE) => agg_range(input),
+        // AnnotationCount (2351) is intentionally unsupported until annotations are modeled.
+        opcua_types::Identifier::Numeric(AGG_COUNT) => agg_count(input),
+        opcua_types::Identifier::Numeric(AGG_DELTA) => agg_delta(input),
+        opcua_types::Identifier::Numeric(AGG_WORST_QUALITY) => agg_worst_quality(input),
         opcua_types::Identifier::Numeric(AGG_STANDARD_DEVIATION_SAMPLE) => {
             agg_std_dev_sample(input)
         }
+        opcua_types::Identifier::Numeric(AGG_STANDARD_DEVIATION_POPULATION) => {
+            agg_std_dev_population(input)
+        }
+        opcua_types::Identifier::Numeric(AGG_VARIANCE_SAMPLE) => agg_variance_sample(input),
+        opcua_types::Identifier::Numeric(AGG_VARIANCE_POPULATION) => agg_variance_population(input),
         _ => bad_aggregate_not_supported(input.interval_start),
     }
 }

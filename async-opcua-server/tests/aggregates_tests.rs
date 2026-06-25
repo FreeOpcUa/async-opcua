@@ -41,8 +41,8 @@ fn aggregate_node_ids_match_the_standard_registry() {
     assert_eq!(aggregate_maximum(), NodeId::new(0u16, 2347u32));
     assert_eq!(aggregate_std_dev(), NodeId::new(0u16, 11426u32));
 
-    // A request for the correct standard id is computed; the previously-mis-used id 2352 (which is
-    // actually AggregateFunction_Count, not implemented) must report BadAggregateNotSupported.
+    // A request for a supported standard id is computed; an unimplemented id (2351 =
+    // AggregateFunction_AnnotationCount, needs annotation history) reports BadAggregateNotSupported.
     let start = DateTime::from((2026, 6, 6, 12, 0, 0));
     let end = DateTime::from((2026, 6, 6, 12, 0, 10));
     let v = DataValue {
@@ -55,8 +55,14 @@ fn aggregate_node_ids_match_the_standard_registry() {
         calculate_aggregate(&[&v], &aggregate_minimum(), start, end).status,
         Some(StatusCode::Good)
     );
+    // Count (2352) is now supported (Phase B).
     assert_eq!(
         calculate_aggregate(&[&v], &NodeId::new(0u16, 2352u32), start, end).status,
+        Some(StatusCode::Good)
+    );
+    // AnnotationCount (2351) is intentionally not implemented.
+    assert_eq!(
+        calculate_aggregate(&[&v], &NodeId::new(0u16, 2351u32), start, end).status,
         Some(StatusCode::BadAggregateNotSupported)
     );
 }
@@ -206,4 +212,173 @@ fn test_calculate_aggregate_min_max() {
 
     let max_res = calculate_aggregate(&[&val1, &val2, &val3], &aggregate_maximum(), start, end);
     assert_eq!(max_res.value, Some(Variant::Double(50.0)));
+}
+
+// ---------------------------------------------------------------------------
+// Phase B: simple in-interval aggregates. Expected values hand-computed and
+// cross-checked against OPC 10000-13 §5.4.3 (verified via the opc-ua-reference
+// MCP). Canonical interval [12:00:00, 12:00:10) with Good values
+// 10@0s, 20@2s, 30@5s, 5@7s unless noted.
+// ---------------------------------------------------------------------------
+
+fn good(value: f64, sec: u16) -> DataValue {
+    DataValue {
+        value: Some(Variant::Double(value)),
+        source_timestamp: Some(DateTime::from((2026, 6, 6, 12, 0, sec))),
+        status: Some(StatusCode::Good),
+        ..Default::default()
+    }
+}
+
+fn phase_b_interval() -> (DateTime, DateTime) {
+    (
+        DateTime::from((2026, 6, 6, 12, 0, 0)),
+        DateTime::from((2026, 6, 6, 12, 0, 10)),
+    )
+}
+
+const ID_AVERAGE: u32 = 2342;
+const ID_MIN_ACTUAL_TIME: u32 = 2348;
+const ID_MAX_ACTUAL_TIME: u32 = 2349;
+const ID_RANGE: u32 = 2350;
+const ID_COUNT: u32 = 2352;
+const ID_WORST_QUALITY: u32 = 2364;
+const ID_DELTA: u32 = 2359;
+const ID_STDDEV_POP: u32 = 11427;
+const ID_VARIANCE_SAMPLE: u32 = 11428;
+const ID_VARIANCE_POP: u32 = 11429;
+
+#[test]
+fn phase_b_count_average_range_delta() {
+    let (start, end) = phase_b_interval();
+    let (v0, v2, v5, v7) = (good(10.0, 0), good(20.0, 2), good(30.0, 5), good(5.0, 7));
+    let vals = [&v0, &v2, &v5, &v7];
+
+    // Count = number of Good raw values, as Int32, timestamp = interval start.
+    let count = calculate_aggregate(&vals, &NodeId::new(0u16, ID_COUNT), start, end);
+    assert_eq!(count.value, Some(Variant::Int32(4)));
+    assert_eq!(count.status, Some(StatusCode::Good));
+    assert_eq!(count.source_timestamp, Some(start));
+
+    // Average = arithmetic mean = 65/4 = 16.25.
+    let avg = calculate_aggregate(&vals, &NodeId::new(0u16, ID_AVERAGE), start, end);
+    assert_eq!(avg.value, Some(Variant::Double(16.25)));
+
+    // Range = max - min = 30 - 5 = 25.
+    let range = calculate_aggregate(&vals, &NodeId::new(0u16, ID_RANGE), start, end);
+    assert_eq!(range.value, Some(Variant::Double(25.0)));
+
+    // Delta = last - first = 5 - 10 = -5 (signed).
+    let delta = calculate_aggregate(&vals, &NodeId::new(0u16, ID_DELTA), start, end);
+    assert_eq!(delta.value, Some(Variant::Double(-5.0)));
+}
+
+#[test]
+fn phase_b_actual_time_returns_value_timestamp_not_interval_start() {
+    let (start, end) = phase_b_interval();
+    let (v0, v2, v5, v7) = (good(10.0, 0), good(20.0, 2), good(30.0, 5), good(5.0, 7));
+    let vals = [&v0, &v2, &v5, &v7];
+
+    // MinimumActualTime: value 5.0 occurring at 12:00:07 — timestamp must be the value's, not start.
+    let min = calculate_aggregate(&vals, &NodeId::new(0u16, ID_MIN_ACTUAL_TIME), start, end);
+    assert_eq!(min.value, Some(Variant::Double(5.0)));
+    assert_eq!(
+        min.source_timestamp,
+        Some(DateTime::from((2026, 6, 6, 12, 0, 7)))
+    );
+    assert_ne!(min.source_timestamp, Some(start));
+
+    // MaximumActualTime: value 30.0 occurring at 12:00:05.
+    let max = calculate_aggregate(&vals, &NodeId::new(0u16, ID_MAX_ACTUAL_TIME), start, end);
+    assert_eq!(max.value, Some(Variant::Double(30.0)));
+    assert_eq!(
+        max.source_timestamp,
+        Some(DateTime::from((2026, 6, 6, 12, 0, 5)))
+    );
+}
+
+#[test]
+fn phase_b_variance_and_stddev() {
+    let (start, end) = phase_b_interval();
+    let (v0, v2, v5, v7) = (good(10.0, 0), good(20.0, 2), good(30.0, 5), good(5.0, 7));
+    let vals = [&v0, &v2, &v5, &v7];
+    // mean = 16.25; sum of squared deviations = 368.75.
+    // sample variance = 368.75 / 3 = 122.91666...; population variance = 368.75 / 4 = 92.1875.
+    let var_s = calculate_aggregate(&vals, &NodeId::new(0u16, ID_VARIANCE_SAMPLE), start, end);
+    match var_s.value {
+        Some(Variant::Double(v)) => assert!((v - 122.916_666_666).abs() < 1e-6, "got {v}"),
+        other => panic!("expected Double, got {other:?}"),
+    }
+    let var_p = calculate_aggregate(&vals, &NodeId::new(0u16, ID_VARIANCE_POP), start, end);
+    assert_eq!(var_p.value, Some(Variant::Double(92.1875)));
+
+    let sd_p = calculate_aggregate(&vals, &NodeId::new(0u16, ID_STDDEV_POP), start, end);
+    match sd_p.value {
+        Some(Variant::Double(v)) => assert!((v - 92.1875_f64.sqrt()).abs() < 1e-9, "got {v}"),
+        other => panic!("expected Double, got {other:?}"),
+    }
+
+    // Sample variance needs >= 2 points.
+    let single = good(10.0, 0);
+    let var_s1 = calculate_aggregate(
+        &[&single],
+        &NodeId::new(0u16, ID_VARIANCE_SAMPLE),
+        start,
+        end,
+    );
+    assert_eq!(var_s1.status, Some(StatusCode::BadNoData));
+}
+
+#[test]
+fn phase_b_non_good_values_excluded_and_downgrade_status() {
+    let (start, end) = phase_b_interval();
+    let g = good(10.0, 0);
+    let bad = DataValue {
+        value: Some(Variant::Double(20.0)),
+        source_timestamp: Some(DateTime::from((2026, 6, 6, 12, 0, 5))),
+        status: Some(StatusCode::BadDataUnavailable),
+        ..Default::default()
+    };
+    let vals = [&g, &bad];
+
+    // Average ignores the non-Good value (only 10.0 counts) but the result status is downgraded.
+    let avg = calculate_aggregate(&vals, &NodeId::new(0u16, ID_AVERAGE), start, end);
+    assert_eq!(avg.value, Some(Variant::Double(10.0)));
+    assert_eq!(avg.status, Some(StatusCode::UncertainDataSubNormal));
+
+    // Count excludes the non-Good value.
+    let count = calculate_aggregate(&vals, &NodeId::new(0u16, ID_COUNT), start, end);
+    assert_eq!(count.value, Some(Variant::Int32(1)));
+
+    // WorstQuality returns the worst StatusCode as the value, with the interval-start timestamp.
+    let wq = calculate_aggregate(&vals, &NodeId::new(0u16, ID_WORST_QUALITY), start, end);
+    assert_eq!(
+        wq.value,
+        Some(Variant::StatusCode(StatusCode::BadDataUnavailable))
+    );
+    assert_eq!(wq.status, Some(StatusCode::Good));
+    assert_eq!(wq.source_timestamp, Some(start));
+}
+
+#[test]
+fn phase_b_empty_interval() {
+    let (start, end) = phase_b_interval();
+    let empty: [&DataValue; 0] = [];
+
+    // Count of an empty interval is 0, Good (§5.4.3.21), not BadNoData.
+    let count = calculate_aggregate(&empty, &NodeId::new(0u16, ID_COUNT), start, end);
+    assert_eq!(count.value, Some(Variant::Int32(0)));
+    assert_eq!(count.status, Some(StatusCode::Good));
+
+    // Value-bearing aggregates report BadNoData on an empty interval.
+    for id in [
+        ID_AVERAGE,
+        ID_RANGE,
+        ID_DELTA,
+        ID_MIN_ACTUAL_TIME,
+        ID_MAX_ACTUAL_TIME,
+    ] {
+        let r = calculate_aggregate(&empty, &NodeId::new(0u16, id), start, end);
+        assert_eq!(r.status, Some(StatusCode::BadNoData), "id {id}");
+    }
 }

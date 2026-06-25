@@ -88,7 +88,7 @@ pub trait HistoryStorageBackend: Send + Sync {
         let mut next_token = None;
         loop {
             let (values, token) = self
-                .read_raw_modified(node_id, start_time, end_time, 100_000, false, next_token)
+                .read_raw_modified(node_id, start_time, end_time, 100_000, true, next_token)
                 .await?;
             raw_values.extend(values);
 

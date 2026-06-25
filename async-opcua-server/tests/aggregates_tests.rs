@@ -2,8 +2,8 @@
 
 use opcua_server::aggregates::engine::{
     aggregate_average, aggregate_maximum, aggregate_minimum, aggregate_std_dev,
-    calculate_std_dev_sample, calculate_time_weighted_average, dispatch_aggregate,
-    partition_intervals, AggregateInput,
+    calculate_std_dev_sample, calculate_time_weighted_average, compute_processed_intervals,
+    dispatch_aggregate, partition_intervals, AggregateInput,
 };
 use opcua_server::aggregates::quality::compute_aggregate_quality;
 use opcua_types::{AggregateConfiguration, DataValue, DateTime, NodeId, StatusCode, Variant};
@@ -381,4 +381,87 @@ fn phase_b_empty_interval() {
         let r = calculate_aggregate(&empty, &NodeId::new(0u16, id), start, end);
         assert_eq!(r.status, Some(StatusCode::BadNoData), "id {id}");
     }
+}
+
+// ---------------------------------------------------------------------------
+// Phase C: bounded aggregates. Driven through compute_processed_intervals so the
+// real prior/next bound wiring is exercised. Raw series has a point BEFORE the
+// interval (the prior bound). Interval [12:00:02, 12:00:12) (one interval).
+// Raw: 10@0s (prior), 20@5s, 30@10s. Expected values hand-computed, cross-checked
+// against OPC 10000-13 §5.4.3.4/6/8/28-30 (verified via the opc-ua-reference MCP).
+// ---------------------------------------------------------------------------
+
+fn phase_c_series() -> Vec<DataValue> {
+    vec![good(10.0, 0), good(20.0, 5), good(30.0, 10)]
+}
+
+fn phase_c_one_interval(id: u32) -> DataValue {
+    let series = phase_c_series();
+    let start = DateTime::from((2026, 6, 6, 12, 0, 2));
+    let end = DateTime::from((2026, 6, 6, 12, 0, 12));
+    let cfg = AggregateConfiguration::default();
+    let mut out =
+        compute_processed_intervals(&series, &NodeId::new(0u16, id), &cfg, start, end, 10_000.0);
+    assert_eq!(out.len(), 1, "expected exactly one interval for id {id}");
+    out.remove(0)
+}
+
+#[test]
+fn phase_c_start_end_delta_bounds() {
+    // StartBound (simple) at 12:00:02 = prior value held = 10.
+    assert_eq!(
+        phase_c_one_interval(11505).value,
+        Some(Variant::Double(10.0))
+    );
+    // EndBound (simple) at 12:00:12 = last in-interval value held = 30.
+    assert_eq!(
+        phase_c_one_interval(11506).value,
+        Some(Variant::Double(30.0))
+    );
+    // DeltaBounds = EndBound - StartBound = 30 - 10 = 20.
+    assert_eq!(
+        phase_c_one_interval(11507).value,
+        Some(Variant::Double(20.0))
+    );
+}
+
+#[test]
+fn phase_c_interpolative_at_interval_start() {
+    // Interpolative at start=2s, linear between prior 10@0s and first in-interval 20@5s:
+    // ratio = (2-0)/(5-0) = 0.4 -> 10 + (20-10)*0.4 = 14.0.
+    let r = phase_c_one_interval(2341);
+    match r.value {
+        Some(Variant::Double(v)) => assert!((v - 14.0).abs() < 1e-9, "got {v}"),
+        other => panic!("expected Double, got {other:?}"),
+    }
+}
+
+#[test]
+fn phase_c_time_average_uses_leading_bound_region() {
+    // Corrected TimeAverage (stepped, with the prior bound covering the leading region [2s,5s]):
+    // area = 10*(5-2) + 20*(10-5) + 30*(12-10) = 30 + 100 + 60 = 190; /10s = 19.0.
+    // (The old, non-conformant impl ignored the prior and the [2s,5s] region.)
+    let avg = phase_c_one_interval(2343);
+    match avg.value {
+        Some(Variant::Double(v)) => assert!((v - 19.0).abs() < 1e-9, "got {v}"),
+        other => panic!("expected Double, got {other:?}"),
+    }
+    // Total = the same area = 190 (value-seconds).
+    let total = phase_c_one_interval(2344);
+    match total.value {
+        Some(Variant::Double(v)) => assert!((v - 190.0).abs() < 1e-9, "got {v}"),
+        other => panic!("expected Double, got {other:?}"),
+    }
+}
+
+#[test]
+fn phase_c_interpolative_before_data_is_bad_no_data() {
+    // No prior and no data at all -> Bad_NoData (§5.4.3.4 before start of data).
+    let empty: Vec<DataValue> = vec![];
+    let start = DateTime::from((2026, 6, 6, 12, 0, 2));
+    let end = DateTime::from((2026, 6, 6, 12, 0, 12));
+    let cfg = AggregateConfiguration::default();
+    let out =
+        compute_processed_intervals(&empty, &NodeId::new(0u16, 2341), &cfg, start, end, 10_000.0);
+    assert_eq!(out[0].status, Some(StatusCode::BadNoData));
 }

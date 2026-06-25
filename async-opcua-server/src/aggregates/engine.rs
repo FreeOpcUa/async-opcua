@@ -8,6 +8,8 @@ use opcua_types::{AggregateConfiguration, DataValue, DateTime, NodeId, StatusCod
 // Standard AggregateFunction NodeIds (Part 13 / Part 6 NodeIds.csv). The implemented average is
 // interpolated/time-weighted, so it maps to TimeAverage (2343), NOT simple Average (2342).
 const AGG_TIME_AVERAGE: u32 = 2343;
+const AGG_TOTAL: u32 = 2344;
+const AGG_INTERPOLATIVE: u32 = 2341;
 const AGG_AVERAGE: u32 = 2342;
 const AGG_MINIMUM: u32 = 2346;
 const AGG_MAXIMUM: u32 = 2347;
@@ -17,6 +19,9 @@ const AGG_RANGE: u32 = 2350;
 const AGG_COUNT: u32 = 2352;
 const AGG_DELTA: u32 = 2359;
 const AGG_WORST_QUALITY: u32 = 2364;
+const AGG_START_BOUND: u32 = 11505;
+const AGG_END_BOUND: u32 = 11506;
+const AGG_DELTA_BOUNDS: u32 = 11507;
 const AGG_STANDARD_DEVIATION_SAMPLE: u32 = 11426;
 const AGG_STANDARD_DEVIATION_POPULATION: u32 = 11427;
 const AGG_VARIANCE_SAMPLE: u32 = 11428;
@@ -184,9 +189,9 @@ pub fn calculate_std_dev_sample(values: &[f64]) -> Option<f64> {
 pub struct AggregateInput<'a> {
     /// Raw values whose timestamp falls inside the interval, time-sorted.
     pub values: &'a [&'a DataValue],
-    /// Last raw value at/before interval_start (start-bound source). None until Phase C.
+    /// Last raw value at/before the interval's earlier boundary.
     pub prior: Option<&'a DataValue>,
-    /// First raw value after interval_end. None until Phase C.
+    /// First raw value after the interval's later boundary.
     pub next: Option<&'a DataValue>,
     /// Start timestamp of the processing interval.
     pub interval_start: DateTime,
@@ -293,6 +298,49 @@ fn aggregate_quality(input: &AggregateInput<'_>) -> StatusCode {
     compute_aggregate_quality(&statuses)
 }
 
+/// Area under the stepped curve over [interval_start, interval_end] and the covered duration (seconds).
+/// Returns None if there is no usable value. Stepped: each knot's value is held until the next knot.
+fn stepped_area_seconds(input: &AggregateInput<'_>) -> Option<(f64 /*area*/, f64 /*seconds*/)> {
+    if input.interval_end <= input.interval_start {
+        // ponytail: Backward aggregate intervals need explicit Part 13 handling; do not guess here.
+        return None;
+    }
+
+    let good_points = good_numeric_points(input);
+    let start_value = input
+        .prior
+        .and_then(|value| value.value.as_ref())
+        .and_then(variant_to_f64)
+        .or_else(|| good_points.first().map(|(_, value, _)| *value))?;
+
+    let mut knots = Vec::with_capacity(good_points.len() + 2);
+    knots.push((input.interval_start, start_value));
+    knots.extend(
+        good_points
+            .iter()
+            .filter(|(timestamp, _, _)| {
+                *timestamp > input.interval_start && *timestamp < input.interval_end
+            })
+            .map(|(timestamp, value, _)| (*timestamp, *value)),
+    );
+    let last_value = knots.last().map(|(_, value)| *value)?;
+    knots.push((input.interval_end, last_value));
+
+    let area = knots
+        .windows(2)
+        .map(|window| {
+            let (left_time, left_value) = window[0];
+            let (right_time, _) = window[1];
+            left_value * (right_time.ticks() - left_time.ticks()) as f64 / 10_000_000.0
+        })
+        .sum::<f64>();
+    let seconds = (input.interval_end.ticks() - input.interval_start.ticks()) as f64 / 10_000_000.0;
+
+    // ponytail: Bad-region reduction per OPC UA Part 13 §5.4.3.6/§5.4.3.7 is deferred to the
+    // status-aware phase; stepped coverage currently spans the full interval.
+    Some((area, seconds))
+}
+
 fn agg_average(input: &AggregateInput<'_>) -> DataValue {
     let points = good_numeric_points(input);
     if points.is_empty() {
@@ -304,20 +352,29 @@ fn agg_average(input: &AggregateInput<'_>) -> DataValue {
 }
 
 fn agg_time_average(input: &AggregateInput<'_>) -> DataValue {
-    let preamble = match aggregate_preamble(input) {
-        Ok(preamble) => preamble,
-        Err(value) => return value,
+    let Some((area, seconds)) = stepped_area_seconds(input) else {
+        return bad_no_data(input.interval_start);
     };
 
+    if seconds <= 0.0 {
+        return bad_no_data(input.interval_start);
+    }
+
     aggregate_result(
-        calculate_time_weighted_average(
-            &preamble.numeric_points,
-            input.interval_start,
-            input.interval_end,
-        ),
-        preamble.quality,
+        Some(area / seconds),
+        aggregate_quality(input),
         input.interval_start,
     )
+}
+
+fn agg_total(input: &AggregateInput<'_>) -> DataValue {
+    let Some((area, _)) = stepped_area_seconds(input) else {
+        return bad_no_data(input.interval_start);
+    };
+
+    // OPC UA Part 13 §5.4.3.8 defines Total as TimeAverage * ProcessingInterval(seconds), so the
+    // returned area is normalized to [source units] * seconds.
+    aggregate_result(Some(area), aggregate_quality(input), input.interval_start)
 }
 
 fn agg_range(input: &AggregateInput<'_>) -> DataValue {
@@ -560,11 +617,141 @@ fn agg_worst_quality(input: &AggregateInput<'_>) -> DataValue {
     }
 }
 
+fn agg_start_bound(input: &AggregateInput<'_>) -> DataValue {
+    aggregate_result(
+        simple_bound_at(input.prior),
+        aggregate_quality(input),
+        input.interval_start,
+    )
+}
+
+fn end_bound_value(input: &AggregateInput<'_>) -> Option<f64> {
+    good_numeric_points(input)
+        .last()
+        .map(|(_, value, _)| *value)
+        .or_else(|| simple_bound_at(input.prior))
+}
+
+fn good_simple_bound_at(before: Option<&DataValue>) -> Option<f64> {
+    before.and_then(|value| {
+        if value.status.is_none_or(|status| status.is_good()) {
+            simple_bound_at(Some(value))
+        } else {
+            None
+        }
+    })
+}
+
+fn good_end_bound_value(input: &AggregateInput<'_>) -> Option<f64> {
+    good_numeric_points(input)
+        .last()
+        .map(|(_, value, _)| *value)
+        .or_else(|| good_simple_bound_at(input.prior))
+}
+
+fn agg_end_bound(input: &AggregateInput<'_>) -> DataValue {
+    aggregate_result(
+        end_bound_value(input),
+        aggregate_quality(input),
+        input.interval_start,
+    )
+}
+
+fn agg_delta_bounds(input: &AggregateInput<'_>) -> DataValue {
+    let Some(start) = good_simple_bound_at(input.prior) else {
+        return bad_no_data(input.interval_start);
+    };
+    let Some(end) = good_end_bound_value(input) else {
+        return bad_no_data(input.interval_start);
+    };
+
+    aggregate_result(
+        Some(end - start),
+        aggregate_quality(input),
+        input.interval_start,
+    )
+}
+
+fn agg_interpolative(input: &AggregateInput<'_>) -> DataValue {
+    let after = input
+        .values
+        .iter()
+        .find(|value| value.value.as_ref().and_then(variant_to_f64).is_some())
+        .copied()
+        .or(input.next);
+
+    let value = interpolated_bound_at(
+        input.interval_start,
+        input.prior,
+        after,
+        input.config.use_sloped_extrapolation,
+    )
+    .map(|(value, _)| value);
+
+    aggregate_result(value, aggregate_quality(input), input.interval_start)
+}
+
+/// Linear interpolation of the value at `boundary` between the raw point before it and the one after.
+/// Returns `(value, is_interpolated)`. With only `before`, returns a stepped hold; sloped
+/// extrapolation using two prior values is refined later.
+fn interpolated_bound_at(
+    boundary: DateTime,
+    before: Option<&DataValue>,
+    after: Option<&DataValue>,
+    use_sloped: bool,
+) -> Option<(f64, bool)> {
+    let _ = use_sloped;
+
+    let before = before.and_then(|value| {
+        value
+            .value
+            .as_ref()
+            .and_then(variant_to_f64)
+            .map(|numeric| (get_value_timestamp(value), numeric))
+    });
+    let after = after.and_then(|value| {
+        value
+            .value
+            .as_ref()
+            .and_then(variant_to_f64)
+            .map(|numeric| (get_value_timestamp(value), numeric))
+    });
+
+    match (before, after) {
+        (Some((before_time, before_value)), Some((after_time, after_value))) => {
+            let before_ticks = before_time.ticks();
+            let after_ticks = after_time.ticks();
+            if before_ticks == after_ticks {
+                return Some((before_value, false));
+            }
+
+            let ratio =
+                (boundary.ticks() - before_ticks) as f64 / (after_ticks - before_ticks) as f64;
+            Some((before_value + (after_value - before_value) * ratio, true))
+        }
+        (Some((_, before_value)), None) => {
+            // ponytail: C1 keeps this as stepped hold; sloped extrapolation with two priors is later.
+            Some((before_value, false))
+        }
+        (None, Some((_, after_value))) => Some((after_value, false)),
+        (None, None) => None,
+    }
+}
+
+/// The simple bounding value at `boundary`: the `before` raw value held constant.
+fn simple_bound_at(before: Option<&DataValue>) -> Option<f64> {
+    before
+        .and_then(|value| value.value.as_ref())
+        .and_then(variant_to_f64)
+}
+
 /// Dispatches an aggregate calculation to the implementation for the requested aggregate NodeId.
 pub fn dispatch_aggregate(aggregate_type: &NodeId, input: &AggregateInput<'_>) -> DataValue {
     match aggregate_type.identifier {
+        opcua_types::Identifier::Numeric(AGG_INTERPOLATIVE) => agg_interpolative(input),
         opcua_types::Identifier::Numeric(AGG_AVERAGE) => agg_average(input),
         opcua_types::Identifier::Numeric(AGG_TIME_AVERAGE) => agg_time_average(input),
+        opcua_types::Identifier::Numeric(AGG_TOTAL) => agg_total(input),
         opcua_types::Identifier::Numeric(AGG_MINIMUM) => agg_minimum(input),
         opcua_types::Identifier::Numeric(AGG_MAXIMUM) => agg_maximum(input),
         opcua_types::Identifier::Numeric(AGG_MINIMUM_ACTUAL_TIME) => agg_minimum_actual_time(input),
@@ -574,6 +761,9 @@ pub fn dispatch_aggregate(aggregate_type: &NodeId, input: &AggregateInput<'_>) -
         opcua_types::Identifier::Numeric(AGG_COUNT) => agg_count(input),
         opcua_types::Identifier::Numeric(AGG_DELTA) => agg_delta(input),
         opcua_types::Identifier::Numeric(AGG_WORST_QUALITY) => agg_worst_quality(input),
+        opcua_types::Identifier::Numeric(AGG_START_BOUND) => agg_start_bound(input),
+        opcua_types::Identifier::Numeric(AGG_END_BOUND) => agg_end_bound(input),
+        opcua_types::Identifier::Numeric(AGG_DELTA_BOUNDS) => agg_delta_bounds(input),
         opcua_types::Identifier::Numeric(AGG_STANDARD_DEVIATION_SAMPLE) => {
             agg_std_dev_sample(input)
         }
@@ -612,10 +802,18 @@ pub fn compute_processed_intervals(
                 })
                 .collect();
 
+            let prior = raw_values
+                .iter()
+                .rev()
+                .find(|value| get_value_timestamp(value) <= min_t);
+            let next = raw_values
+                .iter()
+                .find(|value| get_value_timestamp(value) > max_t);
+
             let input = AggregateInput {
                 values: &values_in_interval,
-                prior: None,
-                next: None,
+                prior,
+                next,
                 interval_start,
                 interval_end,
                 config,

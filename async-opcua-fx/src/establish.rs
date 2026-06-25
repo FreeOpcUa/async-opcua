@@ -1,6 +1,6 @@
 //! Pure OPC UA FX EstablishConnections/CloseConnections command dispatch core.
 
-use std::{fmt, sync::Arc};
+use std::{collections::HashMap, fmt, sync::Arc};
 
 use opcua_pubsub::{
     ConnectionManager, DataSetReaderConfig, DataSetWriterConfig, IdReservation, MessageEncoding,
@@ -45,6 +45,9 @@ pub trait FxVerifier: Send + Sync {
 pub struct FxConnectionState {
     /// Current PubSub connection configurations.
     pub connections: Vec<PubSubConnectionConfig>,
+    /// Current ControlGroup LockingClient values, keyed by ControlGroup NodeId.
+    pub control_locks: HashMap<NodeId, String>,
+    lock_context: String,
     reservation: IdReservation,
     manager: ConnectionManager,
     endpoints: Vec<EstablishedEndpoint>,
@@ -64,6 +67,8 @@ impl fmt::Debug for FxConnectionState {
         formatter
             .debug_struct("FxConnectionState")
             .field("connections", &self.connections)
+            .field("control_locks", &self.control_locks.len())
+            .field("lock_context", &self.lock_context)
             .field("reservation", &self.reservation)
             .field("manager", &self.manager)
             .field("endpoints", &self.endpoints)
@@ -135,6 +140,11 @@ impl FxConnectionState {
     pub fn set_verifier(&mut self, verifier: Arc<dyn FxVerifier>) {
         self.verifier = Some(verifier);
     }
+
+    /// Set the ambient LockContext used by EstablishControlCmd.
+    pub fn set_lock_context(&mut self, application_uri: impl Into<String>) {
+        self.lock_context = application_uri.into();
+    }
 }
 
 /// Process a pure EstablishConnections command bundle.
@@ -162,19 +172,11 @@ pub fn process_establish_connections(
         } else if command == FxCommandMask::CreateConnectionEndpointCmd {
             create_connection_endpoints(state, endpoint_configs, &mut results)
         } else if command == FxCommandMask::EstablishControlCmd {
-            unsupported_endpoint_command(
-                endpoint_configs,
-                &mut results,
-                EndpointResultField::EstablishControl,
-            )
+            establish_control(state, endpoint_configs, &mut results)
         } else if command == FxCommandMask::SetConfigurationDataCmd {
             set_configuration_data(state, endpoint_configs, &mut results)
         } else if command == FxCommandMask::ReassignControlCmd {
-            unsupported_endpoint_command(
-                endpoint_configs,
-                &mut results,
-                EndpointResultField::ReassignControl,
-            )
+            reassign_control(state, endpoint_configs, &mut results)
         } else if command == FxCommandMask::ReserveCommunicationIdsCmd {
             reserve_communication_ids(state, reserve_ids, &mut results)
         } else if command == FxCommandMask::SetCommunicationConfigurationCmd {
@@ -305,19 +307,6 @@ enum EndpointResultField {
     ReassignControl,
 }
 
-fn unsupported_endpoint_command(
-    endpoint_configs: &[ConnectionEndpointConfigurationDataType],
-    results: &mut EstablishResults,
-    field: EndpointResultField,
-) -> Result<(), StatusCode> {
-    // ponytail: filled by FX pieces 2b/3/4.
-    let count = result_count(endpoint_configs.len());
-    results.connection_endpoint_results.extend(
-        (0..count).map(|_| endpoint_result_with_status(StatusCode::BadNotSupported, field)),
-    );
-    Err(StatusCode::BadNotSupported)
-}
-
 fn create_connection_endpoints(
     state: &mut FxConnectionState,
     endpoint_configs: &[ConnectionEndpointConfigurationDataType],
@@ -360,6 +349,86 @@ fn create_connection_endpoints(
     Ok(())
 }
 
+fn establish_control(
+    state: &mut FxConnectionState,
+    endpoint_configs: &[ConnectionEndpointConfigurationDataType],
+    results: &mut EstablishResults,
+) -> Result<(), StatusCode> {
+    let owner = state.lock_context.clone();
+    let mut acquired_control_groups = Vec::new();
+
+    for endpoint_config in endpoint_configs {
+        let Some(control_groups) = non_empty_control_groups(endpoint_config) else {
+            continue;
+        };
+
+        let mut result =
+            endpoint_result_with_status(StatusCode::Good, EndpointResultField::EstablishControl);
+        result.connection_endpoint_id = endpoint_config.connection_endpoint_node_id();
+        let mut group_statuses = Vec::with_capacity(control_groups.len());
+
+        for control_group in control_groups {
+            let (status, acquired) = acquire_control_group(state, control_group, &owner);
+            group_statuses.push(status);
+
+            if acquired {
+                acquired_control_groups.push(control_group.clone());
+            }
+
+            if status.is_bad() {
+                group_statuses.resize(control_groups.len(), StatusCode::BadNothingToDo);
+                result.establish_control_result = Some(group_statuses);
+                results.connection_endpoint_results.push(result);
+                release_acquired_control_groups(state, &acquired_control_groups, &owner);
+                return Err(status);
+            }
+        }
+
+        result.establish_control_result = Some(group_statuses);
+        results.connection_endpoint_results.push(result);
+    }
+
+    Ok(())
+}
+
+fn acquire_control_group(
+    state: &mut FxConnectionState,
+    control_group: &NodeId,
+    owner: &str,
+) -> (StatusCode, bool) {
+    match state.control_locks.get(control_group) {
+        Some(existing_owner) if existing_owner != owner => (StatusCode::BadLocked, false),
+        Some(_) => {
+            state
+                .control_locks
+                .insert(control_group.clone(), owner.to_owned());
+            (StatusCode::Good, false)
+        }
+        None => {
+            state
+                .control_locks
+                .insert(control_group.clone(), owner.to_owned());
+            (StatusCode::Good, true)
+        }
+    }
+}
+
+fn release_acquired_control_groups(
+    state: &mut FxConnectionState,
+    control_groups: &[NodeId],
+    owner: &str,
+) {
+    for control_group in control_groups {
+        if state
+            .control_locks
+            .get(control_group)
+            .is_some_and(|existing_owner| existing_owner == owner)
+        {
+            state.control_locks.remove(control_group);
+        }
+    }
+}
+
 fn set_configuration_data(
     state: &mut FxConnectionState,
     endpoint_configs: &[ConnectionEndpointConfigurationDataType],
@@ -398,6 +467,64 @@ fn set_configuration_data(
     }
 
     Ok(())
+}
+
+fn reassign_control(
+    state: &mut FxConnectionState,
+    endpoint_configs: &[ConnectionEndpointConfigurationDataType],
+    results: &mut EstablishResults,
+) -> Result<(), StatusCode> {
+    for endpoint_config in endpoint_configs {
+        let Some(control_groups) = non_empty_control_groups(endpoint_config) else {
+            continue;
+        };
+
+        let node_id = endpoint_config.connection_endpoint_node_id();
+        let owner = node_id.to_string();
+        let mut result =
+            endpoint_result_with_status(StatusCode::Good, EndpointResultField::ReassignControl);
+        result.connection_endpoint_id = node_id;
+        let mut group_statuses = Vec::with_capacity(control_groups.len());
+
+        for control_group in control_groups {
+            let status = reassign_control_group(state, control_group, &owner);
+            group_statuses.push(status);
+
+            if status.is_bad() {
+                group_statuses.resize(control_groups.len(), StatusCode::BadNothingToDo);
+                result.reassign_control_result = Some(group_statuses);
+                results.connection_endpoint_results.push(result);
+                return Err(status);
+            }
+        }
+
+        result.reassign_control_result = Some(group_statuses);
+        results.connection_endpoint_results.push(result);
+    }
+
+    Ok(())
+}
+
+fn reassign_control_group(
+    state: &mut FxConnectionState,
+    control_group: &NodeId,
+    owner: &str,
+) -> StatusCode {
+    if let Some(existing_owner) = state.control_locks.get_mut(control_group) {
+        *existing_owner = owner.to_owned();
+        StatusCode::Good
+    } else {
+        StatusCode::BadRequiresLock
+    }
+}
+
+fn non_empty_control_groups(
+    endpoint_config: &ConnectionEndpointConfigurationDataType,
+) -> Option<&[NodeId]> {
+    endpoint_config
+        .control_groups
+        .as_deref()
+        .filter(|control_groups| !control_groups.is_empty())
 }
 
 fn validate_connection_endpoint_config(
@@ -727,10 +854,6 @@ fn communication_result(
         changes_applied,
         ..PubSubCommunicationConfigurationResultDataType::default()
     }
-}
-
-fn result_count(input_count: usize) -> usize {
-    input_count.max(1)
 }
 
 fn string_value(value: &UAString) -> String {

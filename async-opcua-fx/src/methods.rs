@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use opcua::server::node_manager::memory::SimpleNodeManager;
+use opcua::server::node_manager::{memory::SimpleNodeManager, RequestContext};
 use opcua::sync::Mutex;
 use opcua_types::{
     DynEncodable, ExpandedMessageInfo, ExtensionObject, NodeId, StatusCode, TryFromVariant,
@@ -83,12 +83,15 @@ pub fn register_fx_connection_methods(
     state: Arc<Mutex<FxConnectionState>>,
 ) {
     let establish_state = Arc::clone(&state);
-    node_manager
-        .inner()
-        .add_method_callback(establish_method_id, move |args| {
+    node_manager.inner().add_method_callback_with_context(
+        establish_method_id,
+        move |context, args| {
+            let application_uri = session_application_uri(context);
             let mut state = establish_state.lock();
+            state.set_lock_context(application_uri);
             handle_establish_connections(&mut state, args)
-        });
+        },
+    );
 
     node_manager
         .inner()
@@ -96,6 +99,16 @@ pub fn register_fx_connection_methods(
             let mut state = state.lock();
             handle_close_connections(&mut state, args)
         });
+}
+
+fn session_application_uri(context: &RequestContext) -> String {
+    context
+        .session()
+        .read()
+        .application_description()
+        .application_uri
+        .as_ref()
+        .to_owned()
 }
 
 fn expect_arg_count(args: &[Variant], expected: usize) -> Result<(), StatusCode> {

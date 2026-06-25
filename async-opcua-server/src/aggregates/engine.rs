@@ -19,6 +19,14 @@ const AGG_RANGE: u32 = 2350;
 const AGG_COUNT: u32 = 2352;
 const AGG_DELTA: u32 = 2359;
 const AGG_WORST_QUALITY: u32 = 2364;
+const AGG_TIME_AVERAGE2: u32 = 11285;
+const AGG_MINIMUM2: u32 = 11286;
+const AGG_MAXIMUM2: u32 = 11287;
+const AGG_RANGE2: u32 = 11288;
+const AGG_WORST_QUALITY2: u32 = 11292;
+const AGG_TOTAL2: u32 = 11304;
+const AGG_MINIMUM_ACTUAL_TIME2: u32 = 11305;
+const AGG_MAXIMUM_ACTUAL_TIME2: u32 = 11306;
 const AGG_START_BOUND: u32 = 11505;
 const AGG_END_BOUND: u32 = 11506;
 const AGG_DELTA_BOUNDS: u32 = 11507;
@@ -270,6 +278,22 @@ fn good_numeric_points<'a>(input: &AggregateInput<'a>) -> Vec<(DateTime, f64, &'
         .collect()
 }
 
+fn simple_bounded_points(input: &AggregateInput<'_>) -> Vec<(DateTime, f64)> {
+    let good_points = good_numeric_points(input);
+    let mut points = Vec::with_capacity(good_points.len() + usize::from(input.prior.is_some()));
+
+    if let Some(value) = simple_bound_at(input.prior) {
+        points.push((input.interval_start, value));
+    }
+
+    points.extend(
+        good_points
+            .into_iter()
+            .map(|(timestamp, value, _)| (timestamp, value)),
+    );
+    points
+}
+
 fn aggregate_result(
     result_value: Option<f64>,
     quality: StatusCode,
@@ -351,7 +375,7 @@ fn agg_average(input: &AggregateInput<'_>) -> DataValue {
     aggregate_result(Some(mean), aggregate_quality(input), input.interval_start)
 }
 
-fn agg_time_average(input: &AggregateInput<'_>) -> DataValue {
+fn time_average_value(input: &AggregateInput<'_>) -> DataValue {
     let Some((area, seconds)) = stepped_area_seconds(input) else {
         return bad_no_data(input.interval_start);
     };
@@ -367,7 +391,15 @@ fn agg_time_average(input: &AggregateInput<'_>) -> DataValue {
     )
 }
 
-fn agg_total(input: &AggregateInput<'_>) -> DataValue {
+fn agg_time_average(input: &AggregateInput<'_>) -> DataValue {
+    time_average_value(input)
+}
+
+fn agg_time_average2(input: &AggregateInput<'_>) -> DataValue {
+    time_average_value(input)
+}
+
+fn total_value(input: &AggregateInput<'_>) -> DataValue {
     let Some((area, _)) = stepped_area_seconds(input) else {
         return bad_no_data(input.interval_start);
     };
@@ -375,6 +407,14 @@ fn agg_total(input: &AggregateInput<'_>) -> DataValue {
     // OPC UA Part 13 §5.4.3.8 defines Total as TimeAverage * ProcessingInterval(seconds), so the
     // returned area is normalized to [source units] * seconds.
     aggregate_result(Some(area), aggregate_quality(input), input.interval_start)
+}
+
+fn agg_total(input: &AggregateInput<'_>) -> DataValue {
+    total_value(input)
+}
+
+fn agg_total2(input: &AggregateInput<'_>) -> DataValue {
+    total_value(input)
 }
 
 fn agg_range(input: &AggregateInput<'_>) -> DataValue {
@@ -386,6 +426,25 @@ fn agg_range(input: &AggregateInput<'_>) -> DataValue {
     let (min, max) = points
         .iter()
         .map(|(_, value, _)| *value)
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(min, max), value| {
+            (min.min(value), max.max(value))
+        });
+    aggregate_result(
+        Some(max - min),
+        aggregate_quality(input),
+        input.interval_start,
+    )
+}
+
+fn agg_range2(input: &AggregateInput<'_>) -> DataValue {
+    let points = simple_bounded_points(input);
+    if points.is_empty() {
+        return bad_no_data(input.interval_start);
+    }
+
+    let (min, max) = points
+        .iter()
+        .map(|(_, value)| *value)
         .fold((f64::INFINITY, f64::NEG_INFINITY), |(min, max), value| {
             (min.min(value), max.max(value))
         });
@@ -429,6 +488,22 @@ fn agg_minimum(input: &AggregateInput<'_>) -> DataValue {
     )
 }
 
+fn agg_minimum2(input: &AggregateInput<'_>) -> DataValue {
+    let points = simple_bounded_points(input);
+    if points.is_empty() {
+        return bad_no_data(input.interval_start);
+    }
+
+    aggregate_result(
+        points
+            .iter()
+            .map(|(_, value)| *value)
+            .min_by(|a, b| a.total_cmp(b)),
+        aggregate_quality(input),
+        input.interval_start,
+    )
+}
+
 fn agg_minimum_actual_time(input: &AggregateInput<'_>) -> DataValue {
     let points = good_numeric_points(input);
     let Some((timestamp, _, source)) =
@@ -453,6 +528,30 @@ fn agg_minimum_actual_time(input: &AggregateInput<'_>) -> DataValue {
     }
 }
 
+fn agg_minimum_actual_time2(input: &AggregateInput<'_>) -> DataValue {
+    let points = simple_bounded_points(input);
+    let Some((timestamp, value)) =
+        points
+            .iter()
+            .min_by(|(left_time, left_value), (right_time, right_value)| {
+                left_value
+                    .total_cmp(right_value)
+                    .then_with(|| left_time.cmp(right_time))
+            })
+    else {
+        return bad_no_data(input.interval_start);
+    };
+
+    // ponytail: synthetic-bound source-Variant retention deferred; return Double for all candidates.
+    DataValue {
+        value: Some(Variant::Double(*value)),
+        status: Some(aggregate_quality(input)),
+        source_timestamp: Some(*timestamp),
+        server_timestamp: Some(DateTime::now()),
+        ..Default::default()
+    }
+}
+
 fn agg_maximum(input: &AggregateInput<'_>) -> DataValue {
     let preamble = match aggregate_preamble(input) {
         Ok(preamble) => preamble,
@@ -466,6 +565,22 @@ fn agg_maximum(input: &AggregateInput<'_>) -> DataValue {
             .map(|(_, v)| *v)
             .max_by(|a, b| a.partial_cmp(b).unwrap()),
         preamble.quality,
+        input.interval_start,
+    )
+}
+
+fn agg_maximum2(input: &AggregateInput<'_>) -> DataValue {
+    let points = simple_bounded_points(input);
+    if points.is_empty() {
+        return bad_no_data(input.interval_start);
+    }
+
+    aggregate_result(
+        points
+            .iter()
+            .map(|(_, value)| *value)
+            .max_by(|a, b| a.total_cmp(b)),
+        aggregate_quality(input),
         input.interval_start,
     )
 }
@@ -487,6 +602,30 @@ fn agg_maximum_actual_time(input: &AggregateInput<'_>) -> DataValue {
     // ponytail: MultipleValues aggregate-bit is not set yet when duplicate maxima exist.
     DataValue {
         value: source.value.clone(),
+        status: Some(aggregate_quality(input)),
+        source_timestamp: Some(*timestamp),
+        server_timestamp: Some(DateTime::now()),
+        ..Default::default()
+    }
+}
+
+fn agg_maximum_actual_time2(input: &AggregateInput<'_>) -> DataValue {
+    let points = simple_bounded_points(input);
+    let Some((timestamp, value)) =
+        points
+            .iter()
+            .min_by(|(left_time, left_value), (right_time, right_value)| {
+                right_value
+                    .total_cmp(left_value)
+                    .then_with(|| left_time.cmp(right_time))
+            })
+    else {
+        return bad_no_data(input.interval_start);
+    };
+
+    // ponytail: synthetic-bound source-Variant retention deferred; return Double for all candidates.
+    DataValue {
+        value: Some(Variant::Double(*value)),
         status: Some(aggregate_quality(input)),
         source_timestamp: Some(*timestamp),
         server_timestamp: Some(DateTime::now()),
@@ -603,6 +742,29 @@ fn agg_worst_quality(input: &AggregateInput<'_>) -> DataValue {
         .values
         .iter()
         .map(|value| value.status.unwrap_or(StatusCode::Good))
+        .max_by_key(|status| quality_rank(*status))
+    else {
+        return bad_no_data(input.interval_start);
+    };
+
+    DataValue {
+        value: Some(Variant::StatusCode(worst)),
+        status: Some(StatusCode::Good),
+        source_timestamp: Some(input.interval_start),
+        server_timestamp: Some(DateTime::now()),
+        ..Default::default()
+    }
+}
+
+fn agg_worst_quality2(input: &AggregateInput<'_>) -> DataValue {
+    let prior_status = input
+        .prior
+        .map(|value| value.status.unwrap_or(StatusCode::Good));
+    let Some(worst) = input
+        .values
+        .iter()
+        .map(|value| value.status.unwrap_or(StatusCode::Good))
+        .chain(prior_status)
         .max_by_key(|status| quality_rank(*status))
     else {
         return bad_no_data(input.interval_start);
@@ -757,6 +919,18 @@ pub fn dispatch_aggregate(aggregate_type: &NodeId, input: &AggregateInput<'_>) -
         opcua_types::Identifier::Numeric(AGG_MINIMUM_ACTUAL_TIME) => agg_minimum_actual_time(input),
         opcua_types::Identifier::Numeric(AGG_MAXIMUM_ACTUAL_TIME) => agg_maximum_actual_time(input),
         opcua_types::Identifier::Numeric(AGG_RANGE) => agg_range(input),
+        opcua_types::Identifier::Numeric(AGG_TIME_AVERAGE2) => agg_time_average2(input),
+        opcua_types::Identifier::Numeric(AGG_MINIMUM2) => agg_minimum2(input),
+        opcua_types::Identifier::Numeric(AGG_MAXIMUM2) => agg_maximum2(input),
+        opcua_types::Identifier::Numeric(AGG_RANGE2) => agg_range2(input),
+        opcua_types::Identifier::Numeric(AGG_WORST_QUALITY2) => agg_worst_quality2(input),
+        opcua_types::Identifier::Numeric(AGG_TOTAL2) => agg_total2(input),
+        opcua_types::Identifier::Numeric(AGG_MINIMUM_ACTUAL_TIME2) => {
+            agg_minimum_actual_time2(input)
+        }
+        opcua_types::Identifier::Numeric(AGG_MAXIMUM_ACTUAL_TIME2) => {
+            agg_maximum_actual_time2(input)
+        }
         // AnnotationCount (2351) is intentionally unsupported until annotations are modeled.
         opcua_types::Identifier::Numeric(AGG_COUNT) => agg_count(input),
         opcua_types::Identifier::Numeric(AGG_DELTA) => agg_delta(input),

@@ -465,3 +465,100 @@ fn phase_c_interpolative_before_data_is_bad_no_data() {
         compute_processed_intervals(&empty, &NodeId::new(0u16, 2341), &cfg, start, end, 10_000.0);
     assert_eq!(out[0].status, Some(StatusCode::BadNoData));
 }
+
+// ---------------------------------------------------------------------------
+// Phase D: the "2" / SimpleBounds family. The prior value (before the interval)
+// is the extreme, so the "2" variants include it where the base ones don't.
+// Interval [12:00:02, 12:00:12); raw: 5@0s (prior), 10@5s, 20@10s.
+// Hand-computed, cross-checked vs OPC 10000-13 §5.4.3.7/15-19/36 (MCP-verified).
+// ---------------------------------------------------------------------------
+
+fn phase_d_one_interval(id: u32) -> DataValue {
+    let series = vec![good(5.0, 0), good(10.0, 5), good(20.0, 10)];
+    let start = DateTime::from((2026, 6, 6, 12, 0, 2));
+    let end = DateTime::from((2026, 6, 6, 12, 0, 12));
+    let cfg = AggregateConfiguration::default();
+    let mut out =
+        compute_processed_intervals(&series, &NodeId::new(0u16, id), &cfg, start, end, 10_000.0);
+    assert_eq!(out.len(), 1, "expected one interval for id {id}");
+    out.remove(0)
+}
+
+#[test]
+fn phase_d_minimum2_includes_simple_bound() {
+    // Minimum2 (11286) includes the simple start bound (prior 5) -> 5.
+    assert_eq!(
+        phase_d_one_interval(11286).value,
+        Some(Variant::Double(5.0))
+    );
+    // Base Minimum (2346) excludes the bound -> 10 (only in-interval values).
+    assert_eq!(
+        phase_d_one_interval(2346).value,
+        Some(Variant::Double(10.0))
+    );
+    // Maximum2 (11287) = 20; Range2 (11288) = 20 - 5 = 15.
+    assert_eq!(
+        phase_d_one_interval(11287).value,
+        Some(Variant::Double(20.0))
+    );
+    assert_eq!(
+        phase_d_one_interval(11288).value,
+        Some(Variant::Double(15.0))
+    );
+}
+
+#[test]
+fn phase_d_min_actual_time2_uses_bound_timestamp() {
+    // MinimumActualTime2 (11305): the min is the start bound (5) -> timestamp = interval_start.
+    let r = phase_d_one_interval(11305);
+    assert_eq!(r.value, Some(Variant::Double(5.0)));
+    assert_eq!(
+        r.source_timestamp,
+        Some(DateTime::from((2026, 6, 6, 12, 0, 2)))
+    );
+    // MaximumActualTime2 (11306): max 20 at its actual time 12:00:10.
+    let mx = phase_d_one_interval(11306);
+    assert_eq!(mx.value, Some(Variant::Double(20.0)));
+    assert_eq!(
+        mx.source_timestamp,
+        Some(DateTime::from((2026, 6, 6, 12, 0, 10)))
+    );
+}
+
+#[test]
+fn phase_d_time_average2_total2_match_stepped_area() {
+    // stepped area with prior 5 held from 2s: 5*(5-2) + 10*(10-5) + 20*(12-10) = 15+50+40 = 105.
+    // TimeAverage2 = 105/10 = 10.5; Total2 = 105. Both equal the corrected TimeAverage/Total
+    // (same series) since our default is stepped/simple bounds.
+    let ta2 = phase_d_one_interval(11285);
+    match ta2.value {
+        Some(Variant::Double(v)) => assert!((v - 10.5).abs() < 1e-9, "got {v}"),
+        other => panic!("expected Double, got {other:?}"),
+    }
+    let total2 = phase_d_one_interval(11304);
+    match total2.value {
+        Some(Variant::Double(v)) => assert!((v - 105.0).abs() < 1e-9, "got {v}"),
+        other => panic!("expected Double, got {other:?}"),
+    }
+    // TimeAverage2 == corrected TimeAverage(2343) for the same series.
+    let ta = phase_d_one_interval(2343);
+    assert_eq!(ta.value, ta2.value);
+}
+
+#[test]
+fn phase_d_no_prior_degrades_to_in_interval() {
+    // No prior before the interval -> Minimum2 degrades to the in-interval minimum.
+    let series = vec![good(10.0, 5), good(20.0, 10)];
+    let start = DateTime::from((2026, 6, 6, 12, 0, 2));
+    let end = DateTime::from((2026, 6, 6, 12, 0, 12));
+    let cfg = AggregateConfiguration::default();
+    let out = compute_processed_intervals(
+        &series,
+        &NodeId::new(0u16, 11286),
+        &cfg,
+        start,
+        end,
+        10_000.0,
+    );
+    assert_eq!(out[0].value, Some(Variant::Double(10.0)));
+}

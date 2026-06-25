@@ -908,3 +908,149 @@ async fn simple_writable_adds_all_node_classes() {
         );
     }
 }
+
+/// Part 3 §9.32: GeneralModelChangeEvent reports model changes. This verifies the event's field
+/// mapping (the high-risk part): EventType, SourceNode = Server, and the Changes array.
+#[tokio::test]
+async fn general_model_change_event_fields() {
+    use opcua::nodes::{Event, EventField};
+    use opcua::server::node_manager::GeneralModelChangeEvent;
+    use opcua::types::{
+        ModelChangeStructureDataType, NumericRange, ObjectTypeId, QualifiedName, Variant,
+    };
+
+    let change = ModelChangeStructureDataType {
+        affected: NodeId::new(2, "Added"),
+        affected_type: NodeId::null(),
+        verb: 1, // NodeAdded
+    };
+    let event = GeneralModelChangeEvent::new(vec![change.clone()]);
+
+    assert_eq!(
+        event.event_type_id(),
+        &NodeId::from(ObjectTypeId::GeneralModelChangeEventType)
+    );
+
+    let field = |name: &str| {
+        event.get_value(
+            AttributeId::Value,
+            &NumericRange::None,
+            &[QualifiedName::new(0, name)],
+        )
+    };
+
+    assert_eq!(
+        field("SourceNode"),
+        Variant::from(NodeId::from(ObjectId::Server))
+    );
+    assert_eq!(
+        field("EventType"),
+        Variant::from(NodeId::from(ObjectTypeId::GeneralModelChangeEventType))
+    );
+
+    // Changes is an array of one ModelChangeStructureDataType (verb NodeAdded).
+    let Variant::Array(arr) = field("Changes") else {
+        panic!("Changes must be an array");
+    };
+    assert_eq!(arr.values.len(), 1);
+    let Variant::ExtensionObject(obj) = &arr.values[0] else {
+        panic!("Changes element must be an ExtensionObject");
+    };
+    let decoded = obj
+        .inner_as::<ModelChangeStructureDataType>()
+        .expect("ModelChangeStructureDataType");
+    assert_eq!(decoded.affected, NodeId::new(2, "Added"));
+    assert_eq!(decoded.verb, 1);
+}
+
+/// Part 3 §9.32 end-to-end: AddNodes by a client fires a GeneralModelChangeEvent from the Server node
+/// to a subscriber monitoring Server events.
+#[tokio::test]
+async fn add_nodes_emits_general_model_change_event() {
+    use crate::utils::ChannelNotifications;
+    use opcua::types::{
+        EventFilter, ExtensionObject, MonitoredItemCreateRequest, MonitoringMode,
+        MonitoringParameters, NumericRange, ObjectTypeId, SimpleAttributeOperand, Variant,
+    };
+
+    let (_tester, _nm, ns, parent, session) = setup_simple(true).await;
+
+    // Subscribe to events on the Server node.
+    let (notifs, _, mut events) = ChannelNotifications::new();
+    let sub_id = session
+        .create_subscription(Duration::from_millis(100), 100, 20, 1000, 0, true, notifs)
+        .await
+        .unwrap();
+    let select = vec![
+        SimpleAttributeOperand {
+            type_definition_id: NodeId::new(0, 2041),
+            browse_path: Some(vec![QualifiedName::new(0, "EventType")]),
+            attribute_id: AttributeId::Value as u32,
+            index_range: NumericRange::None,
+        },
+        SimpleAttributeOperand {
+            type_definition_id: NodeId::from(ObjectTypeId::GeneralModelChangeEventType),
+            browse_path: Some(vec![QualifiedName::new(0, "Changes")]),
+            attribute_id: AttributeId::Value as u32,
+            index_range: NumericRange::None,
+        },
+    ];
+    let res = session
+        .create_monitored_items(
+            sub_id,
+            TimestampsToReturn::Both,
+            vec![MonitoredItemCreateRequest {
+                item_to_monitor: ReadValueId {
+                    node_id: ObjectId::Server.into(),
+                    attribute_id: AttributeId::EventNotifier as u32,
+                    ..Default::default()
+                },
+                monitoring_mode: MonitoringMode::Reporting,
+                requested_parameters: MonitoringParameters {
+                    sampling_interval: 0.0,
+                    queue_size: 10,
+                    discard_oldest: true,
+                    filter: ExtensionObject::new(EventFilter {
+                        select_clauses: Some(select),
+                        where_clause: Default::default(),
+                    }),
+                    ..Default::default()
+                },
+            }],
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        res[0].result.status_code,
+        StatusCode::Good,
+        "Server must accept event monitoring"
+    );
+
+    // AddNodes -> should fire a GeneralModelChangeEvent from the Server node.
+    let r = session
+        .add_nodes(&[object_item(
+            parent.clone(),
+            ns,
+            "ModelChangeChild",
+            NodeId::new(ns, "ModelChangeChild").into(),
+        )])
+        .await
+        .unwrap();
+    assert_eq!(r[0].status_code, StatusCode::Good);
+
+    // Receive the model-change event.
+    let (_h, v) = tokio::time::timeout(Duration::from_secs(3), events.recv())
+        .await
+        .expect("a GeneralModelChangeEvent must be delivered after AddNodes")
+        .unwrap();
+    let fields = v.unwrap();
+    // field[0] = EventType, field[1] = Changes
+    assert_eq!(
+        fields[0],
+        Variant::from(NodeId::from(ObjectTypeId::GeneralModelChangeEventType))
+    );
+    let Variant::Array(changes) = &fields[1] else {
+        panic!("Changes must be an array, got {:?}", fields[1]);
+    };
+    assert!(!changes.values.is_empty(), "at least one change reported");
+}

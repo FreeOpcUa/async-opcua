@@ -25,6 +25,7 @@ mod history;
 pub mod memory;
 mod method;
 mod method_typed;
+mod model_change;
 mod monitored_items;
 mod node_management;
 mod query;
@@ -54,6 +55,7 @@ pub use {
         typed_method, typed_method_with_context, IntoMethodOutputs, MethodArg, MethodHandler,
         MethodHandlerWithContext,
     },
+    model_change::GeneralModelChangeEvent,
     monitored_items::{MonitoredItemRef, MonitoredItemUpdateRef},
     node_management::{AddNodeItem, AddReferenceItem, DeleteNodeItem, DeleteReferenceItem},
     query::{ParsedNodeTypeDescription, ParsedQueryDataDescription, QueryRequest},

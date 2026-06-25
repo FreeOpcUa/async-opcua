@@ -5,24 +5,30 @@ use crate::{
     address_space::{AccessLevel, AddressSpace, EventNotifier, NodeType, ReferenceDirection},
     diagnostics::NamespaceMetadata,
     node_manager::{
-        AddNodeItem, AddReferenceItem, DeleteNodeItem, DeleteReferenceItem, HistoryNode,
-        HistoryUpdateNode, MethodCall, MonitoredItemRef, MonitoredItemUpdateRef, ParsedReadValueId,
-        RegisterNodeItem, RequestContext, ServerContext, WriteNode,
+        AddNodeItem, AddReferenceItem, DeleteNodeItem, DeleteReferenceItem,
+        GeneralModelChangeEvent, HistoryNode, HistoryUpdateNode, MethodCall, MonitoredItemRef,
+        MonitoredItemUpdateRef, ParsedReadValueId, RegisterNodeItem, RequestContext, ServerContext,
+        WriteNode,
     },
     session::continuation_points::ContinuationPoint,
     subscriptions::CreateMonitoredItem,
 };
 use opcua_core::sync::RwLock;
 use opcua_nodes::{
-    DataType, Method, NodeBase, Object, ObjectType, ReferenceType, TypeTree, Variable,
+    DataType, Event, Method, NodeBase, Object, ObjectType, ReferenceType, TypeTree, Variable,
     VariableType, View,
 };
 use opcua_types::{
     AddNodeAttributes, AttributesMask, DataTypeId, DataValue, ExpandedNodeId, LocalizedText,
-    MonitoringMode, NodeClass, NodeId, ReadAnnotationDataDetails, ReadAtTimeDetails,
-    ReadEventDetails, ReadProcessedDetails, ReadRawModifiedDetails, ReferenceTypeId, StatusCode,
-    TimestampsToReturn, Variant, WriteMask,
+    ModelChangeStructureDataType, MonitoringMode, NodeClass, NodeId, ObjectId,
+    ReadAnnotationDataDetails, ReadAtTimeDetails, ReadEventDetails, ReadProcessedDetails,
+    ReadRawModifiedDetails, ReferenceTypeId, StatusCode, TimestampsToReturn, Variant, WriteMask,
 };
+
+const MODEL_CHANGE_NODE_ADDED: u8 = 1;
+const MODEL_CHANGE_NODE_DELETED: u8 = 2;
+const MODEL_CHANGE_REFERENCE_ADDED: u8 = 4;
+const MODEL_CHANGE_REFERENCE_DELETED: u8 = 8;
 
 /// Callback used by the default in-memory method `Call` implementation.
 pub type InMemoryMethodCallback = Arc<
@@ -56,6 +62,25 @@ fn clients_can_modify_address_space(context: &RequestContext) -> bool {
     context.info.config.limits.clients_can_modify_address_space
 }
 
+fn model_change(affected: NodeId, verb: u8) -> ModelChangeStructureDataType {
+    ModelChangeStructureDataType {
+        affected,
+        affected_type: NodeId::null(),
+        verb,
+    }
+}
+
+fn notify_model_changes(context: &RequestContext, changes: Vec<ModelChangeStructureDataType>) {
+    if changes.is_empty() {
+        return;
+    }
+
+    let event = GeneralModelChangeEvent::new(changes);
+    let server_node_id = NodeId::from(ObjectId::Server);
+    let items = std::iter::once((&event as &dyn Event, &server_node_id));
+    context.subscriptions.notify_events(items);
+}
+
 fn add_nodes_impl(
     context: &RequestContext,
     address_space: &RwLock<AddressSpace>,
@@ -68,68 +93,75 @@ fn add_nodes_impl(
         return;
     }
 
-    let mut address_space = address_space.write();
+    let mut changes = Vec::new();
 
-    for item in nodes_to_add {
-        if item.status().is_bad() && item.status() != StatusCode::BadNotSupported {
-            continue;
-        }
+    {
+        let mut address_space = address_space.write();
 
-        let parent_id = item.parent_node_id().node_id.clone();
-        if parent_id.is_null() || !address_space.node_exists(&parent_id) {
-            item.set_result(NodeId::null(), StatusCode::BadParentNodeIdInvalid);
-            continue;
-        }
-
-        if item.reference_type_id().is_null() {
-            item.set_result(NodeId::null(), StatusCode::BadReferenceTypeIdInvalid);
-            continue;
-        }
-
-        let assigned_id = if item.requested_new_node_id().is_null() {
-            next_unused_node_id(&address_space, parent_id.namespace)
-        } else if !address_space
-            .namespaces()
-            .contains_key(&item.requested_new_node_id().namespace)
-        {
-            item.set_result(NodeId::null(), StatusCode::BadNodeIdRejected);
-            continue;
-        } else if address_space.node_exists(item.requested_new_node_id()) {
-            item.set_result(NodeId::null(), StatusCode::BadNodeIdExists);
-            continue;
-        } else {
-            item.requested_new_node_id().clone()
-        };
-
-        let node = match build_node(item, &assigned_id) {
-            Ok(node) => node,
-            Err(status) => {
-                item.set_result(NodeId::null(), status);
+        for item in nodes_to_add.iter_mut() {
+            if item.status().is_bad() && item.status() != StatusCode::BadNotSupported {
                 continue;
             }
-        };
 
-        let type_definition_id = item.type_definition_id().node_id.clone();
-        let has_type_definition_id = NodeId::from(ReferenceTypeId::HasTypeDefinition);
-        let mut references = vec![(
-            &parent_id,
-            item.reference_type_id(),
-            ReferenceDirection::Inverse,
-        )];
-        if !type_definition_id.is_null() {
-            references.push((
-                &type_definition_id,
-                &has_type_definition_id,
-                ReferenceDirection::Forward,
-            ));
-        }
+            let parent_id = item.parent_node_id().node_id.clone();
+            if parent_id.is_null() || !address_space.node_exists(&parent_id) {
+                item.set_result(NodeId::null(), StatusCode::BadParentNodeIdInvalid);
+                continue;
+            }
 
-        if address_space.insert(node, Some(references.as_slice())) {
-            item.set_result(assigned_id, StatusCode::Good);
-        } else {
-            item.set_result(NodeId::null(), StatusCode::BadNodeIdExists);
+            if item.reference_type_id().is_null() {
+                item.set_result(NodeId::null(), StatusCode::BadReferenceTypeIdInvalid);
+                continue;
+            }
+
+            let assigned_id = if item.requested_new_node_id().is_null() {
+                next_unused_node_id(&address_space, parent_id.namespace)
+            } else if !address_space
+                .namespaces()
+                .contains_key(&item.requested_new_node_id().namespace)
+            {
+                item.set_result(NodeId::null(), StatusCode::BadNodeIdRejected);
+                continue;
+            } else if address_space.node_exists(item.requested_new_node_id()) {
+                item.set_result(NodeId::null(), StatusCode::BadNodeIdExists);
+                continue;
+            } else {
+                item.requested_new_node_id().clone()
+            };
+
+            let node = match build_node(item, &assigned_id) {
+                Ok(node) => node,
+                Err(status) => {
+                    item.set_result(NodeId::null(), status);
+                    continue;
+                }
+            };
+
+            let type_definition_id = item.type_definition_id().node_id.clone();
+            let has_type_definition_id = NodeId::from(ReferenceTypeId::HasTypeDefinition);
+            let mut references = vec![(
+                &parent_id,
+                item.reference_type_id(),
+                ReferenceDirection::Inverse,
+            )];
+            if !type_definition_id.is_null() {
+                references.push((
+                    &type_definition_id,
+                    &has_type_definition_id,
+                    ReferenceDirection::Forward,
+                ));
+            }
+
+            if address_space.insert(node, Some(references.as_slice())) {
+                item.set_result(assigned_id.clone(), StatusCode::Good);
+                changes.push(model_change(assigned_id, MODEL_CHANGE_NODE_ADDED));
+            } else {
+                item.set_result(NodeId::null(), StatusCode::BadNodeIdExists);
+            }
         }
     }
+
+    notify_model_changes(context, changes);
 }
 
 fn delete_nodes_impl(
@@ -144,23 +176,31 @@ fn delete_nodes_impl(
         return;
     }
 
-    let mut address_space = address_space.write();
+    let mut changes = Vec::new();
 
-    for item in nodes_to_delete {
-        if item.node_id().is_null() {
-            item.set_result(StatusCode::BadNodeIdInvalid);
-            continue;
-        }
+    {
+        let mut address_space = address_space.write();
 
-        if address_space
-            .delete(item.node_id(), item.delete_target_references())
-            .is_some()
-        {
-            item.set_result(StatusCode::Good);
-        } else {
-            item.set_result(StatusCode::BadNodeIdUnknown);
+        for item in nodes_to_delete.iter_mut() {
+            if item.node_id().is_null() {
+                item.set_result(StatusCode::BadNodeIdInvalid);
+                continue;
+            }
+
+            let deleted_node_id = item.node_id().clone();
+            if address_space
+                .delete(item.node_id(), item.delete_target_references())
+                .is_some()
+            {
+                item.set_result(StatusCode::Good);
+                changes.push(model_change(deleted_node_id, MODEL_CHANGE_NODE_DELETED));
+            } else {
+                item.set_result(StatusCode::BadNodeIdUnknown);
+            }
         }
     }
+
+    notify_model_changes(context, changes);
 }
 
 fn add_references_impl(
@@ -176,83 +216,93 @@ fn add_references_impl(
         return;
     }
 
-    let mut address_space = address_space.write();
-    let type_tree = context.type_tree.read();
+    let mut changes = Vec::new();
 
-    for item in references_to_add {
-        let source_owned = address_space
-            .namespaces()
-            .contains_key(&item.source_node_id().namespace);
-        let target_owned = address_space
-            .namespaces()
-            .contains_key(&item.target_node_id().node_id.namespace);
+    {
+        let mut address_space = address_space.write();
+        let type_tree = context.type_tree.read();
 
-        let handle_source = source_owned && item.source_status() == StatusCode::BadNotSupported;
-        let handle_target = target_owned && item.target_status() == StatusCode::BadNotSupported;
-        if !handle_source && !handle_target {
-            continue;
-        }
+        for item in references_to_add.iter_mut() {
+            let source_owned = address_space
+                .namespaces()
+                .contains_key(&item.source_node_id().namespace);
+            let target_owned = address_space
+                .namespaces()
+                .contains_key(&item.target_node_id().node_id.namespace);
 
-        if !type_tree
-            .get(item.reference_type_id())
-            .is_some_and(|node_class| node_class == NodeClass::ReferenceType)
-        {
-            if handle_source {
-                item.set_source_result(StatusCode::BadReferenceTypeIdInvalid);
+            let handle_source = source_owned && item.source_status() == StatusCode::BadNotSupported;
+            let handle_target = target_owned && item.target_status() == StatusCode::BadNotSupported;
+            if !handle_source && !handle_target {
+                continue;
             }
-            if handle_target {
-                item.set_target_result(StatusCode::BadReferenceTypeIdInvalid);
+
+            if !type_tree
+                .get(item.reference_type_id())
+                .is_some_and(|node_class| node_class == NodeClass::ReferenceType)
+            {
+                if handle_source {
+                    item.set_source_result(StatusCode::BadReferenceTypeIdInvalid);
+                }
+                if handle_target {
+                    item.set_target_result(StatusCode::BadReferenceTypeIdInvalid);
+                }
+                continue;
             }
-            continue;
-        }
 
-        let source_exists = address_space.node_exists(item.source_node_id());
-        let target_exists = address_space.node_exists(&item.target_node_id().node_id);
+            let source_exists = address_space.node_exists(item.source_node_id());
+            let target_exists = address_space.node_exists(&item.target_node_id().node_id);
 
-        if handle_source && !source_exists {
-            item.set_source_result(StatusCode::BadSourceNodeIdInvalid);
-        }
-        if handle_target && !target_exists {
-            item.set_target_result(StatusCode::BadTargetNodeIdInvalid);
-        }
-
-        let source_ready = handle_source && source_exists;
-        let target_ready = handle_target && target_exists;
-        if !source_ready && !target_ready {
-            continue;
-        }
-
-        if item.source_node_id() == &item.target_node_id().node_id {
-            if source_ready {
+            if handle_source && !source_exists {
                 item.set_source_result(StatusCode::BadSourceNodeIdInvalid);
             }
-            if target_ready {
+            if handle_target && !target_exists {
                 item.set_target_result(StatusCode::BadTargetNodeIdInvalid);
             }
-            continue;
-        }
 
-        if item.is_forward() {
-            address_space.insert_reference(
-                item.source_node_id(),
-                &item.target_node_id().node_id,
-                item.reference_type_id(),
-            );
-        } else {
-            address_space.insert_reference(
-                &item.target_node_id().node_id,
-                item.source_node_id(),
-                item.reference_type_id(),
-            );
-        }
+            let source_ready = handle_source && source_exists;
+            let target_ready = handle_target && target_exists;
+            if !source_ready && !target_ready {
+                continue;
+            }
 
-        if source_ready {
-            item.set_source_result(StatusCode::Good);
-        }
-        if target_ready {
-            item.set_target_result(StatusCode::Good);
+            if item.source_node_id() == &item.target_node_id().node_id {
+                if source_ready {
+                    item.set_source_result(StatusCode::BadSourceNodeIdInvalid);
+                }
+                if target_ready {
+                    item.set_target_result(StatusCode::BadTargetNodeIdInvalid);
+                }
+                continue;
+            }
+
+            if item.is_forward() {
+                address_space.insert_reference(
+                    item.source_node_id(),
+                    &item.target_node_id().node_id,
+                    item.reference_type_id(),
+                );
+            } else {
+                address_space.insert_reference(
+                    &item.target_node_id().node_id,
+                    item.source_node_id(),
+                    item.reference_type_id(),
+                );
+            }
+
+            if source_ready {
+                item.set_source_result(StatusCode::Good);
+            }
+            if target_ready {
+                item.set_target_result(StatusCode::Good);
+            }
+            changes.push(model_change(
+                item.source_node_id().clone(),
+                MODEL_CHANGE_REFERENCE_ADDED,
+            ));
         }
     }
+
+    notify_model_changes(context, changes);
 }
 
 fn delete_references_impl(
@@ -268,70 +318,80 @@ fn delete_references_impl(
         return;
     }
 
-    let mut address_space = address_space.write();
-    let type_tree = context.type_tree.read();
+    let mut changes = Vec::new();
 
-    for item in references_to_delete {
-        let source_owned = address_space
-            .namespaces()
-            .contains_key(&item.source_node_id().namespace);
-        let target_owned = address_space
-            .namespaces()
-            .contains_key(&item.target_node_id().node_id.namespace);
+    {
+        let mut address_space = address_space.write();
+        let type_tree = context.type_tree.read();
 
-        let handle_source = source_owned && item.source_status() == StatusCode::BadNotSupported;
-        let handle_target = target_owned && item.target_status() == StatusCode::BadNotSupported;
-        if !handle_source && !handle_target {
-            continue;
-        }
+        for item in references_to_delete.iter_mut() {
+            let source_owned = address_space
+                .namespaces()
+                .contains_key(&item.source_node_id().namespace);
+            let target_owned = address_space
+                .namespaces()
+                .contains_key(&item.target_node_id().node_id.namespace);
 
-        if !type_tree
-            .get(item.reference_type_id())
-            .is_some_and(|node_class| node_class == NodeClass::ReferenceType)
-        {
-            if handle_source {
-                item.set_source_result(StatusCode::BadReferenceTypeIdInvalid);
+            let handle_source = source_owned && item.source_status() == StatusCode::BadNotSupported;
+            let handle_target = target_owned && item.target_status() == StatusCode::BadNotSupported;
+            if !handle_source && !handle_target {
+                continue;
             }
-            if handle_target {
-                item.set_target_result(StatusCode::BadReferenceTypeIdInvalid);
+
+            if !type_tree
+                .get(item.reference_type_id())
+                .is_some_and(|node_class| node_class == NodeClass::ReferenceType)
+            {
+                if handle_source {
+                    item.set_source_result(StatusCode::BadReferenceTypeIdInvalid);
+                }
+                if handle_target {
+                    item.set_target_result(StatusCode::BadReferenceTypeIdInvalid);
+                }
+                continue;
             }
-            continue;
-        }
 
-        let source_exists = address_space.node_exists(item.source_node_id());
-        let target_exists = address_space.node_exists(&item.target_node_id().node_id);
+            let source_exists = address_space.node_exists(item.source_node_id());
+            let target_exists = address_space.node_exists(&item.target_node_id().node_id);
 
-        if handle_source && !source_exists {
-            item.set_source_result(StatusCode::BadSourceNodeIdInvalid);
-        }
-        if handle_target && !target_exists {
-            item.set_target_result(StatusCode::BadTargetNodeIdInvalid);
-        }
+            if handle_source && !source_exists {
+                item.set_source_result(StatusCode::BadSourceNodeIdInvalid);
+            }
+            if handle_target && !target_exists {
+                item.set_target_result(StatusCode::BadTargetNodeIdInvalid);
+            }
 
-        let source_ready = handle_source && source_exists;
-        let target_ready = handle_target && target_exists;
-        if !source_ready && !target_ready {
-            continue;
-        }
+            let source_ready = handle_source && source_exists;
+            let target_ready = handle_target && target_exists;
+            if !source_ready && !target_ready {
+                continue;
+            }
 
-        let (source_node, target_node) = if item.is_forward() {
-            (item.source_node_id(), &item.target_node_id().node_id)
-        } else {
-            (&item.target_node_id().node_id, item.source_node_id())
-        };
+            let (source_node, target_node) = if item.is_forward() {
+                (item.source_node_id(), &item.target_node_id().node_id)
+            } else {
+                (&item.target_node_id().node_id, item.source_node_id())
+            };
 
-        address_space.delete_reference(source_node, target_node, item.reference_type_id());
-        if item.delete_bidirectional() {
-            address_space.delete_reference(target_node, source_node, item.reference_type_id());
-        }
+            address_space.delete_reference(source_node, target_node, item.reference_type_id());
+            if item.delete_bidirectional() {
+                address_space.delete_reference(target_node, source_node, item.reference_type_id());
+            }
 
-        if source_ready {
-            item.set_source_result(StatusCode::Good);
-        }
-        if target_ready {
-            item.set_target_result(StatusCode::Good);
+            if source_ready {
+                item.set_source_result(StatusCode::Good);
+            }
+            if target_ready {
+                item.set_target_result(StatusCode::Good);
+            }
+            changes.push(model_change(
+                item.source_node_id().clone(),
+                MODEL_CHANGE_REFERENCE_DELETED,
+            ));
         }
     }
+
+    notify_model_changes(context, changes);
 }
 
 fn next_unused_node_id(address_space: &AddressSpace, namespace: u16) -> NodeId {

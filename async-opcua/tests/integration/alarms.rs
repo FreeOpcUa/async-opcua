@@ -7,15 +7,18 @@ use opcua::{
         node_manager::memory::{simple_node_manager, CoreNodeManager, SimpleNodeManager},
     },
     types::{
-        AttributeId, ByteString, CallMethodRequest, LocalizedText, MethodId,
+        AttributeId, BrowsePath, ByteString, CallMethodRequest, LocalizedText, MethodId,
         MonitoredItemCreateRequest, MonitoringMode, MonitoringParameters, NodeId, ObjectId,
-        ObjectTypeId, ReadValueId, StatusCode, TimestampsToReturn, Variant,
+        ObjectTypeId, QualifiedName, ReadValueId, ReferenceTypeId, RelativePath,
+        RelativePathElement, StatusCode, TimestampsToReturn, Variant,
     },
 };
 use opcua_client::alarms::client::{get_alarm_event_select_clauses, parse_alarm_event};
 use opcua_core::events::AlarmEvent;
-use opcua_server::alarms::{register_condition_methods, ConditionRegistry};
-use opcua_server::namespace::register_alarm_condition;
+use opcua_server::alarms::{
+    register_condition_methods, ConditionRegistry, LimitAlarm, LimitConfig, LimitDef, LimitMode,
+};
+use opcua_server::namespace::{register_alarm_condition, register_limit_alarm};
 use opcua_types::{EventFilter, ExtensionObject};
 use tokio::time::timeout;
 
@@ -710,4 +713,296 @@ async fn alarm_client_helpers_acknowledge_and_confirm() {
         let space = nm.address_space().read();
         assert!(sm.get_confirmed(&space), "helper should have confirmed");
     }
+}
+
+// ---------------------------------------------------------------------------
+// Process limit alarms (Part 9 §5.8.18–§5.8.20) — ExclusiveLimitAlarmType /
+// NonExclusiveLimitAlarmType driven from a value via update_value, composing the
+// existing condition lifecycle. The pure threshold/deadband logic is covered by
+// async-opcua-server/tests/limit_evaluator.rs; these assert the end-to-end wiring.
+// ---------------------------------------------------------------------------
+
+/// Apply a new process value to a limit alarm and dispatch the resulting condition event (if any),
+/// the same way an application would.
+fn drive_limit(alarm: &LimitAlarm, nm: &SimpleNodeManager, tester: &Tester, value: f64) {
+    let event = {
+        let mut space = nm.address_space().write();
+        alarm.update_value(&mut space, value)
+    };
+    if let Some(ev) = event {
+        let wrapper = opcua::server::alarms::ServerAlarmEvent { event: &ev };
+        tester
+            .handle
+            .subscriptions()
+            .notify_events(std::iter::once((
+                &wrapper as &dyn opcua::nodes::Event,
+                &ev.source_node,
+            )));
+    }
+}
+
+async fn recv_alarm(
+    events: &mut tokio::sync::mpsc::UnboundedReceiver<(ReadValueId, Option<Vec<Variant>>)>,
+) -> AlarmEvent {
+    let (_r, v) = timeout(Duration::from_secs(2), events.recv())
+        .await
+        .expect("timed out waiting for a condition event")
+        .expect("event channel closed");
+    parse_alarm_event(&v.expect("event without fields")).expect("parse alarm event")
+}
+
+/// Resolve a browse path from `start` (all hierarchical, ns0 names) and read the target's Value.
+async fn read_value_via_path(
+    session: &opcua_client::Session,
+    start: &NodeId,
+    names: &[&str],
+) -> Option<Variant> {
+    let elements = names
+        .iter()
+        .map(|n| RelativePathElement {
+            reference_type_id: ReferenceTypeId::HierarchicalReferences.into(),
+            is_inverse: false,
+            include_subtypes: true,
+            target_name: QualifiedName::new(0, *n),
+        })
+        .collect();
+    let r = session
+        .translate_browse_paths_to_node_ids(&[BrowsePath {
+            starting_node: start.clone(),
+            relative_path: RelativePath {
+                elements: Some(elements),
+            },
+        }])
+        .await
+        .unwrap();
+    let targets = r[0].targets.clone().unwrap_or_default();
+    assert!(
+        !targets.is_empty(),
+        "browse path {names:?} resolved to nothing"
+    );
+    let node_id = targets[0].target_id.node_id.clone();
+    let dvs = session
+        .read(
+            &[ReadValueId {
+                node_id,
+                attribute_id: AttributeId::Value as u32,
+                ..Default::default()
+            }],
+            TimestampsToReturn::Neither,
+            0.0,
+        )
+        .await
+        .unwrap();
+    dvs[0].value.clone()
+}
+
+fn exclusive_level_cfg() -> LimitConfig {
+    LimitConfig::new(LimitMode::Exclusive)
+        .with_high(LimitDef {
+            value: 100.0,
+            deadband: 5.0,
+            severity: 400,
+        })
+        .with_high_high(LimitDef {
+            value: 110.0,
+            deadband: 5.0,
+            severity: 700,
+        })
+        .build()
+        .expect("valid config")
+}
+
+/// Exclusive limit alarm: bands drive the condition event severity, the LimitState exposes the
+/// active state, and Acknowledge (via the standard type method) works on it.
+#[tokio::test]
+async fn limit_alarm_exclusive_drives_bands_acks_and_exposes_limit_state() {
+    let (tester, nm, session) = setup_alarms().await;
+    let core_nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<CoreNodeManager>()
+        .expect("CoreNodeManager not found");
+    let source = make_event_source(&nm, "LevelSensor");
+    let alarm = register_limit_alarm(
+        nm.address_space(),
+        &nm,
+        "Tank",
+        "Level",
+        source.clone(),
+        exclusive_level_cfg(),
+    );
+    let condition_id = alarm.condition_state_machine().condition_id.clone();
+    let registry = ConditionRegistry::new();
+    registry.register(alarm.condition_state_machine());
+    register_condition_methods(&core_nm, registry, nm.address_space().clone());
+
+    let (notifs, _dv, mut events) = ChannelNotifications::new();
+    let sub_id = session
+        .create_subscription(Duration::from_millis(100), 100, 20, 1000, 0, true, notifs)
+        .await
+        .unwrap();
+    let _item = add_event_item(&session, sub_id, &source).await;
+
+    // High band -> severity 400.
+    drive_limit(&alarm, &nm, &tester, 105.0);
+    let e = recv_alarm(&mut events).await;
+    assert!(e.active_state);
+    assert_eq!(e.severity, 400);
+
+    // Escalate to HighHigh -> severity 700.
+    drive_limit(&alarm, &nm, &tester, 115.0);
+    let e = recv_alarm(&mut events).await;
+    assert!(e.active_state);
+    assert_eq!(e.severity, 700);
+
+    // The exclusive LimitState exposes the active sub-state (HighHigh = i=9329).
+    match read_value_via_path(
+        &session,
+        &condition_id,
+        &["LimitState", "CurrentState", "Id"],
+    )
+    .await
+    {
+        Some(Variant::NodeId(n)) => assert_eq!(*n, NodeId::new(0, 9329)),
+        other => panic!("LimitState.CurrentState.Id = {other:?}, expected HighHigh (9329)"),
+    }
+
+    // Acknowledge the active limit alarm via the standard type method.
+    session
+        .acknowledge_condition(
+            &condition_id,
+            ByteString::from(e.event_id.clone()),
+            LocalizedText::new("en", "ack limit alarm"),
+        )
+        .await
+        .expect("acknowledge_condition on a limit alarm should succeed");
+    {
+        let space = nm.address_space().read();
+        assert!(
+            alarm.condition_state_machine().get_acked(&space),
+            "limit alarm should be acknowledged"
+        );
+    }
+    // Acknowledge dispatches its own (still-active, now-acked) event; consume it.
+    let ack_ev = recv_alarm(&mut events).await;
+    assert!(ack_ev.active_state && ack_ev.acked_state);
+
+    // Return to normal -> inactive.
+    drive_limit(&alarm, &nm, &tester, 50.0);
+    let e = recv_alarm(&mut events).await;
+    assert!(!e.active_state, "value back in range clears the alarm");
+}
+
+/// NonExclusive limit alarm: above HighHigh, BOTH HighHighState and HighState read active.
+#[tokio::test]
+async fn limit_alarm_non_exclusive_activates_independent_states() {
+    let (tester, nm, session) = setup_alarms().await;
+    let core_nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<CoreNodeManager>()
+        .expect("CoreNodeManager not found");
+    let source = make_event_source(&nm, "PressureSensor");
+    let cfg = LimitConfig::new(LimitMode::NonExclusive)
+        .with_high(LimitDef {
+            value: 100.0,
+            deadband: 5.0,
+            severity: 400,
+        })
+        .with_high_high(LimitDef {
+            value: 110.0,
+            deadband: 5.0,
+            severity: 700,
+        })
+        .build()
+        .expect("valid config");
+    let alarm = register_limit_alarm(
+        nm.address_space(),
+        &nm,
+        "Vat",
+        "Pressure",
+        source.clone(),
+        cfg,
+    );
+    let condition_id = alarm.condition_state_machine().condition_id.clone();
+    let registry = ConditionRegistry::new();
+    registry.register(alarm.condition_state_machine());
+    register_condition_methods(&core_nm, registry, nm.address_space().clone());
+
+    let (notifs, _dv, mut events) = ChannelNotifications::new();
+    let sub_id = session
+        .create_subscription(Duration::from_millis(100), 100, 20, 1000, 0, true, notifs)
+        .await
+        .unwrap();
+    let _item = add_event_item(&session, sub_id, &source).await;
+
+    drive_limit(&alarm, &nm, &tester, 115.0);
+    let e = recv_alarm(&mut events).await;
+    assert!(e.active_state);
+    assert_eq!(
+        e.severity, 700,
+        "non-exclusive severity is the highest active limit"
+    );
+
+    // Both High and HighHigh states are active simultaneously.
+    match read_value_via_path(&session, &condition_id, &["HighHighState", "Id"]).await {
+        Some(Variant::Boolean(b)) => assert!(b, "HighHighState should be active"),
+        other => panic!("HighHighState.Id = {other:?}"),
+    }
+    match read_value_via_path(&session, &condition_id, &["HighState", "Id"]).await {
+        Some(Variant::Boolean(b)) => assert!(b, "HighState should also be active"),
+        other => panic!("HighState.Id = {other:?}"),
+    }
+}
+
+/// A late subscriber learns about an already-active limit alarm via ConditionRefresh.
+#[tokio::test]
+async fn limit_alarm_conditionrefresh_replays_active_limit() {
+    let (tester, nm, session) = setup_alarms().await;
+    let core_nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<CoreNodeManager>()
+        .expect("CoreNodeManager not found");
+    let source = make_event_source(&nm, "FlowSensor");
+    let alarm = register_limit_alarm(
+        nm.address_space(),
+        &nm,
+        "Line",
+        "Flow",
+        source.clone(),
+        exclusive_level_cfg(),
+    );
+    let registry = ConditionRegistry::new();
+    registry.register(alarm.condition_state_machine());
+    register_condition_methods(&core_nm, registry, nm.address_space().clone());
+
+    // Drive into the HighHigh band BEFORE subscribing, without broadcasting.
+    {
+        let mut space = nm.address_space().write();
+        let _ = alarm.update_value(&mut space, 115.0);
+    }
+
+    let (notifs, _dv, mut events) = ChannelNotifications::new();
+    let sub_id = session
+        .create_subscription(Duration::from_millis(100), 100, 20, 1000, 0, true, notifs)
+        .await
+        .unwrap();
+    let _item = add_event_item(&session, sub_id, &source).await;
+
+    session
+        .refresh_conditions(sub_id)
+        .await
+        .expect("refresh_conditions should succeed");
+
+    let burst = collect_until_refresh_end(&mut events).await;
+    let cond = burst
+        .iter()
+        .find(|(_, e)| !is_marker(e))
+        .expect("the retained limit alarm must be replayed");
+    assert!(cond.1.active_state);
+    assert_eq!(
+        cond.1.severity, 700,
+        "replayed limit alarm keeps its HighHigh severity"
+    );
 }

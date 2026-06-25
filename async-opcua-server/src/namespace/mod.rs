@@ -2,4 +2,4 @@
 
 pub mod init;
 
-pub use init::register_alarm_condition;
+pub use init::{register_alarm_condition, register_limit_alarm};

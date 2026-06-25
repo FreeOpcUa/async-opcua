@@ -1,9 +1,13 @@
 //! OPC UA FX generated data types.
 
+pub mod cm_ids;
 pub mod connection_endpoint_definition_data_type;
 pub mod establish;
 pub mod generated;
+pub mod last_activity_mask;
 pub mod methods;
+pub mod node_identifier;
+pub mod portable_node_identifier;
 pub mod pub_sub_connection_endpoint_mode_enum;
 
 pub use connection_endpoint_definition_data_type::ConnectionEndpointDefinitionDataType;
@@ -11,12 +15,17 @@ pub use establish::{
     process_close_connections, process_establish_connections, EstablishResults,
     EstablishedEndpoint, FxConnectionState, FxVerifier,
 };
+pub use generated::cm::{enums::*, structs::*, GeneratedTypeLoader as CmGeneratedTypeLoader};
 pub use generated::types::*;
+pub use last_activity_mask::LastActivityMask;
 pub use methods::{
     handle_close_connections, handle_establish_connections, register_fx_connection_methods,
 };
+pub use node_identifier::NodeIdentifier;
+pub use portable_node_identifier::PortableNodeIdentifier;
 pub use pub_sub_connection_endpoint_mode_enum::PubSubConnectionEndpointModeEnum;
 
+const FX_CM_NAMESPACE: &str = "http://opcfoundation.org/UA/FX/CM/";
 const FX_DATA_NAMESPACE: &str = "http://opcfoundation.org/UA/FX/Data/";
 
 #[allow(non_camel_case_types, clippy::enum_variant_names)]

@@ -46,6 +46,103 @@ targets:
       #![allow(clippy::upper_case_acronyms)]
       #[allow(unused)]
       mod opcua { pub(super) use opcua_types as types; }
+  - type: types
+    file: opc.ua.fx.cm.nodeset2.xml
+    output_dir: src/generated/cm
+    id_path: crate::cm_ids
+    enums_single_file: true
+    structs_single_file: true
+    types_import_map:
+      MessageSecurityMode:
+        path: "opcua::types::enums"
+        has_default: true
+      RelativePath:
+        path: "opcua::types::relative_path"
+        has_default: true
+        base_type: "ExtensionObject"
+        add_to_type_loader: false
+      QualifiedName:
+        path: "opcua::types::qualified_name"
+        has_default: true
+      KeyValuePair:
+        path: "opcua::types::key_value_pair"
+        has_default: true
+        base_type: "ExtensionObject"
+        add_to_type_loader: false
+      ConfigurationVersionDataType:
+        path: "opcua::types::configuration_version_data_type"
+        has_default: true
+        base_type: "ExtensionObject"
+        add_to_type_loader: false
+      PortableNodeId:
+        path: "opcua::types::portable_node_id"
+        has_default: true
+        base_type: "ExtensionObject"
+        add_to_type_loader: false
+      PortableQualifiedName:
+        path: "opcua::types::portable_qualified_name"
+        has_default: true
+        base_type: "ExtensionObject"
+        add_to_type_loader: false
+      PubSubConfiguration2DataType:
+        path: "opcua::types::pub_sub_configuration_2_data_type"
+        has_default: true
+        base_type: "ExtensionObject"
+        add_to_type_loader: false
+      PubSubConfigurationRefDataType:
+        path: "opcua::types::pub_sub_configuration_ref_data_type"
+        has_default: true
+        base_type: "ExtensionObject"
+        add_to_type_loader: false
+      PubSubConfigurationValueDataType:
+        path: "opcua::types::pub_sub_configuration_value_data_type"
+        has_default: true
+        base_type: "ExtensionObject"
+        add_to_type_loader: false
+      PubSubKeyPushTargetDataType:
+        path: "opcua::types::pub_sub_key_push_target_data_type"
+        has_default: true
+        base_type: "ExtensionObject"
+        add_to_type_loader: false
+      PublishedDataSetDataType:
+        path: "opcua::types::published_data_set_data_type"
+        has_default: true
+        base_type: "ExtensionObject"
+        add_to_type_loader: false
+      SecurityGroupDataType:
+        path: "opcua::types::security_group_data_type"
+        has_default: true
+        base_type: "ExtensionObject"
+        add_to_type_loader: false
+      StandaloneSubscribedDataSetDataType:
+        path: "opcua::types::standalone_subscribed_data_set_data_type"
+        has_default: true
+        base_type: "ExtensionObject"
+        add_to_type_loader: false
+      AssetVerificationModeEnum:
+        path: "crate::generated::types::enums"
+        has_default: true
+      AssetVerificationResultEnum:
+        path: "crate::generated::types::enums"
+        has_default: true
+      LastActivityMask:
+        path: "crate::last_activity_mask"
+        has_default: true
+      NodeIdentifier:
+        path: "crate::node_identifier"
+        has_default: true
+        base_type: "ExtensionObject"
+        add_to_type_loader: true
+      PortableNodeIdentifier:
+        path: "crate::portable_node_identifier"
+        has_default: true
+        base_type: "ExtensionObject"
+        add_to_type_loader: true
+    extra_header: |
+      #![allow(non_camel_case_types)]
+      #![allow(clippy::upper_case_acronyms)]
+      #[allow(unused)]
+      mod opcua { pub(super) use opcua_types as types; }
 
 sources:
   - schema

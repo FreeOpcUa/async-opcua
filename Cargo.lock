@@ -514,6 +514,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-opcua-fx"
+version = "0.19.0"
+dependencies = [
+ "async-opcua",
+ "async-opcua-types",
+ "bitflags 2.11.0",
+ "log",
+ "serde",
+ "serde_json",
+ "serde_with",
+]
+
+[[package]]
 name = "async-opcua-history-sqlite"
 version = "0.19.0"
 dependencies = [

@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
   "async-opcua",
+  "async-opcua-fx",
   "async-opcua-pubsub",
   "async-opcua-safety",
   "samples/*",

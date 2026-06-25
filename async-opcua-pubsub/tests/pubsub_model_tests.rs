@@ -3,8 +3,8 @@
 use opcua_nodes::DefaultTypeTree;
 use opcua_pubsub::pubsub_model::{reflect_pubsub_config, PubSubModelMap};
 use opcua_pubsub::{
-    DataSetWriterConfig, MessageEncoding, PubSubConnectionConfig, PublishedDataSetConfig,
-    WriterGroupConfig,
+    DataSetReaderConfig, DataSetWriterConfig, MessageEncoding, PubSubConnectionConfig,
+    PublishedDataSetConfig, ReaderGroupConfig, WriterGroupConfig,
 };
 use opcua_server::address_space::AddressSpace;
 use opcua_types::{
@@ -121,4 +121,105 @@ fn reflect_pubsub_config_materializes_referenceable_instances() {
         )
         .and_then(|dv| dv.value);
     assert_eq!(wg_value, Some(Variant::UInt16(42)));
+}
+
+#[test]
+fn reflect_pubsub_config_materializes_reader_side_instances() {
+    let mut space = AddressSpace::new();
+    space.add_namespace("urn:test", 1);
+
+    let cfg = PubSubConnectionConfig {
+        connection_id: "conn1".into(),
+        name: "Conn 1".into(),
+        address: "udp://239.0.0.1:4840".into(),
+        writer_groups: vec![],
+        reader_groups: vec![ReaderGroupConfig {
+            reader_group_id: 5,
+            dataset_readers: vec![DataSetReaderConfig {
+                dataset_reader_id: 3,
+                dataset_writer_id: 7,
+                publisher_id: None,
+                subscribed_variables: vec![],
+            }],
+        }],
+    };
+
+    let map: PubSubModelMap = reflect_pubsub_config(&mut space, 1, &[cfg]);
+    let tt = DefaultTypeTree::new();
+
+    // The map locates the DataSetReader by its config id.
+    let reader_id = map
+        .readers
+        .iter()
+        .find(|(id, _)| *id == 3)
+        .expect("reader id 3 in map")
+        .1
+        .clone();
+    assert!(space.node_exists(&reader_id));
+
+    // It is a typed DataSetReader instance with its identity property.
+    let type_def = space
+        .find_references(
+            &reader_id,
+            Some((ReferenceTypeId::HasTypeDefinition, false)),
+            &tt,
+            BrowseDirection::Forward,
+        )
+        .next()
+        .expect("DataSetReader HasTypeDefinition");
+    assert_eq!(
+        type_def.target_node,
+        &NodeId::from(ObjectTypeId::DataSetReaderType)
+    );
+
+    let id_prop = space
+        .find_node_by_browse_name(
+            &reader_id,
+            Some((ReferenceTypeId::HasProperty, false)),
+            &tt,
+            BrowseDirection::Forward,
+            QualifiedName::from("DataSetReaderId"),
+        )
+        .expect("DataSetReaderId property");
+    let v = id_prop
+        .as_node()
+        .get_attribute(
+            TimestampsToReturn::Neither,
+            AttributeId::Value,
+            &NumericRange::None,
+            &DataEncoding::Binary,
+        )
+        .and_then(|dv| dv.value);
+    assert_eq!(v, Some(Variant::UInt16(3)));
+
+    // The connection -> ReaderGroup chain is wired via HasReaderGroup with ReaderGroupId = 5.
+    let conn_id = map.connections[0].1.clone();
+    let group = space
+        .find_references(
+            &conn_id,
+            Some((ReferenceTypeId::HasReaderGroup, false)),
+            &tt,
+            BrowseDirection::Forward,
+        )
+        .next()
+        .expect("Connection HasReaderGroup");
+    let wg = space
+        .find_node_by_browse_name(
+            group.target_node,
+            Some((ReferenceTypeId::HasProperty, false)),
+            &tt,
+            BrowseDirection::Forward,
+            QualifiedName::from("ReaderGroupId"),
+        )
+        .expect("ReaderGroupId property");
+    let wgv = wg
+        .as_node()
+        .get_attribute(
+            TimestampsToReturn::Neither,
+            AttributeId::Value,
+            &NumericRange::None,
+            &DataEncoding::Binary,
+        )
+        .and_then(|dv| dv.value);
+    assert_eq!(wgv, Some(Variant::UInt16(5)));
 }

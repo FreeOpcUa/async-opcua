@@ -19,7 +19,7 @@ use opcua_types::{
 };
 use std::sync::Arc;
 
-/// Handler for Alarm Acknowledge/Confirm method calls.
+/// Handler for Alarm Acknowledge/Confirm/AddComment method calls.
 pub struct AlarmMethodHandler {
     /// Associated Alarm condition state machine
     pub state_machine: ConditionStateMachine,
@@ -149,6 +149,80 @@ impl AlarmMethodHandler {
         Ok(vec![])
     }
 
+    /// Callback executed when the AddComment method is called by a client.
+    pub fn handle_add_comment_method(
+        &self,
+        context: &RequestContext,
+        args: &[Variant],
+    ) -> Result<Vec<Variant>, StatusCode> {
+        // FR-019: Trace user token securely (masking unencrypted token/key and logging SHA-256 hash)
+        {
+            let session = opcua_core::trace_read_lock!(context.session);
+            if let crate::identity_token::IdentityToken::IssuedToken(ref token) =
+                session.user_identity()
+            {
+                let token_str = String::from_utf8_lossy(token.token_data.as_ref());
+                let hashed = opcua_core::logging::hash_jwt(&token_str);
+                tracing::info!(
+                    "AddComment called on alarm {} by user with token hash: {}",
+                    self.state_machine.condition_name,
+                    hashed
+                );
+            }
+        }
+
+        if args.len() < 2 {
+            return Err(StatusCode::BadArgumentsMissing);
+        }
+
+        let event_id = match &args[0] {
+            Variant::ByteString(ref b) => b.as_ref(),
+            _ => return Err(StatusCode::BadTypeMismatch),
+        };
+
+        if self.state_machine.branch_by_event_id(event_id).is_none()
+            && !self.state_machine.current_event_id_matches(event_id)
+        {
+            return Err(StatusCode::BadEventIdUnknown);
+        }
+
+        let comment = match &args[1] {
+            Variant::LocalizedText(ref t) => (**t).clone(),
+            _ => return Err(StatusCode::BadTypeMismatch),
+        };
+
+        let address_space = opcua_core::trace_read_lock!(self.address_space);
+        let active = self.state_machine.get_active(&address_space);
+        let acked = self.state_machine.get_acked(&address_space);
+        let confirmed = self.state_machine.get_confirmed(&address_space);
+        let severity = self.state_machine.get_severity(&address_space);
+        let retain = active || !confirmed;
+
+        // ponytail: Emit AuditConditionCommentEventType when audit event support is added.
+        let event = opcua_core::events::AlarmEvent {
+            event_id: event_id.to_vec(),
+            event_type: NodeId::new(0, 2915),
+            source_node: self.state_machine.source_node_id.clone(),
+            source_name: self.state_machine.condition_name.clone(),
+            time: DateTime::now(),
+            message: comment,
+            severity,
+            condition_id: self.state_machine.condition_id.clone(),
+            branch_id: NodeId::null(),
+            condition_name: self.state_machine.condition_name.clone(),
+            active_state: active,
+            acked_state: acked,
+            confirmed_state: confirmed,
+            retain,
+        };
+
+        let wrapper = ServerAlarmEvent { event: &event };
+        let items = std::iter::once((&wrapper as &dyn Event, &event.source_node));
+        context.subscriptions.notify_events(items);
+
+        Ok(vec![])
+    }
+
     /// Callback executed when the Confirm method is called by a client.
     pub fn handle_confirm_method(
         &self,
@@ -266,6 +340,21 @@ impl ConditionRefreshHandler {
             .ok_or(StatusCode::BadNodeIdUnknown)?;
         AlarmMethodHandler::new(condition, self.address_space.clone())
             .handle_ack_method(context, args)
+    }
+
+    /// Callback executed when the standard AddComment method is called by a client.
+    pub fn handle_condition_add_comment(
+        &self,
+        context: &RequestContext,
+        object_id: &NodeId,
+        args: &[Variant],
+    ) -> Result<Vec<Variant>, StatusCode> {
+        let condition = self
+            .registry
+            .get(object_id)
+            .ok_or(StatusCode::BadNodeIdUnknown)?;
+        AlarmMethodHandler::new(condition, self.address_space.clone())
+            .handle_add_comment_method(context, args)
     }
 
     /// Callback executed when the standard Confirm method is called by a client.
@@ -483,7 +572,7 @@ impl EventField for OwnedAlarmEvent {
     }
 }
 
-/// Registers standard ConditionRefresh, ConditionRefresh2, Acknowledge, and Confirm method callbacks.
+/// Registers standard ConditionRefresh, ConditionRefresh2, AddComment, Acknowledge, and Confirm method callbacks.
 #[cfg(feature = "generated-address-space")]
 pub fn register_condition_methods(
     core_node_manager: &crate::node_manager::memory::CoreNodeManager,
@@ -509,6 +598,14 @@ pub fn register_condition_methods(
         MethodId::AcknowledgeableConditionType_Acknowledge.into(),
         move |ctx, object_id, args| {
             acknowledge_handler.handle_condition_acknowledge(ctx, object_id, args)
+        },
+    );
+
+    let add_comment_handler = handler.clone();
+    core_node_manager.inner().add_method_callback_with_context(
+        MethodId::ConditionType_AddComment.into(),
+        move |ctx, object_id, args| {
+            add_comment_handler.handle_condition_add_comment(ctx, object_id, args)
         },
     );
 

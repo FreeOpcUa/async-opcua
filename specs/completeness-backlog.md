@@ -6,11 +6,12 @@ built — "the spec defines it" is sufficient reason. (User direction 2026-06-25
 abstraction), not WHETHER. One feature per PR: codex implements (MCP-grounded), Claude writes
 independent tests.
 
-## In progress
-- **FX (Parts 80/81/83) completion** — 6 pieces: (1) async-opcua-fx crate + FX DataTypes,
-  (2) EstablishConnections/CloseConnections Methods (9-command CommandMask + atomic abort),
-  (3) FunctionalEntity Verify + IAssetRevision VerifyAsset, (4) ControlGroup locking,
-  (5) NodeIdTranslation, (6) SecurityGroups/SKS (Part 14 §8). See `2026-06-25-fx-completion-design.md`.
+## Done
+- **FX (Parts 80/81/83) completion** — DONE (PRs #160-168): async-opcua-fx crate + FX/Data + FX/CM
+  DataTypes; full 9-command EstablishConnections/CloseConnections w/ atomic abort + server Method adapter;
+  VerifyAsset/VerifyFunctionalEntity (FxVerifier); ControlGroup locking; NodeIdTranslation; SetSecurityKeys
+  (SKS). Follow-up: wire Get/SetSecurityKeys as callable address-space Method nodes. See
+  `2026-06-25-fx-completion-design.md` + memory `feature-fx-completion`.
 
 ## To build (spec features, YAGNI-deferred)
 - **A&C (Part 9):** condition history / HistoryRead on condition events; AddComment; DialogConditionType;

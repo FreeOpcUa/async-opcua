@@ -1466,3 +1466,154 @@ async fn limit_alarm_validates_against_analog_item_eurange() {
         "a limit above EURange high must be rejected"
     );
 }
+
+/// Part 9 §5.5.2 AddComment: adds a comment to the condition and REPORTS a new event carrying that
+/// comment WITHOUT changing AckedState/ActiveState/ConfirmedState; an unknown EventId is rejected.
+#[tokio::test]
+async fn alarm_add_comment_reports_without_state_change() {
+    let (tester, nm, session) = setup_alarms().await;
+
+    let source_node_id = NodeId::new(2, "CommentDevice");
+    {
+        let mut space = nm.address_space().write();
+        let source_node = opcua::server::address_space::ObjectBuilder::new(
+            &source_node_id,
+            "CommentDevice",
+            "CommentDevice",
+        )
+        .component_of(ObjectId::ObjectsFolder)
+        .event_notifier(opcua::server::address_space::EventNotifier::SUBSCRIBE_TO_EVENTS)
+        .build();
+        space.insert::<_, NodeId>(source_node, None);
+    }
+
+    let core_nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<CoreNodeManager>()
+        .expect("CoreNodeManager not found");
+    let state_machine = register_alarm_condition(
+        nm.address_space(),
+        &nm,
+        "Device1",
+        "Temperature",
+        source_node_id.clone(),
+        "Temperature alarm",
+    );
+    let registry = ConditionRegistry::new();
+    registry.register(state_machine.clone());
+    register_condition_methods(&core_nm, registry, nm.address_space().clone());
+
+    let (notifs, _, mut events) = ChannelNotifications::new();
+    let sub_id = session
+        .create_subscription(Duration::from_millis(100), 100, 20, 1000, 0, true, notifs)
+        .await
+        .unwrap();
+    session
+        .create_monitored_items(
+            sub_id,
+            TimestampsToReturn::Both,
+            vec![MonitoredItemCreateRequest {
+                item_to_monitor: ReadValueId {
+                    node_id: source_node_id.clone(),
+                    attribute_id: AttributeId::EventNotifier as u32,
+                    ..Default::default()
+                },
+                monitoring_mode: MonitoringMode::Reporting,
+                requested_parameters: MonitoringParameters {
+                    sampling_interval: 0.0,
+                    queue_size: 10,
+                    discard_oldest: true,
+                    filter: ExtensionObject::new(EventFilter {
+                        select_clauses: Some(get_alarm_event_select_clauses()),
+                        where_clause: opcua_types::ContentFilter::default(),
+                    }),
+                    ..Default::default()
+                },
+            }],
+        )
+        .await
+        .unwrap();
+
+    // Trigger Active (unacknowledged).
+    let event = {
+        let mut space = nm.address_space().write();
+        trigger_alarm_transition(
+            &mut space,
+            &state_machine,
+            true,
+            800,
+            LocalizedText::new("en", "High temperature!"),
+        )
+        .unwrap()
+        .expect("transition event")
+    };
+    {
+        let wrapper = opcua::server::alarms::ServerAlarmEvent { event: &event };
+        tester
+            .handle
+            .subscriptions()
+            .notify_events(std::iter::once((
+                &wrapper as &dyn opcua::nodes::Event,
+                &event.source_node,
+            )));
+    }
+    let (_r1, v1) = timeout(Duration::from_secs(2), events.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    let active = parse_alarm_event(&v1.unwrap()).expect("active event");
+    assert!(active.active_state && !active.acked_state);
+
+    // An unknown EventId is rejected before anything is reported.
+    let bogus = session
+        .call_one(CallMethodRequest {
+            object_id: state_machine.condition_id.clone(),
+            method_id: MethodId::ConditionType_AddComment.into(),
+            input_arguments: Some(vec![
+                Variant::from(opcua::types::ByteString::from(vec![0xDE, 0xAD])),
+                Variant::from(LocalizedText::new("en", "nope")),
+            ]),
+        })
+        .await
+        .unwrap();
+    assert_eq!(bogus.status_code, StatusCode::BadEventIdUnknown);
+
+    // AddComment on the current EventId succeeds.
+    let response = session
+        .call_one(CallMethodRequest {
+            object_id: state_machine.condition_id.clone(),
+            method_id: MethodId::ConditionType_AddComment.into(),
+            input_arguments: Some(vec![
+                Variant::from(opcua::types::ByteString::from(active.event_id.clone())),
+                Variant::from(LocalizedText::new("en", "Operator note")),
+            ]),
+        })
+        .await
+        .unwrap();
+    assert_eq!(response.status_code, StatusCode::Good);
+
+    // The reported comment event carries the comment and does NOT change ack/confirm/active state.
+    let (_r2, v2) = timeout(Duration::from_secs(2), events.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    let comment_event = parse_alarm_event(&v2.unwrap()).expect("comment event");
+    assert_eq!(comment_event.message.text.as_ref(), "Operator note");
+    assert!(comment_event.active_state, "still active");
+    assert!(
+        !comment_event.acked_state,
+        "AddComment must not acknowledge"
+    );
+    assert!(!comment_event.confirmed_state);
+
+    // Server state is unchanged by AddComment.
+    {
+        let space = nm.address_space().read();
+        assert!(
+            !state_machine.get_acked(&space),
+            "AddComment left acked unchanged"
+        );
+        assert!(state_machine.get_active(&space));
+    }
+}

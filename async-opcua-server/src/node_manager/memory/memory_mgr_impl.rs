@@ -5,7 +5,7 @@ use crate::{
     address_space::{AccessLevel, AddressSpace, EventNotifier, NodeType, ReferenceDirection},
     diagnostics::NamespaceMetadata,
     node_manager::{
-        AddNodeItem, AddReferenceItem, DeleteNodeItem, DeleteReferenceItem,
+        audit_events, AddNodeItem, AddReferenceItem, DeleteNodeItem, DeleteReferenceItem,
         GeneralModelChangeEvent, HistoryNode, HistoryUpdateNode, MethodCall, MonitoredItemRef,
         MonitoredItemUpdateRef, ParsedReadValueId, RegisterNodeItem, RequestContext, ServerContext,
         WriteNode,
@@ -94,6 +94,7 @@ fn add_nodes_impl(
     }
 
     let mut changes = Vec::new();
+    let mut audit_items = Vec::new();
 
     {
         let mut address_space = address_space.write();
@@ -154,6 +155,7 @@ fn add_nodes_impl(
 
             if address_space.insert(node, Some(references.as_slice())) {
                 item.set_result(assigned_id.clone(), StatusCode::Good);
+                audit_items.push(audit_events::add_nodes_item(item));
                 changes.push(model_change(assigned_id, MODEL_CHANGE_NODE_ADDED));
             } else {
                 item.set_result(NodeId::null(), StatusCode::BadNodeIdExists);
@@ -161,6 +163,7 @@ fn add_nodes_impl(
         }
     }
 
+    audit_events::notify_add_nodes(context, audit_items);
     notify_model_changes(context, changes);
 }
 
@@ -177,6 +180,7 @@ fn delete_nodes_impl(
     }
 
     let mut changes = Vec::new();
+    let mut audit_items = Vec::new();
 
     {
         let mut address_space = address_space.write();
@@ -193,6 +197,7 @@ fn delete_nodes_impl(
                 .is_some()
             {
                 item.set_result(StatusCode::Good);
+                audit_items.push(audit_events::delete_nodes_item(item));
                 changes.push(model_change(deleted_node_id, MODEL_CHANGE_NODE_DELETED));
             } else {
                 item.set_result(StatusCode::BadNodeIdUnknown);
@@ -200,6 +205,7 @@ fn delete_nodes_impl(
         }
     }
 
+    audit_events::notify_delete_nodes(context, audit_items);
     notify_model_changes(context, changes);
 }
 
@@ -217,6 +223,7 @@ fn add_references_impl(
     }
 
     let mut changes = Vec::new();
+    let mut audit_items = Vec::new();
 
     {
         let mut address_space = address_space.write();
@@ -295,6 +302,7 @@ fn add_references_impl(
             if target_ready {
                 item.set_target_result(StatusCode::Good);
             }
+            audit_items.push(audit_events::add_references_item(item));
             changes.push(model_change(
                 item.source_node_id().clone(),
                 MODEL_CHANGE_REFERENCE_ADDED,
@@ -302,6 +310,7 @@ fn add_references_impl(
         }
     }
 
+    audit_events::notify_add_references(context, audit_items);
     notify_model_changes(context, changes);
 }
 
@@ -319,6 +328,7 @@ fn delete_references_impl(
     }
 
     let mut changes = Vec::new();
+    let mut audit_items = Vec::new();
 
     {
         let mut address_space = address_space.write();
@@ -384,6 +394,7 @@ fn delete_references_impl(
             if target_ready {
                 item.set_target_result(StatusCode::Good);
             }
+            audit_items.push(audit_events::delete_references_item(item));
             changes.push(model_change(
                 item.source_node_id().clone(),
                 MODEL_CHANGE_REFERENCE_DELETED,
@@ -391,6 +402,7 @@ fn delete_references_impl(
         }
     }
 
+    audit_events::notify_delete_references(context, audit_items);
     notify_model_changes(context, changes);
 }
 

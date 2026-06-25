@@ -1,7 +1,7 @@
 use opcua_types::{
     AddNodeAttributes, AddNodesItem, AddNodesResult, AddReferencesItem, DeleteNodesItem,
     DeleteReferencesItem, DiagnosticBits, DiagnosticInfo, ExpandedNodeId, NodeClass, NodeId,
-    QualifiedName, StatusCode,
+    QualifiedName, StatusCode, UAString,
 };
 
 use super::IntoResult;
@@ -112,6 +112,11 @@ impl AddNodeItem {
         &self.requested_new_node_id
     }
 
+    /// Result node ID assigned to the new node.
+    pub(crate) fn added_node_id(&self) -> &NodeId {
+        &self.result_node_id
+    }
+
     /// Requested browse name of the new node.
     pub fn browse_name(&self) -> &QualifiedName {
         &self.browse_name
@@ -168,7 +173,9 @@ impl IntoResult for AddNodeItem {
 pub struct AddReferenceItem {
     source_node_id: NodeId,
     reference_type_id: NodeId,
+    target_server_uri: UAString,
     target_node_id: ExpandedNodeId,
+    target_node_class: NodeClass,
     is_forward: bool,
     diagnostic_bits: DiagnosticBits,
 
@@ -195,7 +202,9 @@ impl AddReferenceItem {
         Self {
             source_node_id: item.source_node_id,
             reference_type_id: item.reference_type_id,
+            target_server_uri: item.target_server_uri,
             target_node_id: item.target_node_id,
+            target_node_class: item.target_node_class,
             is_forward: item.is_forward,
             source_status: status,
             target_status: status,
@@ -214,9 +223,19 @@ impl AddReferenceItem {
         &self.reference_type_id
     }
 
+    /// Requested target server URI.
+    pub fn target_server_uri(&self) -> &UAString {
+        &self.target_server_uri
+    }
+
     /// Requested target node ID.
     pub fn target_node_id(&self) -> &ExpandedNodeId {
         &self.target_node_id
+    }
+
+    /// Requested target node class.
+    pub fn target_node_class(&self) -> NodeClass {
+        self.target_node_class
     }
 
     /// Current result status, as a summary of source status and target status.

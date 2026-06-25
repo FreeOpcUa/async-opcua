@@ -19,6 +19,7 @@ use opcua_types::{
 use tokio::sync::OnceCell;
 
 mod attributes;
+mod audit_events;
 mod build;
 mod context;
 mod history;

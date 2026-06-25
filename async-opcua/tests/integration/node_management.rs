@@ -1038,19 +1038,107 @@ async fn add_nodes_emits_general_model_change_event() {
         .unwrap();
     assert_eq!(r[0].status_code, StatusCode::Good);
 
-    // Receive the model-change event.
-    let (_h, v) = tokio::time::timeout(Duration::from_secs(3), events.recv())
-        .await
-        .expect("a GeneralModelChangeEvent must be delivered after AddNodes")
-        .unwrap();
-    let fields = v.unwrap();
-    // field[0] = EventType, field[1] = Changes
-    assert_eq!(
-        fields[0],
-        Variant::from(NodeId::from(ObjectTypeId::GeneralModelChangeEventType))
+    // AddNodes fires both a GeneralModelChangeEvent and node-management audit events; find the
+    // model-change one (field[0] = EventType, field[1] = Changes) among the delivered events.
+    let model_change_type = Variant::from(NodeId::from(ObjectTypeId::GeneralModelChangeEventType));
+    let mut found = false;
+    for _ in 0..5 {
+        let Ok(Some((_h, v))) = tokio::time::timeout(Duration::from_secs(3), events.recv()).await
+        else {
+            break;
+        };
+        let fields = v.unwrap();
+        if fields[0] == model_change_type {
+            let Variant::Array(changes) = &fields[1] else {
+                panic!("Changes must be an array, got {:?}", fields[1]);
+            };
+            assert!(!changes.values.is_empty(), "at least one change reported");
+            found = true;
+            break;
+        }
+    }
+    assert!(
+        found,
+        "a GeneralModelChangeEvent must be delivered after AddNodes"
     );
-    let Variant::Array(changes) = &fields[1] else {
-        panic!("Changes must be an array, got {:?}", fields[1]);
+}
+
+/// Part 3/4 auditing: AddNodes by a client emits an AuditAddNodesEventType (i=2091) from the Server
+/// node, recording the action for auditors.
+#[tokio::test]
+async fn add_nodes_emits_audit_event() {
+    use crate::utils::ChannelNotifications;
+    use opcua::types::{
+        EventFilter, ExtensionObject, MonitoredItemCreateRequest, MonitoringMode,
+        MonitoringParameters, NumericRange, SimpleAttributeOperand, Variant,
     };
-    assert!(!changes.values.is_empty(), "at least one change reported");
+
+    let (_tester, _nm, ns, parent, session) = setup_simple(true).await;
+
+    let (notifs, _, mut events) = ChannelNotifications::new();
+    let sub_id = session
+        .create_subscription(Duration::from_millis(100), 100, 20, 1000, 0, true, notifs)
+        .await
+        .unwrap();
+    let select = vec![SimpleAttributeOperand {
+        type_definition_id: NodeId::new(0, 2041), // BaseEventType
+        browse_path: Some(vec![QualifiedName::new(0, "EventType")]),
+        attribute_id: AttributeId::Value as u32,
+        index_range: NumericRange::None,
+    }];
+    let res = session
+        .create_monitored_items(
+            sub_id,
+            TimestampsToReturn::Both,
+            vec![MonitoredItemCreateRequest {
+                item_to_monitor: ReadValueId {
+                    node_id: ObjectId::Server.into(),
+                    attribute_id: AttributeId::EventNotifier as u32,
+                    ..Default::default()
+                },
+                monitoring_mode: MonitoringMode::Reporting,
+                requested_parameters: MonitoringParameters {
+                    sampling_interval: 0.0,
+                    queue_size: 10,
+                    discard_oldest: true,
+                    filter: ExtensionObject::new(EventFilter {
+                        select_clauses: Some(select),
+                        where_clause: Default::default(),
+                    }),
+                    ..Default::default()
+                },
+            }],
+        )
+        .await
+        .unwrap();
+    assert_eq!(res[0].result.status_code, StatusCode::Good);
+
+    let r = session
+        .add_nodes(&[object_item(
+            parent.clone(),
+            ns,
+            "AuditChild",
+            NodeId::new(ns, "AuditChild").into(),
+        )])
+        .await
+        .unwrap();
+    assert_eq!(r[0].status_code, StatusCode::Good);
+
+    // AuditAddNodesEventType = i=2091. Find it among the delivered events.
+    let audit_type = Variant::from(NodeId::new(0, 2091));
+    let mut found = false;
+    for _ in 0..5 {
+        let Ok(Some((_h, v))) = tokio::time::timeout(Duration::from_secs(3), events.recv()).await
+        else {
+            break;
+        };
+        if v.unwrap()[0] == audit_type {
+            found = true;
+            break;
+        }
+    }
+    assert!(
+        found,
+        "an AuditAddNodesEventType must be delivered after AddNodes"
+    );
 }

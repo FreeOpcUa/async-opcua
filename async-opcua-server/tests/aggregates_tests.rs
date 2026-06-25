@@ -717,3 +717,56 @@ fn phase_f_time_average_excludes_bad_regions() {
         other => panic!("expected Double, got {other:?}"),
     }
 }
+
+#[test]
+fn phase_g_status_honors_custom_aggregate_configuration() {
+    // Average over [Good 10@2s, Good 20@4s, Bad 30@6s]: value = mean of Good = 15.
+    // Counts: 2 Good, 1 Bad, total 3 -> good_ratio = 66.7%, bad_ratio = 33.3%.
+    let series = vec![
+        good(10.0, 2),
+        good(20.0, 4),
+        dv(30.0, 6, StatusCode::BadDataUnavailable),
+    ];
+    let start = DateTime::from((2026, 6, 6, 12, 0, 0));
+    let end = DateTime::from((2026, 6, 6, 12, 0, 10));
+    let avg_id = NodeId::new(0u16, 2342);
+
+    // Default config (100/100): 66.7% good < 100 -> Uncertain_DataSubNormal.
+    let default_cfg = AggregateConfiguration::default();
+    let r = compute_processed_intervals(&series, &avg_id, &default_cfg, start, end, 10_000.0);
+    assert_eq!(r[0].value, Some(Variant::Double(15.0)));
+    assert_eq!(r[0].status, Some(StatusCode::UncertainDataSubNormal));
+
+    // percent_data_good = 50: 66.7% good >= 50 -> Good (the value is unchanged).
+    let cfg_good50 = AggregateConfiguration {
+        use_server_capabilities_defaults: false,
+        treat_uncertain_as_bad: false,
+        percent_data_bad: 100,
+        percent_data_good: 50,
+        use_sloped_extrapolation: false,
+    };
+    let r = compute_processed_intervals(&series, &avg_id, &cfg_good50, start, end, 10_000.0);
+    assert_eq!(r[0].status, Some(StatusCode::Good));
+
+    // percent_data_bad = 30: 33.3% bad >= 30 -> Bad.
+    let cfg_bad30 = AggregateConfiguration {
+        percent_data_bad: 30,
+        percent_data_good: 100,
+        ..cfg_good50
+    };
+    let r = compute_processed_intervals(&series, &avg_id, &cfg_bad30, start, end, 10_000.0);
+    assert_eq!(r[0].status, Some(StatusCode::Bad));
+
+    // TreatUncertainAsBad: an Uncertain value counts as Good by default (-> Good), as Bad when set.
+    let series_u = vec![good(10.0, 2), dv(20.0, 4, StatusCode::Uncertain)];
+    let r = compute_processed_intervals(&series_u, &avg_id, &default_cfg, start, end, 10_000.0);
+    assert_eq!(r[0].status, Some(StatusCode::Good)); // uncertain folded into good, no bad -> Good
+    let cfg_uab = AggregateConfiguration {
+        treat_uncertain_as_bad: true,
+        percent_data_bad: 100,
+        percent_data_good: 100,
+        ..cfg_good50
+    };
+    let r = compute_processed_intervals(&series_u, &avg_id, &cfg_uab, start, end, 10_000.0);
+    assert_eq!(r[0].status, Some(StatusCode::UncertainDataSubNormal));
+}

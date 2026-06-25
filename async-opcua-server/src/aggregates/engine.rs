@@ -444,6 +444,96 @@ fn aggregate_quality(input: &AggregateInput<'_>) -> StatusCode {
     compute_aggregate_quality(&statuses)
 }
 
+/// Part-13 §5.4.3.2.1 aggregate StatusCode from Good/Uncertain/Bad amounts (count or duration).
+fn aggregate_status_calc(
+    good: f64,
+    uncertain: f64,
+    bad: f64,
+    config: &AggregateConfiguration,
+) -> StatusCode {
+    let total = good + uncertain + bad;
+    if total <= 0.0 {
+        return StatusCode::BadNoData;
+    }
+
+    let (good_amount, bad_amount) = if config.treat_uncertain_as_bad {
+        (good, bad + uncertain)
+    } else {
+        (good + uncertain, bad)
+    };
+
+    if bad_amount <= 0.0 {
+        return StatusCode::Good;
+    }
+
+    // ponytail: Part-13 default for both thresholds is 100, but Rust's derived
+    // AggregateConfiguration::default() yields 0, so coerce 0 -> 100. Limitation: a client cannot
+    // request a literal 0% threshold (degenerate); proper use_server_capabilities_defaults
+    // resolution would disambiguate if explicit 0 is ever needed.
+    let percent_data_bad = if config.percent_data_bad == 0 {
+        100.0
+    } else {
+        f64::from(config.percent_data_bad)
+    };
+    let percent_data_good = if config.percent_data_good == 0 {
+        100.0
+    } else {
+        f64::from(config.percent_data_good)
+    };
+
+    let bad_ratio = bad_amount / total * 100.0;
+    if bad_ratio >= percent_data_bad {
+        return StatusCode::Bad;
+    }
+
+    let good_ratio = good_amount / total * 100.0;
+    if good_ratio >= percent_data_good {
+        StatusCode::Good
+    } else {
+        StatusCode::UncertainDataSubNormal
+    }
+}
+
+fn raw_value_status_amounts(input: &AggregateInput<'_>) -> (f64, f64, f64) {
+    input
+        .values
+        .iter()
+        .fold((0.0, 0.0, 0.0), |(good, uncertain, bad), value| {
+            let status = value.status.unwrap_or(StatusCode::Good);
+            if status.is_good() {
+                (good + 1.0, uncertain, bad)
+            } else if status.is_bad() {
+                (good, uncertain, bad + 1.0)
+            } else {
+                (good, uncertain + 1.0, bad)
+            }
+        })
+}
+
+fn percent_values_status(input: &AggregateInput<'_>) -> StatusCode {
+    let (good, uncertain, bad) = raw_value_status_amounts(input);
+    aggregate_status_calc(good, uncertain, bad, input.config)
+}
+
+fn region_status_amounts(regions: &[StateRegion]) -> (f64, f64, f64) {
+    regions
+        .iter()
+        .fold((0.0, 0.0, 0.0), |(good, uncertain, bad), region| {
+            if region.status.is_good() {
+                (good + region.duration_ms, uncertain, bad)
+            } else if region.status.is_bad() {
+                (good, uncertain, bad + region.duration_ms)
+            } else {
+                (good, uncertain + region.duration_ms, bad)
+            }
+        })
+}
+
+fn percent_time_status(regions: &[StateRegion], config: &AggregateConfiguration) -> StatusCode {
+    let (good, uncertain, bad) = region_status_amounts(regions);
+    aggregate_status_calc(good, uncertain, bad, config)
+}
+
 /// Area under the stepped curve over [interval_start, interval_end] and the covered duration (seconds).
 /// Returns None if there is no usable value. Stepped: each knot's value is held until the next knot.
 fn stepped_area_seconds(input: &AggregateInput<'_>) -> Option<(f64 /*area*/, f64 /*seconds*/)> {
@@ -523,10 +613,14 @@ fn agg_average(input: &AggregateInput<'_>) -> DataValue {
     }
 
     let mean = points.iter().map(|(_, value, _)| value).sum::<f64>() / points.len() as f64;
-    aggregate_result(Some(mean), aggregate_quality(input), input.interval_start)
+    aggregate_result(
+        Some(mean),
+        percent_values_status(input),
+        input.interval_start,
+    )
 }
 
-fn time_average_value(input: &AggregateInput<'_>) -> DataValue {
+fn time_average_value(input: &AggregateInput<'_>, quality: StatusCode) -> DataValue {
     let Some((area, seconds)) = stepped_area_seconds(input) else {
         return bad_no_data(input.interval_start);
     };
@@ -535,37 +629,35 @@ fn time_average_value(input: &AggregateInput<'_>) -> DataValue {
         return bad_no_data(input.interval_start);
     }
 
-    aggregate_result(
-        Some(area / seconds),
-        aggregate_quality(input),
-        input.interval_start,
-    )
+    aggregate_result(Some(area / seconds), quality, input.interval_start)
 }
 
 fn agg_time_average(input: &AggregateInput<'_>) -> DataValue {
-    time_average_value(input)
+    time_average_value(input, aggregate_quality(input))
 }
 
 fn agg_time_average2(input: &AggregateInput<'_>) -> DataValue {
-    time_average_value(input)
+    let regions = state_regions(input);
+    time_average_value(input, percent_time_status(&regions, input.config))
 }
 
-fn total_value(input: &AggregateInput<'_>) -> DataValue {
+fn total_value(input: &AggregateInput<'_>, quality: StatusCode) -> DataValue {
     let Some((area, _)) = stepped_area_seconds(input) else {
         return bad_no_data(input.interval_start);
     };
 
     // OPC UA Part 13 §5.4.3.8 defines Total as TimeAverage * ProcessingInterval(seconds), so the
     // returned area is normalized to [source units] * seconds.
-    aggregate_result(Some(area), aggregate_quality(input), input.interval_start)
+    aggregate_result(Some(area), quality, input.interval_start)
 }
 
 fn agg_total(input: &AggregateInput<'_>) -> DataValue {
-    total_value(input)
+    total_value(input, aggregate_quality(input))
 }
 
 fn agg_total2(input: &AggregateInput<'_>) -> DataValue {
-    total_value(input)
+    let regions = state_regions(input);
+    total_value(input, percent_time_status(&regions, input.config))
 }
 
 fn agg_range(input: &AggregateInput<'_>) -> DataValue {
@@ -644,13 +736,14 @@ fn agg_minimum2(input: &AggregateInput<'_>) -> DataValue {
     if points.is_empty() {
         return bad_no_data(input.interval_start);
     }
+    let regions = state_regions(input);
 
     aggregate_result(
         points
             .iter()
             .map(|(_, value)| *value)
             .min_by(|a, b| a.total_cmp(b)),
-        aggregate_quality(input),
+        percent_time_status(&regions, input.config),
         input.interval_start,
     )
 }
@@ -692,11 +785,12 @@ fn agg_minimum_actual_time2(input: &AggregateInput<'_>) -> DataValue {
     else {
         return bad_no_data(input.interval_start);
     };
+    let regions = state_regions(input);
 
     // ponytail: synthetic-bound source-Variant retention deferred; return Double for all candidates.
     DataValue {
         value: Some(Variant::Double(*value)),
-        status: Some(aggregate_quality(input)),
+        status: Some(percent_time_status(&regions, input.config)),
         source_timestamp: Some(*timestamp),
         server_timestamp: Some(DateTime::now()),
         ..Default::default()
@@ -725,13 +819,14 @@ fn agg_maximum2(input: &AggregateInput<'_>) -> DataValue {
     if points.is_empty() {
         return bad_no_data(input.interval_start);
     }
+    let regions = state_regions(input);
 
     aggregate_result(
         points
             .iter()
             .map(|(_, value)| *value)
             .max_by(|a, b| a.total_cmp(b)),
-        aggregate_quality(input),
+        percent_time_status(&regions, input.config),
         input.interval_start,
     )
 }
@@ -773,11 +868,12 @@ fn agg_maximum_actual_time2(input: &AggregateInput<'_>) -> DataValue {
     else {
         return bad_no_data(input.interval_start);
     };
+    let regions = state_regions(input);
 
     // ponytail: synthetic-bound source-Variant retention deferred; return Double for all candidates.
     DataValue {
         value: Some(Variant::Double(*value)),
-        status: Some(aggregate_quality(input)),
+        status: Some(percent_time_status(&regions, input.config)),
         source_timestamp: Some(*timestamp),
         server_timestamp: Some(DateTime::now()),
         ..Default::default()
@@ -878,10 +974,15 @@ fn quality_rank(status: StatusCode) -> u8 {
 
 fn agg_count(input: &AggregateInput<'_>) -> DataValue {
     let good_count = good_numeric_points(input).len() as i32;
+    let status = if input.values.is_empty() {
+        StatusCode::Good
+    } else {
+        percent_values_status(input)
+    };
     // ponytail: Count's before-start/after-end BadNoData nuance needs historian range metadata.
     DataValue {
         value: Some(Variant::Int32(good_count)),
-        status: Some(StatusCode::Good),
+        status: Some(status),
         source_timestamp: Some(input.interval_start),
         server_timestamp: Some(DateTime::now()),
         ..Default::default()
@@ -904,14 +1005,19 @@ fn state_duration(input: &AggregateInput<'_>, include: impl Fn(&StateRegion) -> 
         return bad_no_data(input.interval_start);
     }
 
-    good_double_result(
-        regions
-            .iter()
-            .filter(|region| include(region))
-            .map(|region| region.duration_ms)
-            .sum(),
-        input.interval_start,
-    )
+    DataValue {
+        value: Some(Variant::Double(
+            regions
+                .iter()
+                .filter(|region| include(region))
+                .map(|region| region.duration_ms)
+                .sum(),
+        )),
+        status: Some(percent_time_status(&regions, input.config)),
+        source_timestamp: Some(input.interval_start),
+        server_timestamp: Some(DateTime::now()),
+        ..Default::default()
+    }
 }
 
 fn duration_good_ms(input: &AggregateInput<'_>) -> Option<f64> {
@@ -1030,10 +1136,15 @@ fn agg_number_of_transitions(input: &AggregateInput<'_>) -> DataValue {
         .windows(2)
         .filter(|window| (window[0].1 == 0.0) != (window[1].1 == 0.0))
         .count() as i32;
+    let status = if input.values.is_empty() {
+        StatusCode::Good
+    } else {
+        percent_values_status(input)
+    };
 
     DataValue {
         value: Some(Variant::Int32(count)),
-        status: Some(StatusCode::Good),
+        status: Some(status),
         source_timestamp: Some(input.interval_start),
         server_timestamp: Some(DateTime::now()),
         ..Default::default()

@@ -258,7 +258,7 @@ impl<'a> EventGenerator<'a> {
 
         Ok(EventItem {
             def: parse_quote! {
-                #[derive(Debug, opcua::EventField, Default)]
+                #[derive(Clone, Debug, opcua::EventField, Default)]
                 pub struct #ident {
                     #fields
                 }
@@ -306,7 +306,7 @@ impl<'a> EventGenerator<'a> {
 
         Ok(EventItem {
             def: parse_quote! {
-                #[derive(Debug, opcua::EventField, Default)]
+                #[derive(Clone, Debug, opcua::EventField, Default)]
                 pub struct #ident {
                     #fields
                 }
@@ -362,7 +362,7 @@ impl<'a> EventGenerator<'a> {
 
         Ok(EventItem {
             def: parse_quote! {
-                #[derive(Debug, opcua::Event)]
+                #[derive(Clone, Debug, opcua::Event)]
                 #opcua_attr
                 pub struct #ident {
                     #fields

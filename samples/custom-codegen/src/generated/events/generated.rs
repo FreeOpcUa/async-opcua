@@ -5,7 +5,7 @@
 // OPCUA for Rust
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (C) 2017-2024 Einar Omang
-#[derive(Debug, opcua::Event)]
+#[derive(Clone, Debug, opcua::Event)]
 #[opcua(
     identifier = "i=1003",
     namespace = "http://opcfoundation.org/UA/PROFINET/"
@@ -16,7 +16,7 @@ pub struct PnAssetChangedEventType {
     pub asset_change: crate::generated::types::PnAssetChangeEnumeration,
     pub asset_type: crate::generated::types::PnAssetTypeEnumeration,
 }
-#[derive(Debug, opcua::Event)]
+#[derive(Clone, Debug, opcua::Event)]
 #[opcua(
     identifier = "i=1002",
     namespace = "http://opcfoundation.org/UA/PROFINET/"
@@ -42,7 +42,7 @@ pub struct PnDiagnosisAlarmType {
     pub __type: crate::generated::types::PnChannelTypeEnumeration,
     pub user_structure_identifier: u16,
 }
-#[derive(Debug, opcua::Event)]
+#[derive(Clone, Debug, opcua::Event)]
 #[opcua(
     identifier = "i=1004",
     namespace = "http://opcfoundation.org/UA/PROFINET/"

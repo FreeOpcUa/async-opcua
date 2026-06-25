@@ -166,7 +166,7 @@ impl EventField for NumericRange {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 /// Struct for an event field placeholder, i.e. a dynamic list of fields.
 pub struct PlaceholderEventField<T> {
     items: HashMap<QualifiedName, T>,

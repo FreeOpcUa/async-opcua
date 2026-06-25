@@ -50,8 +50,9 @@ pub(crate) async fn delete_subscriptions_inner(
     subscriptions: &SubscriptionCache,
     context: &mut RequestContext,
 ) -> Result<Vec<StatusCode>, StatusCode> {
-    let results =
-        subscriptions.delete_subscriptions(context.session_id, &to_delete, &context.info)?;
+    let results = subscriptions
+        .delete_subscriptions(context.session_id, &to_delete, context.info.clone())
+        .await?;
 
     for (idx, mgr) in node_managers.iter().enumerate() {
         context.current_node_manager_index = idx;

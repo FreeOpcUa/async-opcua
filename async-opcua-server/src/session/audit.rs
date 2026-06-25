@@ -41,6 +41,7 @@ impl AuditEventContext {
     }
 }
 
+#[derive(Clone)]
 struct ServerAuditEvent {
     base: BaseEventType,
     action_time_stamp: DateTime,
@@ -102,6 +103,10 @@ impl ServerAuditEvent {
 }
 
 impl Event for ServerAuditEvent {
+    fn clone_box(&self) -> Box<dyn Event + Send> {
+        Box::new(self.clone())
+    }
+
     fn get_field(
         &self,
         _type_definition_id: &NodeId,

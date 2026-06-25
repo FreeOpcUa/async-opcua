@@ -15,7 +15,7 @@ use crate::{
     subscriptions::CreateMonitoredItem,
     ServerCapabilities, ServerStatusWrapper,
 };
-use opcua_core::{sync::RwLock, trace_lock, trace_read_lock, trace_write_lock};
+use opcua_core::{sync::RwLock, trace_read_lock, trace_write_lock};
 use opcua_types::{
     DataValue, DateTime, ExtensionObject, IdType, Identifier, MethodId, MonitoringMode, NodeId,
     NumericRange, ObjectId, ReferenceTypeId, StatusCode, TimeZoneDataType, TimestampsToReturn,
@@ -133,7 +133,7 @@ impl InMemoryNodeManagerImpl for CoreNodeManagerImpl {
         methods_to_call: &mut [&mut &mut MethodCall],
     ) -> Result<(), StatusCode> {
         for method in methods_to_call {
-            if let Err(e) = self.call_builtin_method(method, context) {
+            if let Err(e) = self.call_builtin_method(method, context).await {
                 method.set_status(e);
             }
         }
@@ -576,7 +576,7 @@ impl CoreNodeManagerImpl {
         cbs.insert(id, Arc::new(cb));
     }
 
-    fn call_builtin_method(
+    async fn call_builtin_method(
         &self,
         call: &mut MethodCall,
         context: &RequestContext,
@@ -592,10 +592,15 @@ impl CoreNodeManagerImpl {
                     .subscriptions
                     .get_session_subscriptions(context.session_id)
                     .ok_or(StatusCode::BadSessionIdInvalid)?;
-                let subs = trace_lock!(subs);
-                let sub = subs.get(id).ok_or(StatusCode::BadSubscriptionIdInvalid)?;
-                let (ids, handles): (Vec<_>, Vec<_>) =
-                    sub.items().map(|i| (i.id(), i.client_handle())).unzip();
+                let (ids, handles) = subs
+                    .legacy(move |subs| {
+                        let sub = subs.get(id).ok_or(StatusCode::BadSubscriptionIdInvalid)?;
+                        let (ids, handles): (Vec<_>, Vec<_>) =
+                            sub.items().map(|i| (i.id(), i.client_handle())).unzip();
+                        Ok::<_, StatusCode>((ids, handles))
+                    })
+                    .await
+                    .map_err(|_| StatusCode::BadSessionIdInvalid)??;
                 call.set_outputs(vec![ids.into(), handles.into()]);
                 call.set_status(StatusCode::Good);
             }
@@ -605,11 +610,15 @@ impl CoreNodeManagerImpl {
                     .subscriptions
                     .get_session_subscriptions(context.session_id)
                     .ok_or(StatusCode::BadSessionIdInvalid)?;
-                let mut subs = trace_lock!(subs);
-                let sub = subs
-                    .get_mut(id)
-                    .ok_or(StatusCode::BadSubscriptionIdInvalid)?;
-                sub.set_resend_data();
+                subs.legacy(move |subs| {
+                    let sub = subs
+                        .get_mut(id)
+                        .ok_or(StatusCode::BadSubscriptionIdInvalid)?;
+                    sub.set_resend_data();
+                    Ok::<_, StatusCode>(())
+                })
+                .await
+                .map_err(|_| StatusCode::BadSessionIdInvalid)??;
                 call.set_status(StatusCode::Good);
             }
             _ => {

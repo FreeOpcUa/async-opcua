@@ -536,7 +536,7 @@ mod tests {
         pub(super) use opcua_types as types;
     }
 
-    #[derive(Event)]
+    #[derive(Clone, Event)]
     #[opcua(identifier = "i=123", namespace = "my:namespace:uri")]
     struct TestEvent {
         base: BaseEventType,

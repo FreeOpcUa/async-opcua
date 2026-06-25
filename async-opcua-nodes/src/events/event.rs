@@ -9,6 +9,9 @@ use opcua_types::{
 /// This is used repeatedly when publishing event notifications to
 /// clients.
 pub trait Event: EventField {
+    /// Clone this event into an owned boxed event.
+    fn clone_box(&self) -> Box<dyn Event + Send>;
+
     /// Get a field from the event. Should return [`Variant::Empty`]
     /// if the field is not valid for the event.
     fn get_field(
@@ -26,7 +29,7 @@ pub trait Event: EventField {
     fn event_type_id(&self) -> &NodeId;
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 /// This corresponds to BaseEventType definition in OPC UA Part 5
 pub struct BaseEventType {
     /// A unique identifier for an event, e.g. a GUID in a byte string
@@ -73,6 +76,10 @@ pub struct BaseEventType {
 }
 
 impl Event for BaseEventType {
+    fn clone_box(&self) -> Box<dyn Event + Send> {
+        Box::new(self.clone())
+    }
+
     fn time(&self) -> &DateTime {
         &self.time
     }
@@ -215,7 +222,7 @@ mod method_event_field {
         pub(super) use crate as nodes;
         pub(super) use opcua_types as types;
     }
-    #[derive(Default, EventField, Debug)]
+    #[derive(Clone, Default, EventField, Debug)]
     /// A field of an event that references a method.
     pub struct MethodEventField {
         /// Method node ID.
@@ -238,7 +245,7 @@ mod tests {
         AttributeId, ByteString, EUInformation, KeyValuePair, LocalizedText, NodeId, NumericRange,
         ObjectTypeId, QualifiedName, StatusCode, UAString, Variant,
     };
-    #[derive(Event)]
+    #[derive(Clone, Event)]
     #[opcua(identifier = "s=myevent", namespace = "uri:my:namespace")]
     struct BasicValueEvent {
         base: BaseEventType,
@@ -377,12 +384,12 @@ mod tests {
         assert_eq!(euinfo.description, "Some unit desc".into());
     }
 
-    #[derive(EventField, Default, Debug)]
+    #[derive(Clone, EventField, Default, Debug)]
     struct ComplexEventField {
         float: f32,
     }
 
-    #[derive(EventField, Default, Debug)]
+    #[derive(Clone, EventField, Default, Debug)]
     struct SubComplexEventField {
         base: ComplexEventField,
         node_id: NodeId,
@@ -392,7 +399,7 @@ mod tests {
         data: i32,
     }
 
-    #[derive(EventField, Default, Debug)]
+    #[derive(Clone, EventField, Default, Debug)]
     struct ComplexVariable {
         node_id: NodeId,
         value: i32,
@@ -401,7 +408,7 @@ mod tests {
         extra: PlaceholderEventField<i32>,
     }
 
-    #[derive(Event)]
+    #[derive(Clone, Event)]
     #[opcua(identifier = "s=mynestedevent", namespace = "uri:my:namespace")]
     struct NestedEvent {
         base: BasicValueEvent,

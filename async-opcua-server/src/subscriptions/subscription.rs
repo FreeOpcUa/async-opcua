@@ -184,7 +184,7 @@ pub(crate) enum HandledState {
     Closed27 = 27,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// A single subscription maintained by the server.
 pub struct Subscription {
     id: u32,

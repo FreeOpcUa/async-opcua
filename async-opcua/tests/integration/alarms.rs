@@ -1,4 +1,7 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use crate::utils::{default_server, ChannelNotifications, Tester};
 use opcua::{
@@ -1005,4 +1008,73 @@ async fn limit_alarm_conditionrefresh_replays_active_limit() {
         cond.1.severity, 700,
         "replayed limit alarm keeps its HighHigh severity"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Measurement (not a CI gate): how long does ConditionRefresh hold the per-session
+// subscription lock while it replays N retained conditions? This sizes the
+// "lock-held-over-unbounded-work" invariant before choosing a fix.
+// Run with: cargo test -p async-opcua --test integration_tests
+//   bench_condition_refresh_lock_hold -- --ignored --nocapture
+// ---------------------------------------------------------------------------
+#[tokio::test]
+#[ignore = "perf measurement; run manually with --ignored --nocapture"]
+async fn bench_condition_refresh_lock_hold_scaling() {
+    println!("\n--- ConditionRefresh server-side cost vs retained-condition count ---");
+    for &n in &[100usize, 500, 1000, 2000] {
+        let (tester, nm, session) = setup_alarms().await;
+        let core_nm = tester
+            .handle
+            .node_managers()
+            .get_of_type::<CoreNodeManager>()
+            .expect("CoreNodeManager not found");
+        let source = make_event_source(&nm, "BenchSource");
+
+        // Register N active (retained) conditions.
+        let registry = ConditionRegistry::new();
+        for i in 0..n {
+            let sm = register_alarm_condition(
+                nm.address_space(),
+                &nm,
+                "Bench",
+                &format!("C{i}"),
+                source.clone(),
+                "bench alarm",
+            );
+            {
+                let mut space = nm.address_space().write();
+                trigger_alarm_transition(&mut space, &sm, true, 500, LocalizedText::new("en", "x"))
+                    .unwrap();
+            }
+            registry.register(sm);
+        }
+        register_condition_methods(&core_nm, registry, nm.address_space().clone());
+
+        let (notifs, _dv, mut events) = ChannelNotifications::new();
+        let sub_id = session
+            .create_subscription(Duration::from_millis(100), 100, 20, 5000, 0, true, notifs)
+            .await
+            .unwrap();
+        let _item = add_event_item(&session, sub_id, &source).await;
+
+        // The Call does not return until the server-side refresh (build + deliver under the
+        // per-session lock) completes, so this end-to-end time is dominated by the lock-held work.
+        let t0 = Instant::now();
+        session.refresh_conditions(sub_id).await.unwrap();
+        let elapsed = t0.elapsed();
+
+        // Drain the burst so it doesn't bleed into the next iteration.
+        let _ = timeout(
+            Duration::from_secs(5),
+            collect_until_refresh_end(&mut events),
+        )
+        .await;
+
+        println!(
+            "N={n:>5} retained conditions -> refresh_conditions {:>8.2?}  ({:>6.1} us/condition)",
+            elapsed,
+            elapsed.as_micros() as f64 / n as f64
+        );
+    }
+    println!("--- end ---\n");
 }

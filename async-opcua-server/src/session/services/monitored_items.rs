@@ -163,6 +163,7 @@ pub(crate) async fn create_monitored_items(
     let Some(len) = request
         .subscriptions
         .get_monitored_item_count(request.session_id, request.request.subscription_id)
+        .await
     else {
         return service_fault!(request, StatusCode::BadSubscriptionIdInvalid);
     };
@@ -248,11 +249,15 @@ pub(crate) async fn create_monitored_items(
     )
     .await;
 
-    let res = match request.subscriptions.create_monitored_items(
-        request.session_id,
-        request.request.subscription_id,
-        &items,
-    ) {
+    let res = match request
+        .subscriptions
+        .create_monitored_items(
+            request.session_id,
+            request.request.subscription_id,
+            items.clone(),
+        )
+        .await
+    {
         Ok(r) => r,
         // Shouldn't happen, would be due to a race condition. If it does happen we're fine with failing.
         Err(e) => {
@@ -323,16 +328,17 @@ pub(crate) async fn modify_monitored_items(
 
     // Call modify first, then only pass successful modify's to the node managers.
     let results = {
-        let type_tree = context.get_type_tree_for_user();
-
-        match request.subscriptions.modify_monitored_items(
-            request.session_id,
-            request.request.subscription_id,
-            &request.info,
-            request.request.timestamps_to_return,
-            items_to_modify,
-            type_tree.get(),
-        ) {
+        match request
+            .subscriptions
+            .modify_monitored_items(
+                request.session_id,
+                request.request.subscription_id,
+                request.info.clone(),
+                request.request.timestamps_to_return,
+                items_to_modify,
+            )
+            .await
+        {
             Ok(r) => r,
             Err(e) => return service_fault!(request, e),
         }
@@ -387,12 +393,16 @@ pub(crate) async fn set_monitoring_mode(
         request.info.operational_limits.max_monitored_items_per_call
     );
 
-    let results = match request.subscriptions.set_monitoring_mode(
-        request.session_id,
-        request.request.subscription_id,
-        request.request.monitoring_mode,
-        items,
-    ) {
+    let results = match request
+        .subscriptions
+        .set_monitoring_mode(
+            request.session_id,
+            request.request.subscription_id,
+            request.request.monitoring_mode,
+            items,
+        )
+        .await
+    {
         Ok(r) => r,
         Err(e) => return service_fault!(request, e),
     };
@@ -452,11 +462,11 @@ pub(crate) async fn delete_monitored_items(
         request.info.operational_limits.max_monitored_items_per_call
     );
 
-    let results = match request.subscriptions.delete_monitored_items(
-        request.session_id,
-        request.request.subscription_id,
-        &items,
-    ) {
+    let results = match request
+        .subscriptions
+        .delete_monitored_items(request.session_id, request.request.subscription_id, &items)
+        .await
+    {
         Ok(r) => r,
         Err(e) => return service_fault!(request, e),
     };

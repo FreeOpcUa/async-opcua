@@ -51,9 +51,6 @@ pub(crate) enum HandleMessageResult {
     /// A request spawned as a tokio task, all messages that go to
     /// node managers return this response type.
     AsyncMessage(JoinHandle<Response>),
-    /// A publish request, which takes a slightly different form, instead
-    /// using a callback pattern.
-    PublishResponse(PendingPublishRequest),
     /// A message that was resolved synchronously and returns a response immediately.
     SyncMessage(Response),
 }
@@ -260,55 +257,59 @@ impl MessageHandler {
             RequestMessage::Publish(request) => self.publish(request, data),
 
             RequestMessage::Republish(request) => {
-                HandleMessageResult::SyncMessage(Response::from_result(
-                    self.subscriptions.republish(data.session_id, &request),
-                    data.request_handle,
-                    data.request_id,
-                ))
+                let subscriptions = self.subscriptions.clone();
+                HandleMessageResult::AsyncMessage(tokio::task::spawn(async move {
+                    let result = subscriptions.republish(data.session_id, &request).await;
+                    Response::from_result(result, data.request_handle, data.request_id)
+                }))
             }
 
             RequestMessage::CreateSubscription(request) => {
                 let request = self.get_request(data, *request);
-                let context = request.context();
-                HandleMessageResult::SyncMessage(Response::from_result(
-                    self.subscriptions.create_subscription(
-                        request.session_id,
-                        &request.request,
-                        &context,
-                    ),
-                    request.request_handle,
-                    request.request_id,
-                ))
+                HandleMessageResult::AsyncMessage(tokio::task::spawn(async move {
+                    let context = request.context();
+                    let result = request
+                        .subscriptions
+                        .create_subscription(request.session_id, &request.request, &context)
+                        .await;
+                    Response::from_result(result, request.request_handle, request.request_id)
+                }))
             }
 
             RequestMessage::ModifySubscription(request) => {
-                HandleMessageResult::SyncMessage(Response::from_result(
-                    self.subscriptions
-                        .modify_subscription(data.session_id, &request, &self.info),
-                    data.request_handle,
-                    data.request_id,
-                ))
+                let subscriptions = self.subscriptions.clone();
+                let info = self.info.clone();
+                HandleMessageResult::AsyncMessage(tokio::task::spawn(async move {
+                    let result = subscriptions
+                        .modify_subscription(data.session_id, &request, info)
+                        .await;
+                    Response::from_result(result, data.request_handle, data.request_id)
+                }))
             }
 
             RequestMessage::SetPublishingMode(request) => {
-                HandleMessageResult::SyncMessage(Response::from_result(
-                    self.subscriptions
-                        .set_publishing_mode(data.session_id, &request),
-                    data.request_handle,
-                    data.request_id,
-                ))
+                let subscriptions = self.subscriptions.clone();
+                HandleMessageResult::AsyncMessage(tokio::task::spawn(async move {
+                    let result = subscriptions
+                        .set_publishing_mode(data.session_id, &request)
+                        .await;
+                    Response::from_result(result, data.request_handle, data.request_id)
+                }))
             }
 
             RequestMessage::TransferSubscriptions(request) => {
                 let request = self.get_request(data, *request);
-                let context = request.context();
-                HandleMessageResult::SyncMessage(Response {
-                    message: self
-                        .subscriptions
-                        .transfer(&request.request, &context)
-                        .into(),
-                    request_id: request.request_id,
-                })
+                HandleMessageResult::AsyncMessage(tokio::task::spawn(async move {
+                    let context = request.context();
+                    Response {
+                        message: request
+                            .subscriptions
+                            .transfer(&request.request, &context)
+                            .await
+                            .into(),
+                        request_id: request.request_id,
+                    }
+                }))
             }
 
             RequestMessage::DeleteSubscriptions(request) => {
@@ -391,8 +392,14 @@ impl MessageHandler {
         session: Arc<RwLock<Session>>,
         token: UserToken,
     ) {
-        let ids = self.subscriptions.get_session_subscription_ids(session_id);
+        let ids = self
+            .subscriptions
+            .get_session_subscription_ids(session_id)
+            .await;
         if ids.is_empty() {
+            self.subscriptions
+                .teardown_session(session_id, &self.info)
+                .await;
             return;
         }
 
@@ -421,6 +428,9 @@ impl MessageHandler {
         {
             warn!("Cleaning up session subscriptions failed: {e}");
         }
+        self.subscriptions
+            .teardown_session(session_id, &self.info)
+            .await;
     }
 
     pub(super) async fn revalidate_monitored_items_for_user(
@@ -443,7 +453,9 @@ impl MessageHandler {
             }),
         };
 
-        self.subscriptions.update_session_user(session_id, &context);
+        self.subscriptions
+            .update_session_user(session_id, &context)
+            .await;
 
         struct RevalidationItem {
             item: MonitoredItemRef,
@@ -453,6 +465,7 @@ impl MessageHandler {
         let mut items = self
             .subscriptions
             .get_session_monitored_items(session_id)
+            .await
             .into_iter()
             .map(|item| {
                 let read = ReadNode::new(
@@ -516,7 +529,8 @@ impl MessageHandler {
         }
 
         self.subscriptions
-            .apply_revalidated_values(session_id, refreshed_values);
+            .apply_revalidated_values(session_id, refreshed_values)
+            .await;
 
         if denied.is_empty() {
             return;
@@ -525,6 +539,7 @@ impl MessageHandler {
         let deleted = match self
             .subscriptions
             .delete_monitored_item_refs(session_id, &denied)
+            .await
         {
             Ok(deleted) => deleted,
             Err(e) => {
@@ -587,28 +602,27 @@ impl MessageHandler {
         request: SetTriggeringRequest,
         data: RequestData,
     ) -> HandleMessageResult {
-        let result = self
-            .subscriptions
-            .set_triggering(
-                data.session_id,
-                request.subscription_id,
-                request.triggering_item_id,
-                request.links_to_add.unwrap_or_default(),
-                request.links_to_remove.unwrap_or_default(),
-            )
-            .map(|(add_res, remove_res)| SetTriggeringResponse {
-                response_header: ResponseHeader::new_good(&request.request_header),
-                add_results: Some(add_res),
-                add_diagnostic_infos: None,
-                remove_results: Some(remove_res),
-                remove_diagnostic_infos: None,
-            });
+        let subscriptions = self.subscriptions.clone();
+        HandleMessageResult::AsyncMessage(tokio::task::spawn(async move {
+            let result = subscriptions
+                .set_triggering(
+                    data.session_id,
+                    request.subscription_id,
+                    request.triggering_item_id,
+                    request.links_to_add.unwrap_or_default(),
+                    request.links_to_remove.unwrap_or_default(),
+                )
+                .await
+                .map(|(add_res, remove_res)| SetTriggeringResponse {
+                    response_header: ResponseHeader::new_good(&request.request_header),
+                    add_results: Some(add_res),
+                    add_diagnostic_infos: None,
+                    remove_results: Some(remove_res),
+                    remove_diagnostic_infos: None,
+                });
 
-        HandleMessageResult::SyncMessage(Response::from_result(
-            result,
-            data.request_handle,
-            data.request_id,
-        ))
+            Response::from_result(result, data.request_handle, data.request_id)
+        }))
     }
 
     fn get_request<T>(&self, dt: RequestData, request: T) -> Request<T> {
@@ -829,19 +843,29 @@ impl MessageHandler {
             ack_results: None,
             deadline: now_instant + std::time::Duration::from_millis(timeout),
         };
-        match self
-            .subscriptions
-            .enqueue_publish_request(data.session_id, &now, now_instant, req)
-        {
-            Ok(_) => HandleMessageResult::PublishResponse(PendingPublishRequest {
-                request_id: data.request_id,
-                request_handle: data.request_handle,
-                recv,
-            }),
-            Err(e) => HandleMessageResult::SyncMessage(Response {
-                message: ServiceFault::new(data.request_handle, e).into(),
-                request_id: data.request_id,
-            }),
-        }
+        let subscriptions = self.subscriptions.clone();
+        HandleMessageResult::AsyncMessage(tokio::task::spawn(async move {
+            match subscriptions
+                .enqueue_publish_request(data.session_id, now, now_instant, req)
+                .await
+            {
+                Ok(_) => PendingPublishRequest {
+                    request_id: data.request_id,
+                    request_handle: data.request_handle,
+                    recv,
+                }
+                .recv()
+                .await
+                .unwrap_or_else(|_| Response {
+                    message: ServiceFault::new(data.request_handle, StatusCode::BadInternalError)
+                        .into(),
+                    request_id: data.request_id,
+                }),
+                Err(e) => Response {
+                    message: ServiceFault::new(data.request_handle, e).into(),
+                    request_id: data.request_id,
+                },
+            }
+        }))
     }
 }

@@ -12,6 +12,7 @@ const START_MESSAGE: &str = "Condition refresh started";
 const END_MESSAGE: &str = "Condition refresh finished";
 
 /// Marker event emitted before a ConditionRefresh replay burst.
+#[derive(Clone)]
 pub struct RefreshStartEvent {
     base: BaseEventType,
 }
@@ -32,6 +33,7 @@ impl Default for RefreshStartEvent {
 }
 
 /// Marker event emitted after a ConditionRefresh replay burst.
+#[derive(Clone)]
 pub struct RefreshEndEvent {
     base: BaseEventType,
 }
@@ -106,6 +108,10 @@ fn get_refresh_marker_value(
 macro_rules! impl_refresh_marker_event {
     ($event:ty) => {
         impl Event for $event {
+            fn clone_box(&self) -> Box<dyn Event + Send> {
+                Box::new(self.clone())
+            }
+
             fn time(&self) -> &DateTime {
                 &self.base.time
             }

@@ -272,27 +272,28 @@ async fn modify_subscription() {
     let opcua::types::Identifier::Numeric(session_id_num) = &session_id.identifier else {
         panic!("Expected numeric session ID");
     };
-    let sess_subs = tester
-        .handle
-        .subscriptions()
-        .get_session_subscriptions(*session_id_num)
-        .unwrap();
+    let subs_cache = tester.handle.subscriptions();
     {
-        let lck = sess_subs.lock();
-        let sub = lck.get(sub_id).unwrap();
+        let id = id.clone();
+        subs_cache
+            .with_session_subscriptions(*session_id_num, move |lck| {
+                let sub = lck.get(sub_id).unwrap();
 
-        assert_eq!(sub.len(), 1);
-        assert_eq!(sub.publishing_interval(), Duration::from_millis(100));
-        assert_eq!(sub.priority(), 0);
-        assert!(sub.publishing_enabled());
-        assert_eq!(sub.max_notifications_per_publish(), 1000);
+                assert_eq!(sub.len(), 1);
+                assert_eq!(sub.publishing_interval(), Duration::from_millis(100));
+                assert_eq!(sub.priority(), 0);
+                assert!(sub.publishing_enabled());
+                assert_eq!(sub.max_notifications_per_publish(), 1000);
 
-        let item = sub.get(&monitored_item_id).unwrap();
-        assert_eq!(id, item.item_to_monitor().node_id);
-        assert_eq!(MonitoringMode::Reporting, item.monitoring_mode());
-        assert_eq!(100.0, item.sampling_interval());
-        assert_eq!(10, item.queue_size());
-        assert!(item.discard_oldest());
+                let item = sub.get(&monitored_item_id).unwrap();
+                assert_eq!(id, item.item_to_monitor().node_id);
+                assert_eq!(MonitoringMode::Reporting, item.monitoring_mode());
+                assert_eq!(100.0, item.sampling_interval());
+                assert_eq!(10, item.queue_size());
+                assert!(item.discard_oldest());
+            })
+            .await
+            .expect("session subscriptions present");
     }
 
     // Modify the subscription, we're mostly just checking that nothing blows up here.
@@ -320,21 +321,26 @@ async fn modify_subscription() {
         .unwrap();
 
     {
-        let lck = sess_subs.lock();
-        let sub = lck.get(sub_id).unwrap();
+        let id = id.clone();
+        subs_cache
+            .with_session_subscriptions(*session_id_num, move |lck| {
+                let sub = lck.get(sub_id).unwrap();
 
-        assert_eq!(sub.len(), 1);
-        assert_eq!(sub.publishing_interval(), Duration::from_millis(200));
-        assert_eq!(sub.priority(), 1);
-        assert!(sub.publishing_enabled());
-        assert_eq!(sub.max_notifications_per_publish(), 500);
+                assert_eq!(sub.len(), 1);
+                assert_eq!(sub.publishing_interval(), Duration::from_millis(200));
+                assert_eq!(sub.priority(), 1);
+                assert!(sub.publishing_enabled());
+                assert_eq!(sub.max_notifications_per_publish(), 500);
 
-        let item = sub.get(&monitored_item_id).unwrap();
-        assert_eq!(id, item.item_to_monitor().node_id);
-        assert_eq!(MonitoringMode::Reporting, item.monitoring_mode());
-        assert_eq!(200.0, item.sampling_interval());
-        assert_eq!(5, item.queue_size());
-        assert!(!item.discard_oldest());
+                let item = sub.get(&monitored_item_id).unwrap();
+                assert_eq!(id, item.item_to_monitor().node_id);
+                assert_eq!(MonitoringMode::Reporting, item.monitoring_mode());
+                assert_eq!(200.0, item.sampling_interval());
+                assert_eq!(5, item.queue_size());
+                assert!(!item.discard_oldest());
+            })
+            .await
+            .expect("session subscriptions present");
     }
 
     // Disable publishing
@@ -347,21 +353,26 @@ async fn modify_subscription() {
         .unwrap();
 
     {
-        let lck = sess_subs.lock();
-        let sub = lck.get(sub_id).unwrap();
+        let id = id.clone();
+        subs_cache
+            .with_session_subscriptions(*session_id_num, move |lck| {
+                let sub = lck.get(sub_id).unwrap();
 
-        assert_eq!(sub.len(), 1);
-        assert_eq!(sub.publishing_interval(), Duration::from_millis(200));
-        assert_eq!(sub.priority(), 1);
-        assert!(!sub.publishing_enabled());
-        assert_eq!(sub.max_notifications_per_publish(), 500);
+                assert_eq!(sub.len(), 1);
+                assert_eq!(sub.publishing_interval(), Duration::from_millis(200));
+                assert_eq!(sub.priority(), 1);
+                assert!(!sub.publishing_enabled());
+                assert_eq!(sub.max_notifications_per_publish(), 500);
 
-        let item = sub.get(&monitored_item_id).unwrap();
-        assert_eq!(id, item.item_to_monitor().node_id);
-        assert_eq!(MonitoringMode::Sampling, item.monitoring_mode());
-        assert_eq!(200.0, item.sampling_interval());
-        assert_eq!(5, item.queue_size());
-        assert!(!item.discard_oldest());
+                let item = sub.get(&monitored_item_id).unwrap();
+                assert_eq!(id, item.item_to_monitor().node_id);
+                assert_eq!(MonitoringMode::Sampling, item.monitoring_mode());
+                assert_eq!(200.0, item.sampling_interval());
+                assert_eq!(5, item.queue_size());
+                assert!(!item.discard_oldest());
+            })
+            .await
+            .expect("session subscriptions present");
     }
 
     // Delete monitored item

@@ -175,7 +175,7 @@ fn add_machine(
     machine_id
 }
 
-#[derive(Event)]
+#[derive(Clone, Event)]
 #[opcua(identifier = "s=MachineCycledEventId", namespace = "urn:DemoServer")]
 pub struct MachineCycledEventType {
     base: BaseEventType,

@@ -728,24 +728,6 @@ impl<T: ConnectionTransport> SessionController<T> {
                         }
                         RequestProcessResult::Ok
                     }
-                    super::message_handler::HandleMessageResult::PublishResponse(resp) => {
-                        let audit_context = audit_context.clone();
-                        let info = self.info.clone();
-                        let subscriptions = self.subscriptions.clone();
-                        self.pending_messages.push(Box::pin(async move {
-                            let response = resp.recv().await;
-                            if let Ok(response) = &response {
-                                dispatch_response_failure(
-                                    &subscriptions,
-                                    &info,
-                                    &audit_context,
-                                    &response.message,
-                                );
-                            }
-                            response
-                        }));
-                        RequestProcessResult::Ok
-                    }
                 }
             }
         }

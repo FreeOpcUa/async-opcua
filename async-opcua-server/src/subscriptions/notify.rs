@@ -4,7 +4,9 @@ use opcua_types::{node_id::IntoNodeIdRef, AttributeId, DataValue, DateTime, Obje
 use parking_lot::RwLockReadGuard;
 
 use crate::{
-    subscriptions::{MonitoredItemEntry, MonitoredItemKeyRef, SubscriptionCacheInner},
+    subscriptions::{
+        ring::NotificationWorkItem, MonitoredItemEntry, MonitoredItemKeyRef, SubscriptionCacheInner,
+    },
     MonitoredItemHandle,
 };
 
@@ -130,11 +132,13 @@ impl Drop for SubscriptionDataNotifier<'_> {
             let Some(session_id) = self.lock.subscription_to_session.get(&sub_id) else {
                 continue;
             };
-            let Some(cache) = self.lock.session_subscriptions.get(session_id) else {
+            let Some(entry) = self.lock.session_subscriptions.get(session_id) else {
                 continue;
             };
-            let mut cache_lck = cache.lock();
-            cache_lck.notify_data_changes(items);
+            for (handle, value) in items {
+                let item = NotificationWorkItem::Data { handle, value };
+                entry.handle.push_notification(item);
+            }
         }
     }
 }
@@ -246,11 +250,16 @@ impl Drop for SubscriptionEventNotifier<'_, '_> {
             let Some(session_id) = self.lock.subscription_to_session.get(&sub_id) else {
                 continue;
             };
-            let Some(cache) = self.lock.session_subscriptions.get(session_id) else {
+            let Some(entry) = self.lock.session_subscriptions.get(session_id) else {
                 continue;
             };
-            let mut cache_lck = cache.lock();
-            cache_lck.notify_events(items);
+            for (handle, event) in items {
+                let item = NotificationWorkItem::Event {
+                    handle,
+                    event: event.clone_box(),
+                };
+                entry.handle.push_notification(item);
+            }
         }
     }
 }

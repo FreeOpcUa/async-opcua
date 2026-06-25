@@ -133,6 +133,10 @@ pub(crate) fn generate_event_impls(event: EventStruct) -> syn::Result<TokenStrea
 
     Ok(quote! {
         impl opcua::nodes::Event for #ident {
+            fn clone_box(&self) -> Box<dyn opcua::nodes::Event + Send> {
+                Box::new(<#ident as Clone>::clone(self))
+            }
+
             fn get_field(
                 &self,
                 type_definition_id: &opcua::types::NodeId,

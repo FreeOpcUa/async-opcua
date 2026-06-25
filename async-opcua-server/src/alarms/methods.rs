@@ -10,10 +10,13 @@ use crate::node_manager::RequestContext;
 use crate::MonitoredItemHandle;
 use opcua_core::events::AlarmEvent;
 use opcua_core::traits::ConditionMethodHandler;
-use opcua_nodes::Event;
+use opcua_nodes::{Event, EventField};
 #[cfg(feature = "generated-address-space")]
 use opcua_types::MethodId;
-use opcua_types::{DateTime, LocalizedText, NodeId, StatusCode, TryFromVariant, Variant};
+use opcua_types::{
+    AttributeId, ByteString, DateTime, LocalizedText, NodeId, NumericRange, QualifiedName,
+    StatusCode, TryFromVariant, UAString, Variant,
+};
 use std::sync::Arc;
 
 /// Handler for Alarm Acknowledge/Confirm method calls.
@@ -284,30 +287,118 @@ impl ConditionRefreshHandler {
             .collect();
         drop(address_space);
 
-        let start = RefreshStartEvent::new();
-        let end = RefreshEndEvent::new();
-        let alarm_wrappers: Vec<ServerAlarmEvent<'_>> = alarm_events
-            .iter()
-            .map(|event| ServerAlarmEvent { event })
-            .collect();
+        let mut events: Vec<Box<dyn Event + Send>> = Vec::with_capacity(alarm_events.len() + 2);
+        events.push(Box::new(RefreshStartEvent::new()));
+        events.extend(
+            alarm_events
+                .into_iter()
+                .map(|event| Box::new(OwnedAlarmEvent::new(event)) as Box<dyn Event + Send>),
+        );
+        events.push(Box::new(RefreshEndEvent::new()));
 
-        let mut event_refs: Vec<&dyn Event> = Vec::with_capacity(alarm_wrappers.len() + 2);
-        event_refs.push(&start);
-        for wrapper in &alarm_wrappers {
-            event_refs.push(wrapper);
-        }
-        event_refs.push(&end);
-
-        let type_tree = context.get_type_tree_for_user();
         context.subscriptions.refresh_subscription_events(
             context.session_id,
             subscription_id,
             monitored_item,
-            &event_refs,
-            type_tree.get(),
+            events,
         )?;
 
         Ok(vec![])
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct OwnedAlarmEvent {
+    event: AlarmEvent,
+}
+
+impl OwnedAlarmEvent {
+    pub(crate) fn new(event: AlarmEvent) -> Self {
+        Self { event }
+    }
+}
+
+impl Event for OwnedAlarmEvent {
+    fn clone_box(&self) -> Box<dyn Event + Send> {
+        Box::new(self.clone())
+    }
+
+    fn time(&self) -> &DateTime {
+        &self.event.time
+    }
+
+    fn event_type_id(&self) -> &NodeId {
+        &self.event.event_type
+    }
+
+    fn get_field(
+        &self,
+        _type_definition_id: &NodeId,
+        attribute_id: AttributeId,
+        index_range: &NumericRange,
+        browse_path: &[QualifiedName],
+    ) -> Variant {
+        self.get_value(attribute_id, index_range, browse_path)
+    }
+}
+
+impl EventField for OwnedAlarmEvent {
+    fn get_value(
+        &self,
+        attribute_id: AttributeId,
+        _index_range: &NumericRange,
+        remaining_path: &[QualifiedName],
+    ) -> Variant {
+        if attribute_id != AttributeId::Value {
+            return Variant::Empty;
+        }
+        if remaining_path.is_empty() {
+            return Variant::Empty;
+        }
+
+        let first_name = remaining_path[0].name.as_ref();
+
+        if remaining_path.len() == 2 {
+            let second_name = remaining_path[1].name.as_ref();
+            if second_name == "Id" {
+                match first_name {
+                    "ActiveState" => return Variant::from(self.event.active_state),
+                    "AckedState" => return Variant::from(self.event.acked_state),
+                    "ConfirmedState" => return Variant::from(self.event.confirmed_state),
+                    "EnabledState" => return Variant::from(true),
+                    _ => {}
+                }
+            }
+        }
+
+        if remaining_path.len() == 1 {
+            match first_name {
+                "EventId" => {
+                    return Variant::from(ByteString::from(self.event.event_id.clone()));
+                }
+                "EventType" => return Variant::from(self.event.event_type.clone()),
+                "SourceNode" => return Variant::from(self.event.source_node.clone()),
+                "SourceName" => {
+                    return Variant::from(UAString::from(self.event.source_name.clone()))
+                }
+                "Time" => return Variant::from(self.event.time),
+                "ReceiveTime" => return Variant::from(self.event.time),
+                "Message" => return Variant::from(self.event.message.clone()),
+                "Severity" => return Variant::from(self.event.severity),
+                "ConditionId" => return Variant::from(self.event.condition_id.clone()),
+                "ConditionName" => {
+                    return Variant::from(UAString::from(self.event.condition_name.clone()));
+                }
+                "Retain" => return Variant::from(self.event.retain),
+                "ActiveState" => return Variant::from(self.event.active_state),
+                "AckedState" => return Variant::from(self.event.acked_state),
+                "ConfirmedState" => return Variant::from(self.event.confirmed_state),
+                "EnabledState" => return Variant::from(true),
+                _ => {}
+            }
+        }
+
+        Variant::Empty
     }
 }
 

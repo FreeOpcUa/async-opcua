@@ -99,7 +99,7 @@ impl FilterType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// Container for a request to create a single monitored item.
 pub struct CreateMonitoredItem {
     id: u32,
@@ -287,7 +287,7 @@ impl CreateMonitoredItem {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// State of an active monitored item on the server.
 pub struct MonitoredItem {
     id: u32,
@@ -318,7 +318,7 @@ pub struct MonitoredItem {
     eu_range: Option<(f64, f64)>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(super) enum SamplingInterval {
     Subscription,
     Zero,

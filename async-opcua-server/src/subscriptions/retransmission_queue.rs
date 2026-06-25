@@ -102,6 +102,16 @@ impl RetransmissionQueue {
         removed
     }
 
+    pub(crate) fn clone_subscription(&self, subscription_id: u32) -> Vec<NonAckedPublish> {
+        let Some(ids) = self.by_subscription.get(&subscription_id) else {
+            return Vec::new();
+        };
+
+        ids.iter()
+            .filter_map(|id| self.entries.get(id).cloned())
+            .collect()
+    }
+
     pub(crate) fn available_sequence_numbers(&self, subscription_id: u32) -> Option<Vec<u32>> {
         if self.is_empty() {
             return None;

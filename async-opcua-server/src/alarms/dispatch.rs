@@ -1,6 +1,6 @@
 //! Event routing and dispatching of Alarm events to MonitoredItem subscription buffers.
 
-use crate::server::Server;
+use crate::{alarms::methods::OwnedAlarmEvent, server::Server};
 use opcua_core::events::AlarmEvent;
 use opcua_nodes::{Event, EventField};
 use opcua_types::{AttributeId, DateTime, NodeId, NumericRange, QualifiedName, UAString, Variant};
@@ -12,6 +12,10 @@ pub struct ServerAlarmEvent<'a> {
 }
 
 impl Event for ServerAlarmEvent<'_> {
+    fn clone_box(&self) -> Box<dyn Event + Send> {
+        Box::new(OwnedAlarmEvent::new(self.event.clone()))
+    }
+
     fn time(&self) -> &DateTime {
         &self.event.time
     }

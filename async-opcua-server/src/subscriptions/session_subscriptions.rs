@@ -1,5 +1,5 @@
 use std::{
-    collections::VecDeque,
+    collections::{HashSet, VecDeque},
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -8,12 +8,14 @@ use super::{
     monitored_item::MonitoredItem,
     pool::NotificationBuffer,
     retransmission_queue::RetransmissionQueue,
+    ring::NotificationWorkItem,
     subscription::{
         reclaim_data_change_notification_vecs, DataChangeNotificationVecPool, MonitoredItemHandle,
         Subscription, TickReason, TickResult,
     },
     CreateMonitoredItem, NonAckedPublish, PendingPublish, PersistentSessionKey,
 };
+use crossbeam_queue::ArrayQueue;
 use hashbrown::HashMap;
 use opcua_nodes::{Event, TypeTree};
 
@@ -40,6 +42,36 @@ pub(super) struct RemovedSubscription {
 
 type PendingPublishResponse = (PendingPublish, Arc<NotificationMessage>, u32);
 
+pub(super) struct PendingRefreshDrain {
+    subscription_id: u32,
+    monitored_item: Option<MonitoredItemHandle>,
+    events: Vec<Box<dyn Event + Send>>,
+    next_event: usize,
+}
+
+impl PendingRefreshDrain {
+    fn new(
+        subscription_id: u32,
+        monitored_item: Option<MonitoredItemHandle>,
+        events: Vec<Box<dyn Event + Send>>,
+    ) -> Self {
+        Self {
+            subscription_id,
+            monitored_item,
+            events,
+            next_event: 0,
+        }
+    }
+
+    fn remaining(&self) -> usize {
+        self.events.len().saturating_sub(self.next_event)
+    }
+
+    pub(super) fn is_complete(&self) -> bool {
+        self.next_event >= self.events.len()
+    }
+}
+
 /// Subscriptions belonging to a single session. Note that they are technically _owned_ by
 /// a user token, which means that they can be transfered to a different session.
 pub struct SessionSubscriptions {
@@ -53,6 +85,9 @@ pub struct SessionSubscriptions {
     /// transferred away (Part 4 §5.14.7.1: the old session receives Good_SubscriptionTransferred).
     /// Delivered on the next available publish request, even with no remaining subscriptions.
     pending_status_changes: VecDeque<(u32, Arc<NotificationMessage>)>,
+    /// Subscriptions staged for transfer out. They remain routable/drainable
+    /// until the cache index flips, but this session no longer advances them.
+    transferring: HashSet<u32>,
     /// Notifications that have been sent but have yet to be acknowledged (retransmission queue).
     retransmission_queue: RetransmissionQueue,
     /// Reusable storage for data-change notifications reclaimed from acknowledged publishes.
@@ -78,6 +113,7 @@ impl SessionSubscriptions {
             subscriptions: HashMap::new(),
             publish_request_queue: VecDeque::new(),
             pending_status_changes: VecDeque::new(),
+            transferring: HashSet::new(),
             retransmission_queue: RetransmissionQueue::new(),
             data_change_notification_pool: DataChangeNotificationVecPool::default(),
             limits,
@@ -108,6 +144,7 @@ impl SessionSubscriptions {
         if self.subscriptions.len() >= self.limits.max_subscriptions_per_session {
             return Err((StatusCode::BadTooManySubscriptions, subscription, notifs));
         }
+        self.transferring.remove(&subscription.id());
         self.subscriptions.insert(subscription.id(), subscription);
         for notif in notifs {
             self.retransmission_queue.push_existing(notif);
@@ -159,10 +196,30 @@ impl SessionSubscriptions {
         &mut self,
         subscription_id: u32,
     ) -> (Option<Subscription>, Vec<NonAckedPublish>) {
+        self.transferring.remove(&subscription_id);
         let notifs = self
             .retransmission_queue
             .remove_subscription(subscription_id);
         (self.subscriptions.remove(&subscription_id), notifs)
+    }
+
+    pub(super) fn clone_for_transfer(
+        &self,
+        subscription_id: u32,
+    ) -> Option<(Subscription, Vec<NonAckedPublish>)> {
+        let subscription = self.subscriptions.get(&subscription_id)?.clone();
+        let notifs = self
+            .retransmission_queue
+            .clone_subscription(subscription_id);
+        Some((subscription, notifs))
+    }
+
+    pub(super) fn mark_transferring(&mut self, subscription_id: u32) -> Result<(), StatusCode> {
+        if !self.subscriptions.contains_key(&subscription_id) {
+            return Err(StatusCode::BadSubscriptionIdInvalid);
+        }
+        self.transferring.insert(subscription_id);
+        Ok(())
     }
 
     /// Get a mutable reference to a subscription by ID.
@@ -664,6 +721,16 @@ impl SessionSubscriptions {
         );
     }
 
+    pub(super) fn has_more_notifications(&self) -> bool {
+        self.subscriptions
+            .values()
+            .any(|subscription| subscription.more_notifications())
+    }
+
+    pub(super) fn has_queued_publish_request(&self) -> bool {
+        !self.publish_request_queue.is_empty()
+    }
+
     /// Queue a StatusChangeNotification to be delivered to this session on the next
     /// available publish request. Used when a subscription is transferred away
     /// (Part 4 §5.14.7.1).
@@ -721,7 +788,7 @@ impl SessionSubscriptions {
     ) -> Vec<RemovedSubscription> {
         self.deliver_pending_status_changes(now);
 
-        if self.subscriptions.is_empty() {
+        if self.subscriptions.is_empty() || self.subscriptions.len() == self.transferring.len() {
             self.reject_publish_requests_without_subscriptions();
             return Vec::new();
         }
@@ -763,6 +830,9 @@ impl SessionSubscriptions {
         let mut to_remove = Vec::new();
 
         for (sub_id, subscription) in &mut self.subscriptions {
+            if self.transferring.contains(sub_id) {
+                continue;
+            }
             buffer.reset();
             let monitored_items = subscription.monitored_item_refs();
             let res = subscription.tick(
@@ -801,6 +871,9 @@ impl SessionSubscriptions {
         let mut more_notifications = false;
 
         for sub_id in self.subscription_ids_by_priority() {
+            if self.transferring.contains(&sub_id) {
+                continue;
+            }
             let (removed_subscription, subscription_has_more_notifications) = self
                 .tick_subscription_with_publish_requests(
                     sub_id,
@@ -883,6 +956,7 @@ impl SessionSubscriptions {
 
     fn remove_ready_subscriptions(&mut self, to_remove: Vec<u32>) {
         for sub_id in to_remove {
+            self.transferring.remove(&sub_id);
             self.subscriptions.remove(&sub_id);
             let removed = self.retransmission_queue.remove_subscription(sub_id);
             for notification in removed {
@@ -1005,46 +1079,101 @@ impl SessionSubscriptions {
             .available_sequence_numbers(subscription_id)
     }
 
-    pub(super) fn notify_data_changes(&mut self, values: Vec<(MonitoredItemHandle, DataValue)>) {
-        let now = DateTime::now();
-        for (handle, value) in values {
-            let Some(sub) = self.subscriptions.get_mut(&handle.subscription_id) else {
-                continue;
-            };
-            sub.notify_data_value(&handle.monitored_item_id, value, &now);
-        }
-    }
-
-    pub(super) fn notify_events(&mut self, events: Vec<(MonitoredItemHandle, &dyn Event)>) {
-        // Only get the inner type tree if we need to, for performance.
-        let mut lck = None;
-        for (handle, event) in events {
-            let Some(sub) = self.subscriptions.get_mut(&handle.subscription_id) else {
-                continue;
-            };
-            let type_tree = lck.get_or_insert_with(|| self.type_tree_for_user.get_type_tree());
-            sub.notify_event(&handle.monitored_item_id, event, type_tree.get());
-        }
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn refresh_subscription_events(
+    pub(super) fn drain_ring_chunk(
         &mut self,
-        subscription_id: u32,
-        monitored_item: Option<MonitoredItemHandle>,
-        events: &[&dyn Event],
+        ring: &ArrayQueue<NotificationWorkItem>,
         type_tree: &dyn TypeTree,
-    ) -> Result<(), StatusCode> {
-        // ponytail: If refresh ever becomes async/throttled, add a per-subscription in-progress flag + StatusCode::BadRefreshInProgress here.
-        let Some(sub) = self.subscriptions.get_mut(&subscription_id) else {
-            return Err(StatusCode::BadSubscriptionIdInvalid);
+        event_chunk: usize,
+        pending_refresh: &mut Option<PendingRefreshDrain>,
+    ) -> usize {
+        let mut processed = 0;
+        let now = DateTime::now();
+        while processed < event_chunk {
+            if pending_refresh.is_some() {
+                processed +=
+                    self.drain_pending_refresh(type_tree, event_chunk - processed, pending_refresh);
+                break;
+            }
+
+            let Some(item) = ring.pop() else {
+                break;
+            };
+
+            match item {
+                NotificationWorkItem::Data { handle, value } => {
+                    let Some(sub) = self.subscriptions.get_mut(&handle.subscription_id) else {
+                        processed += 1;
+                        continue;
+                    };
+                    sub.notify_data_value(&handle.monitored_item_id, value, &now);
+                }
+                NotificationWorkItem::Event { handle, event } => {
+                    let Some(sub) = self.subscriptions.get_mut(&handle.subscription_id) else {
+                        processed += 1;
+                        continue;
+                    };
+                    sub.notify_event(&handle.monitored_item_id, &*event, type_tree);
+                }
+                NotificationWorkItem::Refresh {
+                    subscription_id,
+                    monitored_item,
+                    events,
+                } => {
+                    *pending_refresh = Some(PendingRefreshDrain::new(
+                        subscription_id,
+                        monitored_item,
+                        events,
+                    ));
+                    processed += self.drain_pending_refresh(
+                        type_tree,
+                        event_chunk - processed,
+                        pending_refresh,
+                    );
+                    continue;
+                }
+            }
+
+            processed += 1;
+        }
+
+        processed
+    }
+
+    fn drain_pending_refresh(
+        &mut self,
+        type_tree: &dyn TypeTree,
+        event_limit: usize,
+        pending_refresh: &mut Option<PendingRefreshDrain>,
+    ) -> usize {
+        let Some(refresh) = pending_refresh.as_mut() else {
+            return 0;
         };
 
-        sub.refresh_events(monitored_item, events, type_tree)
+        let deliver_count = refresh.remaining().min(event_limit);
+        if deliver_count == 0 {
+            return 0;
+        }
+
+        let start = refresh.next_event;
+        let end = start + deliver_count;
+        if let Some(sub) = self.subscriptions.get_mut(&refresh.subscription_id) {
+            let events = refresh.events[start..end]
+                .iter()
+                .map(|event| event.as_ref() as &dyn Event)
+                .collect::<Vec<_>>();
+            let _ = sub.refresh_events(refresh.monitored_item, &events, type_tree);
+        }
+        refresh.next_event = end;
+
+        deliver_count
     }
 
     pub(super) fn user_token(&self) -> &PersistentSessionKey {
         &self.user_token
+    }
+
+    pub(super) fn type_tree_for_user(&self) -> Arc<dyn TypeTreeForUserStatic> {
+        Arc::clone(&self.type_tree_for_user)
     }
 
     pub(super) fn get_monitored_item_count(&self, subscription_id: u32) -> Option<usize> {

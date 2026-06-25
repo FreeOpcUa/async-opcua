@@ -8,6 +8,8 @@ pub mod middleware;
 /// Quality code evaluation for aggregated data points.
 pub mod quality;
 
-pub use engine::{calculate_aggregate, partition_intervals};
+pub use engine::{
+    compute_processed_intervals, dispatch_aggregate, partition_intervals, AggregateInput,
+};
 pub use middleware::read_processed_aggregates;
 pub use quality::compute_aggregate_quality;

@@ -38,6 +38,7 @@ pub async fn read_processed_aggregates(
                 details.end_time,
                 details.processing_interval,
                 &aggregate_type,
+                &details.aggregate_configuration,
                 None,
             )
             .await

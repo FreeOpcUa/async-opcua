@@ -3,7 +3,7 @@
 
 use crate::aggregates::quality::compute_aggregate_quality;
 use chrono::Duration as ChronoDuration;
-use opcua_types::{DataValue, DateTime, NodeId, StatusCode, Variant};
+use opcua_types::{AggregateConfiguration, DataValue, DateTime, NodeId, StatusCode, Variant};
 
 // Standard AggregateFunction NodeIds (Part 13 / Part 6 NodeIds.csv). The implemented average is
 // interpolated/time-weighted, so it maps to TimeAverage (2343), NOT simple Average (2342).
@@ -170,27 +170,57 @@ pub fn calculate_std_dev_sample(values: &[f64]) -> Option<f64> {
     Some(variance.sqrt())
 }
 
-/// Calculates the aggregate for a specific interval from raw values.
-pub fn calculate_aggregate(
-    values_in_interval: &[&DataValue],
-    aggregate_type: &NodeId,
-    interval_start: DateTime,
-    interval_end: DateTime,
-) -> DataValue {
-    let statuses: Vec<Option<StatusCode>> = values_in_interval.iter().map(|v| v.status).collect();
+/// Input values and interval metadata for aggregate calculations.
+pub struct AggregateInput<'a> {
+    /// Raw values whose timestamp falls inside the interval, time-sorted.
+    pub values: &'a [&'a DataValue],
+    /// Last raw value at/before interval_start (start-bound source). None until Phase C.
+    pub prior: Option<&'a DataValue>,
+    /// First raw value after interval_end. None until Phase C.
+    pub next: Option<&'a DataValue>,
+    /// Start timestamp of the processing interval.
+    pub interval_start: DateTime,
+    /// End timestamp of the processing interval.
+    pub interval_end: DateTime,
+    /// Aggregate configuration supplied by the ReadProcessed request.
+    pub config: &'a AggregateConfiguration,
+}
+
+struct AggregatePreamble {
+    quality: StatusCode,
+    numeric_points: Vec<(DateTime, f64)>,
+}
+
+fn bad_no_data(interval_start: DateTime) -> DataValue {
+    DataValue {
+        value: None,
+        status: Some(StatusCode::BadNoData),
+        source_timestamp: Some(interval_start),
+        server_timestamp: Some(DateTime::now()),
+        ..Default::default()
+    }
+}
+
+fn bad_aggregate_not_supported(interval_start: DateTime) -> DataValue {
+    DataValue {
+        value: None,
+        status: Some(StatusCode::BadAggregateNotSupported),
+        source_timestamp: Some(interval_start),
+        server_timestamp: Some(DateTime::now()),
+        ..Default::default()
+    }
+}
+
+fn aggregate_preamble(input: &AggregateInput<'_>) -> Result<AggregatePreamble, DataValue> {
+    let statuses: Vec<Option<StatusCode>> = input.values.iter().map(|v| v.status).collect();
     let quality = compute_aggregate_quality(&statuses);
 
     if quality == StatusCode::BadNoData {
-        return DataValue {
-            value: None,
-            status: Some(StatusCode::BadNoData),
-            source_timestamp: Some(interval_start),
-            server_timestamp: Some(DateTime::now()),
-            ..Default::default()
-        };
+        return Err(bad_no_data(input.interval_start));
     }
 
-    let numeric_points: Vec<(DateTime, f64)> = values_in_interval
+    let numeric_points: Vec<(DateTime, f64)> = input
+        .values
         .iter()
         .filter_map(|v| {
             let t = get_value_timestamp(v);
@@ -200,42 +230,20 @@ pub fn calculate_aggregate(
         .collect();
 
     if numeric_points.is_empty() {
-        return DataValue {
-            value: None,
-            status: Some(StatusCode::BadNoData),
-            source_timestamp: Some(interval_start),
-            server_timestamp: Some(DateTime::now()),
-            ..Default::default()
-        };
+        return Err(bad_no_data(input.interval_start));
     }
 
-    let result_value = match aggregate_type.identifier {
-        opcua_types::Identifier::Numeric(AGG_TIME_AVERAGE) => {
-            calculate_time_weighted_average(&numeric_points, interval_start, interval_end)
-        }
-        opcua_types::Identifier::Numeric(AGG_MINIMUM) => numeric_points
-            .iter()
-            .map(|(_, v)| *v)
-            .min_by(|a, b| a.partial_cmp(b).unwrap()),
-        opcua_types::Identifier::Numeric(AGG_MAXIMUM) => numeric_points
-            .iter()
-            .map(|(_, v)| *v)
-            .max_by(|a, b| a.partial_cmp(b).unwrap()),
-        opcua_types::Identifier::Numeric(AGG_STANDARD_DEVIATION_SAMPLE) => {
-            let raw_values: Vec<f64> = numeric_points.iter().map(|(_, v)| *v).collect();
-            calculate_std_dev_sample(&raw_values)
-        }
-        _ => {
-            return DataValue {
-                value: None,
-                status: Some(StatusCode::BadAggregateNotSupported),
-                source_timestamp: Some(interval_start),
-                server_timestamp: Some(DateTime::now()),
-                ..Default::default()
-            };
-        }
-    };
+    Ok(AggregatePreamble {
+        quality,
+        numeric_points,
+    })
+}
 
+fn aggregate_result(
+    result_value: Option<f64>,
+    quality: StatusCode,
+    interval_start: DateTime,
+) -> DataValue {
     match result_value {
         Some(val) => DataValue {
             value: Some(Variant::Double(val)),
@@ -252,4 +260,122 @@ pub fn calculate_aggregate(
             ..Default::default()
         },
     }
+}
+
+fn agg_time_average(input: &AggregateInput<'_>) -> DataValue {
+    let preamble = match aggregate_preamble(input) {
+        Ok(preamble) => preamble,
+        Err(value) => return value,
+    };
+
+    aggregate_result(
+        calculate_time_weighted_average(
+            &preamble.numeric_points,
+            input.interval_start,
+            input.interval_end,
+        ),
+        preamble.quality,
+        input.interval_start,
+    )
+}
+
+fn agg_minimum(input: &AggregateInput<'_>) -> DataValue {
+    let preamble = match aggregate_preamble(input) {
+        Ok(preamble) => preamble,
+        Err(value) => return value,
+    };
+
+    aggregate_result(
+        preamble
+            .numeric_points
+            .iter()
+            .map(|(_, v)| *v)
+            .min_by(|a, b| a.partial_cmp(b).unwrap()),
+        preamble.quality,
+        input.interval_start,
+    )
+}
+
+fn agg_maximum(input: &AggregateInput<'_>) -> DataValue {
+    let preamble = match aggregate_preamble(input) {
+        Ok(preamble) => preamble,
+        Err(value) => return value,
+    };
+
+    aggregate_result(
+        preamble
+            .numeric_points
+            .iter()
+            .map(|(_, v)| *v)
+            .max_by(|a, b| a.partial_cmp(b).unwrap()),
+        preamble.quality,
+        input.interval_start,
+    )
+}
+
+fn agg_std_dev_sample(input: &AggregateInput<'_>) -> DataValue {
+    let preamble = match aggregate_preamble(input) {
+        Ok(preamble) => preamble,
+        Err(value) => return value,
+    };
+
+    let raw_values: Vec<f64> = preamble.numeric_points.iter().map(|(_, v)| *v).collect();
+    aggregate_result(
+        calculate_std_dev_sample(&raw_values),
+        preamble.quality,
+        input.interval_start,
+    )
+}
+
+/// Dispatches an aggregate calculation to the implementation for the requested aggregate NodeId.
+pub fn dispatch_aggregate(aggregate_type: &NodeId, input: &AggregateInput<'_>) -> DataValue {
+    match aggregate_type.identifier {
+        opcua_types::Identifier::Numeric(AGG_TIME_AVERAGE) => agg_time_average(input),
+        opcua_types::Identifier::Numeric(AGG_MINIMUM) => agg_minimum(input),
+        opcua_types::Identifier::Numeric(AGG_MAXIMUM) => agg_maximum(input),
+        opcua_types::Identifier::Numeric(AGG_STANDARD_DEVIATION_SAMPLE) => {
+            agg_std_dev_sample(input)
+        }
+        _ => bad_aggregate_not_supported(input.interval_start),
+    }
+}
+
+/// Computes processed aggregate values for each partitioned interval.
+pub fn compute_processed_intervals(
+    raw_values: &[DataValue],
+    aggregate_type: &NodeId,
+    config: &AggregateConfiguration,
+    start_time: DateTime,
+    end_time: DateTime,
+    processing_interval: f64,
+) -> Vec<DataValue> {
+    partition_intervals(start_time, end_time, processing_interval)
+        .into_iter()
+        .map(|(interval_start, interval_end)| {
+            let (min_t, max_t) = if interval_start <= interval_end {
+                (interval_start, interval_end)
+            } else {
+                (interval_end, interval_start)
+            };
+
+            let values_in_interval: Vec<&DataValue> = raw_values
+                .iter()
+                .filter(|value| {
+                    let timestamp = get_value_timestamp(value);
+                    timestamp >= min_t && timestamp < max_t
+                })
+                .collect();
+
+            let input = AggregateInput {
+                values: &values_in_interval,
+                prior: None,
+                next: None,
+                interval_start,
+                interval_end,
+                config,
+            };
+
+            dispatch_aggregate(aggregate_type, &input)
+        })
+        .collect()
 }

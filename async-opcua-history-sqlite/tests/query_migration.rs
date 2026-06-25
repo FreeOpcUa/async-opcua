@@ -149,6 +149,7 @@ async fn sqlite_backend_read_processed_computes_aggregates() {
             DateTime::from(start_time.ticks() + 10_000_000),
             10_000.0,
             &aggregate_average(),
+            &opcua_types::AggregateConfiguration::default(),
             None,
         )
         .await

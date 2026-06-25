@@ -2,11 +2,34 @@
 
 use opcua_server::aggregates::engine::{
     aggregate_average, aggregate_maximum, aggregate_minimum, aggregate_std_dev,
-    calculate_aggregate, calculate_std_dev_sample, calculate_time_weighted_average,
-    partition_intervals,
+    calculate_std_dev_sample, calculate_time_weighted_average, dispatch_aggregate,
+    partition_intervals, AggregateInput,
 };
 use opcua_server::aggregates::quality::compute_aggregate_quality;
-use opcua_types::{DataValue, DateTime, NodeId, StatusCode, Variant};
+use opcua_types::{AggregateConfiguration, DataValue, DateTime, NodeId, StatusCode, Variant};
+
+/// Phase-A shim: the old `calculate_aggregate(values, type, start, end)` is now
+/// `dispatch_aggregate` over an `AggregateInput`. These lock-in tests keep their exact
+/// expected values to prove the refactor introduced no behavior change.
+fn calculate_aggregate(
+    values: &[&DataValue],
+    aggregate_type: &NodeId,
+    start: DateTime,
+    end: DateTime,
+) -> DataValue {
+    let config = AggregateConfiguration::default();
+    dispatch_aggregate(
+        aggregate_type,
+        &AggregateInput {
+            values,
+            prior: None,
+            next: None,
+            interval_start: start,
+            interval_end: end,
+            config: &config,
+        },
+    )
+}
 
 #[test]
 fn aggregate_node_ids_match_the_standard_registry() {

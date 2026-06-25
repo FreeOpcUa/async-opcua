@@ -3,12 +3,12 @@
 use crate::{migration::run_migrations, query};
 use async_trait::async_trait;
 use opcua_server::{
-    aggregates::engine::{calculate_aggregate, get_value_timestamp, partition_intervals},
+    aggregates::{compute_processed_intervals, engine::get_value_timestamp},
     history::HistoryStorageBackend,
 };
 use opcua_types::{
-    BinaryEncodable, ContextOwned, DataValue, DateTime, EventFilter, HistoryEventFieldList, NodeId,
-    PerformUpdateType, StatusCode,
+    AggregateConfiguration, BinaryEncodable, ContextOwned, DataValue, DateTime, EventFilter,
+    HistoryEventFieldList, NodeId, PerformUpdateType, StatusCode,
 };
 use parking_lot::Mutex;
 use rusqlite::{params, Connection, Error as SqliteError, OptionalExtension};
@@ -297,6 +297,7 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn read_processed(
         &self,
         node_id: &NodeId,
@@ -304,6 +305,7 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
         end_time: DateTime,
         processing_interval: f64,
         aggregate_type: &NodeId,
+        aggregate_configuration: &AggregateConfiguration,
         continuation_point: Option<Vec<u8>>,
     ) -> Result<(Vec<DataValue>, Option<Vec<u8>>), StatusCode> {
         if continuation_point.is_some() {
@@ -326,31 +328,14 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
 
         raw_values.sort_by_key(get_value_timestamp);
 
-        let processed_values = partition_intervals(start_time, end_time, processing_interval)
-            .into_iter()
-            .map(|(interval_start, interval_end)| {
-                let (min_t, max_t) = if interval_start <= interval_end {
-                    (interval_start, interval_end)
-                } else {
-                    (interval_end, interval_start)
-                };
-
-                let values_in_interval: Vec<&DataValue> = raw_values
-                    .iter()
-                    .filter(|value| {
-                        let timestamp = get_value_timestamp(value);
-                        timestamp >= min_t && timestamp < max_t
-                    })
-                    .collect();
-
-                calculate_aggregate(
-                    &values_in_interval,
-                    aggregate_type,
-                    interval_start,
-                    interval_end,
-                )
-            })
-            .collect();
+        let processed_values = compute_processed_intervals(
+            &raw_values,
+            aggregate_type,
+            aggregate_configuration,
+            start_time,
+            end_time,
+            processing_interval,
+        );
 
         Ok((processed_values, None))
     }

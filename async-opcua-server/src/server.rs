@@ -797,19 +797,16 @@ impl Server {
         self.run_with(listener).await
     }
 
-    async fn run_subscription_ticks(interval: u64, context: &ServerContext) -> Never {
-        if interval == 0 {
-            futures::future::pending().await
-        } else {
-            let context = context.clone();
-            let mut tick = tokio::time::interval(Duration::from_millis(interval));
-            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-            loop {
-                tick.tick().await;
+    async fn run_subscription_ticks(_interval: u64, context: &ServerContext) -> Never {
+        let context = context.clone();
+        let cleanup_rx = context.subscriptions.take_cleanup_receiver();
 
-                context.subscriptions.periodic_tick(&context).await;
-            }
+        if let Some(rx) = cleanup_rx {
+            let subscriptions = context.subscriptions.clone();
+            subscriptions.run_cleanup(&context, rx).await;
         }
+
+        futures::future::pending().await
     }
 
     async fn run_session_expiry(sessions: &RwLock<SessionManager>, notify: &Notify) -> Never {

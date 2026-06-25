@@ -13,11 +13,11 @@ use crate::node_manager::TypeTreeForUserStatic;
 use super::{
     pool::NotificationBuffer, ring::NotificationWorkItem,
     session_subscriptions::PendingRefreshDrain, PendingPublish, SessionSubscriptions,
-    NOTIFICATION_RING_CAPACITY, RING_DRAIN_BUDGET, RING_DRAIN_EVENT_CHUNK,
+    SubscriptionCleanup, NOTIFICATION_RING_CAPACITY, RING_DRAIN_BUDGET, RING_DRAIN_EVENT_CHUNK,
 };
 use crate::subscriptions::subscription::TickReason;
 use opcua_types::DateTimeUtc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// Commands accepted by the per-session subscription actor.
 pub(crate) enum SubscriptionCommand {
@@ -92,17 +92,24 @@ impl SubscriptionActorHandle {
 }
 
 pub(crate) struct SubscriptionActor {
+    session_id: u32,
     subs: SessionSubscriptions,
     ring: Arc<ArrayQueue<NotificationWorkItem>>,
     notify: Arc<Notify>,
     commands_rx: mpsc::UnboundedReceiver<SubscriptionCommand>,
+    cleanup_tx: mpsc::UnboundedSender<SubscriptionCleanup>,
     type_tree: Arc<dyn TypeTreeForUserStatic>,
     pending_refresh: Option<PendingRefreshDrain>,
 }
 
 impl SubscriptionActor {
     pub(crate) async fn run(mut self) {
+        let sleep = tokio::time::sleep_until(Self::next_sleep_deadline(&self.subs));
+        tokio::pin!(sleep);
+
         loop {
+            sleep.as_mut().reset(Self::next_sleep_deadline(&self.subs));
+
             tokio::select! {
                 command = self.commands_rx.recv() => {
                     match command {
@@ -135,8 +142,36 @@ impl SubscriptionActor {
                 _ = self.notify.notified() => {
                     self.drain_ring().await;
                 }
+                _ = &mut sleep => {
+                    self.drain_ring().await;
+                    let now = DateTimeUtc::from(chrono::Utc::now());
+                    let now_instant = std::time::Instant::now();
+                    let mut buffer = NotificationBuffer::new();
+                    let removed = self.subs.tick(
+                        &now,
+                        now_instant,
+                        TickReason::TickTimerFired,
+                        &mut buffer,
+                    );
+                    let ready = self.subs.is_ready_to_delete();
+                    if !removed.is_empty() || ready {
+                        let session = (!removed.is_empty()).then(|| self.subs.session().clone());
+                        let _ = self.cleanup_tx.send(SubscriptionCleanup {
+                            session_id: self.session_id,
+                            session,
+                            removed_subscriptions: removed,
+                            ready_to_delete: ready,
+                        });
+                    }
+                }
             }
         }
+    }
+
+    fn next_sleep_deadline(subs: &SessionSubscriptions) -> tokio::time::Instant {
+        subs.next_tick_deadline()
+            .map(tokio::time::Instant::from_std)
+            .unwrap_or_else(|| tokio::time::Instant::now() + Duration::from_secs(3600))
     }
 
     async fn drain_ring(&mut self) {
@@ -176,8 +211,10 @@ impl SubscriptionActor {
 }
 
 pub(crate) fn spawn(
+    session_id: u32,
     subs: SessionSubscriptions,
     type_tree: Arc<dyn TypeTreeForUserStatic>,
+    cleanup_tx: mpsc::UnboundedSender<SubscriptionCleanup>,
 ) -> SubscriptionActorHandle {
     assert_actor_send_bounds();
 
@@ -188,10 +225,12 @@ pub(crate) fn spawn(
 
     tokio::spawn(
         SubscriptionActor {
+            session_id,
             subs,
             ring: Arc::clone(&ring),
             notify: Arc::clone(&notify),
             commands_rx,
+            cleanup_tx,
             type_tree,
             pending_refresh: None,
         }

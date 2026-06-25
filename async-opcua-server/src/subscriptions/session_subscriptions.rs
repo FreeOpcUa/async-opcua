@@ -727,6 +727,13 @@ impl SessionSubscriptions {
             .any(|subscription| subscription.more_notifications())
     }
 
+    pub(super) fn next_tick_deadline(&self) -> Option<Instant> {
+        self.subscriptions
+            .values()
+            .map(|subscription| subscription.next_publish_deadline())
+            .min()
+    }
+
     pub(super) fn has_queued_publish_request(&self) -> bool {
         !self.publish_request_queue.is_empty()
     }

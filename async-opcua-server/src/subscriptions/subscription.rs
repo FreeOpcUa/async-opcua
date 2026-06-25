@@ -1002,6 +1002,10 @@ impl Subscription {
         self.publishing_interval
     }
 
+    pub(super) fn next_publish_deadline(&self) -> Instant {
+        self.last_time_publishing_interval_elapsed + self.publishing_interval
+    }
+
     /// Whether publishing is enabled on this subscription.
     pub fn publishing_enabled(&self) -> bool {
         self.publishing_enabled

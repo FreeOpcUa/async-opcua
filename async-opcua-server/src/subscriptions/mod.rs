@@ -9,7 +9,6 @@ mod subscription;
 
 use std::{hash::Hash, sync::Arc, time::Instant};
 
-use chrono::Utc;
 use hashbrown::{Equivalent, HashMap};
 pub use monitored_item::{CreateMonitoredItem, MonitoredItem};
 use opcua_core::{trace_read_lock, trace_write_lock, RepublishResponseShared, ResponseMessage};
@@ -17,8 +16,8 @@ use opcua_nodes::Event;
 use ring::NotificationWorkItem;
 use session_subscriptions::RemovedSubscription;
 pub use session_subscriptions::SessionSubscriptions;
-use subscription::TickReason;
 pub use subscription::{MonitoredItemHandle, Subscription, SubscriptionState};
+use tokio::sync::mpsc;
 use tracing::error;
 
 use actor::SubscriptionActorHandle;
@@ -27,7 +26,7 @@ pub use notify::{
     SubscriptionEventNotifierBatch,
 };
 
-use opcua_core::sync::RwLock;
+use opcua_core::sync::{Mutex, RwLock};
 
 use opcua_types::{
     node_id::{IdentifierRef, NodeIdRef},
@@ -93,14 +92,16 @@ struct SessionEntry {
 
 impl SessionEntry {
     fn new(
+        session_id: u32,
         limits: SubscriptionLimits,
         key: PersistentSessionKey,
         session: Arc<RwLock<Session>>,
         type_tree: Arc<dyn TypeTreeForUserStatic>,
+        cleanup_tx: mpsc::UnboundedSender<SubscriptionCleanup>,
     ) -> Self {
         let subs = SessionSubscriptions::new(limits, key, session, Arc::clone(&type_tree));
         Self {
-            handle: actor::spawn(subs, type_tree),
+            handle: actor::spawn(session_id, subs, type_tree, cleanup_tx),
         }
     }
 
@@ -118,6 +119,13 @@ pub struct MonitoredItemEntry {
     pub data_encoding: DataEncoding,
     /// The index range of the monitored item.
     pub index_range: NumericRange,
+}
+
+pub(crate) struct SubscriptionCleanup {
+    session_id: u32,
+    session: Option<Arc<RwLock<Session>>>,
+    removed_subscriptions: Vec<RemovedSubscription>,
+    ready_to_delete: bool,
 }
 
 struct SubscriptionCacheInner {
@@ -139,10 +147,13 @@ pub struct SubscriptionCache {
     inner: RwLock<SubscriptionCacheInner>,
     /// Configured limits on subscriptions.
     limits: SubscriptionLimits,
+    cleanup_tx: mpsc::UnboundedSender<SubscriptionCleanup>,
+    cleanup_rx: Mutex<Option<mpsc::UnboundedReceiver<SubscriptionCleanup>>>,
 }
 
 impl SubscriptionCache {
     pub(crate) fn new(limits: SubscriptionLimits) -> Self {
+        let (cleanup_tx, cleanup_rx) = mpsc::unbounded_channel();
         Self {
             inner: RwLock::new(SubscriptionCacheInner {
                 session_subscriptions: HashMap::new(),
@@ -150,7 +161,15 @@ impl SubscriptionCache {
                 monitored_items: HashMap::new(),
             }),
             limits,
+            cleanup_tx,
+            cleanup_rx: Mutex::new(Some(cleanup_rx)),
         }
+    }
+
+    pub(crate) fn take_cleanup_receiver(
+        &self,
+    ) -> Option<mpsc::UnboundedReceiver<SubscriptionCleanup>> {
+        self.cleanup_rx.lock().take()
     }
 
     /// Get the `SessionSubscriptions` object for a single session by its numeric ID.
@@ -299,75 +318,6 @@ impl SubscriptionCache {
         Ok(results)
     }
 
-    /// This is the periodic subscription tick where we check for
-    /// triggered subscriptions.
-    ///
-    pub(crate) async fn periodic_tick(&self, context: &ServerContext) {
-        // TODO: Look into replacing this with a smarter system, in theory it should be possible to
-        // always just sleep for the exact time until the next expired publish request, which could
-        // be more efficient, and would be more responsive.
-        let mut to_delete = Vec::new();
-        let mut expired_subscriptions = Vec::new();
-        {
-            let now = Utc::now();
-            let now_instant = Instant::now();
-            let session_subscriptions = {
-                let lck = trace_read_lock!(self.inner);
-                lck.session_subscriptions
-                    .iter()
-                    .map(|(session_id, entry)| (*session_id, entry.handle()))
-                    .collect::<Vec<_>>()
-            };
-            for (session_id, sub) in session_subscriptions {
-                let tick_result = sub
-                    .legacy(move |subs| {
-                        let mut buffer = pool::NotificationBuffer::new();
-                        let removed_subscriptions =
-                            subs.tick(&now, now_instant, TickReason::TickTimerFired, &mut buffer);
-                        let expired_session =
-                            (!removed_subscriptions.is_empty()).then(|| subs.session().clone());
-                        (
-                            expired_session,
-                            removed_subscriptions,
-                            subs.is_ready_to_delete(),
-                        )
-                    })
-                    .await;
-                let Ok((expired_session, removed_subscriptions, ready_to_delete)) = tick_result
-                else {
-                    to_delete.push(session_id);
-                    continue;
-                };
-                if !removed_subscriptions.is_empty() {
-                    if let Some(session) = expired_session {
-                        expired_subscriptions.push((session, removed_subscriptions));
-                    }
-                }
-                if ready_to_delete {
-                    to_delete.push(session_id);
-                }
-            }
-        }
-        if !to_delete.is_empty() || !expired_subscriptions.is_empty() {
-            let mut lck = trace_write_lock!(self.inner);
-            for (_, removed_subscriptions) in &expired_subscriptions {
-                Self::cleanup_removed_subscriptions(&mut lck, removed_subscriptions);
-            }
-            for id in to_delete {
-                if let Some(entry) = lck.session_subscriptions.remove(&id) {
-                    entry.handle.stop();
-                }
-            }
-            context
-                .info
-                .diagnostics
-                .set_current_subscription_count(lck.subscription_to_session.len() as u32);
-        }
-        if !expired_subscriptions.is_empty() {
-            Self::delete_expired_monitored_items(context, expired_subscriptions).await;
-        }
-    }
-
     async fn delete_expired_monitored_items(
         context: &ServerContext,
         expired_subscriptions: Vec<(Arc<RwLock<Session>>, Vec<RemovedSubscription>)>,
@@ -410,6 +360,41 @@ impl SubscriptionCache {
                 }
 
                 mgr.delete_monitored_items(&ctx, &owned).await;
+            }
+        }
+    }
+
+    pub(crate) async fn run_cleanup(
+        &self,
+        context: &ServerContext,
+        mut rx: mpsc::UnboundedReceiver<SubscriptionCleanup>,
+    ) {
+        while let Some(c) = rx.recv().await {
+            let should_delete_expired_monitored_items =
+                c.session.is_some() && !c.removed_subscriptions.is_empty();
+            {
+                let mut lck = trace_write_lock!(self.inner);
+                if !c.removed_subscriptions.is_empty() {
+                    Self::cleanup_removed_subscriptions(&mut lck, &c.removed_subscriptions);
+                }
+                if c.ready_to_delete {
+                    if let Some(entry) = lck.session_subscriptions.remove(&c.session_id) {
+                        entry.handle.stop();
+                    }
+                }
+                context
+                    .info
+                    .diagnostics
+                    .set_current_subscription_count(lck.subscription_to_session.len() as u32);
+            }
+            if should_delete_expired_monitored_items {
+                if let Some(session) = c.session {
+                    Self::delete_expired_monitored_items(
+                        context,
+                        vec![(session, c.removed_subscriptions)],
+                    )
+                    .await;
+                }
             }
         }
     }
@@ -471,11 +456,14 @@ impl SubscriptionCache {
             lck.session_subscriptions
                 .entry(session_id)
                 .or_insert_with(|| {
+                    let cleanup_tx = self.cleanup_tx.clone();
                     SessionEntry::new(
+                        session_id,
                         self.limits,
                         Self::get_key(&context.session),
                         context.session.clone(),
                         context.info.type_tree_getter.get_type_tree_static(context),
+                        cleanup_tx,
                     )
                 })
                 .handle()
@@ -504,14 +492,17 @@ impl SubscriptionCache {
         context: &RequestContext,
     ) -> SubscriptionActorHandle {
         let mut lck = trace_write_lock!(self.inner);
+        let cleanup_tx = self.cleanup_tx.clone();
         lck.session_subscriptions
             .entry(session_id)
             .or_insert_with(|| {
                 SessionEntry::new(
+                    session_id,
                     self.limits,
                     key,
                     context.session.clone(),
                     context.info.type_tree_getter.get_type_tree_static(context),
+                    cleanup_tx,
                 )
             })
             .handle()
@@ -1212,7 +1203,7 @@ impl PersistentSessionKey {
 
 #[cfg(test)]
 mod tests {
-    use std::{sync::Arc, time::Duration};
+    use std::sync::Arc;
 
     use opcua_core::sync::RwLock;
     use opcua_crypto::{random, SecurityPolicy};
@@ -1387,9 +1378,34 @@ mod tests {
             .expect("monitored items should be created");
         assert!(results.iter().all(|r| r.status_code.is_good()));
 
-        for _ in 0..6 {
-            fixture.cache.periodic_tick(&fixture.server_context).await;
-            tokio::time::sleep(Duration::from_millis(110)).await;
+        // No publish requests are ever sent, so the subscription's lifetime expires.
+        // The per-session actor self-ticks on its own deadline timer (no central scan)
+        // and reports the removed subscription on the cleanup channel; the reaper
+        // (run as the server runs it) performs the index cleanup. Wait for the indexes
+        // to return to baseline rather than driving ticks manually.
+        let cleanup_rx = fixture
+            .cache
+            .take_cleanup_receiver()
+            .expect("cleanup receiver should be available");
+        {
+            let cache = Arc::clone(&fixture.cache);
+            let ctx = fixture.server_context.clone();
+            tokio::spawn(async move { cache.run_cleanup(&ctx, cleanup_rx).await });
+        }
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let at_baseline = fixture.cache.subscription_to_session_size_for_test()
+                == baseline_subscription_to_session
+                && fixture.cache.reverse_index_size_for_test() == baseline_monitored_items;
+            if at_baseline {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "subscription did not self-tick to expiry and clean up within 10s"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         }
 
         assert_eq!(

@@ -105,7 +105,7 @@ impl SecurityGroupKeys {
     }
 }
 
-/// In-memory handler for OPC UA Part 14 `GetSecurityKeys` requests.
+/// In-memory handler for OPC UA Part 14 security key requests.
 #[derive(Debug, Clone, Default)]
 pub struct SecurityKeyService {
     groups: Arc<RwLock<HashMap<String, SecurityGroupKeys>>>,
@@ -143,6 +143,39 @@ impl SecurityKeyService {
             .ok_or(StatusCode::BadNotFound)?
             .get_security_keys(&request)
     }
+
+    /// Handles a `SetSecurityKeys` push by replacing registered key material.
+    pub fn set_security_keys(&self, request: SetSecurityKeysRequest) -> Result<(), StatusCode> {
+        validate_security_group_id(request.security_group_id.as_ref())?;
+
+        if request.security_policy_uri.as_ref().trim().is_empty()
+            || request.current_key.is_null_or_empty()
+            || request.key_lifetime <= 0.0
+        {
+            return Err(StatusCode::BadInvalidArgument);
+        }
+
+        let security_group_id = request.security_group_id.as_ref().to_owned();
+        let key_lifetime = duration_from_ms(request.key_lifetime)?;
+        let elapsed = duration_from_ms((request.key_lifetime - request.time_to_next_key).max(0.0))?;
+        let now = Instant::now();
+        let current_key_started_at = now.checked_sub(elapsed).unwrap_or(now);
+
+        let mut keys = Vec::with_capacity(1 + request.future_keys.len());
+        keys.push(request.current_key);
+        keys.extend(request.future_keys);
+
+        let group_keys = SecurityGroupKeys::with_current_key_started_at(
+            request.security_policy_uri,
+            request.current_token_id,
+            keys,
+            key_lifetime,
+            current_key_started_at,
+        )?;
+
+        self.groups.write().insert(security_group_id, group_keys);
+        Ok(())
+    }
 }
 
 fn validate_security_group_id(security_group_id: &str) -> Result<(), StatusCode> {
@@ -155,6 +188,14 @@ fn validate_security_group_id(security_group_id: &str) -> Result<(), StatusCode>
 
 fn duration_ms(duration: StdDuration) -> Duration {
     duration.as_secs_f64() * 1_000.0
+}
+
+fn duration_from_ms(duration_ms: Duration) -> Result<StdDuration, StatusCode> {
+    if duration_ms.is_finite() && duration_ms >= 0.0 {
+        Ok(StdDuration::from_secs_f64(duration_ms / 1_000.0))
+    } else {
+        Err(StatusCode::BadInvalidArgument)
+    }
 }
 
 /// Request contract for the OPC UA Part 14 `GetSecurityKeys` method.
@@ -180,6 +221,49 @@ impl GetSecurityKeysRequest {
             security_group_id: security_group_id.into(),
             starting_token_id,
             requested_key_count,
+        }
+    }
+}
+
+/// Request contract for the OPC UA Part 14 `SetSecurityKeys` method.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct SetSecurityKeysRequest {
+    /// Identifier of the SecurityGroup receiving pushed key material.
+    pub security_group_id: UAString,
+    /// URI of the security policy used by the pushed key material.
+    pub security_policy_uri: UAString,
+    /// Security token id associated with [`current_key`](Self::current_key).
+    pub current_token_id: IntegerId,
+    /// Current PubSub security key.
+    pub current_key: ByteString,
+    /// Ordered future PubSub security keys following [`current_key`](Self::current_key).
+    pub future_keys: Vec<ByteString>,
+    /// Milliseconds remaining on the current key.
+    pub time_to_next_key: Duration,
+    /// Milliseconds each key is valid.
+    pub key_lifetime: Duration,
+}
+
+impl SetSecurityKeysRequest {
+    /// Creates a `SetSecurityKeys` request.
+    #[must_use]
+    pub fn new(
+        security_group_id: impl Into<UAString>,
+        security_policy_uri: impl Into<UAString>,
+        current_token_id: IntegerId,
+        current_key: ByteString,
+        future_keys: Vec<ByteString>,
+        time_to_next_key: Duration,
+        key_lifetime: Duration,
+    ) -> Self {
+        Self {
+            security_group_id: security_group_id.into(),
+            security_policy_uri: security_policy_uri.into(),
+            current_token_id,
+            current_key,
+            future_keys,
+            time_to_next_key,
+            key_lifetime,
         }
     }
 }

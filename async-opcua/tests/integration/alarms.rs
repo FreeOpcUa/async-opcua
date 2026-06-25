@@ -4,6 +4,8 @@ use std::{
 };
 
 use crate::utils::{default_server, ChannelNotifications, Tester};
+use chrono::TimeDelta;
+use opcua::client::HistoryReadAction;
 use opcua::{
     server::{
         address_space::AddressSpace,
@@ -23,11 +25,15 @@ use opcua_server::alarms::{
     DialogCondition, DialogRegistry, DiscreteAlarm, DiscreteAlarmKind, LimitAlarm, LimitConfig,
     LimitDef, LimitMode, ShelvingState,
 };
+use opcua_server::history::InMemoryEventHistory;
 use opcua_server::namespace::{
     register_alarm_condition, register_discrete_alarm, register_limit_alarm,
     register_limit_alarm_checked,
 };
-use opcua_types::{DataTypeId, EventFilter, ExtensionObject, Range, VariableTypeId};
+use opcua_types::{
+    DataTypeId, DateTime, EventFilter, ExtensionObject, HistoryEvent, HistoryReadValueId, Range,
+    ReadEventDetails, VariableTypeId,
+};
 use tokio::time::timeout;
 
 pub async fn setup_alarms() -> (Tester, Arc<SimpleNodeManager>, Arc<opcua_client::Session>) {
@@ -1722,4 +1728,94 @@ async fn dialog_condition_respond_ends_dialog_and_validates() {
         .await
         .unwrap();
     assert_eq!(oob.status_code, StatusCode::BadDialogResponseInvalid);
+}
+
+fn make_condition_event(source: &NodeId, message: &str, severity: u16) -> AlarmEvent {
+    AlarmEvent {
+        event_id: format!("evt-{message}").into_bytes(),
+        event_type: NodeId::new(0, 2915),
+        source_node: source.clone(),
+        source_name: "HistDevice".to_string(),
+        time: DateTime::now(),
+        message: LocalizedText::new("en", message),
+        severity,
+        condition_id: NodeId::new(2, "HistCondition"),
+        branch_id: NodeId::null(),
+        condition_name: "HistCondition".to_string(),
+        active_state: true,
+        acked_state: false,
+        confirmed_state: false,
+        retain: true,
+    }
+}
+
+/// Part 9 condition history: recorded condition events are returned by HistoryRead (ReadEventDetails)
+/// with the requested select clauses applied.
+#[tokio::test]
+async fn condition_event_history_read_returns_recorded_events() {
+    let (_tester, nm, session) = setup_alarms().await;
+
+    let source = NodeId::new(2, "HistDevice");
+    {
+        let mut space = nm.address_space().write();
+        let source_node =
+            opcua::server::address_space::ObjectBuilder::new(&source, "HistDevice", "HistDevice")
+                .component_of(ObjectId::ObjectsFolder)
+                .event_notifier(
+                    opcua::server::address_space::EventNotifier::SUBSCRIBE_TO_EVENTS
+                        | opcua::server::address_space::EventNotifier::HISTORY_READ,
+                )
+                .build();
+        space.insert::<_, NodeId>(source_node, None);
+    }
+
+    // Record two condition events into the in-memory event historian and wire it as the backend.
+    let history = std::sync::Arc::new(InMemoryEventHistory::new());
+    history.record_event(source.clone(), make_condition_event(&source, "first", 100));
+    history.record_event(source.clone(), make_condition_event(&source, "second", 200));
+    nm.inner().set_history_backend(history);
+
+    let action = HistoryReadAction::ReadEventDetails(ReadEventDetails {
+        num_values_per_node: 10,
+        start_time: DateTime::now() - TimeDelta::try_seconds(1000).unwrap(),
+        end_time: DateTime::now() + TimeDelta::try_seconds(1000).unwrap(),
+        filter: EventFilter {
+            select_clauses: Some(get_alarm_event_select_clauses()),
+            where_clause: opcua_types::ContentFilter::default(),
+        },
+    });
+
+    let r = session
+        .history_read(
+            action,
+            TimestampsToReturn::Both,
+            false,
+            &[HistoryReadValueId {
+                node_id: source.clone(),
+                ..Default::default()
+            }],
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(r.len(), 1);
+    assert_eq!(r[0].status_code, StatusCode::Good);
+    let events = r[0]
+        .history_data
+        .inner_as::<HistoryEvent>()
+        .expect("HistoryEvent")
+        .events
+        .clone()
+        .unwrap_or_default();
+    assert_eq!(events.len(), 2, "both recorded condition events returned");
+
+    // The select clauses round-trip back into parseable alarm events (in ascending time order).
+    let messages: Vec<String> = events
+        .iter()
+        .filter_map(|e| e.event_fields.as_ref())
+        .filter_map(|f| parse_alarm_event(f))
+        .map(|e| e.message.text.as_ref().to_string())
+        .collect();
+    assert!(messages.contains(&"first".to_string()));
+    assert!(messages.contains(&"second".to_string()));
 }

@@ -3,6 +3,7 @@
 pub mod connection_endpoint_definition_data_type;
 pub mod establish;
 pub mod generated;
+pub mod methods;
 pub mod pub_sub_connection_endpoint_mode_enum;
 
 pub use connection_endpoint_definition_data_type::ConnectionEndpointDefinitionDataType;
@@ -11,6 +12,9 @@ pub use establish::{
     EstablishedEndpoint, FxConnectionState,
 };
 pub use generated::types::*;
+pub use methods::{
+    handle_close_connections, handle_establish_connections, register_fx_connection_methods,
+};
 pub use pub_sub_connection_endpoint_mode_enum::PubSubConnectionEndpointModeEnum;
 
 const FX_DATA_NAMESPACE: &str = "http://opcfoundation.org/UA/FX/Data/";

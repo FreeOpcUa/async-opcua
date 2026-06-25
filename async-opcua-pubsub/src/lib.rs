@@ -21,6 +21,9 @@ pub mod subscriber;
 /// PubSub id reservation and configuration-version compatibility helpers.
 pub mod reservation;
 
+/// OPC UA FX in-process connection orchestration helpers.
+pub mod fx;
+
 /// PubSub security key management and OPC UA Part 14 secured-NetworkMessage codec.
 ///
 /// Secured UADP NetworkMessages use the Part 14 (§7.2.4.4) wire format: the real SecurityHeader
@@ -35,6 +38,7 @@ pub use config::{
 };
 
 pub use engine::{PubSubEngine, TransportKind};
+pub use fx::{ConnectionManager, EstablishedConnection};
 pub use reservation::{configuration_version_compatible, IdReservation};
 pub use security::{
     SecurityGroup, SecurityKeySet, SharedSecurityGroup, TimeBasedKeyRotator, UadpSecurityCodec,

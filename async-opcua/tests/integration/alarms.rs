@@ -19,8 +19,9 @@ use opcua::{
 use opcua_client::alarms::client::{get_alarm_event_select_clauses, parse_alarm_event};
 use opcua_core::events::AlarmEvent;
 use opcua_server::alarms::{
-    register_condition_methods, ConditionRegistry, DiscreteAlarm, DiscreteAlarmKind, LimitAlarm,
-    LimitConfig, LimitDef, LimitMode, ShelvingState,
+    register_condition_methods, register_dialog_condition_methods, ConditionRegistry,
+    DialogCondition, DialogRegistry, DiscreteAlarm, DiscreteAlarmKind, LimitAlarm, LimitConfig,
+    LimitDef, LimitMode, ShelvingState,
 };
 use opcua_server::namespace::{
     register_alarm_condition, register_discrete_alarm, register_limit_alarm,
@@ -1616,4 +1617,109 @@ async fn alarm_add_comment_reports_without_state_change() {
         );
         assert!(state_machine.get_active(&space));
     }
+}
+
+/// Part 9 §5.6 DialogConditionType: an active dialog is ended by Respond (DialogState -> Inactive,
+/// LastResponse recorded); Respond on an inactive dialog or with an out-of-range index is rejected.
+#[tokio::test]
+async fn dialog_condition_respond_ends_dialog_and_validates() {
+    let (tester, nm, session) = setup_alarms().await;
+
+    let source_node_id = NodeId::new(2, "DialogDevice");
+    {
+        let mut space = nm.address_space().write();
+        let source_node = opcua::server::address_space::ObjectBuilder::new(
+            &source_node_id,
+            "DialogDevice",
+            "DialogDevice",
+        )
+        .component_of(ObjectId::ObjectsFolder)
+        .event_notifier(opcua::server::address_space::EventNotifier::SUBSCRIBE_TO_EVENTS)
+        .build();
+        space.insert::<_, NodeId>(source_node, None);
+    }
+
+    let core_nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<CoreNodeManager>()
+        .expect("CoreNodeManager not found");
+
+    let dialog = {
+        let mut space = nm.address_space().write();
+        DialogCondition::create_in_address_space(
+            &mut space,
+            2,
+            "Device1",
+            "Restart",
+            source_node_id.clone(),
+            LocalizedText::new("en", "Restart the device?"),
+            vec![
+                LocalizedText::new("en", "Yes"),
+                LocalizedText::new("en", "No"),
+            ],
+            1, // default response
+            0, // ok response
+            1, // cancel response
+        )
+    };
+    let condition_id = dialog.condition_state_machine().condition_id.clone();
+
+    let registry = DialogRegistry::new();
+    registry.register(dialog.clone());
+    register_dialog_condition_methods(&core_nm, registry, nm.address_space().clone());
+
+    // Activate the dialog (it is shown to the operator).
+    {
+        let mut space = nm.address_space().write();
+        let _ = dialog.activate(&mut space);
+        assert!(
+            dialog.get_dialog_state_active(&space),
+            "dialog should be active after activate"
+        );
+    }
+
+    // Respond with a valid option (index 0 = "Yes") ends the dialog.
+    let resp = session
+        .call_one(CallMethodRequest {
+            object_id: condition_id.clone(),
+            method_id: MethodId::DialogConditionType_Respond.into(),
+            input_arguments: Some(vec![Variant::Int32(0)]),
+        })
+        .await
+        .unwrap();
+    assert_eq!(resp.status_code, StatusCode::Good);
+    {
+        let space = nm.address_space().read();
+        assert!(
+            !dialog.get_dialog_state_active(&space),
+            "Respond must end the dialog"
+        );
+    }
+
+    // Respond again on the now-inactive dialog -> BadDialogNotActive.
+    let inactive = session
+        .call_one(CallMethodRequest {
+            object_id: condition_id.clone(),
+            method_id: MethodId::DialogConditionType_Respond.into(),
+            input_arguments: Some(vec![Variant::Int32(0)]),
+        })
+        .await
+        .unwrap();
+    assert_eq!(inactive.status_code, StatusCode::BadDialogNotActive);
+
+    // Re-activate, then respond with an out-of-range index -> BadDialogResponseInvalid.
+    {
+        let mut space = nm.address_space().write();
+        let _ = dialog.activate(&mut space);
+    }
+    let oob = session
+        .call_one(CallMethodRequest {
+            object_id: condition_id,
+            method_id: MethodId::DialogConditionType_Respond.into(),
+            input_arguments: Some(vec![Variant::Int32(5)]),
+        })
+        .await
+        .unwrap();
+    assert_eq!(oob.status_code, StatusCode::BadDialogResponseInvalid);
 }

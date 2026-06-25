@@ -59,6 +59,7 @@ impl EventField for ServerAlarmEvent<'_> {
                     "ActiveState" => return Variant::from(self.event.active_state),
                     "AckedState" => return Variant::from(self.event.acked_state),
                     "ConfirmedState" => return Variant::from(self.event.confirmed_state),
+                    "DialogState" => return Variant::from(self.event.active_state),
                     "EnabledState" => return Variant::from(true),
                     _ => {}
                 }
@@ -93,6 +94,7 @@ impl EventField for ServerAlarmEvent<'_> {
                 "ActiveState" => return Variant::from(self.event.active_state),
                 "AckedState" => return Variant::from(self.event.acked_state),
                 "ConfirmedState" => return Variant::from(self.event.confirmed_state),
+                "DialogState" => return Variant::from(self.event.active_state),
                 "EnabledState" => return Variant::from(true),
                 _ => {}
             }

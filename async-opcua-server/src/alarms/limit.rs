@@ -2,6 +2,7 @@
 //! NonExclusiveLimitAlarmType.
 
 use crate::address_space::{AddressSpace, ObjectBuilder, VariableBuilder};
+use crate::alarms::replace_condition_type_definition;
 use crate::alarms::state_machine::ConditionStateMachine;
 use opcua_core::events::AlarmEvent;
 use opcua_nodes::{DefaultTypeTree, NodeType};
@@ -12,7 +13,6 @@ use opcua_types::{
 };
 use std::sync::Mutex;
 
-const ALARM_CONDITION_TYPE_ID: u32 = 2915;
 const EXCLUSIVE_LIMIT_ALARM_TYPE_ID: u32 = 9341;
 const NON_EXCLUSIVE_LIMIT_ALARM_TYPE_ID: u32 = 9906;
 const EXCLUSIVE_STATE_HIGH_HIGH_ID: u32 = 9329;
@@ -779,18 +779,6 @@ fn level_name(level: LimitLevel) -> &'static str {
         LimitLevel::Low => "Low",
         LimitLevel::LowLow => "LowLow",
     }
-}
-
-fn replace_condition_type_definition(
-    address_space: &mut AddressSpace,
-    condition_id: &NodeId,
-    new_type: NodeId,
-) {
-    let old_type = NodeId::new(0, ALARM_CONDITION_TYPE_ID);
-    let reference_type = NodeId::from(ReferenceTypeId::HasTypeDefinition);
-
-    address_space.delete_reference(condition_id, &old_type, &reference_type);
-    address_space.insert_reference(condition_id, &new_type, ReferenceTypeId::HasTypeDefinition);
 }
 
 fn add_limit_property(

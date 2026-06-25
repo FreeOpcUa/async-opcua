@@ -2,15 +2,14 @@
 //! TripAlarmType.
 
 use crate::address_space::{AddressSpace, VariableBuilder};
+use crate::alarms::replace_condition_type_definition;
 use crate::alarms::state_machine::ConditionStateMachine;
 use opcua_core::events::AlarmEvent;
 use opcua_types::{
-    DataTypeId, DateTime, LocalizedText, NodeId, ObjectTypeId, ReferenceTypeId, VariableTypeId,
-    Variant,
+    DataTypeId, DateTime, LocalizedText, NodeId, ObjectTypeId, VariableTypeId, Variant,
 };
 use std::sync::Mutex;
 
-const ALARM_CONDITION_TYPE_ID: u32 = 2915;
 const ACTIVE_SEVERITY: u16 = 500;
 const INACTIVE_SEVERITY: u16 = 0;
 
@@ -158,16 +157,4 @@ impl DiscreteAlarmKind {
             Self::Trip => NodeId::from(ObjectTypeId::TripAlarmType),
         }
     }
-}
-
-fn replace_condition_type_definition(
-    address_space: &mut AddressSpace,
-    condition_id: &NodeId,
-    new_type: NodeId,
-) {
-    let old_type = NodeId::new(0, ALARM_CONDITION_TYPE_ID);
-    let reference_type = NodeId::from(ReferenceTypeId::HasTypeDefinition);
-
-    address_space.delete_reference(condition_id, &old_type, &reference_type);
-    address_space.insert_reference(condition_id, &new_type, ReferenceTypeId::HasTypeDefinition);
 }

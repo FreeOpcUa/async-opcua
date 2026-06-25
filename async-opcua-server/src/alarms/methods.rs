@@ -1,6 +1,7 @@
 //! Client method acknowledgment callbacks and identity validation handlers for Alarms.
 
 use crate::address_space::AddressSpace;
+use crate::alarms::dialog::DialogRegistry;
 use crate::alarms::dispatch::ServerAlarmEvent;
 use crate::alarms::refresh_events::{RefreshEndEvent, RefreshStartEvent};
 use crate::alarms::registry::ConditionRegistry;
@@ -282,6 +283,64 @@ impl AlarmMethodHandler {
     }
 }
 
+/// Handler for OPC UA Part 9 dialog response method calls on standard namespace method ids.
+pub struct DialogConditionMethodHandler {
+    /// Shared registry of dialog conditions to receive responses.
+    pub registry: DialogRegistry,
+    /// Thread-safe reference to the AddressSpace.
+    pub address_space: Arc<opcua_core::sync::RwLock<AddressSpace>>,
+}
+
+impl DialogConditionMethodHandler {
+    /// Creates a new `DialogConditionMethodHandler` instance.
+    pub fn new(
+        registry: DialogRegistry,
+        address_space: Arc<opcua_core::sync::RwLock<AddressSpace>>,
+    ) -> Self {
+        Self {
+            registry,
+            address_space,
+        }
+    }
+
+    /// Callback executed when the standard Respond method is called by a client.
+    pub fn handle_dialog_respond(
+        &self,
+        context: &RequestContext,
+        object_id: &NodeId,
+        args: &[Variant],
+    ) -> Result<Vec<Variant>, StatusCode> {
+        let selected_response = parse_i32_arg(args, 0)?;
+        let dialog = self
+            .registry
+            .get(object_id)
+            .ok_or(StatusCode::BadNodeIdUnknown)?;
+        let mut address_space = opcua_core::trace_write_lock!(self.address_space);
+        let event = dialog.respond(&mut address_space, selected_response)?;
+        notify_alarm_event(context, &event);
+        Ok(vec![])
+    }
+
+    /// Callback executed when the standard Respond2 method is called by a client.
+    pub fn handle_dialog_respond2(
+        &self,
+        context: &RequestContext,
+        object_id: &NodeId,
+        args: &[Variant],
+    ) -> Result<Vec<Variant>, StatusCode> {
+        let selected_response = parse_i32_arg(args, 0)?;
+        let comment = parse_localized_text_arg(args, 1)?;
+        let dialog = self
+            .registry
+            .get(object_id)
+            .ok_or(StatusCode::BadNodeIdUnknown)?;
+        let mut address_space = opcua_core::trace_write_lock!(self.address_space);
+        let event = dialog.respond2(&mut address_space, selected_response, comment)?;
+        notify_alarm_event(context, &event);
+        Ok(vec![])
+    }
+}
+
 /// Handler for OPC UA Part 9 condition method calls on standard namespace method ids.
 pub struct ConditionRefreshHandler {
     /// Shared registry of condition state machines to replay.
@@ -532,6 +591,7 @@ impl EventField for OwnedAlarmEvent {
                     "ActiveState" => return Variant::from(self.event.active_state),
                     "AckedState" => return Variant::from(self.event.acked_state),
                     "ConfirmedState" => return Variant::from(self.event.confirmed_state),
+                    "DialogState" => return Variant::from(self.event.active_state),
                     "EnabledState" => return Variant::from(true),
                     _ => {}
                 }
@@ -563,6 +623,7 @@ impl EventField for OwnedAlarmEvent {
                 "ActiveState" => return Variant::from(self.event.active_state),
                 "AckedState" => return Variant::from(self.event.acked_state),
                 "ConfirmedState" => return Variant::from(self.event.confirmed_state),
+                "DialogState" => return Variant::from(self.event.active_state),
                 "EnabledState" => return Variant::from(true),
                 _ => {}
             }
@@ -637,6 +698,33 @@ pub fn register_condition_methods(
     );
 }
 
+/// Registers standard DialogConditionType Respond and Respond2 method callbacks.
+#[cfg(feature = "generated-address-space")]
+pub fn register_dialog_condition_methods(
+    core_node_manager: &crate::node_manager::memory::CoreNodeManager,
+    registry: DialogRegistry,
+    address_space: Arc<opcua_core::sync::RwLock<AddressSpace>>,
+) {
+    let handler = Arc::new(DialogConditionMethodHandler::new(registry, address_space));
+
+    let respond_handler = handler.clone();
+    core_node_manager.inner().add_method_callback_with_context(
+        MethodId::DialogConditionType_Respond.into(),
+        move |ctx, object_id, args| respond_handler.handle_dialog_respond(ctx, object_id, args),
+    );
+
+    core_node_manager.inner().add_method_callback_with_context(
+        MethodId::DialogConditionType_Respond2.into(),
+        move |ctx, object_id, args| handler.handle_dialog_respond2(ctx, object_id, args),
+    );
+}
+
+fn notify_alarm_event(context: &RequestContext, event: &AlarmEvent) {
+    let wrapper = ServerAlarmEvent { event };
+    let items = std::iter::once((&wrapper as &dyn Event, &event.source_node));
+    context.subscriptions.notify_events(items);
+}
+
 fn parse_u32_arg(args: &[Variant], index: usize) -> Result<u32, StatusCode> {
     let Some(arg) = args.get(index) else {
         return Err(StatusCode::BadInvalidArgument);
@@ -649,6 +737,22 @@ fn parse_f64_arg(args: &[Variant], index: usize) -> Result<f64, StatusCode> {
         return Err(StatusCode::BadInvalidArgument);
     };
     f64::try_from_variant(arg.clone()).map_err(|_| StatusCode::BadInvalidArgument)
+}
+
+fn parse_i32_arg(args: &[Variant], index: usize) -> Result<i32, StatusCode> {
+    match args.get(index) {
+        Some(Variant::Int32(value)) => Ok(*value),
+        Some(_) => Err(StatusCode::BadTypeMismatch),
+        None => Err(StatusCode::BadArgumentsMissing),
+    }
+}
+
+fn parse_localized_text_arg(args: &[Variant], index: usize) -> Result<LocalizedText, StatusCode> {
+    match args.get(index) {
+        Some(Variant::LocalizedText(value)) => Ok((**value).clone()),
+        Some(_) => Err(StatusCode::BadTypeMismatch),
+        None => Err(StatusCode::BadArgumentsMissing),
+    }
 }
 
 fn build_current_alarm_event(

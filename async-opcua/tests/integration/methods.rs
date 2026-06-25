@@ -576,3 +576,109 @@ async fn call_with_missing_arguments() {
         .unwrap();
     assert_eq!(r.status_code, StatusCode::BadArgumentsMissing);
 }
+
+/// Part 4/3 auditing: a method Call emits an AuditUpdateMethodEventType (i=2127) from the Server node,
+/// recording the called MethodId.
+#[tokio::test]
+async fn method_call_emits_audit_event() {
+    use opcua::types::{
+        EventFilter, ExtensionObject, MonitoringMode, NumericRange, QualifiedName,
+        SimpleAttributeOperand,
+    };
+
+    let (_tester, nm, session) = setup().await;
+
+    let id = nm.inner().next_node_id();
+    let input_id = nm.inner().next_node_id();
+    let output_id = nm.inner().next_node_id();
+    {
+        let mut sp = nm.address_space().write();
+        MethodBuilder::new(&id, "AuditMethod", "AuditMethod")
+            .component_of(ObjectId::ObjectsFolder)
+            .input_args(&mut *sp, &input_id, &[])
+            .output_args(&mut *sp, &output_id, &[])
+            .insert(&mut *sp);
+    }
+    nm.inner().add_method_cb(id.clone(), move |_| Ok(vec![]));
+
+    // Subscribe to Server events.
+    let (notifs, _, mut events) = ChannelNotifications::new();
+    let sub_id = session
+        .create_subscription(Duration::from_millis(100), 100, 20, 1000, 0, true, notifs)
+        .await
+        .unwrap();
+    let select = vec![
+        SimpleAttributeOperand {
+            type_definition_id: NodeId::new(0, 2041), // BaseEventType
+            browse_path: Some(vec![QualifiedName::new(0, "EventType")]),
+            attribute_id: AttributeId::Value as u32,
+            index_range: NumericRange::None,
+        },
+        SimpleAttributeOperand {
+            type_definition_id: NodeId::new(0, 2127), // AuditUpdateMethodEventType
+            browse_path: Some(vec![QualifiedName::new(0, "MethodId")]),
+            attribute_id: AttributeId::Value as u32,
+            index_range: NumericRange::None,
+        },
+    ];
+    let res = session
+        .create_monitored_items(
+            sub_id,
+            TimestampsToReturn::Both,
+            vec![MonitoredItemCreateRequest {
+                item_to_monitor: ReadValueId {
+                    node_id: ObjectId::Server.into(),
+                    attribute_id: AttributeId::EventNotifier as u32,
+                    ..Default::default()
+                },
+                monitoring_mode: MonitoringMode::Reporting,
+                requested_parameters: MonitoringParameters {
+                    sampling_interval: 0.0,
+                    queue_size: 10,
+                    discard_oldest: true,
+                    filter: ExtensionObject::new(EventFilter {
+                        select_clauses: Some(select),
+                        where_clause: Default::default(),
+                    }),
+                    ..Default::default()
+                },
+            }],
+        )
+        .await
+        .unwrap();
+    assert_eq!(res[0].result.status_code, StatusCode::Good);
+
+    let r = session
+        .call_one(CallMethodRequest {
+            object_id: ObjectId::ObjectsFolder.into(),
+            method_id: id.clone(),
+            input_arguments: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(r.status_code, StatusCode::Good);
+
+    // Find the AuditUpdateMethodEventType event carrying the called MethodId.
+    let audit_type = Variant::from(NodeId::new(0, 2127));
+    let mut found = false;
+    for _ in 0..5 {
+        let Ok(Some((_h, v))) = tokio::time::timeout(Duration::from_secs(3), events.recv()).await
+        else {
+            break;
+        };
+        let fields = v.unwrap();
+        if fields[0] == audit_type {
+            assert_eq!(
+                fields[1],
+                Variant::from(id.clone()),
+                "audit must carry the MethodId"
+            );
+            found = true;
+            break;
+        }
+    }
+    assert!(
+        found,
+        "an AuditUpdateMethodEventType must be delivered after a method Call"
+    );
+}

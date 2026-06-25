@@ -15,6 +15,7 @@ use crate::{
 };
 
 const AUDIT_FAILURE_SEVERITY: u16 = 900;
+const AUDIT_SUCCESS_SEVERITY: u16 = 100;
 const AUDIT_SOURCE_NAME: &str = "Server";
 
 #[derive(Clone)]
@@ -53,6 +54,7 @@ struct ServerAuditEvent {
     session_id: Option<NodeId>,
     secure_channel_id: Option<UAString>,
     user_identity_token: Option<ExtensionObject>,
+    method_id: Option<NodeId>,
 }
 
 impl ServerAuditEvent {
@@ -88,6 +90,50 @@ impl ServerAuditEvent {
             session_id,
             secure_channel_id: None,
             user_identity_token: None,
+            method_id: None,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn method_call(
+        server_id: UAString,
+        _request_type: &str,
+        client_audit_entry_id: UAString,
+        client_user_id: UAString,
+        status_code_id: StatusCode,
+        session_id: Option<NodeId>,
+        method_id: NodeId,
+    ) -> Self {
+        let now = DateTime::now();
+        let status = status_code_id.is_good();
+        let severity = if status {
+            AUDIT_SUCCESS_SEVERITY
+        } else {
+            AUDIT_FAILURE_SEVERITY
+        };
+        let message = format!("Method call {method_id}");
+        let base = BaseEventType::new(
+            ObjectTypeId::AuditUpdateMethodEventType,
+            ByteString::from(Uuid::new_v4().as_bytes().as_slice()),
+            message,
+            now,
+        )
+        .set_source_node(ObjectId::Server.into())
+        .set_source_name(UAString::from(AUDIT_SOURCE_NAME))
+        .set_severity(severity);
+
+        Self {
+            base,
+            action_time_stamp: now,
+            status,
+            server_id,
+            client_audit_entry_id,
+            client_user_id,
+            status_code_id,
+            session_id,
+            secure_channel_id: None,
+            user_identity_token: None,
+            method_id: Some(method_id),
         }
     }
 
@@ -166,6 +212,11 @@ impl EventField for ServerAuditEvent {
                 self.user_identity_token
                     .get_value(attribute_id, index_range, &[])
             }
+            "MethodId" => self.method_id.get_value(attribute_id, index_range, &[]),
+            "InputArguments" | "OutputArguments" => {
+                // ponytail: flat audit events do not carry generated method argument arrays.
+                Variant::Empty
+            }
             _ => self
                 .base
                 .get_value(attribute_id, index_range, remaining_path),
@@ -213,6 +264,25 @@ pub(crate) fn dispatch_service_failure(
         context.client_user_id.clone(),
         status,
         context.session_id.clone(),
+    );
+    dispatch_audit_event(subscriptions, &event);
+}
+
+pub(crate) fn dispatch_method_audit(
+    subscriptions: &Arc<SubscriptionCache>,
+    info: &ServerInfo,
+    context: &AuditEventContext,
+    method_id: &NodeId,
+    status: StatusCode,
+) {
+    let event = ServerAuditEvent::method_call(
+        info.application_uri.clone(),
+        context.request_type,
+        context.client_audit_entry_id.clone(),
+        context.client_user_id.clone(),
+        status,
+        context.session_id.clone(),
+        method_id.clone(),
     );
     dispatch_audit_event(subscriptions, &event);
 }

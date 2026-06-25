@@ -3,17 +3,31 @@ use std::sync::Arc;
 use crate::{
     node_manager::{consume_results, DynNodeManager, MethodCall, NodeManagers, RequestContext},
     session::{
+        audit::{self, AuditEventContext},
         controller::Response,
         message_handler::Request,
         services::{invoke_service_concurrently_mut, ServiceCb},
     },
 };
-use opcua_types::{CallRequest, CallResponse, ResponseHeader, StatusCode};
+use opcua_types::{CallRequest, CallResponse, ResponseHeader, StatusCode, UAString};
 use tracing::debug_span;
 use tracing_futures::Instrument;
 
 pub(crate) async fn call(node_managers: NodeManagers, request: Request<CallRequest>) -> Response {
     let context = request.context();
+    let subscriptions = request.subscriptions.clone();
+    let info = request.info.clone();
+    let audit_context = {
+        let session = context.session().read();
+        AuditEventContext::new(
+            "Call",
+            &request.request.request_header,
+            session
+                .user_token()
+                .map(|user_token| UAString::from(user_token.0.as_str())),
+            Some(session.session_id().clone()),
+        )
+    };
     let method_calls = take_service_items!(
         request,
         request.request.methods_to_call,
@@ -57,6 +71,16 @@ pub(crate) async fn call(node_managers: NodeManagers, request: Request<CallReque
         },
     )
     .await;
+
+    for call in &calls {
+        audit::dispatch_method_audit(
+            &subscriptions,
+            &info,
+            &audit_context,
+            call.method_id(),
+            call.status(),
+        );
+    }
 
     let (results, diagnostic_infos) =
         consume_results(calls, request.request.request_header.return_diagnostics);

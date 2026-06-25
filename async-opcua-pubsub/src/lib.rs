@@ -12,6 +12,9 @@ pub mod transport;
 /// Main PubSub publishing engine coordinator.
 pub mod engine;
 
+/// Read-only PubSub information-model reflection.
+pub mod pubsub_model;
+
 /// PubSub security key management and OPC UA Part 14 secured-NetworkMessage codec.
 ///
 /// Secured UADP NetworkMessages use the Part 14 (§7.2.4.4) wire format: the real SecurityHeader

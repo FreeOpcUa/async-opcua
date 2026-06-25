@@ -46,6 +46,7 @@ uuid = { workspace = true, features = ["v4"] }
 # Test-only: an independent crypto path (raw HMAC-SHA256 + AES-CTR) used by the US5 interop
 # cross-check to verify/decrypt production output WITHOUT going through the production codec.
 [dev-dependencies]
+async-opcua-nodes = { path = "../async-opcua-nodes", version = "0.19.0" }
 aes = { workspace = true }
 hmac = { workspace = true }
 sha2 = { workspace = true }

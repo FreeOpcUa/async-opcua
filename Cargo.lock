@@ -597,6 +597,7 @@ dependencies = [
  "aes",
  "async-opcua-core",
  "async-opcua-crypto",
+ "async-opcua-nodes",
  "async-opcua-server",
  "async-opcua-types",
  "futures",

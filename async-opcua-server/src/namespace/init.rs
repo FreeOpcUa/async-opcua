@@ -3,9 +3,10 @@
 
 use crate::address_space::AddressSpace;
 use crate::alarms::{
-    ConditionStateMachine, DiscreteAlarm, DiscreteAlarmKind, LimitAlarm, LimitConfig, LimitMode,
+    read_eurange, ConditionStateMachine, DiscreteAlarm, DiscreteAlarmKind, LimitAlarm, LimitConfig,
+    LimitMode,
 };
-use opcua_types::{MethodId, NodeId, ReferenceTypeId, Variant};
+use opcua_types::{MethodId, NodeId, ReferenceTypeId, StatusCode, Variant};
 use std::sync::Arc;
 
 /// Registers a new Alarm Condition state machine and exposes the standard Acknowledge/Confirm methods.
@@ -95,6 +96,36 @@ pub fn register_limit_alarm(
     }
 
     alarm
+}
+
+/// Registers a new LimitAlarm condition after validating limits against the source EURange.
+///
+/// If the source variable does not expose an AnalogItem EURange property, validation is skipped.
+pub fn register_limit_alarm_checked(
+    address_space: &Arc<opcua_core::sync::RwLock<AddressSpace>>,
+    node_manager: &crate::node_manager::memory::SimpleNodeManager,
+    device: &str,
+    alarm_name: &str,
+    source_node_id: NodeId,
+    cfg: LimitConfig,
+) -> Result<LimitAlarm, StatusCode> {
+    let eurange = {
+        let space = opcua_core::trace_read_lock!(address_space);
+        read_eurange(&space, &source_node_id)
+    };
+
+    if let Some((low, high)) = eurange {
+        cfg.validate_against_eurange(low, high)?;
+    }
+
+    Ok(register_limit_alarm(
+        address_space,
+        node_manager,
+        device,
+        alarm_name,
+        source_node_id,
+        cfg,
+    ))
 }
 
 /// Registers a new DiscreteAlarm condition and exposes the standard Acknowledge/Confirm methods.

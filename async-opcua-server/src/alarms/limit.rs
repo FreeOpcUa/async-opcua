@@ -4,10 +4,11 @@
 use crate::address_space::{AddressSpace, ObjectBuilder, VariableBuilder};
 use crate::alarms::state_machine::ConditionStateMachine;
 use opcua_core::events::AlarmEvent;
-use opcua_nodes::NodeType;
+use opcua_nodes::{DefaultTypeTree, NodeType};
 use opcua_types::{
-    DataTypeId, DateTime, LocalizedText, NodeId, ObjectTypeId, ReferenceTypeId, StatusCode,
-    VariableTypeId, Variant,
+    AttributeId, BrowseDirection, DataEncoding, DataTypeId, DateTime, LocalizedText, NodeId,
+    NumericRange, ObjectTypeId, QualifiedName, Range, ReferenceTypeId, StatusCode,
+    TimestampsToReturn, VariableTypeId, Variant,
 };
 use std::sync::Mutex;
 
@@ -157,6 +158,17 @@ impl LimitConfig {
         Ok(())
     }
 
+    /// Validates that all configured limit values fit inside the source variable EURange.
+    pub fn validate_against_eurange(&self, low: f64, high: f64) -> Result<(), StatusCode> {
+        for (_, limit) in self.configured_limits() {
+            if limit.value < low || limit.value > high {
+                return Err(StatusCode::BadOutOfRange);
+            }
+        }
+
+        Ok(())
+    }
+
     fn configured_limits(&self) -> Vec<(LimitLevel, LimitDef)> {
         let mut limits = Vec::with_capacity(4);
 
@@ -177,6 +189,36 @@ impl LimitConfig {
         }
 
         limits
+    }
+}
+
+/// Reads the EURange property of an AnalogItem source variable.
+#[must_use]
+pub fn read_eurange(address_space: &AddressSpace, source_node_id: &NodeId) -> Option<(f64, f64)> {
+    let type_tree = DefaultTypeTree::new();
+    let eurange_node = address_space.find_node_by_browse_name(
+        source_node_id,
+        Some((ReferenceTypeId::HasProperty, false)),
+        &type_tree,
+        BrowseDirection::Forward,
+        QualifiedName::from("EURange"),
+    )?;
+
+    let value = eurange_node
+        .as_node()
+        .get_attribute(
+            TimestampsToReturn::Neither,
+            AttributeId::Value,
+            &NumericRange::None,
+            &DataEncoding::Binary,
+        )
+        .and_then(|data_value| data_value.value)?;
+
+    match value {
+        Variant::ExtensionObject(eurange) => eurange
+            .inner_as::<Range>()
+            .map(|range| (range.low, range.high)),
+        _ => None,
     }
 }
 

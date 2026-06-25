@@ -12,8 +12,8 @@ pub mod transitions;
 pub use discrete::{DiscreteAlarm, DiscreteAlarmKind};
 pub use dispatch::{dispatch_alarm_event, ServerAlarmEvent};
 pub use limit::{
-    ActiveLimits, LimitAlarm, LimitConfig, LimitDef, LimitEvaluator, LimitLevel, LimitMode,
-    LimitOutcome, NonExclusiveState,
+    read_eurange, ActiveLimits, LimitAlarm, LimitConfig, LimitDef, LimitEvaluator, LimitLevel,
+    LimitMode, LimitOutcome, NonExclusiveState,
 };
 #[cfg(feature = "generated-address-space")]
 pub use methods::register_condition_methods;

@@ -24,8 +24,9 @@ use opcua_server::alarms::{
 };
 use opcua_server::namespace::{
     register_alarm_condition, register_discrete_alarm, register_limit_alarm,
+    register_limit_alarm_checked,
 };
-use opcua_types::{EventFilter, ExtensionObject};
+use opcua_types::{DataTypeId, EventFilter, ExtensionObject, Range, VariableTypeId};
 use tokio::time::timeout;
 
 pub async fn setup_alarms() -> (Tester, Arc<SimpleNodeManager>, Arc<opcua_client::Session>) {
@@ -1385,5 +1386,83 @@ async fn condition_branch_preserves_unacked_state_and_resolves_independently() {
     assert!(
         sm.retained_branches().is_empty(),
         "a fully acked+confirmed branch is dropped"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// AC4: limit alarms validated against the source AnalogItem's EURange
+// (Part 8 §5.3.2.3 EURange / Part 9 §5.8.18 LimitAlarmType).
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn limit_alarm_validates_against_analog_item_eurange() {
+    let (_tester, nm, _session) = setup_alarms().await;
+
+    // An AnalogItem source variable with EURange [0, 100].
+    let source_id = NodeId::new(2, "AnalogSrc");
+    {
+        use opcua::server::address_space::{ReferenceDirection, VariableBuilder};
+        let mut space = nm.address_space().write();
+        let src = VariableBuilder::new(&source_id, "AnalogSrc", "AnalogSrc")
+            .data_type(DataTypeId::Double)
+            .has_type_definition(VariableTypeId::AnalogItemType)
+            .build();
+        space.insert::<_, NodeId>(src, None);
+
+        let eurange_id = NodeId::new(2, "AnalogSrc_EURange");
+        let eurange = VariableBuilder::new(&eurange_id, "EURange", "EURange")
+            .data_type(DataTypeId::Range)
+            .value(Variant::from(ExtensionObject::new(Range {
+                low: 0.0,
+                high: 100.0,
+            })))
+            .build();
+        space.insert(
+            eurange,
+            Some(&[(&source_id, &NodeId::new(0, 46), ReferenceDirection::Inverse)]),
+        );
+    }
+
+    let within = LimitConfig::new(LimitMode::Exclusive)
+        .with_high(LimitDef {
+            value: 80.0,
+            deadband: 1.0,
+            severity: 400,
+        })
+        .with_high_high(LimitDef {
+            value: 95.0,
+            deadband: 1.0,
+            severity: 700,
+        });
+    assert!(
+        register_limit_alarm_checked(
+            nm.address_space(),
+            &nm,
+            "Tank",
+            "Level",
+            source_id.clone(),
+            within
+        )
+        .is_ok(),
+        "limits inside EURange [0,100] should register"
+    );
+
+    let out_of_range = LimitConfig::new(LimitMode::Exclusive).with_high_high(LimitDef {
+        value: 150.0, // > EURange high 100
+        deadband: 1.0,
+        severity: 700,
+    });
+    assert_eq!(
+        register_limit_alarm_checked(
+            nm.address_space(),
+            &nm,
+            "Tank2",
+            "Level2",
+            source_id.clone(),
+            out_of_range,
+        )
+        .unwrap_err(),
+        StatusCode::BadOutOfRange,
+        "a limit above EURange high must be rejected"
     );
 }

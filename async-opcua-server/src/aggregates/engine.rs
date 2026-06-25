@@ -452,39 +452,68 @@ fn stepped_area_seconds(input: &AggregateInput<'_>) -> Option<(f64 /*area*/, f64
         return None;
     }
 
-    let good_points = good_numeric_points(input);
-    let start_value = input
-        .prior
-        .and_then(|value| value.value.as_ref())
-        .and_then(variant_to_f64)
-        .or_else(|| good_points.first().map(|(_, value, _)| *value))?;
+    let mut values = input.values.to_vec();
+    values.sort_by_key(|value| get_value_timestamp(value));
 
-    let mut knots = Vec::with_capacity(good_points.len() + 2);
-    knots.push((input.interval_start, start_value));
-    knots.extend(
-        good_points
-            .iter()
-            .filter(|(timestamp, _, _)| {
-                *timestamp > input.interval_start && *timestamp < input.interval_end
-            })
-            .map(|(timestamp, value, _)| (*timestamp, *value)),
-    );
-    let last_value = knots.last().map(|(_, value)| *value)?;
-    knots.push((input.interval_end, last_value));
+    let mut knots = Vec::with_capacity(values.len() + 1);
+    if let Some((status, value)) = input.prior.and_then(|prior| {
+        prior
+            .value
+            .as_ref()
+            .and_then(variant_to_f64)
+            .map(|value| (prior.status.unwrap_or(StatusCode::Good), value))
+    }) {
+        knots.push((input.interval_start, status, value));
+    } else if let Some((status, value)) = values.iter().find_map(|value| {
+        let timestamp = get_value_timestamp(value);
+        if timestamp < input.interval_start || timestamp > input.interval_end {
+            return None;
+        }
 
-    let area = knots
-        .windows(2)
-        .map(|window| {
-            let (left_time, left_value) = window[0];
-            let (right_time, _) = window[1];
-            left_value * (right_time.ticks() - left_time.ticks()) as f64 / 10_000_000.0
-        })
-        .sum::<f64>();
-    let seconds = (input.interval_end.ticks() - input.interval_start.ticks()) as f64 / 10_000_000.0;
+        value
+            .value
+            .as_ref()
+            .and_then(variant_to_f64)
+            .map(|numeric| (value.status.unwrap_or(StatusCode::Good), numeric))
+    }) {
+        knots.push((input.interval_start, status, value));
+    } else {
+        return None;
+    }
 
-    // ponytail: Bad-region reduction per OPC UA Part 13 §5.4.3.6/§5.4.3.7 is deferred to the
-    // status-aware phase; stepped coverage currently spans the full interval.
-    Some((area, seconds))
+    knots.extend(values.into_iter().filter_map(|value| {
+        let timestamp = get_value_timestamp(value);
+        if timestamp > input.interval_start && timestamp < input.interval_end {
+            value
+                .value
+                .as_ref()
+                .and_then(variant_to_f64)
+                .map(|numeric| (timestamp, value.status.unwrap_or(StatusCode::Good), numeric))
+        } else {
+            None
+        }
+    }));
+
+    let mut area = 0.0;
+    let mut good_seconds = 0.0;
+    for index in 0..knots.len() {
+        let (left_time, status, value) = knots[index];
+        let right_time = knots
+            .get(index + 1)
+            .map(|(timestamp, _, _)| *timestamp)
+            .unwrap_or(input.interval_end);
+        let duration_seconds = (right_time.ticks() - left_time.ticks()) as f64 / 10_000_000.0;
+        if duration_seconds > 0.0 && status.is_good() {
+            area += value * duration_seconds;
+            good_seconds += duration_seconds;
+        }
+    }
+
+    if good_seconds > 0.0 {
+        Some((area, good_seconds))
+    } else {
+        None
+    }
 }
 
 fn agg_average(input: &AggregateInput<'_>) -> DataValue {

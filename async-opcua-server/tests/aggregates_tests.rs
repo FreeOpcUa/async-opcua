@@ -673,3 +673,47 @@ fn supported_aggregates_matches_dispatch() {
         Some(StatusCode::BadAggregateNotSupported)
     );
 }
+
+#[test]
+fn phase_f_time_average_excludes_bad_regions() {
+    // Bad region [6,9) is omitted from BOTH area and covered duration (§5.4.3.6/7).
+    // prior Good 10@0s held over [2,6); Bad 99@6s over [6,9) (skipped); Good 20@9s over [9,12).
+    // area = 10*4 + 20*3 = 100; covered Good seconds = 4 + 3 = 7; TimeAverage = 100/7.
+    let series = vec![
+        good(10.0, 0),
+        dv(99.0, 6, StatusCode::BadDataUnavailable),
+        good(20.0, 9),
+    ];
+    let start = DateTime::from((2026, 6, 6, 12, 0, 2));
+    let end = DateTime::from((2026, 6, 6, 12, 0, 12));
+    let cfg = AggregateConfiguration::default();
+
+    let ta = compute_processed_intervals(
+        &series,
+        &NodeId::new(0u16, 2343),
+        &cfg,
+        start,
+        end,
+        10_000.0,
+    );
+    match &ta[0].value {
+        Some(Variant::Double(v)) => assert!((v - 100.0 / 7.0).abs() < 1e-9, "TimeAverage got {v}"),
+        other => panic!("expected Double, got {other:?}"),
+    }
+    // Bad data present -> Uncertain_DataSubNormal.
+    assert_eq!(ta[0].status, Some(StatusCode::UncertainDataSubNormal));
+
+    // Total = the Good-region area = 100 (value-seconds).
+    let total = compute_processed_intervals(
+        &series,
+        &NodeId::new(0u16, 2344),
+        &cfg,
+        start,
+        end,
+        10_000.0,
+    );
+    match &total[0].value {
+        Some(Variant::Double(v)) => assert!((v - 100.0).abs() < 1e-9, "Total got {v}"),
+        other => panic!("expected Double, got {other:?}"),
+    }
+}

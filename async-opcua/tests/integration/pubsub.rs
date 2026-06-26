@@ -545,3 +545,156 @@ async fn pubsub_add_remove_group_methods() {
     }
     assert!(manager.lock().connections.is_empty());
 }
+
+/// Part 14 §9.1.4.5/§9.1.4.3: the PublishedDataSets folder Methods (AddPublishedDataItems /
+/// RemovePublishedDataSet) and the PublishedDataItems Methods (AddVariables / RemoveVariables) make
+/// the top-level DataSet configuration writable, with the spec's ConfigurationVersion concurrency.
+#[tokio::test]
+async fn pubsub_published_dataset_methods() {
+    use crate::utils::setup;
+    use opcua::core::sync::Mutex;
+    use opcua::server::node_manager::memory::CoreNodeManager;
+    use opcua::types::{
+        CallMethodRequest, ConfigurationVersionDataType, ExtensionObject, MethodId, ObjectId,
+        PublishedVariableDataType, StatusCode,
+    };
+    use opcua_pubsub::{register_pubsub_config_methods, PubSubConfigManager};
+
+    let (tester, _nm, session) = setup().await;
+    let core_nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<CoreNodeManager>()
+        .expect("CoreNodeManager");
+
+    let pubsub_ns = 52;
+    core_nm
+        .address_space()
+        .write()
+        .add_namespace("urn:pubsub-pds-test", pubsub_ns);
+    let manager = Arc::new(Mutex::new(PubSubConfigManager::new(pubsub_ns)));
+    register_pubsub_config_methods(&core_nm, core_nm.address_space().clone(), manager.clone());
+
+    let folder: NodeId = ObjectId::PublishSubscribe_PublishedDataSets.into();
+    let published_var = |id: u32| {
+        ExtensionObject::from_message(PublishedVariableDataType {
+            published_variable: NodeId::new(pubsub_ns, id),
+            ..Default::default()
+        })
+    };
+    let version = |major: u32, minor: u32| {
+        Variant::from(ExtensionObject::from_message(
+            ConfigurationVersionDataType {
+                major_version: major,
+                minor_version: minor,
+            },
+        ))
+    };
+    let call = |object_id: NodeId, method_id: MethodId, inputs: Vec<Variant>| {
+        let session = &session;
+        async move {
+            session
+                .call_one(CallMethodRequest {
+                    object_id,
+                    method_id: method_id.into(),
+                    input_arguments: Some(inputs),
+                })
+                .await
+                .unwrap()
+        }
+    };
+
+    // AddPublishedDataItems(Name, FieldNameAliases, FieldFlags, VariablesToAdd) -> DataSetNodeId.
+    let add = call(
+        folder.clone(),
+        MethodId::DataSetFolderType_AddPublishedDataItems,
+        vec![
+            Variant::from("DS1"),
+            Variant::from(vec!["a", "b"]),
+            Variant::from(vec![0u32, 0u32]),
+            Variant::from(vec![published_var(1001), published_var(1002)]),
+        ],
+    )
+    .await;
+    assert_eq!(add.status_code, StatusCode::Good);
+    let outputs = add.output_arguments.unwrap_or_default();
+    let ds_id = match &outputs[0] {
+        Variant::NodeId(id) => (**id).clone(),
+        other => panic!("AddPublishedDataItems must return a NodeId, got {other:?}"),
+    };
+    assert!(core_nm.address_space().read().node_exists(&ds_id));
+    {
+        let m = manager.lock();
+        assert_eq!(m.published_data_sets.len(), 1);
+        assert_eq!(m.published_data_sets[0].name, "DS1");
+        assert_eq!(m.published_data_sets[0].published_variables.len(), 2);
+        let v = &m.published_data_sets[0].configuration_version;
+        assert_eq!((v.major_version, v.minor_version), (1, 0));
+    }
+
+    // AddVariables with the matching version: adds a field, minor version bumps.
+    let add_vars = call(
+        ds_id.clone(),
+        MethodId::PublishedDataItemsType_AddVariables,
+        vec![
+            version(1, 0),
+            Variant::from(vec!["c"]),
+            Variant::from(vec![false]),
+            Variant::from(vec![published_var(1003)]),
+        ],
+    )
+    .await;
+    assert_eq!(add_vars.status_code, StatusCode::Good);
+    {
+        let m = manager.lock();
+        assert_eq!(m.published_data_sets[0].published_variables.len(), 3);
+        let v = &m.published_data_sets[0].configuration_version;
+        assert_eq!((v.major_version, v.minor_version), (1, 1));
+    }
+
+    // AddVariables with a stale version is rejected (optimistic concurrency).
+    let stale = call(
+        ds_id.clone(),
+        MethodId::PublishedDataItemsType_AddVariables,
+        vec![
+            version(1, 0),
+            Variant::Empty,
+            Variant::Empty,
+            Variant::from(vec![published_var(1004)]),
+        ],
+    )
+    .await;
+    assert_eq!(stale.status_code, StatusCode::BadInvalidState);
+    assert_eq!(
+        manager.lock().published_data_sets[0]
+            .published_variables
+            .len(),
+        3
+    );
+
+    // RemoveVariables(version, indices) with the matching version: removes index 0, major bumps.
+    let remove_vars = call(
+        ds_id.clone(),
+        MethodId::PublishedDataItemsType_RemoveVariables,
+        vec![version(1, 1), Variant::from(vec![0u32])],
+    )
+    .await;
+    assert_eq!(remove_vars.status_code, StatusCode::Good);
+    {
+        let m = manager.lock();
+        assert_eq!(m.published_data_sets[0].published_variables.len(), 2);
+        let v = &m.published_data_sets[0].configuration_version;
+        assert_eq!((v.major_version, v.minor_version), (2, 0));
+    }
+
+    // RemovePublishedDataSet drops the whole DataSet.
+    let remove = call(
+        folder.clone(),
+        MethodId::DataSetFolderType_RemovePublishedDataSet,
+        vec![Variant::from(ds_id.clone())],
+    )
+    .await;
+    assert_eq!(remove.status_code, StatusCode::Good);
+    assert!(!core_nm.address_space().read().node_exists(&ds_id));
+    assert!(manager.lock().published_data_sets.is_empty());
+}

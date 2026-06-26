@@ -58,6 +58,28 @@ pub struct PublishedDataSetConfig {
 
 impl Eq for PublishedDataSetConfig {}
 
+/// A named, top-level PublishedDataItems DataSet held under the `PublishedDataSets` folder.
+///
+/// Unlike [`PublishedDataSetConfig`] (which is embedded in a DataSetWriter), this is a
+/// standalone DataSet addressable in the address space and mutated via the writable PubSub
+/// configuration Methods (`AddPublishedDataItems` / `AddVariables` / ...).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PublishedDataItemsConfig {
+    /// Symbolic name of the DataSet (unique within the folder).
+    pub name: String,
+    /// List of published variable NodeIds, in field order.
+    #[serde(
+        deserialize_with = "deserialize_node_ids",
+        serialize_with = "serialize_node_ids"
+    )]
+    pub published_variables: Vec<NodeId>,
+    /// Configuration version for the DataSet metadata.
+    #[serde(default, with = "configuration_version_serde")]
+    pub configuration_version: ConfigurationVersionDataType,
+}
+
+impl Eq for PublishedDataItemsConfig {}
+
 /// Maps specific variable NodeIds to outbound DataSets.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DataSetWriterConfig {

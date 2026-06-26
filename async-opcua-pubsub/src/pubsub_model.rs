@@ -1,10 +1,11 @@
 //! Read-only PubSub information-model reflection.
 
-use crate::config::PubSubConnectionConfig;
+use crate::config::{PubSubConnectionConfig, PublishedDataItemsConfig};
 use opcua_server::address_space::{AddressSpace, ObjectBuilder, VariableBuilder};
 use opcua_types::{DataTypeId, NodeId, ObjectTypeId, ReferenceTypeId, VariableTypeId, Variant};
 
 const PUBLISH_SUBSCRIBE_ID: u32 = 14443;
+const PUBLISHED_DATA_SETS_ID: u32 = 17371;
 
 /// NodeIds created for reflected PubSub configuration entities.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -186,6 +187,42 @@ pub fn reflect_pubsub_config(
     }
 
     map
+}
+
+/// Reflects the top-level PublishedDataItems DataSets under the `PublishedDataSets` folder.
+///
+/// Returns each DataSet's configured name paired with its reflected NodeId. Idempotent for the
+/// deterministic NodeIds it creates.
+#[must_use]
+pub fn reflect_published_data_sets(
+    address_space: &mut AddressSpace,
+    namespace: u16,
+    configs: &[PublishedDataItemsConfig],
+) -> Vec<(String, NodeId)> {
+    let folder = NodeId::new(0, PUBLISHED_DATA_SETS_ID);
+    let mut map = Vec::with_capacity(configs.len());
+
+    for config in configs {
+        let node_id = published_data_set_node_id(namespace, &config.name);
+        ensure_object(
+            address_space,
+            &node_id,
+            &config.name,
+            ObjectTypeId::PublishedDataItemsType,
+        );
+        // Part 14 §9.1.4.5.1: a DataSet is a HasComponent of its DataSetFolder.
+        address_space.insert_reference(&folder, &node_id, ReferenceTypeId::HasComponent);
+        // ponytail: the PublishedData / DataSetMetaData / ConfigurationVersion properties are not
+        // reflected; the live config holds them and the Methods return ConfigurationVersion directly.
+        map.push((config.name.clone(), node_id));
+    }
+
+    map
+}
+
+/// Deterministic NodeId for a reflected top-level PublishedDataItems DataSet.
+pub(crate) fn published_data_set_node_id(namespace: u16, name: &str) -> NodeId {
+    NodeId::new(namespace, format!("PublishedDataSet:{name}"))
 }
 
 fn ensure_object(

@@ -37,7 +37,7 @@ pub mod security;
 
 pub use config::{
     DataSetReaderConfig, DataSetWriterConfig, MessageEncoding, PubSubConnectionConfig,
-    PublishedDataSetConfig, ReaderGroupConfig, WriterGroupConfig,
+    PublishedDataItemsConfig, PublishedDataSetConfig, ReaderGroupConfig, WriterGroupConfig,
 };
 pub use config_methods::{register_pubsub_config_methods, PubSubConfigManager};
 

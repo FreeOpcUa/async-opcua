@@ -5,21 +5,21 @@ use std::sync::Arc;
 use opcua_core::sync::{Mutex, RwLock};
 use opcua_server::{address_space::AddressSpace, node_manager::memory::CoreNodeManager};
 use opcua_types::{
-    ConfigurationVersionDataType, DataSetReaderDataType, DataSetWriterDataType, MethodId, NodeId,
-    PubSubConnectionDataType, ReaderGroupDataType, StatusCode, UAString, Variant,
-    WriterGroupDataType,
+    ConfigurationVersionDataType, DataSetReaderDataType, DataSetWriterDataType, ExtensionObject,
+    MethodId, NodeId, PubSubConnectionDataType, PublishedVariableDataType, ReaderGroupDataType,
+    StatusCode, UAString, Variant, WriterGroupDataType,
 };
 
 use crate::{
     config::{
         DataSetReaderConfig, DataSetWriterConfig, MessageEncoding, PubSubConnectionConfig,
-        PublishedDataSetConfig, ReaderGroupConfig, WriterGroupConfig,
+        PublishedDataItemsConfig, PublishedDataSetConfig, ReaderGroupConfig, WriterGroupConfig,
     },
     pubsub_model::{
         connection_node_id, dataset_reader_id_property_node_id, dataset_reader_node_id,
-        dataset_writer_id_property_node_id, dataset_writer_node_id,
-        reader_group_id_property_node_id, reader_group_node_id, reflect_pubsub_config,
-        writer_group_id_property_node_id, writer_group_node_id,
+        dataset_writer_id_property_node_id, dataset_writer_node_id, published_data_set_node_id,
+        reader_group_id_property_node_id, reader_group_node_id, reflect_published_data_sets,
+        reflect_pubsub_config, writer_group_id_property_node_id, writer_group_node_id,
     },
 };
 
@@ -28,6 +28,8 @@ use crate::{
 pub struct PubSubConfigManager {
     /// Current PubSub connections reflected into the AddressSpace.
     pub connections: Vec<PubSubConnectionConfig>,
+    /// Top-level PublishedDataItems DataSets under the `PublishedDataSets` folder.
+    pub published_data_sets: Vec<PublishedDataItemsConfig>,
     namespace: u16,
 }
 
@@ -37,6 +39,7 @@ impl PubSubConfigManager {
     pub fn new(namespace: u16) -> Self {
         Self {
             connections: Vec::new(),
+            published_data_sets: Vec::new(),
             namespace,
         }
     }
@@ -110,6 +113,36 @@ impl PubSubConfigManager {
             }
         }
         None
+    }
+
+    /// A DataSet name unique within the `PublishedDataSets` folder.
+    fn unique_dataset_name(&self, name: &str) -> String {
+        let base = name.trim();
+        let base = if base.is_empty() { "DataSet" } else { base };
+        if !self.dataset_name_exists(base) {
+            return base.to_string();
+        }
+        let mut suffix = 1;
+        loop {
+            let candidate = format!("{base}{suffix}");
+            if !self.dataset_name_exists(&candidate) {
+                return candidate;
+            }
+            suffix += 1;
+        }
+    }
+
+    fn dataset_name_exists(&self, name: &str) -> bool {
+        self.published_data_sets
+            .iter()
+            .any(|dataset| dataset.name == name)
+    }
+
+    /// Index of the PublishedDataItems DataSet reflected as `object_id`.
+    fn dataset_index_for_node(&self, object_id: &NodeId) -> Option<usize> {
+        self.published_data_sets.iter().position(|dataset| {
+            &published_data_set_node_id(self.namespace, &dataset.name) == object_id
+        })
     }
 }
 
@@ -239,7 +272,7 @@ pub fn register_pubsub_config_methods(
         &[Variant],
     ) -> Result<Vec<Variant>, StatusCode>;
 
-    let methods: [(MethodId, Handler); 9] = [
+    let methods: [(MethodId, Handler); 13] = [
         (MethodId::PublishSubscribe_AddConnection, add_connection),
         (
             MethodId::PublishSubscribe_RemoveConnection,
@@ -269,6 +302,23 @@ pub fn register_pubsub_config_methods(
         (
             MethodId::ReaderGroupType_RemoveDataSetReader,
             remove_dataset_reader,
+        ),
+        // The PublishedDataSets folder's instance Method nodes are absent from the core nodeset, so
+        // (like the rest of this feature) the DataSetFolderType Method nodes route, resolving the
+        // folder from the called object_id.
+        (
+            MethodId::DataSetFolderType_AddPublishedDataItems,
+            add_published_data_items,
+        ),
+        (
+            MethodId::DataSetFolderType_RemovePublishedDataSet,
+            remove_published_data_set,
+        ),
+        // DataSets are created dynamically without instance Methods, so the type Method node routes.
+        (MethodId::PublishedDataItemsType_AddVariables, add_variables),
+        (
+            MethodId::PublishedDataItemsType_RemoveVariables,
+            remove_variables,
         ),
     ];
 
@@ -567,6 +617,171 @@ fn remove_dataset_reader(
     Ok(Vec::new())
 }
 
+// --- PublishedDataSets folder (Part 14 §9.1.4.5/§9.1.4.3) ------------------------------------------
+
+fn add_published_data_items(
+    address_space: &Arc<RwLock<AddressSpace>>,
+    manager: &Arc<Mutex<PubSubConfigManager>>,
+    _object_id: &NodeId,
+    args: &[Variant],
+) -> Result<Vec<Variant>, StatusCode> {
+    // Signature: (Name, FieldNameAliases[], FieldFlags[], VariablesToAdd[]).
+    // ponytail: FieldNameAliases/FieldFlags are dropped; the config models only the variable NodeIds.
+    let name = decode_string_argument(args, 0)?;
+    let variables = decode_published_variable_node_ids(args, 3);
+    let add_results: Vec<StatusCode> = variables.iter().map(|_| StatusCode::Good).collect();
+
+    let mut manager = manager.lock();
+    let ns = manager.namespace;
+    let unique = manager.unique_dataset_name(&name);
+    // New DataSet starts at version {1, 0}; structural changes bump it (see add/remove variables).
+    let version = ConfigurationVersionDataType {
+        major_version: 1,
+        minor_version: 0,
+    };
+    manager.published_data_sets.push(PublishedDataItemsConfig {
+        name: unique.clone(),
+        published_variables: variables,
+        configuration_version: version.clone(),
+    });
+
+    let mut space = address_space.write();
+    let _ = reflect_published_data_sets(&mut space, ns, &manager.published_data_sets);
+    Ok(vec![
+        Variant::from(published_data_set_node_id(ns, &unique)),
+        Variant::from(ExtensionObject::from_message(version)),
+        add_results.into(),
+    ])
+}
+
+fn remove_published_data_set(
+    address_space: &Arc<RwLock<AddressSpace>>,
+    manager: &Arc<Mutex<PubSubConfigManager>>,
+    _object_id: &NodeId,
+    args: &[Variant],
+) -> Result<Vec<Variant>, StatusCode> {
+    let node = decode_node_id_argument(args)?;
+
+    let mut manager = manager.lock();
+    let ns = manager.namespace;
+    let idx = manager
+        .dataset_index_for_node(node)
+        .ok_or(StatusCode::BadNodeIdUnknown)?;
+    let removed = manager.published_data_sets.remove(idx);
+
+    let mut space = address_space.write();
+    space.delete(&published_data_set_node_id(ns, &removed.name), true);
+    let _ = reflect_published_data_sets(&mut space, ns, &manager.published_data_sets);
+    Ok(Vec::new())
+}
+
+fn add_variables(
+    address_space: &Arc<RwLock<AddressSpace>>,
+    manager: &Arc<Mutex<PubSubConfigManager>>,
+    object_id: &NodeId,
+    args: &[Variant],
+) -> Result<Vec<Variant>, StatusCode> {
+    // Signature: (ConfigurationVersion, FieldNameAliases[], PromotedFields[], VariablesToAdd[]).
+    let expected = decode_configuration_version(args, 0)?;
+    let variables = decode_published_variable_node_ids(args, 3);
+    let add_results: Vec<StatusCode> = variables.iter().map(|_| StatusCode::Good).collect();
+
+    let mut manager = manager.lock();
+    let ns = manager.namespace;
+    let idx = manager
+        .dataset_index_for_node(object_id)
+        .ok_or(StatusCode::BadNodeIdUnknown)?;
+
+    let new_version = {
+        let dataset = &mut manager.published_data_sets[idx];
+        // Part 14 §9.1.4.3.2: the supplied version must match the current configuration version.
+        if !version_matches(&expected, &dataset.configuration_version) {
+            return Err(StatusCode::BadInvalidState);
+        }
+        dataset.published_variables.extend(variables);
+        // Adding fields is a non-breaking change: bump the minor version.
+        dataset.configuration_version.minor_version = dataset
+            .configuration_version
+            .minor_version
+            .saturating_add(1);
+        dataset.configuration_version.clone()
+    };
+
+    let mut space = address_space.write();
+    let _ = reflect_published_data_sets(&mut space, ns, &manager.published_data_sets);
+    Ok(vec![
+        Variant::from(ExtensionObject::from_message(new_version)),
+        add_results.into(),
+    ])
+}
+
+fn remove_variables(
+    address_space: &Arc<RwLock<AddressSpace>>,
+    manager: &Arc<Mutex<PubSubConfigManager>>,
+    object_id: &NodeId,
+    args: &[Variant],
+) -> Result<Vec<Variant>, StatusCode> {
+    // Signature: (ConfigurationVersion, VariablesToRemove[] — indices into the current field list).
+    let expected = decode_configuration_version(args, 0)?;
+    let indices = decode_u32_array(args, 1);
+
+    let mut manager = manager.lock();
+    let ns = manager.namespace;
+    let idx = manager
+        .dataset_index_for_node(object_id)
+        .ok_or(StatusCode::BadNodeIdUnknown)?;
+
+    let (new_version, remove_results) = {
+        let dataset = &mut manager.published_data_sets[idx];
+        if !version_matches(&expected, &dataset.configuration_version) {
+            return Err(StatusCode::BadInvalidState);
+        }
+
+        let len = dataset.published_variables.len();
+        let mut remove_results = Vec::with_capacity(indices.len());
+        let mut to_remove = Vec::new();
+        for &index in &indices {
+            if (index as usize) < len {
+                remove_results.push(StatusCode::Good);
+                to_remove.push(index as usize);
+            } else {
+                remove_results.push(StatusCode::BadInvalidArgument);
+            }
+        }
+        // Remove highest-index-first so the earlier indices stay valid as we delete.
+        to_remove.sort_unstable();
+        to_remove.dedup();
+        for &index in to_remove.iter().rev() {
+            dataset.published_variables.remove(index);
+        }
+
+        if !to_remove.is_empty() {
+            // Removing fields is a breaking change: bump major, reset minor.
+            dataset.configuration_version.major_version = dataset
+                .configuration_version
+                .major_version
+                .saturating_add(1);
+            dataset.configuration_version.minor_version = 0;
+        }
+        (dataset.configuration_version.clone(), remove_results)
+    };
+
+    let mut space = address_space.write();
+    let _ = reflect_published_data_sets(&mut space, ns, &manager.published_data_sets);
+    Ok(vec![
+        Variant::from(ExtensionObject::from_message(new_version)),
+        remove_results.into(),
+    ])
+}
+
+fn version_matches(
+    expected: &ConfigurationVersionDataType,
+    current: &ConfigurationVersionDataType,
+) -> bool {
+    expected.major_version == current.major_version
+        && expected.minor_version == current.minor_version
+}
+
 fn writer_group_id_taken(connection: &PubSubConnectionConfig, id: u16) -> bool {
     connection
         .writer_groups
@@ -712,6 +927,63 @@ fn decode_node_id_argument(args: &[Variant]) -> Result<&NodeId, StatusCode> {
     };
 
     Ok(node_id)
+}
+
+fn decode_string_argument(args: &[Variant], index: usize) -> Result<String, StatusCode> {
+    let Variant::String(value) = args.get(index).ok_or(StatusCode::BadArgumentsMissing)? else {
+        return Err(StatusCode::BadInvalidArgument);
+    };
+    Ok(value.to_string())
+}
+
+fn decode_configuration_version(
+    args: &[Variant],
+    index: usize,
+) -> Result<ConfigurationVersionDataType, StatusCode> {
+    let Variant::ExtensionObject(object) =
+        args.get(index).ok_or(StatusCode::BadArgumentsMissing)?
+    else {
+        return Err(StatusCode::BadInvalidArgument);
+    };
+    object
+        .inner_as::<ConfigurationVersionDataType>()
+        .cloned()
+        .ok_or(StatusCode::BadInvalidArgument)
+}
+
+/// Extracts the `PublishedVariable` NodeId of each `PublishedVariableDataType` in array `index`.
+///
+/// A missing/empty argument yields an empty list (adding no variables is valid).
+fn decode_published_variable_node_ids(args: &[Variant], index: usize) -> Vec<NodeId> {
+    let Some(Variant::Array(array)) = args.get(index) else {
+        return Vec::new();
+    };
+    array
+        .values
+        .iter()
+        .filter_map(|value| match value {
+            Variant::ExtensionObject(object) => object
+                .inner_as::<PublishedVariableDataType>()
+                .map(|published| published.published_variable.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Extracts a `UInt32[]` argument (e.g. `VariablesToRemove`) as a plain `Vec<u32>`.
+fn decode_u32_array(args: &[Variant], index: usize) -> Vec<u32> {
+    match args.get(index) {
+        Some(Variant::Array(array)) => array
+            .values
+            .iter()
+            .filter_map(|value| match value {
+                Variant::UInt32(v) => Some(*v),
+                _ => None,
+            })
+            .collect(),
+        Some(Variant::UInt32(v)) => vec![*v],
+        _ => Vec::new(),
+    }
 }
 
 fn ua_string_to_string(value: &UAString) -> String {

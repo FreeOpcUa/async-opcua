@@ -70,10 +70,14 @@ surface; do not defer spec-defined behavior on YAGNI/ponytail grounds (user dire
   stale — bit #162).
 
 ## Remaining queue (prioritize with the user)
-- **Connection-level writable PubSub Methods** — AddWriterGroup/AddReaderGroup (on a connection),
-  AddDataSetWriter (on a writer group), AddPublishedDataSet/AddPublishedDataItems + removes. The natural
-  follow-up to #178; harder: instance methods (object_id → which config object) + nested config
-  mutation. Method ids e.g. `PubSubConnectionType_AddWriterGroup` = 17427.
+- **~~Connection-level writable PubSub Methods~~ DONE (#180):** AddWriterGroup/AddReaderGroup/RemoveGroup
+  (connection), AddDataSetWriter/RemoveDataSetWriter (writer group), AddDataSetReader/RemoveDataSetReader
+  (reader group), in `config_methods.rs`. Callbacks register against the *type* Method node and resolve
+  the target config object from the called `object_id` vs. the deterministic reflected NodeIds; added ids
+  minted connection-unique (max+1). Also fixed a #178 latent gap: `AddressSpace::delete` is not recursive,
+  so removals now prune the exact reflected subtree (RemoveConnection reused it). STILL OPEN:
+  AddPublishedDataSet/AddPublishedDataItems + removes — separate `DataSetFolderType` subsystem (published
+  datasets are referenced by writers, not part of the connection config model).
 - **Aggregate subscriptions** — AggregateFilter on MonitoredItems + HistoryUpdate of aggregates;
   touches the hot monitored-item sampling/filter path.
 - **Rest of the Audit hierarchy** — certificate / session-success events, etc. (breadth).

@@ -361,3 +361,187 @@ async fn pubsub_add_remove_connection_methods() {
     assert!(manager.lock().connections.is_empty());
     assert!(!core_nm.address_space().read().node_exists(&new_id));
 }
+
+/// Part 14 §9.1.4: the per-instance connection / group Methods make the nested PubSub configuration
+/// (writer groups, reader groups, and their dataset writers/readers) writable over the address space.
+#[tokio::test]
+async fn pubsub_add_remove_group_methods() {
+    use crate::utils::setup;
+    use opcua::core::sync::Mutex;
+    use opcua::server::node_manager::memory::CoreNodeManager;
+    use opcua::types::{
+        CallMethodRequest, DataSetReaderDataType, DataSetWriterDataType, ExtensionObject, MethodId,
+        ObjectId, PubSubConnectionDataType, ReaderGroupDataType, StatusCode, WriterGroupDataType,
+    };
+    use opcua_pubsub::{register_pubsub_config_methods, PubSubConfigManager};
+
+    let (tester, _nm, session) = setup().await;
+    let core_nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<CoreNodeManager>()
+        .expect("CoreNodeManager");
+
+    let pubsub_ns = 51;
+    core_nm
+        .address_space()
+        .write()
+        .add_namespace("urn:pubsub-group-test", pubsub_ns);
+    let manager = Arc::new(Mutex::new(PubSubConfigManager::new(pubsub_ns)));
+    register_pubsub_config_methods(&core_nm, core_nm.address_space().clone(), manager.clone());
+
+    let call = |object_id: NodeId, method_id: MethodId, arg: Variant| {
+        let session = &session;
+        async move {
+            session
+                .call_one(CallMethodRequest {
+                    object_id,
+                    method_id: method_id.into(),
+                    input_arguments: Some(vec![arg]),
+                })
+                .await
+                .unwrap()
+        }
+    };
+    let node_out = |result: &opcua::types::CallMethodResult| -> NodeId {
+        match &result.output_arguments.as_ref().unwrap()[0] {
+            Variant::NodeId(id) => (**id).clone(),
+            other => panic!("expected a NodeId output, got {other:?}"),
+        }
+    };
+
+    // A connection to hang the groups off.
+    let conn = PubSubConnectionDataType {
+        name: "GroupConn".into(),
+        transport_profile_uri: "udp://239.0.0.1:4840".into(),
+        ..Default::default()
+    };
+    let add_conn = call(
+        ObjectId::PublishSubscribe.into(),
+        MethodId::PublishSubscribe_AddConnection,
+        Variant::from(ExtensionObject::from_message(conn)),
+    )
+    .await;
+    assert_eq!(add_conn.status_code, StatusCode::Good);
+    let conn_id = node_out(&add_conn);
+
+    // AddWriterGroup on the connection.
+    let wg = WriterGroupDataType {
+        name: "WG".into(),
+        publishing_interval: 100.0,
+        ..Default::default()
+    };
+    let add_wg = call(
+        conn_id.clone(),
+        MethodId::PubSubConnectionType_AddWriterGroup,
+        Variant::from(ExtensionObject::from_message(wg)),
+    )
+    .await;
+    assert_eq!(add_wg.status_code, StatusCode::Good);
+    let wg_id = node_out(&add_wg);
+    assert!(core_nm.address_space().read().node_exists(&wg_id));
+
+    // AddDataSetWriter on the writer group.
+    let dsw = DataSetWriterDataType {
+        name: "DSW".into(),
+        data_set_name: "DS".into(),
+        ..Default::default()
+    };
+    let add_dsw = call(
+        wg_id.clone(),
+        MethodId::WriterGroupType_AddDataSetWriter,
+        Variant::from(ExtensionObject::from_message(dsw)),
+    )
+    .await;
+    assert_eq!(add_dsw.status_code, StatusCode::Good);
+    let dsw_id = node_out(&add_dsw);
+    assert!(core_nm.address_space().read().node_exists(&dsw_id));
+
+    // AddReaderGroup + AddDataSetReader.
+    let rg = ReaderGroupDataType {
+        name: "RG".into(),
+        ..Default::default()
+    };
+    let add_rg = call(
+        conn_id.clone(),
+        MethodId::PubSubConnectionType_AddReaderGroup,
+        Variant::from(ExtensionObject::from_message(rg)),
+    )
+    .await;
+    assert_eq!(add_rg.status_code, StatusCode::Good);
+    let rg_id = node_out(&add_rg);
+    assert!(core_nm.address_space().read().node_exists(&rg_id));
+
+    let dsr = DataSetReaderDataType {
+        name: "DSR".into(),
+        ..Default::default()
+    };
+    let add_dsr = call(
+        rg_id.clone(),
+        MethodId::ReaderGroupType_AddDataSetReader,
+        Variant::from(ExtensionObject::from_message(dsr)),
+    )
+    .await;
+    assert_eq!(add_dsr.status_code, StatusCode::Good);
+    let dsr_id = node_out(&add_dsr);
+    assert!(core_nm.address_space().read().node_exists(&dsr_id));
+
+    // The live config now has the full nested shape.
+    {
+        let m = manager.lock();
+        let c = &m.connections[0];
+        assert_eq!(c.writer_groups.len(), 1);
+        assert_eq!(c.writer_groups[0].dataset_writers.len(), 1);
+        assert_eq!(c.reader_groups.len(), 1);
+        assert_eq!(c.reader_groups[0].dataset_readers.len(), 1);
+    }
+
+    // RemoveGroup on the writer group prunes the writer subtree (group + dataset writer).
+    let remove_wg = call(
+        conn_id.clone(),
+        MethodId::PubSubConnectionType_RemoveGroup,
+        Variant::from(wg_id.clone()),
+    )
+    .await;
+    assert_eq!(remove_wg.status_code, StatusCode::Good);
+    {
+        let space = core_nm.address_space().read();
+        assert!(!space.node_exists(&wg_id));
+        assert!(
+            !space.node_exists(&dsw_id),
+            "dataset writer must be pruned too"
+        );
+    }
+    assert!(manager.lock().connections[0].writer_groups.is_empty());
+
+    // RemoveDataSetReader leaves the reader group but drops the reader.
+    let remove_dsr = call(
+        rg_id.clone(),
+        MethodId::ReaderGroupType_RemoveDataSetReader,
+        Variant::from(dsr_id.clone()),
+    )
+    .await;
+    assert_eq!(remove_dsr.status_code, StatusCode::Good);
+    assert!(!core_nm.address_space().read().node_exists(&dsr_id));
+    assert!(manager.lock().connections[0].reader_groups[0]
+        .dataset_readers
+        .is_empty());
+
+    // Removing the connection prunes everything that is left (reader group included).
+    let remove_conn = call(
+        ObjectId::PublishSubscribe.into(),
+        MethodId::PublishSubscribe_RemoveConnection,
+        Variant::from(conn_id.clone()),
+    )
+    .await;
+    assert_eq!(remove_conn.status_code, StatusCode::Good);
+    {
+        let space = core_nm.address_space().read();
+        assert!(!space.node_exists(&conn_id));
+        assert!(
+            !space.node_exists(&rg_id),
+            "reader group must be pruned with its connection"
+        );
+    }
+    assert!(manager.lock().connections.is_empty());
+}

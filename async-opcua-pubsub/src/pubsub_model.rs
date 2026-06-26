@@ -222,39 +222,55 @@ fn ensure_u16_property(
         .insert(address_space);
 }
 
-fn connection_node_id(namespace: u16, connection_id: &str) -> NodeId {
+pub(crate) fn connection_node_id(namespace: u16, connection_id: &str) -> NodeId {
     NodeId::new(namespace, format!("PubSubConnection:{connection_id}"))
 }
 
-fn writer_group_node_id(namespace: u16, connection_id: &str, writer_group_id: u16) -> NodeId {
+pub(crate) fn writer_group_node_id(
+    namespace: u16,
+    connection_id: &str,
+    writer_group_id: u16,
+) -> NodeId {
     NodeId::new(
         namespace,
         format!("WriterGroup:{connection_id}:{writer_group_id}"),
     )
 }
 
-fn reader_group_node_id(namespace: u16, connection_id: &str, reader_group_id: u16) -> NodeId {
+pub(crate) fn reader_group_node_id(
+    namespace: u16,
+    connection_id: &str,
+    reader_group_id: u16,
+) -> NodeId {
     NodeId::new(
         namespace,
         format!("ReaderGroup:{connection_id}:{reader_group_id}"),
     )
 }
 
-fn dataset_writer_node_id(namespace: u16, connection_id: &str, dataset_writer_id: u16) -> NodeId {
+pub(crate) fn dataset_writer_node_id(
+    namespace: u16,
+    connection_id: &str,
+    dataset_writer_id: u16,
+) -> NodeId {
     NodeId::new(
         namespace,
         format!("DataSetWriter:{connection_id}:{dataset_writer_id}"),
     )
 }
 
-fn dataset_reader_node_id(namespace: u16, connection_id: &str, dataset_reader_id: u16) -> NodeId {
+pub(crate) fn dataset_reader_node_id(
+    namespace: u16,
+    connection_id: &str,
+    dataset_reader_id: u16,
+) -> NodeId {
     NodeId::new(
         namespace,
         format!("DataSetReader:{connection_id}:{dataset_reader_id}"),
     )
 }
 
-fn writer_group_id_property_node_id(
+pub(crate) fn writer_group_id_property_node_id(
     namespace: u16,
     connection_id: &str,
     writer_group_id: u16,
@@ -265,7 +281,7 @@ fn writer_group_id_property_node_id(
     )
 }
 
-fn reader_group_id_property_node_id(
+pub(crate) fn reader_group_id_property_node_id(
     namespace: u16,
     connection_id: &str,
     reader_group_id: u16,
@@ -276,7 +292,7 @@ fn reader_group_id_property_node_id(
     )
 }
 
-fn dataset_writer_id_property_node_id(
+pub(crate) fn dataset_writer_id_property_node_id(
     namespace: u16,
     connection_id: &str,
     dataset_writer_id: u16,
@@ -287,7 +303,7 @@ fn dataset_writer_id_property_node_id(
     )
 }
 
-fn dataset_reader_id_property_node_id(
+pub(crate) fn dataset_reader_id_property_node_id(
     namespace: u16,
     connection_id: &str,
     dataset_reader_id: u16,

@@ -55,6 +55,7 @@ struct ServerAuditEvent {
     secure_channel_id: Option<UAString>,
     user_identity_token: Option<ExtensionObject>,
     method_id: Option<NodeId>,
+    attribute_id: Option<u32>,
 }
 
 impl ServerAuditEvent {
@@ -91,6 +92,7 @@ impl ServerAuditEvent {
             secure_channel_id: None,
             user_identity_token: None,
             method_id: None,
+            attribute_id: None,
         }
     }
 
@@ -134,6 +136,52 @@ impl ServerAuditEvent {
             secure_channel_id: None,
             user_identity_token: None,
             method_id: Some(method_id),
+            attribute_id: None,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn write_update(
+        server_id: UAString,
+        _request_type: &str,
+        client_audit_entry_id: UAString,
+        client_user_id: UAString,
+        status_code_id: StatusCode,
+        session_id: Option<NodeId>,
+        node_id: &NodeId,
+        attribute_id: u32,
+    ) -> Self {
+        let now = DateTime::now();
+        let status = status_code_id.is_good();
+        let severity = if status {
+            AUDIT_SUCCESS_SEVERITY
+        } else {
+            AUDIT_FAILURE_SEVERITY
+        };
+        let message = format!("Write to {node_id} attribute {attribute_id}");
+        let base = BaseEventType::new(
+            ObjectTypeId::AuditWriteUpdateEventType,
+            ByteString::from(Uuid::new_v4().as_bytes().as_slice()),
+            message,
+            now,
+        )
+        .set_source_node(ObjectId::Server.into())
+        .set_source_name(UAString::from(AUDIT_SOURCE_NAME))
+        .set_severity(severity);
+
+        Self {
+            base,
+            action_time_stamp: now,
+            status,
+            server_id,
+            client_audit_entry_id,
+            client_user_id,
+            status_code_id,
+            session_id,
+            secure_channel_id: None,
+            user_identity_token: None,
+            method_id: None,
+            attribute_id: Some(attribute_id),
         }
     }
 
@@ -213,8 +261,13 @@ impl EventField for ServerAuditEvent {
                     .get_value(attribute_id, index_range, &[])
             }
             "MethodId" => self.method_id.get_value(attribute_id, index_range, &[]),
+            "AttributeId" => self.attribute_id.get_value(attribute_id, index_range, &[]),
             "InputArguments" | "OutputArguments" => {
                 // ponytail: flat audit events do not carry generated method argument arrays.
+                Variant::Empty
+            }
+            "NewValue" | "OldValue" => {
+                // ponytail: flat audit events do not carry generated write value fields.
                 Variant::Empty
             }
             _ => self
@@ -283,6 +336,27 @@ pub(crate) fn dispatch_method_audit(
         status,
         context.session_id.clone(),
         method_id.clone(),
+    );
+    dispatch_audit_event(subscriptions, &event);
+}
+
+pub(crate) fn dispatch_write_audit(
+    subscriptions: &Arc<SubscriptionCache>,
+    info: &ServerInfo,
+    context: &AuditEventContext,
+    node_id: &NodeId,
+    attribute_id: u32,
+    status: StatusCode,
+) {
+    let event = ServerAuditEvent::write_update(
+        info.application_uri.clone(),
+        context.request_type,
+        context.client_audit_entry_id.clone(),
+        context.client_user_id.clone(),
+        status,
+        context.session_id.clone(),
+        node_id,
+        attribute_id,
     );
     dispatch_audit_event(subscriptions, &event);
 }

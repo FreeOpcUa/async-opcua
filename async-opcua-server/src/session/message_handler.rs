@@ -24,14 +24,17 @@ use crate::{
         get_namespaces_for_user, MonitoredItemRef, NodeManagers, ReadNode, RequestContext,
         RequestContextInner,
     },
-    session::services,
+    session::{
+        audit::{self, AuditEventContext},
+        services,
+    },
     subscriptions::{PendingPublish, SubscriptionCache},
 };
 use opcua_types::{
-    AttributeId, CancelResponse, DataValue, DiagnosticBits, DiagnosticInfo, NamespaceMap,
+    AttributeId, CancelResponse, DataValue, DiagnosticBits, DiagnosticInfo, NamespaceMap, NodeId,
     PublishRequest, ReadRequest, ReadResponse, ReadValueId, ResponseHeader, ServiceFault,
-    SetTriggeringRequest, SetTriggeringResponse, StatusCode, TimestampsToReturn, WriteRequest,
-    WriteResponse,
+    SetTriggeringRequest, SetTriggeringResponse, StatusCode, TimestampsToReturn, UAString,
+    WriteRequest, WriteResponse,
 };
 
 use super::{actor::SessionMessage, controller::Response, instance::Session};
@@ -737,8 +740,9 @@ impl MessageHandler {
 
     fn write(&self, request: Box<WriteRequest>, data: RequestData) -> HandleMessageResult {
         let info = self.info.clone();
+        let subscriptions = self.subscriptions.clone();
         HandleMessageResult::AsyncMessage(tokio::task::spawn(async move {
-            Self::write_via_actor(request, data, info).await
+            Self::write_via_actor(request, data, info, subscriptions).await
         }))
     }
 
@@ -746,6 +750,7 @@ impl MessageHandler {
         request: Box<WriteRequest>,
         data: RequestData,
         info: Arc<ServerInfo>,
+        subscriptions: Arc<SubscriptionCache>,
     ) -> Response {
         let request = *request;
         let Some(nodes_to_write) = request.nodes_to_write else {
@@ -762,6 +767,10 @@ impl MessageHandler {
             return Self::service_fault(&data, StatusCode::BadSessionClosed);
         };
         let include_diagnostics = !request.request_header.return_diagnostics.is_empty();
+        let write_targets: Vec<(NodeId, u32)> = nodes_to_write
+            .iter()
+            .map(|write| (write.node_id.clone(), write.attribute_id))
+            .collect();
 
         // The whole batch is one actor round-trip; node managers run
         // concurrently within it.
@@ -785,6 +794,28 @@ impl MessageHandler {
             if let Some(diagnostics) = &mut diagnostics {
                 diagnostics.push(diagnostic.unwrap_or_default());
             }
+        }
+
+        let audit_context = {
+            let session = data.session.read();
+            AuditEventContext::new(
+                "Write",
+                &request.request_header,
+                session
+                    .user_token()
+                    .map(|user_token| UAString::from(user_token.0.as_str())),
+                Some(session.session_id().clone()),
+            )
+        };
+        for (target, status) in write_targets.iter().zip(&results) {
+            audit::dispatch_write_audit(
+                &subscriptions,
+                &info,
+                &audit_context,
+                &target.0,
+                target.1,
+                *status,
+            );
         }
 
         Response {

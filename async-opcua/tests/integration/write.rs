@@ -1042,3 +1042,110 @@ async fn write_out_of_bounds_index_range_is_rejected() {
         "out-of-bounds write must not mutate the array"
     );
 }
+
+/// Part 4/3 auditing: a Write emits an AuditWriteUpdateEventType (i=2100) from the Server node,
+/// recording the written AttributeId.
+#[tokio::test]
+async fn write_emits_audit_event() {
+    use crate::utils::ChannelNotifications;
+    use opcua::types::{
+        EventFilter, ExtensionObject, MonitoredItemCreateRequest, MonitoringMode,
+        MonitoringParameters, ReadValueId, SimpleAttributeOperand,
+    };
+    use std::time::Duration;
+
+    let (tester, nm, session) = setup().await;
+
+    let id = nm.inner().next_node_id();
+    nm.inner().add_node(
+        nm.address_space(),
+        tester.handle.type_tree(),
+        VariableBuilder::new(&id, "AuditedVar", "AuditedVar")
+            .data_type(DataTypeId::String)
+            .value("initial")
+            .access_level(AccessLevel::CURRENT_READ | AccessLevel::CURRENT_WRITE)
+            .user_access_level(AccessLevel::CURRENT_READ | AccessLevel::CURRENT_WRITE)
+            .build()
+            .into(),
+        &ObjectId::ObjectsFolder.into(),
+        &ReferenceTypeId::Organizes.into(),
+        Some(&VariableTypeId::BaseDataVariableType.into()),
+        Vec::new(),
+    );
+
+    let (notifs, _, mut events) = ChannelNotifications::new();
+    let sub_id = session
+        .create_subscription(Duration::from_millis(100), 100, 20, 1000, 0, true, notifs)
+        .await
+        .unwrap();
+    let select = vec![
+        SimpleAttributeOperand {
+            type_definition_id: NodeId::new(0, 2041), // BaseEventType
+            browse_path: Some(vec![QualifiedName::new(0, "EventType")]),
+            attribute_id: AttributeId::Value as u32,
+            index_range: NumericRange::None,
+        },
+        SimpleAttributeOperand {
+            type_definition_id: NodeId::new(0, 2100), // AuditWriteUpdateEventType
+            browse_path: Some(vec![QualifiedName::new(0, "AttributeId")]),
+            attribute_id: AttributeId::Value as u32,
+            index_range: NumericRange::None,
+        },
+    ];
+    let res = session
+        .create_monitored_items(
+            sub_id,
+            TimestampsToReturn::Both,
+            vec![MonitoredItemCreateRequest {
+                item_to_monitor: ReadValueId {
+                    node_id: ObjectId::Server.into(),
+                    attribute_id: AttributeId::EventNotifier as u32,
+                    ..Default::default()
+                },
+                monitoring_mode: MonitoringMode::Reporting,
+                requested_parameters: MonitoringParameters {
+                    sampling_interval: 0.0,
+                    queue_size: 10,
+                    discard_oldest: true,
+                    filter: ExtensionObject::new(EventFilter {
+                        select_clauses: Some(select),
+                        where_clause: Default::default(),
+                    }),
+                    ..Default::default()
+                },
+            }],
+        )
+        .await
+        .unwrap();
+    assert_eq!(res[0].result.status_code, StatusCode::Good);
+
+    let r = session
+        .write(&[write_value(AttributeId::Value, "audited", &id)])
+        .await
+        .unwrap();
+    assert_eq!(r[0], StatusCode::Good);
+
+    // AuditWriteUpdateEventType = i=2100; AttributeId::Value = 13.
+    let audit_type = Variant::from(NodeId::new(0, 2100));
+    let mut found = false;
+    for _ in 0..5 {
+        let Ok(Some((_h, v))) = tokio::time::timeout(Duration::from_secs(3), events.recv()).await
+        else {
+            break;
+        };
+        let fields = v.unwrap();
+        if fields[0] == audit_type {
+            assert_eq!(
+                fields[1],
+                Variant::from(AttributeId::Value as u32),
+                "audit must carry the written AttributeId"
+            );
+            found = true;
+            break;
+        }
+    }
+    assert!(
+        found,
+        "an AuditWriteUpdateEventType must be delivered after a Write"
+    );
+}

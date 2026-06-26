@@ -75,9 +75,18 @@ surface; do not defer spec-defined behavior on YAGNI/ponytail grounds (user dire
   (reader group), in `config_methods.rs`. Callbacks register against the *type* Method node and resolve
   the target config object from the called `object_id` vs. the deterministic reflected NodeIds; added ids
   minted connection-unique (max+1). Also fixed a #178 latent gap: `AddressSpace::delete` is not recursive,
-  so removals now prune the exact reflected subtree (RemoveConnection reused it). STILL OPEN:
-  AddPublishedDataSet/AddPublishedDataItems + removes — separate `DataSetFolderType` subsystem (published
-  datasets are referenced by writers, not part of the connection config model).
+  so removals now prune the exact reflected subtree (RemoveConnection reused it).
+- **~~PublishedDataSet writable Methods~~ DONE (#181):** DataSetFolderType AddPublishedDataItems/
+  RemovePublishedDataSet + PublishedDataItemsType AddVariables/RemoveVariables, in `config_methods.rs`.
+  New top-level `PublishedDataItemsConfig` on `PubSubConfigManager` + `reflect_published_data_sets`
+  (PublishedDataItemsType objects, HasComponent of folder i=17371). AddVariables/RemoveVariables
+  enforce ConfigurationVersion optimistic concurrency (BadInvalidState on mismatch; add=minor++,
+  remove=major++/minor=0). KEY GOTCHA: the folder's *instance* Method nodes (i=17372/17384) are
+  ABSENT from the core nodeset — only the `DataSetFolderType` type nodes (14493/14499) exist (with
+  their InputArguments), so register on the type nodes (same as the rest of this feature). Verified
+  via `validate_method_calls` (mod.rs): needs HasComponent object→method OR
+  `accepts_method_without_object_component` (true for registered ctx callbacks) AND the method node
+  to EXIST. Still open: AddPublishedEvents / *Template / AddDataSetFolder (sub-folders).
 - **Aggregate subscriptions** — AggregateFilter on MonitoredItems + HistoryUpdate of aggregates;
   touches the hot monitored-item sampling/filter path.
 - **Rest of the Audit hierarchy** — certificate / session-success events, etc. (breadth).

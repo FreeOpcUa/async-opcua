@@ -1813,3 +1813,129 @@ async fn aggregate_filter_average() {
 
     session.delete_subscription(sub_id).await.unwrap();
 }
+
+/// ModifyMonitoredItems must restart aggregation when a plain data item is reconfigured with an
+/// AggregateFilter: the item only begins flushing aggregates if modify() (re)sets the deadline.
+#[tokio::test]
+async fn modify_monitored_item_to_aggregate_filter() {
+    use opcua_types::{AggregateConfiguration, AggregateFilter, AggregateFilterResult};
+
+    let (tester, nm, session) = setup().await;
+
+    let id = nm.inner().next_node_id();
+    nm.inner().add_node(
+        nm.address_space(),
+        tester.handle.type_tree(),
+        VariableBuilder::new(&id, "ModAggVar", "ModAggVar")
+            .value(7.0f64)
+            .data_type(DataTypeId::Double)
+            .access_level(AccessLevel::CURRENT_READ)
+            .user_access_level(AccessLevel::CURRENT_READ)
+            .build()
+            .into(),
+        &ObjectId::ObjectsFolder.into(),
+        &ReferenceTypeId::Organizes.into(),
+        Some(&VariableTypeId::BaseDataVariableType.into()),
+        Vec::new(),
+    );
+
+    let (notifs, mut data, _) = ChannelNotifications::new();
+    let sub_id = session
+        .create_subscription(Duration::from_millis(100), 100, 20, 1000, 0, true, notifs)
+        .await
+        .unwrap();
+
+    // Create a plain (non-aggregate) data monitored item.
+    let res = session
+        .create_monitored_items(
+            sub_id,
+            TimestampsToReturn::Both,
+            vec![MonitoredItemCreateRequest {
+                item_to_monitor: ReadValueId {
+                    node_id: id.clone(),
+                    attribute_id: AttributeId::Value as u32,
+                    ..Default::default()
+                },
+                monitoring_mode: MonitoringMode::Reporting,
+                requested_parameters: MonitoringParameters {
+                    sampling_interval: 0.0,
+                    queue_size: 10,
+                    discard_oldest: true,
+                    ..Default::default()
+                },
+            }],
+        )
+        .await
+        .unwrap();
+    let item_id = res[0].result.monitored_item_id;
+
+    // Modify it into an Average AggregateFilter item.
+    let filter = ExtensionObject::from_message(AggregateFilter {
+        start_time: opcua::types::DateTime::now(),
+        aggregate_type: NodeId::new(0, 2342),
+        processing_interval: 200.0,
+        aggregate_configuration: AggregateConfiguration {
+            use_server_capabilities_defaults: true,
+            ..Default::default()
+        },
+    });
+    let modify = session
+        .modify_monitored_items(
+            sub_id,
+            TimestampsToReturn::Both,
+            &[MonitoredItemModifyRequest {
+                monitored_item_id: item_id,
+                requested_parameters: MonitoringParameters {
+                    sampling_interval: 0.0,
+                    queue_size: 10,
+                    discard_oldest: true,
+                    filter,
+                    ..Default::default()
+                },
+            }],
+        )
+        .await
+        .unwrap();
+    assert_eq!(modify[0].status_code, StatusCode::Good);
+    assert!(
+        modify[0]
+            .filter_result
+            .inner_as::<AggregateFilterResult>()
+            .is_some(),
+        "ModifyMonitoredItems must return an AggregateFilterResult"
+    );
+
+    // Drive the constant value; the now-aggregate item must report the Average (7.0).
+    for _ in 0..12 {
+        nm.set_value(
+            tester.handle.subscriptions(),
+            &id,
+            None,
+            DataValue::new_now(7.0f64),
+        )
+        .unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+
+    let mut found = false;
+    for _ in 0..12 {
+        let Ok(Some((r, v))) = timeout(Duration::from_millis(500), data.recv()).await else {
+            break;
+        };
+        if r.node_id != id {
+            continue;
+        }
+        if let Some(Variant::Double(d)) = v.value {
+            if (d - 7.0).abs() < 1e-9 {
+                found = true;
+                break;
+            }
+        }
+    }
+    assert!(
+        found,
+        "after modifying to an AggregateFilter the item must report the Average (7.0)"
+    );
+
+    session.delete_subscription(sub_id).await.unwrap();
+}

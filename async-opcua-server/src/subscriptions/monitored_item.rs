@@ -457,6 +457,16 @@ impl MonitoredItem {
             Ok(f) => f,
             Err(e) => return (filter_res, e),
         };
+        // The filter may have changed to/from/within an AggregateFilter: restart the aggregation
+        // window so a new aggregate item starts flushing and a reconfigured one uses the new
+        // interval, rather than carrying the old buffer/deadline (or none at all).
+        self.aggregate_buffer.clear();
+        self.aggregate_next_deadline = match &self.filter {
+            FilterType::AggregateFilter(agg) => {
+                Some(add_millis(DateTime::now(), agg.processing_interval))
+            }
+            _ => None,
+        };
         let parsed_sampling_interval =
             sanitize_sampling_interval(info, request.requested_parameters.sampling_interval);
         self.sampling_interval = parse_sampling_interval(parsed_sampling_interval);

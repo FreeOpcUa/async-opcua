@@ -91,9 +91,11 @@ surface; do not defer spec-defined behavior on YAGNI/ponytail grounds (user dire
   touches the hot monitored-item sampling/filter path.
 - **Rest of the Audit hierarchy** — DONE so far: Create/ActivateSession (#182); AuditCertificate*EventType
   on client-cert rejection (#183, status-code → 5 subtypes mapping in `certificate_event_type`, dispatched
-  from the CreateSession arm). STILL OPEN: AuditChannel*/AuditOpenSecureChannelEventType (transport layer),
-  AuditCancelEventType (Cancel service), AuditCertificateMismatchEventType (cert-vs-channel binding at
-  ActivateSession), GetEndpoints `// TODO audit` in controller.rs.
+  from the CreateSession arm); AuditCancelEventType on Cancel (#184, from the message-handler Cancel arm,
+  carries RequestHandle). HIGH-VALUE AUDIT EVENTS NOW DONE. STILL OPEN (low-value/deeper, deprioritized):
+  AuditChannel*/AuditOpenSecureChannelEventType (transport layer), AuditCertificateMismatchEventType
+  (needs activate_session to surface the cert-vs-channel mismatch reason vs generic BadSecurityChecksFailed),
+  GetEndpoints `// TODO audit` in controller.rs.
   Audit pattern = extend flat `ServerAuditEvent` in session/audit.rs (`outcome` ctor is status-aware),
   dispatch from the session controller. CI GOTCHA (hit on #182, avoided on #183): a new always-on audit
   event broke `async-opcua-server/tests/event_filter_tests.rs` (subscribes to ALL events) — run the WHOLE

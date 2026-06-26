@@ -60,6 +60,10 @@ struct ServerAuditEvent {
     client_certificate_thumbprint: Option<ByteString>,
     revised_session_timeout: Option<f64>,
     request_handle: Option<u32>,
+    request_type: Option<i32>,
+    security_policy_uri: Option<UAString>,
+    security_mode: Option<i32>,
+    requested_lifetime: Option<u32>,
 }
 
 impl ServerAuditEvent {
@@ -112,6 +116,10 @@ impl ServerAuditEvent {
             client_certificate_thumbprint: None,
             revised_session_timeout: None,
             request_handle: None,
+            request_type: None,
+            security_policy_uri: None,
+            security_mode: None,
+            requested_lifetime: None,
         }
     }
 
@@ -181,6 +189,10 @@ impl ServerAuditEvent {
             client_certificate_thumbprint: None,
             revised_session_timeout: None,
             request_handle: None,
+            request_type: None,
+            security_policy_uri: None,
+            security_mode: None,
+            requested_lifetime: None,
         }
     }
 
@@ -230,6 +242,10 @@ impl ServerAuditEvent {
             client_certificate_thumbprint: None,
             revised_session_timeout: None,
             request_handle: None,
+            request_type: None,
+            security_policy_uri: None,
+            security_mode: None,
+            requested_lifetime: None,
         }
     }
 
@@ -268,6 +284,21 @@ impl ServerAuditEvent {
     /// Records the cancelled request handle for an AuditCancelEventType.
     fn with_request_handle(mut self, request_handle: u32) -> Self {
         self.request_handle = Some(request_handle);
+        self
+    }
+
+    /// Records the secure-channel parameters for an AuditOpenSecureChannelEventType.
+    fn with_secure_channel_params(
+        mut self,
+        request_type: i32,
+        security_policy_uri: &str,
+        security_mode: i32,
+        requested_lifetime: u32,
+    ) -> Self {
+        self.request_type = Some(request_type);
+        self.security_policy_uri = Some(UAString::from(security_policy_uri));
+        self.security_mode = Some(security_mode);
+        self.requested_lifetime = Some(requested_lifetime);
         self
     }
 }
@@ -355,6 +386,16 @@ impl EventField for ServerAuditEvent {
             "RequestHandle" => self
                 .request_handle
                 .get_value(attribute_id, index_range, &[]),
+            "RequestType" => self.request_type.get_value(attribute_id, index_range, &[]),
+            "SecurityPolicyUri" => {
+                self.security_policy_uri
+                    .get_value(attribute_id, index_range, &[])
+            }
+            "SecurityMode" => self.security_mode.get_value(attribute_id, index_range, &[]),
+            "RequestedLifetime" => {
+                self.requested_lifetime
+                    .get_value(attribute_id, index_range, &[])
+            }
             "InputArguments" | "OutputArguments" => {
                 // ponytail: flat audit events do not carry generated method argument arrays.
                 Variant::Empty
@@ -495,6 +536,40 @@ pub(crate) fn dispatch_cancel(
         session_id,
     )
     .with_request_handle(request_handle);
+    dispatch_audit_event(subscriptions, &event);
+}
+
+/// Emits an AuditOpenSecureChannelEventType for an OpenSecureChannel request (Part 4 §A.3).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn dispatch_open_secure_channel(
+    subscriptions: &Arc<SubscriptionCache>,
+    info: &ServerInfo,
+    request_header: &RequestHeader,
+    secure_channel_id: u32,
+    client_certificate: ByteString,
+    request_type: i32,
+    security_policy_uri: &str,
+    security_mode: i32,
+    requested_lifetime: u32,
+    status: StatusCode,
+) {
+    let event = ServerAuditEvent::outcome(
+        ObjectTypeId::AuditOpenSecureChannelEventType,
+        info.application_uri.clone(),
+        "OpenSecureChannel",
+        request_header.audit_entry_id.clone(),
+        UAString::null(),
+        status,
+        None,
+    )
+    .with_secure_channel_id(secure_channel_id)
+    .with_client_certificate(client_certificate)
+    .with_secure_channel_params(
+        request_type,
+        security_policy_uri,
+        security_mode,
+        requested_lifetime,
+    );
     dispatch_audit_event(subscriptions, &event);
 }
 
@@ -722,6 +797,61 @@ mod tests {
             None
         );
         assert_eq!(certificate_event_type(StatusCode::Good), None);
+    }
+
+    #[test]
+    fn open_secure_channel_audit_exposes_channel_params() {
+        let event = ServerAuditEvent::outcome(
+            ObjectTypeId::AuditOpenSecureChannelEventType,
+            UAString::from("urn:test-server"),
+            "OpenSecureChannel",
+            UAString::null(),
+            UAString::null(),
+            StatusCode::Good,
+            None,
+        )
+        .with_secure_channel_id(9)
+        .with_secure_channel_params(
+            1,
+            "http://opcfoundation.org/UA/SecurityPolicy#None",
+            3,
+            3600,
+        );
+
+        assert_eq!(
+            event.get_value(
+                AttributeId::Value,
+                &NumericRange::None,
+                &field("RequestType")
+            ),
+            Variant::Int32(1)
+        );
+        assert_eq!(
+            event.get_value(
+                AttributeId::Value,
+                &NumericRange::None,
+                &field("SecurityPolicyUri")
+            ),
+            Variant::from(UAString::from(
+                "http://opcfoundation.org/UA/SecurityPolicy#None"
+            ))
+        );
+        assert_eq!(
+            event.get_value(
+                AttributeId::Value,
+                &NumericRange::None,
+                &field("SecurityMode")
+            ),
+            Variant::Int32(3)
+        );
+        assert_eq!(
+            event.get_value(
+                AttributeId::Value,
+                &NumericRange::None,
+                &field("RequestedLifetime")
+            ),
+            Variant::UInt32(3600)
+        );
     }
 
     #[test]

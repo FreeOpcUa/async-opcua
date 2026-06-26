@@ -47,7 +47,8 @@ use crate::{
 use super::{
     audit::{
         dispatch_activate_session, dispatch_certificate_audit, dispatch_create_session,
-        dispatch_response_failure, dispatch_service_failure, AuditEventContext,
+        dispatch_open_secure_channel, dispatch_response_failure, dispatch_service_failure,
+        AuditEventContext,
     },
     instance::Session,
     manager::{activate_session, close_session, SessionManager},
@@ -388,6 +389,29 @@ impl<T: ConnectionTransport> SessionController<T> {
                     &req.chunk_info.security_header,
                     self.transport.client_protocol_version(),
                     &r,
+                );
+                let osc_status = match &res {
+                    Err(status) => *status,
+                    Ok(ResponseMessage::ServiceFault(fault)) => {
+                        fault.response_header.service_result
+                    }
+                    Ok(_) => StatusCode::Good,
+                };
+                let client_certificate = match &req.chunk_info.security_header {
+                    SecurityHeader::Asymmetric(header) => header.sender_certificate.clone(),
+                    _ => opcua_types::ByteString::null(),
+                };
+                dispatch_open_secure_channel(
+                    &self.subscriptions,
+                    &self.info,
+                    &r.request_header,
+                    self.channel.secure_channel_id(),
+                    client_certificate,
+                    r.request_type as i32,
+                    self.channel.security_policy().to_uri(),
+                    r.security_mode as i32,
+                    r.requested_lifetime,
+                    osc_status,
                 );
                 if res.is_ok() {
                     self.deadline = self.channel.token_renewal_deadline();

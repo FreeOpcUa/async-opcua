@@ -66,12 +66,14 @@ async fn session_lifecycle_emits_audit_events() {
         .await
         .unwrap();
 
+    let open_channel_type = Variant::from(NodeId::new(0, 2060)); // AuditOpenSecureChannelEventType
     let create_type = Variant::from(NodeId::new(0, 2071)); // AuditCreateSessionEventType
     let activate_type = Variant::from(NodeId::new(0, 2075)); // AuditActivateSessionEventType
+    let mut saw_open_channel = false;
     let mut saw_create = false;
     let mut saw_activate = false;
-    for _ in 0..10 {
-        if saw_create && saw_activate {
+    for _ in 0..12 {
+        if saw_open_channel && saw_create && saw_activate {
             break;
         }
         let Ok(Some((_h, v))) = tokio::time::timeout(Duration::from_secs(3), events.recv()).await
@@ -79,12 +81,18 @@ async fn session_lifecycle_emits_audit_events() {
             break;
         };
         let fields = v.unwrap();
-        if fields[0] == create_type {
+        if fields[0] == open_channel_type {
+            saw_open_channel = true;
+        } else if fields[0] == create_type {
             saw_create = true;
         } else if fields[0] == activate_type {
             saw_activate = true;
         }
     }
+    assert!(
+        saw_open_channel,
+        "an AuditOpenSecureChannelEventType must be delivered when a secure channel is opened"
+    );
     assert!(
         saw_create,
         "an AuditCreateSessionEventType must be delivered when a session is created"

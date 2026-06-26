@@ -15,6 +15,9 @@ pub mod engine;
 /// Read-only PubSub information-model reflection.
 pub mod pubsub_model;
 
+/// Writable PubSub configuration methods.
+pub mod config_methods;
+
 /// Subscriber helpers for applying received PubSub DataSets.
 pub mod subscriber;
 
@@ -36,6 +39,7 @@ pub use config::{
     DataSetReaderConfig, DataSetWriterConfig, MessageEncoding, PubSubConnectionConfig,
     PublishedDataSetConfig, ReaderGroupConfig, WriterGroupConfig,
 };
+pub use config_methods::{register_pubsub_config_methods, PubSubConfigManager};
 
 pub use engine::{PubSubEngine, TransportKind};
 pub use fx::{ConnectionManager, EstablishedConnection};

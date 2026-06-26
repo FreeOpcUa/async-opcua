@@ -288,3 +288,76 @@ async fn test_mqtt_broker_pubsub() {
         received_data.len()
     );
 }
+
+/// Part 14 §9.1.4: the PublishSubscribe object's AddConnection / RemoveConnection Methods make the
+/// PubSub configuration writable over the address space.
+#[tokio::test]
+async fn pubsub_add_remove_connection_methods() {
+    use crate::utils::setup;
+    use opcua::core::sync::Mutex;
+    use opcua::server::node_manager::memory::CoreNodeManager;
+    use opcua::types::{
+        CallMethodRequest, ExtensionObject, MethodId, ObjectId, PubSubConnectionDataType,
+        StatusCode,
+    };
+    use opcua_pubsub::{register_pubsub_config_methods, PubSubConfigManager};
+
+    let (tester, _nm, session) = setup().await;
+    let core_nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<CoreNodeManager>()
+        .expect("CoreNodeManager");
+
+    // Register the writable-config Methods on the PublishSubscribe object (ns0). The PubSub objects
+    // are materialized in a server namespace, which the operator must register first.
+    let pubsub_ns = 50;
+    core_nm
+        .address_space()
+        .write()
+        .add_namespace("urn:pubsub-config-test", pubsub_ns);
+    let manager = Arc::new(Mutex::new(PubSubConfigManager::new(pubsub_ns)));
+    register_pubsub_config_methods(&core_nm, core_nm.address_space().clone(), manager.clone());
+
+    // AddConnection: pass a PubSubConnectionDataType, get back the new connection NodeId.
+    let conn = PubSubConnectionDataType {
+        name: "WritableConn".into(),
+        transport_profile_uri: "udp://239.0.0.1:4840".into(),
+        ..Default::default()
+    };
+    let add = session
+        .call_one(CallMethodRequest {
+            object_id: ObjectId::PublishSubscribe.into(),
+            method_id: MethodId::PublishSubscribe_AddConnection.into(),
+            input_arguments: Some(vec![Variant::from(ExtensionObject::from_message(conn))]),
+        })
+        .await
+        .unwrap();
+    assert_eq!(add.status_code, StatusCode::Good);
+    let outputs = add.output_arguments.unwrap_or_default();
+    let new_id = match &outputs[0] {
+        Variant::NodeId(id) => (**id).clone(),
+        other => panic!("AddConnection must return a NodeId, got {other:?}"),
+    };
+    assert!(!new_id.is_null());
+    {
+        let m = manager.lock();
+        assert_eq!(m.connections.len(), 1);
+        assert_eq!(m.connections[0].name, "WritableConn");
+    }
+    // The connection object now exists in the address space.
+    assert!(core_nm.address_space().read().node_exists(&new_id));
+
+    // RemoveConnection: pass the NodeId, the connection is gone.
+    let remove = session
+        .call_one(CallMethodRequest {
+            object_id: ObjectId::PublishSubscribe.into(),
+            method_id: MethodId::PublishSubscribe_RemoveConnection.into(),
+            input_arguments: Some(vec![Variant::from(new_id.clone())]),
+        })
+        .await
+        .unwrap();
+    assert_eq!(remove.status_code, StatusCode::Good);
+    assert!(manager.lock().connections.is_empty());
+    assert!(!core_nm.address_space().read().node_exists(&new_id));
+}

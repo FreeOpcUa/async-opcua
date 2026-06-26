@@ -24,7 +24,7 @@ legacy-crypto = [
 xsk-rs = { version = "0.3", optional = true }
 async-opcua-core = { path = "../async-opcua-core", version = "0.19.0", default-features = false }
 async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.19.0", default-features = false }
-async-opcua-server = { path = "../async-opcua-server", version = "0.19.0", default-features = false }
+async-opcua-server = { path = "../async-opcua-server", version = "0.19.0", default-features = false, features = ["generated-address-space"] }
 async-opcua-types = { path = "../async-opcua-types", version = "0.19.0", features = ["json"] }
 futures = { workspace = true }
 tokio = { workspace = true }

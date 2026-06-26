@@ -683,3 +683,26 @@ async fn namespace_default_governs_and_node_overrides() {
         "node-level RolePermissions must override the namespace default"
     );
 }
+
+/// US7 / Part 18 §4.6: the RoleSet/RoleType management Methods are gated to SecurityAdmin. A non-admin
+/// (here, the anonymous session) is rejected with Bad_UserAccessDenied.
+#[tokio::test]
+async fn role_management_denied_to_non_security_admin() {
+    let (_tester, _nm, session) = setup().await; // anonymous ⇒ not SecurityAdmin
+    let r = session
+        .call_one(CallMethodRequest {
+            object_id: NodeId::new(0, 15606), // Server.ServerCapabilities.RoleSet
+            method_id: NodeId::new(0, 16301), // RoleSet AddRole
+            input_arguments: Some(vec![
+                Variant::from("Maintainer"),
+                Variant::from("urn:test:roles"),
+            ]),
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        r.status_code,
+        StatusCode::BadUserAccessDenied,
+        "AddRole must be denied to a non-SecurityAdmin session"
+    );
+}

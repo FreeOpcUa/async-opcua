@@ -82,7 +82,7 @@ pub struct ServerInfo {
     /// Authenticator to use when verifying user identities, and checking for user access.
     pub authenticator: Arc<dyn AuthManager>,
     /// Resolver for mapping activated identities to granted role NodeIds.
-    pub(crate) role_resolver: RoleResolver,
+    pub(crate) role_resolver: Arc<RwLock<RoleResolver>>,
     /// Per-namespace default RolePermissions and AccessRestrictions.
     pub(crate) namespace_defaults: NamespaceDefaults,
     /// Structure containing type metadata shared by the entire server.

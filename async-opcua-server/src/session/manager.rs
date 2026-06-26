@@ -772,7 +772,7 @@ pub(crate) async fn activate_session(
             application_uri,
             Some(endpoint_url.clone()),
         )?;
-        let roles = Arc::new(info.role_resolver.resolve(&resolved_identity));
+        let roles = Arc::new(info.role_resolver.read().resolve(&resolved_identity));
         session.activate(
             secure_channel_id,
             server_nonce,
@@ -870,16 +870,16 @@ mod tests {
     use opcua_types::{
         ActivateSessionRequest, AnonymousIdentityToken, ApplicationDescription, ByteString, Error,
         ExtensionObject, MessageSecurityMode, NodeId, RequestHeader, SignatureData, StatusCode,
-        UAString, UserTokenPolicy, UserTokenType,
+        UAString, UserNameIdentityToken, UserTokenPolicy, UserTokenType,
     };
     use tokio::sync::Notify;
 
     use crate::{
         authenticator::{AuthManager, UserToken},
-        config::ServerEndpoint,
-        identity_token::{IdentityToken, POLICY_ID_ANONYMOUS},
+        config::{ServerEndpoint, ServerUserToken},
+        identity_token::{IdentityToken, POLICY_ID_ANONYMOUS, POLICY_ID_USER_PASS_NONE},
         node_manager::NodeManagers,
-        rbac::WellKnownRole,
+        rbac::{rules::IdentityMappingRule, WellKnownRole},
         session::{instance::Session, manager::SessionManager, message_handler::MessageHandler},
         ServerBuilder,
     };
@@ -1121,6 +1121,28 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn activation_reads_runtime_mutable_role_resolver() {
+        let dynamic_role = NodeId::new(1, "RuntimeResolvedRole");
+        let fixture = ActivationFixture::with_username_user("alice", "correct-password");
+
+        {
+            let mut resolver = fixture.info.role_resolver.write();
+            resolver.register_role(dynamic_role.clone());
+            resolver.add_mapping(
+                dynamic_role.clone(),
+                IdentityMappingRule::UserName("alice".into()),
+            );
+        }
+
+        fixture
+            .activate_username_with(SecurityPolicy::None, 7, "alice", "correct-password")
+            .await
+            .expect("username activation should succeed");
+
+        assert!(fixture.session.read().roles().contains(&dynamic_role));
+    }
+
     #[derive(Clone)]
     struct ActivationFixture {
         info: Arc<crate::ServerInfo>,
@@ -1139,6 +1161,31 @@ mod tests {
                 .with_authenticator(authenticator)
                 .build()
                 .expect("test server should build");
+            Self::from_handle(handle)
+        }
+
+        fn with_username_user(username: &str, password: &str) -> Self {
+            let token_id = "runtime-role-user";
+            let (_server, handle) = ServerBuilder::new()
+                .without_node_managers()
+                .application_name("activation runtime role resolver test")
+                .add_user_token(token_id, ServerUserToken::user_pass(username, password))
+                .add_endpoint(
+                    "none",
+                    (
+                        "/",
+                        SecurityPolicy::None,
+                        MessageSecurityMode::None,
+                        &[token_id] as &[&str],
+                    ),
+                )
+                .discovery_urls(vec!["/".to_owned()])
+                .build()
+                .expect("test server should build");
+            Self::from_handle(handle)
+        }
+
+        fn from_handle(handle: crate::ServerHandle) -> Self {
             let info = Arc::clone(handle.info());
             let token = NodeId::new(1, 42);
             let endpoint_url = UAString::from(handle.info().base_endpoint());
@@ -1196,6 +1243,31 @@ mod tests {
             channel.set_secure_channel_id(secure_channel_id);
 
             let request = activate_request(&self.token);
+            let mut handler = MessageHandler::new(
+                Arc::clone(&self.info),
+                self.node_managers.clone(),
+                Arc::clone(&self.subscriptions),
+            );
+            activate_session(&self.manager, &mut channel, &request, &mut handler).await
+        }
+
+        async fn activate_username_with(
+            &self,
+            security_policy: SecurityPolicy,
+            secure_channel_id: u32,
+            username: &str,
+            password: &str,
+        ) -> Result<super::ActivateSessionResponse, StatusCode> {
+            let mut channel = SecureChannel::new(
+                Arc::clone(&self.certificate_store),
+                opcua_core::comms::secure_channel::Role::Server,
+                Arc::new(RwLock::new(Default::default())),
+            );
+            channel.set_security_policy(security_policy);
+            channel.set_security_mode(MessageSecurityMode::None);
+            channel.set_secure_channel_id(secure_channel_id);
+
+            let request = username_activate_request(&self.token, username, password);
             let mut handler = MessageHandler::new(
                 Arc::clone(&self.info),
                 self.node_managers.clone(),
@@ -1319,6 +1391,29 @@ mod tests {
             locale_ids: None,
             user_identity_token: ExtensionObject::from_message(AnonymousIdentityToken {
                 policy_id: UAString::from(POLICY_ID_ANONYMOUS),
+            }),
+            user_token_signature: SignatureData::null(),
+        }
+    }
+
+    fn username_activate_request(
+        authentication_token: &NodeId,
+        username: &str,
+        password: &str,
+    ) -> ActivateSessionRequest {
+        ActivateSessionRequest {
+            request_header: RequestHeader {
+                authentication_token: authentication_token.clone(),
+                ..Default::default()
+            },
+            client_signature: SignatureData::null(),
+            client_software_certificates: None,
+            locale_ids: None,
+            user_identity_token: ExtensionObject::from_message(UserNameIdentityToken {
+                policy_id: UAString::from(POLICY_ID_USER_PASS_NONE),
+                user_name: UAString::from(username),
+                password: ByteString::from(password.as_bytes()),
+                encryption_algorithm: UAString::null(),
             }),
             user_token_signature: SignatureData::null(),
         }

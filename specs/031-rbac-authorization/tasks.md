@@ -197,20 +197,20 @@ AddRole+AddIdentity grants a new session a role; non-admin rejected.
 
 ### Tests for US7
 
-- [ ] T078 [P] [US7] Integration test `it/rbac.rs::add_role_creates_roletype_instance` (Spec: Part 18 §4.6 AddRole)
-- [ ] T079 [P] [US7] Integration test `it/rbac.rs::add_identity_grants_new_session_role` (Spec: Part 18 §4.4.1 AddIdentity)
-- [ ] T080 [P] [US7] Integration test `it/rbac.rs::role_management_denied_to_non_security_admin` (Bad_UserAccessDenied) (Spec: Part 18 §4.6/§4.8; Part 3 §8.55 Call)
-- [ ] T081 [P] [US7] Integration test `it/rbac.rs::remove_identity_revokes_mapping` (Spec: Part 18 §4.4.1 RemoveIdentity)
+- [X] T078 [P] [US7] Integration test `it/rbac.rs::add_role_creates_roletype_instance` (Spec: Part 18 §4.6 AddRole)
+- [X] T079 [P] [US7] Integration test `it/rbac.rs::add_identity_grants_new_session_role` (Spec: Part 18 §4.4.1 AddIdentity)
+- [X] T080 [P] [US7] Integration test `it/rbac.rs::role_management_denied_to_non_security_admin` (Bad_UserAccessDenied) (Spec: Part 18 §4.6/§4.8; Part 3 §8.55 Call)
+- [X] T081 [P] [US7] Integration test `it/rbac.rs::remove_identity_revokes_mapping` (Spec: Part 18 §4.4.1 RemoveIdentity)
 
 ### Implementation for US7
 
-- [ ] T082 [US7] Register `RoleSet.AddRole`/`RemoveRole` method callbacks on the core node manager (PubSub-config-methods pattern), reflecting new RoleType instances under RoleSet (Spec: Part 18 §4.6 RoleSetType Methods)
-- [ ] T083 [US7] Register `RoleType.AddIdentity`/`RemoveIdentity` callbacks updating the resolver's mapping rules (Spec: Part 18 §4.4.1 / §4.8)
-- [ ] T084 [US7] Register `RoleType.AddApplication`/`RemoveApplication` callbacks updating the role's application filter (Spec: Part 18 §4.4.1 Applications)
-- [ ] T085 [US7] Register `RoleType.AddEndpoint`/`RemoveEndpoint` callbacks updating the role's endpoint filter (Spec: Part 18 §4.4.1 Endpoints)
-- [ ] T086 [US7] Gate ALL role-management methods to SecurityAdmin (Call permission + role check), returning Bad_UserAccessDenied otherwise (Spec: Part 18 §4.8 security; Part 3 §4.9.2 SecurityAdmin)
-- [ ] T087 [US7] Ensure runtime mapping changes affect NEW sessions only (resolution at activate) and are reflected in the RoleSet model (Spec: Part 18 §4.4.1)
-- [ ] T088 [US7] Verify the four US7 tests pass (Spec: Part 18 §4.4.1, §4.6)
+- [X] T082 [US7] Register `RoleSet.AddRole`/`RemoveRole` method callbacks on the core node manager (PubSub-config-methods pattern), reflecting new RoleType instances under RoleSet (Spec: Part 18 §4.6 RoleSetType Methods)
+- [X] T083 [US7] Register `RoleType.AddIdentity`/`RemoveIdentity` callbacks updating the resolver's mapping rules (Spec: Part 18 §4.4.1 / §4.8)
+- [X] T084 [US7] Register `RoleType.AddApplication`/`RemoveApplication` callbacks updating the role's application filter (Spec: Part 18 §4.4.1 Applications)
+- [X] T085 [US7] Register `RoleType.AddEndpoint`/`RemoveEndpoint` callbacks updating the role's endpoint filter (Spec: Part 18 §4.4.1 Endpoints)
+- [X] T086 [US7] Gate ALL role-management methods to SecurityAdmin (Call permission + role check), returning Bad_UserAccessDenied otherwise (Spec: Part 18 §4.8 security; Part 3 §4.9.2 SecurityAdmin)
+- [X] T087 [US7] Ensure runtime mapping changes affect NEW sessions only (resolution at activate) and are reflected in the RoleSet model (Spec: Part 18 §4.4.1)
+- [X] T088 [US7] Verify the four US7 tests pass (Spec: Part 18 §4.4.1, §4.6)
 
 **Checkpoint**: runtime role administration works and is privilege-gated.
 

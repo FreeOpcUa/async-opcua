@@ -350,7 +350,7 @@ impl Server {
             authenticator: builder
                 .authenticator
                 .unwrap_or_else(|| Arc::new(DefaultAuthenticator::new(config.user_tokens.clone()))),
-            role_resolver,
+            role_resolver: Arc::new(RwLock::new(role_resolver)),
             namespace_defaults,
             application_uri,
             product_uri,
@@ -415,6 +415,17 @@ impl Server {
 
         let node_managers = NodeManagers::new(final_node_managers);
         node_managers_ref.init_from_node_managers(node_managers.clone());
+
+        #[cfg(feature = "generated-address-space")]
+        if let Some(core_node_manager) =
+            node_managers.get_of_type::<crate::node_manager::memory::CoreNodeManager>()
+        {
+            crate::rbac::role_management::register_role_management_methods(
+                &core_node_manager,
+                Arc::clone(&info.role_resolver),
+                Arc::clone(core_node_manager.address_space()),
+            );
+        }
 
         let session_notify = Arc::new(Notify::new());
         let session_manager = Arc::new(RwLock::new(SessionManager::new(

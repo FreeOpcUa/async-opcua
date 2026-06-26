@@ -12,6 +12,8 @@ use opcua_types::{NodeId, ObjectId};
 pub(crate) mod decision;
 pub(crate) mod defaults;
 pub(crate) mod resolver;
+#[cfg(feature = "generated-address-space")]
+pub(crate) mod role_management;
 pub(crate) mod rules;
 
 /// Standard OPC UA well-known roles used by RoleSet.

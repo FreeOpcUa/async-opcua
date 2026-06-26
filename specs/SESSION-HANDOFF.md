@@ -89,15 +89,16 @@ surface; do not defer spec-defined behavior on YAGNI/ponytail grounds (user dire
   to EXIST. Still open: AddPublishedEvents / *Template / AddDataSetFolder (sub-folders).
 - **Aggregate subscriptions** — AggregateFilter on MonitoredItems + HistoryUpdate of aggregates;
   touches the hot monitored-item sampling/filter path.
-- **Rest of the Audit hierarchy** — DONE so far: Create/ActivateSession (#182, AuditCreateSessionEventType
-  success+failure with cert/thumbprint/RevisedSessionTimeout; AuditActivateSessionEventType now fires on
-  success too). STILL OPEN: AuditCertificate*EventType (cert-validation failures), AuditChannel*/
-  AuditOpenSecureChannelEventType, AuditCancelEventType, GetEndpoints `// TODO audit` in controller.rs.
+- **Rest of the Audit hierarchy** — DONE so far: Create/ActivateSession (#182); AuditCertificate*EventType
+  on client-cert rejection (#183, status-code → 5 subtypes mapping in `certificate_event_type`, dispatched
+  from the CreateSession arm). STILL OPEN: AuditChannel*/AuditOpenSecureChannelEventType (transport layer),
+  AuditCancelEventType (Cancel service), AuditCertificateMismatchEventType (cert-vs-channel binding at
+  ActivateSession), GetEndpoints `// TODO audit` in controller.rs.
   Audit pattern = extend flat `ServerAuditEvent` in session/audit.rs (`outcome` ctor is status-aware),
-  dispatch from the session controller. CI GOTCHA HIT: a new always-on audit event broke
-  `async-opcua-server/tests/event_filter_tests.rs` (subscribes to ALL events, asserted first==activate) —
-  run the WHOLE server crate's tests (`cargo test -p async-opcua-server`, incl. tests/ binaries), not just
-  --lib + the async-opcua integration suite.
+  dispatch from the session controller. CI GOTCHA (hit on #182, avoided on #183): a new always-on audit
+  event broke `async-opcua-server/tests/event_filter_tests.rs` (subscribes to ALL events) — run the WHOLE
+  server crate's tests (`cargo test -p async-opcua-server`, incl. tests/ binaries), not just --lib + the
+  async-opcua integration suite.
 - **Automatic alarm source-monitoring** — alarms self-triggering from a source var via sampling
   (behavioral/architectural change).
 - **Cert** — ChannelThumbprint, multi-cert mixed server.

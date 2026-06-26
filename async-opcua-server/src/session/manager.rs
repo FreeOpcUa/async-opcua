@@ -25,13 +25,14 @@ use crate::{
     subscriptions::SubscriptionCache,
 };
 use opcua_types::{
-    ActivateSessionRequest, ActivateSessionResponse, CloseSessionRequest, CloseSessionResponse,
-    CreateSessionRequest, CreateSessionResponse, Error, NodeId, ResponseHeader, SignatureData,
-    StatusCode,
+    ActivateSessionRequest, ActivateSessionResponse, ByteString, CloseSessionRequest,
+    CloseSessionResponse, CreateSessionRequest, CreateSessionResponse, Error, NodeId,
+    ResponseHeader, SignatureData, StatusCode,
 };
 
 use super::{
     actor::{SessionActor, SessionMessage},
+    audit,
     instance::Session,
     message_handler::MessageHandler,
 };
@@ -690,6 +691,17 @@ pub(crate) async fn activate_session(
             error!(
                 "activate session rejected: client certificate presented at CreateSession does not match the certificate securing the channel (secure channel id {})",
                 secure_channel_id
+            );
+            let mismatch_cert = session
+                .client_certificate()
+                .map(|cert| cert.as_byte_string())
+                .unwrap_or_else(ByteString::null);
+            audit::dispatch_certificate_mismatch(
+                handler.subscriptions(),
+                &info,
+                &request.request_header,
+                Some(session.session_id().clone()),
+                mismatch_cert,
             );
             return Err(StatusCode::BadSecurityChecksFailed);
         }

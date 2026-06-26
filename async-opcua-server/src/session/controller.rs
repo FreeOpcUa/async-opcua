@@ -526,8 +526,8 @@ impl<T: ConnectionTransport> SessionController<T> {
                 self.process_service_result(res, request.request_header.request_handle, id)
             }
             RequestMessage::GetEndpoints(request) => {
-                // TODO audit - generate event for failed service invocation
-
+                // GetEndpoints is a pre-session discovery service that cannot fail here (it always
+                // returns the filtered endpoint list), so there is no failure to audit.
                 let _h = span.enter();
                 let endpoints = self.info.endpoints_with_filters(
                     &request.endpoint_url,

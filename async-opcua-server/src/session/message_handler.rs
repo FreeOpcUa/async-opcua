@@ -194,6 +194,11 @@ impl MessageHandler {
         }
     }
 
+    /// The subscription cache used to dispatch server events (e.g. audit events).
+    pub(crate) fn subscriptions(&self) -> &Arc<SubscriptionCache> {
+        &self.subscriptions
+    }
+
     /// Handle an incoming message and return a result object.
     /// This method returns synchronously, but the returned result object
     /// may take longer to resolve.

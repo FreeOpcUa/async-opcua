@@ -517,6 +517,28 @@ pub(crate) fn dispatch_certificate_audit(
     dispatch_audit_event(subscriptions, &event);
 }
 
+/// Emits an AuditCertificateMismatchEventType when the certificate presented at CreateSession does
+/// not match the certificate securing the channel at ActivateSession (Part 4 §A.2 / §5.6.3).
+pub(crate) fn dispatch_certificate_mismatch(
+    subscriptions: &Arc<SubscriptionCache>,
+    info: &ServerInfo,
+    request_header: &RequestHeader,
+    session_id: Option<NodeId>,
+    certificate: ByteString,
+) {
+    let event = ServerAuditEvent::outcome(
+        ObjectTypeId::AuditCertificateMismatchEventType,
+        info.application_uri.clone(),
+        "Validate ClientCertificate channel binding",
+        request_header.audit_entry_id.clone(),
+        UAString::null(),
+        StatusCode::BadSecurityChecksFailed,
+        session_id,
+    )
+    .with_certificate(certificate);
+    dispatch_audit_event(subscriptions, &event);
+}
+
 /// Emits an AuditCancelEventType recording a Cancel request against the session (Part 4 §A.5).
 pub(crate) fn dispatch_cancel(
     subscriptions: &Arc<SubscriptionCache>,
@@ -797,6 +819,40 @@ mod tests {
             None
         );
         assert_eq!(certificate_event_type(StatusCode::Good), None);
+    }
+
+    #[test]
+    fn certificate_mismatch_audit_event_is_a_security_failure() {
+        let cert = ByteString::from(vec![9u8, 8, 7]);
+        let event = ServerAuditEvent::outcome(
+            ObjectTypeId::AuditCertificateMismatchEventType,
+            UAString::from("urn:test-server"),
+            "Validate ClientCertificate channel binding",
+            UAString::null(),
+            UAString::null(),
+            StatusCode::BadSecurityChecksFailed,
+            Some(NodeId::new(1, 3)),
+        )
+        .with_certificate(cert.clone());
+
+        assert_eq!(
+            event.get_value(AttributeId::Value, &NumericRange::None, &field("EventType")),
+            Variant::from(NodeId::from(
+                ObjectTypeId::AuditCertificateMismatchEventType
+            ))
+        );
+        assert_eq!(
+            event.get_value(
+                AttributeId::Value,
+                &NumericRange::None,
+                &field("Certificate")
+            ),
+            Variant::from(cert)
+        );
+        assert_eq!(
+            event.get_value(AttributeId::Value, &NumericRange::None, &field("Status")),
+            Variant::Boolean(false)
+        );
     }
 
     #[test]

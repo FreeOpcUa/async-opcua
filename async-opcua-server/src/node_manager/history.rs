@@ -4,9 +4,10 @@ use opcua_types::{
     match_extension_object_owned, ByteString, DeleteAtTimeDetails, DeleteEventDetails,
     DeleteRawModifiedDetails, DynEncodable, ExtensionObject, HistoryData, HistoryEvent,
     HistoryModifiedData, HistoryReadResult, HistoryReadValueId, HistoryUpdateResult, NodeId,
-    NumericRange, ObjectId, QualifiedName, ReadAnnotationDataDetails, ReadAtTimeDetails,
-    ReadEventDetails, ReadProcessedDetails, ReadRawModifiedDetails, StatusCode, UpdateDataDetails,
-    UpdateEventDetails, UpdateStructureDataDetails,
+    NumericRange, ObjectId, PerformUpdateType, PermissionType, QualifiedName,
+    ReadAnnotationDataDetails, ReadAtTimeDetails, ReadEventDetails, ReadProcessedDetails,
+    ReadRawModifiedDetails, StatusCode, UpdateDataDetails, UpdateEventDetails,
+    UpdateStructureDataDetails,
 };
 
 /// Container for a single node in a history read request.
@@ -82,6 +83,30 @@ impl HistoryUpdateDetails {
             HistoryUpdateDetails::DeleteAtTime(d) => &d.node_id,
             HistoryUpdateDetails::DeleteEvent(d) => &d.node_id,
         }
+    }
+
+    /// Return the RolePermissions bit required for this history update operation.
+    pub fn required_permission(&self) -> PermissionType {
+        match self {
+            HistoryUpdateDetails::UpdateData(details) => {
+                permission_for_update_mode(details.perform_insert_replace)
+            }
+            HistoryUpdateDetails::UpdateStructureData(_) => PermissionType::ModifyHistory,
+            HistoryUpdateDetails::UpdateEvent(details) => {
+                permission_for_update_mode(details.perform_insert_replace)
+            }
+            HistoryUpdateDetails::DeleteRawModified(_)
+            | HistoryUpdateDetails::DeleteAtTime(_)
+            | HistoryUpdateDetails::DeleteEvent(_) => PermissionType::DeleteHistory,
+        }
+    }
+}
+
+fn permission_for_update_mode(mode: PerformUpdateType) -> PermissionType {
+    match mode {
+        PerformUpdateType::Insert => PermissionType::InsertHistory,
+        PerformUpdateType::Replace | PerformUpdateType::Update => PermissionType::ModifyHistory,
+        PerformUpdateType::Remove => PermissionType::DeleteHistory,
     }
 }
 

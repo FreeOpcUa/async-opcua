@@ -41,7 +41,7 @@ use opcua_types::{
     BrowseDirection, DataEncoding, DataValue, DateTime, ExpandedNodeId, MonitoringMode, NodeClass,
     NodeId, NumericRange, PermissionType, ReadAnnotationDataDetails, ReadAtTimeDetails,
     ReadEventDetails, ReadProcessedDetails, ReadRawModifiedDetails, ReferenceDescription,
-    ReferenceTypeId, StatusCode, TimestampsToReturn, Variant,
+    ReferenceTypeId, RolePermissionType, StatusCode, TimestampsToReturn, Variant,
 };
 
 use super::{
@@ -526,6 +526,11 @@ impl<TImpl: InMemoryNodeManagerImpl> InMemoryNodeManager<TImpl> {
                 }
             }
 
+            if !rbac::decision::authorize_ctx(context, &node, PermissionType::ReadHistory) {
+                history_node.set_status(StatusCode::BadUserAccessDenied);
+                continue;
+            }
+
             valid.push(history_node);
         }
 
@@ -576,6 +581,15 @@ impl<TImpl: InMemoryNodeManagerImpl> InMemoryNodeManager<TImpl> {
                     history_node.set_status(StatusCode::BadUserAccessDenied);
                     continue;
                 }
+            }
+
+            if !rbac::decision::authorize_ctx(
+                context,
+                &node,
+                history_node.details().required_permission(),
+            ) {
+                history_node.set_status(StatusCode::BadUserAccessDenied);
+                continue;
             }
 
             valid.push(history_node);
@@ -720,6 +734,12 @@ impl<TImpl: InMemoryNodeManagerImpl> InMemoryNodeManager<TImpl> {
 impl<TImpl: InMemoryNodeManagerImpl> NodeManagerCore for InMemoryNodeManager<TImpl> {
     fn owns_node(&self, id: &NodeId) -> bool {
         self.namespaces.contains_key(&id.namespace)
+    }
+
+    fn role_permissions(&self, node_id: &NodeId) -> Option<Vec<RolePermissionType>> {
+        let address_space = trace_read_lock!(self.address_space);
+        let node = address_space.find(node_id)?;
+        node.as_node().role_permissions().map(<[_]>::to_vec)
     }
 
     fn name(&self) -> &str {
@@ -1290,11 +1310,16 @@ mod tests {
 
     use async_trait::async_trait;
     use opcua_core::sync::RwLock;
-    use opcua_nodes::{Method, NodeBase, Object};
+    use opcua_nodes::{Method, NodeBase, Object, Variable};
     use opcua_types::{
-        AccessRestrictionType, AnonymousIdentityToken, ApplicationDescription, BrowseDescription,
-        BrowseResult, ByteString, CallMethodRequest, DiagnosticBits, MessageSecurityMode,
-        NodeClass, NodeClassMask, PermissionType, RolePermissionType, UAString,
+        AccessRestrictionType, AddNodeAttributes, AddNodesItem, AddReferencesItem,
+        AnonymousIdentityToken, ApplicationDescription, BrowseDescription, BrowseResult,
+        ByteString, CallMethodRequest, DateTime, DeleteAtTimeDetails, DeleteEventDetails,
+        DeleteNodesItem, DeleteReferencesItem, DiagnosticBits, EventFilter, ExpandedNodeId,
+        HistoryReadValueId, LocalizedText, MessageSecurityMode, NodeClass, NodeClassMask,
+        ObjectAttributes, ObjectTypeId, PerformUpdateType, PermissionType, QualifiedName,
+        RolePermissionType, UAString, UpdateDataDetails, UpdateEventDetails,
+        UpdateStructureDataDetails,
     };
 
     use crate::{
@@ -1345,9 +1370,28 @@ mod tests {
         user_roles: Vec<NodeId>,
         security_mode: MessageSecurityMode,
     ) -> RequestContext {
-        let (_server, handle) = ServerBuilder::new_anonymous("test")
-            .build()
-            .expect("test server should build");
+        request_context_with_options(user_roles, security_mode, false)
+    }
+
+    fn request_context_with_address_space_modification() -> RequestContext {
+        request_context_with_roles_and_address_space_modification(Vec::new())
+    }
+
+    fn request_context_with_roles_and_address_space_modification(
+        user_roles: Vec<NodeId>,
+    ) -> RequestContext {
+        request_context_with_options(user_roles, MessageSecurityMode::None, true)
+    }
+
+    fn request_context_with_options(
+        user_roles: Vec<NodeId>,
+        security_mode: MessageSecurityMode,
+        clients_can_modify_address_space: bool,
+    ) -> RequestContext {
+        let mut builder = ServerBuilder::new_anonymous("test");
+        builder.config_mut().limits.clients_can_modify_address_space =
+            clients_can_modify_address_space;
+        let (_server, handle) = builder.build().expect("test server should build");
         let info = handle.info().clone();
         {
             let mut type_tree = info.type_tree.write();
@@ -1400,6 +1444,219 @@ mod tests {
             role_id: role_id.clone(),
             permissions,
         }
+    }
+
+    fn object_node(
+        node_id: &NodeId,
+        browse_name: &'static str,
+        role_permissions: Option<Vec<RolePermissionType>>,
+    ) -> Object {
+        let mut object = Object::new(node_id, browse_name, browse_name, EventNotifier::empty());
+        if let Some(role_permissions) = role_permissions {
+            object.set_role_permissions(role_permissions);
+        }
+        object
+    }
+
+    fn node_management_manager(nodes: Vec<NodeType>) -> InMemoryNodeManager<TestMethodImpl> {
+        let mut address_space = AddressSpace::new();
+        address_space.add_namespace("urn:test", 1);
+        for node in nodes {
+            address_space.insert::<_, NodeId>(node, None);
+        }
+
+        InMemoryNodeManager::new(
+            TestMethodImpl {
+                method_ids: Vec::new(),
+            },
+            address_space,
+        )
+    }
+
+    fn object_attributes() -> ObjectAttributes {
+        ObjectAttributes {
+            specified_attributes: 0,
+            display_name: LocalizedText::null(),
+            description: LocalizedText::null(),
+            write_mask: 0,
+            user_write_mask: 0,
+            event_notifier: 0,
+        }
+    }
+
+    fn add_object_node_item(parent_id: &NodeId, new_node_id: &NodeId) -> AddNodeItem {
+        AddNodeItem::new(
+            AddNodesItem {
+                parent_node_id: ExpandedNodeId::from(parent_id),
+                reference_type_id: NodeId::from(ReferenceTypeId::HasComponent),
+                requested_new_node_id: ExpandedNodeId::from(new_node_id),
+                browse_name: QualifiedName::new(1, "new_object"),
+                node_class: NodeClass::Object,
+                node_attributes: AddNodeAttributes::Object(object_attributes())
+                    .as_extension_object(),
+                type_definition: ExpandedNodeId::from(NodeId::from(ObjectTypeId::BaseObjectType)),
+            },
+            DiagnosticBits::empty(),
+        )
+    }
+
+    fn delete_node_item(node_id: &NodeId) -> DeleteNodeItem {
+        DeleteNodeItem::new(
+            DeleteNodesItem {
+                node_id: node_id.clone(),
+                delete_target_references: false,
+            },
+            DiagnosticBits::empty(),
+        )
+    }
+
+    fn add_reference_item(source_id: &NodeId, target_id: &NodeId) -> AddReferenceItem {
+        AddReferenceItem::new(
+            AddReferencesItem {
+                source_node_id: source_id.clone(),
+                reference_type_id: NodeId::from(ReferenceTypeId::HasComponent),
+                is_forward: true,
+                target_server_uri: UAString::null(),
+                target_node_id: ExpandedNodeId::from(target_id),
+                target_node_class: NodeClass::Object,
+            },
+            DiagnosticBits::empty(),
+        )
+    }
+
+    fn delete_reference_item(source_id: &NodeId, target_id: &NodeId) -> DeleteReferenceItem {
+        DeleteReferenceItem::new(
+            DeleteReferencesItem {
+                source_node_id: source_id.clone(),
+                reference_type_id: NodeId::from(ReferenceTypeId::HasComponent),
+                is_forward: true,
+                target_node_id: ExpandedNodeId::from(target_id),
+                delete_bidirectional: false,
+            },
+            DiagnosticBits::empty(),
+        )
+    }
+
+    fn history_variable(
+        node_id: &NodeId,
+        role_permissions: Option<Vec<RolePermissionType>>,
+    ) -> Variable {
+        let mut variable = Variable::new(node_id, "history", "history", 0i32);
+        let history_access = AccessLevel::CURRENT_READ
+            | AccessLevel::CURRENT_WRITE
+            | AccessLevel::HISTORY_READ
+            | AccessLevel::HISTORY_WRITE;
+        variable.set_historizing(true);
+        variable.set_access_level(history_access);
+        variable.set_user_access_level(history_access);
+        if let Some(role_permissions) = role_permissions {
+            variable.set_role_permissions(role_permissions);
+        }
+        variable
+    }
+
+    fn history_event_object(
+        node_id: &NodeId,
+        role_permissions: Option<Vec<RolePermissionType>>,
+    ) -> Object {
+        let mut object = Object::new(
+            node_id,
+            "events",
+            "events",
+            EventNotifier::HISTORY_READ | EventNotifier::HISTORY_WRITE,
+        );
+        if let Some(role_permissions) = role_permissions {
+            object.set_role_permissions(role_permissions);
+        }
+        object
+    }
+
+    fn history_manager(nodes: Vec<NodeType>) -> InMemoryNodeManager<TestMethodImpl> {
+        let mut address_space = AddressSpace::new();
+        address_space.add_namespace("urn:test", 1);
+        for node in nodes {
+            address_space.insert::<_, NodeId>(node, None);
+        }
+
+        InMemoryNodeManager::new(
+            TestMethodImpl {
+                method_ids: Vec::new(),
+            },
+            address_space,
+        )
+    }
+
+    fn history_read_node(node_id: &NodeId, is_events: bool) -> HistoryNode {
+        HistoryNode::new(
+            HistoryReadValueId {
+                node_id: node_id.clone(),
+                index_range: NumericRange::None,
+                data_encoding: QualifiedName::null(),
+                continuation_point: ByteString::null(),
+            },
+            is_events,
+            None,
+        )
+    }
+
+    fn update_data_node(node_id: &NodeId, mode: PerformUpdateType) -> HistoryUpdateNode {
+        HistoryUpdateNode::new(HistoryUpdateDetails::UpdateData(UpdateDataDetails {
+            node_id: node_id.clone(),
+            perform_insert_replace: mode,
+            update_values: None,
+        }))
+    }
+
+    fn update_event_node(node_id: &NodeId, mode: PerformUpdateType) -> HistoryUpdateNode {
+        HistoryUpdateNode::new(HistoryUpdateDetails::UpdateEvent(UpdateEventDetails {
+            node_id: node_id.clone(),
+            perform_insert_replace: mode,
+            filter: EventFilter::default(),
+            event_data: None,
+        }))
+    }
+
+    fn update_structure_node(node_id: &NodeId, mode: PerformUpdateType) -> HistoryUpdateNode {
+        HistoryUpdateNode::new(HistoryUpdateDetails::UpdateStructureData(
+            UpdateStructureDataDetails {
+                node_id: node_id.clone(),
+                perform_insert_replace: mode,
+                update_values: None,
+            },
+        ))
+    }
+
+    fn delete_at_time_node(node_id: &NodeId) -> HistoryUpdateNode {
+        HistoryUpdateNode::new(HistoryUpdateDetails::DeleteAtTime(DeleteAtTimeDetails {
+            node_id: node_id.clone(),
+            req_times: Some(vec![DateTime::null()]),
+        }))
+    }
+
+    fn delete_event_node(node_id: &NodeId) -> HistoryUpdateNode {
+        HistoryUpdateNode::new(HistoryUpdateDetails::DeleteEvent(DeleteEventDetails {
+            node_id: node_id.clone(),
+            event_ids: None,
+        }))
+    }
+
+    fn validated_history_read_len(
+        manager: &InMemoryNodeManager<TestMethodImpl>,
+        context: &RequestContext,
+        nodes: &mut [&mut HistoryNode],
+        is_for_events: bool,
+    ) -> usize {
+        manager
+            .validate_history_read_nodes(context, nodes, is_for_events)
+            .len()
+    }
+
+    fn validated_history_update_len(
+        manager: &InMemoryNodeManager<TestMethodImpl>,
+        context: &RequestContext,
+        nodes: &mut [&mut HistoryUpdateNode],
+    ) -> usize {
+        manager.validate_history_write_nodes(context, nodes).len()
     }
 
     fn method_call(object_id: &NodeId, method_id: &NodeId) -> MethodCall {
@@ -1538,6 +1795,205 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn add_nodes_denies_configured_parent_without_add_node_permission_per_operation() {
+        let context = request_context_with_address_space_modification();
+        let operator = NodeId::new(0, "Operator");
+        let denied_parent_id = NodeId::new(1, "denied_parent");
+        let open_parent_id = NodeId::new(1, "open_parent");
+        let denied_new_id = NodeId::new(1, "denied_new");
+        let open_new_id = NodeId::new(1, "open_new");
+        let manager = node_management_manager(vec![
+            NodeType::Object(Box::new(object_node(
+                &denied_parent_id,
+                "denied_parent",
+                Some(vec![role_permission(&operator, PermissionType::DeleteNode)]),
+            ))),
+            NodeType::Object(Box::new(object_node(&open_parent_id, "open_parent", None))),
+        ]);
+        let mut denied = add_object_node_item(&denied_parent_id, &denied_new_id);
+        let mut open = add_object_node_item(&open_parent_id, &open_new_id);
+
+        {
+            let mut nodes = vec![&mut denied, &mut open];
+            manager
+                .add_nodes(&context, nodes.as_mut_slice())
+                .await
+                .unwrap();
+        }
+
+        assert_eq!(denied.status(), StatusCode::BadUserAccessDenied);
+        assert_eq!(open.status(), StatusCode::Good);
+        let address_space = manager.address_space.read();
+        assert!(!address_space.node_exists(&denied_new_id));
+        assert!(address_space.node_exists(&open_new_id));
+    }
+
+    #[tokio::test]
+    async fn delete_nodes_denies_configured_node_without_delete_node_permission_per_operation() {
+        let context = request_context_with_address_space_modification();
+        let operator = NodeId::new(0, "Operator");
+        let denied_id = NodeId::new(1, "delete_denied");
+        let open_id = NodeId::new(1, "delete_open");
+        let manager = node_management_manager(vec![
+            NodeType::Object(Box::new(object_node(
+                &denied_id,
+                "delete_denied",
+                Some(vec![role_permission(&operator, PermissionType::AddNode)]),
+            ))),
+            NodeType::Object(Box::new(object_node(&open_id, "delete_open", None))),
+        ]);
+        let mut denied = delete_node_item(&denied_id);
+        let mut open = delete_node_item(&open_id);
+
+        {
+            let mut nodes = vec![&mut denied, &mut open];
+            manager
+                .delete_nodes(&context, nodes.as_mut_slice())
+                .await
+                .unwrap();
+        }
+
+        assert_eq!(denied.status(), StatusCode::BadUserAccessDenied);
+        assert_eq!(open.status(), StatusCode::Good);
+        let address_space = manager.address_space.read();
+        assert!(address_space.node_exists(&denied_id));
+        assert!(!address_space.node_exists(&open_id));
+    }
+
+    #[tokio::test]
+    async fn add_references_denies_configured_source_without_add_reference_permission_per_operation(
+    ) {
+        let context = request_context_with_address_space_modification();
+        let operator = NodeId::new(0, "Operator");
+        let denied_source_id = NodeId::new(1, "add_reference_denied_source");
+        let denied_target_id = NodeId::new(1, "add_reference_denied_target");
+        let open_source_id = NodeId::new(1, "add_reference_open_source");
+        let open_target_id = NodeId::new(1, "add_reference_open_target");
+        let manager = node_management_manager(vec![
+            NodeType::Object(Box::new(object_node(
+                &denied_source_id,
+                "add_reference_denied_source",
+                Some(vec![role_permission(
+                    &operator,
+                    PermissionType::RemoveReference,
+                )]),
+            ))),
+            NodeType::Object(Box::new(object_node(
+                &denied_target_id,
+                "add_reference_denied_target",
+                None,
+            ))),
+            NodeType::Object(Box::new(object_node(
+                &open_source_id,
+                "add_reference_open_source",
+                None,
+            ))),
+            NodeType::Object(Box::new(object_node(
+                &open_target_id,
+                "add_reference_open_target",
+                None,
+            ))),
+        ]);
+        let mut denied = add_reference_item(&denied_source_id, &denied_target_id);
+        let mut open = add_reference_item(&open_source_id, &open_target_id);
+
+        {
+            let mut references = vec![&mut denied, &mut open];
+            manager
+                .add_references(&context, references.as_mut_slice())
+                .await
+                .unwrap();
+        }
+
+        assert_eq!(denied.result_status(), StatusCode::BadUserAccessDenied);
+        assert_eq!(open.result_status(), StatusCode::Good);
+        let address_space = manager.address_space.read();
+        assert!(!address_space.has_reference(
+            &denied_source_id,
+            &denied_target_id,
+            &NodeId::from(ReferenceTypeId::HasComponent),
+        ));
+        assert!(address_space.has_reference(
+            &open_source_id,
+            &open_target_id,
+            &NodeId::from(ReferenceTypeId::HasComponent),
+        ));
+    }
+
+    #[tokio::test]
+    async fn delete_references_denies_configured_source_without_remove_reference_permission_per_operation(
+    ) {
+        let context = request_context_with_address_space_modification();
+        let operator = NodeId::new(0, "Operator");
+        let denied_source_id = NodeId::new(1, "delete_reference_denied_source");
+        let denied_target_id = NodeId::new(1, "delete_reference_denied_target");
+        let open_source_id = NodeId::new(1, "delete_reference_open_source");
+        let open_target_id = NodeId::new(1, "delete_reference_open_target");
+        let manager = node_management_manager(vec![
+            NodeType::Object(Box::new(object_node(
+                &denied_source_id,
+                "delete_reference_denied_source",
+                Some(vec![role_permission(
+                    &operator,
+                    PermissionType::AddReference,
+                )]),
+            ))),
+            NodeType::Object(Box::new(object_node(
+                &denied_target_id,
+                "delete_reference_denied_target",
+                None,
+            ))),
+            NodeType::Object(Box::new(object_node(
+                &open_source_id,
+                "delete_reference_open_source",
+                None,
+            ))),
+            NodeType::Object(Box::new(object_node(
+                &open_target_id,
+                "delete_reference_open_target",
+                None,
+            ))),
+        ]);
+        {
+            let mut address_space = manager.address_space.write();
+            address_space.insert_reference(
+                &denied_source_id,
+                &denied_target_id,
+                ReferenceTypeId::HasComponent,
+            );
+            address_space.insert_reference(
+                &open_source_id,
+                &open_target_id,
+                ReferenceTypeId::HasComponent,
+            );
+        }
+        let mut denied = delete_reference_item(&denied_source_id, &denied_target_id);
+        let mut open = delete_reference_item(&open_source_id, &open_target_id);
+
+        {
+            let mut references = vec![&mut denied, &mut open];
+            manager
+                .delete_references(&context, references.as_mut_slice())
+                .await
+                .unwrap();
+        }
+
+        assert_eq!(denied.result_status(), StatusCode::BadUserAccessDenied);
+        assert_eq!(open.result_status(), StatusCode::Good);
+        let address_space = manager.address_space.read();
+        assert!(address_space.has_reference(
+            &denied_source_id,
+            &denied_target_id,
+            &NodeId::from(ReferenceTypeId::HasComponent),
+        ));
+        assert!(!address_space.has_reference(
+            &open_source_id,
+            &open_target_id,
+            &NodeId::from(ReferenceTypeId::HasComponent),
+        ));
+    }
+
+    #[tokio::test]
     async fn browse_omits_forward_target_without_browse_permission() {
         let context = request_context();
         let operator = NodeId::new(0, "Operator");
@@ -1659,6 +2115,300 @@ mod tests {
 
         assert_eq!(node.status_code, StatusCode::Good);
         assert_eq!(refs, vec![child_id]);
+    }
+
+    #[tokio::test]
+    async fn history_read_denies_configured_variable_without_read_history_permission() {
+        let context = request_context();
+        let operator = NodeId::new(0, "Operator");
+        let denied_id = NodeId::new(1, "denied_history");
+        let open_id = NodeId::new(1, "open_history");
+        let manager = history_manager(vec![
+            NodeType::Variable(Box::new(history_variable(
+                &denied_id,
+                Some(vec![role_permission(&operator, PermissionType::Read)]),
+            ))),
+            NodeType::Variable(Box::new(history_variable(&open_id, None))),
+        ]);
+        let mut denied = history_read_node(&denied_id, false);
+        let mut open = history_read_node(&open_id, false);
+
+        let valid_len = {
+            let mut nodes = vec![&mut denied, &mut open];
+            validated_history_read_len(&manager, &context, nodes.as_mut_slice(), false)
+        };
+
+        assert_eq!(valid_len, 1);
+        assert_eq!(denied.status(), StatusCode::BadUserAccessDenied);
+        assert_eq!(open.status(), StatusCode::BadNodeIdUnknown);
+    }
+
+    #[tokio::test]
+    async fn history_read_allows_variable_with_read_history_permission() {
+        let operator = NodeId::new(0, "Operator");
+        let context = request_context_with_roles(vec![operator.clone()]);
+        let node_id = NodeId::new(1, "readable_history");
+        let manager = history_manager(vec![NodeType::Variable(Box::new(history_variable(
+            &node_id,
+            Some(vec![role_permission(
+                &operator,
+                PermissionType::ReadHistory,
+            )]),
+        )))]);
+        let mut history_node = history_read_node(&node_id, false);
+
+        let valid_len = {
+            let mut nodes = vec![&mut history_node];
+            validated_history_read_len(&manager, &context, nodes.as_mut_slice(), false)
+        };
+
+        assert_eq!(valid_len, 1);
+        assert_eq!(history_node.status(), StatusCode::BadNodeIdUnknown);
+    }
+
+    #[tokio::test]
+    async fn history_read_denies_configured_event_source_without_read_history_permission() {
+        let context = request_context();
+        let operator = NodeId::new(0, "Operator");
+        let node_id = NodeId::new(1, "event_history");
+        let manager = history_manager(vec![NodeType::Object(Box::new(history_event_object(
+            &node_id,
+            Some(vec![role_permission(
+                &operator,
+                PermissionType::ReceiveEvents,
+            )]),
+        )))]);
+        let mut history_node = history_read_node(&node_id, true);
+
+        let valid_len = {
+            let mut nodes = vec![&mut history_node];
+            validated_history_read_len(&manager, &context, nodes.as_mut_slice(), true)
+        };
+
+        assert_eq!(valid_len, 0);
+        assert_eq!(history_node.status(), StatusCode::BadUserAccessDenied);
+    }
+
+    #[tokio::test]
+    async fn history_update_insert_data_requires_insert_history_permission() {
+        let operator = NodeId::new(0, "Operator");
+        let context = request_context_with_roles(vec![operator.clone()]);
+        let node_id = NodeId::new(1, "insert_history");
+        let manager = history_manager(vec![NodeType::Variable(Box::new(history_variable(
+            &node_id,
+            Some(vec![role_permission(
+                &operator,
+                PermissionType::ModifyHistory,
+            )]),
+        )))]);
+        let mut update = update_data_node(&node_id, PerformUpdateType::Insert);
+
+        let denied_len = {
+            let mut nodes = vec![&mut update];
+            validated_history_update_len(&manager, &context, nodes.as_mut_slice())
+        };
+
+        assert_eq!(denied_len, 0);
+        assert_eq!(update.status(), StatusCode::BadUserAccessDenied);
+
+        {
+            let address_space = manager.address_space.write();
+            let mut node = address_space
+                .find_mut(&node_id)
+                .expect("history node should exist");
+            node.as_mut_node()
+                .set_role_permissions(vec![role_permission(
+                    &operator,
+                    PermissionType::InsertHistory,
+                )]);
+        }
+
+        let mut update = update_data_node(&node_id, PerformUpdateType::Insert);
+        let allowed_len = {
+            let mut nodes = vec![&mut update];
+            validated_history_update_len(&manager, &context, nodes.as_mut_slice())
+        };
+
+        assert_eq!(allowed_len, 1);
+        assert_eq!(update.status(), StatusCode::BadNodeIdUnknown);
+    }
+
+    #[tokio::test]
+    async fn history_update_replace_data_requires_modify_history_permission() {
+        let operator = NodeId::new(0, "Operator");
+        let context = request_context_with_roles(vec![operator.clone()]);
+        let node_id = NodeId::new(1, "replace_history");
+        let manager = history_manager(vec![NodeType::Variable(Box::new(history_variable(
+            &node_id,
+            Some(vec![role_permission(
+                &operator,
+                PermissionType::InsertHistory,
+            )]),
+        )))]);
+        let mut update = update_data_node(&node_id, PerformUpdateType::Replace);
+
+        let denied_len = {
+            let mut nodes = vec![&mut update];
+            validated_history_update_len(&manager, &context, nodes.as_mut_slice())
+        };
+
+        assert_eq!(denied_len, 0);
+        assert_eq!(update.status(), StatusCode::BadUserAccessDenied);
+
+        {
+            let address_space = manager.address_space.write();
+            let mut node = address_space
+                .find_mut(&node_id)
+                .expect("history node should exist");
+            node.as_mut_node()
+                .set_role_permissions(vec![role_permission(
+                    &operator,
+                    PermissionType::ModifyHistory,
+                )]);
+        }
+
+        let mut update = update_data_node(&node_id, PerformUpdateType::Replace);
+        let allowed_len = {
+            let mut nodes = vec![&mut update];
+            validated_history_update_len(&manager, &context, nodes.as_mut_slice())
+        };
+
+        assert_eq!(allowed_len, 1);
+        assert_eq!(update.status(), StatusCode::BadNodeIdUnknown);
+    }
+
+    #[tokio::test]
+    async fn history_update_structure_data_requires_modify_history_permission() {
+        let operator = NodeId::new(0, "Operator");
+        let context = request_context_with_roles(vec![operator.clone()]);
+        let node_id = NodeId::new(1, "structure_history");
+        let manager = history_manager(vec![NodeType::Variable(Box::new(history_variable(
+            &node_id,
+            Some(vec![role_permission(
+                &operator,
+                PermissionType::InsertHistory,
+            )]),
+        )))]);
+        let mut update = update_structure_node(&node_id, PerformUpdateType::Insert);
+
+        let denied_len = {
+            let mut nodes = vec![&mut update];
+            validated_history_update_len(&manager, &context, nodes.as_mut_slice())
+        };
+
+        assert_eq!(denied_len, 0);
+        assert_eq!(update.status(), StatusCode::BadUserAccessDenied);
+
+        {
+            let address_space = manager.address_space.write();
+            let mut node = address_space
+                .find_mut(&node_id)
+                .expect("history node should exist");
+            node.as_mut_node()
+                .set_role_permissions(vec![role_permission(
+                    &operator,
+                    PermissionType::ModifyHistory,
+                )]);
+        }
+
+        let mut update = update_structure_node(&node_id, PerformUpdateType::Insert);
+        let allowed_len = {
+            let mut nodes = vec![&mut update];
+            validated_history_update_len(&manager, &context, nodes.as_mut_slice())
+        };
+
+        assert_eq!(allowed_len, 1);
+        assert_eq!(update.status(), StatusCode::BadNodeIdUnknown);
+    }
+
+    #[tokio::test]
+    async fn history_update_delete_details_require_delete_history_permission() {
+        let operator = NodeId::new(0, "Operator");
+        let context = request_context_with_roles(vec![operator.clone()]);
+        let node_id = NodeId::new(1, "delete_history");
+        let manager = history_manager(vec![NodeType::Variable(Box::new(history_variable(
+            &node_id,
+            Some(vec![role_permission(
+                &operator,
+                PermissionType::ModifyHistory,
+            )]),
+        )))]);
+        let mut update = delete_at_time_node(&node_id);
+
+        let denied_len = {
+            let mut nodes = vec![&mut update];
+            validated_history_update_len(&manager, &context, nodes.as_mut_slice())
+        };
+
+        assert_eq!(denied_len, 0);
+        assert_eq!(update.status(), StatusCode::BadUserAccessDenied);
+
+        {
+            let address_space = manager.address_space.write();
+            let mut node = address_space
+                .find_mut(&node_id)
+                .expect("history node should exist");
+            node.as_mut_node()
+                .set_role_permissions(vec![role_permission(
+                    &operator,
+                    PermissionType::DeleteHistory,
+                )]);
+        }
+
+        let mut update = delete_at_time_node(&node_id);
+        let allowed_len = {
+            let mut nodes = vec![&mut update];
+            validated_history_update_len(&manager, &context, nodes.as_mut_slice())
+        };
+
+        assert_eq!(allowed_len, 1);
+        assert_eq!(update.status(), StatusCode::BadNodeIdUnknown);
+    }
+
+    #[tokio::test]
+    async fn history_update_delete_event_requires_delete_history_permission() {
+        let operator = NodeId::new(0, "Operator");
+        let context = request_context_with_roles(vec![operator.clone()]);
+        let node_id = NodeId::new(1, "delete_event_history");
+        let manager = history_manager(vec![NodeType::Object(Box::new(history_event_object(
+            &node_id,
+            Some(vec![role_permission(
+                &operator,
+                PermissionType::ModifyHistory,
+            )]),
+        )))]);
+        let mut update = delete_event_node(&node_id);
+
+        let denied_len = {
+            let mut nodes = vec![&mut update];
+            validated_history_update_len(&manager, &context, nodes.as_mut_slice())
+        };
+
+        assert_eq!(denied_len, 0);
+        assert_eq!(update.status(), StatusCode::BadUserAccessDenied);
+    }
+
+    #[tokio::test]
+    async fn history_update_insert_event_requires_insert_history_permission() {
+        let operator = NodeId::new(0, "Operator");
+        let context = request_context_with_roles(vec![operator.clone()]);
+        let node_id = NodeId::new(1, "insert_event_history");
+        let manager = history_manager(vec![NodeType::Object(Box::new(history_event_object(
+            &node_id,
+            Some(vec![role_permission(
+                &operator,
+                PermissionType::ModifyHistory,
+            )]),
+        )))]);
+        let mut update = update_event_node(&node_id, PerformUpdateType::Insert);
+
+        let denied_len = {
+            let mut nodes = vec![&mut update];
+            validated_history_update_len(&manager, &context, nodes.as_mut_slice())
+        };
+
+        assert_eq!(denied_len, 0);
+        assert_eq!(update.status(), StatusCode::BadUserAccessDenied);
     }
 
     #[tokio::test]

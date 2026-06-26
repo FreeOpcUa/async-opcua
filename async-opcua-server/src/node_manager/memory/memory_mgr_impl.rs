@@ -10,6 +10,7 @@ use crate::{
         MonitoredItemUpdateRef, ParsedReadValueId, RegisterNodeItem, RequestContext, ServerContext,
         WriteNode,
     },
+    rbac,
     session::continuation_points::ContinuationPoint,
     subscriptions::CreateMonitoredItem,
 };
@@ -20,7 +21,7 @@ use opcua_nodes::{
 };
 use opcua_types::{
     AddNodeAttributes, AttributesMask, DataTypeId, DataValue, ExpandedNodeId, LocalizedText,
-    ModelChangeStructureDataType, MonitoringMode, NodeClass, NodeId, ObjectId,
+    ModelChangeStructureDataType, MonitoringMode, NodeClass, NodeId, ObjectId, PermissionType,
     ReadAnnotationDataDetails, ReadAtTimeDetails, ReadEventDetails, ReadProcessedDetails,
     ReadRawModifiedDetails, ReferenceTypeId, StatusCode, TimestampsToReturn, Variant, WriteMask,
 };
@@ -60,6 +61,19 @@ where
 
 fn clients_can_modify_address_space(context: &RequestContext) -> bool {
     context.info.config.limits.clients_can_modify_address_space
+}
+
+fn authorize_node_management_permission(
+    context: &RequestContext,
+    address_space: &AddressSpace,
+    node_id: &NodeId,
+    required: PermissionType,
+) -> bool {
+    let Some(node) = address_space.find(node_id) else {
+        return true;
+    };
+
+    rbac::decision::authorize_ctx(context, &node, required)
 }
 
 fn model_change(affected: NodeId, verb: u8) -> ModelChangeStructureDataType {
@@ -107,6 +121,16 @@ fn add_nodes_impl(
             let parent_id = item.parent_node_id().node_id.clone();
             if parent_id.is_null() || !address_space.node_exists(&parent_id) {
                 item.set_result(NodeId::null(), StatusCode::BadParentNodeIdInvalid);
+                continue;
+            }
+
+            if !authorize_node_management_permission(
+                context,
+                &address_space,
+                &parent_id,
+                PermissionType::AddNode,
+            ) {
+                item.set_result(NodeId::null(), StatusCode::BadUserAccessDenied);
                 continue;
             }
 
@@ -191,6 +215,16 @@ fn delete_nodes_impl(
                 continue;
             }
 
+            if !authorize_node_management_permission(
+                context,
+                &address_space,
+                item.node_id(),
+                PermissionType::DeleteNode,
+            ) {
+                item.set_result(StatusCode::BadUserAccessDenied);
+                continue;
+            }
+
             let deleted_node_id = item.node_id().clone();
             if address_space
                 .delete(item.node_id(), item.delete_target_references())
@@ -243,6 +277,22 @@ fn add_references_impl(
                 continue;
             }
 
+            let source_exists = address_space.node_exists(item.source_node_id());
+            let target_exists = address_space.node_exists(&item.target_node_id().node_id);
+
+            if source_exists
+                && !authorize_node_management_permission(
+                    context,
+                    &address_space,
+                    item.source_node_id(),
+                    PermissionType::AddReference,
+                )
+            {
+                item.set_source_result(StatusCode::BadUserAccessDenied);
+                item.set_target_result(StatusCode::BadUserAccessDenied);
+                continue;
+            }
+
             if !type_tree
                 .get(item.reference_type_id())
                 .is_some_and(|node_class| node_class == NodeClass::ReferenceType)
@@ -255,9 +305,6 @@ fn add_references_impl(
                 }
                 continue;
             }
-
-            let source_exists = address_space.node_exists(item.source_node_id());
-            let target_exists = address_space.node_exists(&item.target_node_id().node_id);
 
             if handle_source && !source_exists {
                 item.set_source_result(StatusCode::BadSourceNodeIdInvalid);
@@ -348,6 +395,22 @@ fn delete_references_impl(
                 continue;
             }
 
+            let source_exists = address_space.node_exists(item.source_node_id());
+            let target_exists = address_space.node_exists(&item.target_node_id().node_id);
+
+            if source_exists
+                && !authorize_node_management_permission(
+                    context,
+                    &address_space,
+                    item.source_node_id(),
+                    PermissionType::RemoveReference,
+                )
+            {
+                item.set_source_result(StatusCode::BadUserAccessDenied);
+                item.set_target_result(StatusCode::BadUserAccessDenied);
+                continue;
+            }
+
             if !type_tree
                 .get(item.reference_type_id())
                 .is_some_and(|node_class| node_class == NodeClass::ReferenceType)
@@ -360,9 +423,6 @@ fn delete_references_impl(
                 }
                 continue;
             }
-
-            let source_exists = address_space.node_exists(item.source_node_id());
-            let target_exists = address_space.node_exists(&item.target_node_id().node_id);
 
             if handle_source && !source_exists {
                 item.set_source_result(StatusCode::BadSourceNodeIdInvalid);

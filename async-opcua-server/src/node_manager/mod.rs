@@ -14,7 +14,8 @@ use opcua_core::sync::RwLock;
 use opcua_nodes::DefaultTypeTree;
 use opcua_types::{
     ExpandedNodeId, MonitoringMode, NodeId, ReadAnnotationDataDetails, ReadAtTimeDetails,
-    ReadEventDetails, ReadProcessedDetails, ReadRawModifiedDetails, StatusCode, TimestampsToReturn,
+    ReadEventDetails, ReadProcessedDetails, ReadRawModifiedDetails, RolePermissionType, StatusCode,
+    TimestampsToReturn,
 };
 use tokio::sync::OnceCell;
 
@@ -311,6 +312,15 @@ pub trait NodeManagerCore: IntoAnyArc + Any {
     /// reading or updating historical server events.
     fn owns_server_events(&self) -> bool {
         false
+    }
+
+    /// Return the node-level RolePermissions for `node_id`, if this manager can resolve them.
+    ///
+    /// `None` is intentionally used for both unresolved nodes and unconfigured RolePermissions; RBAC
+    /// callers that require fail-closed semantics should first establish that a RolePermissions list
+    /// exists. Event delivery uses this as a permissive compatibility fallback for unknown sources.
+    fn role_permissions(&self, node_id: &NodeId) -> Option<Vec<RolePermissionType>> {
+        None
     }
 
     /// Return whether this node should handle requests to create a node

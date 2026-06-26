@@ -60,6 +60,22 @@ pub(crate) fn authorize_ctx(
     )
 }
 
+/// Returns `true` if the session roles may receive Events from an event source.
+///
+/// `None` means the source node could not be resolved or has no RolePermissions configured, so
+/// event delivery remains permissive for backwards compatibility.
+#[must_use]
+pub(crate) fn event_receive_allowed(
+    user_roles: &[NodeId],
+    source_role_permissions: Option<&[RolePermissionType]>,
+) -> bool {
+    authorize(
+        user_roles,
+        source_role_permissions,
+        PermissionType::ReceiveEvents,
+    )
+}
+
 /// Validate a node's AccessRestrictions against the channel message security mode.
 pub(crate) fn access_restrictions_ok(
     restrictions: Option<AccessRestrictionType>,
@@ -215,6 +231,37 @@ mod tests {
         ];
 
         let allowed = authorize(&user_roles, Some(&permissions), PermissionType::Write);
+
+        assert!(allowed);
+    }
+
+    #[test]
+    fn event_receive_allowed_permits_unconfigured_source_permissions() {
+        let user_roles = [role("Observer")];
+
+        let allowed = event_receive_allowed(&user_roles, None);
+
+        assert!(allowed);
+    }
+
+    #[test]
+    fn event_receive_allowed_denies_when_receive_events_is_not_granted() {
+        let observer = role("Observer");
+        let permissions = [grant(&observer, PermissionType::Read)];
+        let user_roles = [observer];
+
+        let allowed = event_receive_allowed(&user_roles, Some(&permissions));
+
+        assert!(!allowed);
+    }
+
+    #[test]
+    fn event_receive_allowed_permits_when_receive_events_is_granted() {
+        let observer = role("Observer");
+        let permissions = [grant(&observer, PermissionType::ReceiveEvents)];
+        let user_roles = [observer];
+
+        let allowed = event_receive_allowed(&user_roles, Some(&permissions));
 
         assert!(allowed);
     }

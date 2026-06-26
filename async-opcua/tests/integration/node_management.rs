@@ -12,8 +12,9 @@ use opcua::{
         AddNodeAttributes, AddNodesItem, AddReferencesItem, AttributeId, BrowseDescription,
         BrowseDirection, DataTypeAttributes, DeleteNodesItem, DeleteReferencesItem, ExpandedNodeId,
         MethodAttributes, NodeClass, NodeId, ObjectAttributes, ObjectId, ObjectTypeAttributes,
-        ObjectTypeId, QualifiedName, ReadValueId, ReferenceTypeAttributes, ReferenceTypeId,
-        StatusCode, TimestampsToReturn, VariableTypeAttributes, ViewAttributes,
+        ObjectTypeId, PermissionType, QualifiedName, ReadValueId, ReferenceTypeAttributes,
+        ReferenceTypeId, RolePermissionType, StatusCode, TimestampsToReturn,
+        VariableTypeAttributes, ViewAttributes,
     },
 };
 
@@ -1141,4 +1142,56 @@ async fn add_nodes_emits_audit_event() {
         found,
         "an AuditAddNodesEventType must be delivered after AddNodes"
     );
+}
+
+/// Feature 031 US5 (Part 3 §8.55 AddReference): AddReferences requires the AddReference permission on
+/// the source node. The anonymous session holds the Anonymous role (i=15644), not Operator (i=15680),
+/// so a source granting AddReference only to Operator denies it; an unpermissioned source allows it.
+#[tokio::test]
+async fn simple_add_reference_enforced_by_role_permission() {
+    let (_tester, nm, ns, parent, session) = setup_simple(true).await;
+    let src = NodeId::new(ns, "RbacRefSrc");
+    let tgt = NodeId::new(ns, "RbacRefTgt");
+    {
+        let mut sp = nm.address_space().write();
+        ObjectBuilder::new(&src, "RbacRefSrc", "RbacRefSrc")
+            .organized_by(parent.clone())
+            .role_permissions(vec![RolePermissionType {
+                role_id: NodeId::new(0, 15680), // Operator only
+                permissions: PermissionType::AddReference,
+            }])
+            .insert(&mut *sp);
+        ObjectBuilder::new(&tgt, "RbacRefTgt", "RbacRefTgt")
+            .organized_by(parent.clone())
+            .insert(&mut *sp);
+    }
+
+    let denied = session
+        .add_references(&[AddReferencesItem {
+            source_node_id: src,
+            reference_type_id: ReferenceTypeId::Organizes.into(),
+            is_forward: true,
+            target_server_uri: Default::default(),
+            target_node_id: tgt.clone().into(),
+            target_node_class: NodeClass::Object,
+        }])
+        .await
+        .unwrap();
+    assert_eq!(denied, vec![StatusCode::BadUserAccessDenied]);
+
+    // Control: a source with no role_permissions permits AddReference.
+    let open = NodeId::new(ns, "OpenRefSrc");
+    seed_object(&nm, &parent, &open, "OpenRefSrc");
+    let allowed = session
+        .add_references(&[AddReferencesItem {
+            source_node_id: open,
+            reference_type_id: ReferenceTypeId::Organizes.into(),
+            is_forward: true,
+            target_server_uri: Default::default(),
+            target_node_id: tgt.into(),
+            target_node_class: NodeClass::Object,
+        }])
+        .await
+        .unwrap();
+    assert_eq!(allowed, vec![StatusCode::Good]);
 }

@@ -21,7 +21,10 @@ use opcua_nodes::{Event, TypeTree};
 
 use crate::{
     info::ServerInfo,
-    node_manager::{MonitoredItemRef, MonitoredItemUpdateRef, TypeTreeForUserStatic},
+    node_manager::{
+        MonitoredItemRef, MonitoredItemUpdateRef, NodeManagersRef, TypeTreeForUserStatic,
+    },
+    rbac,
     session::instance::Session,
     SubscriptionLimits,
 };
@@ -30,9 +33,9 @@ use opcua_types::{
     AttributeId, CreateSubscriptionRequest, CreateSubscriptionResponse, DataValue, DateTime,
     DateTimeUtc, ExtensionObject, ModifySubscriptionRequest, ModifySubscriptionResponse,
     MonitoredItemCreateResult, MonitoredItemModifyRequest, MonitoredItemModifyResult,
-    MonitoringMode, NodeId, NotificationMessage, PublishRequest, RepublishRequest, ResponseHeader,
-    ServiceFault, SetPublishingModeRequest, SetPublishingModeResponse, StatusCode,
-    TimestampsToReturn,
+    MonitoringMode, NodeId, NotificationMessage, ObjectTypeId, PublishRequest, QualifiedName,
+    RepublishRequest, ResponseHeader, RolePermissionType, ServiceFault, SetPublishingModeRequest,
+    SetPublishingModeResponse, StatusCode, TimestampsToReturn, Variant,
 };
 
 pub(super) struct RemovedSubscription {
@@ -99,6 +102,8 @@ pub struct SessionSubscriptions {
     session: Arc<RwLock<Session>>,
     /// Static reference to the type-tree for the user owning this.
     type_tree_for_user: Arc<dyn TypeTreeForUserStatic>,
+    /// Weak reference to server node managers, used for delivery-time event-source metadata lookup.
+    node_managers: NodeManagersRef,
 }
 
 impl SessionSubscriptions {
@@ -107,6 +112,7 @@ impl SessionSubscriptions {
         user_token: PersistentSessionKey,
         session: Arc<RwLock<Session>>,
         type_tree_for_user: Arc<dyn TypeTreeForUserStatic>,
+        node_managers: NodeManagersRef,
     ) -> Self {
         Self {
             user_token,
@@ -119,6 +125,7 @@ impl SessionSubscriptions {
             limits,
             session,
             type_tree_for_user,
+            node_managers,
         }
     }
 
@@ -1113,6 +1120,10 @@ impl SessionSubscriptions {
                     sub.notify_data_value(&handle.monitored_item_id, value, &now);
                 }
                 NotificationWorkItem::Event { handle, event } => {
+                    if !self.event_receive_allowed(&*event) {
+                        processed += 1;
+                        continue;
+                    }
                     let Some(sub) = self.subscriptions.get_mut(&handle.subscription_id) else {
                         processed += 1;
                         continue;
@@ -1161,16 +1172,39 @@ impl SessionSubscriptions {
 
         let start = refresh.next_event;
         let end = start + deliver_count;
+        let events = refresh.events[start..end]
+            .iter()
+            .filter_map(|event| {
+                let event = event.as_ref() as &dyn Event;
+                self.event_receive_allowed(event).then_some(event)
+            })
+            .collect::<Vec<_>>();
         if let Some(sub) = self.subscriptions.get_mut(&refresh.subscription_id) {
-            let events = refresh.events[start..end]
-                .iter()
-                .map(|event| event.as_ref() as &dyn Event)
-                .collect::<Vec<_>>();
-            let _ = sub.refresh_events(refresh.monitored_item, &events, type_tree);
+            if !events.is_empty() {
+                let _ = sub.refresh_events(refresh.monitored_item, &events, type_tree);
+            }
         }
         refresh.next_event = end;
 
         deliver_count
+    }
+
+    fn event_receive_allowed(&self, event: &dyn Event) -> bool {
+        let Some(source_node_id) = event_source_node(event) else {
+            return true;
+        };
+
+        let source_role_permissions = self.source_role_permissions(&source_node_id);
+        let user_roles = self.session.read().roles();
+
+        rbac::decision::event_receive_allowed(&user_roles, source_role_permissions.as_deref())
+    }
+
+    fn source_role_permissions(&self, source_node_id: &NodeId) -> Option<Vec<RolePermissionType>> {
+        self.node_managers
+            .iter()
+            .find(|manager| manager.owns_node(source_node_id))
+            .and_then(|manager| manager.role_permissions(source_node_id))
     }
 
     pub(super) fn user_token(&self) -> &PersistentSessionKey {
@@ -1188,6 +1222,25 @@ impl SessionSubscriptions {
     /// Get a reference to the session this subscription collection is owned by.
     pub fn session(&self) -> &Arc<RwLock<Session>> {
         &self.session
+    }
+}
+
+fn event_source_node(event: &dyn Event) -> Option<NodeId> {
+    let source = event.get_field(
+        &NodeId::from(ObjectTypeId::BaseEventType),
+        AttributeId::Value,
+        &opcua_types::NumericRange::None,
+        &[QualifiedName::new(0, "SourceNode")],
+    );
+
+    match source {
+        Variant::NodeId(source_node_id) if !source_node_id.is_null() => Some(*source_node_id),
+        Variant::ExpandedNodeId(source_node_id)
+            if source_node_id.server_index == 0 && !source_node_id.node_id.is_null() =>
+        {
+            Some(source_node_id.node_id)
+        }
+        _ => None,
     }
 }
 

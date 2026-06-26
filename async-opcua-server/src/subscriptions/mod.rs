@@ -45,7 +45,7 @@ use super::{
     authenticator::UserToken,
     info::ServerInfo,
     node_manager::{
-        MonitoredItemRef, MonitoredItemUpdateRef, RequestContext, ServerContext,
+        MonitoredItemRef, MonitoredItemUpdateRef, NodeManagersRef, RequestContext, ServerContext,
         TypeTreeForUserStatic,
     },
     session::instance::Session,
@@ -97,9 +97,11 @@ impl SessionEntry {
         key: PersistentSessionKey,
         session: Arc<RwLock<Session>>,
         type_tree: Arc<dyn TypeTreeForUserStatic>,
+        node_managers: NodeManagersRef,
         cleanup_tx: mpsc::UnboundedSender<SubscriptionCleanup>,
     ) -> Self {
-        let subs = SessionSubscriptions::new(limits, key, session, Arc::clone(&type_tree));
+        let subs =
+            SessionSubscriptions::new(limits, key, session, Arc::clone(&type_tree), node_managers);
         Self {
             handle: actor::spawn(session_id, subs, type_tree, cleanup_tx),
         }
@@ -145,6 +147,7 @@ struct SubscriptionCacheInner {
 /// manipulating subscriptions.
 pub struct SubscriptionCache {
     inner: RwLock<SubscriptionCacheInner>,
+    node_managers: NodeManagersRef,
     /// Configured limits on subscriptions.
     limits: SubscriptionLimits,
     cleanup_tx: mpsc::UnboundedSender<SubscriptionCleanup>,
@@ -152,7 +155,15 @@ pub struct SubscriptionCache {
 }
 
 impl SubscriptionCache {
+    #[allow(dead_code)]
     pub(crate) fn new(limits: SubscriptionLimits) -> Self {
+        Self::new_with_node_managers(limits, NodeManagersRef::new_empty())
+    }
+
+    pub(crate) fn new_with_node_managers(
+        limits: SubscriptionLimits,
+        node_managers: NodeManagersRef,
+    ) -> Self {
         let (cleanup_tx, cleanup_rx) = mpsc::unbounded_channel();
         Self {
             inner: RwLock::new(SubscriptionCacheInner {
@@ -160,6 +171,7 @@ impl SubscriptionCache {
                 subscription_to_session: HashMap::new(),
                 monitored_items: HashMap::new(),
             }),
+            node_managers,
             limits,
             cleanup_tx,
             cleanup_rx: Mutex::new(Some(cleanup_rx)),
@@ -464,6 +476,7 @@ impl SubscriptionCache {
                         Self::get_key(&context.session),
                         context.session.clone(),
                         context.info.type_tree_getter.get_type_tree_static(context),
+                        self.node_managers.clone(),
                         cleanup_tx,
                     )
                 })
@@ -503,6 +516,7 @@ impl SubscriptionCache {
                     key,
                     context.session.clone(),
                     context.info.type_tree_getter.get_type_tree_static(context),
+                    self.node_managers.clone(),
                     cleanup_tx,
                 )
             })

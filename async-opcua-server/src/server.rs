@@ -386,9 +386,11 @@ impl Server {
         let certificate_store = Arc::new(RwLock::new(certificate_store));
 
         let info = Arc::new(info);
-        let subscriptions = Arc::new(SubscriptionCache::new(config.limits.subscriptions));
-
         let node_managers_ref = NodeManagersRef::new_empty();
+        let subscriptions = Arc::new(SubscriptionCache::new_with_node_managers(
+            config.limits.subscriptions,
+            node_managers_ref.clone(),
+        ));
         let status_wrapper = Arc::new(ServerStatusWrapper::new(
             builder.build_info,
             subscriptions.clone(),

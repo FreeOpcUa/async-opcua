@@ -149,19 +149,19 @@ AddReference, ReceiveEvents allowed/denied by role.
 
 ### Tests for US5
 
-- [ ] T060 [P] [US5] Integration test `it/rbac.rs::history_read_denied_without_readhistory` (Spec: Part 11 §6 HistoryRead; Part 3 §8.55 ReadHistory)
-- [ ] T061 [P] [US5] Integration test `it/rbac.rs::history_delete_denied_without_deletehistory` (Spec: Part 11 §6 HistoryUpdate; Part 3 §8.55 DeleteHistory)
-- [ ] T062 [P] [US5] Integration test `it/rbac.rs::add_reference_denied_without_addreference` (Spec: Part 4 §5.7 AddReferences; Part 3 §8.55 AddReference)
-- [ ] T063 [P] [US5] Integration test `it/rbac.rs::receive_events_denied_filters_events` (Spec: Part 4 §5.12 MonitoredItems; Part 3 §8.55 ReceiveEvents)
+- [X] T060 [P] [US5] Integration test `it/rbac.rs::history_read_denied_without_readhistory` (Spec: Part 11 §6 HistoryRead; Part 3 §8.55 ReadHistory)
+- [X] T061 [P] [US5] Integration test `it/rbac.rs::history_delete_denied_without_deletehistory` (Spec: Part 11 §6 HistoryUpdate; Part 3 §8.55 DeleteHistory)
+- [X] T062 [P] [US5] Integration test `it/rbac.rs::add_reference_denied_without_addreference` (Spec: Part 4 §5.7 AddReferences; Part 3 §8.55 AddReference)
+- [X] T063 [P] [US5] Integration test `it/rbac.rs::receive_events_denied_filters_events` (Spec: Part 4 §5.12 MonitoredItems; Part 3 §8.55 ReceiveEvents)
 
 ### Implementation for US5
 
-- [ ] T064 [US5] Enforce `ReadHistory` on HistoryRead in `srv/services/history_read.rs` / `srv/session/services/attribute.rs` (Spec: Part 11 §6.3; Part 3 §8.55 ReadHistory)
-- [ ] T065 [US5] Enforce `InsertHistory`/`ModifyHistory`/`DeleteHistory` on HistoryUpdate per detail type in the history-update path `srv/node_manager/history.rs` consumers (Spec: Part 11 §6.8 HistoryUpdate; Part 3 §8.55)
-- [ ] T066 [US5] Enforce `AddNode`/`DeleteNode` on AddNodes/DeleteNodes in `srv/session/services/node_management.rs` (Spec: Part 4 §5.7.2/§5.7.4; Part 3 §8.55 AddNode/DeleteNode)
-- [ ] T067 [US5] Enforce `AddReference`/`RemoveReference` on AddReferences/DeleteReferences in `srv/session/services/node_management.rs` (Spec: Part 4 §5.7.3/§5.7.5; Part 3 §8.55)
-- [ ] T068 [US5] Enforce `ReceiveEvents` on event-notification delivery from event-source nodes in `srv/subscriptions/` event path (Spec: Part 4 §5.12.1.4; Part 3 §8.55 ReceiveEvents)
-- [ ] T069 [US5] Verify the four US5 tests pass (Spec: Part 11 §6; Part 4 §5.7)
+- [X] T064 [US5] Enforce `ReadHistory` on HistoryRead in `srv/services/history_read.rs` / `srv/session/services/attribute.rs` (Spec: Part 11 §6.3; Part 3 §8.55 ReadHistory)
+- [X] T065 [US5] Enforce `InsertHistory`/`ModifyHistory`/`DeleteHistory` on HistoryUpdate per detail type in the history-update path `srv/node_manager/history.rs` consumers (Spec: Part 11 §6.8 HistoryUpdate; Part 3 §8.55)
+- [X] T066 [US5] Enforce `AddNode`/`DeleteNode` on AddNodes/DeleteNodes in `srv/session/services/node_management.rs` (Spec: Part 4 §5.7.2/§5.7.4; Part 3 §8.55 AddNode/DeleteNode)
+- [X] T067 [US5] Enforce `AddReference`/`RemoveReference` on AddReferences/DeleteReferences in `srv/session/services/node_management.rs` (Spec: Part 4 §5.7.3/§5.7.5; Part 3 §8.55)
+- [X] T068 [US5] Enforce `ReceiveEvents` on event-notification delivery from event-source nodes in `srv/subscriptions/` event path (Spec: Part 4 §5.12.1.4; Part 3 §8.55 ReceiveEvents)
+- [X] T069 [US5] Verify the four US5 tests pass (Spec: Part 11 §6; Part 4 §5.7)
 
 **Checkpoint**: enforcement covers every permissioned service.
 

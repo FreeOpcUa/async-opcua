@@ -87,8 +87,13 @@ surface; do not defer spec-defined behavior on YAGNI/ponytail grounds (user dire
   via `validate_method_calls` (mod.rs): needs HasComponent object→method OR
   `accepts_method_without_object_component` (true for registered ctx callbacks) AND the method node
   to EXIST. Still open: AddPublishedEvents / *Template / AddDataSetFolder (sub-folders).
-- **Aggregate subscriptions** — AggregateFilter on MonitoredItems + HistoryUpdate of aggregates;
-  touches the hot monitored-item sampling/filter path.
+- **Aggregate subscriptions — AggregateFilter on MonitoredItems DONE (#187 create, #188 modify).**
+  `FilterType::AggregateFilter(ParsedAggregateFilter)` in subscriptions/monitored_item.rs; item buffers
+  samples (notify_data_value intercept) and `maybe_flush_aggregate` (called from tick_monitored_item)
+  emits one `dispatch_aggregate()` result per processing interval, timestamped at interval end. Filter
+  result generalized EventFilterResult → MonitoringFilterResult ExtensionObject. modify() restarts the
+  aggregation window. Reuses the merged Part-13 engine. STILL OPEN: HistoryUpdate of aggregates (write
+  side); ModifyMonitoredItems is otherwise complete for aggregates.
 - **Audit hierarchy — COMPLETE (#182–#186).** Now emitted: session Create/Activate (#182),
   AuditCertificate* on client-cert rejection (#183, 5-subtype status-code mapping), Cancel (#184),
   OpenSecureChannel Issue/Renew (#185, full channel params), CertificateMismatch at activate (#186) +

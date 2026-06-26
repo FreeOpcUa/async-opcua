@@ -242,6 +242,7 @@ impl ActorFixture {
             session_id: 1,
             authenticator: info.authenticator.clone(),
             token: UserToken(ANONYMOUS_USER_TOKEN_ID.to_string()),
+            user_roles: Arc::new(Vec::new()),
             type_tree: info.type_tree.clone(),
             type_tree_getter: info.type_tree_getter.clone(),
             subscriptions: Arc::clone(handle.subscriptions()),

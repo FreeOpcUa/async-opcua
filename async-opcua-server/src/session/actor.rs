@@ -236,6 +236,7 @@ impl SessionActor {
                 session_id: self.context.session_id,
                 authenticator: self.context.authenticator.clone(),
                 token,
+                user_roles: Arc::new(Vec::new()),
                 type_tree: self.context.type_tree.clone(),
                 type_tree_getter: self.context.type_tree_getter.clone(),
                 subscriptions: self.context.subscriptions.clone(),

@@ -3,8 +3,9 @@
 // Copyright (C) 2017-2024 Adam Lock
 
 use opcua_types::{
-    status_code::StatusCode, AttributeId, DataEncoding, DataValue, LocalizedText, NodeClass,
-    NodeId, NumericRange, QualifiedName, TimestampsToReturn, Variant, WriteMask,
+    status_code::StatusCode, AccessRestrictionType, AttributeId, DataEncoding, DataValue,
+    LocalizedText, NodeClass, NodeId, NumericRange, QualifiedName, RolePermissionType,
+    TimestampsToReturn, Variant, WriteMask,
 };
 
 use super::{DataType, Method, Object, ObjectType, ReferenceType, Variable, VariableType, View};
@@ -121,6 +122,18 @@ pub trait NodeBase {
 
     /// Set the user write mask for this node.
     fn set_user_write_mask(&mut self, write_mask: WriteMask);
+
+    /// Get the role permissions for this node.
+    fn role_permissions(&self) -> Option<&[RolePermissionType]>;
+
+    /// Set the role permissions for this node.
+    fn set_role_permissions(&mut self, role_permissions: Vec<RolePermissionType>);
+
+    /// Get the access restrictions for this node.
+    fn access_restrictions(&self) -> Option<AccessRestrictionType>;
+
+    /// Set the access restrictions for this node.
+    fn set_access_restrictions(&mut self, access_restrictions: AccessRestrictionType);
 }
 
 /// Implemented by each node type's to provide a generic way to set or get attributes, e.g.

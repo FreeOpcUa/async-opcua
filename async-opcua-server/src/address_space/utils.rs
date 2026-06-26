@@ -1,8 +1,9 @@
 use crate::node_manager::{ParsedReadValueId, ParsedWriteValue, RequestContext, ServerContext};
 use opcua_nodes::TypeTree;
 use opcua_types::{
-    AttributeId, DataEncoding, DataTypeId, DataValue, DateTime, NodeId, NumericRange, StatusCode,
-    TimestampsToReturn, Variant, VariantScalarTypeId, VariantTypeId, WriteMask,
+    AttributeId, DataEncoding, DataTypeId, DataValue, DateTime, NodeId, NumericRange,
+    RolePermissionType, StatusCode, TimestampsToReturn, Variant, VariantScalarTypeId,
+    VariantTypeId, WriteMask,
 };
 use tracing::debug;
 
@@ -339,6 +340,33 @@ pub fn is_supported_data_encoding(data_encoding: &DataEncoding) -> bool {
     )
 }
 
+fn compute_user_role_permissions(
+    role_permissions: &[RolePermissionType],
+    user_roles: &[NodeId],
+) -> Vec<RolePermissionType> {
+    let mut merged: Vec<RolePermissionType> = Vec::new();
+
+    for role_permission in role_permissions {
+        if !user_roles
+            .iter()
+            .any(|role_id| role_id == &role_permission.role_id)
+        {
+            continue;
+        }
+
+        if let Some(existing) = merged
+            .iter_mut()
+            .find(|existing| existing.role_id == role_permission.role_id)
+        {
+            existing.permissions |= role_permission.permissions;
+        } else {
+            merged.push(role_permission.clone());
+        }
+    }
+
+    merged
+}
+
 /// Invoke `Read` for the given `node_to_read` on `node`.
 ///
 /// This can return a data value containing an error if validation failed.
@@ -350,6 +378,16 @@ pub fn read_node_value(
     timestamps_to_return: TimestampsToReturn,
 ) -> DataValue {
     let mut result_value = DataValue::null();
+
+    if node_to_read.attribute_id == AttributeId::UserRolePermissions {
+        result_value.value = node.as_node().role_permissions().map(|role_permissions| {
+            Variant::from(compute_user_role_permissions(
+                role_permissions,
+                context.user_roles(),
+            ))
+        });
+        return result_value;
+    }
 
     let Some(attribute) = node.as_node().get_attribute_max_age(
         timestamps_to_return,
@@ -467,7 +505,8 @@ mod tests {
 
     use opcua_core::sync::RwLock;
     use opcua_types::{
-        AnonymousIdentityToken, ApplicationDescription, ByteString, MessageSecurityMode, UAString,
+        AnonymousIdentityToken, ApplicationDescription, ByteString, MessageSecurityMode,
+        PermissionType, RolePermissionType, UAString,
     };
 
     use crate::{
@@ -511,6 +550,7 @@ mod tests {
                 session_id: 1,
                 authenticator: info.authenticator.clone(),
                 token: UserToken("anonymous".to_string()),
+                user_roles: Arc::new(Vec::new()),
                 type_tree: info.type_tree.clone(),
                 type_tree_getter: info.type_tree_getter.clone(),
                 subscriptions: handle.subscriptions().clone(),
@@ -545,5 +585,47 @@ mod tests {
                 Err(StatusCode::BadDataEncodingInvalid)
             );
         }
+    }
+
+    #[test]
+    fn user_role_permissions_filters_to_session_roles_and_unions_duplicates() {
+        let role_a = NodeId::new(0, "RoleA");
+        let role_b = NodeId::new(0, "RoleB");
+        let role_c = NodeId::new(0, "RoleC");
+        let role_permissions = vec![
+            RolePermissionType {
+                role_id: role_a.clone(),
+                permissions: PermissionType::Browse,
+            },
+            RolePermissionType {
+                role_id: role_c.clone(),
+                permissions: PermissionType::Call,
+            },
+            RolePermissionType {
+                role_id: role_a.clone(),
+                permissions: PermissionType::Read,
+            },
+            RolePermissionType {
+                role_id: role_b.clone(),
+                permissions: PermissionType::Write,
+            },
+        ];
+        let user_roles = vec![role_a.clone(), role_b.clone()];
+
+        let filtered = compute_user_role_permissions(&role_permissions, &user_roles);
+
+        assert_eq!(
+            filtered,
+            vec![
+                RolePermissionType {
+                    role_id: role_a,
+                    permissions: PermissionType::Browse | PermissionType::Read,
+                },
+                RolePermissionType {
+                    role_id: role_b,
+                    permissions: PermissionType::Write,
+                },
+            ]
+        );
     }
 }

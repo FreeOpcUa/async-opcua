@@ -3,8 +3,9 @@
 // Copyright (C) 2017-2024 Adam Lock
 
 use opcua_types::{
-    status_code::StatusCode, AttributeId, DataEncoding, DataValue, LocalizedText, NodeClass,
-    NodeId, NumericRange, QualifiedName, TimestampsToReturn, Variant, WriteMask,
+    status_code::StatusCode, AccessRestrictionType, AttributeId, DataEncoding, DataValue,
+    LocalizedText, NodeClass, NodeId, NumericRange, QualifiedName, RolePermissionType,
+    TimestampsToReturn, Variant, WriteMask,
 };
 
 use super::node::{Node, NodeBase};
@@ -26,6 +27,10 @@ pub struct Base {
     pub(super) write_mask: Option<u32>,
     /// User write mask bits (optional)
     pub(super) user_write_mask: Option<u32>,
+    /// Role permissions for this node (optional)
+    pub(super) role_permissions: Option<Vec<RolePermissionType>>,
+    /// Access restrictions for this node (optional)
+    pub(super) access_restrictions: Option<AccessRestrictionType>,
 }
 
 impl NodeBase for Base {
@@ -72,6 +77,22 @@ impl NodeBase for Base {
     fn set_user_write_mask(&mut self, user_write_mask: WriteMask) {
         self.user_write_mask = Some(user_write_mask.bits());
     }
+
+    fn role_permissions(&self) -> Option<&[RolePermissionType]> {
+        self.role_permissions.as_deref()
+    }
+
+    fn set_role_permissions(&mut self, role_permissions: Vec<RolePermissionType>) {
+        self.role_permissions = Some(role_permissions);
+    }
+
+    fn access_restrictions(&self) -> Option<AccessRestrictionType> {
+        self.access_restrictions
+    }
+
+    fn set_access_restrictions(&mut self, access_restrictions: AccessRestrictionType) {
+        self.access_restrictions = Some(access_restrictions);
+    }
 }
 
 impl Node for Base {
@@ -94,6 +115,13 @@ impl Node for Base {
                 .map(|description| description.into()),
             AttributeId::WriteMask => self.write_mask.map(|v| v.into()),
             AttributeId::UserWriteMask => self.user_write_mask.map(|v| v.into()),
+            AttributeId::RolePermissions => self
+                .role_permissions
+                .as_ref()
+                .map(|v| Variant::from(v).into()),
+            AttributeId::AccessRestrictions => {
+                self.access_restrictions.map(|v| (v.bits() as u16).into())
+            }
             _ => None,
         }
     }
@@ -195,6 +223,8 @@ impl Base {
             description: None,
             write_mask: None,
             user_write_mask: None,
+            role_permissions: None,
+            access_restrictions: None,
         }
     }
 
@@ -217,6 +247,8 @@ impl Base {
             description,
             write_mask,
             user_write_mask,
+            role_permissions: None,
+            access_restrictions: None,
         }
     }
 
@@ -234,5 +266,32 @@ impl Base {
     /// Set the browse name of this node.
     pub fn set_browse_name(&mut self, browse_name: impl Into<QualifiedName>) {
         self.browse_name = browse_name.into();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use opcua_types::{AccessRestrictionType, PermissionType, RolePermissionType};
+
+    use super::*;
+
+    #[test]
+    fn role_permissions_and_access_restrictions_default_to_none_and_round_trip() {
+        let mut base = Base::new(NodeClass::Object, &NodeId::null(), "test", "Test");
+
+        assert!(base.role_permissions().is_none());
+        assert!(base.access_restrictions().is_none());
+
+        let role_permissions = vec![RolePermissionType {
+            role_id: NodeId::new(0, 1),
+            permissions: PermissionType::Read,
+        }];
+        base.set_role_permissions(role_permissions.clone());
+
+        let access_restrictions = AccessRestrictionType::SigningRequired;
+        base.set_access_restrictions(access_restrictions);
+
+        assert_eq!(base.role_permissions(), Some(role_permissions.as_slice()));
+        assert_eq!(base.access_restrictions(), Some(access_restrictions));
     }
 }

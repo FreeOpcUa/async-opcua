@@ -112,6 +112,8 @@ pub struct RequestContextInner {
     pub authenticator: Arc<dyn AuthManager>,
     /// The current user token.
     pub token: UserToken,
+    /// Role NodeIds granted to the activated session.
+    pub user_roles: Arc<Vec<NodeId>>,
     /// Global type tree object.
     pub type_tree: Arc<RwLock<DefaultTypeTree>>,
     /// Wrapper to get a type tree
@@ -157,6 +159,11 @@ impl RequestContext {
     /// Get the current user token.
     pub fn user_token(&self) -> &UserToken {
         &self.token
+    }
+
+    /// Get the role NodeIds granted to the activated session.
+    pub fn user_roles(&self) -> &[NodeId] {
+        &self.inner.user_roles
     }
 
     /// Get the global type tree object. If your server needs per-user type trees,

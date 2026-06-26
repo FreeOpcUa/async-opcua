@@ -139,6 +139,24 @@ macro_rules! node_builder_impl {
                 self
             }
 
+            /// Sets the role permissions of the node
+            pub fn role_permissions<V>(mut self, role_permissions: V) -> Self
+            where
+                V: Into<Vec<opcua_types::RolePermissionType>>,
+            {
+                self.node.set_role_permissions(role_permissions.into());
+                self
+            }
+
+            /// Sets the access restrictions of the node
+            pub fn access_restrictions(
+                mut self,
+                access_restrictions: opcua_types::AccessRestrictionType,
+            ) -> Self {
+                self.node.set_access_restrictions(access_restrictions);
+                self
+            }
+
             /// Adds a reference to the node
             pub fn reference<T>(
                 mut self,
@@ -335,7 +353,7 @@ macro_rules! node_builder_impl_property_of {
 macro_rules! node_base_impl {
     ( $node_struct:ident ) => {
         use crate::NodeType;
-        use opcua_types::{NodeClass, WriteMask};
+        use opcua_types::{AccessRestrictionType, NodeClass, RolePermissionType, WriteMask};
 
         impl From<$node_struct> for NodeType {
             fn from(value: $node_struct) -> Self {
@@ -386,6 +404,22 @@ macro_rules! node_base_impl {
 
             fn set_user_write_mask(&mut self, user_write_mask: WriteMask) {
                 self.base.set_user_write_mask(user_write_mask)
+            }
+
+            fn role_permissions(&self) -> Option<&[RolePermissionType]> {
+                self.base.role_permissions()
+            }
+
+            fn set_role_permissions(&mut self, role_permissions: Vec<RolePermissionType>) {
+                self.base.set_role_permissions(role_permissions);
+            }
+
+            fn access_restrictions(&self) -> Option<AccessRestrictionType> {
+                self.base.access_restrictions()
+            }
+
+            fn set_access_restrictions(&mut self, access_restrictions: AccessRestrictionType) {
+                self.base.set_access_restrictions(access_restrictions);
             }
         }
     };

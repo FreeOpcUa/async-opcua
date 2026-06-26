@@ -18,6 +18,7 @@ mod node_management;
 mod programs;
 mod pubsub;
 mod query;
+mod rbac;
 mod read;
 mod reverse_connect;
 mod sampling_transition;

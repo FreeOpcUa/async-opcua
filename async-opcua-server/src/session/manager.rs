@@ -174,6 +174,7 @@ impl SessionManager {
                 session_id: session_id_numeric,
                 authenticator: self.info.authenticator.clone(),
                 token: UserToken(ANONYMOUS_USER_TOKEN_ID.to_string()),
+                user_roles: Arc::new(Vec::new()),
                 type_tree: self.info.type_tree.clone(),
                 type_tree_getter: self.info.type_tree_getter.clone(),
                 subscriptions,

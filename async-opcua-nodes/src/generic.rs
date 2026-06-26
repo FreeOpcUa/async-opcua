@@ -80,6 +80,8 @@ macro_rules! base {
                 $attrs,
                 user_write_mask
             ),
+            role_permissions: None,
+            access_restrictions: None,
         }
     }};
 }

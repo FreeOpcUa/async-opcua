@@ -254,6 +254,12 @@ impl ServerAuditEvent {
         self.revised_session_timeout = Some(revised_session_timeout);
         self
     }
+
+    /// Records the subject certificate for an AuditCertificateEventType (exposed as `Certificate`).
+    fn with_certificate(mut self, certificate: ByteString) -> Self {
+        self.client_certificate = Some(certificate);
+        self
+    }
 }
 
 impl Event for ServerAuditEvent {
@@ -322,7 +328,9 @@ impl EventField for ServerAuditEvent {
             }
             "MethodId" => self.method_id.get_value(attribute_id, index_range, &[]),
             "AttributeId" => self.attribute_id.get_value(attribute_id, index_range, &[]),
-            "ClientCertificate" => {
+            // AuditCreateSessionEventType exposes the client cert as "ClientCertificate";
+            // AuditCertificateEventType exposes the subject cert as "Certificate" — same storage.
+            "ClientCertificate" | "Certificate" => {
                 self.client_certificate
                     .get_value(attribute_id, index_range, &[])
             }
@@ -395,6 +403,63 @@ pub(crate) fn dispatch_create_session(
     if let Some(revised_session_timeout) = revised_session_timeout {
         event = event.with_revised_session_timeout(revised_session_timeout);
     }
+    dispatch_audit_event(subscriptions, &event);
+}
+
+/// Maps a certificate-validation status code to its AuditCertificateEventType subtype (Part 4 §A.2).
+///
+/// Returns `None` for non-certificate status codes (which get no certificate audit event).
+fn certificate_event_type(status: StatusCode) -> Option<ObjectTypeId> {
+    Some(match status {
+        StatusCode::BadCertificateTimeInvalid | StatusCode::BadCertificateIssuerTimeInvalid => {
+            ObjectTypeId::AuditCertificateExpiredEventType
+        }
+        StatusCode::BadCertificateRevoked
+        | StatusCode::BadCertificateIssuerRevoked
+        | StatusCode::BadCertificateRevocationUnknown
+        | StatusCode::BadCertificateIssuerRevocationUnknown => {
+            ObjectTypeId::AuditCertificateRevokedEventType
+        }
+        StatusCode::BadCertificateUntrusted | StatusCode::BadCertificateChainIncomplete => {
+            ObjectTypeId::AuditCertificateUntrustedEventType
+        }
+        StatusCode::BadCertificateHostNameInvalid | StatusCode::BadCertificateUriInvalid => {
+            ObjectTypeId::AuditCertificateDataMismatchEventType
+        }
+        StatusCode::BadCertificateInvalid
+        | StatusCode::BadCertificateUseNotAllowed
+        | StatusCode::BadCertificateIssuerUseNotAllowed
+        | StatusCode::BadCertificatePolicyCheckFailed => {
+            ObjectTypeId::AuditCertificateInvalidEventType
+        }
+        _ => return None,
+    })
+}
+
+/// Emits the matching AuditCertificateEventType subtype when a client certificate fails validation.
+///
+/// A no-op for status codes that are not certificate-validation failures.
+pub(crate) fn dispatch_certificate_audit(
+    subscriptions: &Arc<SubscriptionCache>,
+    info: &ServerInfo,
+    request_header: &RequestHeader,
+    certificate: ByteString,
+    session_id: Option<NodeId>,
+    status: StatusCode,
+) {
+    let Some(event_type) = certificate_event_type(status) else {
+        return;
+    };
+    let event = ServerAuditEvent::outcome(
+        event_type,
+        info.application_uri.clone(),
+        "Validate ClientCertificate",
+        request_header.audit_entry_id.clone(),
+        UAString::null(),
+        status,
+        session_id,
+    )
+    .with_certificate(certificate);
     dispatch_audit_event(subscriptions, &event);
 }
 
@@ -582,6 +647,80 @@ mod tests {
                 &field("SecureChannelId")
             ),
             Variant::from(UAString::from("5"))
+        );
+    }
+
+    #[test]
+    fn certificate_status_codes_map_to_event_subtypes() {
+        let cases = [
+            (
+                StatusCode::BadCertificateTimeInvalid,
+                ObjectTypeId::AuditCertificateExpiredEventType,
+            ),
+            (
+                StatusCode::BadCertificateRevoked,
+                ObjectTypeId::AuditCertificateRevokedEventType,
+            ),
+            (
+                StatusCode::BadCertificateUntrusted,
+                ObjectTypeId::AuditCertificateUntrustedEventType,
+            ),
+            (
+                StatusCode::BadCertificateUriInvalid,
+                ObjectTypeId::AuditCertificateDataMismatchEventType,
+            ),
+            (
+                StatusCode::BadCertificateHostNameInvalid,
+                ObjectTypeId::AuditCertificateDataMismatchEventType,
+            ),
+            (
+                StatusCode::BadCertificateInvalid,
+                ObjectTypeId::AuditCertificateInvalidEventType,
+            ),
+        ];
+        for (status, expected) in cases {
+            assert_eq!(certificate_event_type(status), Some(expected), "{status}");
+        }
+        // Non-certificate failures get no certificate audit event.
+        assert_eq!(
+            certificate_event_type(StatusCode::BadUserAccessDenied),
+            None
+        );
+        assert_eq!(certificate_event_type(StatusCode::Good), None);
+    }
+
+    #[test]
+    fn certificate_audit_event_exposes_certificate_and_failure() {
+        let cert = ByteString::from(vec![1u8, 2, 3]);
+        let event = ServerAuditEvent::outcome(
+            ObjectTypeId::AuditCertificateUntrustedEventType,
+            UAString::from("urn:test-server"),
+            "Validate ClientCertificate",
+            UAString::null(),
+            UAString::null(),
+            StatusCode::BadCertificateUntrusted,
+            None,
+        )
+        .with_certificate(cert.clone());
+
+        assert_eq!(
+            event.get_value(AttributeId::Value, &NumericRange::None, &field("EventType")),
+            Variant::from(NodeId::from(
+                ObjectTypeId::AuditCertificateUntrustedEventType
+            ))
+        );
+        // AuditCertificateEventType exposes the subject cert as "Certificate".
+        assert_eq!(
+            event.get_value(
+                AttributeId::Value,
+                &NumericRange::None,
+                &field("Certificate")
+            ),
+            Variant::from(cert)
+        );
+        assert_eq!(
+            event.get_value(AttributeId::Value, &NumericRange::None, &field("Status")),
+            Variant::Boolean(false)
         );
     }
 }

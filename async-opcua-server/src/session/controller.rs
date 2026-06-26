@@ -46,8 +46,8 @@ use crate::{
 
 use super::{
     audit::{
-        dispatch_activate_session, dispatch_create_session, dispatch_response_failure,
-        dispatch_service_failure, AuditEventContext,
+        dispatch_activate_session, dispatch_certificate_audit, dispatch_create_session,
+        dispatch_response_failure, dispatch_service_failure, AuditEventContext,
     },
     instance::Session,
     manager::{activate_session, close_session, SessionManager},
@@ -447,6 +447,18 @@ impl<T: ConnectionTransport> SessionController<T> {
                     revised_timeout,
                     status,
                 );
+                // A client-certificate validation failure also emits the matching
+                // AuditCertificateEventType subtype (no-op for non-certificate failures).
+                if status.is_bad() {
+                    dispatch_certificate_audit(
+                        &self.subscriptions,
+                        &self.info,
+                        &request.request_header,
+                        request.client_certificate.clone(),
+                        None,
+                        status,
+                    );
+                }
                 self.process_service_result(res, request.request_header.request_handle, id)
             }
 

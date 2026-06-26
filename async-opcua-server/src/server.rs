@@ -336,6 +336,8 @@ impl Server {
             ..Default::default()
         });
 
+        let role_resolver =
+            crate::rbac::resolver::RoleResolver::from_user_tokens(&config.user_tokens);
         let config = Arc::new(config);
 
         let service_level = Arc::new(AtomicU8::new(255));
@@ -346,6 +348,7 @@ impl Server {
             authenticator: builder
                 .authenticator
                 .unwrap_or_else(|| Arc::new(DefaultAuthenticator::new(config.user_tokens.clone()))),
+            role_resolver,
             application_uri,
             product_uri,
             application_name: LocalizedText {

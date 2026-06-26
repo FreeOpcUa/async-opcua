@@ -136,13 +136,14 @@ impl<T> Request<T> {
 
     /// Get a request context object from this request.
     pub(super) fn context(&self) -> RequestContext {
+        let user_roles = self.session.read().roles();
         RequestContext {
             current_node_manager_index: 0,
             inner: Arc::new(RequestContextInner {
                 session: self.session.clone(),
                 authenticator: self.info.authenticator.clone(),
                 token: self.token.clone(),
-                user_roles: Arc::new(Vec::new()),
+                user_roles,
                 type_tree: self.info.type_tree.clone(),
                 type_tree_getter: self.info.type_tree_getter.clone(),
                 subscriptions: self.subscriptions.clone(),
@@ -421,6 +422,7 @@ impl MessageHandler {
             return;
         }
 
+        let user_roles = session.read().roles();
         let mut context = RequestContext {
             current_node_manager_index: 0,
             inner: Arc::new(RequestContextInner {
@@ -428,7 +430,7 @@ impl MessageHandler {
                 session_id,
                 authenticator: self.info.authenticator.clone(),
                 token,
-                user_roles: Arc::new(Vec::new()),
+                user_roles,
                 type_tree: self.info.type_tree.clone(),
                 subscriptions: self.subscriptions.clone(),
                 info: self.info.clone(),
@@ -458,6 +460,7 @@ impl MessageHandler {
         session_id: u32,
         token: UserToken,
     ) {
+        let user_roles = session.read().roles();
         let context = RequestContext {
             current_node_manager_index: 0,
             inner: Arc::new(RequestContextInner {
@@ -465,7 +468,7 @@ impl MessageHandler {
                 session_id,
                 authenticator: self.info.authenticator.clone(),
                 token,
-                user_roles: Arc::new(Vec::new()),
+                user_roles,
                 type_tree: self.info.type_tree.clone(),
                 subscriptions: self.subscriptions.clone(),
                 info: self.info.clone(),
@@ -601,6 +604,7 @@ impl MessageHandler {
         session_id: u32,
         token: UserToken,
     ) -> NamespaceMap {
+        let user_roles = session.read().roles();
         let ctx = RequestContext {
             current_node_manager_index: 0,
             inner: Arc::new(RequestContextInner {
@@ -608,7 +612,7 @@ impl MessageHandler {
                 session_id,
                 authenticator: self.info.authenticator.clone(),
                 token,
-                user_roles: Arc::new(Vec::new()),
+                user_roles,
                 type_tree: self.info.type_tree.clone(),
                 subscriptions: self.subscriptions.clone(),
                 info: self.info.clone(),

@@ -67,21 +67,21 @@ browsable. **Independent test**: connect with mapped identities, check granted r
 ### Tests for US2
 
 - [ ] T022 [P] [US2] Integration test `it/rbac.rs::username_maps_to_role` — username→Operator grants Operator (+AuthenticatedUser) (Spec: Part 18 §4.4.3; Part 3 §4.9.2)
-- [ ] T023 [P] [US2] Integration test `it/rbac.rs::anonymous_gets_anonymous_role_only` (Spec: Part 3 §4.9.2)
+- [X] T023 [P] [US2] Integration test `it/rbac.rs::anonymous_gets_anonymous_role_only` (Spec: Part 3 §4.9.2)
 - [ ] T024 [P] [US2] Integration test `it/rbac.rs::cert_thumbprint_maps_to_role` — X509 thumbprint→SecurityAdmin (Spec: Part 18 §4.4.2 Thumbprint)
-- [ ] T025 [P] [US2] Integration test `it/rbac.rs::roleset_has_eight_well_known_roles` — browse `Server.ServerCapabilities.RoleSet` finds the 8 RoleType instances at standard NodeIds (Spec: Part 5 ServerCapabilities; Part 18 §4.4.1, §4.5)
+- [X] T025 [P] [US2] Integration test `it/rbac.rs::roleset_has_eight_well_known_roles` — browse `Server.ServerCapabilities.RoleSet` finds the 8 RoleType instances at standard NodeIds (Spec: Part 5 ServerCapabilities; Part 18 §4.4.1, §4.5)
 
 ### Implementation for US2
 
-- [ ] T026 [US2] Define the runtime `IdentityMappingRule` criteria enum (AnonymousIdentity/AuthenticatedUser/UserName/Thumbprint/Role/GroupId/Application) in `srv/authorization/rules.rs`, mapping to/from `IdentityMappingRuleType`/`IdentityCriteriaType` (Spec: Part 18 §4.4.2, §4.4.3)
-- [ ] T027 [US2] Define `ResolvedIdentity` (identity token kind + value, cert thumbprint, issued-token groups, application URI, endpoint) assembled at activate in `srv/authorization/resolver.rs` (Spec: Part 18 §4.4.1)
-- [ ] T028 [US2] Implement `RoleResolver` with the seeded 8 well-known roles + their default identity criteria (Anonymous⇒AnonymousIdentity, AuthenticatedUser⇒AuthenticatedUser) in `srv/authorization/resolver.rs` (Spec: Part 3 §4.9.2; Part 18 §4.4.1)
-- [ ] T029 [US2] Implement `RoleResolver::resolve(&ResolvedIdentity) -> Vec<NodeId>` evaluating all rules incl. Applications/Endpoints include/exclude filtering (Spec: Part 18 §4.4.1 Applications/Endpoints, §4.4.3)
-- [ ] T030 [US2] Resolve the role set at session activation and cache it (the resolved role set) on the Session; populate `RequestContextInner.user_roles` from it (Spec: Part 4 §5.6 ActivateSession; Part 18 §4)
-- [ ] T031 [US2] Assemble `ResolvedIdentity` from the activate path (identity token + channel cert thumbprint + app uri + endpoint) `srv/session/` (Spec: Part 4 §5.6.3; Part 18 §4.4.2)
-- [ ] T032 [P] [US2] Verify the well-known RoleType instances + RoleSet from the core nodeset (nodeset_16) load with correct BrowseNames/NodeIds; add any missing wiring `srv/node_manager/memory/core.rs` (Spec: Part 18 §4.4.1, §4.5; Part 5)
-- [ ] T033 [US2] Map well-known role NodeIds ↔ a `WellKnownRole` enum for ergonomic config `srv/authorization/mod.rs` (Spec: Part 3 §4.9.2; node_ids `WellKnownRole_*`)
-- [ ] T034 [US2] Verify the four US2 tests pass; confirm anonymous excludes AuthenticatedUser (Spec: Part 3 §4.9.2)
+- [X] T026 [US2] Define the runtime `IdentityMappingRule` criteria enum (AnonymousIdentity/AuthenticatedUser/UserName/Thumbprint/Role/GroupId/Application) in `srv/authorization/rules.rs`, mapping to/from `IdentityMappingRuleType`/`IdentityCriteriaType` (Spec: Part 18 §4.4.2, §4.4.3)
+- [X] T027 [US2] Define `ResolvedIdentity` (identity token kind + value, cert thumbprint, issued-token groups, application URI, endpoint) assembled at activate in `srv/authorization/resolver.rs` (Spec: Part 18 §4.4.1)
+- [X] T028 [US2] Implement `RoleResolver` with the seeded 8 well-known roles + their default identity criteria (Anonymous⇒AnonymousIdentity, AuthenticatedUser⇒AuthenticatedUser) in `srv/authorization/resolver.rs` (Spec: Part 3 §4.9.2; Part 18 §4.4.1)
+- [X] T029 [US2] Implement `RoleResolver::resolve(&ResolvedIdentity) -> Vec<NodeId>` evaluating all rules incl. Applications/Endpoints include/exclude filtering (Spec: Part 18 §4.4.1 Applications/Endpoints, §4.4.3)
+- [X] T030 [US2] Resolve the role set at session activation and cache it (the resolved role set) on the Session; populate `RequestContextInner.user_roles` from it (Spec: Part 4 §5.6 ActivateSession; Part 18 §4)
+- [X] T031 [US2] Assemble `ResolvedIdentity` from the activate path (identity token + channel cert thumbprint + app uri + endpoint) `srv/session/` (Spec: Part 4 §5.6.3; Part 18 §4.4.2)
+- [X] T032 [P] [US2] Verify the well-known RoleType instances + RoleSet from the core nodeset (nodeset_16) load with correct BrowseNames/NodeIds; add any missing wiring `srv/node_manager/memory/core.rs` (Spec: Part 18 §4.4.1, §4.5; Part 5)
+- [X] T033 [US2] Map well-known role NodeIds ↔ a `WellKnownRole` enum for ergonomic config `srv/authorization/mod.rs` (Spec: Part 3 §4.9.2; node_ids `WellKnownRole_*`)
+- [X] T034 [US2] Verify the four US2 tests pass; confirm anonymous excludes AuthenticatedUser (Spec: Part 3 §4.9.2)
 
 **Checkpoint**: sessions carry correct roles; RoleSet model is browsable.
 
@@ -229,7 +229,7 @@ test**: no-config server unchanged; configured server enforces; secure preset re
 
 ### Implementation for US8
 
-- [ ] T092 [US8] Add `roles: Vec<NodeId>` to `srv/config/server.rs::ServerUserToken` + `with_roles(...)` (Spec: Part 18 §4.4.1; Part 3 §4.9)
+- [X] T092 [US8] Add `roles: Vec<NodeId>` to `srv/config/server.rs::ServerUserToken` + `with_roles(...)` (Spec: Part 18 §4.4.1; Part 3 §4.9)
 - [ ] T093 [US8] Add identity-mapping-rule + per-namespace default config to `srv/config/server.rs::ServerConfig` (Spec: Part 18 §4.4.3; Part 5 §6)
 - [ ] T094 [US8] Add `enforce_role_based_access: bool` (global posture) to `srv/config/limits.rs` (default false) (Spec: Part 3 §4.8; plan.md D5)
 - [ ] T095 [US8] Add `ServerBuilder` methods: `identity_mapping_rule`, `default_role_permissions`, `default_access_restrictions`, `enforce_role_based_access`, `with_secure_role_preset` `srv/builder.rs` (Spec: Part 18 §4; Part 5 §6)

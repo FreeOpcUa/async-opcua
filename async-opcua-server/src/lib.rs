@@ -42,6 +42,7 @@ pub mod node_manager;
 pub mod nodeset_loader;
 /// Program execution (Part 10) support.
 pub mod programs;
+pub(crate) mod rbac;
 mod reverse_connect;
 mod server;
 mod server_handle;

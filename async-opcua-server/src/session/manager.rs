@@ -22,6 +22,7 @@ use crate::{
     identity_token::IdentityToken,
     info::ServerInfo,
     node_manager::{NodeManagers, RequestContext, RequestContextInner},
+    rbac::resolver::ResolvedIdentity,
     subscriptions::SubscriptionCache,
 };
 use opcua_types::{
@@ -78,6 +79,53 @@ pub(crate) fn is_client_certificate_channel_mismatch(
             session_cert.thumbprint() != channel_cert.thumbprint()
         }
         _ => true,
+    }
+}
+
+fn non_empty_ua_string(value: &opcua_types::UAString) -> Option<String> {
+    value
+        .value()
+        .as_ref()
+        .filter(|value| !value.is_empty())
+        .cloned()
+}
+
+fn resolved_identity_from_activation(
+    identity: &IdentityToken,
+    claims: Option<&opcua_crypto::identity::ClaimProfile>,
+    application_uri: Option<String>,
+    endpoint_url: Option<String>,
+) -> Result<ResolvedIdentity, StatusCode> {
+    match identity {
+        IdentityToken::Anonymous(_) => {
+            Ok(ResolvedIdentity::anonymous(application_uri, endpoint_url))
+        }
+        IdentityToken::UserName(token) => Ok(ResolvedIdentity::username(
+            token.user_name.as_ref(),
+            application_uri,
+            endpoint_url,
+        )),
+        IdentityToken::X509(token) => {
+            let signing_cert =
+                X509::from_byte_string(&token.certificate_data).map_err(|err| err.status())?;
+            Ok(ResolvedIdentity::x509_thumbprint(
+                signing_cert.thumbprint().as_hex_string(),
+                application_uri,
+                endpoint_url,
+            ))
+        }
+        IdentityToken::IssuedToken(_) => {
+            let group_ids = claims
+                .map(|claims| claims.roles.clone())
+                .unwrap_or_default();
+            Ok(ResolvedIdentity::issued_token(
+                group_ids,
+                std::iter::empty::<NodeId>(),
+                application_uri,
+                endpoint_url,
+            ))
+        }
+        IdentityToken::None | IdentityToken::Invalid(_) => Err(StatusCode::BadIdentityTokenInvalid),
     }
 }
 
@@ -166,6 +214,7 @@ impl SessionManager {
     ) {
         let (sender, receiver) = mpsc::channel(SESSION_ACTOR_QUEUE_CAPACITY);
         self.register_actor_sender(authentication_token.clone(), sender);
+        let user_roles = session.read().roles();
 
         let context = RequestContext {
             current_node_manager_index: 0,
@@ -174,7 +223,7 @@ impl SessionManager {
                 session_id: session_id_numeric,
                 authenticator: self.info.authenticator.clone(),
                 token: UserToken(ANONYMOUS_USER_TOKEN_ID.to_string()),
-                user_roles: Arc::new(Vec::new()),
+                user_roles,
                 type_tree: self.info.type_tree.clone(),
                 type_tree_getter: self.info.type_tree_getter.clone(),
                 subscriptions,
@@ -714,13 +763,24 @@ pub(crate) async fn activate_session(
         let user_changed = session
             .user_token()
             .is_some_and(|previous| previous != &user_token);
+        let activated_identity = IdentityToken::new(request.user_identity_token.clone());
+        let application_uri =
+            non_empty_ua_string(&session.application_description().application_uri);
+        let resolved_identity = resolved_identity_from_activation(
+            &activated_identity,
+            claims.as_ref(),
+            application_uri,
+            Some(endpoint_url.clone()),
+        )?;
+        let roles = Arc::new(info.role_resolver.resolve(&resolved_identity));
         session.activate(
             secure_channel_id,
             server_nonce,
-            IdentityToken::new(request.user_identity_token.clone()),
+            activated_identity,
             request.locale_ids.clone(),
             user_token.clone(),
             claims,
+            roles,
         );
         (
             session.session_nonce().clone(),
@@ -819,6 +879,7 @@ mod tests {
         config::ServerEndpoint,
         identity_token::{IdentityToken, POLICY_ID_ANONYMOUS},
         node_manager::NodeManagers,
+        rbac::WellKnownRole,
         session::{instance::Session, manager::SessionManager, message_handler::MessageHandler},
         ServerBuilder,
     };
@@ -1046,6 +1107,20 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn anonymous_activation_stores_anonymous_role_on_session() {
+        let fixture = ActivationFixture::new(Arc::new(AuthenticationGate::open()));
+        fixture
+            .activate_with(SecurityPolicy::None, 7)
+            .await
+            .expect("anonymous activation should succeed");
+
+        assert_eq!(
+            fixture.session.read().roles().as_slice(),
+            [WellKnownRole::Anonymous.node_id()]
+        );
+    }
+
     #[derive(Clone)]
     struct ActivationFixture {
         info: Arc<crate::ServerInfo>,
@@ -1155,6 +1230,7 @@ mod tests {
                 None,
                 user_token,
                 None,
+                Arc::new(vec![WellKnownRole::Anonymous.node_id()]),
             );
         }
     }

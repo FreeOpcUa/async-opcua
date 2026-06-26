@@ -543,14 +543,17 @@ mod tests {
             MessageSecurityMode::None,
         );
 
+        let session = Arc::new(RwLock::new(session));
+        let user_roles = session.read().roles();
+
         RequestContext {
             current_node_manager_index: 0,
             inner: Arc::new(RequestContextInner {
-                session: Arc::new(RwLock::new(session)),
+                session,
                 session_id: 1,
                 authenticator: info.authenticator.clone(),
                 token: UserToken("anonymous".to_string()),
-                user_roles: Arc::new(Vec::new()),
+                user_roles,
                 type_tree: info.type_tree.clone(),
                 type_tree_getter: info.type_tree_getter.clone(),
                 subscriptions: handle.subscriptions().clone(),

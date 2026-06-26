@@ -325,14 +325,14 @@ impl SubscriptionCache {
         for (session, removed_subscriptions) in expired_subscriptions {
             // Create a local request context, since we need to call delete monitored items.
 
-            let (id, token) = {
+            let (id, token, user_roles) = {
                 let lck = session.read();
                 let Some(token) = lck.user_token() else {
                     error!("Active session missing user token, this should be impossible");
                     continue;
                 };
 
-                (lck.session_id_numeric(), token.clone())
+                (lck.session_id_numeric(), token.clone(), lck.roles())
             };
             let ctx = RequestContext {
                 current_node_manager_index: 0,
@@ -341,7 +341,7 @@ impl SubscriptionCache {
                     session_id: id,
                     authenticator: context.authenticator.clone(),
                     token,
-                    user_roles: Arc::new(Vec::new()),
+                    user_roles,
                     type_tree: context.type_tree.clone(),
                     subscriptions: context.subscriptions.clone(),
                     info: context.info.clone(),
@@ -1459,14 +1459,16 @@ mod tests {
                 None,
                 UserToken(POLICY_ID_ANONYMOUS.to_string()),
                 None,
+                Arc::new(Vec::new()),
             );
             let session_id = session.read().session_id_numeric();
+            let user_roles = session.read().roles();
             let context = RequestContext::new_test(Arc::new(RequestContextInner {
                 session,
                 session_id,
                 authenticator: info.authenticator.clone(),
                 token: UserToken(POLICY_ID_ANONYMOUS.to_string()),
-                user_roles: Arc::new(Vec::new()),
+                user_roles,
                 type_tree: info.type_tree.clone(),
                 type_tree_getter: info.type_tree_getter.clone(),
                 subscriptions: Arc::clone(&cache),

@@ -9,13 +9,14 @@ use std::sync::Arc;
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
+    str::FromStr,
 };
 
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, SaltString},
     Argon2,
 };
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tracing::{trace, warn};
 
 use crate::constants;
@@ -23,7 +24,7 @@ use opcua_core::{comms::url::url_matches_except_host, config::Config};
 use opcua_crypto::{CertificateStore, SecurityPolicy, Thumbprint};
 use opcua_types::{
     ApplicationDescription, ApplicationType, DecodingOptions, LocalizedText, MessageSecurityMode,
-    UAString,
+    NodeId, UAString,
 };
 
 use super::{endpoint::ServerEndpoint, limits::Limits};
@@ -127,6 +128,14 @@ pub struct ServerUserToken {
     #[serde(default)]
     /// Access to read diagnostics on the server.
     pub read_diagnostics: bool,
+    /// Role NodeIds granted to this configured user identity.
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        serialize_with = "serialize_node_ids",
+        deserialize_with = "deserialize_node_ids"
+    )]
+    pub roles: Vec<NodeId>,
 }
 
 impl ServerUserToken {
@@ -142,6 +151,7 @@ impl ServerUserToken {
             x509: None,
             thumbprint: None,
             read_diagnostics: false,
+            roles: Vec::new(),
         }
     }
 
@@ -156,6 +166,7 @@ impl ServerUserToken {
             x509: Some(cert_path.to_string_lossy().to_string()),
             thumbprint: None,
             read_diagnostics: false,
+            roles: Vec::new(),
         }
     }
 
@@ -225,6 +236,16 @@ impl ServerUserToken {
         self.read_diagnostics = read;
         self
     }
+
+    /// Set the role NodeIds granted to this configured user identity.
+    pub fn with_roles<I, R>(mut self, roles: I) -> Self
+    where
+        I: IntoIterator<Item = R>,
+        R: Into<NodeId>,
+    {
+        self.roles = roles.into_iter().map(Into::into).collect();
+        self
+    }
 }
 
 fn hash_password(password: &str) -> Result<String, argon2::password_hash::Error> {
@@ -236,6 +257,27 @@ fn hash_password(password: &str) -> Result<String, argon2::password_hash::Error>
 
 fn is_argon2id_password_hash(password_hash: &str) -> bool {
     password_hash.starts_with("$argon2id$") && PasswordHash::new(password_hash).is_ok()
+}
+
+fn serialize_node_ids<S>(node_ids: &[NodeId], serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    node_ids
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .serialize(serializer)
+}
+
+fn deserialize_node_ids<'de, D>(deserializer: D) -> Result<Vec<NodeId>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Vec::<String>::deserialize(deserializer)?
+        .into_iter()
+        .map(|node_id| NodeId::from_str(&node_id).map_err(serde::de::Error::custom))
+        .collect()
 }
 
 #[cfg(test)]
@@ -257,6 +299,19 @@ mod tests {
 
         assert_ne!(stored_password, "correct-password");
         assert!(stored_password.starts_with("$argon2id$"));
+    }
+
+    #[test]
+    fn user_token_roles_default_empty_and_builder_sets_roles() {
+        let role: NodeId = opcua_types::ObjectId::WellKnownRole_Operator.into();
+
+        let default_token = ServerUserToken::user_pass("brew-operator", "correct-password");
+        assert!(default_token.roles.is_empty());
+
+        let token = ServerUserToken::user_pass("brew-operator", "correct-password")
+            .with_roles([role.clone()]);
+
+        assert_eq!(token.roles, vec![role]);
     }
 
     #[test]

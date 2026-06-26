@@ -112,6 +112,8 @@ pub struct Session {
     query_continuation_points: ContinuationPointCache<QueryContinuationPoint>,
     /// User token.
     user_token: Option<UserToken>,
+    /// Role NodeIds resolved for the activated user identity.
+    roles: Arc<Vec<NodeId>>,
     /// Claims extracted from an issued JWT identity token.
     pub claims: Option<opcua_crypto::identity::ClaimProfile>,
     /// Authorization profile mapped from JWT claims.
@@ -190,6 +192,7 @@ impl Session {
                 BROWSE_QUERY_CONTINUATION_POINT_TTL,
             ),
             user_token: None,
+            roles: Arc::new(Vec::new()),
             claims: None,
             auth_profile: None,
             application_description,
@@ -255,6 +258,7 @@ impl Session {
     }
 
     /// Activate the session.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn activate(
         &mut self,
         secure_channel_id: u32,
@@ -263,12 +267,14 @@ impl Session {
         locale_ids: Option<Vec<UAString>>,
         user_token: UserToken,
         claims: Option<opcua_crypto::identity::ClaimProfile>,
+        roles: Arc<Vec<NodeId>>,
     ) {
         self.auth_profile = claims
             .as_ref()
             .map(super::identity::SessionAuthorizationProfile::from_claims);
         self.claims = claims;
         self.user_token = Some(user_token);
+        self.roles = roles;
         self.secure_channel_id = secure_channel_id;
         self.session_nonce = server_nonce;
         self.user_identity = identity;
@@ -426,6 +432,11 @@ impl Session {
     /// is activated.
     pub fn user_token(&self) -> Option<&UserToken> {
         self.user_token.as_ref()
+    }
+
+    /// Get the role NodeIds resolved for this session.
+    pub(crate) fn roles(&self) -> Arc<Vec<NodeId>> {
+        Arc::clone(&self.roles)
     }
 
     /// Get the user identity token of this session.

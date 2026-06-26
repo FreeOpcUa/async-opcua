@@ -171,3 +171,87 @@ async fn unconfigured_permission_attributes_are_null() {
         );
     }
 }
+
+/// US2 / Part 3 §4.9.2: an anonymous session is granted the Anonymous well-known role (i=15644).
+/// Observable end-to-end via UserRolePermissions: a node permissioned for the Anonymous role reports
+/// that entry to the (anonymous) session, proving identity→role resolution ran at activation.
+#[tokio::test]
+async fn anonymous_session_is_granted_anonymous_role() {
+    let (tester, nm, session) = setup().await;
+    let anonymous_role = NodeId::new(0, 15644);
+    let id = add_permissioned_var(
+        &tester,
+        &nm,
+        "AnonPerm",
+        vec![RolePermissionType {
+            role_id: anonymous_role.clone(),
+            permissions: PermissionType::Read,
+        }],
+        None,
+    );
+
+    let r = session
+        .read(
+            &[read_value_id(AttributeId::UserRolePermissions, id)],
+            TimestampsToReturn::Neither,
+            0.0,
+        )
+        .await
+        .unwrap();
+    let Some(Variant::Array(arr)) = &r[0].value else {
+        panic!(
+            "anonymous session must see its Anonymous-role permission, got {:?}",
+            r[0].value
+        );
+    };
+    assert_eq!(
+        arr.values.len(),
+        1,
+        "expected one UserRolePermissions entry"
+    );
+    let Variant::ExtensionObject(obj) = &arr.values[0] else {
+        panic!("entry must be an ExtensionObject");
+    };
+    let rp = obj
+        .inner_as::<RolePermissionType>()
+        .expect("RolePermissionType");
+    assert_eq!(
+        rp.role_id, anonymous_role,
+        "must be the Anonymous role entry"
+    );
+    assert_eq!(rp.permissions, PermissionType::Read);
+}
+
+/// US2 / Part 18 §4.4.1 / Part 5: the RoleSet object and the 8 well-known RoleType instances are
+/// present in the address space at their standard NodeIds.
+#[tokio::test]
+async fn roleset_exposes_well_known_roles() {
+    use opcua::server::node_manager::memory::CoreNodeManager;
+
+    let (tester, _nm, _session) = setup().await;
+    let core_nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<CoreNodeManager>()
+        .expect("CoreNodeManager");
+    let space = core_nm.address_space().read();
+
+    // RoleSet object (i=15606) + the 8 well-known roles.
+    let role_set = NodeId::new(0, 15606);
+    assert!(space.node_exists(&role_set), "RoleSet object must exist");
+    for (role, id) in [
+        ("Anonymous", 15644u32),
+        ("AuthenticatedUser", 15656),
+        ("Observer", 15668),
+        ("Operator", 15680),
+        ("Supervisor", 15692),
+        ("SecurityAdmin", 15704),
+        ("ConfigureAdmin", 15716),
+        ("Engineer", 16036),
+    ] {
+        assert!(
+            space.node_exists(&NodeId::new(0, id)),
+            "well-known role {role} (i={id}) must exist"
+        );
+    }
+}

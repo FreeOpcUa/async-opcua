@@ -59,6 +59,7 @@ struct ServerAuditEvent {
     client_certificate: Option<ByteString>,
     client_certificate_thumbprint: Option<ByteString>,
     revised_session_timeout: Option<f64>,
+    request_handle: Option<u32>,
 }
 
 impl ServerAuditEvent {
@@ -110,6 +111,7 @@ impl ServerAuditEvent {
             client_certificate: None,
             client_certificate_thumbprint: None,
             revised_session_timeout: None,
+            request_handle: None,
         }
     }
 
@@ -178,6 +180,7 @@ impl ServerAuditEvent {
             client_certificate: None,
             client_certificate_thumbprint: None,
             revised_session_timeout: None,
+            request_handle: None,
         }
     }
 
@@ -226,6 +229,7 @@ impl ServerAuditEvent {
             client_certificate: None,
             client_certificate_thumbprint: None,
             revised_session_timeout: None,
+            request_handle: None,
         }
     }
 
@@ -258,6 +262,12 @@ impl ServerAuditEvent {
     /// Records the subject certificate for an AuditCertificateEventType (exposed as `Certificate`).
     fn with_certificate(mut self, certificate: ByteString) -> Self {
         self.client_certificate = Some(certificate);
+        self
+    }
+
+    /// Records the cancelled request handle for an AuditCancelEventType.
+    fn with_request_handle(mut self, request_handle: u32) -> Self {
+        self.request_handle = Some(request_handle);
         self
     }
 }
@@ -342,6 +352,9 @@ impl EventField for ServerAuditEvent {
                 self.revised_session_timeout
                     .get_value(attribute_id, index_range, &[])
             }
+            "RequestHandle" => self
+                .request_handle
+                .get_value(attribute_id, index_range, &[]),
             "InputArguments" | "OutputArguments" => {
                 // ponytail: flat audit events do not carry generated method argument arrays.
                 Variant::Empty
@@ -460,6 +473,28 @@ pub(crate) fn dispatch_certificate_audit(
         session_id,
     )
     .with_certificate(certificate);
+    dispatch_audit_event(subscriptions, &event);
+}
+
+/// Emits an AuditCancelEventType recording a Cancel request against the session (Part 4 §A.5).
+pub(crate) fn dispatch_cancel(
+    subscriptions: &Arc<SubscriptionCache>,
+    info: &ServerInfo,
+    request_header: &RequestHeader,
+    session_id: Option<NodeId>,
+    request_handle: u32,
+    status: StatusCode,
+) {
+    let event = ServerAuditEvent::outcome(
+        ObjectTypeId::AuditCancelEventType,
+        info.application_uri.clone(),
+        "Cancel",
+        request_header.audit_entry_id.clone(),
+        UAString::null(),
+        status,
+        session_id,
+    )
+    .with_request_handle(request_handle);
     dispatch_audit_event(subscriptions, &event);
 }
 

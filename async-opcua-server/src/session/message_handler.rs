@@ -361,6 +361,15 @@ impl MessageHandler {
                 // Part 4 §5.7.5: Cancel cancels outstanding requests for the Session and returns the
                 // number cancelled. This server processes requests without a cancellable queue, so
                 // there is nothing outstanding to cancel; respond Good with cancelCount = 0.
+                let session_id = Some(data.session.read().session_id().clone());
+                audit::dispatch_cancel(
+                    &self.subscriptions,
+                    &self.info,
+                    &request.request_header,
+                    session_id,
+                    request.request_handle,
+                    StatusCode::Good,
+                );
                 HandleMessageResult::SyncMessage(Response {
                     message: CancelResponse {
                         response_header: ResponseHeader::new_good(&request.request_header),

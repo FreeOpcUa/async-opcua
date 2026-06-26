@@ -15,6 +15,8 @@ use super::{AccessLevel, AddressSpace, HasNodeId, NodeType, Variable};
 /// Validate that the user given by `context` can read the value
 /// of the given node.
 pub fn is_readable(context: &RequestContext, node: &NodeType) -> Result<(), StatusCode> {
+    rbac::decision::access_restrictions_ok_ctx(context, node)?;
+
     if !authenticator_user_access_level(context, node).contains(AccessLevel::CURRENT_READ)
         || !rbac::decision::authorize_ctx(context, node, PermissionType::Read)
     {
@@ -25,6 +27,8 @@ pub fn is_readable(context: &RequestContext, node: &NodeType) -> Result<(), Stat
 }
 
 fn is_attribute_readable(context: &RequestContext, node: &NodeType) -> Result<(), StatusCode> {
+    rbac::decision::access_restrictions_ok_ctx(context, node)?;
+
     if authenticator_user_access_level(context, node).contains(AccessLevel::CURRENT_READ) {
         Ok(())
     } else {
@@ -42,6 +46,8 @@ pub fn is_writable(
     crate::services::node_access::validate_write_access(context)?;
 
     if let (NodeType::Variable(_), AttributeId::Value) = (node, attribute_id) {
+        rbac::decision::access_restrictions_ok_ctx(context, node)?;
+
         if !authenticator_user_access_level(context, node).contains(AccessLevel::CURRENT_WRITE) {
             return Err(StatusCode::BadUserAccessDenied);
         }
@@ -86,6 +92,8 @@ pub fn is_writable(
         if write_mask.is_none() || write_mask.is_some_and(|wm| !wm.contains(mask_value)) {
             return Err(StatusCode::BadNotWritable);
         }
+
+        rbac::decision::access_restrictions_ok_ctx(context, node)?;
 
         let required = rbac::decision::permission_for_write_attribute(attribute_id);
         if !rbac::decision::authorize_ctx(context, node, required) {
@@ -539,8 +547,8 @@ mod tests {
     use opcua_core::sync::RwLock;
     use opcua_nodes::Method;
     use opcua_types::{
-        AnonymousIdentityToken, ApplicationDescription, ByteString, MessageSecurityMode,
-        PermissionType, RolePermissionType, UAString,
+        AccessRestrictionType, AnonymousIdentityToken, ApplicationDescription, ByteString,
+        MessageSecurityMode, PermissionType, RolePermissionType, UAString,
     };
 
     use crate::{
@@ -723,6 +731,19 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn value_read_encryption_required_rejects_unencrypted_channel() {
+        let context = request_context();
+        let mut node = variable_with_user_access_level(AccessLevel::CURRENT_READ);
+        node.as_mut_node()
+            .set_access_restrictions(AccessRestrictionType::EncryptionRequired);
+
+        let result = read_node_through_address_space(&context, node);
+
+        assert_eq!(result.status, Some(StatusCode::BadSecurityModeInsufficient));
+        assert!(result.value.is_none());
+    }
+
+    #[tokio::test]
     async fn value_write_denied_without_write_role_returns_user_access_denied_and_leaves_value() {
         let context = request_context();
         let operator = NodeId::new(0, "Operator");
@@ -789,6 +810,22 @@ mod tests {
             TimestampsToReturn::Neither,
         );
         assert_eq!(value.value, Some(Variant::from(2i32)));
+    }
+
+    #[tokio::test]
+    async fn value_write_encryption_required_rejects_unencrypted_channel() {
+        let context = request_context();
+        let mut node =
+            variable_with_user_access_level(AccessLevel::CURRENT_READ | AccessLevel::CURRENT_WRITE);
+        node.as_mut_node()
+            .set_access_restrictions(AccessRestrictionType::EncryptionRequired);
+        let node_to_write = write_value_id(node.node_id(), Variant::from(2i32));
+
+        let type_tree = context.get_type_tree_for_user();
+        assert_eq!(
+            validate_node_write(&node, &context, &node_to_write, type_tree.get()),
+            Err(StatusCode::BadSecurityModeInsufficient)
+        );
     }
 
     #[tokio::test]

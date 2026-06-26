@@ -124,19 +124,19 @@ test**: non-Operator can't see a Browse-restricted node; EncryptionRequired over
 
 ### Tests for US4
 
-- [ ] T050 [P] [US4] Integration test `it/rbac.rs::browse_omits_nodes_without_browse_permission` (Spec: Part 4 §5.8 Browse; Part 3 §8.55 Browse)
-- [ ] T051 [P] [US4] Integration test `it/rbac.rs::encryption_required_rejects_unencrypted_access` (Bad_SecurityModeInsufficient) (Spec: Part 3 §8.56 EncryptionRequired)
-- [ ] T052 [P] [US4] Integration test `it/rbac.rs::session_required_rejects_sessionless` (Spec: Part 3 §8.56 SessionRequired; Part 4 §5.10)
-- [ ] T053 [P] [US4] Integration test `it/rbac.rs::apply_restrictions_to_browse_filters_node` (Spec: Part 3 §8.56 ApplyRestrictionsToBrowse)
+- [X] T050 [P] [US4] Integration test `it/rbac.rs::browse_omits_nodes_without_browse_permission` (Spec: Part 4 §5.8 Browse; Part 3 §8.55 Browse)
+- [X] T051 [P] [US4] Integration test `it/rbac.rs::encryption_required_rejects_unencrypted_access` (Bad_SecurityModeInsufficient) (Spec: Part 3 §8.56 EncryptionRequired)
+- [X] T052 [P] [US4] Integration test `it/rbac.rs::session_required_rejects_sessionless` (Spec: Part 3 §8.56 SessionRequired; Part 4 §5.10)
+- [X] T053 [P] [US4] Integration test `it/rbac.rs::apply_restrictions_to_browse_filters_node` (Spec: Part 3 §8.56 ApplyRestrictionsToBrowse)
 
 ### Implementation for US4
 
-- [ ] T054 [US4] Enforce the `Browse` permission by omitting denied nodes/references from Browse results in `srv/session/services/view.rs` / the browse node-manager path (Spec: Part 4 §5.8.2; Part 3 §8.55 Browse)
-- [ ] T055 [US4] Implement an `access_restrictions_ok(context, effective_restrictions) -> Result<(), StatusCode>` checking Signing/Encryption/Session vs the channel security mode + session presence in `srv/authorization/decision.rs` (Spec: Part 3 §8.56)
-- [ ] T056 [US4] AND `access_restrictions_ok` into the Read/Write/Call/History enforcement, returning `Bad_SecurityModeInsufficient` on failure (Spec: Part 3 §8.56; Part 4 §7.39)
-- [ ] T057 [US4] Implement `ApplyRestrictionsToBrowse`: apply AccessRestrictions to Browse filtering only when the bit is set `srv/session/services/view.rs` (Spec: Part 3 §8.56 ApplyRestrictionsToBrowse)
-- [ ] T058 [US4] Expose the channel `MessageSecurityMode` to the authorization decision via RequestContext/session `srv/node_manager/context.rs` (Spec: Part 4 §5.5 SecureChannel; Part 3 §8.56)
-- [ ] T059 [US4] Verify the four US4 tests pass (Spec: Part 3 §8.56; Part 4 §5.8)
+- [X] T054 [US4] Enforce the `Browse` permission by omitting denied nodes/references from Browse results in `srv/session/services/view.rs` / the browse node-manager path (Spec: Part 4 §5.8.2; Part 3 §8.55 Browse)
+- [X] T055 [US4] Implement an `access_restrictions_ok(context, effective_restrictions) -> Result<(), StatusCode>` checking Signing/Encryption/Session vs the channel security mode + session presence in `srv/authorization/decision.rs` (Spec: Part 3 §8.56)
+- [X] T056 [US4] AND `access_restrictions_ok` into the Read/Write/Call/History enforcement, returning `Bad_SecurityModeInsufficient` on failure (Spec: Part 3 §8.56; Part 4 §7.39)
+- [X] T057 [US4] Implement `ApplyRestrictionsToBrowse`: apply AccessRestrictions to Browse filtering only when the bit is set `srv/session/services/view.rs` (Spec: Part 3 §8.56 ApplyRestrictionsToBrowse)
+- [X] T058 [US4] Expose the channel `MessageSecurityMode` to the authorization decision via RequestContext/session `srv/node_manager/context.rs` (Spec: Part 4 §5.5 SecureChannel; Part 3 §8.56)
+- [X] T059 [US4] Verify the four US4 tests pass (Spec: Part 3 §8.56; Part 4 §5.8)
 
 **Checkpoint**: Browse + channel-security enforcement complete.
 

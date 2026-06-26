@@ -132,6 +132,8 @@ async fn reads_role_permissions_attribute() {
 }
 
 /// US1 / Part 3 §8.56: the AccessRestrictions attribute (26) returns the configured bitmask.
+/// Uses SessionRequired (satisfied by the session) so the read isn't blocked by US4 enforcement —
+/// EncryptionRequired would correctly deny a read over the test's unencrypted (None) channel.
 #[tokio::test]
 async fn reads_access_restrictions_attribute() {
     let (tester, nm, session) = setup().await;
@@ -140,7 +142,7 @@ async fn reads_access_restrictions_attribute() {
         &nm,
         "ArVar",
         Vec::new(),
-        Some(AccessRestrictionType::EncryptionRequired),
+        Some(AccessRestrictionType::SessionRequired),
     );
 
     let r = session
@@ -154,7 +156,7 @@ async fn reads_access_restrictions_attribute() {
     assert_eq!(
         r[0].value,
         Some(Variant::UInt16(
-            AccessRestrictionType::EncryptionRequired.bits() as u16
+            AccessRestrictionType::SessionRequired.bits() as u16
         )),
         "AccessRestrictions must return the UInt16 bitmask"
     );
@@ -483,5 +485,137 @@ async fn call_enforced_by_role() {
         r_denied.status_code,
         StatusCode::BadUserAccessDenied,
         "Call granted only to Operator must be denied to the anonymous session"
+    );
+}
+
+fn browse_children(refs: &Option<Vec<opcua::types::ReferenceDescription>>) -> Vec<NodeId> {
+    refs.clone()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|r| r.node_id.node_id)
+        .collect()
+}
+
+fn objects_folder_browse() -> opcua::types::BrowseDescription {
+    use opcua::types::{BrowseDirection, BrowseResultMask, NodeClassMask};
+    opcua::types::BrowseDescription {
+        node_id: ObjectId::ObjectsFolder.into(),
+        browse_direction: BrowseDirection::Forward,
+        reference_type_id: ReferenceTypeId::HierarchicalReferences.into(),
+        include_subtypes: true,
+        node_class_mask: NodeClassMask::all().bits(),
+        result_mask: BrowseResultMask::All as u32,
+    }
+}
+
+/// US4 / Part 3 §8.55 Browse: a node whose RolePermissions deny Browse to the session's roles is
+/// omitted from Browse results (a sibling with no restriction stays visible).
+#[tokio::test]
+async fn browse_omits_node_without_browse_permission() {
+    let (tester, nm, session) = setup().await;
+    let hidden = add_rw_var(
+        &tester,
+        &nm,
+        "HiddenFromAnon",
+        vec![rp(OPERATOR_ROLE, PermissionType::Browse)],
+    );
+    let visible = add_rw_var(&tester, &nm, "VisibleToAnon", Vec::new());
+
+    let r = session
+        .browse(&[objects_folder_browse()], 1000, None)
+        .await
+        .unwrap();
+    let children = browse_children(&r[0].references);
+    assert!(
+        children.contains(&visible),
+        "unrestricted node must be browsable"
+    );
+    assert!(
+        !children.contains(&hidden),
+        "Operator-only Browse node must be omitted for anonymous"
+    );
+}
+
+/// US4 / Part 3 §8.56: EncryptionRequired on a node accessed over an unencrypted (None) channel is
+/// rejected with Bad_SecurityModeInsufficient.
+#[tokio::test]
+async fn encryption_required_rejects_unencrypted_read() {
+    let (tester, nm, session) = setup().await; // None security policy
+    let id = add_permissioned_var(
+        &tester,
+        &nm,
+        "EncReq",
+        Vec::new(),
+        Some(AccessRestrictionType::EncryptionRequired),
+    );
+    let r = session
+        .read(
+            &[read_value_id(AttributeId::Value, id)],
+            TimestampsToReturn::Neither,
+            0.0,
+        )
+        .await
+        .unwrap();
+    assert_eq!(r[0].status(), StatusCode::BadSecurityModeInsufficient);
+}
+
+/// US4 / Part 3 §8.56 SessionRequired: a node requiring a session is still accessible WITHIN a session
+/// (the session service path), so it must not be wrongly blocked.
+#[tokio::test]
+async fn session_required_allows_session_access() {
+    let (tester, nm, session) = setup().await;
+    let id = add_permissioned_var(
+        &tester,
+        &nm,
+        "SessReq",
+        Vec::new(),
+        Some(AccessRestrictionType::SessionRequired),
+    );
+    let r = session
+        .read(
+            &[read_value_id(AttributeId::Value, id)],
+            TimestampsToReturn::Neither,
+            0.0,
+        )
+        .await
+        .unwrap();
+    assert_eq!(r[0].status(), StatusCode::Good);
+}
+
+/// US4 / Part 3 §8.56 ApplyRestrictionsToBrowse: with the bit set, an unmet EncryptionRequired node is
+/// omitted from Browse; without the bit, AccessRestrictions do not affect Browse.
+#[tokio::test]
+async fn apply_restrictions_to_browse_filters_node() {
+    let (tester, nm, session) = setup().await; // None channel ⇒ EncryptionRequired unmet
+    let applied = add_permissioned_var(
+        &tester,
+        &nm,
+        "EncReqBrowseApplied",
+        Vec::new(),
+        Some(
+            AccessRestrictionType::EncryptionRequired
+                | AccessRestrictionType::ApplyRestrictionsToBrowse,
+        ),
+    );
+    let not_applied = add_permissioned_var(
+        &tester,
+        &nm,
+        "EncReqBrowseNotApplied",
+        Vec::new(),
+        Some(AccessRestrictionType::EncryptionRequired),
+    );
+
+    let r = session
+        .browse(&[objects_folder_browse()], 1000, None)
+        .await
+        .unwrap();
+    let children = browse_children(&r[0].references);
+    assert!(
+        !children.contains(&applied),
+        "EncryptionRequired + ApplyRestrictionsToBrowse must hide the node over an unencrypted channel"
+    );
+    assert!(
+        children.contains(&not_applied),
+        "EncryptionRequired WITHOUT ApplyRestrictionsToBrowse must not affect Browse"
     );
 }

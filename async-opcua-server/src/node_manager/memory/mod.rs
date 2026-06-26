@@ -37,11 +37,11 @@ use crate::{
 };
 use opcua_core::sync::RwLock;
 use opcua_types::{
-    argument::Argument, AttributeId, BrowseDescriptionResultMask, BrowseDirection, DataEncoding,
-    DataValue, DateTime, ExpandedNodeId, MonitoringMode, NodeClass, NodeId, NumericRange,
-    PermissionType, ReadAnnotationDataDetails, ReadAtTimeDetails, ReadEventDetails,
-    ReadProcessedDetails, ReadRawModifiedDetails, ReferenceDescription, ReferenceTypeId,
-    StatusCode, TimestampsToReturn, Variant,
+    argument::Argument, AccessRestrictionType, AttributeId, BrowseDescriptionResultMask,
+    BrowseDirection, DataEncoding, DataValue, DateTime, ExpandedNodeId, MonitoringMode, NodeClass,
+    NodeId, NumericRange, PermissionType, ReadAnnotationDataDetails, ReadAtTimeDetails,
+    ReadEventDetails, ReadProcessedDetails, ReadRawModifiedDetails, ReferenceDescription,
+    ReferenceTypeId, StatusCode, TimestampsToReturn, Variant,
 };
 
 use super::{
@@ -310,10 +310,30 @@ impl<TImpl: InMemoryNodeManagerImpl> InMemoryNodeManager<TImpl> {
         }
     }
 
+    fn can_browse_target(context: &RequestContext, target_node: &NodeType) -> bool {
+        if !rbac::decision::authorize_ctx(context, target_node, PermissionType::Browse) {
+            return false;
+        }
+
+        let apply_restrictions_to_browse =
+            target_node
+                .as_node()
+                .access_restrictions()
+                .is_some_and(|restrictions| {
+                    restrictions.contains(AccessRestrictionType::ApplyRestrictionsToBrowse)
+                });
+        if apply_restrictions_to_browse {
+            rbac::decision::access_restrictions_ok_ctx(context, target_node).is_ok()
+        } else {
+            true
+        }
+    }
+
     /// Browses a single node, returns any external references found.
     fn browse_node(
         address_space: &AddressSpace,
         type_tree: &DefaultTypeTree,
+        context: &RequestContext,
         node: &mut BrowseNode,
         namespaces: &hashbrown::HashMap<u16, String>,
     ) {
@@ -362,6 +382,10 @@ impl<TImpl: InMemoryNodeManagerImpl> InMemoryNodeManager<TImpl> {
 
                 continue;
             };
+
+            if !Self::can_browse_target(context, &target_node) {
+                continue;
+            }
 
             let r_node =
                 Self::get_reference(address_space, type_tree, &target_node, node.result_mask());
@@ -594,6 +618,13 @@ impl<TImpl: InMemoryNodeManagerImpl> InMemoryNodeManager<TImpl> {
                 continue;
             }
 
+            if let Err(status) =
+                rbac::decision::access_restrictions_ok_ctx(context, &method_ref_guard)
+            {
+                method.set_status(status);
+                continue;
+            }
+
             if !method_node.user_executable()
                 || !context
                     .authenticator
@@ -789,6 +820,10 @@ impl<TImpl: InMemoryNodeManagerImpl> ViewProvider for InMemoryNodeManager<TImpl>
                 continue;
             };
 
+            if !Self::can_browse_target(context, &target_node) {
+                continue;
+            }
+
             item.set(Self::get_reference(
                 &address_space,
                 &type_tree,
@@ -828,7 +863,7 @@ impl<TImpl: InMemoryNodeManagerImpl> ViewProvider for InMemoryNodeManager<TImpl>
                     node.set_next_continuation_point(point);
                 }
             } else {
-                Self::browse_node(&address_space, &type_tree, node, &self.namespaces);
+                Self::browse_node(&address_space, &type_tree, context, node, &self.namespaces);
             }
         }
 
@@ -1162,10 +1197,18 @@ impl<TImpl: InMemoryNodeManagerImpl> MethodProvider for InMemoryNodeManager<TImp
                 continue;
             };
 
-            if method_node.executable()
-                && !rbac::decision::authorize_ctx(context, &method_ref_guard, PermissionType::Call)
-            {
-                method.set_status(StatusCode::BadUserAccessDenied);
+            if method_node.executable() {
+                if let Err(status) =
+                    rbac::decision::access_restrictions_ok_ctx(context, &method_ref_guard)
+                {
+                    method.set_status(status);
+                    continue;
+                }
+
+                if !rbac::decision::authorize_ctx(context, &method_ref_guard, PermissionType::Call)
+                {
+                    method.set_status(StatusCode::BadUserAccessDenied);
+                }
             }
         }
 
@@ -1249,8 +1292,9 @@ mod tests {
     use opcua_core::sync::RwLock;
     use opcua_nodes::{Method, NodeBase, Object};
     use opcua_types::{
-        AnonymousIdentityToken, ApplicationDescription, ByteString, CallMethodRequest,
-        DiagnosticBits, MessageSecurityMode, PermissionType, RolePermissionType, UAString,
+        AccessRestrictionType, AnonymousIdentityToken, ApplicationDescription, BrowseDescription,
+        BrowseResult, ByteString, CallMethodRequest, DiagnosticBits, MessageSecurityMode,
+        NodeClass, NodeClassMask, PermissionType, RolePermissionType, UAString,
     };
 
     use crate::{
@@ -1294,10 +1338,25 @@ mod tests {
     }
 
     fn request_context_with_roles(user_roles: Vec<NodeId>) -> RequestContext {
+        request_context_with_roles_and_security_mode(user_roles, MessageSecurityMode::None)
+    }
+
+    fn request_context_with_roles_and_security_mode(
+        user_roles: Vec<NodeId>,
+        security_mode: MessageSecurityMode,
+    ) -> RequestContext {
         let (_server, handle) = ServerBuilder::new_anonymous("test")
             .build()
             .expect("test server should build");
         let info = handle.info().clone();
+        {
+            let mut type_tree = info.type_tree.write();
+            type_tree.add_type_node(
+                &NodeId::from(ReferenceTypeId::HasComponent),
+                &NodeId::from(ReferenceTypeId::References),
+                NodeClass::ReferenceType,
+            );
+        }
         let session = Session::create(
             &info,
             NodeId::new(0, 1),
@@ -1314,7 +1373,7 @@ mod tests {
             ByteString::null(),
             UAString::from("test"),
             ApplicationDescription::default(),
-            MessageSecurityMode::None,
+            security_mode,
         );
 
         let session = Arc::new(RwLock::new(session));
@@ -1358,6 +1417,23 @@ mod tests {
         object_id: &NodeId,
         methods: Vec<(NodeId, Option<Vec<RolePermissionType>>)>,
     ) -> InMemoryNodeManager<TestMethodImpl> {
+        method_manager_with_access_restrictions(
+            object_id,
+            methods
+                .into_iter()
+                .map(|(method_id, role_permissions)| (method_id, role_permissions, None))
+                .collect(),
+        )
+    }
+
+    fn method_manager_with_access_restrictions(
+        object_id: &NodeId,
+        methods: Vec<(
+            NodeId,
+            Option<Vec<RolePermissionType>>,
+            Option<AccessRestrictionType>,
+        )>,
+    ) -> InMemoryNodeManager<TestMethodImpl> {
         let mut address_space = AddressSpace::new();
         address_space.add_namespace("urn:test", 1);
         address_space.insert::<_, NodeId>(
@@ -1367,19 +1443,222 @@ mod tests {
 
         let method_ids = methods
             .iter()
-            .map(|(method_id, _)| method_id.clone())
+            .map(|(method_id, _, _)| method_id.clone())
             .collect::<Vec<_>>();
 
-        for (method_id, role_permissions) in methods {
+        for (method_id, role_permissions, access_restrictions) in methods {
             let mut method = Method::new(&method_id, "method", "method", true, true);
             if let Some(role_permissions) = role_permissions {
                 method.set_role_permissions(role_permissions);
+            }
+            if let Some(access_restrictions) = access_restrictions {
+                method.set_access_restrictions(access_restrictions);
             }
             address_space.insert::<_, NodeId>(method, None);
             address_space.insert_reference(object_id, &method_id, ReferenceTypeId::HasComponent);
         }
 
         InMemoryNodeManager::new(TestMethodImpl { method_ids }, address_space)
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn browse_manager(
+        parent_id: &NodeId,
+        children: Vec<(
+            NodeId,
+            &'static str,
+            Option<Vec<RolePermissionType>>,
+            Option<AccessRestrictionType>,
+        )>,
+    ) -> InMemoryNodeManager<TestMethodImpl> {
+        let mut address_space = AddressSpace::new();
+        address_space.add_namespace("urn:test", 1);
+        address_space.insert::<_, NodeId>(
+            Object::new(parent_id, "parent", "parent", EventNotifier::empty()),
+            None,
+        );
+
+        for (child_id, browse_name, role_permissions, access_restrictions) in children {
+            let mut child =
+                Object::new(&child_id, browse_name, browse_name, EventNotifier::empty());
+            if let Some(role_permissions) = role_permissions {
+                child.set_role_permissions(role_permissions);
+            }
+            if let Some(access_restrictions) = access_restrictions {
+                child.set_access_restrictions(access_restrictions);
+            }
+            address_space.insert::<_, NodeId>(child, None);
+            address_space.insert_reference(parent_id, &child_id, ReferenceTypeId::HasComponent);
+        }
+
+        InMemoryNodeManager::new(
+            TestMethodImpl {
+                method_ids: Vec::new(),
+            },
+            address_space,
+        )
+    }
+
+    async fn browse_node(
+        manager: &InMemoryNodeManager<TestMethodImpl>,
+        context: &RequestContext,
+        node_id: &NodeId,
+        browse_direction: BrowseDirection,
+    ) -> BrowseResult {
+        let mut node = BrowseNode::new(
+            BrowseDescription {
+                node_id: node_id.clone(),
+                browse_direction,
+                reference_type_id: NodeId::from(ReferenceTypeId::HasComponent),
+                include_subtypes: false,
+                node_class_mask: NodeClassMask::OBJECT.bits(),
+                result_mask: BrowseDescriptionResultMask::RESULT_MASK_BROWSE_NAME.bits(),
+            },
+            100,
+            0,
+        );
+
+        manager
+            .browse(context, std::slice::from_mut(&mut node))
+            .await
+            .expect("browse should not fail the service");
+
+        let mut session = context.session.write();
+        node.into_result(0, 1, &mut session).0
+    }
+
+    fn browsed_node_ids(result: &BrowseResult) -> Vec<NodeId> {
+        result
+            .references
+            .as_deref()
+            .unwrap_or_default()
+            .iter()
+            .map(|reference| reference.node_id.node_id.clone())
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn browse_omits_forward_target_without_browse_permission() {
+        let context = request_context();
+        let operator = NodeId::new(0, "Operator");
+        let parent_id = NodeId::new(1, "parent");
+        let visible_id = NodeId::new(1, "visible");
+        let denied_id = NodeId::new(1, "denied");
+        let manager = browse_manager(
+            &parent_id,
+            vec![
+                (visible_id.clone(), "visible", None, None),
+                (
+                    denied_id.clone(),
+                    "denied",
+                    Some(vec![role_permission(&operator, PermissionType::Read)]),
+                    None,
+                ),
+            ],
+        );
+
+        let node = browse_node(&manager, &context, &parent_id, BrowseDirection::Forward).await;
+        let refs = browsed_node_ids(&node);
+
+        assert_eq!(node.status_code, StatusCode::Good);
+        assert_eq!(refs, vec![visible_id]);
+    }
+
+    #[tokio::test]
+    async fn browse_omits_inverse_target_without_browse_permission() {
+        let context = request_context();
+        let operator = NodeId::new(0, "Operator");
+        let parent_id = NodeId::new(1, "parent");
+        let child_id = NodeId::new(1, "child");
+        let manager = browse_manager(&parent_id, vec![(child_id.clone(), "child", None, None)]);
+        {
+            let address_space = manager.address_space.write();
+            let mut parent = address_space
+                .find_mut(&parent_id)
+                .expect("parent should exist");
+            parent
+                .as_mut_node()
+                .set_role_permissions(vec![role_permission(&operator, PermissionType::Read)]);
+        }
+
+        let node = browse_node(&manager, &context, &child_id, BrowseDirection::Inverse).await;
+
+        assert_eq!(node.status_code, StatusCode::Good);
+        assert!(browsed_node_ids(&node).is_empty());
+    }
+
+    #[tokio::test]
+    async fn browse_keeps_access_restricted_target_when_apply_to_browse_is_unset() {
+        let context = request_context();
+        let parent_id = NodeId::new(1, "parent");
+        let child_id = NodeId::new(1, "encrypted");
+        let manager = browse_manager(
+            &parent_id,
+            vec![(
+                child_id.clone(),
+                "encrypted",
+                None,
+                Some(AccessRestrictionType::EncryptionRequired),
+            )],
+        );
+
+        let node = browse_node(&manager, &context, &parent_id, BrowseDirection::Forward).await;
+        let refs = browsed_node_ids(&node);
+
+        assert_eq!(node.status_code, StatusCode::Good);
+        assert_eq!(refs, vec![child_id]);
+    }
+
+    #[tokio::test]
+    async fn browse_omits_target_when_apply_to_browse_security_is_not_met() {
+        let context = request_context();
+        let parent_id = NodeId::new(1, "parent");
+        let child_id = NodeId::new(1, "encrypted");
+        let manager = browse_manager(
+            &parent_id,
+            vec![(
+                child_id,
+                "encrypted",
+                None,
+                Some(
+                    AccessRestrictionType::EncryptionRequired
+                        | AccessRestrictionType::ApplyRestrictionsToBrowse,
+                ),
+            )],
+        );
+
+        let node = browse_node(&manager, &context, &parent_id, BrowseDirection::Forward).await;
+
+        assert_eq!(node.status_code, StatusCode::Good);
+        assert!(browsed_node_ids(&node).is_empty());
+    }
+
+    #[tokio::test]
+    async fn browse_keeps_apply_to_browse_target_when_security_is_met() {
+        let context = request_context_with_roles_and_security_mode(
+            Vec::new(),
+            MessageSecurityMode::SignAndEncrypt,
+        );
+        let parent_id = NodeId::new(1, "parent");
+        let child_id = NodeId::new(1, "encrypted");
+        let manager = browse_manager(
+            &parent_id,
+            vec![(
+                child_id.clone(),
+                "encrypted",
+                None,
+                Some(
+                    AccessRestrictionType::EncryptionRequired
+                        | AccessRestrictionType::ApplyRestrictionsToBrowse,
+                ),
+            )],
+        );
+
+        let node = browse_node(&manager, &context, &parent_id, BrowseDirection::Forward).await;
+        let refs = browsed_node_ids(&node);
+
+        assert_eq!(node.status_code, StatusCode::Good);
+        assert_eq!(refs, vec![child_id]);
     }
 
     #[tokio::test]
@@ -1451,5 +1730,30 @@ mod tests {
         }
 
         assert_eq!(call.status(), StatusCode::Good);
+    }
+
+    #[tokio::test]
+    async fn method_dispatch_authorization_rejects_encryption_required_unencrypted_channel() {
+        let context = request_context();
+        let object_id = NodeId::new(1, "object");
+        let method_id = NodeId::new(1, "method");
+        let manager = method_manager_with_access_restrictions(
+            &object_id,
+            vec![(
+                method_id.clone(),
+                None,
+                Some(AccessRestrictionType::EncryptionRequired),
+            )],
+        );
+        let mut call = method_call(&object_id, &method_id);
+
+        {
+            let mut calls = vec![&mut call];
+            manager
+                .authorize_method_calls(&context, calls.as_mut_slice())
+                .expect("authorization precheck should not fail the service");
+        }
+
+        assert_eq!(call.status(), StatusCode::BadSecurityModeInsufficient);
     }
 }

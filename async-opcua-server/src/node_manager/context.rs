@@ -8,7 +8,7 @@ use crate::{
 };
 use opcua_core::{sync::RwLock, trace_read_lock};
 use opcua_nodes::TypeTree;
-use opcua_types::{BrowseDescriptionResultMask, NodeId};
+use opcua_types::{BrowseDescriptionResultMask, MessageSecurityMode, NodeId};
 use parking_lot::lock_api::{RawRwLock, RwLockReadGuard};
 use tracing::debug_span;
 use tracing_futures::Instrument;
@@ -164,6 +164,11 @@ impl RequestContext {
     /// Get the role NodeIds granted to the activated session.
     pub fn user_roles(&self) -> &[NodeId] {
         &self.inner.user_roles
+    }
+
+    /// Get the secure channel message security mode for this request's session.
+    pub fn security_mode(&self) -> MessageSecurityMode {
+        self.session.read().message_security_mode()
     }
 
     /// Get the global type tree object. If your server needs per-user type trees,

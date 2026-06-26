@@ -5,7 +5,10 @@
 //! matching role grants contains the required [`PermissionType`] bit.
 
 use crate::{address_space::NodeType, node_manager::RequestContext};
-use opcua_types::{AttributeId, NodeId, PermissionType, RolePermissionType};
+use opcua_types::{
+    AccessRestrictionType, AttributeId, MessageSecurityMode, NodeId, PermissionType,
+    RolePermissionType, StatusCode,
+};
 
 /// Returns the RolePermissions list currently effective for `node`.
 #[must_use]
@@ -57,6 +60,48 @@ pub(crate) fn authorize_ctx(
     )
 }
 
+/// Validate a node's AccessRestrictions against the channel message security mode.
+pub(crate) fn access_restrictions_ok(
+    restrictions: Option<AccessRestrictionType>,
+    security_mode: MessageSecurityMode,
+) -> Result<(), StatusCode> {
+    let Some(restrictions) = restrictions else {
+        return Ok(());
+    };
+
+    if restrictions.contains(AccessRestrictionType::EncryptionRequired)
+        && security_mode != MessageSecurityMode::SignAndEncrypt
+    {
+        return Err(StatusCode::BadSecurityModeInsufficient);
+    }
+
+    if restrictions.contains(AccessRestrictionType::SigningRequired)
+        && !matches!(
+            security_mode,
+            MessageSecurityMode::Sign | MessageSecurityMode::SignAndEncrypt
+        )
+    {
+        return Err(StatusCode::BadSecurityModeInsufficient);
+    }
+
+    if restrictions.contains(AccessRestrictionType::SessionRequired) {
+        // TODO sessionless: enforce SessionRequired on sessionless invocation paths.
+    }
+
+    Ok(())
+}
+
+/// Context-taking wrapper for AccessRestrictions decisions.
+pub(crate) fn access_restrictions_ok_ctx(
+    context: &RequestContext,
+    node: &NodeType,
+) -> Result<(), StatusCode> {
+    access_restrictions_ok(
+        node.as_node().access_restrictions(),
+        context.security_mode(),
+    )
+}
+
 /// Permission required to read an attribute.
 #[must_use]
 pub(crate) fn permission_for_attribute(attribute_id: AttributeId) -> PermissionType {
@@ -101,6 +146,7 @@ pub(crate) fn permission_for_call() -> PermissionType {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use opcua_types::{AccessRestrictionType, MessageSecurityMode, StatusCode};
 
     fn role(id: &'static str) -> NodeId {
         NodeId::new(0, id)
@@ -171,5 +217,65 @@ mod tests {
         let allowed = authorize(&user_roles, Some(&permissions), PermissionType::Write);
 
         assert!(allowed);
+    }
+
+    #[test]
+    fn access_restrictions_permit_unconfigured_node_for_all_security_modes() {
+        for security_mode in [
+            MessageSecurityMode::None,
+            MessageSecurityMode::Sign,
+            MessageSecurityMode::SignAndEncrypt,
+        ] {
+            assert_eq!(access_restrictions_ok(None, security_mode), Ok(()));
+        }
+    }
+
+    #[test]
+    fn access_restrictions_require_encryption_when_requested() {
+        let restrictions = Some(AccessRestrictionType::EncryptionRequired);
+
+        assert_eq!(
+            access_restrictions_ok(restrictions, MessageSecurityMode::None),
+            Err(StatusCode::BadSecurityModeInsufficient)
+        );
+        assert_eq!(
+            access_restrictions_ok(restrictions, MessageSecurityMode::Sign),
+            Err(StatusCode::BadSecurityModeInsufficient)
+        );
+        assert_eq!(
+            access_restrictions_ok(restrictions, MessageSecurityMode::SignAndEncrypt),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn access_restrictions_require_signing_when_requested() {
+        let restrictions = Some(AccessRestrictionType::SigningRequired);
+
+        assert_eq!(
+            access_restrictions_ok(restrictions, MessageSecurityMode::None),
+            Err(StatusCode::BadSecurityModeInsufficient)
+        );
+        assert_eq!(
+            access_restrictions_ok(restrictions, MessageSecurityMode::Sign),
+            Ok(())
+        );
+        assert_eq!(
+            access_restrictions_ok(restrictions, MessageSecurityMode::SignAndEncrypt),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn access_restrictions_session_required_is_permitted_on_session_path() {
+        let restrictions = Some(AccessRestrictionType::SessionRequired);
+
+        for security_mode in [
+            MessageSecurityMode::None,
+            MessageSecurityMode::Sign,
+            MessageSecurityMode::SignAndEncrypt,
+        ] {
+            assert_eq!(access_restrictions_ok(restrictions, security_mode), Ok(()));
+        }
     }
 }

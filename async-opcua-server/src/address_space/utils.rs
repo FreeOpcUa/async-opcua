@@ -388,7 +388,7 @@ pub fn is_supported_data_encoding(data_encoding: &DataEncoding) -> bool {
     )
 }
 
-fn compute_user_role_permissions(
+pub(crate) fn compute_user_role_permissions(
     role_permissions: &[RolePermissionType],
     user_roles: &[NodeId],
 ) -> Vec<RolePermissionType> {

@@ -16,6 +16,7 @@ use crate::auth::oauth2::validate_issued_jwt;
 use crate::authenticator::{issued_token_security_policy, user_pass_security_policy_id, Password};
 use crate::diagnostics::{ServerDiagnostics, ServerDiagnosticsSummary};
 use crate::node_manager::TypeTreeForUser;
+use crate::rbac::defaults::NamespaceDefaults;
 use crate::rbac::resolver::RoleResolver;
 use crate::session::negotiate::{
     decrypt_identity_token_secret, tarpit_authentication_failure, EccSecretContext,
@@ -82,6 +83,8 @@ pub struct ServerInfo {
     pub authenticator: Arc<dyn AuthManager>,
     /// Resolver for mapping activated identities to granted role NodeIds.
     pub(crate) role_resolver: RoleResolver,
+    /// Per-namespace default RolePermissions and AccessRestrictions.
+    pub(crate) namespace_defaults: NamespaceDefaults,
     /// Structure containing type metadata shared by the entire server.
     pub type_tree: Arc<RwLock<DefaultTypeTree>>,
     /// Wrapper to get a type tree for a specific user.

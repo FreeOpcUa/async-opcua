@@ -4,7 +4,9 @@
 //! RolePermissions list applies, authorization fails closed unless the union of the session's
 //! matching role grants contains the required [`PermissionType`] bit.
 
-use crate::{address_space::NodeType, node_manager::RequestContext};
+use crate::{
+    address_space::NodeType, node_manager::RequestContext, rbac::defaults::NamespaceDefaults,
+};
 use opcua_types::{
     AccessRestrictionType, AttributeId, MessageSecurityMode, NodeId, PermissionType,
     RolePermissionType, StatusCode,
@@ -12,9 +14,15 @@ use opcua_types::{
 
 /// Returns the RolePermissions list currently effective for `node`.
 #[must_use]
-pub(crate) fn effective_role_permissions(node: &NodeType) -> Option<&[RolePermissionType]> {
-    // TODO US6: namespace default fallback.
-    node.as_node().role_permissions()
+pub(crate) fn effective_role_permissions<'a>(
+    namespace_defaults: &'a NamespaceDefaults,
+    node: &'a NodeType,
+) -> Option<&'a [RolePermissionType]> {
+    if let Some(role_permissions) = node.as_node().role_permissions() {
+        return Some(role_permissions);
+    }
+
+    namespace_defaults.role_permissions(node.as_node().node_id().namespace)
 }
 
 /// Returns `true` if `user_roles` grant `required` in the effective RolePermissions list.
@@ -55,9 +63,20 @@ pub(crate) fn authorize_ctx(
 ) -> bool {
     authorize(
         context.user_roles(),
-        effective_role_permissions(node),
+        effective_role_permissions(&context.info().namespace_defaults, node),
         required,
     )
+}
+
+/// Returns the AccessRestrictions currently effective for `node`.
+#[must_use]
+pub(crate) fn effective_access_restrictions(
+    namespace_defaults: &NamespaceDefaults,
+    node: &NodeType,
+) -> Option<AccessRestrictionType> {
+    node.as_node()
+        .access_restrictions()
+        .or_else(|| namespace_defaults.access_restrictions(node.as_node().node_id().namespace))
 }
 
 /// Returns `true` if the session roles may receive Events from an event source.
@@ -113,7 +132,7 @@ pub(crate) fn access_restrictions_ok_ctx(
     node: &NodeType,
 ) -> Result<(), StatusCode> {
     access_restrictions_ok(
-        node.as_node().access_restrictions(),
+        effective_access_restrictions(&context.info().namespace_defaults, node),
         context.security_mode(),
     )
 }
@@ -162,7 +181,11 @@ pub(crate) fn permission_for_call() -> PermissionType {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use opcua_types::{AccessRestrictionType, MessageSecurityMode, StatusCode};
+    use crate::rbac::defaults::NamespaceDefaults;
+    use opcua_nodes::{EventNotifier, Object};
+    use opcua_types::{
+        AccessRestrictionType, LocalizedText, MessageSecurityMode, QualifiedName, StatusCode,
+    };
 
     fn role(id: &'static str) -> NodeId {
         NodeId::new(0, id)
@@ -175,6 +198,16 @@ mod tests {
         }
     }
 
+    fn object_node(namespace: u16, name: &'static str) -> NodeType {
+        Object::new(
+            &NodeId::new(namespace, name),
+            QualifiedName::new(namespace, name),
+            LocalizedText::new("", name),
+            EventNotifier::empty(),
+        )
+        .into()
+    }
+
     #[test]
     fn authorize_permits_unconfigured_permissions() {
         let user_roles = [role("Operator")];
@@ -182,6 +215,47 @@ mod tests {
         let allowed = authorize(&user_roles, None, PermissionType::Read);
 
         assert!(allowed);
+    }
+
+    #[test]
+    fn effective_role_permissions_falls_back_to_namespace_default() {
+        let mut defaults = NamespaceDefaults::default();
+        let operator = role("Operator");
+        let namespace_permissions = vec![grant(&operator, PermissionType::Read)];
+        defaults.set_role_permissions(2, namespace_permissions.clone());
+        let node = object_node(2, "Unconfigured");
+
+        let effective = effective_role_permissions(&defaults, &node);
+
+        assert_eq!(effective, Some(namespace_permissions.as_slice()));
+    }
+
+    #[test]
+    fn effective_role_permissions_prefers_node_value_over_namespace_default() {
+        let mut defaults = NamespaceDefaults::default();
+        let operator = role("Operator");
+        let observer = role("Observer");
+        defaults.set_role_permissions(2, vec![grant(&operator, PermissionType::Read)]);
+        let mut node = object_node(2, "Configured");
+        node.as_mut_node()
+            .set_role_permissions(vec![grant(&observer, PermissionType::Browse)]);
+
+        let effective = effective_role_permissions(&defaults, &node);
+
+        assert_eq!(
+            effective,
+            Some([grant(&observer, PermissionType::Browse)].as_slice())
+        );
+    }
+
+    #[test]
+    fn effective_role_permissions_is_none_without_node_or_namespace_value() {
+        let defaults = NamespaceDefaults::default();
+        let node = object_node(3, "Open");
+
+        let effective = effective_role_permissions(&defaults, &node);
+
+        assert!(effective.is_none());
     }
 
     #[test]
@@ -324,5 +398,29 @@ mod tests {
         ] {
             assert_eq!(access_restrictions_ok(restrictions, security_mode), Ok(()));
         }
+    }
+
+    #[test]
+    fn effective_access_restrictions_falls_back_to_namespace_default() {
+        let mut defaults = NamespaceDefaults::default();
+        defaults.set_access_restrictions(2, AccessRestrictionType::EncryptionRequired);
+        let node = object_node(2, "EncryptedByDefault");
+
+        let effective = effective_access_restrictions(&defaults, &node);
+
+        assert_eq!(effective, Some(AccessRestrictionType::EncryptionRequired));
+    }
+
+    #[test]
+    fn effective_access_restrictions_prefers_node_value_over_namespace_default() {
+        let mut defaults = NamespaceDefaults::default();
+        defaults.set_access_restrictions(2, AccessRestrictionType::EncryptionRequired);
+        let mut node = object_node(2, "SignedOnly");
+        node.as_mut_node()
+            .set_access_restrictions(AccessRestrictionType::SigningRequired);
+
+        let effective = effective_access_restrictions(&defaults, &node);
+
+        assert_eq!(effective, Some(AccessRestrictionType::SigningRequired));
     }
 }

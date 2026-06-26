@@ -10,6 +10,7 @@
 use opcua_types::{NodeId, ObjectId};
 
 pub(crate) mod decision;
+pub(crate) mod defaults;
 pub(crate) mod resolver;
 pub(crate) mod rules;
 

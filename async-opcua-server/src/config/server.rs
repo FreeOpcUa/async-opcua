@@ -23,8 +23,8 @@ use crate::constants;
 use opcua_core::{comms::url::url_matches_except_host, config::Config};
 use opcua_crypto::{CertificateStore, SecurityPolicy, Thumbprint};
 use opcua_types::{
-    ApplicationDescription, ApplicationType, DecodingOptions, LocalizedText, MessageSecurityMode,
-    NodeId, UAString,
+    AccessRestrictionType, ApplicationDescription, ApplicationType, DecodingOptions, LocalizedText,
+    MessageSecurityMode, NodeId, RolePermissionType, UAString,
 };
 
 use super::{endpoint::ServerEndpoint, limits::Limits};
@@ -246,6 +246,18 @@ impl ServerUserToken {
         self.roles = roles.into_iter().map(Into::into).collect();
         self
     }
+}
+
+/// Per-namespace default RBAC attributes configured for server startup.
+///
+/// `DefaultUserRolePermissions` is intentionally absent. It is computed per session from the
+/// effective role permissions and the session's resolved role set.
+#[derive(Debug, PartialEq, Clone, Default)]
+pub struct NamespaceDefaultConfig {
+    /// Namespace default `RolePermissions` used when a node has no explicit value.
+    pub default_role_permissions: Option<Vec<RolePermissionType>>,
+    /// Namespace default `AccessRestrictions` used when a node has no explicit value.
+    pub default_access_restrictions: Option<AccessRestrictionType>,
 }
 
 fn hash_password(password: &str) -> Result<String, argon2::password_hash::Error> {
@@ -476,6 +488,13 @@ pub struct ServerConfig {
     /// are explicitly configured.
     #[serde(default)]
     pub oauth2_issuer_certificate_path: Option<PathBuf>,
+    /// Per-namespace default RolePermissions and AccessRestrictions.
+    ///
+    /// This in-memory configuration hook is populated by the builder/config API. It is skipped
+    /// by file serialization because the generated OPC UA permission structs do not implement
+    /// Serde in the default feature set.
+    #[serde(skip)]
+    pub namespace_defaults: BTreeMap<u16, NamespaceDefaultConfig>,
     /// TLS server configuration used for `opc.wss` listeners.
     ///
     /// Public so `ServerConfig` stays constructible via struct literal (like its sibling
@@ -671,6 +690,7 @@ impl Default for ServerConfig {
             oauth2_issuer: None,
             oauth2_audience: None,
             oauth2_issuer_certificate_path: None,
+            namespace_defaults: BTreeMap::new(),
             #[cfg(feature = "wss")]
             wss_tls: None,
         }

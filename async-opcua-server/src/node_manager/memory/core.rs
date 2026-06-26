@@ -5,7 +5,9 @@ use chrono::Offset;
 use hashbrown::HashMap;
 
 use crate::{
-    address_space::{read_node_value, AddressSpace, CoreNamespace},
+    address_space::{
+        compute_user_role_permissions, read_node_value, AddressSpace, CoreNamespace, NodeType,
+    },
     diagnostics::NamespaceMetadata,
     load_method_args,
     node_manager::{
@@ -18,8 +20,8 @@ use crate::{
 use opcua_core::{sync::RwLock, trace_read_lock, trace_write_lock};
 use opcua_types::{
     DataValue, DateTime, ExtensionObject, IdType, Identifier, MethodId, MonitoringMode, NodeId,
-    NumericRange, ObjectId, ReferenceTypeId, StatusCode, TimeZoneDataType, TimestampsToReturn,
-    VariableId, Variant, VariantScalarTypeId, VariantTypeId,
+    NumericRange, ObjectId, ReferenceTypeId, RolePermissionType, StatusCode, TimeZoneDataType,
+    TimestampsToReturn, VariableId, Variant, VariantScalarTypeId, VariantTypeId,
 };
 
 use super::{InMemoryNodeManager, InMemoryNodeManagerImpl, InMemoryNodeManagerImplBuilder};
@@ -70,6 +72,7 @@ of changes to these to the one doing the modifying.
 #[async_trait]
 impl InMemoryNodeManagerImpl for CoreNodeManagerImpl {
     async fn init(&self, address_space: &mut AddressSpace, context: ServerContext) {
+        self.set_core_namespace_metadata_defaults(address_space, &context);
         self.add_aggregates(address_space, &context.info.capabilities);
         let interval = context
             .info
@@ -237,6 +240,52 @@ impl CoreNodeManagerImpl {
         }
     }
 
+    fn set_core_namespace_metadata_defaults(
+        &self,
+        address_space: &mut AddressSpace,
+        context: &ServerContext,
+    ) {
+        let defaults = &context.info.namespace_defaults;
+
+        if let Some(role_permissions) = defaults.role_permissions(0) {
+            Self::set_core_namespace_metadata_value(
+                address_space,
+                VariableId::OPCUANamespaceMetadata_DefaultRolePermissions,
+                role_permissions_variant(role_permissions),
+            );
+            Self::set_core_namespace_metadata_value(
+                address_space,
+                VariableId::OPCUANamespaceMetadata_DefaultUserRolePermissions,
+                role_permissions_variant(role_permissions),
+            );
+        }
+
+        if let Some(access_restrictions) = defaults.access_restrictions(0) {
+            Self::set_core_namespace_metadata_value(
+                address_space,
+                VariableId::OPCUANamespaceMetadata_DefaultAccessRestrictions,
+                access_restrictions.bits().into(),
+            );
+        }
+    }
+
+    fn set_core_namespace_metadata_value(
+        address_space: &mut AddressSpace,
+        variable_id: VariableId,
+        value: Variant,
+    ) {
+        let node_id: NodeId = variable_id.into();
+        let Some(mut node) = address_space.find_mut(&node_id) else {
+            // The generated core NamespaceMetadata hierarchy may be absent in custom builds; leave
+            // it unset rather than fabricating the object and property nodes here.
+            return;
+        };
+
+        if let NodeType::Variable(variable) = &mut *node {
+            variable.set_data_value(DataValue::new_now(value));
+        }
+    }
+
     fn read_node_value(
         &self,
         context: &RequestContext,
@@ -388,6 +437,23 @@ impl CoreNodeManagerImpl {
             VariableId::Server_ServerCapabilities_LocaleIdArray => {
                 context.info.config.locale_ids.clone().into()
             }
+
+            VariableId::OPCUANamespaceMetadata_DefaultRolePermissions => {
+                role_permissions_variant(context.info.namespace_defaults.role_permissions(0)?)
+            }
+            VariableId::OPCUANamespaceMetadata_DefaultUserRolePermissions => {
+                let role_permissions = context.info.namespace_defaults.role_permissions(0)?;
+                role_permissions_variant(&compute_user_role_permissions(
+                    role_permissions,
+                    context.user_roles(),
+                ))
+            }
+            VariableId::OPCUANamespaceMetadata_DefaultAccessRestrictions => context
+                .info
+                .namespace_defaults
+                .access_restrictions(0)?
+                .bits()
+                .into(),
 
             // History capabilities
             VariableId::HistoryServerCapabilities_AccessHistoryDataCapability => {
@@ -639,4 +705,13 @@ impl CoreNodeManagerImpl {
         }
         Ok(())
     }
+}
+
+fn role_permissions_variant(role_permissions: &[RolePermissionType]) -> Variant {
+    role_permissions
+        .iter()
+        .cloned()
+        .map(ExtensionObject::from_message)
+        .collect::<Vec<_>>()
+        .into()
 }

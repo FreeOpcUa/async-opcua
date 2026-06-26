@@ -10,7 +10,7 @@ use opcua_nodes::DefaultTypeTree;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    address_space::AccessLevel,
+    address_space::{compute_user_role_permissions, AccessLevel},
     node_manager::{
         as_opaque_node_id, from_opaque_node_id, impl_translate_browse_paths_using_browse,
         AddReferenceResult, AttributeProvider, BrowseNode, BrowsePathItem, DynNodeManager,
@@ -25,6 +25,23 @@ use opcua_types::{
     NumericRange, ObjectId, ObjectTypeId, QualifiedName, ReferenceDescription, ReferenceTypeId,
     RolePermissionType, StatusCode, TimestampsToReturn, VariableTypeId, Variant,
 };
+
+fn apply_namespace_metadata_defaults(
+    namespace: &mut NamespaceMetadata,
+    role_permissions: Option<&[RolePermissionType]>,
+    access_restrictions: Option<AccessRestrictionType>,
+    user_roles: &[NodeId],
+) {
+    if let Some(role_permissions) = role_permissions {
+        namespace.default_user_role_permissions =
+            Some(compute_user_role_permissions(role_permissions, user_roles));
+        namespace.default_role_permissions = Some(role_permissions.to_vec());
+    }
+
+    if let Some(access_restrictions) = access_restrictions {
+        namespace.default_access_restrictions = access_restrictions;
+    }
+}
 
 /// Node manager handling nodes in the server hierarchy that are not part of the
 /// core namespace, and that are somehow dynamic. This includes the node for each namespace,
@@ -117,11 +134,29 @@ impl DiagnosticsNodeManager {
     }
 
     fn namespaces(&self, context: &RequestContext) -> BTreeMap<String, NamespaceMetadata> {
-        self.node_managers
+        let mut namespaces: BTreeMap<_, _> = self
+            .node_managers
             .iter()
             .flat_map(move |nm| nm.namespaces_for_user(context))
             .map(|ns| (ns.namespace_uri.clone(), ns))
-            .collect()
+            .collect();
+
+        for namespace in namespaces.values_mut() {
+            apply_namespace_metadata_defaults(
+                namespace,
+                context
+                    .info
+                    .namespace_defaults
+                    .role_permissions(namespace.namespace_index),
+                context
+                    .info
+                    .namespace_defaults
+                    .access_restrictions(namespace.namespace_index),
+                context.user_roles(),
+            );
+        }
+
+        namespaces
     }
 
     fn namespace_node_metadata(&self, ns: &NamespaceMetadata) -> NodeMetadata {
@@ -724,3 +759,55 @@ impl MethodProvider for DiagnosticsNodeManager {}
 impl MonitoredItemProvider for DiagnosticsNodeManager {}
 
 impl NodeMutator for DiagnosticsNodeManager {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use opcua_types::{NodeId, PermissionType};
+
+    fn role_permission(role_id: NodeId, permissions: PermissionType) -> RolePermissionType {
+        RolePermissionType {
+            role_id,
+            permissions,
+        }
+    }
+
+    #[test]
+    fn namespace_metadata_uses_configured_defaults_for_user_roles() {
+        let operator = NodeId::new(0, "Operator");
+        let observer = NodeId::new(0, "Observer");
+        let role_permissions = vec![
+            role_permission(operator.clone(), PermissionType::Read),
+            role_permission(observer, PermissionType::Write),
+            role_permission(operator.clone(), PermissionType::Browse),
+        ];
+        let mut metadata = NamespaceMetadata {
+            namespace_uri: "urn:test".to_string(),
+            namespace_index: 2,
+            ..Default::default()
+        };
+
+        apply_namespace_metadata_defaults(
+            &mut metadata,
+            Some(&role_permissions),
+            Some(AccessRestrictionType::SigningRequired),
+            std::slice::from_ref(&operator),
+        );
+
+        assert_eq!(
+            metadata.default_role_permissions,
+            Some(role_permissions.clone())
+        );
+        assert_eq!(
+            metadata.default_user_role_permissions,
+            Some(vec![role_permission(
+                operator,
+                PermissionType::Read | PermissionType::Browse
+            )])
+        );
+        assert_eq!(
+            metadata.default_access_restrictions,
+            AccessRestrictionType::SigningRequired
+        );
+    }
+}

@@ -619,3 +619,67 @@ async fn apply_restrictions_to_browse_filters_node() {
         "EncryptionRequired WITHOUT ApplyRestrictionsToBrowse must not affect Browse"
     );
 }
+
+/// US6 / Part 3 §4.8.2 + Part 5 §6: a per-namespace DefaultRolePermissions governs nodes in that
+/// namespace that have no explicit RolePermissions; a node-level RolePermissions always overrides it.
+#[tokio::test]
+async fn namespace_default_governs_and_node_overrides() {
+    use std::time::Duration;
+    // Configure ns 1 (the TestNodeManager namespace) to default-grant Read to Operator only.
+    let server = crate::utils::default_server()
+        .default_role_permissions(2, vec![rp(OPERATOR_ROLE, PermissionType::Read)])
+        .with_node_manager(crate::utils::test_node_manager());
+    let mut tester = crate::utils::Tester::new(server, false).await;
+    let nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<crate::utils::TestNodeManager>()
+        .unwrap();
+    assert_eq!(
+        tester.handle.get_namespace_index("urn:rustopcuatestserver"),
+        Some(2),
+        "this test assumes the TestNodeManager is namespace 2"
+    );
+    let (session, lp) = tester.connect_default().await.unwrap();
+    lp.spawn();
+    tokio::time::timeout(Duration::from_secs(2), session.wait_for_connection())
+        .await
+        .unwrap();
+
+    // No explicit RolePermissions ⇒ governed by the namespace default (Operator-only) ⇒ anon denied.
+    let governed = add_rw_var(&tester, &nm, "DefaultGoverned", Vec::new());
+    let r = session
+        .read(
+            &[read_value_id(AttributeId::Value, governed)],
+            TimestampsToReturn::Neither,
+            0.0,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        r[0].status(),
+        StatusCode::BadUserAccessDenied,
+        "namespace default (Operator-only Read) must deny the anonymous session"
+    );
+
+    // Explicit node-level RolePermissions granting Read to Anonymous ⇒ overrides the namespace default.
+    let overridden = add_rw_var(
+        &tester,
+        &nm,
+        "NodeOverride",
+        vec![rp(ANONYMOUS_ROLE, PermissionType::Read)],
+    );
+    let r = session
+        .read(
+            &[read_value_id(AttributeId::Value, overridden)],
+            TimestampsToReturn::Neither,
+            0.0,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        r[0].status(),
+        StatusCode::Good,
+        "node-level RolePermissions must override the namespace default"
+    );
+}

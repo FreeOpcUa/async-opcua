@@ -8,7 +8,10 @@ use tracing::warn;
 use crate::{constants, node_manager::TypeTreeForUser};
 use opcua_core::config::Config;
 use opcua_crypto::SecurityPolicy;
-use opcua_types::{BuildInfo, MessageSecurityMode, TypeLoader, TypeLoaderCollection};
+use opcua_types::{
+    AccessRestrictionType, BuildInfo, MessageSecurityMode, RolePermissionType, TypeLoader,
+    TypeLoaderCollection,
+};
 
 #[cfg(feature = "wss")]
 use super::WssServerConfig;
@@ -367,6 +370,34 @@ impl ServerBuilder {
         self
     }
 
+    /// Set default RolePermissions for nodes in `namespace` without explicit RolePermissions.
+    pub fn default_role_permissions(
+        mut self,
+        namespace: u16,
+        role_permissions: Vec<RolePermissionType>,
+    ) -> Self {
+        self.config
+            .namespace_defaults
+            .entry(namespace)
+            .or_default()
+            .default_role_permissions = Some(role_permissions);
+        self
+    }
+
+    /// Set default AccessRestrictions for nodes in `namespace` without explicit AccessRestrictions.
+    pub fn default_access_restrictions(
+        mut self,
+        namespace: u16,
+        access_restrictions: AccessRestrictionType,
+    ) -> Self {
+        self.config
+            .namespace_defaults
+            .entry(namespace)
+            .or_default()
+            .default_access_restrictions = Some(access_restrictions);
+        self
+    }
+
     /// PKI folder, either absolute or relative to executable.
     pub fn pki_dir(mut self, pki_dir: impl Into<PathBuf>) -> Self {
         self.config.pki_dir = pki_dir.into();
@@ -634,4 +665,64 @@ fn build_wss_rustls_config(
         .with_no_client_auth()
         .with_single_cert(certs, key)
         .map_err(|err| format!("Failed to build WSS TLS server configuration: {err}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use opcua_types::{NodeId, PermissionType};
+
+    fn role_permission(role_id: NodeId, permissions: PermissionType) -> RolePermissionType {
+        RolePermissionType {
+            role_id,
+            permissions,
+        }
+    }
+
+    #[test]
+    fn builder_stores_namespace_defaults_in_config() {
+        let role_permissions = vec![role_permission(
+            NodeId::new(0, "Operator"),
+            PermissionType::Read,
+        )];
+        let builder = ServerBuilder::new()
+            .default_role_permissions(2, role_permissions.clone())
+            .default_access_restrictions(2, AccessRestrictionType::SigningRequired);
+        let defaults = builder
+            .config()
+            .namespace_defaults
+            .get(&2)
+            .expect("namespace default should be configured");
+
+        assert_eq!(
+            defaults.default_role_permissions.as_deref(),
+            Some(role_permissions.as_slice())
+        );
+        assert_eq!(
+            defaults.default_access_restrictions,
+            Some(AccessRestrictionType::SigningRequired)
+        );
+    }
+
+    #[tokio::test]
+    async fn server_info_uses_namespace_defaults_from_builder() {
+        let role_permissions = vec![role_permission(
+            NodeId::new(0, "Operator"),
+            PermissionType::Read,
+        )];
+        let (_server, handle) = ServerBuilder::new_anonymous("namespace defaults test")
+            .default_role_permissions(2, role_permissions.clone())
+            .default_access_restrictions(2, AccessRestrictionType::EncryptionRequired)
+            .build()
+            .expect("test server should build");
+
+        assert_eq!(
+            handle.info().namespace_defaults.role_permissions(2),
+            Some(role_permissions.as_slice())
+        );
+        assert_eq!(
+            handle.info().namespace_defaults.access_restrictions(2),
+            Some(AccessRestrictionType::EncryptionRequired)
+        );
+    }
 }

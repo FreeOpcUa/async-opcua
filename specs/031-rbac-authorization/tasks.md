@@ -174,17 +174,17 @@ AddReference, ReceiveEvents allowed/denied by role.
 
 ### Tests for US6
 
-- [ ] T070 [P] [US6] Integration test `it/rbac.rs::namespace_default_governs_unconfigured_node` (Spec: Part 5 §6 NamespaceMetadata; Part 3 §4.8.2)
-- [ ] T071 [P] [US6] Integration test `it/rbac.rs::node_permission_overrides_namespace_default` (Spec: Part 3 §4.8.2)
-- [ ] T072 [P] [US6] Integration test `it/rbac.rs::default_role_permissions_readable_via_namespacemetadata` (Spec: Part 5 §6.2.x)
+- [X] T070 [P] [US6] Integration test `it/rbac.rs::namespace_default_governs_unconfigured_node` (Spec: Part 5 §6 NamespaceMetadata; Part 3 §4.8.2)
+- [X] T071 [P] [US6] Integration test `it/rbac.rs::node_permission_overrides_namespace_default` (Spec: Part 3 §4.8.2)
+- [X] T072 [P] [US6] Integration test `it/rbac.rs::default_role_permissions_readable_via_namespacemetadata` (Spec: Part 5 §6.2.x)
 
 ### Implementation for US6
 
-- [ ] T073 [US6] Add per-namespace default tables (DefaultRolePermissions/DefaultUserRolePermissions/DefaultAccessRestrictions) in `srv/authorization/defaults.rs`, keyed by namespace index (Spec: Part 5 §6 NamespacesType/NamespaceMetadataType)
-- [ ] T074 [US6] Wire `EffectiveNodePermissions` (T012) to fall back to the namespace default when a node has no explicit value; node-level wins (Spec: Part 3 §4.8.2)
-- [ ] T075 [US6] Expose Default* values on the NamespaceMetadata nodes for each namespace `srv/node_manager/memory/core.rs` (Spec: Part 5 §6.2 NamespaceMetadataType)
-- [ ] T076 [US6] Apply the same default fallback to AccessRestrictions resolution (Spec: Part 3 §8.56; Part 5 §6)
-- [ ] T077 [US6] Verify the three US6 tests pass (Spec: Part 5 §6)
+- [X] T073 [US6] Add per-namespace default tables (DefaultRolePermissions/DefaultUserRolePermissions/DefaultAccessRestrictions) in `srv/authorization/defaults.rs`, keyed by namespace index (Spec: Part 5 §6 NamespacesType/NamespaceMetadataType)
+- [X] T074 [US6] Wire `EffectiveNodePermissions` (T012) to fall back to the namespace default when a node has no explicit value; node-level wins (Spec: Part 3 §4.8.2)
+- [X] T075 [US6] Expose Default* values on the NamespaceMetadata nodes for each namespace `srv/node_manager/memory/core.rs` (Spec: Part 5 §6.2 NamespaceMetadataType)
+- [X] T076 [US6] Apply the same default fallback to AccessRestrictions resolution (Spec: Part 3 §8.56; Part 5 §6)
+- [X] T077 [US6] Verify the three US6 tests pass (Spec: Part 5 §6)
 
 **Checkpoint**: defaults reduce per-node config; precedence correct.
 

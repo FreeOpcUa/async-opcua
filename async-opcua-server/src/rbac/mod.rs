@@ -2,13 +2,14 @@
 //!
 //! Permissive-by-default: a node with no RolePermissions (and no applicable namespace default) is not
 //! role-restricted, preserving pre-feature behaviour. Enforcement (US3+) is opt-in and fail-closed
-//! where it applies. This module currently provides identity→role resolution (US2); the central
-//! `authorize` decision and namespace defaults are added in later user stories.
+//! where it applies. This module currently provides identity→role resolution (US2) and the central
+//! RolePermissions decision helper (US3). Namespace defaults are added in later user stories.
 
 #![allow(dead_code)]
 
 use opcua_types::{NodeId, ObjectId};
 
+pub(crate) mod decision;
 pub(crate) mod resolver;
 pub(crate) mod rules;
 

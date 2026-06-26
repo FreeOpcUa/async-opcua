@@ -48,12 +48,34 @@ pub(crate) async fn call(node_managers: NodeManagers, request: Request<CallReque
             node_manager: &Arc<DynNodeManager>,
             context: RequestContext,
         ) {
+            if let Err(e) = node_manager.authorize_method_calls(&context, items) {
+                for call in items {
+                    call.set_status(e);
+                }
+                return;
+            }
+
+            let mut dispatch_items = items
+                .iter_mut()
+                .filter_map(|call| {
+                    if call.status() == StatusCode::BadMethodInvalid {
+                        Some(&mut **call)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            if dispatch_items.is_empty() {
+                return;
+            }
+
             if let Err(e) = node_manager
-                .call(&context, &mut *items)
+                .call(&context, dispatch_items.as_mut_slice())
                 .instrument(debug_span!("Call", node_manager = %node_manager.name()))
                 .await
             {
-                for call in items {
+                for call in dispatch_items {
                     call.set_status(e);
                 }
             }

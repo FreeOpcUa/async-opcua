@@ -587,6 +587,20 @@ pub trait MonitoredItemProvider {
 #[async_trait]
 #[allow(unused_variables)]
 pub trait MethodProvider {
+    /// Authorize method calls before dispatch.
+    ///
+    /// Implementations that can inspect Method nodes should set per-operation
+    /// statuses (for example `Bad_UserAccessDenied`) on calls that must not be
+    /// dispatched. The default is permissive for node managers without exposed
+    /// RolePermissions metadata.
+    fn authorize_method_calls(
+        &self,
+        context: &RequestContext,
+        methods_to_call: &mut [&mut MethodCall],
+    ) -> Result<(), StatusCode> {
+        Ok(())
+    }
+
     /// Call a list of methods.
     ///
     /// The node manager should validate the method arguments and set

@@ -30,6 +30,7 @@ use crate::{
         ReferenceDirection,
     },
     diagnostics::NamespaceMetadata,
+    rbac,
     session::continuation_points::ContinuationPoint,
     subscriptions::CreateMonitoredItem,
     SubscriptionCache,
@@ -38,9 +39,9 @@ use opcua_core::sync::RwLock;
 use opcua_types::{
     argument::Argument, AttributeId, BrowseDescriptionResultMask, BrowseDirection, DataEncoding,
     DataValue, DateTime, ExpandedNodeId, MonitoringMode, NodeClass, NodeId, NumericRange,
-    ReadAnnotationDataDetails, ReadAtTimeDetails, ReadEventDetails, ReadProcessedDetails,
-    ReadRawModifiedDetails, ReferenceDescription, ReferenceTypeId, StatusCode, TimestampsToReturn,
-    Variant,
+    PermissionType, ReadAnnotationDataDetails, ReadAtTimeDetails, ReadEventDetails,
+    ReadProcessedDetails, ReadRawModifiedDetails, ReferenceDescription, ReferenceTypeId,
+    StatusCode, TimestampsToReturn, Variant,
 };
 
 use super::{
@@ -115,6 +116,28 @@ impl<TImpl: InMemoryNodeManagerImpl> InMemoryNodeManager<TImpl> {
     /// by namespace index.
     pub fn namespaces(&self) -> &HashMap<u16, String> {
         &self.namespaces
+    }
+
+    fn resolve_method_node_id(
+        &self,
+        address_space: &AddressSpace,
+        type_tree: &DefaultTypeTree,
+        method: &MethodCall,
+    ) -> Option<NodeId> {
+        address_space
+            .find_references(
+                method.object_id(),
+                Some((ReferenceTypeId::HasComponent, false)),
+                type_tree,
+                BrowseDirection::Forward,
+            )
+            .find(|r| r.target_node == method.method_id())
+            .map(|r| r.target_node.clone())
+            .or_else(|| {
+                self.inner
+                    .accepts_method_without_object_component(method.method_id())
+                    .then(|| method.method_id().clone())
+            })
     }
 
     /// Set the attributes given in `values` and notify any subscriptions
@@ -547,26 +570,9 @@ impl<TImpl: InMemoryNodeManagerImpl> InMemoryNodeManager<TImpl> {
         let mut valid = Vec::with_capacity(methods.len());
 
         for method in methods {
-            let component_method_id = {
-                address_space
-                    .find_references(
-                        method.object_id(),
-                        Some((ReferenceTypeId::HasComponent, false)),
-                        &*type_tree,
-                        BrowseDirection::Forward,
-                    )
-                    .find(|r| r.target_node == method.method_id())
-                    .map(|r| r.target_node.clone())
-            };
-
-            let method_node_id = if let Some(method_node_id) = component_method_id {
-                method_node_id
-            } else if self
-                .inner
-                .accepts_method_without_object_component(method.method_id())
-            {
-                method.method_id().clone()
-            } else {
+            let Some(method_node_id) =
+                self.resolve_method_node_id(&address_space, &type_tree, method)
+            else {
                 method.set_status(StatusCode::BadMethodInvalid);
                 continue;
             };
@@ -592,6 +598,7 @@ impl<TImpl: InMemoryNodeManagerImpl> InMemoryNodeManager<TImpl> {
                 || !context
                     .authenticator
                     .is_user_executable(&context.token, method.method_id())
+                || !rbac::decision::authorize_ctx(context, &method_ref_guard, PermissionType::Call)
             {
                 method.set_status(StatusCode::BadUserAccessDenied);
                 continue;
@@ -1128,6 +1135,43 @@ impl<TImpl: InMemoryNodeManagerImpl> HistoryProvider for InMemoryNodeManager<TIm
 
 #[async_trait]
 impl<TImpl: InMemoryNodeManagerImpl> MethodProvider for InMemoryNodeManager<TImpl> {
+    fn authorize_method_calls(
+        &self,
+        context: &RequestContext,
+        methods_to_call: &mut [&mut MethodCall],
+    ) -> Result<(), StatusCode> {
+        let address_space = trace_read_lock!(self.address_space);
+        let type_tree = trace_read_lock!(context.type_tree);
+
+        for method in methods_to_call {
+            if method.status() != StatusCode::BadMethodInvalid {
+                continue;
+            }
+
+            let Some(method_node_id) =
+                self.resolve_method_node_id(&address_space, &type_tree, method)
+            else {
+                continue;
+            };
+
+            let Some(method_ref_guard) = address_space.find(&method_node_id) else {
+                continue;
+            };
+
+            let NodeType::Method(method_node) = &*method_ref_guard else {
+                continue;
+            };
+
+            if method_node.executable()
+                && !rbac::decision::authorize_ctx(context, &method_ref_guard, PermissionType::Call)
+            {
+                method.set_status(StatusCode::BadUserAccessDenied);
+            }
+        }
+
+        Ok(())
+    }
+
     async fn call(
         &self,
         context: &RequestContext,
@@ -1194,5 +1238,218 @@ impl<TImpl: InMemoryNodeManagerImpl> NodeMutator for InMemoryNodeManager<TImpl> 
         self.inner
             .delete_references(context, &self.address_space, references_to_delete)
             .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
+    use opcua_core::sync::RwLock;
+    use opcua_nodes::{Method, NodeBase, Object};
+    use opcua_types::{
+        AnonymousIdentityToken, ApplicationDescription, ByteString, CallMethodRequest,
+        DiagnosticBits, MessageSecurityMode, PermissionType, RolePermissionType, UAString,
+    };
+
+    use crate::{
+        authenticator::UserToken, identity_token::IdentityToken, node_manager::RequestContextInner,
+        session::instance::Session, ServerBuilder,
+    };
+
+    use super::*;
+
+    struct TestMethodImpl {
+        method_ids: Vec<NodeId>,
+    }
+
+    #[async_trait]
+    impl InMemoryNodeManagerImpl for TestMethodImpl {
+        async fn init(&self, _address_space: &mut AddressSpace, _context: ServerContext) {}
+
+        fn name(&self) -> &str {
+            "test"
+        }
+
+        fn namespaces(&self) -> Vec<NamespaceMetadata> {
+            vec![NamespaceMetadata {
+                namespace_uri: "urn:test".to_string(),
+                namespace_index: 1,
+                ..Default::default()
+            }]
+        }
+
+        fn method_callback(&self, method_id: &NodeId) -> Option<InMemoryMethodCallback> {
+            if self.method_ids.iter().any(|id| id == method_id) {
+                Some(Arc::new(|_, _| Ok(Vec::new())))
+            } else {
+                None
+            }
+        }
+    }
+
+    fn request_context() -> RequestContext {
+        request_context_with_roles(Vec::new())
+    }
+
+    fn request_context_with_roles(user_roles: Vec<NodeId>) -> RequestContext {
+        let (_server, handle) = ServerBuilder::new_anonymous("test")
+            .build()
+            .expect("test server should build");
+        let info = handle.info().clone();
+        let session = Session::create(
+            &info,
+            NodeId::new(0, 1),
+            1,
+            60_000,
+            0,
+            0,
+            UAString::from("opc.tcp://localhost"),
+            opcua_crypto::SecurityPolicy::None.to_str().to_string(),
+            IdentityToken::Anonymous(AnonymousIdentityToken {
+                policy_id: UAString::from("anonymous"),
+            }),
+            None,
+            ByteString::null(),
+            UAString::from("test"),
+            ApplicationDescription::default(),
+            MessageSecurityMode::None,
+        );
+
+        let session = Arc::new(RwLock::new(session));
+        let user_roles = Arc::new(user_roles);
+
+        RequestContext {
+            current_node_manager_index: 0,
+            inner: Arc::new(RequestContextInner {
+                session,
+                session_id: 1,
+                authenticator: info.authenticator.clone(),
+                token: UserToken("anonymous".to_string()),
+                user_roles,
+                type_tree: info.type_tree.clone(),
+                type_tree_getter: info.type_tree_getter.clone(),
+                subscriptions: handle.subscriptions().clone(),
+                info,
+            }),
+        }
+    }
+
+    fn role_permission(role_id: &NodeId, permissions: PermissionType) -> RolePermissionType {
+        RolePermissionType {
+            role_id: role_id.clone(),
+            permissions,
+        }
+    }
+
+    fn method_call(object_id: &NodeId, method_id: &NodeId) -> MethodCall {
+        MethodCall::new(
+            CallMethodRequest {
+                object_id: object_id.clone(),
+                method_id: method_id.clone(),
+                input_arguments: None,
+            },
+            DiagnosticBits::empty(),
+        )
+    }
+
+    fn method_manager(
+        object_id: &NodeId,
+        methods: Vec<(NodeId, Option<Vec<RolePermissionType>>)>,
+    ) -> InMemoryNodeManager<TestMethodImpl> {
+        let mut address_space = AddressSpace::new();
+        address_space.add_namespace("urn:test", 1);
+        address_space.insert::<_, NodeId>(
+            Object::new(object_id, "object", "object", EventNotifier::empty()),
+            None,
+        );
+
+        let method_ids = methods
+            .iter()
+            .map(|(method_id, _)| method_id.clone())
+            .collect::<Vec<_>>();
+
+        for (method_id, role_permissions) in methods {
+            let mut method = Method::new(&method_id, "method", "method", true, true);
+            if let Some(role_permissions) = role_permissions {
+                method.set_role_permissions(role_permissions);
+            }
+            address_space.insert::<_, NodeId>(method, None);
+            address_space.insert_reference(object_id, &method_id, ReferenceTypeId::HasComponent);
+        }
+
+        InMemoryNodeManager::new(TestMethodImpl { method_ids }, address_space)
+    }
+
+    #[tokio::test]
+    async fn method_dispatch_authorization_denies_only_call_without_call_permission() {
+        let context = request_context();
+        let operator = NodeId::new(0, "Operator");
+        let object_id = NodeId::new(1, "object");
+        let denied_method_id = NodeId::new(1, "denied_method");
+        let open_method_id = NodeId::new(1, "open_method");
+        let manager = method_manager(
+            &object_id,
+            vec![
+                (
+                    denied_method_id.clone(),
+                    Some(vec![role_permission(&operator, PermissionType::Read)]),
+                ),
+                (open_method_id.clone(), None),
+            ],
+        );
+        let mut denied = method_call(&object_id, &denied_method_id);
+        let mut open = method_call(&object_id, &open_method_id);
+
+        {
+            let mut calls = vec![&mut denied, &mut open];
+            manager
+                .authorize_method_calls(&context, calls.as_mut_slice())
+                .expect("authorization precheck should not fail the service");
+            let mut dispatch = calls
+                .iter_mut()
+                .filter_map(|call| {
+                    if call.status() == StatusCode::BadMethodInvalid {
+                        Some(&mut **call)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>();
+            manager
+                .call(&context, dispatch.as_mut_slice())
+                .await
+                .unwrap();
+        }
+
+        assert_eq!(denied.status(), StatusCode::BadUserAccessDenied);
+        assert_eq!(open.status(), StatusCode::Good);
+    }
+
+    #[tokio::test]
+    async fn method_dispatch_authorization_allows_call_permission() {
+        let operator = NodeId::new(0, "Operator");
+        let context = request_context_with_roles(vec![operator.clone()]);
+        let object_id = NodeId::new(1, "object");
+        let method_id = NodeId::new(1, "method");
+        let manager = method_manager(
+            &object_id,
+            vec![(
+                method_id.clone(),
+                Some(vec![role_permission(&operator, PermissionType::Call)]),
+            )],
+        );
+        let mut call = method_call(&object_id, &method_id);
+
+        {
+            let mut calls = vec![&mut call];
+            manager
+                .authorize_method_calls(&context, calls.as_mut_slice())
+                .expect("authorization precheck should not fail the service");
+            manager.call(&context, calls.as_mut_slice()).await.unwrap();
+        }
+
+        assert_eq!(call.status(), StatusCode::Good);
     }
 }

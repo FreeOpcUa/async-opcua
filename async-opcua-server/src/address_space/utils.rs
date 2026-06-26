@@ -1,9 +1,12 @@
-use crate::node_manager::{ParsedReadValueId, ParsedWriteValue, RequestContext, ServerContext};
+use crate::{
+    node_manager::{ParsedReadValueId, ParsedWriteValue, RequestContext, ServerContext},
+    rbac,
+};
 use opcua_nodes::TypeTree;
 use opcua_types::{
     AttributeId, DataEncoding, DataTypeId, DataValue, DateTime, NodeId, NumericRange,
-    RolePermissionType, StatusCode, TimestampsToReturn, Variant, VariantScalarTypeId,
-    VariantTypeId, WriteMask,
+    PermissionType, RolePermissionType, StatusCode, TimestampsToReturn, Variant,
+    VariantScalarTypeId, VariantTypeId, WriteMask,
 };
 use tracing::debug;
 
@@ -12,10 +15,20 @@ use super::{AccessLevel, AddressSpace, HasNodeId, NodeType, Variable};
 /// Validate that the user given by `context` can read the value
 /// of the given node.
 pub fn is_readable(context: &RequestContext, node: &NodeType) -> Result<(), StatusCode> {
-    if !user_access_level(context, node).contains(AccessLevel::CURRENT_READ) {
+    if !authenticator_user_access_level(context, node).contains(AccessLevel::CURRENT_READ)
+        || !rbac::decision::authorize_ctx(context, node, PermissionType::Read)
+    {
         Err(StatusCode::BadUserAccessDenied)
     } else {
         Ok(())
+    }
+}
+
+fn is_attribute_readable(context: &RequestContext, node: &NodeType) -> Result<(), StatusCode> {
+    if authenticator_user_access_level(context, node).contains(AccessLevel::CURRENT_READ) {
+        Ok(())
+    } else {
+        Err(StatusCode::BadUserAccessDenied)
     }
 }
 
@@ -29,7 +42,11 @@ pub fn is_writable(
     crate::services::node_access::validate_write_access(context)?;
 
     if let (NodeType::Variable(_), AttributeId::Value) = (node, attribute_id) {
-        if !user_access_level(context, node).contains(AccessLevel::CURRENT_WRITE) {
+        if !authenticator_user_access_level(context, node).contains(AccessLevel::CURRENT_WRITE) {
+            return Err(StatusCode::BadUserAccessDenied);
+        }
+
+        if !rbac::decision::authorize_ctx(context, node, PermissionType::Write) {
             return Err(StatusCode::BadUserAccessDenied);
         }
 
@@ -69,12 +86,31 @@ pub fn is_writable(
         if write_mask.is_none() || write_mask.is_some_and(|wm| !wm.contains(mask_value)) {
             return Err(StatusCode::BadNotWritable);
         }
+
+        let required = rbac::decision::permission_for_write_attribute(attribute_id);
+        if !rbac::decision::authorize_ctx(context, node, required) {
+            return Err(StatusCode::BadUserAccessDenied);
+        }
+
         Ok(())
     }
 }
 
 /// Get the effective user access level for `node`.
 pub fn user_access_level(context: &RequestContext, node: &NodeType) -> AccessLevel {
+    let mut access_level = authenticator_user_access_level(context, node);
+    if node.as_node().role_permissions().is_some() {
+        if !rbac::decision::authorize_ctx(context, node, PermissionType::Read) {
+            access_level.remove(AccessLevel::CURRENT_READ);
+        }
+        if !rbac::decision::authorize_ctx(context, node, PermissionType::Write) {
+            access_level.remove(AccessLevel::CURRENT_WRITE);
+        }
+    }
+    access_level
+}
+
+fn authenticator_user_access_level(context: &RequestContext, node: &NodeType) -> AccessLevel {
     let user_access_level = if let NodeType::Variable(ref node) = node {
         node.user_access_level()
     } else {
@@ -95,7 +131,11 @@ pub fn validate_node_read(
     node_to_read: &ParsedReadValueId,
 ) -> Result<(), StatusCode> {
     crate::services::node_access::validate_read_access(context)?;
-    is_readable(context, node)?;
+    if node_to_read.attribute_id == AttributeId::Value {
+        is_readable(context, node)?;
+    } else {
+        is_attribute_readable(context, node)?;
+    }
 
     if node_to_read.attribute_id != AttributeId::Value
         && matches!(
@@ -402,15 +442,7 @@ pub fn read_node_value(
 
     let value = if node_to_read.attribute_id == AttributeId::UserAccessLevel {
         match attribute.value {
-            Some(Variant::Byte(val)) => {
-                let access_level = AccessLevel::from_bits_truncate(val);
-                let access_level = context.authenticator.effective_user_access_level(
-                    &context.token,
-                    access_level,
-                    node.node_id(),
-                );
-                Some(Variant::from(access_level.bits()))
-            }
+            Some(Variant::Byte(_)) => Some(Variant::from(user_access_level(context, node).bits())),
             Some(v) => Some(v),
             _ => None,
         }
@@ -423,7 +455,8 @@ pub fn read_node_value(
             Some(Variant::Boolean(val)) => Some(Variant::from(
                 val && context
                     .authenticator
-                    .is_user_executable(&context.token, node.node_id()),
+                    .is_user_executable(&context.token, node.node_id())
+                    && rbac::decision::authorize_ctx(context, node, PermissionType::Call),
             )),
             r => r,
         }
@@ -504,6 +537,7 @@ mod tests {
     use std::sync::Arc;
 
     use opcua_core::sync::RwLock;
+    use opcua_nodes::Method;
     use opcua_types::{
         AnonymousIdentityToken, ApplicationDescription, ByteString, MessageSecurityMode,
         PermissionType, RolePermissionType, UAString,
@@ -520,6 +554,10 @@ mod tests {
     use super::*;
 
     fn request_context() -> RequestContext {
+        request_context_with_roles(Vec::new())
+    }
+
+    fn request_context_with_roles(user_roles: Vec<NodeId>) -> RequestContext {
         let (_server, handle) = ServerBuilder::new_anonymous("test")
             .build()
             .expect("test server should build");
@@ -544,7 +582,7 @@ mod tests {
         );
 
         let session = Arc::new(RwLock::new(session));
-        let user_roles = session.read().roles();
+        let user_roles = Arc::new(user_roles);
 
         RequestContext {
             current_node_manager_index: 0,
@@ -560,6 +598,75 @@ mod tests {
                 info,
             }),
         }
+    }
+
+    fn read_value_id(node_id: &NodeId) -> ParsedReadValueId {
+        ParsedReadValueId {
+            node_id: node_id.clone(),
+            attribute_id: AttributeId::Value,
+            index_range: NumericRange::None,
+            data_encoding: DataEncoding::Binary,
+        }
+    }
+
+    fn user_access_level_id(node_id: &NodeId) -> ParsedReadValueId {
+        ParsedReadValueId {
+            node_id: node_id.clone(),
+            attribute_id: AttributeId::UserAccessLevel,
+            index_range: NumericRange::None,
+            data_encoding: DataEncoding::Binary,
+        }
+    }
+
+    fn user_executable_id(node_id: &NodeId) -> ParsedReadValueId {
+        ParsedReadValueId {
+            node_id: node_id.clone(),
+            attribute_id: AttributeId::UserExecutable,
+            index_range: NumericRange::None,
+            data_encoding: DataEncoding::Binary,
+        }
+    }
+
+    fn role_permission(role_id: &NodeId, permissions: PermissionType) -> RolePermissionType {
+        RolePermissionType {
+            role_id: role_id.clone(),
+            permissions,
+        }
+    }
+
+    fn variable_with_user_access_level(user_access_level: AccessLevel) -> NodeType {
+        let mut variable = Variable::new(&NodeId::new(1, "test"), "test", "test", 1i32);
+        variable.set_user_access_level(user_access_level);
+        NodeType::Variable(Box::new(variable))
+    }
+
+    fn executable_method() -> NodeType {
+        NodeType::Method(Box::new(Method::new(
+            &NodeId::new(1, "method"),
+            "method",
+            "method",
+            true,
+            true,
+        )))
+    }
+
+    fn write_value_id(node_id: &NodeId, value: Variant) -> ParsedWriteValue {
+        ParsedWriteValue {
+            node_id: node_id.clone(),
+            attribute_id: AttributeId::Value,
+            index_range: NumericRange::None,
+            value: DataValue::value_only(value),
+        }
+    }
+
+    fn read_node_through_address_space(context: &RequestContext, node: NodeType) -> DataValue {
+        let node_id = node.node_id().clone();
+        let node_to_read = read_value_id(&node_id);
+        let mut address_space = AddressSpace::new();
+        address_space.add_namespace("urn:test", 1);
+        assert!(address_space.insert(node, Option::<&[(&NodeId, &NodeId, _)]>::None));
+
+        address_space.read(context, &node_to_read, 0.0, TimestampsToReturn::Neither)
     }
 
     #[tokio::test]
@@ -588,6 +695,305 @@ mod tests {
                 Err(StatusCode::BadDataEncodingInvalid)
             );
         }
+    }
+
+    #[tokio::test]
+    async fn value_read_denied_without_read_role_returns_user_access_denied() {
+        let context = request_context();
+        let operator = NodeId::new(0, "Operator");
+        let mut node = variable_with_user_access_level(AccessLevel::CURRENT_READ);
+        node.as_mut_node()
+            .set_role_permissions(vec![role_permission(&operator, PermissionType::Write)]);
+
+        let result = read_node_through_address_space(&context, node);
+
+        assert_eq!(result.status, Some(StatusCode::BadUserAccessDenied));
+        assert!(result.value.is_none());
+    }
+
+    #[tokio::test]
+    async fn unconfigured_value_read_remains_permissive() {
+        let context = request_context();
+        let node = variable_with_user_access_level(AccessLevel::CURRENT_READ);
+
+        let result = read_node_through_address_space(&context, node);
+
+        assert_eq!(result.status, Some(StatusCode::Good));
+        assert_eq!(result.value, Some(Variant::from(1i32)));
+    }
+
+    #[tokio::test]
+    async fn value_write_denied_without_write_role_returns_user_access_denied_and_leaves_value() {
+        let context = request_context();
+        let operator = NodeId::new(0, "Operator");
+        let mut node =
+            variable_with_user_access_level(AccessLevel::CURRENT_READ | AccessLevel::CURRENT_WRITE);
+        node.as_mut_node()
+            .set_role_permissions(vec![role_permission(&operator, PermissionType::Read)]);
+        let node_to_write = write_value_id(node.node_id(), Variant::from(2i32));
+
+        let type_tree = context.get_type_tree_for_user();
+        let validation = validate_node_write(&node, &context, &node_to_write, type_tree.get());
+        if validation.is_ok() {
+            write_node_value(&mut node, &node_to_write)
+                .expect("write should apply before RBAC enforcement");
+        }
+
+        assert_eq!(validation, Err(StatusCode::BadUserAccessDenied));
+        let value = read_node_value(
+            &node,
+            &context,
+            &read_value_id(node.node_id()),
+            0.0,
+            TimestampsToReturn::Neither,
+        );
+        assert_eq!(value.value, Some(Variant::from(1i32)));
+    }
+
+    #[tokio::test]
+    async fn value_write_allowed_with_write_role() {
+        let operator = NodeId::new(0, "Operator");
+        let context = request_context_with_roles(vec![operator.clone()]);
+        let mut node =
+            variable_with_user_access_level(AccessLevel::CURRENT_READ | AccessLevel::CURRENT_WRITE);
+        node.as_mut_node()
+            .set_role_permissions(vec![role_permission(&operator, PermissionType::Write)]);
+        let node_to_write = write_value_id(node.node_id(), Variant::from(2i32));
+
+        let type_tree = context.get_type_tree_for_user();
+        assert_eq!(
+            validate_node_write(&node, &context, &node_to_write, type_tree.get()),
+            Ok(())
+        );
+    }
+
+    #[tokio::test]
+    async fn unconfigured_value_write_remains_permissive() {
+        let context = request_context();
+        let mut node =
+            variable_with_user_access_level(AccessLevel::CURRENT_READ | AccessLevel::CURRENT_WRITE);
+        let node_to_write = write_value_id(node.node_id(), Variant::from(2i32));
+
+        let type_tree = context.get_type_tree_for_user();
+        assert_eq!(
+            validate_node_write(&node, &context, &node_to_write, type_tree.get()),
+            Ok(())
+        );
+        write_node_value(&mut node, &node_to_write).expect("unconfigured write should apply");
+
+        let value = read_node_value(
+            &node,
+            &context,
+            &read_value_id(node.node_id()),
+            0.0,
+            TimestampsToReturn::Neither,
+        );
+        assert_eq!(value.value, Some(Variant::from(2i32)));
+    }
+
+    #[tokio::test]
+    async fn role_permissions_attribute_write_requires_write_role_permissions() {
+        let operator = NodeId::new(0, "Operator");
+        let context = request_context_with_roles(vec![operator.clone()]);
+        let mut node =
+            variable_with_user_access_level(AccessLevel::CURRENT_READ | AccessLevel::CURRENT_WRITE);
+        node.as_mut_node()
+            .set_write_mask(WriteMask::ROLE_PERMISSIONS);
+        node.as_mut_node()
+            .set_role_permissions(vec![role_permission(
+                &operator,
+                PermissionType::WriteAttribute,
+            )]);
+
+        assert_eq!(
+            is_writable(&context, &node, AttributeId::RolePermissions),
+            Err(StatusCode::BadUserAccessDenied)
+        );
+
+        node.as_mut_node()
+            .set_role_permissions(vec![role_permission(
+                &operator,
+                PermissionType::WriteRolePermissions,
+            )]);
+        assert_eq!(
+            is_writable(&context, &node, AttributeId::RolePermissions),
+            Ok(())
+        );
+    }
+
+    #[tokio::test]
+    async fn display_name_attribute_write_requires_write_attribute() {
+        let operator = NodeId::new(0, "Operator");
+        let context = request_context_with_roles(vec![operator.clone()]);
+        let mut node =
+            variable_with_user_access_level(AccessLevel::CURRENT_READ | AccessLevel::CURRENT_WRITE);
+        node.as_mut_node().set_write_mask(WriteMask::DISPLAY_NAME);
+        node.as_mut_node()
+            .set_role_permissions(vec![role_permission(
+                &operator,
+                PermissionType::WriteRolePermissions,
+            )]);
+
+        assert_eq!(
+            is_writable(&context, &node, AttributeId::DisplayName),
+            Err(StatusCode::BadUserAccessDenied)
+        );
+
+        node.as_mut_node()
+            .set_role_permissions(vec![role_permission(
+                &operator,
+                PermissionType::WriteAttribute,
+            )]);
+        assert_eq!(
+            is_writable(&context, &node, AttributeId::DisplayName),
+            Ok(())
+        );
+    }
+
+    #[tokio::test]
+    async fn access_restrictions_attribute_write_requires_write_attribute() {
+        let operator = NodeId::new(0, "Operator");
+        let context = request_context_with_roles(vec![operator.clone()]);
+        let mut node =
+            variable_with_user_access_level(AccessLevel::CURRENT_READ | AccessLevel::CURRENT_WRITE);
+        node.as_mut_node()
+            .set_write_mask(WriteMask::ACCESS_RESTRICTIONS);
+        node.as_mut_node()
+            .set_role_permissions(vec![role_permission(
+                &operator,
+                PermissionType::WriteRolePermissions,
+            )]);
+
+        assert_eq!(
+            is_writable(&context, &node, AttributeId::AccessRestrictions),
+            Err(StatusCode::BadUserAccessDenied)
+        );
+
+        node.as_mut_node()
+            .set_role_permissions(vec![role_permission(
+                &operator,
+                PermissionType::WriteAttribute,
+            )]);
+        assert_eq!(
+            is_writable(&context, &node, AttributeId::AccessRestrictions),
+            Ok(())
+        );
+    }
+
+    #[tokio::test]
+    async fn unconfigured_attribute_write_remains_permissive_when_write_mask_allows() {
+        let context = request_context();
+        let mut node =
+            variable_with_user_access_level(AccessLevel::CURRENT_READ | AccessLevel::CURRENT_WRITE);
+        node.as_mut_node().set_write_mask(WriteMask::DISPLAY_NAME);
+
+        assert_eq!(
+            is_writable(&context, &node, AttributeId::DisplayName),
+            Ok(())
+        );
+    }
+
+    #[tokio::test]
+    async fn user_access_level_clears_current_read_when_role_lacks_read() {
+        let operator = NodeId::new(0, "Operator");
+        let context = request_context_with_roles(vec![operator.clone()]);
+        let mut node =
+            variable_with_user_access_level(AccessLevel::CURRENT_READ | AccessLevel::CURRENT_WRITE);
+        node.as_mut_node()
+            .set_role_permissions(vec![role_permission(&operator, PermissionType::Write)]);
+
+        let access_level = user_access_level(&context, &node);
+
+        assert!(!access_level.contains(AccessLevel::CURRENT_READ));
+        assert!(access_level.contains(AccessLevel::CURRENT_WRITE));
+    }
+
+    #[tokio::test]
+    async fn user_access_level_clears_current_write_when_role_lacks_write() {
+        let operator = NodeId::new(0, "Operator");
+        let context = request_context_with_roles(vec![operator.clone()]);
+        let mut node =
+            variable_with_user_access_level(AccessLevel::CURRENT_READ | AccessLevel::CURRENT_WRITE);
+        node.as_mut_node()
+            .set_role_permissions(vec![role_permission(&operator, PermissionType::Read)]);
+
+        let access_level = user_access_level(&context, &node);
+
+        assert!(access_level.contains(AccessLevel::CURRENT_READ));
+        assert!(!access_level.contains(AccessLevel::CURRENT_WRITE));
+    }
+
+    #[tokio::test]
+    async fn user_access_level_leaves_unconfigured_node_unchanged() {
+        let context = request_context();
+        let node =
+            variable_with_user_access_level(AccessLevel::CURRENT_READ | AccessLevel::CURRENT_WRITE);
+
+        let access_level = user_access_level(&context, &node);
+
+        assert!(access_level.contains(AccessLevel::CURRENT_READ));
+        assert!(access_level.contains(AccessLevel::CURRENT_WRITE));
+    }
+
+    #[tokio::test]
+    async fn read_user_access_level_attribute_reflects_role_permissions() {
+        let operator = NodeId::new(0, "Operator");
+        let context = request_context_with_roles(vec![operator.clone()]);
+        let mut node =
+            variable_with_user_access_level(AccessLevel::CURRENT_READ | AccessLevel::CURRENT_WRITE);
+        node.as_mut_node()
+            .set_role_permissions(vec![role_permission(&operator, PermissionType::Read)]);
+        let node_to_read = user_access_level_id(node.node_id());
+
+        let value = read_node_value(
+            &node,
+            &context,
+            &node_to_read,
+            0.0,
+            TimestampsToReturn::Neither,
+        );
+
+        assert_eq!(
+            value.value,
+            Some(Variant::from(AccessLevel::CURRENT_READ.bits()))
+        );
+    }
+
+    #[tokio::test]
+    async fn read_user_executable_attribute_reflects_call_role_permissions() {
+        let operator = NodeId::new(0, "Operator");
+        let context = request_context_with_roles(vec![operator.clone()]);
+        let mut node = executable_method();
+        node.as_mut_node()
+            .set_role_permissions(vec![role_permission(&operator, PermissionType::Read)]);
+        let node_to_read = user_executable_id(node.node_id());
+
+        let value = read_node_value(
+            &node,
+            &context,
+            &node_to_read,
+            0.0,
+            TimestampsToReturn::Neither,
+        );
+
+        assert_eq!(value.value, Some(Variant::from(false)));
+    }
+
+    #[tokio::test]
+    async fn read_user_executable_attribute_allows_unconfigured_method() {
+        let context = request_context();
+        let node = executable_method();
+        let node_to_read = user_executable_id(node.node_id());
+
+        let value = read_node_value(
+            &node,
+            &context,
+            &node_to_read,
+            0.0,
+            TimestampsToReturn::Neither,
+        );
+
+        assert_eq!(value.value, Some(Variant::from(true)));
     }
 
     #[test]

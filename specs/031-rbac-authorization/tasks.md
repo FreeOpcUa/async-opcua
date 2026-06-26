@@ -18,8 +18,8 @@
 ## Phase 1: Setup (shared infrastructure)
 
 - [ ] T001 Create the `authorization` module skeleton `srv/authorization/mod.rs` (+ `pub(crate) mod authorization;` in `srv/lib.rs`); empty submodules `resolver`, `rules`, `decision`, `defaults`, `preset` (Spec: Part 18 §4; Part 3 §4.8)
-- [ ] T002 [P] Add a `permission_for_service` mapping helper in `srv/authorization/decision.rs` mapping each service/operation to its required `PermissionType` bit per the usage table (Spec: Part 3 §4.8.2; Part 3 §8.55)
-- [ ] T003 [P] Add `PermissionType` convenience helpers (contains/union over `opcua_types::PermissionType`) in `srv/authorization/decision.rs` (Spec: Part 3 §8.55)
+- [X] T002 [P] Add a `permission_for_service` mapping helper in `srv/authorization/decision.rs` mapping each service/operation to its required `PermissionType` bit per the usage table (Spec: Part 3 §4.8.2; Part 3 §8.55)
+- [X] T003 [P] Add `PermissionType` convenience helpers (contains/union over `opcua_types::PermissionType`) in `srv/authorization/decision.rs` (Spec: Part 3 §8.55)
 - [ ] T004 [P] Document the module's responsibility + the permissive-default contract at the top of `srv/authorization/mod.rs` (Spec: Part 3 §4.8; plan.md Constitution IV justification)
 
 ## Phase 2: Foundational (blocking prerequisites — BLOCKS all user stories)
@@ -29,9 +29,9 @@
 - [X] T007 [P] Add `VariableBuilder`/`ObjectBuilder`/generic node builder `.role_permissions(...)` and `.access_restrictions(...)` methods in `nodes/` builders (Spec: Part 3 §8.55, §8.56)
 - [X] T008 Add a resolved-role-set carrier to `srv/node_manager/context.rs` — `RequestContextInner.user_roles: Arc<Vec<NodeId>>` + `RequestContext::user_roles(&self) -> &[NodeId]`, defaulting to empty (Spec: Part 18 §4.4.1; Part 3 §4.9)
 - [ ] T009 Extend `srv/authenticator.rs::CoreServerPermissions` (or a new return) so the authenticator can surface the resolved role set for a `UserToken`; keep `read_diagnostics` behaviour (Spec: Part 18 §4; Part 3 §4.9)
-- [ ] T010 Implement the central `authorize(context, node_id, effective_role_permissions, required) -> bool` in `srv/authorization/decision.rs` with the permissive-when-unconfigured + fail-closed semantics from research.md D4/D5 (Spec: Part 3 §4.8.2; Part 4 §7.39 Bad_UserAccessDenied)
-- [ ] T011 [P] Unit-test `authorize`: union across roles, unconfigured⇒permit, list-excludes-my-roles⇒deny, required-bit present/absent — in `srv/authorization/decision.rs` tests (Spec: Part 3 §4.8.2)
-- [ ] T012 Add an `EffectiveNodePermissions` accessor that returns node-level RolePermissions else namespace default else "unconfigured" (namespace-default lookup stubbed until US6) in `srv/authorization/decision.rs` (Spec: Part 3 §4.8.2; Part 5 §6)
+- [X] T010 Implement the central `authorize(context, node_id, effective_role_permissions, required) -> bool` in `srv/authorization/decision.rs` with the permissive-when-unconfigured + fail-closed semantics from research.md D4/D5 (Spec: Part 3 §4.8.2; Part 4 §7.39 Bad_UserAccessDenied)
+- [X] T011 [P] Unit-test `authorize`: union across roles, unconfigured⇒permit, list-excludes-my-roles⇒deny, required-bit present/absent — in `srv/authorization/decision.rs` tests (Spec: Part 3 §4.8.2)
+- [X] T012 Add an `EffectiveNodePermissions` accessor that returns node-level RolePermissions else namespace default else "unconfigured" (namespace-default lookup stubbed until US6) in `srv/authorization/decision.rs` (Spec: Part 3 §4.8.2; Part 5 §6)
 
 ---
 
@@ -94,24 +94,24 @@ when unconfigured. **Independent test**: Observer can read not write; Operator b
 
 ### Tests for US3
 
-- [ ] T035 [P] [US3] Integration test `it/rbac.rs::write_denied_without_write_permission` (Bad_UserAccessDenied, value unchanged) (Spec: Part 4 §5.10 Write; Part 3 §8.55 Write)
-- [ ] T036 [P] [US3] Integration test `it/rbac.rs::write_allowed_with_write_permission` (Spec: Part 3 §8.55 Write)
-- [ ] T037 [P] [US3] Integration test `it/rbac.rs::read_denied_without_read_permission` (Spec: Part 3 §8.55 Read)
-- [ ] T038 [P] [US3] Integration test `it/rbac.rs::call_denied_without_call_permission` + allowed with it (Spec: Part 4 §5.11 Call; Part 3 §8.55 Call)
-- [ ] T039 [P] [US3] Integration test `it/rbac.rs::unconfigured_node_is_permissive` (backwards-compat) (Spec: Part 3 §4.8)
-- [ ] T040 [P] [US3] Integration test `it/rbac.rs::user_access_level_reflects_roles` (CurrentRead/CurrentWrite) (Spec: Part 3 §5.6.2 UserAccessLevel)
+- [X] T035 [P] [US3] Integration test `it/rbac.rs::write_denied_without_write_permission` (Bad_UserAccessDenied, value unchanged) (Spec: Part 4 §5.10 Write; Part 3 §8.55 Write)
+- [X] T036 [P] [US3] Integration test `it/rbac.rs::write_allowed_with_write_permission` (Spec: Part 3 §8.55 Write)
+- [X] T037 [P] [US3] Integration test `it/rbac.rs::read_denied_without_read_permission` (Spec: Part 3 §8.55 Read)
+- [X] T038 [P] [US3] Integration test `it/rbac.rs::call_denied_without_call_permission` + allowed with it (Spec: Part 4 §5.11 Call; Part 3 §8.55 Call)
+- [X] T039 [P] [US3] Integration test `it/rbac.rs::unconfigured_node_is_permissive` (backwards-compat) (Spec: Part 3 §4.8)
+- [X] T040 [P] [US3] Integration test `it/rbac.rs::user_access_level_reflects_roles` (CurrentRead/CurrentWrite) (Spec: Part 3 §5.6.2 UserAccessLevel)
 - [ ] T041 [P] [US3] Integration test `it/rbac.rs::multiple_roles_union_permissions` (Spec: Part 3 §4.8.2; FR-015)
 
 ### Implementation for US3
 
-- [ ] T042 [US3] Enforce the `Read` permission in `srv/address_space/utils.rs::is_readable`/`read_node_value` via `authorize(..., Read)`, permissive when unconfigured (Spec: Part 4 §5.10; Part 3 §8.55 Read)
-- [ ] T043 [US3] Fold role permissions into `srv/address_space/utils.rs::user_access_level` so UserAccessLevel CurrentRead/CurrentWrite reflect Read/Write permission (Spec: Part 3 §5.6.2)
-- [ ] T044 [US3] Enforce the `Write` permission on Value writes in `srv/address_space/utils.rs::validate_write_access`/writable check (Spec: Part 4 §5.10 Write; Part 3 §8.55 Write)
-- [ ] T045 [US3] Enforce `WriteAttribute`/`WriteRolePermissions` for non-Value attribute writes (RolePermissions attr write ⇒ WriteRolePermissions) `srv/address_space/utils.rs` (Spec: Part 3 §8.55 WriteAttribute/WriteRolePermissions)
-- [ ] T046 [US3] Enforce the `Call` permission via `authorize(..., Call)` in `srv/authenticator.rs::is_user_executable` + the method service path `srv/session/services/method.rs` (Spec: Part 4 §5.11; Part 3 §8.55 Call)
-- [ ] T047 [US3] Make `UserExecutable` reflect the Call permission for the session's roles `srv/address_space/utils.rs` (Spec: Part 3 §5.6.x UserExecutable)
-- [ ] T048 [US3] Return `Bad_UserAccessDenied` (not silent skip) on every denied per-node operation across Read/Write/Call (Spec: Part 4 §7.39 Bad_UserAccessDenied)
-- [ ] T049 [US3] Verify all seven US3 tests pass; run the full server crate + integration suite for zero regression when unconfigured (Spec: Part 4 §5.10–5.11; SC-007)
+- [X] T042 [US3] Enforce the `Read` permission in `srv/address_space/utils.rs::is_readable`/`read_node_value` via `authorize(..., Read)`, permissive when unconfigured (Spec: Part 4 §5.10; Part 3 §8.55 Read)
+- [X] T043 [US3] Fold role permissions into `srv/address_space/utils.rs::user_access_level` so UserAccessLevel CurrentRead/CurrentWrite reflect Read/Write permission (Spec: Part 3 §5.6.2)
+- [X] T044 [US3] Enforce the `Write` permission on Value writes in `srv/address_space/utils.rs::validate_write_access`/writable check (Spec: Part 4 §5.10 Write; Part 3 §8.55 Write)
+- [X] T045 [US3] Enforce `WriteAttribute`/`WriteRolePermissions` for non-Value attribute writes (RolePermissions attr write ⇒ WriteRolePermissions) `srv/address_space/utils.rs` (Spec: Part 3 §8.55 WriteAttribute/WriteRolePermissions)
+- [X] T046 [US3] Enforce the `Call` permission via `authorize(..., Call)` in `srv/authenticator.rs::is_user_executable` + the method service path `srv/session/services/method.rs` (Spec: Part 4 §5.11; Part 3 §8.55 Call)
+- [X] T047 [US3] Make `UserExecutable` reflect the Call permission for the session's roles `srv/address_space/utils.rs` (Spec: Part 3 §5.6.x UserExecutable)
+- [X] T048 [US3] Return `Bad_UserAccessDenied` (not silent skip) on every denied per-node operation across Read/Write/Call (Spec: Part 4 §7.39 Bad_UserAccessDenied)
+- [X] T049 [US3] Verify all seven US3 tests pass; run the full server crate + integration suite for zero regression when unconfigured (Spec: Part 4 §5.10–5.11; SC-007)
 
 **Checkpoint**: core CRUD/Call enforcement is live and backwards-compatible — MVP+ security value delivered.
 

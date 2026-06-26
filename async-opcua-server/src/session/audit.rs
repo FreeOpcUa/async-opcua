@@ -3,9 +3,9 @@ use std::sync::Arc;
 use opcua_core::ResponseMessage;
 use opcua_nodes::{BaseEventType, Event, EventField};
 use opcua_types::{
-    ActivateSessionRequest, AttributeId, ByteString, DateTime, ExtensionObject, NodeId,
-    NumericRange, ObjectId, ObjectTypeId, QualifiedName, RequestHeader, StatusCode, UAString,
-    Variant,
+    ActivateSessionRequest, AttributeId, ByteString, CreateSessionRequest, DateTime,
+    ExtensionObject, NodeId, NumericRange, ObjectId, ObjectTypeId, QualifiedName, RequestHeader,
+    StatusCode, UAString, Variant,
 };
 use uuid::Uuid;
 
@@ -56,10 +56,14 @@ struct ServerAuditEvent {
     user_identity_token: Option<ExtensionObject>,
     method_id: Option<NodeId>,
     attribute_id: Option<u32>,
+    client_certificate: Option<ByteString>,
+    client_certificate_thumbprint: Option<ByteString>,
+    revised_session_timeout: Option<f64>,
 }
 
 impl ServerAuditEvent {
-    fn failure(
+    /// Builds an audit event whose `Status`/severity reflect `status_code_id`.
+    fn outcome(
         event_type: ObjectTypeId,
         server_id: UAString,
         action: &str,
@@ -69,7 +73,17 @@ impl ServerAuditEvent {
         session_id: Option<NodeId>,
     ) -> Self {
         let now = DateTime::now();
-        let message = format!("{action} failed: {status_code_id}");
+        let status = status_code_id.is_good();
+        let severity = if status {
+            AUDIT_SUCCESS_SEVERITY
+        } else {
+            AUDIT_FAILURE_SEVERITY
+        };
+        let message = if status {
+            format!("{action} succeeded")
+        } else {
+            format!("{action} failed: {status_code_id}")
+        };
         let base = BaseEventType::new(
             event_type,
             ByteString::from(Uuid::new_v4().as_bytes().as_slice()),
@@ -78,12 +92,12 @@ impl ServerAuditEvent {
         )
         .set_source_node(ObjectId::Server.into())
         .set_source_name(UAString::from(AUDIT_SOURCE_NAME))
-        .set_severity(AUDIT_FAILURE_SEVERITY);
+        .set_severity(severity);
 
         Self {
             base,
             action_time_stamp: now,
-            status: false,
+            status,
             server_id,
             client_audit_entry_id,
             client_user_id,
@@ -93,7 +107,31 @@ impl ServerAuditEvent {
             user_identity_token: None,
             method_id: None,
             attribute_id: None,
+            client_certificate: None,
+            client_certificate_thumbprint: None,
+            revised_session_timeout: None,
         }
+    }
+
+    fn failure(
+        event_type: ObjectTypeId,
+        server_id: UAString,
+        action: &str,
+        client_audit_entry_id: UAString,
+        client_user_id: UAString,
+        status_code_id: StatusCode,
+        session_id: Option<NodeId>,
+    ) -> Self {
+        // Callers only use this for Bad status codes, so the outcome is always a failure.
+        Self::outcome(
+            event_type,
+            server_id,
+            action,
+            client_audit_entry_id,
+            client_user_id,
+            status_code_id,
+            session_id,
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -137,6 +175,9 @@ impl ServerAuditEvent {
             user_identity_token: None,
             method_id: Some(method_id),
             attribute_id: None,
+            client_certificate: None,
+            client_certificate_thumbprint: None,
+            revised_session_timeout: None,
         }
     }
 
@@ -182,6 +223,9 @@ impl ServerAuditEvent {
             user_identity_token: None,
             method_id: None,
             attribute_id: Some(attribute_id),
+            client_certificate: None,
+            client_certificate_thumbprint: None,
+            revised_session_timeout: None,
         }
     }
 
@@ -192,6 +236,22 @@ impl ServerAuditEvent {
 
     fn with_user_identity_token(mut self, user_identity_token: ExtensionObject) -> Self {
         self.user_identity_token = Some(user_identity_token);
+        self
+    }
+
+    /// Records the client certificate and its SHA-1 thumbprint (AuditCreateSessionEventType).
+    fn with_client_certificate(mut self, client_certificate: ByteString) -> Self {
+        if !client_certificate.is_null() {
+            if let Ok(cert) = opcua_crypto::X509::from_byte_string(&client_certificate) {
+                self.client_certificate_thumbprint = Some(ByteString::from(cert.thumbprint()));
+            }
+        }
+        self.client_certificate = Some(client_certificate);
+        self
+    }
+
+    fn with_revised_session_timeout(mut self, revised_session_timeout: f64) -> Self {
+        self.revised_session_timeout = Some(revised_session_timeout);
         self
     }
 }
@@ -262,6 +322,18 @@ impl EventField for ServerAuditEvent {
             }
             "MethodId" => self.method_id.get_value(attribute_id, index_range, &[]),
             "AttributeId" => self.attribute_id.get_value(attribute_id, index_range, &[]),
+            "ClientCertificate" => {
+                self.client_certificate
+                    .get_value(attribute_id, index_range, &[])
+            }
+            "ClientCertificateThumbprint" => {
+                self.client_certificate_thumbprint
+                    .get_value(attribute_id, index_range, &[])
+            }
+            "RevisedSessionTimeout" => {
+                self.revised_session_timeout
+                    .get_value(attribute_id, index_range, &[])
+            }
             "InputArguments" | "OutputArguments" => {
                 // ponytail: flat audit events do not carry generated method argument arrays.
                 Variant::Empty
@@ -277,7 +349,7 @@ impl EventField for ServerAuditEvent {
     }
 }
 
-pub(crate) fn dispatch_activate_session_failure(
+pub(crate) fn dispatch_activate_session(
     subscriptions: &Arc<SubscriptionCache>,
     info: &ServerInfo,
     request: &ActivateSessionRequest,
@@ -285,7 +357,7 @@ pub(crate) fn dispatch_activate_session_failure(
     secure_channel_id: u32,
     status: StatusCode,
 ) {
-    let event = ServerAuditEvent::failure(
+    let event = ServerAuditEvent::outcome(
         ObjectTypeId::AuditActivateSessionEventType,
         info.application_uri.clone(),
         "ActivateSession",
@@ -296,6 +368,33 @@ pub(crate) fn dispatch_activate_session_failure(
     )
     .with_secure_channel_id(secure_channel_id)
     .with_user_identity_token(request.user_identity_token.clone());
+    dispatch_audit_event(subscriptions, &event);
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn dispatch_create_session(
+    subscriptions: &Arc<SubscriptionCache>,
+    info: &ServerInfo,
+    request: &CreateSessionRequest,
+    session_id: Option<NodeId>,
+    secure_channel_id: u32,
+    revised_session_timeout: Option<f64>,
+    status: StatusCode,
+) {
+    let mut event = ServerAuditEvent::outcome(
+        ObjectTypeId::AuditCreateSessionEventType,
+        info.application_uri.clone(),
+        "CreateSession",
+        request.request_header.audit_entry_id.clone(),
+        UAString::null(),
+        status,
+        session_id,
+    )
+    .with_secure_channel_id(secure_channel_id)
+    .with_client_certificate(request.client_certificate.clone());
+    if let Some(revised_session_timeout) = revised_session_timeout {
+        event = event.with_revised_session_timeout(revised_session_timeout);
+    }
     dispatch_audit_event(subscriptions, &event);
 }
 
@@ -442,6 +541,47 @@ mod tests {
                 &field("StatusCodeId")
             ),
             Variant::StatusCode(StatusCode::BadUserAccessDenied)
+        );
+    }
+
+    #[test]
+    fn create_session_audit_reports_success_and_revised_timeout() {
+        let event = ServerAuditEvent::outcome(
+            ObjectTypeId::AuditCreateSessionEventType,
+            UAString::from("urn:test-server"),
+            "CreateSession",
+            UAString::null(),
+            UAString::null(),
+            StatusCode::Good,
+            Some(NodeId::new(1, 7)),
+        )
+        .with_secure_channel_id(5)
+        .with_revised_session_timeout(1234.0);
+
+        assert_eq!(
+            event.get_value(AttributeId::Value, &NumericRange::None, &field("EventType")),
+            Variant::from(NodeId::from(ObjectTypeId::AuditCreateSessionEventType))
+        );
+        // A Good status code is a successful audit (Status = true).
+        assert_eq!(
+            event.get_value(AttributeId::Value, &NumericRange::None, &field("Status")),
+            Variant::Boolean(true)
+        );
+        assert_eq!(
+            event.get_value(
+                AttributeId::Value,
+                &NumericRange::None,
+                &field("RevisedSessionTimeout")
+            ),
+            Variant::from(1234.0f64)
+        );
+        assert_eq!(
+            event.get_value(
+                AttributeId::Value,
+                &NumericRange::None,
+                &field("SecureChannelId")
+            ),
+            Variant::from(UAString::from("5"))
         );
     }
 }

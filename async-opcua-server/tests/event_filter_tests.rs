@@ -302,15 +302,24 @@ async fn failed_username_activation_dispatches_audit_event() {
     assert_eq!(status, StatusCode::BadUserAccessDenied);
 
     server.session.trigger_publish_now();
-    let fields = tokio::time::timeout(Duration::from_secs(5), event_rx.recv())
-        .await
-        .expect("failed auth audit event should be published")
-        .expect("failed auth audit event fields should be received");
+    // The bad client's CreateSession succeeds and now emits an AuditCreateSessionEventType ahead of
+    // the ActivateSession failure; skip non-activate audit events and assert on the activation one.
+    let activate_type = Variant::from(NodeId::from(ObjectTypeId::AuditActivateSessionEventType));
+    let mut fields = None;
+    for _ in 0..4 {
+        let Ok(Some(received)) =
+            tokio::time::timeout(Duration::from_secs(5), event_rx.recv()).await
+        else {
+            break;
+        };
+        if received.first() == Some(&activate_type) {
+            fields = Some(received);
+            break;
+        }
+        server.session.trigger_publish_now();
+    }
+    let fields = fields.expect("an AuditActivateSessionEventType failure should be published");
 
-    assert_eq!(
-        fields[0],
-        Variant::from(NodeId::from(ObjectTypeId::AuditActivateSessionEventType))
-    );
     assert_eq!(
         localized_text(&fields[1]),
         Some("ActivateSession failed: BadUserAccessDenied")

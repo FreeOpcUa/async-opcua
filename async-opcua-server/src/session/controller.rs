@@ -46,8 +46,8 @@ use crate::{
 
 use super::{
     audit::{
-        dispatch_activate_session_failure, dispatch_response_failure, dispatch_service_failure,
-        AuditEventContext,
+        dispatch_activate_session, dispatch_create_session, dispatch_response_failure,
+        dispatch_service_failure, AuditEventContext,
     },
     instance::Session,
     manager::{activate_session, close_session, SessionManager},
@@ -430,6 +430,23 @@ impl<T: ConnectionTransport> SessionController<T> {
                     &request,
                 );
                 drop(mgr);
+                let (session_id, revised_timeout, status) = match &res {
+                    Ok(response) => (
+                        Some(response.session_id.clone()),
+                        Some(response.revised_session_timeout),
+                        StatusCode::Good,
+                    ),
+                    Err(status) => (None, None, *status),
+                };
+                dispatch_create_session(
+                    &self.subscriptions,
+                    &self.info,
+                    &request,
+                    session_id,
+                    self.channel.secure_channel_id(),
+                    revised_timeout,
+                    status,
+                );
                 self.process_service_result(res, request.request_header.request_handle, id)
             }
 
@@ -442,18 +459,20 @@ impl<T: ConnectionTransport> SessionController<T> {
                 )
                 .instrument(span.clone())
                 .await;
-                if let Err(status) = &res {
-                    let session_id =
-                        self.session_id_for_token(&request.request_header.authentication_token);
-                    dispatch_activate_session_failure(
-                        &self.subscriptions,
-                        &self.info,
-                        &request,
-                        session_id,
-                        self.channel.secure_channel_id(),
-                        *status,
-                    );
-                }
+                let status = match &res {
+                    Ok(_) => StatusCode::Good,
+                    Err(status) => *status,
+                };
+                let session_id =
+                    self.session_id_for_token(&request.request_header.authentication_token);
+                dispatch_activate_session(
+                    &self.subscriptions,
+                    &self.info,
+                    &request,
+                    session_id,
+                    self.channel.secure_channel_id(),
+                    status,
+                );
                 let _h = span.enter();
                 self.process_service_result(res, request.request_header.request_handle, id)
             }

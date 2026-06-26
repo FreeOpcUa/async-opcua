@@ -1704,3 +1704,112 @@ async fn publishing_disabled_withholds_data_until_enabled() {
     assert_eq!(1, items.len());
     assert_eq!(Some(Variant::Int32(7)), items[0].value.value);
 }
+
+/// Part 4 §7.22.4 / Part 8 §5.13: a MonitoredItem with an AggregateFilter reports one aggregated
+/// value per processing interval instead of raw changes. The Average of a constant value is that
+/// constant regardless of sampling timing, giving a deterministic assertion.
+#[tokio::test]
+async fn aggregate_filter_average() {
+    use opcua_types::{AggregateConfiguration, AggregateFilter, AggregateFilterResult};
+
+    let (tester, nm, session) = setup().await;
+
+    let id = nm.inner().next_node_id();
+    nm.inner().add_node(
+        nm.address_space(),
+        tester.handle.type_tree(),
+        VariableBuilder::new(&id, "AggVar", "AggVar")
+            .value(42.0f64)
+            .data_type(DataTypeId::Double)
+            .access_level(AccessLevel::CURRENT_READ)
+            .user_access_level(AccessLevel::CURRENT_READ)
+            .build()
+            .into(),
+        &ObjectId::ObjectsFolder.into(),
+        &ReferenceTypeId::Organizes.into(),
+        Some(&VariableTypeId::BaseDataVariableType.into()),
+        Vec::new(),
+    );
+
+    let (notifs, mut data, _) = ChannelNotifications::new();
+    let sub_id = session
+        .create_subscription(Duration::from_millis(100), 100, 20, 1000, 0, true, notifs)
+        .await
+        .unwrap();
+
+    // Average aggregate (i=2342) over a 200 ms processing interval.
+    let filter = ExtensionObject::from_message(AggregateFilter {
+        start_time: opcua::types::DateTime::now(),
+        aggregate_type: NodeId::new(0, 2342),
+        processing_interval: 200.0,
+        aggregate_configuration: AggregateConfiguration {
+            use_server_capabilities_defaults: true,
+            ..Default::default()
+        },
+    });
+    let res = session
+        .create_monitored_items(
+            sub_id,
+            TimestampsToReturn::Both,
+            vec![MonitoredItemCreateRequest {
+                item_to_monitor: ReadValueId {
+                    node_id: id.clone(),
+                    attribute_id: AttributeId::Value as u32,
+                    ..Default::default()
+                },
+                monitoring_mode: MonitoringMode::Reporting,
+                requested_parameters: MonitoringParameters {
+                    sampling_interval: 0.0,
+                    queue_size: 10,
+                    discard_oldest: true,
+                    filter,
+                    ..Default::default()
+                },
+            }],
+        )
+        .await
+        .unwrap();
+    assert_eq!(res[0].result.status_code, StatusCode::Good);
+    assert!(
+        res[0]
+            .result
+            .filter_result
+            .inner_as::<AggregateFilterResult>()
+            .is_some(),
+        "CreateMonitoredItems must return an AggregateFilterResult"
+    );
+
+    // Drive the constant value so each processing interval has in-window samples.
+    for _ in 0..12 {
+        nm.set_value(
+            tester.handle.subscriptions(),
+            &id,
+            None,
+            DataValue::new_now(42.0f64),
+        )
+        .unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+
+    let mut found = false;
+    for _ in 0..12 {
+        let Ok(Some((r, v))) = timeout(Duration::from_millis(500), data.recv()).await else {
+            break;
+        };
+        if r.node_id != id {
+            continue;
+        }
+        if let Some(Variant::Double(d)) = v.value {
+            if (d - 42.0).abs() < 1e-9 {
+                found = true;
+                break;
+            }
+        }
+    }
+    assert!(
+        found,
+        "an AggregateFilter MonitoredItem must report the Average (42.0) of the constant value"
+    );
+
+    session.delete_subscription(sub_id).await.unwrap();
+}

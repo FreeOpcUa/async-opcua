@@ -369,7 +369,7 @@ impl SessionSubscriptions {
         for item in requests {
             let filter_result = item
                 .filter_res()
-                .map(|r| ExtensionObject::from_message(r.clone()))
+                .cloned()
                 .unwrap_or_else(ExtensionObject::null);
             if item.status_code().is_good() {
                 if cap > 0 && sub.len() >= cap {
@@ -421,9 +421,7 @@ impl SessionSubscriptions {
             if let Some(item) = sub.get_mut(&request.monitored_item_id) {
                 let (filter_result, status) =
                     item.modify(info, timestamps_to_return, &request, type_tree);
-                let filter_result = filter_result
-                    .map(ExtensionObject::from_message)
-                    .unwrap_or_else(ExtensionObject::null);
+                let filter_result = filter_result.unwrap_or_else(ExtensionObject::null);
 
                 results.push(MonitoredItemUpdateRef::new(
                     MonitoredItemHandle {

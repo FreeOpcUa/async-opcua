@@ -843,6 +843,7 @@ impl Subscription {
         data_change_notification_pool: &mut DataChangeNotificationVecPool,
     ) {
         monitored_item.maybe_enqueue_skipped_value(&(*now).into());
+        monitored_item.maybe_flush_aggregate(&(*now).into());
 
         if monitored_item.is_sampling() && monitored_item.has_new_notifications() {
             triggers.extend(

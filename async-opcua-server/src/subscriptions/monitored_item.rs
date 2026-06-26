@@ -7,14 +7,17 @@ use tracing::{error, warn};
 
 use super::MonitoredItemHandle;
 use crate::{
-    info::ServerInfo, node_manager::ParsedReadValueId,
+    aggregates::{dispatch_aggregate, supported_aggregates, AggregateInput},
+    info::ServerInfo,
+    node_manager::ParsedReadValueId,
     services::subscription::filter::ParsedEventFilter,
 };
 use opcua_types::{
-    match_extension_object_owned, DataChangeFilter, DataValue, DateTime, EventFieldList,
-    EventFilter, EventFilterResult, ExtensionObject, MonitoredItemCreateRequest,
-    MonitoredItemModifyRequest, MonitoredItemNotification, MonitoringMode, NumericRange,
-    ObjectTypeId, ParsedDataChangeFilter, StatusCode, TimestampsToReturn, Variant,
+    match_extension_object_owned, AggregateConfiguration, AggregateFilter, AggregateFilterResult,
+    DataChangeFilter, DataValue, DateTime, EventFieldList, EventFilter, ExtensionObject,
+    MonitoredItemCreateRequest, MonitoredItemModifyRequest, MonitoredItemNotification,
+    MonitoringMode, NodeId, NumericRange, ObjectTypeId, ParsedDataChangeFilter, StatusCode,
+    TimestampsToReturn, Variant,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -60,16 +63,53 @@ pub enum FilterType {
     None,
     DataChangeFilter(ParsedDataChangeFilter),
     EventFilter(ParsedEventFilter),
+    AggregateFilter(ParsedAggregateFilter),
+}
+
+/// A validated AggregateFilter for a monitored item (Part 4 §7.22.4 / Part 8 §5.13).
+///
+/// The item buffers sampled values and, each `processing_interval`, emits one aggregated value
+/// computed by the Part-13 aggregate engine instead of reporting raw data changes.
+#[derive(Debug, Clone)]
+pub struct ParsedAggregateFilter {
+    aggregate_type: NodeId,
+    /// Processing interval in milliseconds (validated > 0).
+    processing_interval: f64,
+    config: AggregateConfiguration,
+}
+
+impl ParsedAggregateFilter {
+    fn parse(filter: AggregateFilter) -> (AggregateFilterResult, Result<Self, StatusCode>) {
+        // The server honours the requested values; revised == requested.
+        let result = AggregateFilterResult {
+            revised_start_time: filter.start_time,
+            revised_processing_interval: filter.processing_interval,
+            revised_aggregate_configuration: filter.aggregate_configuration.clone(),
+        };
+        if !supported_aggregates().contains(&filter.aggregate_type) {
+            return (result, Err(StatusCode::BadAggregateNotSupported));
+        }
+        if !filter.processing_interval.is_finite() || filter.processing_interval <= 0.0 {
+            return (result, Err(StatusCode::BadAggregateInvalidInputs));
+        }
+        let parsed = Self {
+            aggregate_type: filter.aggregate_type,
+            processing_interval: filter.processing_interval,
+            config: filter.aggregate_configuration,
+        };
+        (result, Ok(parsed))
+    }
 }
 
 impl FilterType {
-    /// Try to create a filter from an extension object, returning
-    /// an `EventFilterResult` if the filter is for events.
+    /// Try to create a filter from an extension object, returning the
+    /// `MonitoringFilterResult` (an `EventFilterResult` or `AggregateFilterResult`) if the filter
+    /// type produces one.
     pub fn from_filter(
         filter: ExtensionObject,
         eu_range: Option<(f64, f64)>,
         type_tree: &dyn TypeTree,
-    ) -> (Option<EventFilterResult>, Result<FilterType, StatusCode>) {
+    ) -> (Option<ExtensionObject>, Result<FilterType, StatusCode>) {
         // Check if the filter is a supported filter type
         if filter.is_null() {
             return (None, Ok(FilterType::None));
@@ -82,7 +122,17 @@ impl FilterType {
             },
             v: EventFilter => {
                 let (res, filter_res) = ParsedEventFilter::parse(v, type_tree);
-                (Some(res), filter_res.map(FilterType::EventFilter))
+                (
+                    Some(ExtensionObject::from_message(res)),
+                    filter_res.map(FilterType::EventFilter),
+                )
+            },
+            v: AggregateFilter => {
+                let (res, filter_res) = ParsedAggregateFilter::parse(v);
+                (
+                    Some(ExtensionObject::from_message(res)),
+                    filter_res.map(FilterType::AggregateFilter),
+                )
             },
             _ => {
                 error!(
@@ -113,7 +163,7 @@ pub struct CreateMonitoredItem {
     initial_value: Option<DataValue>,
     status_code: StatusCode,
     filter: FilterType,
-    filter_res: Option<EventFilterResult>,
+    filter_res: Option<ExtensionObject>,
     timestamps_to_return: TimestampsToReturn,
     eu_range: Option<(f64, f64)>,
 }
@@ -282,7 +332,7 @@ impl CreateMonitoredItem {
         self.status_code
     }
 
-    pub(crate) fn filter_res(&self) -> Option<&EventFilterResult> {
+    pub(crate) fn filter_res(&self) -> Option<&ExtensionObject> {
         self.filter_res.as_ref()
     }
 }
@@ -316,6 +366,18 @@ pub struct MonitoredItem {
     // variable's EURange node mid-life is NOT picked up. Deliberate (avoids a node read per sample). If
     // live EURange tracking is ever needed, re-resolve in `modify()`/on sample. (cross-check A1)
     eu_range: Option<(f64, f64)>,
+    /// For an AggregateFilter item: sampled values buffered for the current/next processing interval
+    /// (assumed time-ordered, as samples arrive with monotonic source timestamps).
+    aggregate_buffer: Vec<DataValue>,
+    /// For an AggregateFilter item: the end timestamp of the next processing interval to emit.
+    aggregate_next_deadline: Option<DateTime>,
+}
+
+/// Adds `millis` to a timestamp, saturating on overflow.
+fn add_millis(time: DateTime, millis: f64) -> DateTime {
+    time.as_chrono()
+        .checked_add_signed(TimeDelta::microseconds((millis * 1000.0) as i64))
+        .map_or(time, DateTime::from)
 }
 
 #[derive(Debug, Clone)]
@@ -344,9 +406,15 @@ impl MonitoredItem {
             overflow_event: None,
             any_new_notification: false,
             eu_range: request.eu_range,
+            aggregate_buffer: Vec::new(),
+            aggregate_next_deadline: None,
         };
         let now = DateTime::now();
-        if let Some(val) = request.initial_value.as_ref() {
+        if let FilterType::AggregateFilter(agg) = &v.filter {
+            // The first aggregate is emitted one processing interval after creation; no initial
+            // value notification (an aggregate reports computed values, not the raw current value).
+            v.aggregate_next_deadline = Some(add_millis(now, agg.processing_interval));
+        } else if let Some(val) = request.initial_value.as_ref() {
             v.notify_data_value(val.clone(), &now, true);
         } else {
             v.notify_data_value(
@@ -378,7 +446,7 @@ impl MonitoredItem {
         timestamps_to_return: TimestampsToReturn,
         request: &MonitoredItemModifyRequest,
         type_tree: &dyn TypeTree,
-    ) -> (Option<EventFilterResult>, StatusCode) {
+    ) -> (Option<ExtensionObject>, StatusCode) {
         self.timestamps_to_return = timestamps_to_return;
         let (filter_res, filter) = FilterType::from_filter(
             request.requested_parameters.filter.clone(),
@@ -484,6 +552,113 @@ impl MonitoredItem {
         }
     }
 
+    /// For an AggregateFilter item, emit one aggregated value for each processing interval that has
+    /// fully elapsed at `now`, computed over the buffered samples. Returns true if any was enqueued.
+    pub(super) fn maybe_flush_aggregate(&mut self, now: &DateTime) -> bool {
+        let (aggregate_type, processing_interval, config) = match &self.filter {
+            FilterType::AggregateFilter(agg) => (
+                agg.aggregate_type.clone(),
+                agg.processing_interval,
+                agg.config.clone(),
+            ),
+            _ => return false,
+        };
+        let Some(mut deadline) = self.aggregate_next_deadline else {
+            return false;
+        };
+
+        // ponytail: live monitored items don't expose the variable's Stepped property, so use sloped
+        // interpolation (the Part-13 default for variables without a Stepped flag).
+        let stepped = false;
+
+        let mut produced = Vec::new();
+        while deadline <= *now {
+            let interval_start = add_millis(deadline, -processing_interval);
+            let interval_end = deadline;
+
+            let mut values_in: Vec<&DataValue> = Vec::new();
+            let mut prior: Option<&DataValue> = None;
+            let mut next: Option<&DataValue> = None;
+            for dv in &self.aggregate_buffer {
+                let ts = dv.source_timestamp.unwrap_or(interval_start);
+                if ts < interval_start {
+                    prior = Some(dv);
+                } else if ts <= interval_end {
+                    values_in.push(dv);
+                } else if next.is_none() {
+                    next = Some(dv);
+                }
+            }
+
+            let mut value = dispatch_aggregate(
+                &aggregate_type,
+                &AggregateInput {
+                    values: &values_in,
+                    prior,
+                    next,
+                    interval_start,
+                    interval_end,
+                    config: &config,
+                    stepped,
+                },
+            );
+            // Part 4 §7.22.4: the timestamp is the end of the processing interval.
+            value.source_timestamp = Some(interval_end);
+            value.server_timestamp = Some(interval_end);
+            produced.push(value);
+
+            deadline = add_millis(interval_end, processing_interval);
+        }
+
+        if produced.is_empty() {
+            return false;
+        }
+
+        self.aggregate_next_deadline = Some(deadline);
+        // Retain the samples needed for the next interval: everything at/after its start, plus the
+        // single latest earlier sample (the `prior` bound).
+        let next_start = add_millis(deadline, -processing_interval);
+        if let Some(cut) = self
+            .aggregate_buffer
+            .iter()
+            .rposition(|dv| dv.source_timestamp.is_some_and(|ts| ts < next_start))
+        {
+            if cut > 0 {
+                self.aggregate_buffer.drain(0..cut);
+            }
+        }
+
+        let client_handle = self.client_handle;
+        for mut value in produced {
+            self.apply_timestamps_to_return(&mut value);
+            self.enqueue_notification(MonitoredItemNotification {
+                client_handle,
+                value,
+            });
+        }
+        true
+    }
+
+    fn apply_timestamps_to_return(&self, value: &mut DataValue) {
+        match self.timestamps_to_return {
+            TimestampsToReturn::Neither | TimestampsToReturn::Invalid => {
+                value.source_timestamp = None;
+                value.source_picoseconds = None;
+                value.server_timestamp = None;
+                value.server_picoseconds = None;
+            }
+            TimestampsToReturn::Server => {
+                value.source_timestamp = None;
+                value.source_picoseconds = None;
+            }
+            TimestampsToReturn::Source => {
+                value.server_timestamp = None;
+                value.server_picoseconds = None;
+            }
+            TimestampsToReturn::Both => {}
+        }
+    }
+
     pub(super) fn notify_data_value(
         &mut self,
         mut value: DataValue,
@@ -518,6 +693,13 @@ impl MonitoredItem {
                     }
                 }
             }
+        }
+
+        // AggregateFilter items don't report raw changes: buffer the sample and let
+        // `maybe_flush_aggregate` emit one computed value per processing interval.
+        if matches!(self.filter, FilterType::AggregateFilter(_)) {
+            self.aggregate_buffer.push(value);
+            return true;
         }
 
         let (matches_filter, matches_sampling_interval) =
@@ -815,7 +997,33 @@ pub(super) mod tests {
         Variant,
     };
 
-    use super::{FilterType, MonitoredItem};
+    use super::{FilterType, MonitoredItem, ParsedAggregateFilter};
+
+    #[test]
+    fn aggregate_filter_parse_validates_type_and_interval() {
+        use opcua_types::{AggregateConfiguration, AggregateFilter};
+        let make = |aggregate_type: NodeId, processing_interval: f64| AggregateFilter {
+            start_time: DateTime::now(),
+            aggregate_type,
+            processing_interval,
+            aggregate_configuration: AggregateConfiguration::default(),
+        };
+
+        // Average (i=2342) with a positive interval is accepted.
+        let (_res, ok) = ParsedAggregateFilter::parse(make(NodeId::new(0, 2342), 200.0));
+        assert!(ok.is_ok());
+
+        // An unknown aggregate type is rejected.
+        let (_res, bad_type) = ParsedAggregateFilter::parse(make(NodeId::new(0, 1), 200.0));
+        assert_eq!(bad_type.unwrap_err(), StatusCode::BadAggregateNotSupported);
+
+        // A non-positive processing interval is rejected.
+        let (_res, bad_interval) = ParsedAggregateFilter::parse(make(NodeId::new(0, 2342), 0.0));
+        assert_eq!(
+            bad_interval.unwrap_err(),
+            StatusCode::BadAggregateInvalidInputs
+        );
+    }
 
     pub(crate) fn new_monitored_item(
         id: u32,
@@ -843,6 +1051,8 @@ pub(super) mod tests {
             sample_skipped_data_value: None,
             any_new_notification: false,
             eu_range: None,
+            aggregate_buffer: Vec::new(),
+            aggregate_next_deadline: None,
         };
 
         let now = DateTime::now();

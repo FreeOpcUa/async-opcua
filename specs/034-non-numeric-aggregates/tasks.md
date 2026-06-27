@@ -59,9 +59,9 @@ parallelizable (different concern, no incomplete deps). All engine work is in
 **Goal**: confirm DurationGood/Bad, PercentGood/Bad, WorstQuality/2 ignore value type and lock it in.
 **Independent test**: numeric vs Boolean source with the same status pattern → equal results.
 
-- [ ] T013 [US3] Confirm (read-only) that `agg_duration_good/bad`, `agg_percent_good/bad`, `agg_worst_quality/2` key only on StatusCode and that `state_regions` keeps every point's status regardless of value type; record the finding (no code change expected — if any of them is found to filter on `variant_to_f64`, fix it to be status-only) (Spec: Part 13 §5.4.3.31/§5.4.3.32 DurationGood/Bad, §5.4.3.33/§5.4.3.34 PercentGood/Bad, §5.4.3.35/§5.4.3.36 WorstQuality/2)
-- [ ] T014 [P] [US3] [Claude] Test: a numeric source and a non-numeric source with an identical per-point Good/Bad status pattern return EQUAL DurationGood, DurationBad, PercentGood, PercentBad (Spec: SC-003; §5.4.3.31–§5.4.3.34)
-- [ ] T015 [P] [US3] [Claude] Test: WorstQuality and WorstQuality2 on a non-numeric source return the worst StatusCode in the interval, independent of value type (Spec: §5.4.3.35 / §5.4.3.36)
+- [X] T013 [US3] Confirm (read-only) that `agg_duration_good/bad`, `agg_percent_good/bad`, `agg_worst_quality/2` key only on StatusCode and that `state_regions` keeps every point's status regardless of value type; record the finding (no code change expected — if any of them is found to filter on `variant_to_f64`, fix it to be status-only) (Spec: Part 13 §5.4.3.31/§5.4.3.32 DurationGood/Bad, §5.4.3.33/§5.4.3.34 PercentGood/Bad, §5.4.3.35/§5.4.3.36 WorstQuality/2)
+- [X] T014 [P] [US3] [Claude] Test: a numeric source and a non-numeric source with an identical per-point Good/Bad status pattern return EQUAL DurationGood, DurationBad, PercentGood, PercentBad (Spec: SC-003; §5.4.3.31–§5.4.3.34)
+- [X] T015 [P] [US3] [Claude] Test: WorstQuality and WorstQuality2 on a non-numeric source return the worst StatusCode in the interval, independent of value type (Spec: §5.4.3.35 / §5.4.3.36)
 
 **Checkpoint**: status aggregates proven type-agnostic and pinned by tests.
 

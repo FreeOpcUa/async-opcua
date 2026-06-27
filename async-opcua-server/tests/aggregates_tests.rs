@@ -993,3 +993,49 @@ fn transitions_nonbad_vs_count_good_only() {
     let c = calculate_aggregate(&vals, &NodeId::new(0u16, ID_COUNT), start, end);
     assert_eq!(c.value, Some(Variant::Int32(2)));
 }
+
+// --- US3: status/quality aggregates are value-type-agnostic (lock-in) --------
+// DurationGood/Bad (§5.4.3.31/32), PercentGood/Bad (§5.4.3.33/34),
+// WorstQuality/2 (§5.4.3.35/36) key on StatusCode, never on the value.
+
+#[test]
+fn status_aggregates_equal_for_numeric_and_nonnumeric_same_status() {
+    let (start, end) = phase_b_interval();
+    // Identical timestamps + statuses, different value types.
+    let n0 = dv(1.0, 2, StatusCode::Good);
+    let n1 = dv(2.0, 6, StatusCode::BadDeviceFailure);
+    let num = [&n0, &n1];
+    let b0 = dvv(Variant::Boolean(true), 2, StatusCode::Good);
+    let b1 = dvv(Variant::Boolean(false), 6, StatusCode::BadDeviceFailure);
+    let boolean = [&b0, &b1];
+
+    // DurationGood/Bad (2360/2361), PercentGood/Bad (2362/2363) must match across value types.
+    for id in [2360u32, 2361, 2362, 2363] {
+        let nid = NodeId::new(0u16, id);
+        let rn = calculate_aggregate(&num, &nid, start, end);
+        let rb = calculate_aggregate(&boolean, &nid, start, end);
+        assert_eq!(rn.value, rb.value, "id {id} value");
+        assert_eq!(rn.status, rb.status, "id {id} status");
+    }
+}
+
+#[test]
+fn worst_quality_is_value_type_independent() {
+    let (start, end) = phase_b_interval();
+    let s0 = good_v(Variant::from("a"), 2);
+    let s1 = dvv(Variant::from("b"), 4, StatusCode::Uncertain);
+    let s2 = dvv(Variant::from("c"), 6, StatusCode::BadDeviceFailure);
+    let vals = [&s0, &s1, &s2];
+    // WorstQuality (2364): Bad worse than Uncertain worse than Good → BadDeviceFailure.
+    let wq = calculate_aggregate(&vals, &NodeId::new(0u16, 2364), start, end);
+    assert_eq!(
+        wq.value,
+        Some(Variant::StatusCode(StatusCode::BadDeviceFailure))
+    );
+    // WorstQuality2 (11292): same worst over the interval.
+    let wq2 = calculate_aggregate(&vals, &NodeId::new(0u16, 11292), start, end);
+    assert_eq!(
+        wq2.value,
+        Some(Variant::StatusCode(StatusCode::BadDeviceFailure))
+    );
+}

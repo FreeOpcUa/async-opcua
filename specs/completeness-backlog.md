@@ -41,7 +41,10 @@ _Last refreshed 2026-06-27 (after RBAC #031 + HistoryUpdate #032)._
   separately); better server security-check framework (`TODO.md`).
 
 ## Real constraints (need a new dep/infra — distinct from YAGNI; decide separately)
-- FindServersOnNetwork — needs mDNS (new dep + LDS-ME multicast).
+- ~~FindServersOnNetwork — needs mDNS~~ **DONE (feature 036, PR #216):** Part 12 LDS-ME multicast
+  advertise + discover behind the off-by-default `discovery-mdns` feature (pure-Rust `mdns-sd`,
+  cargo-deny-clean). The "new dep" concern was vetted, not a blocker. Memory `feature-036-mdns-discovery`.
+  Remaining follow-on: re-advertising third-party RegisterServer2 registrations over mDNS (full LDS relay).
 - OCSP revocation — needs OCSP responder/online infra (CRL chain validation done, PR #40).
 - Nano/Micro/Embedded conformance-profile builds — feature alias + minimal example; the default node
   managers assume the core address space (memory `todo-embedded-profiles`).

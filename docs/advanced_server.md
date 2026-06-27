@@ -299,3 +299,34 @@ programmatic `set_source_value(&source, value)` drives the same path. For source
 outside the Write path, `monitor_alarm_source_sampled(&source, alarm, interval)` additionally
 polls the `InputNode` each `interval` (off by default). Manually-driven alarms keep working —
 `update_value` stays public and unchanged.
+
+## Multicast discovery (LDS-ME, OPC UA Part 12)
+
+Behind the **off-by-default `discovery-mdns`** feature, the server can advertise itself on the local
+network via mDNS / DNS-SD and answer `FindServersOnNetwork` with multicast-discovered servers (the OPC UA
+Part 12 Local Discovery Server Multicast Extension). It uses the pure-Rust `mdns-sd` crate, so the
+minimal `--no-default-features` build is unaffected, and it is absent entirely when the feature is off.
+
+```toml
+async-opcua = { version = "0.19", features = ["server", "discovery-mdns"] }
+```
+
+```rust ignore
+let server = ServerBuilder::new()
+    .multicast_discovery(true)              // opt-in even when the feature is compiled in
+    // .mdns_server_name("My Server")       // defaults to the application name
+    // .mdns_capabilities(vec!["DA".into(), "HD".into()])  // Part 12 Annex D CapabilityIdentifiers
+    .build()?;
+```
+
+- **Advertises** an `_opcua-tcp._tcp` service with the discovery URL (`opc.tcp://host:port/path`) and the
+  configured capabilities (TXT `path=` / `caps=`), withdrawn on shutdown.
+- **`FindServersOnNetwork`** merges the multicast-discovered servers with the pull-based registered
+  servers and applies the requested capability filter against the advertised capabilities.
+- **Where multicast is unavailable** (containers, CI, locked-down networks), enabling the feature is safe:
+  advertising/discovery degrade to a no-op (logged at warn) and the server runs normally.
+- With the feature **off** (the default and the minimal build), `mdns-sd` is absent and
+  `FindServersOnNetwork` / `RegisterServer` behave exactly as the pull-based discovery did before.
+
+Re-advertising *other* servers' `RegisterServer2` registrations over mDNS (the full LDS-ME relay role) is
+a documented follow-on; today a server advertises itself.

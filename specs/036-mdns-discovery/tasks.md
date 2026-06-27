@@ -61,8 +61,8 @@ is unavailable.
 
 **Goal**: the feature is off by default, absent from the minimal build, and advisory-clean.
 
-- [ ] T017 [US3] Verify the build matrix and add the feature to the relevant CI legs if needed: `--no-default-features` builds with `mdns-sd` ABSENT and `find_servers_on_network` unchanged; `--all-features` builds + tests with the feature active; confirm `.github/workflows/main.yml` `--all-features` legs exercise `discovery-mdns` and the `--no-default-features` leg proves its absence (Spec: FR-007; FR-011; SC-004; SC-005)
-- [ ] T018 [US3] Run `cargo deny check advisories bans sources` with the feature on (mdns-sd + transitive `flume`/`socket2`/`if-addrs`); it MUST be green — add a justified `[advisories].ignore` entry to `deny.toml` (id + reason scoped to the optional `discovery-mdns` path) ONLY if a transitive advisory actually appears, matching the existing deny.toml style (Spec: FR-010; SC-005)
+- [X] T017 [US3] Verify the build matrix and add the feature to the relevant CI legs if needed: `--no-default-features` builds with `mdns-sd` ABSENT and `find_servers_on_network` unchanged; `--all-features` builds + tests with the feature active; confirm `.github/workflows/main.yml` `--all-features` legs exercise `discovery-mdns` and the `--no-default-features` leg proves its absence (Spec: FR-007; FR-011; SC-004; SC-005)
+- [X] T018 [US3] Run `cargo deny check advisories bans sources` with the feature on (mdns-sd + transitive `flume`/`socket2`/`if-addrs`); it MUST be green — add a justified `[advisories].ignore` entry to `deny.toml` (id + reason scoped to the optional `discovery-mdns` path) ONLY if a transitive advisory actually appears, matching the existing deny.toml style (Spec: FR-010; SC-005)
 - [X] T019 [P] [US3] [Claude] Test (default build, feature OFF): assert `find_servers_on_network` returns exactly the pull-based registered set and a non-empty `capability_filter` still matches nothing — proving byte-identical behavior when the feature is disabled (Spec: FR-007; SC-004)
 
 **Checkpoint**: default + minimal builds unaffected; advisory gate green; opt-in proven.
@@ -71,10 +71,10 @@ is unavailable.
 
 ## Phase 6: Polish & cross-cutting
 
-- [ ] T020 [P] [Claude] DoS/no-panic test (no network): feed `decode_from_parts` + the cache a flood of malformed / oversized / duplicate records (huge `caps`, over-long path/host, thousands of fake instances) and assert no panic, caps bounded, cache size bounded (Spec: FR-008; SC-006; Part 2 §8.3)
-- [ ] T021 [P] `cargo clippy` under default, `--no-default-features`, AND `--all-features` (the `discovery-mdns` leg); `cargo fmt --all --check` clean (Spec: Constitution V; SC-005)
-- [ ] T022 [P] Add a "Multicast discovery (LDS-ME)" docs section (`docs/gds.md` or `docs/advanced_server.md`) mirroring quickstart.md — enabling the feature, opt-in config, and the multicast-unavailable degradation (Spec: Part 12; FR-009)
-- [ ] T023 Update `specs/completeness-backlog.md` (FindServersOnNetwork/LDS-ME multicast DONE via the opt-in `discovery-mdns` feature; mDNS removed from "real constraints") + memory (Spec: project process)
+- [X] T020 [P] [Claude] DoS/no-panic test (no network): feed `decode_from_parts` + the cache a flood of malformed / oversized / duplicate records (huge `caps`, over-long path/host, thousands of fake instances) and assert no panic, caps bounded, cache size bounded (Spec: FR-008; SC-006; Part 2 §8.3)
+- [X] T021 [P] `cargo clippy` under default, `--no-default-features`, AND `--all-features` (the `discovery-mdns` leg); `cargo fmt --all --check` clean (Spec: Constitution V; SC-005)
+- [X] T022 [P] Add a "Multicast discovery (LDS-ME)" docs section (`docs/gds.md` or `docs/advanced_server.md`) mirroring quickstart.md — enabling the feature, opt-in config, and the multicast-unavailable degradation (Spec: Part 12; FR-009)
+- [X] T023 Update `specs/completeness-backlog.md` (FindServersOnNetwork/LDS-ME multicast DONE via the opt-in `discovery-mdns` feature; mDNS removed from "real constraints") + memory (Spec: project process)
 
 ---
 

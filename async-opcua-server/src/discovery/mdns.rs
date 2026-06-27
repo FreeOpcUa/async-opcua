@@ -86,8 +86,6 @@ impl Drop for MdnsResponder {
 
 /// Runs mDNS advertisement and browsing for the server lifetime.
 pub(crate) async fn run_mdns_discovery(info: Arc<crate::ServerInfo>) -> Never {
-    keep_querier_api_reachable();
-
     let config = &info.config.multicast_discovery;
     if !config.enabled {
         return futures::future::pending().await;
@@ -122,17 +120,6 @@ pub(crate) async fn run_mdns_discovery(info: Arc<crate::ServerInfo>) -> Never {
 
     let _responder = responder;
     futures::future::pending().await
-}
-
-fn keep_querier_api_reachable() {
-    let _run_browser = run_browser;
-    let _new = MdnsDiscovery::new;
-    let _snapshot = MdnsDiscovery::snapshot;
-    let _fields = keep_discovered_server_fields_reachable;
-}
-
-fn keep_discovered_server_fields_reachable(d: &DiscoveredServer) {
-    let _fields = (&d.discovery_url, &d.server_name, &d.capabilities);
 }
 
 /// A decoded OPC UA mDNS discovery record.
@@ -586,5 +573,49 @@ mod tests {
         let t = truncate_str(&s, MAX_STR + 1);
         assert!(t.len() <= MAX_STR + 1);
         assert!(t.chars().all(|c| c == 'é'));
+    }
+
+    // FR-008 / SC-006 / Part 2 §8.3: the discovery path is unauthenticated and DoS-exposed. A flood of
+    // hostile announcements must not panic or grow the cache without bound, and decode must stay total.
+    #[test]
+    fn cache_is_bounded_and_decode_never_panics_under_flood() {
+        let discovery = MdnsDiscovery::new("self".to_owned());
+        let future = Instant::now() + Duration::from_secs(300);
+        // Flood with far more than MAX_CACHE distinct hostile records.
+        for i in 0..(MAX_CACHE * 3) {
+            let mut txt = HashMap::new();
+            txt.insert("caps".to_owned(), "X,".repeat(10_000));
+            txt.insert("path".to_owned(), "p".repeat(10_000));
+            if let Some(d) = decode_from_parts(
+                &"i".repeat(5_000),
+                "s",
+                &format!("10.0.{}.{}", i / 256, i % 256),
+                4840,
+                &txt,
+                future,
+            ) {
+                discovery.insert(d);
+            }
+        }
+        // Bounded — never grows past MAX_CACHE despite 3× the inserts.
+        assert!(
+            discovery.snapshot().len() <= MAX_CACHE,
+            "cache bounded under flood"
+        );
+        // Self-announcement is never cached.
+        discovery.insert(DiscoveredServer {
+            instance_name: "self".to_owned(),
+            discovery_url: "opc.tcp://1.2.3.4:4840/".to_owned(),
+            server_name: "self".to_owned(),
+            capabilities: vec![],
+            expires_at: future,
+        });
+        assert!(
+            discovery
+                .snapshot()
+                .iter()
+                .all(|d| d.instance_name != "self"),
+            "self excluded"
+        );
     }
 }

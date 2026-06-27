@@ -827,3 +827,53 @@ async fn browse_advertised_aggregate_functions() {
     // The full built-in set (35 aggregates, incl. AnnotationCount) is advertised.
     assert_eq!(ids.len(), 35, "advertised aggregate function count");
 }
+
+#[tokio::test]
+async fn browse_attached_annotations_property() {
+    // Feature 035 / Part 11 §5.1.2: the opt-in Annotations Property is browsable + readable.
+    let (_tester, nm, session) = setup().await;
+    let source = NodeId::new(2, "AnnotatedVar");
+    {
+        let mut guard = nm.address_space().write();
+        let space = &mut *guard;
+        VariableBuilder::new(&source, "AnnotatedVar", "AnnotatedVar")
+            .data_type(DataTypeId::Double)
+            .value(0.0)
+            .historizing(true)
+            .organized_by(ObjectId::ObjectsFolder)
+            .insert(space);
+        let _ = opcua::server::attach_annotations_property(space, &source);
+    }
+
+    // Browse the source's hierarchical references → the Annotations property is reachable.
+    let r = session
+        .browse(&[hierarchical_desc(source.clone())], 1000, None)
+        .await
+        .unwrap();
+    let refs = r[0].references.clone().unwrap_or_default();
+    let ann = refs
+        .iter()
+        .find(|f| f.browse_name.name.as_ref() == "Annotations")
+        .expect("the Annotations property must be browsable from its source");
+
+    // It reads back as a Variable of DataType Annotation (i=891).
+    assert_eq!(ann.node_class, NodeClass::Variable);
+    let dt = session
+        .read(
+            &[ReadValueId {
+                node_id: ann.node_id.node_id.clone(),
+                attribute_id: AttributeId::DataType as u32,
+                ..Default::default()
+            }],
+            TimestampsToReturn::Neither,
+            0.0,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        dt[0].value,
+        Some(Variant::NodeId(Box::new(NodeId::from(
+            DataTypeId::Annotation
+        ))))
+    );
+}

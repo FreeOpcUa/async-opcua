@@ -1242,3 +1242,25 @@ fn annotation_count_partitions_per_interval() {
     assert_eq!(rb[0].value, Some(Variant::Int32(0)));
     assert_eq!(rb[1].value, Some(Variant::Int32(1)));
 }
+
+#[test]
+fn annotation_count_edge_intervals_do_not_panic() {
+    let t = |s| DateTime::from((2026, 6, 6, 12, 0, s));
+    let cfg = AggregateConfiguration::default();
+    let id = NodeId::new(0u16, ID_ANNOTATION_COUNT);
+    // FR-002/FR-007: a zero-width interval and an empty annotation set must not panic.
+    let zero_width = annotation_count(&[], t(5), t(5));
+    assert_eq!(zero_width.value, Some(Variant::Int32(0)));
+    assert_eq!(zero_width.status, Some(StatusCode::Good));
+    // An empty time range partitions to no intervals → empty result, no panic.
+    let empty_range = compute_processed_intervals(&[], &id, &cfg, t(5), t(5), 1000.0, true, &[]);
+    assert!(empty_range.is_empty());
+    // Annotations present but a tiny interval that excludes them → 0, no panic.
+    let excluded =
+        compute_processed_intervals(&[], &id, &cfg, t(0), t(1), 1000.0, true, &[t(8), t(9)]);
+    assert!(
+        !excluded.is_empty(),
+        "the range must produce at least one interval"
+    );
+    assert!(excluded.iter().all(|v| v.value == Some(Variant::Int32(0))));
+}

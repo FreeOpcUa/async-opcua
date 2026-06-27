@@ -49,8 +49,8 @@ parallelizable. Engine work is in `async-opcua-server/src/aggregates/engine.rs`;
 **Goal**: a historized variable can expose a browsable Annotations Property.
 **Independent test**: attach the property, browse HasProperty → the Annotations Variable is reachable.
 
-- [ ] T013 [US2] Add a helper (e.g. `attach_annotations_property(address_space, &source_var) -> NodeId`) that creates an `Annotations` Variable (BrowseName `Annotations`, `PropertyType`, DataType `Annotation` i=891) and a forward `HasProperty` reference from the source variable to it (Spec: Part 11 §5.1.2)
-- [ ] T014 [P] [US2] [Claude] Integration test: after attaching, browse the source variable's `HasProperty` references → the `Annotations` property is present and reads back as a Variable of DataType `Annotation` (Spec: SC-005; Part 11 §5.1.2)
+- [X] T013 [US2] Add a helper (e.g. `attach_annotations_property(address_space, &source_var) -> NodeId`) that creates an `Annotations` Variable (BrowseName `Annotations`, `PropertyType`, DataType `Annotation` i=891) and a forward `HasProperty` reference from the source variable to it (Spec: Part 11 §5.1.2)
+- [X] T014 [P] [US2] [Claude] Integration test: after attaching, browse the source variable's `HasProperty` references → the `Annotations` property is present and reads back as a Variable of DataType `Annotation` (Spec: SC-005; Part 11 §5.1.2)
 
 **Checkpoint**: annotations are discoverable via the address space, not only via HistoryRead/Update.
 
@@ -58,10 +58,10 @@ parallelizable. Engine work is in `async-opcua-server/src/aggregates/engine.rs`;
 
 ## Phase 5: Polish & cross-cutting
 
-- [ ] T015 [P] Run the FULL `cargo test -p async-opcua-server` + `cargo test -p async-opcua-history-sqlite` — all green; confirm no other aggregate result changed (Spec: SC-004)
-- [ ] T016 [P] [Claude] No-panic test: AnnotationCount with an empty range, a zero-width interval, and a node with no annotations — all return Good/0 with no panic (Spec: FR-002; FR-007; Constitution IV)
-- [ ] T017 [P] Build + `cargo clippy` under `--no-default-features` and `--all-features` (the latter pulls in sqlite); `cargo fmt --all --check` clean (Spec: FR-009; SC-006; Constitution V)
-- [ ] T018 Update `specs/completeness-backlog.md` (AnnotationCount done → the standard Part 13 aggregate set is COMPLETE; only HistoryUpdate-of-aggregates remains, which is a non-operation) + memory (Spec: project process)
+- [X] T015 [P] Run the FULL `cargo test -p async-opcua-server` + `cargo test -p async-opcua-history-sqlite` — all green; confirm no other aggregate result changed (Spec: SC-004)
+- [X] T016 [P] [Claude] No-panic test: AnnotationCount with an empty range, a zero-width interval, and a node with no annotations — all return Good/0 with no panic (Spec: FR-002; FR-007; Constitution IV)
+- [X] T017 [P] Build + `cargo clippy` under `--no-default-features` and `--all-features` (the latter pulls in sqlite); `cargo fmt --all --check` clean (Spec: FR-009; SC-006; Constitution V)
+- [X] T018 Update `specs/completeness-backlog.md` (AnnotationCount done → the standard Part 13 aggregate set is COMPLETE; only HistoryUpdate-of-aggregates remains, which is a non-operation) + memory (Spec: project process)
 
 ---
 

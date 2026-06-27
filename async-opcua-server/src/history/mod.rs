@@ -16,6 +16,9 @@ pub mod permissions;
 /// Read raw/modified response formatting and chronological sorting middleware.
 pub mod read;
 
+mod annotations;
+
+pub use annotations::attach_annotations_property;
 pub use backend::{HistoryCache, HistoryRawModifiedResult, HistoryStorageBackend};
 pub use continuation::{HistoryContinuationPoint, HistoryContinuationPointCache};
 pub use data_history::InMemoryDataHistory;

@@ -31,10 +31,11 @@ _Last refreshed 2026-06-27 (after RBAC #031 + HistoryUpdate #032)._
   the sqlite backend AND a new in-memory store. Memory `feature-032-historyupdate-write`.
 
 ## To build (spec features, YAGNI-deferred)
-- **Aggregates follow-ons (Part 13):** HistoryUpdate of aggregates; annotation history AnnotationCount.
-  (Non-numeric/any-value-type aggregates **DONE** — feature 034, PRs #210–#213: Count/
-  NumberOfTransitions/Duration/Percent/WorstQuality/DurationInState* work for any Variant; also fixed
-  a numeric NumberOfTransitions bug. Memory `feature-034-non-numeric-aggregates`.)
+- **Aggregates (Part 13): the full standard aggregate set is now COMPLETE.** Non-numeric/any-value-type
+  aggregates done (feature 034, PRs #210–#213; also fixed a numeric NumberOfTransitions bug). AnnotationCount
+  (the last omitted aggregate) + the Part-11 §5.1.2 Annotations Property done (feature 035, PRs #214+;
+  memory `feature-035-annotation-count`). "HistoryUpdate of aggregates" is a non-operation — aggregates are
+  computed on read, not stored/written (annotation HistoryUpdate itself was already done in feature 032).
 - **Security/PKI:** ChannelThumbprint binding **(already done — verified PRs #37/#38/#42)**; multi-cert
   mixed server (RSA+ECC per endpoint — LARGE, needs a transport-layer cert-selection refactor, decide
   separately); better server security-check framework (`TODO.md`).

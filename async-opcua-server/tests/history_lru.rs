@@ -33,6 +33,7 @@ async fn test_history_backend_uses_bounded_continuation_cursor() {
             DateTime::from(start_time.ticks() + 10),
             1,
             false,
+            false,
             None,
         )
         .await
@@ -68,6 +69,7 @@ async fn test_history_backend_uses_bounded_continuation_cursor() {
             DateTime::from(start_time.ticks() + 10),
             10,
             false,
+            false,
             Some(continuation_point.clone()),
         )
         .await
@@ -83,6 +85,7 @@ async fn test_history_backend_uses_bounded_continuation_cursor() {
             start_time,
             DateTime::from(start_time.ticks() + 10),
             10,
+            false,
             false,
             Some(continuation_point),
         )

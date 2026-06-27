@@ -348,6 +348,7 @@ impl InMemoryNodeManagerImpl for SimpleNodeManagerImpl {
                         details.end_time,
                         details.num_values_per_node,
                         details.return_bounds,
+                        details.is_read_modified,
                         backend_token,
                     )
                     .await;
@@ -848,14 +849,13 @@ mod tests {
     use async_trait::async_trait;
     use opcua_types::{
         ApplicationDescription, ByteString, DateTime, DeleteAtTimeDetails, DeleteEventDetails,
-        DeleteRawModifiedDetails, EventFilter, HistoryEventFieldList, ModificationInfo,
-        PerformUpdateType, UAString, UpdateDataDetails, UpdateEventDetails,
-        UpdateStructureDataDetails,
+        DeleteRawModifiedDetails, EventFilter, HistoryEventFieldList, PerformUpdateType, UAString,
+        UpdateDataDetails, UpdateEventDetails, UpdateStructureDataDetails,
     };
 
     use crate::{
         authenticator::UserToken,
-        history::HistoryStorageBackend,
+        history::{HistoryRawModifiedResult, HistoryStorageBackend},
         identity_token::IdentityToken,
         node_manager::{
             history::{HistoryUpdateDetails, HistoryUpdateNode},
@@ -920,8 +920,9 @@ mod tests {
             _end_time: DateTime,
             _num_values_per_node: u32,
             _return_bounds: bool,
+            _is_read_modified: bool,
             _continuation_point: Option<Vec<u8>>,
-        ) -> Result<(Vec<DataValue>, Vec<ModificationInfo>, Option<Vec<u8>>), StatusCode> {
+        ) -> Result<HistoryRawModifiedResult, StatusCode> {
             Err(StatusCode::BadHistoryOperationUnsupported)
         }
 

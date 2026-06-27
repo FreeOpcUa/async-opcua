@@ -20,6 +20,7 @@ async fn read_all(b: &InMemoryDataHistory, n: &NodeId) -> Vec<DataValue> {
             DateTime::from(i64::MAX),
             1000,
             false,
+            false,
             None,
         )
         .await
@@ -142,6 +143,7 @@ async fn empty_batch_and_inverted_range_do_not_panic() {
             DateTime::from(100),
             1000,
             false,
+            false,
             None,
         )
         .await
@@ -257,4 +259,83 @@ async fn delete_edges_do_not_panic() {
             .unwrap(),
         vec![StatusCode::BadNoEntryExists]
     );
+}
+
+// ---- US4: modified-history read (Part 11 §6.5), parity with sqlite ----
+
+async fn read_modified(
+    b: &InMemoryDataHistory,
+    n: &NodeId,
+) -> (Vec<DataValue>, Vec<opcua_types::ModificationInfo>) {
+    let (values, infos, _cp) = b
+        .read_raw_modified(
+            n,
+            DateTime::from(0),
+            DateTime::from(i64::MAX),
+            1000,
+            false,
+            true,
+            None,
+        )
+        .await
+        .expect("read modified");
+    (values, infos)
+}
+
+#[tokio::test]
+async fn replace_is_readable_as_modified_replace() {
+    use opcua_types::HistoryUpdateType;
+    let b = InMemoryDataHistory::new();
+    let n = node();
+    b.update_data(&n, PerformUpdateType::Insert, vec![at(100, 1.0)])
+        .await
+        .unwrap();
+    b.update_data(&n, PerformUpdateType::Replace, vec![at(100, 2.0)])
+        .await
+        .unwrap();
+    let (vals, infos) = read_modified(&b, &n).await;
+    assert_eq!(vals.len(), 1);
+    assert_eq!(double(&vals[0]), 1.0);
+    assert_eq!(infos[0].update_type, HistoryUpdateType::Replace);
+    assert_eq!(double(&read_all(&b, &n).await[0]), 2.0);
+}
+
+#[tokio::test]
+async fn deletes_are_readable_as_modified_delete() {
+    use opcua_types::HistoryUpdateType;
+    let b = InMemoryDataHistory::new();
+    let n = node();
+    // delete_at_time path.
+    b.update_data(&n, PerformUpdateType::Insert, vec![at(100, 7.0)])
+        .await
+        .unwrap();
+    b.delete_at_time(&n, vec![DateTime::from(100)])
+        .await
+        .unwrap();
+    // update_data Remove path (must also record Delete — cross-backend parity).
+    b.update_data(&n, PerformUpdateType::Insert, vec![at(200, 8.0)])
+        .await
+        .unwrap();
+    b.update_data(&n, PerformUpdateType::Remove, vec![at(200, 0.0)])
+        .await
+        .unwrap();
+    let (vals, infos) = read_modified(&b, &n).await;
+    assert_eq!(vals.len(), 2, "both deletes recorded a modified entry");
+    assert!(infos
+        .iter()
+        .all(|i| i.update_type == HistoryUpdateType::Delete));
+    let deleted: Vec<f64> = vals.iter().map(double).collect();
+    assert_eq!(deleted, vec![7.0, 8.0]); // ascending by tick
+}
+
+#[tokio::test]
+async fn never_modified_value_has_no_modified_entry() {
+    let b = InMemoryDataHistory::new();
+    let n = node();
+    b.update_data(&n, PerformUpdateType::Insert, vec![at(100, 1.0)])
+        .await
+        .unwrap();
+    let (vals, _infos) = read_modified(&b, &n).await;
+    assert!(vals.is_empty());
+    assert_eq!(double(&read_all(&b, &n).await[0]), 1.0);
 }

@@ -21,6 +21,7 @@ async fn read_all(backend: &SqliteHistoryBackend, node_id: &NodeId) -> Vec<DataV
             DateTime::from(i64::MAX),
             1000,
             false,
+            false,
             None,
         )
         .await
@@ -256,4 +257,101 @@ async fn delete_edges_do_not_panic() {
             .unwrap(),
         StatusCode::BadNoData
     );
+}
+
+// ---- US4: modified-history read (Part 11 §6.5) ----
+
+async fn read_modified(
+    b: &SqliteHistoryBackend,
+    n: &NodeId,
+) -> (Vec<DataValue>, Vec<opcua_types::ModificationInfo>) {
+    let (values, infos, _cp) = b
+        .read_raw_modified(
+            n,
+            DateTime::from(0),
+            DateTime::from(i64::MAX),
+            1000,
+            false,
+            true,
+            None,
+        )
+        .await
+        .expect("read modified");
+    (values, infos)
+}
+
+#[tokio::test]
+async fn replace_is_readable_as_modified_replace() {
+    use opcua_types::HistoryUpdateType;
+    let b = SqliteHistoryBackend::new_in_memory().unwrap();
+    let n = node();
+    b.update_data(&n, PerformUpdateType::Insert, vec![at(100, 1.0)])
+        .await
+        .unwrap();
+    b.update_data(&n, PerformUpdateType::Replace, vec![at(100, 2.0)])
+        .await
+        .unwrap();
+    let (vals, infos) = read_modified(&b, &n).await;
+    assert_eq!(vals.len(), 1);
+    assert_eq!(
+        double(&vals[0]),
+        1.0,
+        "modified read returns the superseded value"
+    );
+    assert_eq!(infos[0].update_type, HistoryUpdateType::Replace);
+    // Raw read still returns the live (replacement) value, unaffected.
+    assert_eq!(double(&read_all(&b, &n).await[0]), 2.0);
+}
+
+#[tokio::test]
+async fn delete_at_time_is_readable_as_modified_delete() {
+    use opcua_types::HistoryUpdateType;
+    let b = SqliteHistoryBackend::new_in_memory().unwrap();
+    let n = node();
+    b.update_data(&n, PerformUpdateType::Insert, vec![at(100, 7.0)])
+        .await
+        .unwrap();
+    b.delete_at_time(&n, vec![DateTime::from(100)])
+        .await
+        .unwrap();
+    let (vals, infos) = read_modified(&b, &n).await;
+    assert_eq!(vals.len(), 1);
+    assert_eq!(double(&vals[0]), 7.0);
+    assert_eq!(infos[0].update_type, HistoryUpdateType::Delete);
+}
+
+#[tokio::test]
+async fn update_data_remove_records_modified_delete() {
+    use opcua_types::HistoryUpdateType;
+    let b = SqliteHistoryBackend::new_in_memory().unwrap();
+    let n = node();
+    b.update_data(&n, PerformUpdateType::Insert, vec![at(100, 5.0)])
+        .await
+        .unwrap();
+    b.update_data(&n, PerformUpdateType::Remove, vec![at(100, 0.0)])
+        .await
+        .unwrap();
+    let (vals, infos) = read_modified(&b, &n).await;
+    assert_eq!(
+        vals.len(),
+        1,
+        "UpdateData Remove must also record a modified Delete entry"
+    );
+    assert_eq!(double(&vals[0]), 5.0);
+    assert_eq!(infos[0].update_type, HistoryUpdateType::Delete);
+}
+
+#[tokio::test]
+async fn never_modified_value_has_no_modified_entry() {
+    let b = SqliteHistoryBackend::new_in_memory().unwrap();
+    let n = node();
+    b.update_data(&n, PerformUpdateType::Insert, vec![at(100, 1.0)])
+        .await
+        .unwrap();
+    let (vals, _infos) = read_modified(&b, &n).await;
+    assert!(
+        vals.is_empty(),
+        "an unmodified value has no modified-history entry"
+    );
+    assert_eq!(double(&read_all(&b, &n).await[0]), 1.0);
 }

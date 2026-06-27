@@ -6,6 +6,9 @@ use opcua_types::{
     ModificationInfo, NodeId, PerformUpdateType, StatusCode,
 };
 
+/// Raw/modified HistoryRead result: values, modification metadata, continuation token.
+pub type HistoryRawModifiedResult = (Vec<DataValue>, Vec<ModificationInfo>, Option<Vec<u8>>);
+
 /// A cache for historical data values to avoid database hits.
 #[derive(Clone)]
 pub struct HistoryCache {
@@ -62,6 +65,7 @@ impl HistoryCache {
 #[async_trait]
 pub trait HistoryStorageBackend: Send + Sync {
     /// Reads raw data values from the history backend.
+    #[allow(clippy::too_many_arguments)]
     async fn read_raw_modified(
         &self,
         node_id: &NodeId,
@@ -69,8 +73,9 @@ pub trait HistoryStorageBackend: Send + Sync {
         end_time: DateTime,
         num_values_per_node: u32,
         return_bounds: bool,
+        is_read_modified: bool,
         continuation_point: Option<Vec<u8>>,
-    ) -> Result<(Vec<DataValue>, Vec<ModificationInfo>, Option<Vec<u8>>), StatusCode>;
+    ) -> Result<HistoryRawModifiedResult, StatusCode>;
 
     /// Reads processed aggregate values from the history backend.
     // ponytail: 8 params (added AggregateConfiguration); a params struct isn't worth it — the
@@ -95,7 +100,9 @@ pub trait HistoryStorageBackend: Send + Sync {
         let mut next_token = None;
         loop {
             let (values, _modification_infos, token) = self
-                .read_raw_modified(node_id, start_time, end_time, 100_000, true, next_token)
+                .read_raw_modified(
+                    node_id, start_time, end_time, 100_000, true, false, next_token,
+                )
                 .await?;
             raw_values.extend(values);
 
@@ -224,8 +231,9 @@ mod tests {
             _end_time: DateTime,
             _num_values_per_node: u32,
             _return_bounds: bool,
+            _is_read_modified: bool,
             _continuation_point: Option<Vec<u8>>,
-        ) -> Result<(Vec<DataValue>, Vec<ModificationInfo>, Option<Vec<u8>>), StatusCode> {
+        ) -> Result<HistoryRawModifiedResult, StatusCode> {
             Ok((Vec::new(), Vec::new(), None))
         }
 

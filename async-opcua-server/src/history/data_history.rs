@@ -9,7 +9,7 @@ use opcua_types::{
     StatusCode, UAString,
 };
 
-use crate::history::HistoryStorageBackend;
+use crate::history::{HistoryRawModifiedResult, HistoryStorageBackend};
 
 const DEFAULT_MAX_VALUES_PER_NODE: usize = 10_000;
 
@@ -71,6 +71,49 @@ impl InMemoryDataHistory {
             values.remove(&oldest_tick);
         }
     }
+
+    fn read_modified_values(
+        &self,
+        node_id: &NodeId,
+        start_tick: i64,
+        end_tick: i64,
+        num_values_per_node: u32,
+        continuation_point: Option<Vec<u8>>,
+    ) -> Result<HistoryRawModifiedResult, StatusCode> {
+        let Some(node_values) = self.modified_values.read().get(node_id).cloned() else {
+            return Ok((Vec::new(), Vec::new(), None));
+        };
+
+        let continuation_position = decode_modified_continuation_position(continuation_point)?;
+        let (effective_start, skip_at_start) =
+            modified_effective_start(start_tick, continuation_position);
+        let limit = (num_values_per_node > 0).then_some(num_values_per_node as usize);
+
+        let capacity = limit.unwrap_or(0).min(node_values.len());
+        let mut values = Vec::with_capacity(capacity);
+        let mut modification_infos = Vec::with_capacity(capacity);
+        let mut next_token = None;
+
+        'ticks: for (tick, entries) in node_values.range(effective_start..end_tick) {
+            let entry_start = if *tick == effective_start {
+                skip_at_start
+            } else {
+                0
+            };
+
+            for (entry_index, (value, info)) in entries.iter().enumerate().skip(entry_start) {
+                if limit.is_some_and(|limit| values.len() >= limit) {
+                    next_token = Some(encode_modified_continuation_position(*tick, entry_index));
+                    break 'ticks;
+                }
+
+                values.push(value.clone());
+                modification_infos.push(info.clone());
+            }
+        }
+
+        Ok((values, modification_infos, next_token))
+    }
 }
 
 impl Default for InMemoryDataHistory {
@@ -88,12 +131,27 @@ impl HistoryStorageBackend for InMemoryDataHistory {
         end_time: DateTime,
         num_values_per_node: u32,
         _return_bounds: bool,
+        is_read_modified: bool,
         continuation_point: Option<Vec<u8>>,
-    ) -> Result<(Vec<DataValue>, Vec<ModificationInfo>, Option<Vec<u8>>), StatusCode> {
+    ) -> Result<HistoryRawModifiedResult, StatusCode> {
         let start_tick = start_time.ticks();
         let end_tick = end_time.ticks();
         if start_tick > end_tick {
             return Ok((Vec::new(), Vec::new(), None));
+        }
+
+        if is_read_modified {
+            if start_tick == end_tick {
+                return Ok((Vec::new(), Vec::new(), None));
+            }
+
+            return self.read_modified_values(
+                node_id,
+                start_tick,
+                end_tick,
+                num_values_per_node,
+                continuation_point,
+            );
         }
 
         let Some(node_values) = self.raw_values.read().get(node_id).cloned() else {
@@ -176,7 +234,14 @@ impl HistoryStorageBackend for InMemoryDataHistory {
                     }
                 }
                 PerformUpdateType::Remove => {
-                    if node_values.remove(&source_ticks).is_some() {
+                    if let Some(value) = node_values.remove(&source_ticks) {
+                        self.modified_values
+                            .write()
+                            .entry(node_id.clone())
+                            .or_default()
+                            .entry(source_ticks)
+                            .or_default()
+                            .push((value, delete_modification_info()));
                         StatusCode::Good
                     } else {
                         StatusCode::BadNoEntryExists
@@ -327,6 +392,51 @@ fn decode_continuation_tick(token: Option<Vec<u8>>) -> Result<Option<i64>, Statu
 
 fn encode_continuation_tick(tick: i64) -> Vec<u8> {
     tick.to_le_bytes().to_vec()
+}
+
+fn modified_effective_start(
+    start_tick: i64,
+    continuation_position: Option<(i64, usize)>,
+) -> (i64, usize) {
+    match continuation_position {
+        Some((tick, entry_index)) if tick >= start_tick => (tick, entry_index),
+        _ => (start_tick, 0),
+    }
+}
+
+fn decode_modified_continuation_position(
+    token: Option<Vec<u8>>,
+) -> Result<Option<(i64, usize)>, StatusCode> {
+    let Some(token) = token else {
+        return Ok(None);
+    };
+
+    match token.len() {
+        8 => {
+            let tick = decode_continuation_tick(Some(token))?;
+            Ok(tick.map(|tick| (tick, 0)))
+        }
+        16 => {
+            let tick_bytes: [u8; 8] = token[..8]
+                .try_into()
+                .map_err(|_| StatusCode::BadContinuationPointInvalid)?;
+            let index_bytes: [u8; 8] = token[8..]
+                .try_into()
+                .map_err(|_| StatusCode::BadContinuationPointInvalid)?;
+            let entry_index = usize::try_from(u64::from_le_bytes(index_bytes))
+                .map_err(|_| StatusCode::BadContinuationPointInvalid)?;
+            Ok(Some((i64::from_le_bytes(tick_bytes), entry_index)))
+        }
+        _ => Err(StatusCode::BadContinuationPointInvalid),
+    }
+}
+
+fn encode_modified_continuation_position(tick: i64, entry_index: usize) -> Vec<u8> {
+    let mut token = encode_continuation_tick(tick);
+    if entry_index > 0 {
+        token.extend_from_slice(&(entry_index as u64).to_le_bytes());
+    }
+    token
 }
 
 #[cfg(test)]

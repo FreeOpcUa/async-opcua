@@ -4,11 +4,12 @@ use crate::{migration::run_migrations, query};
 use async_trait::async_trait;
 use opcua_server::{
     aggregates::{compute_processed_intervals, engine::get_value_timestamp},
-    history::HistoryStorageBackend,
+    history::{HistoryRawModifiedResult, HistoryStorageBackend},
 };
 use opcua_types::{
     AggregateConfiguration, BinaryEncodable, ContextOwned, DataValue, DateTime, EventFilter,
-    HistoryEventFieldList, ModificationInfo, NodeId, PerformUpdateType, StatusCode,
+    HistoryEventFieldList, HistoryUpdateType, ModificationInfo, NodeId, PerformUpdateType,
+    StatusCode, UAString,
 };
 use parking_lot::Mutex;
 use rusqlite::{params, Connection, Error as SqliteError, OptionalExtension};
@@ -32,9 +33,12 @@ struct HistoryReadCursor {
     node_id: NodeId,
     start_time: DateTime,
     end_time: DateTime,
+    read_modified: bool,
     chronological: bool,
     return_bounds: bool,
     last_source_timestamp: i64,
+    last_modification_time: i64,
+    last_modified_rowid: i64,
 }
 
 struct RawModifiedPageRequest {
@@ -47,6 +51,33 @@ struct RawModifiedPageRequest {
     resume_after: Option<i64>,
     page_size: usize,
 }
+
+struct ModifiedPageRequest {
+    node_id: String,
+    start_ticks: i64,
+    end_ticks: i64,
+    resume_after: Option<ModifiedContinuationKey>,
+    page_size: usize,
+}
+
+struct ModifiedPageRow {
+    value: DataValue,
+    modification_info: ModificationInfo,
+    continuation_key: ModifiedContinuationKey,
+}
+
+#[derive(Clone, Copy)]
+struct ModifiedContinuationKey {
+    source_ticks: i64,
+    modification_ticks: i64,
+    rowid: i64,
+}
+
+type ModifiedPageResult = (
+    Vec<DataValue>,
+    Vec<ModificationInfo>,
+    Option<ModifiedContinuationKey>,
+);
 
 const CONTINUATION_POINT_MAX_AGE: Duration = Duration::from_secs(300);
 
@@ -196,6 +227,29 @@ impl SqliteHistoryBackend {
         Ok((values, interval_has_more || has_trimmed_values))
     }
 
+    async fn fetch_modified_page(
+        &self,
+        cursor: &HistoryReadCursor,
+        page_size: usize,
+        resume_after: Option<ModifiedContinuationKey>,
+    ) -> Result<ModifiedPageResult, StatusCode> {
+        let conn = self.connection.clone();
+        let request = Self::modified_page_request(cursor, page_size, resume_after);
+
+        let result: Result<ModifiedPageResult, SqliteError> =
+            tokio::task::spawn_blocking(move || Self::fetch_modified_values(conn, request))
+                .await
+                .map_err(|_| StatusCode::BadInternalError)?;
+
+        result.map_err(|err| {
+            tracing::error!(
+                "SQLite error in read_raw_modified modified branch: {:?}",
+                err
+            );
+            StatusCode::BadInternalError
+        })
+    }
+
     fn raw_modified_page_request(
         cursor: &HistoryReadCursor,
         page_size: usize,
@@ -208,6 +262,20 @@ impl SqliteHistoryBackend {
             chronological: cursor.chronological,
             include_start_bound: cursor.return_bounds && resume_after.is_none(),
             include_end_bound: cursor.return_bounds,
+            resume_after,
+            page_size,
+        }
+    }
+
+    fn modified_page_request(
+        cursor: &HistoryReadCursor,
+        page_size: usize,
+        resume_after: Option<ModifiedContinuationKey>,
+    ) -> ModifiedPageRequest {
+        ModifiedPageRequest {
+            node_id: cursor.node_id.to_string(),
+            start_ticks: cursor.start_time.ticks(),
+            end_ticks: cursor.end_time.ticks(),
             resume_after,
             page_size,
         }
@@ -227,6 +295,112 @@ impl SqliteHistoryBackend {
         Self::push_end_bound(&conn, &request, interval_has_more, &mut values)?;
 
         Ok((values, interval_has_more))
+    }
+
+    fn fetch_modified_values(
+        conn: Arc<Mutex<Connection>>,
+        request: ModifiedPageRequest,
+    ) -> Result<ModifiedPageResult, SqliteError> {
+        let conn = conn.lock();
+        let query_limit = request.page_size.saturating_add(1);
+        let resume_source_ticks = request.resume_after.map(|key| key.source_ticks);
+        let resume_modification_ticks = request.resume_after.map(|key| key.modification_ticks);
+        let resume_rowid = request.resume_after.map(|key| key.rowid);
+
+        let mut stmt = conn.prepare(
+            "SELECT source_timestamp,
+                    server_timestamp,
+                    value_blob,
+                    status_code,
+                    update_type,
+                    modification_time,
+                    user_name,
+                    rowid
+             FROM modified_historical_data
+             WHERE node_id = ?1
+               AND source_timestamp >= ?2
+               AND source_timestamp < ?3
+               AND (
+                   ?4 IS NULL
+                   OR source_timestamp > ?4
+                   OR (source_timestamp = ?4 AND modification_time > ?5)
+                   OR (source_timestamp = ?4 AND modification_time = ?5 AND rowid > ?6)
+               )
+             ORDER BY source_timestamp ASC, modification_time ASC, rowid ASC
+             LIMIT ?7",
+        )?;
+        let rows = stmt.query_map(
+            params![
+                request.node_id,
+                request.start_ticks,
+                request.end_ticks,
+                resume_source_ticks,
+                resume_modification_ticks,
+                resume_rowid,
+                query_limit
+            ],
+            Self::row_to_modified_page_row,
+        )?;
+
+        let mut rows = rows.collect::<Result<Vec<_>, _>>()?;
+        let has_more = rows.len() > request.page_size;
+        if has_more {
+            rows.truncate(request.page_size);
+        }
+        let continuation_key = if has_more {
+            rows.last().map(|row| row.continuation_key)
+        } else {
+            None
+        };
+
+        let mut values = Vec::with_capacity(rows.len());
+        let mut modification_infos = Vec::with_capacity(rows.len());
+        for row in rows {
+            values.push(row.value);
+            modification_infos.push(row.modification_info);
+        }
+
+        Ok((values, modification_infos, continuation_key))
+    }
+
+    fn row_to_modified_page_row(row: &rusqlite::Row<'_>) -> Result<ModifiedPageRow, SqliteError> {
+        let source_ticks: i64 = row.get(0)?;
+        let value = query::row_to_datavalue(row)?;
+        let update_type = Self::history_update_type_from_i64(row.get(4)?)?;
+        let modification_ticks: i64 = row.get(5)?;
+        let user_name: String = row.get(6)?;
+        let rowid: i64 = row.get(7)?;
+
+        Ok(ModifiedPageRow {
+            value,
+            modification_info: ModificationInfo {
+                modification_time: DateTime::from(modification_ticks),
+                update_type,
+                user_name: UAString::from(user_name),
+            },
+            continuation_key: ModifiedContinuationKey {
+                source_ticks,
+                modification_ticks,
+                rowid,
+            },
+        })
+    }
+
+    fn history_update_type_from_i64(update_type: i64) -> Result<HistoryUpdateType, SqliteError> {
+        match update_type {
+            1 => Ok(HistoryUpdateType::Insert),
+            2 => Ok(HistoryUpdateType::Replace),
+            3 => Ok(HistoryUpdateType::Update),
+            4 => Ok(HistoryUpdateType::Delete),
+            _ => Err(SqliteError::FromSqlConversionFailure(
+                4,
+                rusqlite::types::Type::Integer,
+                Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("invalid HistoryUpdateType value {update_type}"),
+                )),
+            )),
+        }
     }
 
     fn push_start_bound(
@@ -309,8 +483,9 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
         end_time: DateTime,
         num_values_per_node: u32,
         return_bounds: bool,
+        is_read_modified: bool,
         continuation_point: Option<Vec<u8>>,
-    ) -> Result<(Vec<DataValue>, Vec<ModificationInfo>, Option<Vec<u8>>), StatusCode> {
+    ) -> Result<HistoryRawModifiedResult, StatusCode> {
         self.prune_continuation_points();
         let page_size = Self::page_size(num_values_per_node);
 
@@ -329,34 +504,60 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
                     node_id: node_id.clone(),
                     start_time,
                     end_time,
+                    read_modified: is_read_modified,
                     chronological,
                     return_bounds,
                     last_source_timestamp: start_time.ticks(),
+                    last_modification_time: 0,
+                    last_modified_rowid: 0,
                 },
                 None,
             )
         };
 
-        let (values, has_more) = self
-            .fetch_raw_modified_page(&cursor, page_size, resume_after)
-            .await?;
-
-        if has_more {
-            let Some(last_value) = values.last() else {
-                return Ok((values, Vec::new(), None));
-            };
-            let Some(last_source_timestamp) = last_value.source_timestamp.map(|ts| ts.ticks())
-            else {
-                return Ok((values, Vec::new(), None));
-            };
-
-            let token = self.insert_continuation_point(HistoryReadCursor {
-                last_source_timestamp,
-                ..cursor
+        if cursor.read_modified {
+            let modified_resume_after = resume_after.map(|source_ticks| ModifiedContinuationKey {
+                source_ticks,
+                modification_ticks: cursor.last_modification_time,
+                rowid: cursor.last_modified_rowid,
             });
-            Ok((values, Vec::new(), Some(token)))
+            let (values, modification_infos, continuation_key) = self
+                .fetch_modified_page(&cursor, page_size, modified_resume_after)
+                .await?;
+
+            if let Some(continuation_key) = continuation_key {
+                let token = self.insert_continuation_point(HistoryReadCursor {
+                    last_source_timestamp: continuation_key.source_ticks,
+                    last_modification_time: continuation_key.modification_ticks,
+                    last_modified_rowid: continuation_key.rowid,
+                    ..cursor
+                });
+                Ok((values, modification_infos, Some(token)))
+            } else {
+                Ok((values, modification_infos, None))
+            }
         } else {
-            Ok((values, Vec::new(), None))
+            let (values, has_more) = self
+                .fetch_raw_modified_page(&cursor, page_size, resume_after)
+                .await?;
+
+            if has_more {
+                let Some(last_value) = values.last() else {
+                    return Ok((values, Vec::new(), None));
+                };
+                let Some(last_source_timestamp) = last_value.source_timestamp.map(|ts| ts.ticks())
+                else {
+                    return Ok((values, Vec::new(), None));
+                };
+
+                let token = self.insert_continuation_point(HistoryReadCursor {
+                    last_source_timestamp,
+                    ..cursor
+                });
+                Ok((values, Vec::new(), Some(token)))
+            } else {
+                Ok((values, Vec::new(), None))
+            }
         }
     }
 
@@ -380,7 +581,9 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
         let mut next_token = None;
         loop {
             let (values, _modification_infos, token) = self
-                .read_raw_modified(node_id, start_time, end_time, 100_000, true, next_token)
+                .read_raw_modified(
+                    node_id, start_time, end_time, 100_000, true, false, next_token,
+                )
                 .await?;
             raw_values.extend(values);
 
@@ -576,7 +779,16 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
                             }
                         }
                         PerformUpdateType::Remove => {
-                            if existing.is_some() {
+                            if let Some((old_server_ticks, old_blob, old_status_val)) = existing {
+                                insert_modified_historical_data(
+                                    &tx,
+                                    &node_id_str,
+                                    source_ticks,
+                                    old_server_ticks,
+                                    &old_blob,
+                                    old_status_val,
+                                    4,
+                                )?;
                                 tx.execute(
                                     "DELETE FROM historical_data
                                  WHERE node_id = ?1 AND source_timestamp = ?2",

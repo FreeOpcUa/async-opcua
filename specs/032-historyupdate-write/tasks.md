@@ -102,13 +102,13 @@ deletion.
 with correct `HistoryUpdateType` and modification metadata, on both backends.
 **Independent test**: replace + delete, then HistoryRead modified, assert prior values + update type.
 
-- [ ] T042 [US4] Implement the modified branch of sqlite `read_raw_modified` (per T007a): read from `modified_historical_data`, returning the superseded `DataValue`s AND a parallel `Vec<ModificationInfo>` (update_type + modification_time + user_name) (Spec: Part 11 §6.5; Part 4 §11.6 ReadRawModifiedDetails)
-- [ ] T043 [US4] Implement the modified branch of in-memory `read_raw_modified` with identical (DataValues, ModificationInfo) output (Spec: Part 11 §6.5)
-- [ ] T044 [US4] Capture modification metadata (`modification_time` = server time of the update, `user_name` from the request context, `update_type`) at WRITE time (US1/US3 record paths) so the read branch returns it; confirm `HistoryModifiedData.modification_infos` is populated end-to-end (no longer `None`) (Spec: Part 11 §6.5; §A.2 ModificationInfo)
-- [ ] T045 [US4] Confirm raw reads (is_read_modified=false) are unaffected by modified entries (Spec: Part 11 §6.4)
-- [ ] T046 [P] [US4] [Claude] test (both backends): replace V1→V2 at T, read modified at T returns V1 tagged Replace with metadata (Spec: Part 11 §6.5)
-- [ ] T047 [P] [US4] [Claude] test (both backends): delete value at T, read modified returns it tagged Delete (Spec: Part 11 §6.5)
-- [ ] T048 [P] [US4] [Claude] test (both backends): never-modified value yields no modified entry; raw read unchanged (Spec: Part 11 §6.4/§6.5)
+- [X] T042 [US4] Implement the modified branch of sqlite `read_raw_modified` (per T007a): read from `modified_historical_data`, returning the superseded `DataValue`s AND a parallel `Vec<ModificationInfo>` (update_type + modification_time + user_name) (Spec: Part 11 §6.5; Part 4 §11.6 ReadRawModifiedDetails)
+- [X] T043 [US4] Implement the modified branch of in-memory `read_raw_modified` with identical (DataValues, ModificationInfo) output (Spec: Part 11 §6.5)
+- [X] T044 [US4] Capture modification metadata (`modification_time` = server time of the update, `user_name` from the request context, `update_type`) at WRITE time (US1/US3 record paths) so the read branch returns it; confirm `HistoryModifiedData.modification_infos` is populated end-to-end (no longer `None`) (Spec: Part 11 §6.5; §A.2 ModificationInfo)
+- [X] T045 [US4] Confirm raw reads (is_read_modified=false) are unaffected by modified entries (Spec: Part 11 §6.4)
+- [X] T046 [P] [US4] [Claude] test (both backends): replace V1→V2 at T, read modified at T returns V1 tagged Replace with metadata (Spec: Part 11 §6.5)
+- [X] T047 [P] [US4] [Claude] test (both backends): delete value at T, read modified returns it tagged Delete (Spec: Part 11 §6.5)
+- [X] T048 [P] [US4] [Claude] test (both backends): never-modified value yields no modified entry; raw read unchanged (Spec: Part 11 §6.4/§6.5)
 
 **Checkpoint**: modified-history readable end-to-end on both backends.
 

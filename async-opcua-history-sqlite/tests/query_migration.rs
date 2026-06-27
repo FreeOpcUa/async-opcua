@@ -252,6 +252,7 @@ async fn sqlite_backend_read_raw_modified_bounds_first_page_query_and_continuati
             DateTime::from(start_time.ticks() + VALUE_COUNT as i64),
             PAGE_SIZE,
             false,
+            false,
             None,
         )
         .await
@@ -273,6 +274,7 @@ async fn sqlite_backend_read_raw_modified_bounds_first_page_query_and_continuati
             start_time,
             DateTime::from(start_time.ticks() + VALUE_COUNT as i64),
             VALUE_COUNT as u32,
+            false,
             false,
             Some(continuation_point),
         )

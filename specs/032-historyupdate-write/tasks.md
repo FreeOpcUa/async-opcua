@@ -175,7 +175,7 @@ drives the full surface; integration tests cover it.
 - [X] T073 [P] Security review of the write path: per-entry results, bounded allocations, no panic on empty/inverted/duplicate input, RBAC gate intact (Spec: Constitution IV)
 - [X] T074 [P] Confirm per-operation result codes match Part 4 §11.7 tables (not whole-request failure) across all six operations (Spec: Part 4 §11.7; SC-002)
 - [X] T075 [P] Add a docs section (e.g. `docs/server.md` or `docs/advanced_server.md`) on HistoryUpdate + the in-memory data history backend, mirroring quickstart.md (Spec: FR-012)
-- [ ] T076 Update `specs/SESSION-HANDOFF.md` + memory with the HistoryUpdate feature outcome (Spec: project process)
+- [X] T076 Update `specs/SESSION-HANDOFF.md` + memory with the HistoryUpdate feature outcome (Spec: project process)
 
 ---
 

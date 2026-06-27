@@ -40,6 +40,9 @@ json = ["async-opcua-nodes/json", "async-opcua-types/json"]
 # becoming a client to the LDS, which brings in a dependency to async-opcua-client.
 # Omitting the feature saves some memory.
 discovery-server-registration = ["async-opcua-client"]
+# OPC UA Part 12 multicast discovery (LDS-ME / FindServersOnNetwork over mDNS). Opt-in;
+# pulls the pure-Rust mdns-sd crate. Feature 036.
+discovery-mdns = ["dep:mdns-sd"]
 metrics-exporter = []
 test-utils = []
 legacy-crypto = [
@@ -61,6 +64,7 @@ wss = [
 moka = { version = "0.12", features = ["future", "sync"] }
 # opc.wss transport (feature 009 / R5 / FR-044), gated by the `wss` feature.
 tokio-tungstenite = { workspace = true, optional = true }
+mdns-sd = { workspace = true, optional = true }
 tokio-rustls = { workspace = true, optional = true }
 rustls = { workspace = true, optional = true }
 rustls-pki-types = { workspace = true, optional = true }

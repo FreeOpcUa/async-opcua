@@ -58,6 +58,7 @@ client = ["async-opcua-client"]
 discovery-server-registration = [
   "async-opcua-server/discovery-server-registration",
 ]
+discovery-mdns = ["async-opcua-server/discovery-mdns"]
 # Includes all the code to populate the address space with the default node set.
 # This is something that embedded systems may or may not require.
 generated-address-space = [

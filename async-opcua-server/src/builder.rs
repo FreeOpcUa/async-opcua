@@ -439,6 +439,27 @@ impl ServerBuilder {
         self
     }
 
+    /// Enable or disable OPC UA Part 12 mDNS multicast discovery registration.
+    #[cfg(feature = "discovery-mdns")]
+    pub fn multicast_discovery(mut self, enabled: bool) -> Self {
+        self.config.multicast_discovery.enabled = enabled;
+        self
+    }
+
+    /// Set the mDNS server name used for multicast discovery registration.
+    #[cfg(feature = "discovery-mdns")]
+    pub fn mdns_server_name(mut self, name: impl Into<String>) -> Self {
+        self.config.multicast_discovery.mdns_server_name = Some(name.into());
+        self
+    }
+
+    /// Set OPC UA Part 12 Annex D capability identifiers advertised by mDNS.
+    #[cfg(feature = "discovery-mdns")]
+    pub fn mdns_capabilities(mut self, caps: Vec<String>) -> Self {
+        self.config.multicast_discovery.capabilities = caps;
+        self
+    }
+
     /// Timeout for new connections to send a `HELLO` message, in seconds.
     /// After this timeout expires without a valid hello message, the connection
     /// is closed.

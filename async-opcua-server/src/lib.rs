@@ -26,6 +26,9 @@ mod config;
 pub mod diagnostics;
 #[cfg(feature = "discovery-server-registration")]
 mod discovery;
+#[cfg(feature = "discovery-mdns")]
+#[path = "discovery/mdns.rs"]
+mod discovery_mdns;
 /// Firmware-over-the-air file transfer helpers.
 pub mod fota;
 /// Global Discovery Server (GDS) support.

@@ -347,6 +347,20 @@ impl Server {
 
         let service_level = Arc::new(AtomicU8::new(255));
 
+        #[cfg(feature = "discovery-mdns")]
+        let mdns = if config.multicast_discovery.enabled {
+            let own_instance = config
+                .multicast_discovery
+                .mdns_server_name
+                .clone()
+                .unwrap_or_else(|| config.application_name.clone());
+            Some(Arc::new(crate::discovery_mdns::MdnsDiscovery::new(
+                own_instance,
+            )))
+        } else {
+            None
+        };
+
         let type_tree = Arc::new(RwLock::new(DefaultTypeTree::new()));
 
         let info = ServerInfo {
@@ -382,6 +396,8 @@ impl Server {
                 .unwrap_or_else(|| Arc::new(DefaultTypeTreeGetter)),
             type_loaders: RwLock::new(builder.type_loaders),
             registered_servers: RwLock::new(Default::default()),
+            #[cfg(feature = "discovery-mdns")]
+            mdns,
             diagnostics: ServerDiagnostics {
                 enabled: config.diagnostics,
                 ..Default::default()
@@ -579,6 +595,14 @@ impl Server {
 
         pin!(discovery_fut);
 
+        #[cfg(feature = "discovery-mdns")]
+        let mdns_fut = crate::discovery_mdns::run_mdns_discovery(self.info.clone());
+
+        #[cfg(not(feature = "discovery-mdns"))]
+        let mdns_fut = futures::future::pending();
+
+        pin!(mdns_fut);
+
         let subscription_fut =
             Self::run_subscription_ticks(self.config.subscription_poll_interval_ms, context);
         pin!(subscription_fut);
@@ -619,6 +643,7 @@ impl Server {
                 }
                 _ = &mut subscription_fut => {}
                 _ = &mut discovery_fut => {}
+                _ = &mut mdns_fut => {}
                 _ = &mut session_expiry_fut => {}
                 rs = connection_source.next() => {
                     match rs {

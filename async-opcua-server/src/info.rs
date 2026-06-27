@@ -105,6 +105,9 @@ pub struct ServerInfo {
     pub type_loaders: RwLock<TypeLoaderCollection>,
     /// Registered servers advertised by this server when acting as a Local Discovery Server.
     pub(crate) registered_servers: RwLock<HashMap<UAString, RegisteredServer>>,
+    /// Servers discovered via OPC UA Part 12 multicast discovery.
+    #[cfg(feature = "discovery-mdns")]
+    pub(crate) mdns: Option<std::sync::Arc<crate::discovery_mdns::MdnsDiscovery>>,
     /// Current server diagnostics.
     pub diagnostics: ServerDiagnostics,
     /// Performance metrics for this server instance.
@@ -243,11 +246,9 @@ impl ServerInfo {
         StatusCode::Good
     }
 
-    /// Returns the registered servers as `ServerOnNetwork` records for FindServersOnNetwork
-    /// (Part 4 §5.5.3). This is the pull-based (no-mDNS) form: it reports servers that have registered
-    /// via RegisterServer(2), applying the record-id offset, max-records limit, and capability filter.
-    /// Records are assigned stable ids by sorting on server URI. Because RegisterServer does not carry
-    /// server capabilities, a non-empty `capability_filter` matches nothing (mDNS LDS-ME is deferred).
+    /// Returns servers as `ServerOnNetwork` records for FindServersOnNetwork (Part 4 §5.5.3).
+    /// Registered servers are sorted by server URI. When mDNS discovery is enabled, discovered servers
+    /// are merged in and sorted by DNS-SD service instance name.
     pub(crate) fn find_servers_on_network(
         &self,
         starting_record_id: u32,
@@ -258,39 +259,123 @@ impl ServerInfo {
             .as_ref()
             .is_some_and(|f| f.iter().any(|c| !c.is_null() && !c.is_empty()));
 
-        let registered = self.registered_servers.read();
-        let mut servers: Vec<_> = registered.values().collect();
-        servers.sort_by(|a, b| a.server_uri.as_ref().cmp(b.server_uri.as_ref()));
+        #[cfg(not(feature = "discovery-mdns"))]
+        {
+            let registered = self.registered_servers.read();
+            let mut servers: Vec<_> = registered.values().collect();
+            servers.sort_by(|a, b| a.server_uri.as_ref().cmp(b.server_uri.as_ref()));
 
-        servers
-            .into_iter()
-            .enumerate()
-            .map(|(i, server)| (i as u32, server))
-            .filter(|(record_id, _)| *record_id >= starting_record_id)
-            // We do not track per-server capabilities, so we can only satisfy an empty filter.
-            .filter(|_| !want_caps)
-            .map(|(record_id, server)| opcua_types::ServerOnNetwork {
-                record_id,
-                server_name: server
-                    .server_names
-                    .as_ref()
-                    .and_then(|n| n.first())
-                    .map(|n| n.text.clone())
-                    .unwrap_or_else(|| server.server_uri.clone()),
-                discovery_url: server
-                    .discovery_urls
-                    .as_ref()
-                    .and_then(|u| u.first())
-                    .cloned()
-                    .unwrap_or_default(),
-                server_capabilities: None,
-            })
-            .take(if max_records_to_return == 0 {
-                usize::MAX
-            } else {
-                max_records_to_return as usize
-            })
-            .collect()
+            servers
+                .into_iter()
+                .enumerate()
+                .map(|(i, server)| (i as u32, server))
+                .filter(|(record_id, _)| *record_id >= starting_record_id)
+                // We do not track per-server capabilities, so we can only satisfy an empty filter.
+                .filter(|_| !want_caps)
+                .map(|(record_id, server)| opcua_types::ServerOnNetwork {
+                    record_id,
+                    server_name: server
+                        .server_names
+                        .as_ref()
+                        .and_then(|n| n.first())
+                        .map(|n| n.text.clone())
+                        .unwrap_or_else(|| server.server_uri.clone()),
+                    discovery_url: server
+                        .discovery_urls
+                        .as_ref()
+                        .and_then(|u| u.first())
+                        .cloned()
+                        .unwrap_or_default(),
+                    server_capabilities: None,
+                })
+                .take(if max_records_to_return == 0 {
+                    usize::MAX
+                } else {
+                    max_records_to_return as usize
+                })
+                .collect()
+        }
+
+        #[cfg(feature = "discovery-mdns")]
+        {
+            struct Candidate {
+                sort_key: String,
+                server_name: UAString,
+                discovery_url: UAString,
+                caps: Option<Vec<String>>,
+            }
+
+            let mut candidates: Vec<Candidate> = {
+                let registered = self.registered_servers.read();
+                registered
+                    .values()
+                    .map(|server| Candidate {
+                        sort_key: server.server_uri.as_ref().to_owned(),
+                        server_name: server
+                            .server_names
+                            .as_ref()
+                            .and_then(|n| n.first())
+                            .map(|n| n.text.clone())
+                            .unwrap_or_else(|| server.server_uri.clone()),
+                        discovery_url: server
+                            .discovery_urls
+                            .as_ref()
+                            .and_then(|u| u.first())
+                            .cloned()
+                            .unwrap_or_default(),
+                        caps: None,
+                    })
+                    .collect()
+            };
+
+            let discovered = self
+                .mdns
+                .as_ref()
+                .map(|mdns| mdns.snapshot())
+                .unwrap_or_default();
+            candidates.extend(discovered.into_iter().map(|server| Candidate {
+                sort_key: server.instance_name,
+                server_name: UAString::from(server.server_name),
+                discovery_url: UAString::from(server.discovery_url),
+                caps: Some(server.capabilities),
+            }));
+
+            candidates.sort_by(|a, b| a.sort_key.cmp(&b.sort_key));
+
+            candidates
+                .into_iter()
+                .enumerate()
+                .map(|(i, server)| (i as u32, server))
+                .filter(|(record_id, _)| *record_id >= starting_record_id)
+                .filter(|(_, server)| {
+                    !want_caps
+                        || server.caps.as_ref().is_some_and(|caps| {
+                            capability_filter.as_ref().is_some_and(|filter| {
+                                filter
+                                    .iter()
+                                    .filter(|cap| !cap.is_null() && !cap.is_empty())
+                                    .all(|requested| {
+                                        caps.iter()
+                                            .any(|cap| cap.eq_ignore_ascii_case(requested.as_ref()))
+                                    })
+                            })
+                        })
+                })
+                .map(|(record_id, server)| opcua_types::ServerOnNetwork {
+                    record_id,
+                    server_name: server.server_name,
+                    discovery_url: server.discovery_url,
+                    server_capabilities: server
+                        .caps
+                        .map(|caps| caps.into_iter().map(UAString::from).collect()),
+                })
+                .take(if max_records_to_return == 0 {
+                    usize::MAX
+                } else {
+                    max_records_to_return as usize
+                })
+                .collect()
+        }
     }
 
     /// Returns registered servers as application descriptions for FindServers.
@@ -1302,5 +1387,129 @@ mod tests {
             .info()
             .validate_endpoint_hostname("opc.tcp://127.0.0.1:4840/")
             .expect("advertised endpoint host should be accepted");
+    }
+
+    // Feature 036 (Claude, independent): with multicast discovery NOT configured (the default, and
+    // the only possibility when the feature is compiled out), FindServersOnNetwork behaves exactly as
+    // the pull-based form — a non-empty capability filter matches nothing (FR-007 / SC-004).
+    #[tokio::test]
+    async fn find_servers_on_network_pull_based_unchanged_without_mdns() {
+        let (_server, handle) = ServerBuilder::new()
+            .without_node_managers()
+            .application_name("PullOnly")
+            .application_uri("urn:pull-only")
+            .discovery_urls(vec!["opc.tcp://127.0.0.1:4840/".to_string()])
+            .host("127.0.0.1")
+            .port(4840)
+            .add_endpoint(
+                "root",
+                (
+                    "/",
+                    SecurityPolicy::None,
+                    MessageSecurityMode::None,
+                    &[ANONYMOUS_USER_TOKEN_ID] as &[&str],
+                ),
+            )
+            .build()
+            .expect("server should build");
+        let info = handle.info();
+        assert_eq!(
+            info.apply_register_server(reg("urn:registered", true)),
+            StatusCode::Good
+        );
+
+        // No filter → the registered server is returned.
+        assert_eq!(info.find_servers_on_network(0, 0, &None).len(), 1);
+        // A non-empty capability filter matches nothing (registered servers carry no caps).
+        assert!(info
+            .find_servers_on_network(0, 0, &Some(vec!["DA".into()]))
+            .is_empty());
+    }
+
+    // Feature 036 (Claude, independent): FindServersOnNetwork merges mDNS-discovered servers with
+    // the pull-based registry, applies the capability filter against advertised caps, excludes self
+    // and expired records (Part 4 §5.5.3; FR-003/FR-004/FR-005/FR-006).
+    #[cfg(feature = "discovery-mdns")]
+    #[tokio::test]
+    async fn find_servers_on_network_merges_filters_and_excludes_self_and_expired() {
+        use crate::discovery_mdns::{DiscoveredServer, MdnsDiscovery};
+        use std::time::{Duration, Instant};
+
+        let (_server, handle) = ServerBuilder::new()
+            .without_node_managers()
+            .application_name("MdnsMerge")
+            .application_uri("urn:mdns-merge")
+            .discovery_urls(vec!["opc.tcp://127.0.0.1:4840/".to_string()])
+            .host("127.0.0.1")
+            .port(4840)
+            .add_endpoint(
+                "root",
+                (
+                    "/",
+                    SecurityPolicy::None,
+                    MessageSecurityMode::None,
+                    &[ANONYMOUS_USER_TOKEN_ID] as &[&str],
+                ),
+            )
+            .multicast_discovery(true)
+            .build()
+            .expect("server should build");
+        let info = handle.info();
+
+        // One pull-based registered server (no advertised caps), name "Test".
+        assert_eq!(
+            info.apply_register_server(reg("urn:registered", true)),
+            StatusCode::Good
+        );
+
+        // Seed the discovery cache directly.
+        let cache: &MdnsDiscovery = info.mdns.as_ref().expect("mdns cache present when enabled");
+        let future = Instant::now() + Duration::from_secs(300);
+        let past = Instant::now() - Duration::from_secs(1);
+        let dv = |inst: &str, url: &str, caps: &[&str], exp: Instant| DiscoveredServer {
+            instance_name: inst.to_owned(),
+            discovery_url: url.to_owned(),
+            server_name: inst.to_owned(),
+            capabilities: caps.iter().map(|s| (*s).to_owned()).collect(),
+            expires_at: exp,
+        };
+        cache.insert(dv("DiscA", "opc.tcp://10.0.0.1:4840/", &["DA"], future));
+        cache.insert(dv(
+            "DiscB",
+            "opc.tcp://10.0.0.2:4840/",
+            &["HD", "AC"],
+            future,
+        ));
+        cache.insert(dv("DiscExpired", "opc.tcp://10.0.0.9:4840/", &["DA"], past)); // FR-006
+        cache.insert(dv("MdnsMerge", "opc.tcp://10.0.0.3:4840/", &["DA"], future)); // self (FR-005)
+
+        // No filter → registered ("Test") + DiscA + DiscB; expired + self excluded.
+        let all = info.find_servers_on_network(0, 0, &None);
+        let names: Vec<String> = all.iter().map(|s| s.server_name.to_string()).collect();
+        assert_eq!(
+            all.len(),
+            3,
+            "registered + 2 live discovered; got {names:?}"
+        );
+        assert!(
+            names.iter().any(|n| n == "Test"),
+            "registered present: {names:?}"
+        );
+        assert!(names.iter().any(|n| n == "DiscA"));
+        assert!(names.iter().any(|n| n == "DiscB"));
+        assert!(
+            !names.iter().any(|n| n == "DiscExpired"),
+            "expired excluded"
+        );
+        assert!(!names.iter().any(|n| n == "MdnsMerge"), "self excluded");
+
+        // Filter ["DA"] → only DiscA (DiscB advertises HD/AC; registered has no caps).
+        let da = info.find_servers_on_network(0, 0, &Some(vec!["DA".into()]));
+        assert_eq!(da.len(), 1, "only the DA-capable discovered server");
+        assert_eq!(da[0].server_name.to_string(), "DiscA");
+        assert!(da[0]
+            .server_capabilities
+            .as_ref()
+            .is_some_and(|c| c.iter().any(|cap| cap.as_ref() == "DA")));
     }
 }

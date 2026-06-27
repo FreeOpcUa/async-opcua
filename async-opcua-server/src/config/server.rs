@@ -442,6 +442,30 @@ impl Default for CertificateValidation {
     }
 }
 
+#[cfg(feature = "discovery-mdns")]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Default)]
+/// Opt-in OPC UA Part 12 multicast discovery configuration.
+pub struct MulticastDiscoveryConfig {
+    /// Whether mDNS multicast discovery registration is enabled.
+    #[serde(default)]
+    pub enabled: bool,
+    /// Optional mDNS server name. Defaults to the server application name when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mdns_server_name: Option<String>,
+    /// OPC UA Part 12 Annex D capability identifiers.
+    ///
+    /// An empty list means the discovery implementation should fall back to `NA`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub capabilities: Vec<String>,
+}
+
+#[cfg(feature = "discovery-mdns")]
+impl MulticastDiscoveryConfig {
+    fn is_default(config: &Self) -> bool {
+        config == &Self::default()
+    }
+}
+
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 /// Server configuration object.
 pub struct ServerConfig {
@@ -470,6 +494,10 @@ pub struct ServerConfig {
     /// register the server with a discovery server.
     #[serde(default)]
     pub discovery_server_url: Option<String>,
+    /// Multicast discovery registration settings.
+    #[cfg(feature = "discovery-mdns")]
+    #[serde(default, skip_serializing_if = "MulticastDiscoveryConfig::is_default")]
+    pub multicast_discovery: MulticastDiscoveryConfig,
     /// tcp configuration information
     pub tcp_config: TcpConfig,
     /// Maximum number of active TCP connections before new incoming sockets are closed.
@@ -724,6 +752,8 @@ impl Default for ServerConfig {
             pki_dir,
             certificate_validation: CertificateValidation::default(),
             discovery_server_url: None,
+            #[cfg(feature = "discovery-mdns")]
+            multicast_discovery: MulticastDiscoveryConfig::default(),
             tcp_config: TcpConfig {
                 host: "127.0.0.1".to_string(),
                 port: constants::DEFAULT_RUST_OPC_UA_SERVER_PORT,

@@ -8,7 +8,7 @@ use opcua_server::{
 };
 use opcua_types::{
     AggregateConfiguration, BinaryEncodable, ContextOwned, DataValue, DateTime, EventFilter,
-    HistoryEventFieldList, NodeId, PerformUpdateType, StatusCode,
+    HistoryEventFieldList, ModificationInfo, NodeId, PerformUpdateType, StatusCode,
 };
 use parking_lot::Mutex;
 use rusqlite::{params, Connection, Error as SqliteError, OptionalExtension};
@@ -53,6 +53,41 @@ const CONTINUATION_POINT_MAX_AGE: Duration = Duration::from_secs(300);
 // OPC UA treats num_values_per_node == 0 as "return all". Keep that API
 // behavior paged, but cap each SQL read so one request cannot scan forever.
 const READ_RAW_MODIFIED_UNBOUNDED_HARD_LIMIT: usize = 100_000;
+
+fn insert_modified_historical_data(
+    tx: &rusqlite::Transaction<'_>,
+    node_id: &str,
+    source_ticks: i64,
+    server_ticks: i64,
+    value_blob: &[u8],
+    status_val: i64,
+    update_type: i64,
+) -> Result<(), SqliteError> {
+    tx.execute(
+        "INSERT INTO modified_historical_data (
+            node_id,
+            source_timestamp,
+            server_timestamp,
+            value_blob,
+            status_code,
+            update_type,
+            modification_time,
+            user_name
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![
+            node_id,
+            source_ticks,
+            server_ticks,
+            value_blob,
+            status_val,
+            update_type,
+            DateTime::now().ticks(),
+            // ponytail: user is not threaded yet; optional field, pass session user later.
+            ""
+        ],
+    )?;
+    Ok(())
+}
 
 impl SqliteHistoryBackend {
     /// Creates a new SQLite history backend using the database at `path`.
@@ -275,7 +310,7 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
         num_values_per_node: u32,
         return_bounds: bool,
         continuation_point: Option<Vec<u8>>,
-    ) -> Result<(Vec<DataValue>, Option<Vec<u8>>), StatusCode> {
+    ) -> Result<(Vec<DataValue>, Vec<ModificationInfo>, Option<Vec<u8>>), StatusCode> {
         self.prune_continuation_points();
         let page_size = Self::page_size(num_values_per_node);
 
@@ -308,20 +343,20 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
 
         if has_more {
             let Some(last_value) = values.last() else {
-                return Ok((values, None));
+                return Ok((values, Vec::new(), None));
             };
             let Some(last_source_timestamp) = last_value.source_timestamp.map(|ts| ts.ticks())
             else {
-                return Ok((values, None));
+                return Ok((values, Vec::new(), None));
             };
 
             let token = self.insert_continuation_point(HistoryReadCursor {
                 last_source_timestamp,
                 ..cursor
             });
-            Ok((values, Some(token)))
+            Ok((values, Vec::new(), Some(token)))
         } else {
-            Ok((values, None))
+            Ok((values, Vec::new(), None))
         }
     }
 
@@ -344,7 +379,7 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
         let mut raw_values = Vec::new();
         let mut next_token = None;
         loop {
-            let (values, token) = self
+            let (values, _modification_infos, token) = self
                 .read_raw_modified(node_id, start_time, end_time, 100_000, true, next_token)
                 .await?;
             raw_values.extend(values);
@@ -425,19 +460,24 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
                     let ctx = ctx_owned.context();
                     let blob = value.encode_to_vec(&ctx);
 
-                    let exists = tx
+                    let existing = tx
                         .query_row(
-                            "SELECT 1 FROM historical_data
+                            "SELECT server_timestamp, value_blob, status_code FROM historical_data
                          WHERE node_id = ?1 AND source_timestamp = ?2",
                             params![node_id_str, source_ticks],
-                            |_| Ok(1),
+                            |row| {
+                                Ok((
+                                    row.get::<_, i64>(0)?,
+                                    row.get::<_, Vec<u8>>(1)?,
+                                    row.get::<_, i64>(2)?,
+                                ))
+                            },
                         )
-                        .optional()?
-                        .is_some();
+                        .optional()?;
 
                     match perform_insert_replace {
                         PerformUpdateType::Insert => {
-                            if exists {
+                            if existing.is_some() {
                                 status_codes.push(StatusCode::BadEntryExists);
                             } else {
                                 tx.execute(
@@ -460,7 +500,16 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
                             }
                         }
                         PerformUpdateType::Replace => {
-                            if exists {
+                            if let Some((old_server_ticks, old_blob, old_status_val)) = existing {
+                                insert_modified_historical_data(
+                                    &tx,
+                                    &node_id_str,
+                                    source_ticks,
+                                    old_server_ticks,
+                                    &old_blob,
+                                    old_status_val,
+                                    2,
+                                )?;
                                 tx.execute(
                                     "UPDATE historical_data
                                  SET server_timestamp = ?3,
@@ -481,7 +530,16 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
                             }
                         }
                         PerformUpdateType::Update => {
-                            if exists {
+                            if let Some((old_server_ticks, old_blob, old_status_val)) = existing {
+                                insert_modified_historical_data(
+                                    &tx,
+                                    &node_id_str,
+                                    source_ticks,
+                                    old_server_ticks,
+                                    &old_blob,
+                                    old_status_val,
+                                    3,
+                                )?;
                                 tx.execute(
                                     "UPDATE historical_data
                                  SET server_timestamp = ?3,
@@ -517,8 +575,17 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
                                 status_codes.push(StatusCode::GoodEntryInserted);
                             }
                         }
-                        _ => {
-                            status_codes.push(StatusCode::BadHistoryOperationUnsupported);
+                        PerformUpdateType::Remove => {
+                            if existing.is_some() {
+                                tx.execute(
+                                    "DELETE FROM historical_data
+                                 WHERE node_id = ?1 AND source_timestamp = ?2",
+                                    params![node_id_str, source_ticks],
+                                )?;
+                                status_codes.push(StatusCode::Good);
+                            } else {
+                                status_codes.push(StatusCode::BadNoEntryExists);
+                            }
                         }
                     }
                 }

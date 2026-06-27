@@ -26,7 +26,7 @@ async fn test_history_backend_uses_bounded_continuation_cursor() {
         .iter()
         .all(|status| *status == StatusCode::GoodEntryInserted));
 
-    let (first_page, continuation_point) = backend
+    let (first_page, modification_infos, continuation_point) = backend
         .read_raw_modified(
             &node_id,
             start_time,
@@ -38,6 +38,7 @@ async fn test_history_backend_uses_bounded_continuation_cursor() {
         .await
         .expect("read first page");
 
+    assert!(modification_infos.is_empty());
     assert_eq!(first_page.len(), 1);
     assert_eq!(
         first_page[0].source_timestamp.expect("source timestamp"),
@@ -60,7 +61,7 @@ async fn test_history_backend_uses_bounded_continuation_cursor() {
             .expect("delete remaining historical values");
     }
 
-    let (remaining, next_continuation_point) = backend
+    let (remaining, modification_infos, next_continuation_point) = backend
         .read_raw_modified(
             &node_id,
             start_time,
@@ -72,6 +73,7 @@ async fn test_history_backend_uses_bounded_continuation_cursor() {
         .await
         .expect("read continuation page");
 
+    assert!(modification_infos.is_empty());
     assert!(remaining.is_empty());
     assert!(next_continuation_point.is_none());
 

@@ -6,7 +6,8 @@ use async_trait::async_trait;
 use opcua_core::{events::AlarmEvent, sync::RwLock};
 use opcua_nodes::DefaultTypeTree;
 use opcua_types::{
-    DataValue, DateTime, EventFilter, HistoryEventFieldList, NodeId, PerformUpdateType, StatusCode,
+    DataValue, DateTime, EventFilter, HistoryEventFieldList, ModificationInfo, NodeId,
+    PerformUpdateType, StatusCode,
 };
 
 use crate::{
@@ -107,7 +108,7 @@ impl HistoryStorageBackend for InMemoryEventHistory {
         _num_values_per_node: u32,
         _return_bounds: bool,
         _continuation_point: Option<Vec<u8>>,
-    ) -> Result<(Vec<DataValue>, Option<Vec<u8>>), StatusCode> {
+    ) -> Result<(Vec<DataValue>, Vec<ModificationInfo>, Option<Vec<u8>>), StatusCode> {
         Err(StatusCode::BadHistoryOperationUnsupported)
     }
 

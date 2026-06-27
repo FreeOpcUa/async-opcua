@@ -4,6 +4,12 @@ This is a list of things that are known to be missing, or ideas that could be im
 
  - Flesh out the server and client SDK with tooling for ease if use.
    - Make it even easier to implement custom node managers.
+ - Add Nano/Micro/Embedded conformance-profile builds. There is no profile feature today — the crate
+   gates by capability (`generated-address-space`, crypto backend, `ecc`, `wss`, `json`, `xml`,
+   `server`/`base-server`). Proposed: `nano`/`micro` feature aliases selecting the minimal set, plus a
+   `samples/nano-server` that compiles against `base-server` with a minimal custom node manager (the
+   default managers assume the core address space, so `base-server` doesn't build out of the box). The
+   generated core address space is the dominant size lever (~4.7 MB of a 24 MB stripped server binary).
  - Implement Part 4 7.41.2.3, encrypted secrets. We currently only support legacy secrets. We should also support more encryption algorithms for secrets.
  - Implement a better framework for security checks on the server.
  - Write a sophisticated server example with a persistent store. This would be a great way to verify the flexibility of the server.

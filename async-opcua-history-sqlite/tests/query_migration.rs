@@ -53,7 +53,7 @@ fn double_value(value: &DataValue) -> f64 {
 }
 
 #[test]
-fn run_migrations_creates_historical_data_table_and_query_index() {
+fn run_migrations_creates_history_tables_and_query_indexes() {
     let conn = Connection::open_in_memory().expect("open database");
 
     run_migrations(&conn).expect("run migrations");
@@ -72,9 +72,62 @@ fn run_migrations_creates_historical_data_table_and_query_index() {
             |row| row.get(0),
         )
         .expect("query index");
+    let modified_table_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'modified_historical_data'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("query modified table");
+    let modified_index_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'idx_modified_historical_data_query'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("query modified index");
+    let modified_columns = conn
+        .prepare("PRAGMA table_info(modified_historical_data)")
+        .expect("prepare modified columns query")
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, bool>(3)?,
+            ))
+        })
+        .expect("query modified columns")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("collect modified columns");
+    let modified_index_columns = conn
+        .prepare("PRAGMA index_info(idx_modified_historical_data_query)")
+        .expect("prepare modified index query")
+        .query_map([], |row| row.get::<_, String>(2))
+        .expect("query modified index columns")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("collect modified index columns");
 
     assert_eq!(table_count, 1);
     assert_eq!(index_count, 1);
+    assert_eq!(modified_table_count, 1);
+    assert_eq!(modified_index_count, 1);
+    assert_eq!(
+        modified_columns,
+        vec![
+            ("node_id".to_string(), "TEXT".to_string(), true),
+            ("source_timestamp".to_string(), "INTEGER".to_string(), true),
+            ("server_timestamp".to_string(), "INTEGER".to_string(), true),
+            ("value_blob".to_string(), "BLOB".to_string(), true),
+            ("status_code".to_string(), "INTEGER".to_string(), true),
+            ("update_type".to_string(), "INTEGER".to_string(), true),
+            ("modification_time".to_string(), "INTEGER".to_string(), true),
+            ("user_name".to_string(), "TEXT".to_string(), true),
+        ]
+    );
+    assert_eq!(
+        modified_index_columns,
+        vec!["node_id", "source_timestamp", "modification_time"]
+    );
 }
 
 #[test]
@@ -192,7 +245,7 @@ async fn sqlite_backend_read_raw_modified_bounds_first_page_query_and_continuati
         conn.trace(Some(record_sql_trace));
     }
 
-    let (first_page, continuation_point) = backend
+    let (first_page, modification_infos, continuation_point) = backend
         .read_raw_modified(
             &node_id,
             start_time,
@@ -204,6 +257,7 @@ async fn sqlite_backend_read_raw_modified_bounds_first_page_query_and_continuati
         .await
         .expect("read first page");
 
+    assert!(modification_infos.is_empty());
     assert_eq!(first_page.len(), PAGE_SIZE as usize);
     assert_eq!(
         first_page.iter().map(source_ticks).collect::<Vec<_>>(),
@@ -213,7 +267,7 @@ async fn sqlite_backend_read_raw_modified_bounds_first_page_query_and_continuati
     );
     let continuation_point = continuation_point.expect("continuation point");
 
-    let (remaining, next_continuation_point) = backend
+    let (remaining, modification_infos, next_continuation_point) = backend
         .read_raw_modified(
             &node_id,
             start_time,
@@ -225,6 +279,7 @@ async fn sqlite_backend_read_raw_modified_bounds_first_page_query_and_continuati
         .await
         .expect("read continuation page");
 
+    assert!(modification_infos.is_empty());
     assert!(next_continuation_point.is_none());
     assert_eq!(remaining.len(), VALUE_COUNT - PAGE_SIZE as usize);
 

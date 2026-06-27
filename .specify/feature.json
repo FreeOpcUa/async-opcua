@@ -1,1 +1,3 @@
-{"feature_directory": "specs/031-rbac-authorization"}
+{
+  "feature_directory": "specs/032-historyupdate-write"
+}

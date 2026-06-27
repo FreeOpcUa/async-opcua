@@ -6,6 +6,7 @@ use opcua_nodes::{HasNodeId, NodeSetImport};
 
 use crate::{
     address_space::{read_node_value, write_node_value, AddressSpace},
+    history::read::modification_infos_or_none,
     node_manager::{
         DefaultTypeTree, MethodCall, MonitoredItemRef, MonitoredItemUpdateRef, NodeManagerBuilder,
         NodeManagersRef, ParsedReadValueId, RequestContext, ServerContext, SyncSampler, WriteNode,
@@ -352,7 +353,7 @@ impl InMemoryNodeManagerImpl for SimpleNodeManagerImpl {
                     .await;
 
                 match res {
-                    Ok((values, next_token)) => {
+                    Ok((values, modification_infos, next_token)) => {
                         let next_cp = next_token.map(|tok| {
                             crate::session::continuation_points::ContinuationPoint::new(Box::new(
                                 crate::history::HistoryContinuationPoint::new(
@@ -370,7 +371,7 @@ impl InMemoryNodeManagerImpl for SimpleNodeManagerImpl {
                         if details.is_read_modified {
                             hn.set_result(opcua_types::HistoryModifiedData {
                                 data_values: Some(values),
-                                modification_infos: None,
+                                modification_infos: modification_infos_or_none(modification_infos),
                             });
                         } else {
                             hn.set_result(opcua_types::HistoryData {
@@ -580,33 +581,114 @@ impl InMemoryNodeManagerImpl for SimpleNodeManagerImpl {
             let guard = self.history_backend.read();
             guard.clone()
         };
-        if let Some(backend) = backend {
+        let Some(backend) = backend else {
             for hn in nodes {
-                match hn.details() {
-                    crate::node_manager::history::HistoryUpdateDetails::UpdateData(d) => {
-                        let node_id = &d.node_id;
-                        let mode = d.perform_insert_replace;
-                        let values = d.update_values.clone().unwrap_or_default();
+                hn.set_status(StatusCode::BadHistoryOperationUnsupported);
+            }
+            return Ok(());
+        };
 
-                        match backend.update_data(node_id, mode, values).await {
-                            Ok(results) => {
-                                hn.set_operation_results(Some(results));
-                                hn.set_status(StatusCode::Good);
-                            }
-                            Err(status) => {
-                                hn.set_status(status);
-                            }
+        for hn in nodes {
+            match hn.details() {
+                crate::node_manager::history::HistoryUpdateDetails::UpdateData(details) => {
+                    let result = backend
+                        .update_data(
+                            &details.node_id,
+                            details.perform_insert_replace,
+                            details.update_values.clone().unwrap_or_default(),
+                        )
+                        .await;
+                    match result {
+                        Ok(results) => {
+                            hn.set_operation_results(Some(results));
+                            hn.set_status(StatusCode::Good);
                         }
+                        Err(status) => hn.set_status(status),
                     }
-                    _ => {
-                        hn.set_status(StatusCode::BadHistoryOperationUnsupported);
+                }
+                crate::node_manager::history::HistoryUpdateDetails::UpdateStructureData(
+                    details,
+                ) => {
+                    let result = backend
+                        .update_structure_data(
+                            &details.node_id,
+                            details.perform_insert_replace,
+                            details.update_values.clone().unwrap_or_default(),
+                        )
+                        .await;
+                    match result {
+                        Ok(results) => {
+                            hn.set_operation_results(Some(results));
+                            hn.set_status(StatusCode::Good);
+                        }
+                        Err(status) => hn.set_status(status),
+                    }
+                }
+                crate::node_manager::history::HistoryUpdateDetails::UpdateEvent(details) => {
+                    let result = backend
+                        .update_event(
+                            &details.node_id,
+                            &details.filter,
+                            details.event_data.clone().unwrap_or_default(),
+                            details.perform_insert_replace,
+                        )
+                        .await;
+                    match result {
+                        Ok(results) => {
+                            hn.set_operation_results(Some(results));
+                            hn.set_status(StatusCode::Good);
+                        }
+                        Err(status) => hn.set_status(status),
+                    }
+                }
+                crate::node_manager::history::HistoryUpdateDetails::DeleteRawModified(details) => {
+                    match backend
+                        .delete_raw_modified(
+                            &details.node_id,
+                            details.is_delete_modified,
+                            details.start_time,
+                            details.end_time,
+                        )
+                        .await
+                    {
+                        Ok(status) => hn.set_status(status),
+                        Err(status) => hn.set_status(status),
+                    }
+                }
+                crate::node_manager::history::HistoryUpdateDetails::DeleteAtTime(details) => {
+                    let result = backend
+                        .delete_at_time(
+                            &details.node_id,
+                            details.req_times.clone().unwrap_or_default(),
+                        )
+                        .await;
+                    match result {
+                        Ok(results) => {
+                            hn.set_operation_results(Some(results));
+                            hn.set_status(StatusCode::Good);
+                        }
+                        Err(status) => hn.set_status(status),
+                    }
+                }
+                crate::node_manager::history::HistoryUpdateDetails::DeleteEvent(details) => {
+                    let result = backend
+                        .delete_event(
+                            &details.node_id,
+                            details.event_ids.clone().unwrap_or_default(),
+                        )
+                        .await;
+                    match result {
+                        Ok(results) => {
+                            hn.set_operation_results(Some(results));
+                            hn.set_status(StatusCode::Good);
+                        }
+                        Err(status) => hn.set_status(status),
                     }
                 }
             }
-            Ok(())
-        } else {
-            Err(StatusCode::BadHistoryOperationUnsupported)
         }
+
+        Ok(())
     }
 }
 
@@ -758,5 +840,425 @@ impl SimpleNodeManagerImpl {
     ) {
         let mut cbs = trace_write_lock!(self.method_with_context_cbs);
         cbs.insert(id, Arc::new(cb));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use async_trait::async_trait;
+    use opcua_types::{
+        ApplicationDescription, ByteString, DateTime, DeleteAtTimeDetails, DeleteEventDetails,
+        DeleteRawModifiedDetails, EventFilter, HistoryEventFieldList, ModificationInfo,
+        PerformUpdateType, UAString, UpdateDataDetails, UpdateEventDetails,
+        UpdateStructureDataDetails,
+    };
+
+    use crate::{
+        authenticator::UserToken,
+        history::HistoryStorageBackend,
+        identity_token::IdentityToken,
+        node_manager::{
+            history::{HistoryUpdateDetails, HistoryUpdateNode},
+            RequestContextInner,
+        },
+        session::instance::Session,
+        ServerBuilder,
+    };
+
+    use super::*;
+
+    #[derive(Debug, Clone, PartialEq)]
+    enum HistoryBackendCall {
+        UpdateData {
+            node_id: NodeId,
+            perform_insert_replace: PerformUpdateType,
+            entry_count: usize,
+        },
+        UpdateStructureData {
+            node_id: NodeId,
+            perform_insert_replace: PerformUpdateType,
+            entry_count: usize,
+        },
+        UpdateEvent {
+            node_id: NodeId,
+            perform_insert_replace: PerformUpdateType,
+            entry_count: usize,
+        },
+        DeleteRawModified {
+            node_id: NodeId,
+            is_delete_modified: bool,
+            start_time: DateTime,
+            end_time: DateTime,
+        },
+        DeleteAtTime {
+            node_id: NodeId,
+            entry_count: usize,
+        },
+        DeleteEvent {
+            node_id: NodeId,
+            entry_count: usize,
+        },
+    }
+
+    #[derive(Default)]
+    struct RecordingHistoryBackend {
+        calls: RwLock<Vec<HistoryBackendCall>>,
+    }
+
+    impl RecordingHistoryBackend {
+        fn calls(&self) -> Vec<HistoryBackendCall> {
+            self.calls.read().clone()
+        }
+    }
+
+    #[async_trait]
+    impl HistoryStorageBackend for RecordingHistoryBackend {
+        async fn read_raw_modified(
+            &self,
+            _node_id: &NodeId,
+            _start_time: DateTime,
+            _end_time: DateTime,
+            _num_values_per_node: u32,
+            _return_bounds: bool,
+            _continuation_point: Option<Vec<u8>>,
+        ) -> Result<(Vec<DataValue>, Vec<ModificationInfo>, Option<Vec<u8>>), StatusCode> {
+            Err(StatusCode::BadHistoryOperationUnsupported)
+        }
+
+        async fn update_data(
+            &self,
+            node_id: &NodeId,
+            perform_insert_replace: PerformUpdateType,
+            values: Vec<DataValue>,
+        ) -> Result<Vec<StatusCode>, StatusCode> {
+            self.calls.write().push(HistoryBackendCall::UpdateData {
+                node_id: node_id.clone(),
+                perform_insert_replace,
+                entry_count: values.len(),
+            });
+            Ok(vec![StatusCode::Good, StatusCode::BadNoData])
+        }
+
+        async fn update_structure_data(
+            &self,
+            node_id: &NodeId,
+            perform_insert_replace: PerformUpdateType,
+            values: Vec<DataValue>,
+        ) -> Result<Vec<StatusCode>, StatusCode> {
+            self.calls
+                .write()
+                .push(HistoryBackendCall::UpdateStructureData {
+                    node_id: node_id.clone(),
+                    perform_insert_replace,
+                    entry_count: values.len(),
+                });
+            Ok(vec![StatusCode::BadOutOfRange])
+        }
+
+        async fn update_event(
+            &self,
+            node_id: &NodeId,
+            _filter: &EventFilter,
+            events: Vec<HistoryEventFieldList>,
+            perform_insert_replace: PerformUpdateType,
+        ) -> Result<Vec<StatusCode>, StatusCode> {
+            self.calls.write().push(HistoryBackendCall::UpdateEvent {
+                node_id: node_id.clone(),
+                perform_insert_replace,
+                entry_count: events.len(),
+            });
+            Ok(vec![StatusCode::Good, StatusCode::BadEventIdUnknown])
+        }
+
+        async fn delete_raw_modified(
+            &self,
+            node_id: &NodeId,
+            is_delete_modified: bool,
+            start_time: DateTime,
+            end_time: DateTime,
+        ) -> Result<StatusCode, StatusCode> {
+            self.calls
+                .write()
+                .push(HistoryBackendCall::DeleteRawModified {
+                    node_id: node_id.clone(),
+                    is_delete_modified,
+                    start_time,
+                    end_time,
+                });
+            Ok(StatusCode::BadDataLost)
+        }
+
+        async fn delete_at_time(
+            &self,
+            node_id: &NodeId,
+            req_times: Vec<DateTime>,
+        ) -> Result<Vec<StatusCode>, StatusCode> {
+            self.calls.write().push(HistoryBackendCall::DeleteAtTime {
+                node_id: node_id.clone(),
+                entry_count: req_times.len(),
+            });
+            Ok(vec![StatusCode::Good, StatusCode::BadNoData])
+        }
+
+        async fn delete_event(
+            &self,
+            node_id: &NodeId,
+            event_ids: Vec<ByteString>,
+        ) -> Result<Vec<StatusCode>, StatusCode> {
+            self.calls.write().push(HistoryBackendCall::DeleteEvent {
+                node_id: node_id.clone(),
+                entry_count: event_ids.len(),
+            });
+            Ok(vec![StatusCode::BadEventIdUnknown])
+        }
+    }
+
+    fn request_context() -> RequestContext {
+        let (_server, handle) = ServerBuilder::new_anonymous("simple history update routing")
+            .build()
+            .expect("test server should build");
+        let info = handle.info().clone();
+        let session = Session::create(
+            &info,
+            NodeId::new(0, 1),
+            1,
+            60_000,
+            0,
+            0,
+            UAString::from("opc.tcp://localhost"),
+            opcua_crypto::SecurityPolicy::None.to_str().to_string(),
+            IdentityToken::Anonymous(opcua_types::AnonymousIdentityToken {
+                policy_id: UAString::from("anonymous"),
+            }),
+            None,
+            ByteString::null(),
+            UAString::from("test"),
+            ApplicationDescription::default(),
+            opcua_types::MessageSecurityMode::None,
+        );
+
+        RequestContext {
+            current_node_manager_index: 0,
+            inner: Arc::new(RequestContextInner {
+                session: Arc::new(RwLock::new(session)),
+                session_id: 1,
+                authenticator: info.authenticator.clone(),
+                token: UserToken("anonymous".to_string()),
+                user_roles: Arc::new(Vec::new()),
+                type_tree: info.type_tree.clone(),
+                type_tree_getter: info.type_tree_getter.clone(),
+                subscriptions: handle.subscriptions().clone(),
+                info,
+            }),
+        }
+    }
+
+    fn manager() -> SimpleNodeManagerImpl {
+        SimpleNodeManagerImpl::new(
+            Vec::new(),
+            "history-update-test",
+            NodeManagersRef::new_empty(),
+        )
+    }
+
+    fn update_data_node(node_id: &NodeId, entry_count: usize) -> HistoryUpdateNode {
+        HistoryUpdateNode::new(HistoryUpdateDetails::UpdateData(UpdateDataDetails {
+            node_id: node_id.clone(),
+            perform_insert_replace: PerformUpdateType::Insert,
+            update_values: Some(vec![DataValue::default(); entry_count]),
+        }))
+    }
+
+    fn update_structure_node(node_id: &NodeId, entry_count: usize) -> HistoryUpdateNode {
+        HistoryUpdateNode::new(HistoryUpdateDetails::UpdateStructureData(
+            UpdateStructureDataDetails {
+                node_id: node_id.clone(),
+                perform_insert_replace: PerformUpdateType::Replace,
+                update_values: Some(vec![DataValue::default(); entry_count]),
+            },
+        ))
+    }
+
+    fn update_event_node(node_id: &NodeId, entry_count: usize) -> HistoryUpdateNode {
+        HistoryUpdateNode::new(HistoryUpdateDetails::UpdateEvent(UpdateEventDetails {
+            node_id: node_id.clone(),
+            perform_insert_replace: PerformUpdateType::Update,
+            filter: EventFilter::default(),
+            event_data: Some(vec![HistoryEventFieldList::default(); entry_count]),
+        }))
+    }
+
+    fn delete_raw_modified_node(
+        node_id: &NodeId,
+        start_time: DateTime,
+        end_time: DateTime,
+    ) -> HistoryUpdateNode {
+        HistoryUpdateNode::new(HistoryUpdateDetails::DeleteRawModified(
+            DeleteRawModifiedDetails {
+                node_id: node_id.clone(),
+                is_delete_modified: true,
+                start_time,
+                end_time,
+            },
+        ))
+    }
+
+    fn delete_at_time_node(node_id: &NodeId, req_times: Vec<DateTime>) -> HistoryUpdateNode {
+        HistoryUpdateNode::new(HistoryUpdateDetails::DeleteAtTime(DeleteAtTimeDetails {
+            node_id: node_id.clone(),
+            req_times: Some(req_times),
+        }))
+    }
+
+    fn delete_event_node(node_id: &NodeId, entry_count: usize) -> HistoryUpdateNode {
+        HistoryUpdateNode::new(HistoryUpdateDetails::DeleteEvent(DeleteEventDetails {
+            node_id: node_id.clone(),
+            event_ids: Some(
+                (0..entry_count)
+                    .map(|i| ByteString::from(vec![i as u8]))
+                    .collect(),
+            ),
+        }))
+    }
+
+    #[tokio::test]
+    async fn history_update_without_backend_sets_node_statuses() {
+        let manager = manager();
+        let context = request_context();
+        let node_id = NodeId::new(1, "without_backend");
+        let mut update_data = update_data_node(&node_id, 1);
+        let mut delete_raw =
+            delete_raw_modified_node(&node_id, DateTime::from(10), DateTime::from(20));
+
+        {
+            let mut update_data_ref = &mut update_data;
+            let mut delete_raw_ref = &mut delete_raw;
+            let mut nodes = vec![&mut update_data_ref, &mut delete_raw_ref];
+
+            assert_eq!(manager.history_update(&context, &mut nodes).await, Ok(()));
+        }
+
+        assert_eq!(
+            update_data.status(),
+            StatusCode::BadHistoryOperationUnsupported
+        );
+        assert_eq!(
+            delete_raw.status(),
+            StatusCode::BadHistoryOperationUnsupported
+        );
+        assert_eq!(update_data.into_result().operation_results, None);
+        assert_eq!(delete_raw.into_result().operation_results, None);
+    }
+
+    #[tokio::test]
+    async fn history_update_routes_all_details_to_backend() {
+        let manager = manager();
+        let context = request_context();
+        let backend = Arc::new(RecordingHistoryBackend::default());
+        manager.set_history_backend(backend.clone());
+
+        let node_id = NodeId::new(1, "with_backend");
+        let start_time = DateTime::from(10);
+        let end_time = DateTime::from(20);
+        let req_times = vec![DateTime::from(30), DateTime::from(40)];
+        let mut update_data = update_data_node(&node_id, 2);
+        let mut update_structure = update_structure_node(&node_id, 1);
+        let mut update_event = update_event_node(&node_id, 2);
+        let mut delete_raw = delete_raw_modified_node(&node_id, start_time, end_time);
+        let mut delete_at_time = delete_at_time_node(&node_id, req_times);
+        let mut delete_event = delete_event_node(&node_id, 1);
+
+        {
+            let mut update_data_ref = &mut update_data;
+            let mut update_structure_ref = &mut update_structure;
+            let mut update_event_ref = &mut update_event;
+            let mut delete_raw_ref = &mut delete_raw;
+            let mut delete_at_time_ref = &mut delete_at_time;
+            let mut delete_event_ref = &mut delete_event;
+            let mut nodes = vec![
+                &mut update_data_ref,
+                &mut update_structure_ref,
+                &mut update_event_ref,
+                &mut delete_raw_ref,
+                &mut delete_at_time_ref,
+                &mut delete_event_ref,
+            ];
+
+            assert_eq!(manager.history_update(&context, &mut nodes).await, Ok(()));
+        }
+
+        assert_eq!(
+            backend.calls(),
+            vec![
+                HistoryBackendCall::UpdateData {
+                    node_id: node_id.clone(),
+                    perform_insert_replace: PerformUpdateType::Insert,
+                    entry_count: 2,
+                },
+                HistoryBackendCall::UpdateStructureData {
+                    node_id: node_id.clone(),
+                    perform_insert_replace: PerformUpdateType::Replace,
+                    entry_count: 1,
+                },
+                HistoryBackendCall::UpdateEvent {
+                    node_id: node_id.clone(),
+                    perform_insert_replace: PerformUpdateType::Update,
+                    entry_count: 2,
+                },
+                HistoryBackendCall::DeleteRawModified {
+                    node_id: node_id.clone(),
+                    is_delete_modified: true,
+                    start_time,
+                    end_time,
+                },
+                HistoryBackendCall::DeleteAtTime {
+                    node_id: node_id.clone(),
+                    entry_count: 2,
+                },
+                HistoryBackendCall::DeleteEvent {
+                    node_id,
+                    entry_count: 1,
+                },
+            ]
+        );
+
+        let update_data = update_data.into_result();
+        assert_eq!(update_data.status_code, StatusCode::Good);
+        assert_eq!(
+            update_data.operation_results,
+            Some(vec![StatusCode::Good, StatusCode::BadNoData])
+        );
+
+        let update_structure = update_structure.into_result();
+        assert_eq!(update_structure.status_code, StatusCode::Good);
+        assert_eq!(
+            update_structure.operation_results,
+            Some(vec![StatusCode::BadOutOfRange])
+        );
+
+        let update_event = update_event.into_result();
+        assert_eq!(update_event.status_code, StatusCode::Good);
+        assert_eq!(
+            update_event.operation_results,
+            Some(vec![StatusCode::Good, StatusCode::BadEventIdUnknown])
+        );
+
+        let delete_raw = delete_raw.into_result();
+        assert_eq!(delete_raw.status_code, StatusCode::BadDataLost);
+        assert_eq!(delete_raw.operation_results, None);
+
+        let delete_at_time = delete_at_time.into_result();
+        assert_eq!(delete_at_time.status_code, StatusCode::Good);
+        assert_eq!(
+            delete_at_time.operation_results,
+            Some(vec![StatusCode::Good, StatusCode::BadNoData])
+        );
+
+        let delete_event = delete_event.into_result();
+        assert_eq!(delete_event.status_code, StatusCode::Good);
+        assert_eq!(
+            delete_event.operation_results,
+            Some(vec![StatusCode::BadEventIdUnknown])
+        );
     }
 }

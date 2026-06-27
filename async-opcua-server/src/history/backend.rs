@@ -2,8 +2,8 @@ use crate::aggregates::engine::{compute_processed_intervals, get_value_timestamp
 use async_trait::async_trait;
 use moka::future::Cache;
 use opcua_types::{
-    AggregateConfiguration, DataValue, DateTime, EventFilter, HistoryEventFieldList, NodeId,
-    PerformUpdateType, StatusCode,
+    AggregateConfiguration, DataValue, DateTime, EventFilter, HistoryEventFieldList,
+    ModificationInfo, NodeId, PerformUpdateType, StatusCode,
 };
 
 /// A cache for historical data values to avoid database hits.
@@ -53,6 +53,12 @@ impl HistoryCache {
 
 /// Trait representing a storage backend for OPC-UA Historical Data Access (HDA).
 /// Custom backends (e.g. SQLite, In-Memory, etc.) implement this trait.
+///
+/// HistoryUpdate write implementations for [`HistoryStorageBackend::update_data`],
+/// [`HistoryStorageBackend::update_structure_data`], and
+/// [`HistoryStorageBackend::update_event`] must support all [`PerformUpdateType`]
+/// modes: [`PerformUpdateType::Insert`], [`PerformUpdateType::Replace`],
+/// [`PerformUpdateType::Update`], and [`PerformUpdateType::Remove`].
 #[async_trait]
 pub trait HistoryStorageBackend: Send + Sync {
     /// Reads raw data values from the history backend.
@@ -64,7 +70,7 @@ pub trait HistoryStorageBackend: Send + Sync {
         num_values_per_node: u32,
         return_bounds: bool,
         continuation_point: Option<Vec<u8>>,
-    ) -> Result<(Vec<DataValue>, Option<Vec<u8>>), StatusCode>;
+    ) -> Result<(Vec<DataValue>, Vec<ModificationInfo>, Option<Vec<u8>>), StatusCode>;
 
     /// Reads processed aggregate values from the history backend.
     // ponytail: 8 params (added AggregateConfiguration); a params struct isn't worth it — the
@@ -88,7 +94,7 @@ pub trait HistoryStorageBackend: Send + Sync {
         let mut raw_values = Vec::new();
         let mut next_token = None;
         loop {
-            let (values, token) = self
+            let (values, _modification_infos, token) = self
                 .read_raw_modified(node_id, start_time, end_time, 100_000, true, next_token)
                 .await?;
             raw_values.extend(values);
@@ -145,8 +151,115 @@ pub trait HistoryStorageBackend: Send + Sync {
         values: Vec<DataValue>,
     ) -> Result<Vec<StatusCode>, StatusCode>;
 
+    /// Updates annotation history data values.
+    async fn update_structure_data(
+        &self,
+        _node_id: &NodeId,
+        _perform: PerformUpdateType,
+        _values: Vec<DataValue>,
+    ) -> Result<Vec<StatusCode>, StatusCode> {
+        Err(StatusCode::BadHistoryOperationUnsupported)
+    }
+
+    /// Updates historical event field lists.
+    async fn update_event(
+        &self,
+        _node_id: &NodeId,
+        _filter: &EventFilter,
+        _events: Vec<HistoryEventFieldList>,
+        _perform: PerformUpdateType,
+    ) -> Result<Vec<StatusCode>, StatusCode> {
+        Err(StatusCode::BadHistoryOperationUnsupported)
+    }
+
+    /// Deletes raw or modified historical data over a time range.
+    async fn delete_raw_modified(
+        &self,
+        _node_id: &NodeId,
+        _is_delete_modified: bool,
+        _start_time: DateTime,
+        _end_time: DateTime,
+    ) -> Result<StatusCode, StatusCode> {
+        Err(StatusCode::BadHistoryOperationUnsupported)
+    }
+
+    /// Deletes historical data values at requested timestamps.
+    async fn delete_at_time(
+        &self,
+        _node_id: &NodeId,
+        _req_times: Vec<DateTime>,
+    ) -> Result<Vec<StatusCode>, StatusCode> {
+        Err(StatusCode::BadHistoryOperationUnsupported)
+    }
+
+    /// Deletes historical events by event id.
+    async fn delete_event(
+        &self,
+        _node_id: &NodeId,
+        _event_ids: Vec<opcua_types::ByteString>,
+    ) -> Result<Vec<StatusCode>, StatusCode> {
+        Err(StatusCode::BadHistoryOperationUnsupported)
+    }
+
     /// Releases a backend-owned continuation point token.
     async fn release_continuation_point(&self, _token: Vec<u8>) -> Result<(), StatusCode> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // A backend implementing ONLY the two required methods, to prove the five new
+    // write methods default to Bad_HistoryOperationUnsupported (FR-011 backwards compat).
+    struct MinimalBackend;
+
+    #[async_trait]
+    impl HistoryStorageBackend for MinimalBackend {
+        async fn read_raw_modified(
+            &self,
+            _node_id: &NodeId,
+            _start_time: DateTime,
+            _end_time: DateTime,
+            _num_values_per_node: u32,
+            _return_bounds: bool,
+            _continuation_point: Option<Vec<u8>>,
+        ) -> Result<(Vec<DataValue>, Vec<ModificationInfo>, Option<Vec<u8>>), StatusCode> {
+            Ok((Vec::new(), Vec::new(), None))
+        }
+
+        async fn update_data(
+            &self,
+            _node_id: &NodeId,
+            _perform_insert_replace: PerformUpdateType,
+            _values: Vec<DataValue>,
+        ) -> Result<Vec<StatusCode>, StatusCode> {
+            Ok(Vec::new())
+        }
+    }
+
+    #[tokio::test]
+    async fn new_write_methods_default_to_unsupported() {
+        let b = MinimalBackend;
+        let node = NodeId::null();
+        assert_eq!(
+            b.update_structure_data(&node, PerformUpdateType::Insert, Vec::new())
+                .await,
+            Err(StatusCode::BadHistoryOperationUnsupported)
+        );
+        assert_eq!(
+            b.delete_at_time(&node, Vec::new()).await,
+            Err(StatusCode::BadHistoryOperationUnsupported)
+        );
+        assert_eq!(
+            b.delete_event(&node, Vec::new()).await,
+            Err(StatusCode::BadHistoryOperationUnsupported)
+        );
+        assert_eq!(
+            b.delete_raw_modified(&node, false, DateTime::null(), DateTime::null())
+                .await,
+            Err(StatusCode::BadHistoryOperationUnsupported)
+        );
     }
 }

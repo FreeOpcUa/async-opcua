@@ -246,11 +246,11 @@ test**: no-config server unchanged; configured server enforces; secure preset re
 - [X] T099 [P] Run the FULL `cargo test -p async-opcua-server` (all binaries) — zero regressions (Spec: SC-007)
 - [X] T100 [P] Build + test under `--no-default-features` and `--all-features`; fix any feature-gating gaps (Spec: FR-016)
 - [X] T101 [P] `cargo clippy --workspace --all-targets` + `cargo fmt --all --check` clean (Spec: Constitution V)
-- [ ] T102 [P] Interop: browse RoleSet from a reference client (node-opcua / .NET / open62541) without error (Spec: SC-002; Part 18 §4.5)
+- [X] T102 [P] Interop: browse RoleSet from a reference client (node-opcua / .NET / open62541) without error (Spec: SC-002; Part 18 §4.5)
 - [X] T103 [P] Add an example/doc snippet for RBAC config in the demo-server or docs (quickstart.md mirror) (Spec: FR-012)
 - [X] T104 [P] Security review of the enforcement path: fail-closed where enforced, no panic on attacker input, no secret leakage (Spec: Constitution IV)
 - [X] T105 [P] Confirm `Bad_UserAccessDenied`/`Bad_SecurityModeInsufficient` are returned per-operation (not whole-request) where the spec requires operation-level results (Spec: Part 4 §7.39; per-service result tables)
-- [ ] T106 Update `specs/SESSION-HANDOFF.md` + memory with the RBAC feature outcome (Spec: project process)
+- [X] T106 Update `specs/SESSION-HANDOFF.md` + memory with the RBAC feature outcome (Spec: project process)
 
 ---
 

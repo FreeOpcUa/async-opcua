@@ -81,16 +81,16 @@ without sqlite.
 deletion.
 **Independent test**: populate, delete by range and by timestamp, assert deletions + per-entry results.
 
-- [ ] T032 [US3] Implement sqlite `delete_raw_modified`: delete raw OR modified rows in [start, end) per `is_delete_modified`; operation `Good`, `Bad_NoData` if range empty (Spec: Part 11 §6.9.2; Part 4 §11.7.6)
-- [ ] T033 [US3] Implement in-memory `delete_raw_modified` with identical semantics (Spec: Part 11 §6.9.2; Part 4 §11.7.6)
-- [ ] T034 [US3] On raw delete (both backends), record a modified-history entry (`update_type = Delete`) for each removed value (Spec: Part 11 §6.5)
-- [ ] T035 [US3] Implement sqlite `delete_at_time`: per-timestamp delete; `Good` present, `Bad_NoEntryExists` absent; operationResults sized to req_times (Spec: Part 11 §6.9.3; Part 4 §11.7.7)
-- [ ] T036 [US3] Implement in-memory `delete_at_time` with identical semantics (Spec: Part 11 §6.9.3; Part 4 §11.7.7)
-- [ ] T037 [US3] Ensure both delete paths bound work to inputs and never panic on empty lists / inverted ranges (Spec: FR-013; Constitution IV)
-- [ ] T038 [P] [US3] [Claude] test (both backends): DeleteRawModified non-empty range removes raw values → `Good`; empty range → `Bad_NoData` (Spec: Part 11 §6.9.2)
-- [ ] T039 [P] [US3] [Claude] test (both backends): DeleteRawModified(is_delete_modified=true) removes modified entries, raw untouched (Spec: Part 11 §6.9.2)
-- [ ] T040 [P] [US3] [Claude] test (both backends): DeleteAtTime([present, present, absent]) → `[Good, Good, Bad_NoEntryExists]` and read-back confirms (Spec: Part 11 §6.9.3)
-- [ ] T041 [P] [US3] [Claude] test: empty timestamp list / inverted range handled without panic (Spec: FR-013)
+- [X] T032 [US3] Implement sqlite `delete_raw_modified`: delete raw OR modified rows in [start, end) per `is_delete_modified`; operation `Good`, `Bad_NoData` if range empty (Spec: Part 11 §6.9.2; Part 4 §11.7.6)
+- [X] T033 [US3] Implement in-memory `delete_raw_modified` with identical semantics (Spec: Part 11 §6.9.2; Part 4 §11.7.6)
+- [X] T034 [US3] On raw delete (both backends), record a modified-history entry (`update_type = Delete`) for each removed value (Spec: Part 11 §6.5)
+- [X] T035 [US3] Implement sqlite `delete_at_time`: per-timestamp delete; `Good` present, `Bad_NoEntryExists` absent; operationResults sized to req_times (Spec: Part 11 §6.9.3; Part 4 §11.7.7)
+- [X] T036 [US3] Implement in-memory `delete_at_time` with identical semantics (Spec: Part 11 §6.9.3; Part 4 §11.7.7)
+- [X] T037 [US3] Ensure both delete paths bound work to inputs and never panic on empty lists / inverted ranges (Spec: FR-013; Constitution IV)
+- [X] T038 [P] [US3] [Claude] test (both backends): DeleteRawModified non-empty range removes raw values → `Good`; empty range → `Bad_NoData` (Spec: Part 11 §6.9.2)
+- [X] T039 [P] [US3] [Claude] test (both backends): DeleteRawModified(is_delete_modified=true) removes modified entries, raw untouched (Spec: Part 11 §6.9.2)
+- [X] T040 [P] [US3] [Claude] test (both backends): DeleteAtTime([present, present, absent]) → `[Good, Good, Bad_NoEntryExists]` and read-back confirms (Spec: Part 11 §6.9.3)
+- [X] T041 [P] [US3] [Claude] test: empty timestamp list / inverted range handled without panic (Spec: FR-013)
 
 **Checkpoint**: data deletes complete on both backends.
 

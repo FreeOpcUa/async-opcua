@@ -155,3 +155,106 @@ async fn unknown_node_reads_empty() {
     // Never panics, returns empty for a node with no history.
     assert!(read_all(&b, &NodeId::new(5, "nope")).await.is_empty());
 }
+
+// ---- US3: DeleteRawModified + DeleteAtTime, parity with the sqlite backend ----
+
+#[tokio::test]
+async fn delete_raw_modified_removes_range_and_reports_no_data() {
+    let b = InMemoryDataHistory::new();
+    let n = node();
+    b.update_data(
+        &n,
+        PerformUpdateType::Insert,
+        vec![at(100, 1.0), at(200, 2.0), at(300, 3.0)],
+    )
+    .await
+    .unwrap();
+    let r = b
+        .delete_raw_modified(&n, false, DateTime::from(100), DateTime::from(300))
+        .await
+        .unwrap();
+    assert_eq!(r, StatusCode::Good);
+    let left: Vec<f64> = read_all(&b, &n).await.iter().map(double).collect();
+    assert_eq!(left, vec![3.0]);
+    let r = b
+        .delete_raw_modified(&n, false, DateTime::from(1000), DateTime::from(2000))
+        .await
+        .unwrap();
+    assert_eq!(r, StatusCode::BadNoData);
+}
+
+#[tokio::test]
+async fn delete_modified_branch_leaves_raw_untouched() {
+    let b = InMemoryDataHistory::new();
+    let n = node();
+    b.update_data(&n, PerformUpdateType::Insert, vec![at(100, 1.0)])
+        .await
+        .unwrap();
+    b.update_data(&n, PerformUpdateType::Replace, vec![at(100, 2.0)])
+        .await
+        .unwrap();
+    let r = b
+        .delete_raw_modified(&n, true, DateTime::from(0), DateTime::from(1000))
+        .await
+        .unwrap();
+    assert_eq!(r, StatusCode::Good);
+    assert_eq!(double(&read_all(&b, &n).await[0]), 2.0);
+    let r = b
+        .delete_raw_modified(&n, true, DateTime::from(0), DateTime::from(1000))
+        .await
+        .unwrap();
+    assert_eq!(r, StatusCode::BadNoData);
+}
+
+#[tokio::test]
+async fn delete_at_time_per_timestamp_results() {
+    let b = InMemoryDataHistory::new();
+    let n = node();
+    b.update_data(
+        &n,
+        PerformUpdateType::Insert,
+        vec![at(100, 1.0), at(300, 3.0)],
+    )
+    .await
+    .unwrap();
+    let r = b
+        .delete_at_time(
+            &n,
+            vec![
+                DateTime::from(100),
+                DateTime::from(200),
+                DateTime::from(300),
+            ],
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        r,
+        vec![
+            StatusCode::Good,
+            StatusCode::BadNoEntryExists,
+            StatusCode::Good
+        ]
+    );
+    assert!(read_all(&b, &n).await.is_empty());
+}
+
+#[tokio::test]
+async fn delete_edges_do_not_panic() {
+    let b = InMemoryDataHistory::new();
+    let n = node();
+    assert!(b.delete_at_time(&n, vec![]).await.unwrap().is_empty());
+    assert_eq!(
+        b.delete_raw_modified(&n, false, DateTime::from(500), DateTime::from(100))
+            .await
+            .unwrap(),
+        StatusCode::BadNoData
+    );
+    // Unknown node delete_at_time → all BadNoEntryExists.
+    assert_eq!(
+        b.delete_at_time(&NodeId::new(9, "x"), vec![DateTime::from(1)])
+            .await
+            .unwrap(),
+        vec![StatusCode::BadNoEntryExists]
+    );
+}

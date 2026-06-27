@@ -149,3 +149,111 @@ async fn empty_batch_and_duplicate_timestamps_do_not_panic() {
     );
     assert_eq!(read_all(&b, &n).await.len(), 1);
 }
+
+// ---- US3: DeleteRawModified + DeleteAtTime (Part 11 §6.9.2 / §6.9.3) ----
+
+#[tokio::test]
+async fn delete_raw_modified_removes_range_and_reports_no_data() {
+    let b = SqliteHistoryBackend::new_in_memory().unwrap();
+    let n = node();
+    b.update_data(
+        &n,
+        PerformUpdateType::Insert,
+        vec![at(100, 1.0), at(200, 2.0), at(300, 3.0)],
+    )
+    .await
+    .unwrap();
+    // Delete [100, 300) → removes 100 and 200, leaves 300 → Good.
+    let r = b
+        .delete_raw_modified(&n, false, DateTime::from(100), DateTime::from(300))
+        .await
+        .unwrap();
+    assert_eq!(r, StatusCode::Good);
+    let left: Vec<f64> = read_all(&b, &n).await.iter().map(double).collect();
+    assert_eq!(left, vec![3.0]);
+    // Delete an empty range → BadNoData.
+    let r = b
+        .delete_raw_modified(&n, false, DateTime::from(1000), DateTime::from(2000))
+        .await
+        .unwrap();
+    assert_eq!(r, StatusCode::BadNoData);
+}
+
+#[tokio::test]
+async fn delete_modified_branch_leaves_raw_untouched() {
+    let b = SqliteHistoryBackend::new_in_memory().unwrap();
+    let n = node();
+    b.update_data(&n, PerformUpdateType::Insert, vec![at(100, 1.0)])
+        .await
+        .unwrap();
+    // Replace creates a modified (superseded) entry at tick 100.
+    b.update_data(&n, PerformUpdateType::Replace, vec![at(100, 2.0)])
+        .await
+        .unwrap();
+    // Deleting the modified branch over the range removes the superseded entry → Good.
+    let r = b
+        .delete_raw_modified(&n, true, DateTime::from(0), DateTime::from(1000))
+        .await
+        .unwrap();
+    assert_eq!(r, StatusCode::Good);
+    // Raw value is untouched (still the replacement 2.0).
+    assert_eq!(double(&read_all(&b, &n).await[0]), 2.0);
+    // Deleting modified again over the same range → nothing left → BadNoData.
+    let r = b
+        .delete_raw_modified(&n, true, DateTime::from(0), DateTime::from(1000))
+        .await
+        .unwrap();
+    assert_eq!(r, StatusCode::BadNoData);
+}
+
+#[tokio::test]
+async fn delete_at_time_per_timestamp_results() {
+    let b = SqliteHistoryBackend::new_in_memory().unwrap();
+    let n = node();
+    b.update_data(
+        &n,
+        PerformUpdateType::Insert,
+        vec![at(100, 1.0), at(300, 3.0)],
+    )
+    .await
+    .unwrap();
+    // [present 100, absent 200, present 300] → [Good, BadNoEntryExists, Good].
+    let r = b
+        .delete_at_time(
+            &n,
+            vec![
+                DateTime::from(100),
+                DateTime::from(200),
+                DateTime::from(300),
+            ],
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        r,
+        vec![
+            StatusCode::Good,
+            StatusCode::BadNoEntryExists,
+            StatusCode::Good
+        ]
+    );
+    assert!(
+        read_all(&b, &n).await.is_empty(),
+        "both present entries removed"
+    );
+}
+
+#[tokio::test]
+async fn delete_edges_do_not_panic() {
+    let b = SqliteHistoryBackend::new_in_memory().unwrap();
+    let n = node();
+    // Empty timestamp list → empty vec.
+    assert!(b.delete_at_time(&n, vec![]).await.unwrap().is_empty());
+    // Inverted range → BadNoData, no panic.
+    assert_eq!(
+        b.delete_raw_modified(&n, false, DateTime::from(500), DateTime::from(100))
+            .await
+            .unwrap(),
+        StatusCode::BadNoData
+    );
+}

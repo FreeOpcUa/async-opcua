@@ -602,6 +602,162 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
         })
     }
 
+    async fn delete_raw_modified(
+        &self,
+        node_id: &NodeId,
+        is_delete_modified: bool,
+        start_time: DateTime,
+        end_time: DateTime,
+    ) -> Result<StatusCode, StatusCode> {
+        self.prune_continuation_points();
+
+        let conn = self.connection.clone();
+        let node_id_str = node_id.to_string();
+        let start_ticks = start_time.ticks();
+        let end_ticks = end_time.ticks();
+
+        let deleted_count: Result<usize, SqliteError> = tokio::task::spawn_blocking(move || {
+            let mut conn = conn.lock();
+            let tx = conn.transaction()?;
+
+            let deleted_count = if start_ticks >= end_ticks {
+                0
+            } else if is_delete_modified {
+                tx.execute(
+                    "DELETE FROM modified_historical_data
+                     WHERE node_id = ?1
+                       AND source_timestamp >= ?2
+                       AND source_timestamp < ?3",
+                    params![node_id_str, start_ticks, end_ticks],
+                )?
+            } else {
+                let rows = {
+                    let mut stmt = tx.prepare(
+                        "SELECT source_timestamp, server_timestamp, value_blob, status_code
+                         FROM historical_data
+                         WHERE node_id = ?1
+                           AND source_timestamp >= ?2
+                           AND source_timestamp < ?3",
+                    )?;
+                    let rows =
+                        stmt.query_map(params![node_id_str, start_ticks, end_ticks], |row| {
+                            Ok((
+                                row.get::<_, i64>(0)?,
+                                row.get::<_, i64>(1)?,
+                                row.get::<_, Vec<u8>>(2)?,
+                                row.get::<_, i64>(3)?,
+                            ))
+                        })?;
+                    rows.collect::<Result<Vec<_>, _>>()?
+                };
+
+                for (source_ticks, server_ticks, value_blob, status_val) in &rows {
+                    insert_modified_historical_data(
+                        &tx,
+                        &node_id_str,
+                        *source_ticks,
+                        *server_ticks,
+                        value_blob,
+                        *status_val,
+                        4,
+                    )?;
+                }
+
+                tx.execute(
+                    "DELETE FROM historical_data
+                     WHERE node_id = ?1
+                       AND source_timestamp >= ?2
+                       AND source_timestamp < ?3",
+                    params![node_id_str, start_ticks, end_ticks],
+                )?
+            };
+
+            tx.commit()?;
+            Ok(deleted_count)
+        })
+        .await
+        .map_err(|_| StatusCode::BadInternalError)?;
+
+        deleted_count
+            .map(|count| {
+                if count > 0 {
+                    StatusCode::Good
+                } else {
+                    StatusCode::BadNoData
+                }
+            })
+            .map_err(|err| {
+                tracing::error!("SQLite error in delete_raw_modified: {:?}", err);
+                StatusCode::BadInternalError
+            })
+    }
+
+    async fn delete_at_time(
+        &self,
+        node_id: &NodeId,
+        req_times: Vec<DateTime>,
+    ) -> Result<Vec<StatusCode>, StatusCode> {
+        self.prune_continuation_points();
+
+        let conn = self.connection.clone();
+        let node_id_str = node_id.to_string();
+
+        let results: Result<Vec<StatusCode>, SqliteError> =
+            tokio::task::spawn_blocking(move || {
+                let mut conn = conn.lock();
+                let tx = conn.transaction()?;
+                let mut status_codes = Vec::with_capacity(req_times.len());
+
+                for req_time in req_times {
+                    let source_ticks = req_time.ticks();
+                    let existing = tx
+                        .query_row(
+                            "SELECT server_timestamp, value_blob, status_code FROM historical_data
+                             WHERE node_id = ?1 AND source_timestamp = ?2",
+                            params![node_id_str, source_ticks],
+                            |row| {
+                                Ok((
+                                    row.get::<_, i64>(0)?,
+                                    row.get::<_, Vec<u8>>(1)?,
+                                    row.get::<_, i64>(2)?,
+                                ))
+                            },
+                        )
+                        .optional()?;
+
+                    if let Some((server_ticks, value_blob, status_val)) = existing {
+                        insert_modified_historical_data(
+                            &tx,
+                            &node_id_str,
+                            source_ticks,
+                            server_ticks,
+                            &value_blob,
+                            status_val,
+                            4,
+                        )?;
+                        tx.execute(
+                            "DELETE FROM historical_data
+                             WHERE node_id = ?1 AND source_timestamp = ?2",
+                            params![node_id_str, source_ticks],
+                        )?;
+                        status_codes.push(StatusCode::Good);
+                    } else {
+                        status_codes.push(StatusCode::BadNoEntryExists);
+                    }
+                }
+
+                tx.commit()?;
+                Ok(status_codes)
+            })
+            .await
+            .map_err(|_| StatusCode::BadInternalError)?;
+
+        results.map_err(|err| {
+            tracing::error!("SQLite error in delete_at_time: {:?}", err);
+            StatusCode::BadInternalError
+        })
+    }
+
     async fn release_continuation_point(&self, token: Vec<u8>) -> Result<(), StatusCode> {
         self.continuation_points.lock().remove(&token);
         Ok(())

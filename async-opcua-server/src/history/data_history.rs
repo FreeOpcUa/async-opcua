@@ -188,10 +188,130 @@ impl HistoryStorageBackend for InMemoryDataHistory {
 
         Ok(results)
     }
+
+    async fn delete_raw_modified(
+        &self,
+        node_id: &NodeId,
+        is_delete_modified: bool,
+        start_time: DateTime,
+        end_time: DateTime,
+    ) -> Result<StatusCode, StatusCode> {
+        let start_ticks = start_time.ticks();
+        let end_ticks = end_time.ticks();
+        if start_ticks >= end_ticks {
+            return Ok(StatusCode::BadNoData);
+        }
+
+        if is_delete_modified {
+            let mut modified_values = self.modified_values.write();
+            let Some(node_modified_values) = modified_values.get_mut(node_id) else {
+                return Ok(StatusCode::BadNoData);
+            };
+
+            let ticks_to_remove = node_modified_values
+                .range(start_ticks..end_ticks)
+                .map(|(tick, _)| *tick)
+                .collect::<Vec<_>>();
+
+            let mut removed_count = 0;
+            for tick in ticks_to_remove {
+                if let Some(entries) = node_modified_values.remove(&tick) {
+                    removed_count += entries.len();
+                }
+            }
+
+            if node_modified_values.is_empty() {
+                modified_values.remove(node_id);
+            }
+
+            return Ok(if removed_count > 0 {
+                StatusCode::Good
+            } else {
+                StatusCode::BadNoData
+            });
+        }
+
+        let mut raw_values = self.raw_values.write();
+        let Some(node_values) = raw_values.get_mut(node_id) else {
+            return Ok(StatusCode::BadNoData);
+        };
+
+        let values_to_delete = node_values
+            .range(start_ticks..end_ticks)
+            .map(|(tick, value)| (*tick, value.clone()))
+            .collect::<Vec<_>>();
+
+        if values_to_delete.is_empty() {
+            return Ok(StatusCode::BadNoData);
+        }
+
+        {
+            let mut modified_values = self.modified_values.write();
+            let node_modified_values = modified_values.entry(node_id.clone()).or_default();
+            for (tick, value) in &values_to_delete {
+                node_modified_values
+                    .entry(*tick)
+                    .or_default()
+                    .push((value.clone(), delete_modification_info()));
+            }
+        }
+
+        for (tick, _) in values_to_delete {
+            node_values.remove(&tick);
+        }
+
+        Ok(StatusCode::Good)
+    }
+
+    async fn delete_at_time(
+        &self,
+        node_id: &NodeId,
+        req_times: Vec<DateTime>,
+    ) -> Result<Vec<StatusCode>, StatusCode> {
+        if req_times.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut status_codes = Vec::with_capacity(req_times.len());
+        let mut raw_values = self.raw_values.write();
+        let Some(node_values) = raw_values.get_mut(node_id) else {
+            for _ in req_times {
+                status_codes.push(StatusCode::BadNoEntryExists);
+            }
+            return Ok(status_codes);
+        };
+
+        let mut modified_values = self.modified_values.write();
+        for req_time in req_times {
+            let source_ticks = req_time.ticks();
+            if let Some(value) = node_values.remove(&source_ticks) {
+                modified_values
+                    .entry(node_id.clone())
+                    .or_default()
+                    .entry(source_ticks)
+                    .or_default()
+                    .push((value, delete_modification_info()));
+                status_codes.push(StatusCode::Good);
+            } else {
+                status_codes.push(StatusCode::BadNoEntryExists);
+            }
+        }
+
+        Ok(status_codes)
+    }
 }
 
 fn source_ticks(value: &DataValue) -> i64 {
     value.source_timestamp.unwrap_or_else(DateTime::now).ticks()
+}
+
+fn delete_modification_info() -> ModificationInfo {
+    ModificationInfo {
+        modification_time: DateTime::now(),
+        update_type: HistoryUpdateType::Delete,
+        // ponytail: user_name is empty because the storage layer has no request context.
+        user_name: UAString::null(),
+    }
 }
 
 fn decode_continuation_tick(token: Option<Vec<u8>>) -> Result<Option<i64>, StatusCode> {

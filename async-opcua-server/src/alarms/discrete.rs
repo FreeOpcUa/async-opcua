@@ -3,10 +3,11 @@
 
 use crate::address_space::{AddressSpace, VariableBuilder};
 use crate::alarms::replace_condition_type_definition;
+use crate::alarms::source_monitor::SourceMonitoredAlarm;
 use crate::alarms::state_machine::ConditionStateMachine;
 use opcua_core::events::AlarmEvent;
 use opcua_types::{
-    DataTypeId, DateTime, LocalizedText, NodeId, ObjectTypeId, VariableTypeId, Variant,
+    DataTypeId, DataValue, DateTime, LocalizedText, NodeId, ObjectTypeId, VariableTypeId, Variant,
 };
 use std::sync::Mutex;
 
@@ -150,11 +151,92 @@ impl DiscreteAlarm {
     }
 }
 
+impl SourceMonitoredAlarm for DiscreteAlarm {
+    fn source_node(&self) -> &NodeId {
+        &self.condition.source_node_id
+    }
+
+    fn condition_id(&self) -> &NodeId {
+        &self.condition.condition_id
+    }
+
+    fn re_evaluate(
+        &self,
+        address_space: &mut AddressSpace,
+        value: &DataValue,
+    ) -> Option<AlarmEvent> {
+        if value.status.is_some_and(|status| status.is_bad()) {
+            return None;
+        }
+
+        match value.value.as_ref()? {
+            Variant::Empty => None,
+            variant => self.update_value(address_space, variant.clone()),
+        }
+    }
+}
+
 impl DiscreteAlarmKind {
     fn type_id(self) -> NodeId {
         match self {
             Self::OffNormal => NodeId::from(ObjectTypeId::OffNormalAlarmType),
             Self::Trip => NodeId::from(ObjectTypeId::TripAlarmType),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::alarms::source_monitor::SourceMonitoredAlarm;
+    use opcua_types::{DataValue, StatusCode};
+
+    fn test_address_space() -> AddressSpace {
+        let mut address_space = AddressSpace::new();
+        address_space.add_namespace("http://opcfoundation.org/UA/", 0);
+        address_space.add_namespace("urn:test", 2);
+        address_space
+    }
+
+    #[test]
+    fn source_monitor_re_evaluate_delegates_raw_discrete_variant_and_skips_bad_status() {
+        let mut address_space = test_address_space();
+        let alarm = DiscreteAlarm::create_in_address_space(
+            &mut address_space,
+            2,
+            "DeviceA",
+            "RunState",
+            NodeId::new(2, "DeviceA.Running"),
+            DiscreteAlarmKind::OffNormal,
+            Variant::from(false),
+        );
+
+        let active_event = SourceMonitoredAlarm::re_evaluate(
+            &alarm,
+            &mut address_space,
+            &DataValue::from((Variant::from(true), StatusCode::Good)),
+        )
+        .expect("off-normal value should activate the discrete alarm");
+        assert!(active_event.active_state);
+
+        let repeat_event = SourceMonitoredAlarm::re_evaluate(
+            &alarm,
+            &mut address_space,
+            &DataValue::from((Variant::from(true), StatusCode::Good)),
+        );
+        assert!(
+            repeat_event.is_none(),
+            "unchanged active state should not emit a second event"
+        );
+
+        let bad_status_event = SourceMonitoredAlarm::re_evaluate(
+            &alarm,
+            &mut address_space,
+            &DataValue::from((Variant::from(false), StatusCode::Bad)),
+        );
+        assert!(
+            bad_status_event.is_none(),
+            "Bad status source values should be skipped"
+        );
     }
 }

@@ -98,10 +98,10 @@ Active(High) + event with no manual call.
 **Goal**: NonExclusive + discrete/off-normal alarms self-trigger too.
 **Independent test**: repeat US1 for NonExclusiveLimitAlarmType and a discrete alarm.
 
-- [ ] T031 [US5] Implement `SourceMonitoredAlarm` for `NonExclusiveLimitAlarmType` in `alarms/limit.rs` (extract f64 → its `update_value`) (Spec: Part 9 §5.8.19–§5.8.20 NonExclusiveLimitAlarmType; §5.8.2 InputNode)
-- [ ] T032 [US5] Implement `SourceMonitoredAlarm` for the discrete / off-normal alarm in `alarms/discrete.rs` (its value type → `update_value`) (Spec: Part 9 §5.8.3 DiscreteAlarmType / §5.8.4 OffNormalAlarmType; §5.8.2 InputNode)
-- [ ] T033 [P] [US5] [Claude] Integration test: NonExclusiveLimitAlarm — a value crossing multiple limits auto-activates the Hi/HiHi/Lo/LoLo states (Spec: Part 9 §5.8.19–§5.8.20)
-- [ ] T034 [P] [US5] [Claude] Integration test: a discrete/off-normal alarm enters its off-normal value via a source write → auto-activates (Spec: Part 9 §5.8.4 OffNormalAlarmType)
+- [X] T031 [US5] Implement `SourceMonitoredAlarm` for `NonExclusiveLimitAlarmType` in `alarms/limit.rs` (extract f64 → its `update_value`) (Spec: Part 9 §5.8.19–§5.8.20 NonExclusiveLimitAlarmType; §5.8.2 InputNode)
+- [X] T032 [US5] Implement `SourceMonitoredAlarm` for the discrete / off-normal alarm in `alarms/discrete.rs` (its value type → `update_value`) (Spec: Part 9 §5.8.3 DiscreteAlarmType / §5.8.4 OffNormalAlarmType; §5.8.2 InputNode)
+- [X] T033 [P] [US5] [Claude] Integration test: NonExclusiveLimitAlarm — a value crossing multiple limits auto-activates the Hi/HiHi/Lo/LoLo states (Spec: Part 9 §5.8.19–§5.8.20)
+- [X] T034 [P] [US5] [Claude] Integration test: a discrete/off-normal alarm enters its off-normal value via a source write → auto-activates (Spec: Part 9 §5.8.4 OffNormalAlarmType)
 
 **Checkpoint**: source monitoring generalizes across the alarm types.
 
@@ -109,11 +109,11 @@ Active(High) + event with no manual call.
 
 ## Phase 8: Polish & cross-cutting
 
-- [ ] T035 [P] Run the FULL `cargo test -p async-opcua-server` (all binaries) + the `async-opcua` alarms integration suite — zero regressions, manual `update_value` unaffected (Spec: SC-004)
-- [ ] T036 [P] Build + test under `--no-default-features` and `--all-features`; fix any feature-gating gaps (Spec: SC-007; FR-012)
-- [ ] T037 [P] `cargo clippy --workspace --all-targets` (default + no-default legs) + `cargo fmt --all --check` clean (Spec: Constitution V)
-- [ ] T038 [P] Security review of the write-path hook: no panic on any source value, work bounded to the bound-alarm set, Write result isolated from alarm-eval errors (Spec: Constitution IV)
-- [ ] T039 [P] Add a docs section (`docs/server.md` or `docs/advanced_server.md`) on alarm source monitoring + `monitor_alarm_source`, mirroring quickstart.md (Spec: Part 9 §5.8.2)
+- [X] T035 [P] Run the FULL `cargo test -p async-opcua-server` (all binaries) + the `async-opcua` alarms integration suite — zero regressions, manual `update_value` unaffected (Spec: SC-004)
+- [X] T036 [P] Build + test under `--no-default-features` and `--all-features`; fix any feature-gating gaps (Spec: SC-007; FR-012)
+- [X] T037 [P] `cargo clippy --workspace --all-targets` (default + no-default legs) + `cargo fmt --all --check` clean (Spec: Constitution V)
+- [X] T038 [P] Security review of the write-path hook: no panic on any source value, work bounded to the bound-alarm set, Write result isolated from alarm-eval errors (Spec: Constitution IV)
+- [X] T039 [P] Add a docs section (`docs/server.md` or `docs/advanced_server.md`) on alarm source monitoring + `monitor_alarm_source`, mirroring quickstart.md (Spec: Part 9 §5.8.2)
 - [ ] T040 Update `specs/SESSION-HANDOFF.md` + memory with the alarm source-monitoring outcome (Spec: project process)
 
 ---

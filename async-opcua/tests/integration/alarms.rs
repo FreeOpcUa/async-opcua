@@ -2280,3 +2280,72 @@ async fn unsampled_alarm_ignores_out_of_band_until_write() {
         .expect("a Write drives the alarm");
     assert!(got.active_state);
 }
+
+// ---------------------------------------------------------------------------
+// US5 — source monitoring generalizes across alarm types: NonExclusiveLimitAlarmType
+// (the shared LimitAlarm in NonExclusive mode) and the discrete / off-normal alarm.
+// ---------------------------------------------------------------------------
+
+fn nonexclusive_level_cfg() -> LimitConfig {
+    LimitConfig::new(LimitMode::NonExclusive)
+        .with_high(LimitDef {
+            value: 100.0,
+            deadband: 5.0,
+            severity: 400,
+        })
+        .with_high_high(LimitDef {
+            value: 110.0,
+            deadband: 5.0,
+            severity: 700,
+        })
+        .build()
+        .expect("valid config")
+}
+
+#[tokio::test]
+async fn nonexclusive_limit_alarm_auto_fires_on_source_write() {
+    let (_tester, nm, session) = setup_alarms().await;
+    let event_source = make_event_source(&nm, "NeSrc33");
+    let input = make_writable_double(&nm, "NeIn33");
+    bind_via_helper(
+        &nm,
+        "NeTank33",
+        &event_source,
+        &input,
+        nonexclusive_level_cfg(),
+    );
+    let mut events = sub_with_events(&session, &event_source).await;
+    // Part 9 §5.8.19–§5.8.20: a value past HighHigh auto-activates without a manual update_value.
+    session.write(&[write_double(&input, 115.0)]).await.unwrap();
+    let got = timeout(Duration::from_secs(2), recv_alarm(&mut events))
+        .await
+        .expect("a NonExclusiveLimitAlarm auto-fires on a source write");
+    assert!(got.active_state);
+}
+
+#[tokio::test]
+async fn discrete_alarm_auto_fires_on_source_write() {
+    let (_tester, nm, session) = setup_alarms().await;
+    let event_source = make_event_source(&nm, "DiscSrc34");
+    let input = make_writable_double(&nm, "DiscIn34");
+    // OffNormalAlarmType with NormalState = 0.0; any other value is off-normal (Part 9 §5.8.4).
+    let alarm = register_discrete_alarm(
+        nm.address_space(),
+        &nm,
+        "DiscPump34",
+        "State",
+        event_source.clone(),
+        DiscreteAlarmKind::OffNormal,
+        Variant::from(0.0f64),
+    );
+    // Write-driven binding: the written InputNode → the discrete alarm.
+    nm.inner()
+        .alarm_source_registry()
+        .register(input.clone(), Arc::new(alarm));
+    let mut events = sub_with_events(&session, &event_source).await;
+    session.write(&[write_double(&input, 1.0)]).await.unwrap();
+    let got = timeout(Duration::from_secs(2), recv_alarm(&mut events))
+        .await
+        .expect("a discrete/off-normal alarm auto-fires on a source write");
+    assert!(got.active_state);
+}

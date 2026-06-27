@@ -263,3 +263,39 @@ For a secure baseline, `with_secure_role_preset()` enables enforcement and appli
 Part 3 §4.9.2 suggested permissions for the well-known roles in one call. Per-`ServerUserToken`
 roles can also be declared with `ServerUserToken::with_roles`, and the `RoleSet` management
 methods (`AddRole`/`AddIdentity`/…) allow runtime changes by a `SecurityAdmin` session.
+
+## Automatic alarm source monitoring
+
+A&C alarms (`LimitAlarm` for the Exclusive/NonExclusive limit types, `DiscreteAlarm` for
+off-normal types) can be bound to a source Variable — their OPC UA Part 9 §5.8.2 `InputNode` —
+so the server **re-evaluates the alarm and dispatches the event automatically** whenever that
+source changes. This closes the loop: you no longer call `update_value` by hand.
+
+`SimpleNodeManager::monitor_alarm_source` performs the binding in one call — it sets the
+`InputNode` property, adds the Part 9 §4.4 `HasCondition` reference (so the binding is
+browsable from the source), and registers the source→alarm index that the Write path consults:
+
+```rust ignore
+// A writable process variable and a limit alarm with a High limit.
+let source = NodeId::new(2, "Temperature");
+let alarm = register_limit_alarm(node_manager.address_space(), &node_manager,
+    "Tank", "Level", event_source, cfg /* High = 80.0, deadband … */);
+
+// Bind once: InputNode + HasCondition + source index.
+let alarm = node_manager.monitor_alarm_source(&source, alarm);
+```
+
+From then on a client (or server) `Write` to the source drives the alarm:
+
+```rust ignore
+session.write(&[WriteValue::value(source.clone(), 95.0)]).await?; // → Active(High) + AlarmEvent
+session.write(&[WriteValue::value(source.clone(), 20.0)]).await?; // → Inactive (deadband) + clearing event
+```
+
+The re-evaluation runs **after** the Write batch under a fresh address-space write lock, so the
+client's Write result is fully determined first and is never affected by an alarm-eval outcome
+(a bad/null/non-numeric source value simply produces no event and never fails the write). A
+programmatic `set_source_value(&source, value)` drives the same path. For sources that change
+outside the Write path, `monitor_alarm_source_sampled(&source, alarm, interval)` additionally
+polls the `InputNode` each `interval` (off by default). Manually-driven alarms keep working —
+`update_value` stays public and unchanged.

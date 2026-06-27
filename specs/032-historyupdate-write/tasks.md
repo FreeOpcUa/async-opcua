@@ -135,14 +135,14 @@ backends; read via the existing annotation path.
 **Goal**: `UpdateEvent` (Insert/Replace/Update) and `DeleteEvent` (by EventId) on both backends.
 **Independent test**: insert events, read via event path, delete by EventId.
 
-- [ ] T054 [US6] Implement in-memory `update_event` on `InMemoryEventHistory` (`event_history.rs`): store events keyed by EventId per the supplied EventFilter select clauses; Insert/Replace/Update matrix (Spec: Part 11 §6.8.4; Part 4 §11.7.4)
-- [ ] T055 [US6] Implement in-memory `delete_event` on `InMemoryEventHistory`: delete by EventId list; per-id `Good`/`Bad_NoEntryExists` (Spec: Part 11 §6.9.4; Part 4 §11.7.8)
-- [ ] T056 [US6] Implement sqlite `update_event`: persist events keyed by EventId, Insert/Replace/Update matrix, read via `read_events` (Spec: Part 11 §6.8.4; Part 4 §11.7.4)
-- [ ] T057 [US6] Implement sqlite `delete_event`: delete by EventId list with per-id results (Spec: Part 11 §6.9.4; Part 4 §11.7.8)
-- [ ] T058 [US6] Bound event-write work to the input list and reject malformed event field lists per-entry without panic (Spec: FR-013; Constitution IV)
-- [ ] T059 [P] [US6] [Claude] test (both backends): UpdateEvent(Insert) then read_events returns the event → `Good_EntryInserted` (Spec: Part 11 §6.8.4)
-- [ ] T060 [P] [US6] [Claude] test (both backends): UpdateEvent(Replace) replaces an existing event (Spec: Part 11 §6.8.4)
-- [ ] T061 [P] [US6] [Claude] test (both backends): DeleteEvent([present, absent]) → `[Good, Bad_NoEntryExists]`, read-back confirms (Spec: Part 11 §6.9.4)
+- [X] T054 [US6] Implement in-memory `update_event` on `InMemoryEventHistory` (`event_history.rs`): store events keyed by EventId per the supplied EventFilter select clauses; Insert/Replace/Update matrix (Spec: Part 11 §6.8.4; Part 4 §11.7.4)
+- [X] T055 [US6] Implement in-memory `delete_event` on `InMemoryEventHistory`: delete by EventId list; per-id `Good`/`Bad_NoEntryExists` (Spec: Part 11 §6.9.4; Part 4 §11.7.8)
+- [X] T056 [US6] Implement sqlite `update_event`: persist events keyed by EventId, Insert/Replace/Update matrix, read via `read_events` (Spec: Part 11 §6.8.4; Part 4 §11.7.4)
+- [X] T057 [US6] Implement sqlite `delete_event`: delete by EventId list with per-id results (Spec: Part 11 §6.9.4; Part 4 §11.7.8)
+- [X] T058 [US6] Bound event-write work to the input list and reject malformed event field lists per-entry without panic (Spec: FR-013; Constitution IV)
+- [X] T059 [P] [US6] [Claude] test (both backends): UpdateEvent(Insert) then read_events returns the event → `Good_EntryInserted` (Spec: Part 11 §6.8.4)
+- [X] T060 [P] [US6] [Claude] test (both backends): UpdateEvent(Replace) replaces an existing event (Spec: Part 11 §6.8.4)
+- [X] T061 [P] [US6] [Claude] test (both backends): DeleteEvent([present, absent]) → `[Good, Bad_NoEntryExists]`, read-back confirms (Spec: Part 11 §6.9.4)
 
 **Checkpoint**: event-history write complete on both backends.
 

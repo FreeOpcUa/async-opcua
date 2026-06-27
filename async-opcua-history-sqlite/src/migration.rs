@@ -54,5 +54,15 @@ pub fn run_migrations(conn: &Connection) -> Result<(), Error> {
          ON historical_annotations (node_id, source_timestamp ASC)",
         [],
     )?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS historical_events (
+            node_id TEXT NOT NULL,
+            event_id BLOB NOT NULL,
+            field_blob BLOB NOT NULL,
+            event_time INTEGER NOT NULL,
+            PRIMARY KEY (node_id, event_id)
+        )",
+        [],
+    )?;
     Ok(())
 }

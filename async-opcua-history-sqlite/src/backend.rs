@@ -7,9 +7,10 @@ use opcua_server::{
     history::{HistoryRawModifiedResult, HistoryStorageBackend},
 };
 use opcua_types::{
-    AggregateConfiguration, Annotation, BinaryEncodable, ContextOwned, DataValue, DateTime,
-    EventFilter, HistoryEventFieldList, HistoryUpdateType, ModificationInfo, NodeId,
-    PerformUpdateType, StatusCode, UAString, Variant,
+    AggregateConfiguration, Annotation, BinaryDecodable, BinaryEncodable, ByteString, ContextOwned,
+    DataValue, DateTime, EventFilter, HistoryEventFieldList, HistoryUpdateType, ModificationInfo,
+    NodeId, ObjectTypeId, PerformUpdateType, QualifiedName, SimpleAttributeOperand, StatusCode,
+    UAString, Variant,
 };
 use parking_lot::Mutex;
 use rusqlite::{params, Connection, Error as SqliteError, OptionalExtension};
@@ -84,6 +85,8 @@ const CONTINUATION_POINT_MAX_AGE: Duration = Duration::from_secs(300);
 // OPC UA treats num_values_per_node == 0 as "return all". Keep that API
 // behavior paged, but cap each SQL read so one request cannot scan forever.
 const READ_RAW_MODIFIED_UNBOUNDED_HARD_LIMIT: usize = 100_000;
+const EVENT_ID_FIELD_NAME: &str = "EventId";
+const EVENT_TIME_FIELD_NAME: &str = "Time";
 
 fn insert_modified_historical_data(
     tx: &rusqlite::Transaction<'_>,
@@ -125,6 +128,78 @@ fn is_annotation_data_value(value: &DataValue) -> bool {
         value.value.as_ref(),
         Some(Variant::ExtensionObject(object)) if object.inner_as::<Annotation>().is_some()
     )
+}
+
+fn event_id_select_clause_index(filter: &EventFilter) -> Option<usize> {
+    base_event_field_select_clause_index(filter, EVENT_ID_FIELD_NAME)
+}
+
+fn event_time_select_clause_index(filter: &EventFilter) -> Option<usize> {
+    base_event_field_select_clause_index(filter, EVENT_TIME_FIELD_NAME)
+}
+
+fn base_event_field_select_clause_index(filter: &EventFilter, field_name: &str) -> Option<usize> {
+    filter
+        .select_clauses
+        .as_deref()?
+        .iter()
+        .position(|clause| is_base_event_field_select_clause(clause, field_name))
+}
+
+fn is_base_event_field_select_clause(clause: &SimpleAttributeOperand, field_name: &str) -> bool {
+    clause.type_definition_id == ObjectTypeId::BaseEventType
+        && is_base_event_field_browse_path(clause.browse_path.as_deref(), field_name)
+}
+
+fn is_base_event_field_browse_path(
+    browse_path: Option<&[QualifiedName]>,
+    field_name: &str,
+) -> bool {
+    matches!(
+        browse_path,
+        Some([name]) if name.namespace_index == 0 && name.name.as_ref() == field_name
+    )
+}
+
+fn event_id_bytes_from_field_list(
+    event: &HistoryEventFieldList,
+    event_id_index: usize,
+) -> Option<Vec<u8>> {
+    match event.event_fields.as_ref()?.get(event_id_index) {
+        Some(Variant::ByteString(event_id)) => Some(event_id.as_ref().to_vec()),
+        _ => None,
+    }
+}
+
+fn event_time_from_field_list(
+    event: &HistoryEventFieldList,
+    event_time_index: Option<usize>,
+) -> i64 {
+    event_time_index
+        .and_then(|index| event.event_fields.as_ref()?.get(index))
+        .and_then(|field| match field {
+            Variant::DateTime(time) => Some(time.ticks()),
+            _ => None,
+        })
+        .unwrap_or(0)
+}
+
+fn encode_history_event_field_list(event: &HistoryEventFieldList) -> Vec<u8> {
+    let ctx_owned = ContextOwned::default();
+    let ctx = ctx_owned.context();
+    event.encode_to_vec(&ctx)
+}
+
+fn row_to_history_event_field_list(
+    row: &rusqlite::Row<'_>,
+) -> Result<HistoryEventFieldList, SqliteError> {
+    let blob: Vec<u8> = row.get(0)?;
+    let ctx_owned = ContextOwned::default();
+    let ctx = ctx_owned.context();
+    let mut cursor = std::io::Cursor::new(blob);
+    HistoryEventFieldList::decode(&mut cursor, &ctx).map_err(|err| {
+        SqliteError::FromSqlConversionFailure(0, rusqlite::types::Type::Blob, Box::new(err))
+    })
 }
 
 impl SqliteHistoryBackend {
@@ -617,10 +692,10 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
 
     async fn read_events(
         &self,
-        _node_id: &NodeId,
+        node_id: &NodeId,
         _start_time: DateTime,
         _end_time: DateTime,
-        _num_values_per_node: u32,
+        num_values_per_node: u32,
         _filter: &EventFilter,
         continuation_point: Option<Vec<u8>>,
     ) -> Result<(Vec<HistoryEventFieldList>, Option<Vec<u8>>), StatusCode> {
@@ -628,7 +703,39 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
             return Err(StatusCode::BadContinuationPointInvalid);
         }
 
-        Ok((Vec::new(), None))
+        let conn = self.connection.clone();
+        let node_id_str = node_id.to_string();
+        let row_limit = if num_values_per_node > 0 {
+            num_values_per_node as i64
+        } else {
+            i64::MAX
+        };
+
+        let events: Result<Vec<HistoryEventFieldList>, SqliteError> =
+            tokio::task::spawn_blocking(move || {
+                let conn = conn.lock();
+                let mut stmt = conn.prepare(
+                    "SELECT field_blob
+                     FROM historical_events
+                     WHERE node_id = ?1
+                     ORDER BY event_time ASC, rowid ASC
+                     LIMIT ?2",
+                )?;
+                // ponytail: inserted events are returned with the written field shape, without
+                // cross-filter re-evaluation, matching the in-memory backend.
+                let rows = stmt.query_map(
+                    params![node_id_str, row_limit],
+                    row_to_history_event_field_list,
+                )?;
+                rows.collect()
+            })
+            .await
+            .map_err(|_| StatusCode::BadInternalError)?;
+
+        events.map(|events| (events, None)).map_err(|err| {
+            tracing::error!("SQLite error in read_events: {:?}", err);
+            StatusCode::BadInternalError
+        })
     }
 
     async fn read_annotations(
@@ -1013,6 +1120,132 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
         })
     }
 
+    async fn update_event(
+        &self,
+        node_id: &NodeId,
+        filter: &EventFilter,
+        events: Vec<HistoryEventFieldList>,
+        perform: PerformUpdateType,
+    ) -> Result<Vec<StatusCode>, StatusCode> {
+        self.prune_continuation_points();
+
+        if events.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let Some(event_id_index) = event_id_select_clause_index(filter) else {
+            return Ok(vec![StatusCode::BadInvalidArgument; events.len()]);
+        };
+        let event_time_index = event_time_select_clause_index(filter);
+
+        let conn = self.connection.clone();
+        let node_id_str = node_id.to_string();
+
+        let results: Result<Vec<StatusCode>, SqliteError> =
+            tokio::task::spawn_blocking(move || {
+                let mut conn = conn.lock();
+                let tx = conn.transaction()?;
+                let mut status_codes = Vec::with_capacity(events.len());
+
+                for event in events {
+                    let Some(event_id) = event_id_bytes_from_field_list(&event, event_id_index)
+                    else {
+                        status_codes.push(StatusCode::BadInvalidArgument);
+                        continue;
+                    };
+
+                    let field_blob = encode_history_event_field_list(&event);
+                    let event_time = event_time_from_field_list(&event, event_time_index);
+                    let existing = tx
+                        .query_row(
+                            "SELECT 1 FROM historical_events
+                             WHERE node_id = ?1 AND event_id = ?2",
+                            params![node_id_str, &event_id],
+                            |_| Ok(()),
+                        )
+                        .optional()?;
+
+                    match perform {
+                        PerformUpdateType::Insert => {
+                            if existing.is_some() {
+                                status_codes.push(StatusCode::BadEntryExists);
+                            } else {
+                                tx.execute(
+                                    "INSERT INTO historical_events (
+                                        node_id,
+                                        event_id,
+                                        field_blob,
+                                        event_time
+                                    ) VALUES (?1, ?2, ?3, ?4)",
+                                    params![node_id_str, &event_id, field_blob, event_time],
+                                )?;
+                                status_codes.push(StatusCode::GoodEntryInserted);
+                            }
+                        }
+                        PerformUpdateType::Replace => {
+                            if existing.is_some() {
+                                tx.execute(
+                                    "UPDATE historical_events
+                                     SET field_blob = ?3,
+                                         event_time = ?4
+                                     WHERE node_id = ?1 AND event_id = ?2",
+                                    params![node_id_str, &event_id, field_blob, event_time],
+                                )?;
+                                status_codes.push(StatusCode::GoodEntryReplaced);
+                            } else {
+                                status_codes.push(StatusCode::BadNoEntryExists);
+                            }
+                        }
+                        PerformUpdateType::Update => {
+                            if existing.is_some() {
+                                tx.execute(
+                                    "UPDATE historical_events
+                                     SET field_blob = ?3,
+                                         event_time = ?4
+                                     WHERE node_id = ?1 AND event_id = ?2",
+                                    params![node_id_str, &event_id, field_blob, event_time],
+                                )?;
+                                status_codes.push(StatusCode::GoodEntryReplaced);
+                            } else {
+                                tx.execute(
+                                    "INSERT INTO historical_events (
+                                        node_id,
+                                        event_id,
+                                        field_blob,
+                                        event_time
+                                    ) VALUES (?1, ?2, ?3, ?4)",
+                                    params![node_id_str, &event_id, field_blob, event_time],
+                                )?;
+                                status_codes.push(StatusCode::GoodEntryInserted);
+                            }
+                        }
+                        PerformUpdateType::Remove => {
+                            if existing.is_some() {
+                                tx.execute(
+                                    "DELETE FROM historical_events
+                                     WHERE node_id = ?1 AND event_id = ?2",
+                                    params![node_id_str, &event_id],
+                                )?;
+                                status_codes.push(StatusCode::Good);
+                            } else {
+                                status_codes.push(StatusCode::BadNoEntryExists);
+                            }
+                        }
+                    }
+                }
+
+                tx.commit()?;
+                Ok(status_codes)
+            })
+            .await
+            .map_err(|_| StatusCode::BadInternalError)?;
+
+        results.map_err(|err| {
+            tracing::error!("SQLite error in update_event: {:?}", err);
+            StatusCode::BadInternalError
+        })
+    }
+
     async fn delete_raw_modified(
         &self,
         node_id: &NodeId,
@@ -1165,6 +1398,61 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
 
         results.map_err(|err| {
             tracing::error!("SQLite error in delete_at_time: {:?}", err);
+            StatusCode::BadInternalError
+        })
+    }
+
+    async fn delete_event(
+        &self,
+        node_id: &NodeId,
+        event_ids: Vec<ByteString>,
+    ) -> Result<Vec<StatusCode>, StatusCode> {
+        self.prune_continuation_points();
+
+        if event_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let conn = self.connection.clone();
+        let node_id_str = node_id.to_string();
+
+        let results: Result<Vec<StatusCode>, SqliteError> =
+            tokio::task::spawn_blocking(move || {
+                let mut conn = conn.lock();
+                let tx = conn.transaction()?;
+                let mut status_codes = Vec::with_capacity(event_ids.len());
+
+                for event_id in event_ids {
+                    let event_id_bytes = event_id.as_ref();
+                    let existing = tx
+                        .query_row(
+                            "SELECT 1 FROM historical_events
+                             WHERE node_id = ?1 AND event_id = ?2",
+                            params![node_id_str, event_id_bytes],
+                            |_| Ok(()),
+                        )
+                        .optional()?;
+
+                    if existing.is_some() {
+                        tx.execute(
+                            "DELETE FROM historical_events
+                             WHERE node_id = ?1 AND event_id = ?2",
+                            params![node_id_str, event_id_bytes],
+                        )?;
+                        status_codes.push(StatusCode::Good);
+                    } else {
+                        status_codes.push(StatusCode::BadNoEntryExists);
+                    }
+                }
+
+                tx.commit()?;
+                Ok(status_codes)
+            })
+            .await
+            .map_err(|_| StatusCode::BadInternalError)?;
+
+        results.map_err(|err| {
+            tracing::error!("SQLite error in delete_event: {:?}", err);
             StatusCode::BadInternalError
         })
     }

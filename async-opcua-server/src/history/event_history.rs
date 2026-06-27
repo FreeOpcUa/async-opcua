@@ -1,12 +1,13 @@
 //! In-memory event history storage.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{hash_map::Entry, HashMap, VecDeque};
 
 use async_trait::async_trait;
 use opcua_core::{events::AlarmEvent, sync::RwLock};
 use opcua_nodes::DefaultTypeTree;
 use opcua_types::{
-    DataValue, DateTime, EventFilter, HistoryEventFieldList, NodeId, PerformUpdateType, StatusCode,
+    ByteString, DataValue, DateTime, EventFilter, HistoryEventFieldList, NodeId, ObjectTypeId,
+    PerformUpdateType, QualifiedName, SimpleAttributeOperand, StatusCode, Variant,
 };
 
 use crate::{
@@ -16,10 +17,16 @@ use crate::{
 };
 
 const DEFAULT_MAX_EVENTS_PER_NODE: usize = 1000;
+const EVENT_ID_FIELD_NAME: &str = "EventId";
+
+type AlarmEventStore = HashMap<NodeId, VecDeque<AlarmEvent>>;
+type InsertedEventFieldsById = HashMap<ByteString, HistoryEventFieldList>;
+type InsertedEventStore = HashMap<NodeId, InsertedEventFieldsById>;
 
 /// In-memory historical event backend for condition events.
 pub struct InMemoryEventHistory {
-    events: RwLock<HashMap<NodeId, VecDeque<AlarmEvent>>>,
+    events: RwLock<AlarmEventStore>,
+    inserted_events: RwLock<InsertedEventStore>,
     max_per_node: usize,
 }
 
@@ -33,6 +40,7 @@ impl InMemoryEventHistory {
     pub fn with_capacity(max_per_node: usize) -> Self {
         Self {
             events: RwLock::new(HashMap::new()),
+            inserted_events: RwLock::new(HashMap::new()),
             max_per_node,
         }
     }
@@ -84,7 +92,7 @@ impl HistoryStorageBackend for InMemoryEventHistory {
             .filter(|event| event_time_in_range(event.time, start_time, end_time))
         {
             // ponytail: reverse reads use the same inclusive range but keep ascending order.
-            if limit.is_some_and(|limit| field_lists.len() >= limit) {
+            if !has_event_read_capacity(limit, field_lists.len()) {
                 // ponytail: this backend truncates to num_values_per_node without a continuation.
                 break;
             }
@@ -94,6 +102,25 @@ impl HistoryStorageBackend for InMemoryEventHistory {
                 field_lists.push(HistoryEventFieldList {
                     event_fields: fields.event_fields,
                 });
+            }
+        }
+
+        if has_event_read_capacity(limit, field_lists.len()) {
+            let inserted_events = self
+                .inserted_events
+                .read()
+                .get(node_id)
+                .map(|events| events.values().cloned().collect::<Vec<_>>())
+                .unwrap_or_default();
+
+            for event in inserted_events {
+                // ponytail: inserted events are returned with the field shape they were written
+                // with, without cross-filter re-evaluation. Upgrade path: store the full event
+                // and re-evaluate it against the read filter.
+                if !has_event_read_capacity(limit, field_lists.len()) {
+                    break;
+                }
+                field_lists.push(event);
             }
         }
 
@@ -120,6 +147,133 @@ impl HistoryStorageBackend for InMemoryEventHistory {
         _values: Vec<DataValue>,
     ) -> Result<Vec<StatusCode>, StatusCode> {
         Err(StatusCode::BadHistoryOperationUnsupported)
+    }
+
+    async fn update_event(
+        &self,
+        node_id: &NodeId,
+        filter: &EventFilter,
+        events: Vec<HistoryEventFieldList>,
+        perform: PerformUpdateType,
+    ) -> Result<Vec<StatusCode>, StatusCode> {
+        if events.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let Some(event_id_index) = event_id_select_clause_index(filter) else {
+            return Ok(vec![StatusCode::BadInvalidArgument; events.len()]);
+        };
+
+        let mut results = Vec::with_capacity(events.len());
+        let mut inserted_events = self.inserted_events.write();
+        let node_events = inserted_events.entry(node_id.clone()).or_default();
+
+        for event in events {
+            let Some(event_id) = event_id_from_field_list(&event, event_id_index) else {
+                results.push(StatusCode::BadInvalidArgument);
+                continue;
+            };
+
+            let status = match perform {
+                PerformUpdateType::Insert => match node_events.entry(event_id) {
+                    Entry::Vacant(entry) => {
+                        entry.insert(event);
+                        StatusCode::GoodEntryInserted
+                    }
+                    Entry::Occupied(_) => StatusCode::BadEntryExists,
+                },
+                PerformUpdateType::Replace => match node_events.entry(event_id) {
+                    Entry::Occupied(mut entry) => {
+                        entry.insert(event);
+                        StatusCode::GoodEntryReplaced
+                    }
+                    Entry::Vacant(_) => StatusCode::BadNoEntryExists,
+                },
+                PerformUpdateType::Update => match node_events.entry(event_id) {
+                    Entry::Occupied(mut entry) => {
+                        entry.insert(event);
+                        StatusCode::GoodEntryReplaced
+                    }
+                    Entry::Vacant(entry) => {
+                        entry.insert(event);
+                        StatusCode::GoodEntryInserted
+                    }
+                },
+                PerformUpdateType::Remove => {
+                    if node_events.remove(&event_id).is_some() {
+                        StatusCode::Good
+                    } else {
+                        StatusCode::BadNoEntryExists
+                    }
+                }
+            };
+            results.push(status);
+        }
+
+        Ok(results)
+    }
+
+    async fn delete_event(
+        &self,
+        node_id: &NodeId,
+        event_ids: Vec<ByteString>,
+    ) -> Result<Vec<StatusCode>, StatusCode> {
+        if event_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut inserted_events = self.inserted_events.write();
+        let Some(node_events) = inserted_events.get_mut(node_id) else {
+            return Ok(vec![StatusCode::BadNoEntryExists; event_ids.len()]);
+        };
+
+        let mut results = Vec::with_capacity(event_ids.len());
+        for event_id in event_ids {
+            if node_events.remove(&event_id).is_some() {
+                results.push(StatusCode::Good);
+            } else {
+                results.push(StatusCode::BadNoEntryExists);
+            }
+        }
+
+        Ok(results)
+    }
+}
+
+fn event_id_select_clause_index(filter: &EventFilter) -> Option<usize> {
+    filter
+        .select_clauses
+        .as_deref()?
+        .iter()
+        .position(is_event_id_select_clause)
+}
+
+fn is_event_id_select_clause(clause: &SimpleAttributeOperand) -> bool {
+    clause.type_definition_id == ObjectTypeId::BaseEventType
+        && is_event_id_browse_path(clause.browse_path.as_deref())
+}
+
+fn is_event_id_browse_path(browse_path: Option<&[QualifiedName]>) -> bool {
+    matches!(
+        browse_path,
+        Some([name]) if name.namespace_index == 0 && name.name.as_ref() == EVENT_ID_FIELD_NAME
+    )
+}
+
+fn event_id_from_field_list(
+    event: &HistoryEventFieldList,
+    event_id_index: usize,
+) -> Option<ByteString> {
+    match event.event_fields.as_ref()?.get(event_id_index) {
+        Some(Variant::ByteString(event_id)) => Some(event_id.clone()),
+        _ => None,
+    }
+}
+
+fn has_event_read_capacity(limit: Option<usize>, len: usize) -> bool {
+    match limit {
+        Some(limit) => len < limit,
+        None => true,
     }
 }
 

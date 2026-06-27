@@ -859,3 +859,76 @@ fn min_max_actual_time_set_multiple_values_bit_on_duplicate_extrema() {
         "a unique minimum must not set the MultipleValues bit"
     );
 }
+
+// ===========================================================================
+// Feature 034 — non-numeric (any-value-type) aggregates.
+// Shared fixtures: a DataValue with an arbitrary Variant value + status (T003).
+// ===========================================================================
+
+fn dvv(value: Variant, sec: u16, status: StatusCode) -> DataValue {
+    DataValue {
+        value: Some(value),
+        source_timestamp: Some(DateTime::from((2026, 6, 6, 12, 0, sec))),
+        status: Some(status),
+        ..Default::default()
+    }
+}
+
+fn good_v(value: Variant, sec: u16) -> DataValue {
+    dvv(value, sec, StatusCode::Good)
+}
+
+// --- US1: Count is value-type-independent (Part 13 §5.4.3.21) ---------------
+
+#[test]
+fn count_boolean_source_counts_good_points_regardless_of_type() {
+    let (start, end) = phase_b_interval();
+    // SC-001: N ∈ {0, 1, 5} good Boolean points → Count = N (previously 0).
+    let empty: [&DataValue; 0] = [];
+    let c0 = calculate_aggregate(&empty, &NodeId::new(0u16, ID_COUNT), start, end);
+    assert_eq!(c0.value, Some(Variant::Int32(0)));
+
+    let b0 = good_v(Variant::Boolean(true), 1);
+    let one = [&b0];
+    let c1 = calculate_aggregate(&one, &NodeId::new(0u16, ID_COUNT), start, end);
+    assert_eq!(c1.value, Some(Variant::Int32(1)));
+
+    let (a, b, c, d, e) = (
+        good_v(Variant::Boolean(true), 1),
+        good_v(Variant::Boolean(false), 2),
+        good_v(Variant::Boolean(true), 3),
+        good_v(Variant::Boolean(false), 4),
+        good_v(Variant::Boolean(true), 5),
+    );
+    let five = [&a, &b, &c, &d, &e];
+    let c5 = calculate_aggregate(&five, &NodeId::new(0u16, ID_COUNT), start, end);
+    assert_eq!(c5.value, Some(Variant::Int32(5)));
+}
+
+#[test]
+fn count_string_source_counts_good_only_excludes_bad() {
+    let (start, end) = phase_b_interval();
+    // 3 Good String points + 1 Bad-status point → Count = 3 (non-Good excluded, §5.4.3.21),
+    // independent of value type.
+    let s0 = good_v(Variant::from("on"), 1);
+    let s1 = good_v(Variant::from("off"), 2);
+    let s2 = good_v(Variant::from("on"), 3);
+    let bad = dvv(Variant::from("err"), 4, StatusCode::BadDeviceFailure);
+    let vals = [&s0, &s1, &s2, &bad];
+    let count = calculate_aggregate(&vals, &NodeId::new(0u16, ID_COUNT), start, end);
+    assert_eq!(count.value, Some(Variant::Int32(3)));
+}
+
+#[test]
+fn count_numeric_with_bad_point_unchanged_good_only() {
+    let (start, end) = phase_b_interval();
+    // Numeric regression: Good-only semantics are unchanged for numeric sources (FR-007) —
+    // 3 good + 1 bad numeric → Count = 3.
+    let g0 = good(10.0, 1);
+    let g1 = good(20.0, 2);
+    let g2 = good(30.0, 3);
+    let bad = dv(40.0, 4, StatusCode::BadDeviceFailure);
+    let vals = [&g0, &g1, &g2, &bad];
+    let count = calculate_aggregate(&vals, &NodeId::new(0u16, ID_COUNT), start, end);
+    assert_eq!(count.value, Some(Variant::Int32(3)));
+}

@@ -338,6 +338,14 @@ fn good_numeric_points<'a>(input: &AggregateInput<'a>) -> Vec<(DateTime, f64, &'
         .collect()
 }
 
+fn good_status_point_count(input: &AggregateInput<'_>) -> usize {
+    input
+        .values
+        .iter()
+        .filter(|v| v.status.is_none_or(|status| status.is_good()))
+        .count()
+}
+
 fn simple_bounded_points(input: &AggregateInput<'_>) -> Vec<(DateTime, f64)> {
     let good_points = good_numeric_points(input);
     let mut points = Vec::with_capacity(good_points.len() + usize::from(input.prior.is_some()));
@@ -1021,7 +1029,7 @@ fn quality_rank(status: StatusCode) -> u8 {
 }
 
 fn agg_count(input: &AggregateInput<'_>) -> DataValue {
-    let good_count = good_numeric_points(input).len() as i32;
+    let good_count = good_status_point_count(input) as i32;
     let status = if input.values.is_empty() {
         StatusCode::Good
     } else {

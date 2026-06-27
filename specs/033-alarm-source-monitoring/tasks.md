@@ -114,7 +114,7 @@ Active(High) + event with no manual call.
 - [X] T037 [P] `cargo clippy --workspace --all-targets` (default + no-default legs) + `cargo fmt --all --check` clean (Spec: Constitution V)
 - [X] T038 [P] Security review of the write-path hook: no panic on any source value, work bounded to the bound-alarm set, Write result isolated from alarm-eval errors (Spec: Constitution IV)
 - [X] T039 [P] Add a docs section (`docs/server.md` or `docs/advanced_server.md`) on alarm source monitoring + `monitor_alarm_source`, mirroring quickstart.md (Spec: Part 9 §5.8.2)
-- [ ] T040 Update `specs/SESSION-HANDOFF.md` + memory with the alarm source-monitoring outcome (Spec: project process)
+- [X] T040 Update `specs/SESSION-HANDOFF.md` + memory with the alarm source-monitoring outcome (Spec: project process)
 
 ---
 

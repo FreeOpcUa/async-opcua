@@ -14,7 +14,9 @@ _Last refreshed 2026-06-27 (after RBAC #031 + HistoryUpdate #032)._
 - **A&C (Part 9)** — AddComment (#169), DialogConditionType + Respond/Respond2 (#170), condition history /
   HistoryRead-events (#171), GeneralModelChangeEvent (#173), ConditionRefresh + Acknowledge/Confirm
   (#138), Discrete/OffNormal + Shelving/Suppression + branching + EURange limits (#152–#155), Exclusive/
-  NonExclusive limit alarms w/ deadband (#139). Remaining: **automatic source monitoring** (below).
+  NonExclusive limit alarms w/ deadband (#139), **automatic source monitoring** (033, PRs #206–#209):
+  bind an alarm to its InputNode → client Write / set_source_value / opt-in sampler auto-re-evaluates +
+  dispatches the event (no manual update_value). **A&C COMPLETE.**
 - **Aggregates (Part 13)** — full HistoryRead aggregate set (#142–#146); MultipleValues + status-bit edges
   (#175); AggregateFilter on MonitoredItems / aggregate subscriptions (#187/#188).
 - **PubSub (Part 14)** — secured UADP NetworkMessage (#56); writable config Methods: connection/group
@@ -29,10 +31,6 @@ _Last refreshed 2026-06-27 (after RBAC #031 + HistoryUpdate #032)._
   the sqlite backend AND a new in-memory store. Memory `feature-032-historyupdate-write`.
 
 ## To build (spec features, YAGNI-deferred)
-- **A&C automatic source monitoring (Part 9 §5.8.2 / §4.4)** — **IN PROGRESS, feature 033.** Bind an
-  alarm/condition to its `InputNode` (source variable), sample it, and auto-evaluate limit state
-  transitions (Active/Inactive, Hi/HiHi/Lo/LoLo + deadband) instead of requiring the integrator to drive
-  state manually. The last A&C gap — turns the limit-alarm types into a working closed loop.
 - **Aggregates follow-ons (Part 13):** HistoryUpdate of aggregates; annotation history AnnotationCount;
   non-numeric / complex aggregates.
 - **Security/PKI:** ChannelThumbprint binding; multi-cert mixed server (RSA+ECC per endpoint); better

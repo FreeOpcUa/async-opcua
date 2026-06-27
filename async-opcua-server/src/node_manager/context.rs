@@ -171,6 +171,11 @@ impl RequestContext {
         self.session.read().message_security_mode()
     }
 
+    /// Return whether missing RolePermissions should fail closed globally.
+    pub fn enforce_role_based_access(&self) -> bool {
+        self.info.config.limits.enforce_role_based_access
+    }
+
     /// Get the global type tree object. If your server needs per-user type trees,
     /// use `get_type_tree_for_user` instead.
     pub fn type_tree(&self) -> &RwLock<DefaultTypeTree> {

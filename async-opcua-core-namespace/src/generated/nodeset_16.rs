@@ -951,15 +951,41 @@ fn make_object_793(
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
         node: opcua::nodes::Object::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 2253u32),
-                opcua::types::NodeClass::Object,
-                opcua::types::QualifiedName::new(0u16, "Server"),
-                opcua::types::LocalizedText::new("", "Server"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
+            {
+                let mut base = opcua::nodes::Base::new_full(
+                    opcua::types::NodeId::new(0u16, 2253u32),
+                    opcua::types::NodeClass::Object,
+                    opcua::types::QualifiedName::new(0u16, "Server"),
+                    opcua::types::LocalizedText::new("", "Server"),
+                    None,
+                    Some(0u32),
+                    Some(0u32),
+                );
+                opcua::nodes::NodeBase::set_role_permissions(
+                    &mut base,
+                    vec![
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15644u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                4097u64 as i32,
+                            ),
+                        },
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15716u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                65423u64 as i32,
+                            ),
+                        },
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15704u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                65423u64 as i32,
+                            ),
+                        },
+                    ],
+                );
+                base
+            },
             opcua::nodes::EventNotifier::from_bits_truncate(1u8),
         )
         .into(),
@@ -1124,15 +1150,41 @@ fn make_object_814(
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
         node: opcua::nodes::Object::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 2268u32),
-                opcua::types::NodeClass::Object,
-                opcua::types::QualifiedName::new(0u16, "ServerCapabilities"),
-                opcua::types::LocalizedText::new("", "ServerCapabilities"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
+            {
+                let mut base = opcua::nodes::Base::new_full(
+                    opcua::types::NodeId::new(0u16, 2268u32),
+                    opcua::types::NodeClass::Object,
+                    opcua::types::QualifiedName::new(0u16, "ServerCapabilities"),
+                    opcua::types::LocalizedText::new("", "ServerCapabilities"),
+                    None,
+                    Some(0u32),
+                    Some(0u32),
+                );
+                opcua::nodes::NodeBase::set_role_permissions(
+                    &mut base,
+                    vec![
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15644u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                4097u64 as i32,
+                            ),
+                        },
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15716u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                65423u64 as i32,
+                            ),
+                        },
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15704u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                65423u64 as i32,
+                            ),
+                        },
+                    ],
+                );
+                base
+            },
             opcua::nodes::EventNotifier::from_bits_truncate(0u8),
         )
         .into(),
@@ -1297,15 +1349,41 @@ fn make_object_825(
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
         node: opcua::nodes::Object::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 11704u32),
-                opcua::types::NodeClass::Object,
-                opcua::types::QualifiedName::new(0u16, "OperationLimits"),
-                opcua::types::LocalizedText::new("", "OperationLimits"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
+            {
+                let mut base = opcua::nodes::Base::new_full(
+                    opcua::types::NodeId::new(0u16, 11704u32),
+                    opcua::types::NodeClass::Object,
+                    opcua::types::QualifiedName::new(0u16, "OperationLimits"),
+                    opcua::types::LocalizedText::new("", "OperationLimits"),
+                    None,
+                    Some(0u32),
+                    Some(0u32),
+                );
+                opcua::nodes::NodeBase::set_role_permissions(
+                    &mut base,
+                    vec![
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15644u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                4097u64 as i32,
+                            ),
+                        },
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15716u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                65423u64 as i32,
+                            ),
+                        },
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15704u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                65423u64 as i32,
+                            ),
+                        },
+                    ],
+                );
+                base
+            },
             opcua::nodes::EventNotifier::from_bits_truncate(0u8),
         )
         .into(),
@@ -1422,15 +1500,41 @@ fn make_object_838(
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
         node: opcua::nodes::Object::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 2996u32),
-                opcua::types::NodeClass::Object,
-                opcua::types::QualifiedName::new(0u16, "ModellingRules"),
-                opcua::types::LocalizedText::new("", "ModellingRules"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
+            {
+                let mut base = opcua::nodes::Base::new_full(
+                    opcua::types::NodeId::new(0u16, 2996u32),
+                    opcua::types::NodeClass::Object,
+                    opcua::types::QualifiedName::new(0u16, "ModellingRules"),
+                    opcua::types::LocalizedText::new("", "ModellingRules"),
+                    None,
+                    Some(0u32),
+                    Some(0u32),
+                );
+                opcua::nodes::NodeBase::set_role_permissions(
+                    &mut base,
+                    vec![
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15644u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                4097u64 as i32,
+                            ),
+                        },
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15716u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                65423u64 as i32,
+                            ),
+                        },
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15704u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                65423u64 as i32,
+                            ),
+                        },
+                    ],
+                );
+                base
+            },
             opcua::nodes::EventNotifier::from_bits_truncate(0u8),
         )
         .into(),
@@ -1454,15 +1558,41 @@ fn make_object_839(
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
         node: opcua::nodes::Object::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 2997u32),
-                opcua::types::NodeClass::Object,
-                opcua::types::QualifiedName::new(0u16, "AggregateFunctions"),
-                opcua::types::LocalizedText::new("", "AggregateFunctions"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
+            {
+                let mut base = opcua::nodes::Base::new_full(
+                    opcua::types::NodeId::new(0u16, 2997u32),
+                    opcua::types::NodeClass::Object,
+                    opcua::types::QualifiedName::new(0u16, "AggregateFunctions"),
+                    opcua::types::LocalizedText::new("", "AggregateFunctions"),
+                    None,
+                    Some(0u32),
+                    Some(0u32),
+                );
+                opcua::nodes::NodeBase::set_role_permissions(
+                    &mut base,
+                    vec![
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15644u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                4097u64 as i32,
+                            ),
+                        },
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15716u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                65423u64 as i32,
+                            ),
+                        },
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15704u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                65423u64 as i32,
+                            ),
+                        },
+                    ],
+                );
+                base
+            },
             opcua::nodes::EventNotifier::from_bits_truncate(0u8),
         )
         .into(),
@@ -1519,15 +1649,35 @@ fn make_object_840(
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
         node: opcua::nodes::Object::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 15606u32),
-                opcua::types::NodeClass::Object,
-                opcua::types::QualifiedName::new(0u16, "RoleSet"),
-                opcua::types::LocalizedText::new("", "RoleSet"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
+            {
+                let mut base = opcua::nodes::Base::new_full(
+                    opcua::types::NodeId::new(0u16, 15606u32),
+                    opcua::types::NodeClass::Object,
+                    opcua::types::QualifiedName::new(0u16, "RoleSet"),
+                    opcua::types::LocalizedText::new("", "RoleSet"),
+                    None,
+                    Some(0u32),
+                    Some(0u32),
+                );
+                opcua::nodes::NodeBase::set_role_permissions(
+                    &mut base,
+                    vec![
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15644u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                1u64 as i32,
+                            ),
+                        },
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15704u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                65423u64 as i32,
+                            ),
+                        },
+                    ],
+                );
+                base
+            },
             opcua::nodes::EventNotifier::from_bits_truncate(0u8),
         )
         .into(),
@@ -1594,15 +1744,41 @@ fn make_object_855(
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
         node: opcua::nodes::Object::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 2274u32),
-                opcua::types::NodeClass::Object,
-                opcua::types::QualifiedName::new(0u16, "ServerDiagnostics"),
-                opcua::types::LocalizedText::new("", "ServerDiagnostics"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
+            {
+                let mut base = opcua::nodes::Base::new_full(
+                    opcua::types::NodeId::new(0u16, 2274u32),
+                    opcua::types::NodeClass::Object,
+                    opcua::types::QualifiedName::new(0u16, "ServerDiagnostics"),
+                    opcua::types::LocalizedText::new("", "ServerDiagnostics"),
+                    None,
+                    Some(0u32),
+                    Some(0u32),
+                );
+                opcua::nodes::NodeBase::set_role_permissions(
+                    &mut base,
+                    vec![
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15644u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                4097u64 as i32,
+                            ),
+                        },
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15716u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                65423u64 as i32,
+                            ),
+                        },
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15704u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                65423u64 as i32,
+                            ),
+                        },
+                    ],
+                );
+                base
+            },
             opcua::nodes::EventNotifier::from_bits_truncate(0u8),
         )
         .into(),
@@ -1717,15 +1893,41 @@ fn make_object_871(
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
         node: opcua::nodes::Object::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 3706u32),
-                opcua::types::NodeClass::Object,
-                opcua::types::QualifiedName::new(0u16, "SessionsDiagnosticsSummary"),
-                opcua::types::LocalizedText::new("", "SessionsDiagnosticsSummary"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
+            {
+                let mut base = opcua::nodes::Base::new_full(
+                    opcua::types::NodeId::new(0u16, 3706u32),
+                    opcua::types::NodeClass::Object,
+                    opcua::types::QualifiedName::new(0u16, "SessionsDiagnosticsSummary"),
+                    opcua::types::LocalizedText::new("", "SessionsDiagnosticsSummary"),
+                    None,
+                    Some(0u32),
+                    Some(0u32),
+                );
+                opcua::nodes::NodeBase::set_role_permissions(
+                    &mut base,
+                    vec![
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15644u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                4097u64 as i32,
+                            ),
+                        },
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15716u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                65423u64 as i32,
+                            ),
+                        },
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15704u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                65423u64 as i32,
+                            ),
+                        },
+                    ],
+                );
+                base
+            },
             opcua::nodes::EventNotifier::from_bits_truncate(0u8),
         )
         .into(),
@@ -1759,15 +1961,41 @@ fn make_object_875(
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
         node: opcua::nodes::Object::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 2295u32),
-                opcua::types::NodeClass::Object,
-                opcua::types::QualifiedName::new(0u16, "VendorServerInfo"),
-                opcua::types::LocalizedText::new("", "VendorServerInfo"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
+            {
+                let mut base = opcua::nodes::Base::new_full(
+                    opcua::types::NodeId::new(0u16, 2295u32),
+                    opcua::types::NodeClass::Object,
+                    opcua::types::QualifiedName::new(0u16, "VendorServerInfo"),
+                    opcua::types::LocalizedText::new("", "VendorServerInfo"),
+                    None,
+                    Some(0u32),
+                    Some(0u32),
+                );
+                opcua::nodes::NodeBase::set_role_permissions(
+                    &mut base,
+                    vec![
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15644u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                4097u64 as i32,
+                            ),
+                        },
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15716u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                65423u64 as i32,
+                            ),
+                        },
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15704u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                65423u64 as i32,
+                            ),
+                        },
+                    ],
+                );
+                base
+            },
             opcua::nodes::EventNotifier::from_bits_truncate(0u8),
         )
         .into(),
@@ -1791,15 +2019,41 @@ fn make_object_876(
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
         node: opcua::nodes::Object::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 2296u32),
-                opcua::types::NodeClass::Object,
-                opcua::types::QualifiedName::new(0u16, "ServerRedundancy"),
-                opcua::types::LocalizedText::new("", "ServerRedundancy"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
+            {
+                let mut base = opcua::nodes::Base::new_full(
+                    opcua::types::NodeId::new(0u16, 2296u32),
+                    opcua::types::NodeClass::Object,
+                    opcua::types::QualifiedName::new(0u16, "ServerRedundancy"),
+                    opcua::types::LocalizedText::new("", "ServerRedundancy"),
+                    None,
+                    Some(0u32),
+                    Some(0u32),
+                );
+                opcua::nodes::NodeBase::set_role_permissions(
+                    &mut base,
+                    vec![
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15644u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                4097u64 as i32,
+                            ),
+                        },
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15716u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                65423u64 as i32,
+                            ),
+                        },
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15704u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                65423u64 as i32,
+                            ),
+                        },
+                    ],
+                );
+                base
+            },
             opcua::nodes::EventNotifier::from_bits_truncate(0u8),
         )
         .into(),
@@ -1833,15 +2087,41 @@ fn make_object_879(
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
         node: opcua::nodes::Object::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 11715u32),
-                opcua::types::NodeClass::Object,
-                opcua::types::QualifiedName::new(0u16, "Namespaces"),
-                opcua::types::LocalizedText::new("", "Namespaces"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
+            {
+                let mut base = opcua::nodes::Base::new_full(
+                    opcua::types::NodeId::new(0u16, 11715u32),
+                    opcua::types::NodeClass::Object,
+                    opcua::types::QualifiedName::new(0u16, "Namespaces"),
+                    opcua::types::LocalizedText::new("", "Namespaces"),
+                    None,
+                    Some(0u32),
+                    Some(0u32),
+                );
+                opcua::nodes::NodeBase::set_role_permissions(
+                    &mut base,
+                    vec![
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15644u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                4097u64 as i32,
+                            ),
+                        },
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15716u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                65423u64 as i32,
+                            ),
+                        },
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15704u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                65423u64 as i32,
+                            ),
+                        },
+                    ],
+                );
+                base
+            },
             opcua::nodes::EventNotifier::from_bits_truncate(0u8),
         )
         .into(),

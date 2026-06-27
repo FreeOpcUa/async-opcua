@@ -336,8 +336,11 @@ impl Server {
             ..Default::default()
         });
 
-        let role_resolver =
+        let mut role_resolver =
             crate::rbac::resolver::RoleResolver::from_user_tokens(&config.user_tokens);
+        for mapping in &config.identity_mapping_rules {
+            role_resolver.add_mapping(mapping.role_node_id.clone(), mapping.rule.clone());
+        }
         let namespace_defaults =
             crate::rbac::defaults::NamespaceDefaults::from_config(&config.namespace_defaults);
         let config = Arc::new(config);

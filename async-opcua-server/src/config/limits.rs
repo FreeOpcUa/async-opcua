@@ -54,6 +54,9 @@ pub struct Limits {
     /// Whether clients are allowed to modify the address space via the NodeManagement service (AddNodes/DeleteNodes/AddReferences/DeleteReferences) on node managers that support it. Default false (read-only).
     #[serde(default = "defaults::clients_can_modify_address_space")]
     pub clients_can_modify_address_space: bool,
+    /// Whether missing RolePermissions should fail closed globally. Default false keeps backwards compatibility.
+    #[serde(default = "defaults::enforce_role_based_access")]
+    pub enforce_role_based_access: bool,
 }
 
 impl Default for Limits {
@@ -76,6 +79,7 @@ impl Default for Limits {
             operational: OperationalLimits::default(),
             max_sessions: defaults::max_sessions(),
             clients_can_modify_address_space: defaults::clients_can_modify_address_space(),
+            enforce_role_based_access: defaults::enforce_role_based_access(),
         }
     }
 }
@@ -271,6 +275,9 @@ mod defaults {
     pub(super) fn clients_can_modify_address_space() -> bool {
         false
     }
+    pub(super) fn enforce_role_based_access() -> bool {
+        false
+    }
 
     pub(super) fn max_subscriptions_per_session() -> usize {
         constants::MAX_SUBSCRIPTIONS_PER_SESSION
@@ -398,6 +405,7 @@ mod tests {
                 max_unactivated_sessions_per_channel: 5,
                 unactivated_session_timeout_ms: 10_000,
                 clients_can_modify_address_space: false,
+                enforce_role_based_access: false,
                 subscriptions: SubscriptionLimits {
                     max_subscriptions_per_session: 100,
                     max_pending_publish_requests: 20,
@@ -476,6 +484,15 @@ mod tests {
         let limits = Limits::default();
         assert_ne!(limits.subscriptions.max_notifications_per_publish, 0);
         assert_eq!(limits.subscriptions.max_notifications_per_publish, 1_000);
+    }
+
+    #[test]
+    fn role_based_access_enforcement_defaults_to_false() {
+        let limits = Limits::default();
+        assert!(!limits.enforce_role_based_access);
+
+        let limits: Limits = serde_norway::from_str("{}").unwrap();
+        assert!(!limits.enforce_role_based_access);
     }
 
     #[test]

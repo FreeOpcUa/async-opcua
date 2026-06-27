@@ -17,10 +17,10 @@
 
 ## Phase 1: Setup (shared infrastructure)
 
-- [ ] T001 Create the `authorization` module skeleton `srv/authorization/mod.rs` (+ `pub(crate) mod authorization;` in `srv/lib.rs`); empty submodules `resolver`, `rules`, `decision`, `defaults`, `preset` (Spec: Part 18 §4; Part 3 §4.8)
+- [X] T001 Create the `authorization` module skeleton `srv/authorization/mod.rs` (+ `pub(crate) mod authorization;` in `srv/lib.rs`); empty submodules `resolver`, `rules`, `decision`, `defaults`, `preset` (Spec: Part 18 §4; Part 3 §4.8)
 - [X] T002 [P] Add a `permission_for_service` mapping helper in `srv/authorization/decision.rs` mapping each service/operation to its required `PermissionType` bit per the usage table (Spec: Part 3 §4.8.2; Part 3 §8.55)
 - [X] T003 [P] Add `PermissionType` convenience helpers (contains/union over `opcua_types::PermissionType`) in `srv/authorization/decision.rs` (Spec: Part 3 §8.55)
-- [ ] T004 [P] Document the module's responsibility + the permissive-default contract at the top of `srv/authorization/mod.rs` (Spec: Part 3 §4.8; plan.md Constitution IV justification)
+- [X] T004 [P] Document the module's responsibility + the permissive-default contract at the top of `srv/authorization/mod.rs` (Spec: Part 3 §4.8; plan.md Constitution IV justification)
 
 ## Phase 2: Foundational (blocking prerequisites — BLOCKS all user stories)
 
@@ -28,7 +28,7 @@
 - [X] T006 Add `RolePermissions`(24)/`AccessRestrictions`(26) cases to `Base::get_attribute` in `nodes/base.rs` returning the stored values (null when unset); confirm `UserRolePermissions`(25) is handled in the read path, not here (Spec: Part 3 §5.2; Part 6 attribute table)
 - [X] T007 [P] Add `VariableBuilder`/`ObjectBuilder`/generic node builder `.role_permissions(...)` and `.access_restrictions(...)` methods in `nodes/` builders (Spec: Part 3 §8.55, §8.56)
 - [X] T008 Add a resolved-role-set carrier to `srv/node_manager/context.rs` — `RequestContextInner.user_roles: Arc<Vec<NodeId>>` + `RequestContext::user_roles(&self) -> &[NodeId]`, defaulting to empty (Spec: Part 18 §4.4.1; Part 3 §4.9)
-- [ ] T009 Extend `srv/authenticator.rs::CoreServerPermissions` (or a new return) so the authenticator can surface the resolved role set for a `UserToken`; keep `read_diagnostics` behaviour (Spec: Part 18 §4; Part 3 §4.9)
+- [X] T009 Extend `srv/authenticator.rs::CoreServerPermissions` (or a new return) so the authenticator can surface the resolved role set for a `UserToken`; keep `read_diagnostics` behaviour (Spec: Part 18 §4; Part 3 §4.9)
 - [X] T010 Implement the central `authorize(context, node_id, effective_role_permissions, required) -> bool` in `srv/authorization/decision.rs` with the permissive-when-unconfigured + fail-closed semantics from research.md D4/D5 (Spec: Part 3 §4.8.2; Part 4 §7.39 Bad_UserAccessDenied)
 - [X] T011 [P] Unit-test `authorize`: union across roles, unconfigured⇒permit, list-excludes-my-roles⇒deny, required-bit present/absent — in `srv/authorization/decision.rs` tests (Spec: Part 3 §4.8.2)
 - [X] T012 Add an `EffectiveNodePermissions` accessor that returns node-level RolePermissions else namespace default else "unconfigured" (namespace-default lookup stubbed until US6) in `srv/authorization/decision.rs` (Spec: Part 3 §4.8.2; Part 5 §6)
@@ -51,8 +51,8 @@ is the per-session-role subset. **Independent test**: configure a node with two 
 
 - [X] T017 [US1] Serve `RolePermissions`(24) and `AccessRestrictions`(26) through the address-space read path `srv/address_space/utils.rs::read_node_value` (Spec: Part 3 §5.2; Part 4 §5.10)
 - [X] T018 [US1] Compute and serve `UserRolePermissions`(25) in `srv/address_space/utils.rs::read_node_value` from `context.user_roles()` ∩ node RolePermissions, merged across roles (Spec: Part 3 §5.2; Part 18 §4)
-- [ ] T019 [US1] Gate reading the RolePermissions attribute itself by the `ReadRolePermissions` permission in the read path (permissive when unconfigured) (Spec: Part 3 §8.55 ReadRolePermissions)
-- [ ] T020 [US1] Ensure `node.into()`/codegen-loaded nodes can carry RolePermissions/AccessRestrictions from the nodeset loader (preserve when present) `srv/node_manager/memory` (Spec: Part 3 §5.2)
+- [X] T019 [US1] Gate reading the RolePermissions attribute itself by the `ReadRolePermissions` permission in the read path (permissive when unconfigured) (Spec: Part 3 §8.55 ReadRolePermissions)
+- [X] T020 [US1] Ensure `node.into()`/codegen-loaded nodes can carry RolePermissions/AccessRestrictions from the nodeset loader (preserve when present) `srv/node_manager/memory` (Spec: Part 3 §5.2)
 - [X] T021 [US1] Verify the four US1 tests pass under default features; fix any read-path regressions (Spec: Part 4 §5.10)
 
 **Checkpoint**: permission attributes are introspectable; UserRolePermissions is role-aware.
@@ -66,9 +66,9 @@ browsable. **Independent test**: connect with mapped identities, check granted r
 
 ### Tests for US2
 
-- [ ] T022 [P] [US2] Integration test `it/rbac.rs::username_maps_to_role` — username→Operator grants Operator (+AuthenticatedUser) (Spec: Part 18 §4.4.3; Part 3 §4.9.2)
+- [X] T022 [P] [US2] Integration test `it/rbac.rs::username_maps_to_role` — username→Operator grants Operator (+AuthenticatedUser) (Spec: Part 18 §4.4.3; Part 3 §4.9.2)
 - [X] T023 [P] [US2] Integration test `it/rbac.rs::anonymous_gets_anonymous_role_only` (Spec: Part 3 §4.9.2)
-- [ ] T024 [P] [US2] Integration test `it/rbac.rs::cert_thumbprint_maps_to_role` — X509 thumbprint→SecurityAdmin (Spec: Part 18 §4.4.2 Thumbprint)
+- [X] T024 [P] [US2] Integration test `it/rbac.rs::cert_thumbprint_maps_to_role` — X509 thumbprint→SecurityAdmin (Spec: Part 18 §4.4.2 Thumbprint)
 - [X] T025 [P] [US2] Integration test `it/rbac.rs::roleset_has_eight_well_known_roles` — browse `Server.ServerCapabilities.RoleSet` finds the 8 RoleType instances at standard NodeIds (Spec: Part 5 ServerCapabilities; Part 18 §4.4.1, §4.5)
 
 ### Implementation for US2
@@ -100,7 +100,7 @@ when unconfigured. **Independent test**: Observer can read not write; Operator b
 - [X] T038 [P] [US3] Integration test `it/rbac.rs::call_denied_without_call_permission` + allowed with it (Spec: Part 4 §5.11 Call; Part 3 §8.55 Call)
 - [X] T039 [P] [US3] Integration test `it/rbac.rs::unconfigured_node_is_permissive` (backwards-compat) (Spec: Part 3 §4.8)
 - [X] T040 [P] [US3] Integration test `it/rbac.rs::user_access_level_reflects_roles` (CurrentRead/CurrentWrite) (Spec: Part 3 §5.6.2 UserAccessLevel)
-- [ ] T041 [P] [US3] Integration test `it/rbac.rs::multiple_roles_union_permissions` (Spec: Part 3 §4.8.2; FR-015)
+- [X] T041 [P] [US3] Integration test `it/rbac.rs::multiple_roles_union_permissions` (Spec: Part 3 §4.8.2; FR-015)
 
 ### Implementation for US3
 
@@ -223,19 +223,19 @@ test**: no-config server unchanged; configured server enforces; secure preset re
 
 ### Tests for US8
 
-- [ ] T089 [P] [US8] Integration test `it/rbac.rs::no_role_config_is_unchanged_behaviour` (existing semantics) (Spec: Part 3 §4.8; SC-007)
-- [ ] T090 [P] [US8] Integration test `it/rbac.rs::configured_server_enforces_roles` (Spec: Part 18 §4)
-- [ ] T091 [P] [US8] Integration test `it/rbac.rs::secure_preset_restricts_anonymous` (Spec: Part 3 §4.9.2 suggested permissions)
+- [X] T089 [P] [US8] Integration test `it/rbac.rs::no_role_config_is_unchanged_behaviour` (existing semantics) (Spec: Part 3 §4.8; SC-007)
+- [X] T090 [P] [US8] Integration test `it/rbac.rs::configured_server_enforces_roles` (Spec: Part 18 §4)
+- [X] T091 [P] [US8] Integration test `it/rbac.rs::secure_preset_restricts_anonymous` (Spec: Part 3 §4.9.2 suggested permissions)
 
 ### Implementation for US8
 
 - [X] T092 [US8] Add `roles: Vec<NodeId>` to `srv/config/server.rs::ServerUserToken` + `with_roles(...)` (Spec: Part 18 §4.4.1; Part 3 §4.9)
-- [ ] T093 [US8] Add identity-mapping-rule + per-namespace default config to `srv/config/server.rs::ServerConfig` (Spec: Part 18 §4.4.3; Part 5 §6)
-- [ ] T094 [US8] Add `enforce_role_based_access: bool` (global posture) to `srv/config/limits.rs` (default false) (Spec: Part 3 §4.8; plan.md D5)
-- [ ] T095 [US8] Add `ServerBuilder` methods: `identity_mapping_rule`, `default_role_permissions`, `default_access_restrictions`, `enforce_role_based_access`, `with_secure_role_preset` `srv/builder.rs` (Spec: Part 18 §4; Part 5 §6)
-- [ ] T096 [US8] Wire `DefaultAuthenticator` to grant each `ServerUserToken`'s configured roles via the resolver `srv/authenticator.rs` (Spec: Part 18 §4.4.1)
-- [ ] T097 [US8] Implement `with_secure_role_preset` in `srv/authorization/preset.rs` applying the Part 3 §4.9.2 well-known-role suggested permissions (Spec: Part 3 §4.9.2)
-- [ ] T098 [US8] Verify the three US8 tests pass; confirm no-config path is byte-for-byte the old behaviour (Spec: SC-007)
+- [X] T093 [US8] Add identity-mapping-rule + per-namespace default config to `srv/config/server.rs::ServerConfig` (Spec: Part 18 §4.4.3; Part 5 §6)
+- [X] T094 [US8] Add `enforce_role_based_access: bool` (global posture) to `srv/config/limits.rs` (default false) (Spec: Part 3 §4.8; plan.md D5)
+- [X] T095 [US8] Add `ServerBuilder` methods: `identity_mapping_rule`, `default_role_permissions`, `default_access_restrictions`, `enforce_role_based_access`, `with_secure_role_preset` `srv/builder.rs` (Spec: Part 18 §4; Part 5 §6)
+- [X] T096 [US8] Wire `DefaultAuthenticator` to grant each `ServerUserToken`'s configured roles via the resolver `srv/authenticator.rs` (Spec: Part 18 §4.4.1)
+- [X] T097 [US8] Implement `with_secure_role_preset` in `srv/authorization/preset.rs` applying the Part 3 §4.9.2 well-known-role suggested permissions (Spec: Part 3 §4.9.2)
+- [X] T098 [US8] Verify the three US8 tests pass; confirm no-config path is byte-for-byte the old behaviour (Spec: SC-007)
 
 **Checkpoint**: configurable, opt-in, with a secure preset.
 
@@ -243,13 +243,13 @@ test**: no-config server unchanged; configured server enforces; secure preset re
 
 ## Phase 11: Polish & cross-cutting concerns
 
-- [ ] T099 [P] Run the FULL `cargo test -p async-opcua-server` (all binaries) — zero regressions (Spec: SC-007)
-- [ ] T100 [P] Build + test under `--no-default-features` and `--all-features`; fix any feature-gating gaps (Spec: FR-016)
-- [ ] T101 [P] `cargo clippy --workspace --all-targets` + `cargo fmt --all --check` clean (Spec: Constitution V)
+- [X] T099 [P] Run the FULL `cargo test -p async-opcua-server` (all binaries) — zero regressions (Spec: SC-007)
+- [X] T100 [P] Build + test under `--no-default-features` and `--all-features`; fix any feature-gating gaps (Spec: FR-016)
+- [X] T101 [P] `cargo clippy --workspace --all-targets` + `cargo fmt --all --check` clean (Spec: Constitution V)
 - [ ] T102 [P] Interop: browse RoleSet from a reference client (node-opcua / .NET / open62541) without error (Spec: SC-002; Part 18 §4.5)
-- [ ] T103 [P] Add an example/doc snippet for RBAC config in the demo-server or docs (quickstart.md mirror) (Spec: FR-012)
-- [ ] T104 [P] Security review of the enforcement path: fail-closed where enforced, no panic on attacker input, no secret leakage (Spec: Constitution IV)
-- [ ] T105 [P] Confirm `Bad_UserAccessDenied`/`Bad_SecurityModeInsufficient` are returned per-operation (not whole-request) where the spec requires operation-level results (Spec: Part 4 §7.39; per-service result tables)
+- [X] T103 [P] Add an example/doc snippet for RBAC config in the demo-server or docs (quickstart.md mirror) (Spec: FR-012)
+- [X] T104 [P] Security review of the enforcement path: fail-closed where enforced, no panic on attacker input, no secret leakage (Spec: Constitution IV)
+- [X] T105 [P] Confirm `Bad_UserAccessDenied`/`Bad_SecurityModeInsufficient` are returned per-operation (not whole-request) where the spec requires operation-level results (Spec: Part 4 §7.39; per-service result tables)
 - [ ] T106 Update `specs/SESSION-HANDOFF.md` + memory with the RBAC feature outcome (Spec: project process)
 
 ---

@@ -19,7 +19,7 @@ use argon2::{
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tracing::{trace, warn};
 
-use crate::constants;
+use crate::{constants, rbac::rules::IdentityMappingRule};
 use opcua_core::{comms::url::url_matches_except_host, config::Config};
 use opcua_crypto::{CertificateStore, SecurityPolicy, Thumbprint};
 use opcua_types::{
@@ -260,6 +260,26 @@ pub struct NamespaceDefaultConfig {
     pub default_access_restrictions: Option<AccessRestrictionType>,
 }
 
+/// Configured identity-to-role mapping applied to the server role resolver at startup.
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+pub struct IdentityMappingRuleConfig {
+    /// Role NodeId granted when `rule` matches an activated session identity.
+    #[serde(
+        serialize_with = "serialize_node_id",
+        deserialize_with = "deserialize_node_id"
+    )]
+    pub role_node_id: NodeId,
+    /// Identity matching rule that grants `role_node_id`.
+    pub rule: IdentityMappingRule,
+}
+
+impl IdentityMappingRuleConfig {
+    /// Creates a configured identity-to-role mapping.
+    pub fn new(role_node_id: NodeId, rule: IdentityMappingRule) -> Self {
+        Self { role_node_id, rule }
+    }
+}
+
 fn hash_password(password: &str) -> Result<String, argon2::password_hash::Error> {
     let salt = SaltString::generate(&mut OsRng);
     Argon2::default()
@@ -269,6 +289,21 @@ fn hash_password(password: &str) -> Result<String, argon2::password_hash::Error>
 
 fn is_argon2id_password_hash(password_hash: &str) -> bool {
     password_hash.starts_with("$argon2id$") && PasswordHash::new(password_hash).is_ok()
+}
+
+fn serialize_node_id<S>(node_id: &NodeId, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    node_id.to_string().serialize(serializer)
+}
+
+fn deserialize_node_id<'de, D>(deserializer: D) -> Result<NodeId, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let node_id = String::deserialize(deserializer)?;
+    NodeId::from_str(&node_id).map_err(serde::de::Error::custom)
 }
 
 fn serialize_node_ids<S>(node_ids: &[NodeId], serializer: S) -> Result<S::Ok, S::Error>
@@ -295,6 +330,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{IdentityMappingRule, WellKnownRole};
 
     /// H3/N10: the per-source-IP connection cap config field exists; default 0 (unlimited,
     /// opt-in) is deliberate to avoid breaking NAT/gateway deployments. Per-IP enforcement
@@ -324,6 +360,27 @@ mod tests {
             .with_roles([role.clone()]);
 
         assert_eq!(token.roles, vec![role]);
+    }
+
+    #[test]
+    fn identity_mapping_rules_default_empty_and_roundtrip_node_ids_as_strings() {
+        let role = WellKnownRole::SecurityAdmin.node_id();
+        let source_role = NodeId::new(2, "SourceRole");
+        let mapping =
+            IdentityMappingRuleConfig::new(role.clone(), IdentityMappingRule::role(source_role));
+        let config = ServerConfig {
+            identity_mapping_rules: vec![mapping.clone()],
+            ..Default::default()
+        };
+
+        let serialized = serde_norway::to_string(&config).expect("config should serialize");
+        let deserialized: ServerConfig =
+            serde_norway::from_str(&serialized).expect("config should deserialize");
+
+        assert!(ServerConfig::default().identity_mapping_rules.is_empty());
+        assert!(serialized.contains(&role.to_string()));
+        assert!(serialized.contains("ns=2;s=SourceRole"));
+        assert_eq!(deserialized.identity_mapping_rules, vec![mapping]);
     }
 
     #[test]
@@ -430,6 +487,9 @@ pub struct ServerConfig {
     pub locale_ids: Vec<String>,
     /// User tokens
     pub user_tokens: BTreeMap<String, ServerUserToken>,
+    /// Additional identity-to-role mappings applied at startup.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub identity_mapping_rules: Vec<IdentityMappingRuleConfig>,
     /// discovery endpoint url which may or may not be the same as the service endpoints below.
     pub discovery_urls: Vec<String>,
     /// Default endpoint id
@@ -674,6 +734,7 @@ impl Default for ServerConfig {
             max_connections_per_ip: defaults::max_connections_per_ip(),
             limits: Limits::default(),
             user_tokens: BTreeMap::new(),
+            identity_mapping_rules: Vec::new(),
             locale_ids: vec!["en".to_string()],
             discovery_urls: Vec::new(),
             default_endpoint: None,

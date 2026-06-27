@@ -223,3 +223,43 @@ while node_to_browse.remaining() > 0 {
 Most node managers should also implement `resolve_external_references`. This method takes a list of `ExternalReferenceRequest`s, which are essentially just a browse `result_mask`, (which you are allowed to ignore), and a `NodeId`. Node managers should iterate over the external references, and if they exist, call `set` on the reference requests with a `ReferenceDescription` representing the node they ask for.
 
 When browsing, node managers can call `BrowseNode::push_external_reference` to add a reference to another node manager. These are not subject to normal filtering or limits, and the server handles continuation for these if necessary.
+
+## Role-based access control (RBAC)
+
+The server implements the OPC UA Part 3 §4.8–4.9 / Part 18 role model: node-level
+`RolePermissions`/`AccessRestrictions`, the well-known roles under
+`Server.ServerCapabilities.RoleSet`, and identity→role resolution.
+
+Enforcement is **opt-in**. By default the server is fully permissive — `RolePermissions`
+and `AccessRestrictions` are exposed as readable node attributes but never deny a request,
+so existing deployments are unaffected. Turn enforcement on with
+`enforce_role_based_access(true)`; when on, a node whose `RolePermissions` do not grant the
+session's roles the required permission is denied with `Bad_UserAccessDenied`, and a node
+with no configured permissions fails closed.
+
+```rust ignore
+use opcua::server::{ServerBuilder, WellKnownRole, IdentityMappingRule};
+use opcua::types::{NodeId, RolePermissionType, PermissionType};
+
+let server = ServerBuilder::new()
+    // Enable enforcement (off by default).
+    .enforce_role_based_access(true)
+    // Map an identity to a role: this username is granted the Operator role.
+    .identity_mapping_rule(
+        WellKnownRole::Operator.node_id(),
+        IdentityMappingRule::user_name("alice"),
+    )
+    // Default permissions for a namespace, applied to nodes without their own RolePermissions.
+    .default_role_permissions(
+        2,
+        vec![RolePermissionType {
+            role_id: WellKnownRole::Observer.node_id(),
+            permissions: PermissionType::Browse | PermissionType::Read,
+        }],
+    );
+```
+
+For a secure baseline, `with_secure_role_preset()` enables enforcement and applies the
+Part 3 §4.9.2 suggested permissions for the well-known roles in one call. Per-`ServerUserToken`
+roles can also be declared with `ServerUserToken::with_roles`, and the `RoleSet` management
+methods (`AddRole`/`AddIdentity`/…) allow runtime changes by a `SecurityAdmin` session.

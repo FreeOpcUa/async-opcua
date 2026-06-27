@@ -1358,37 +1358,35 @@ mod tests {
         }
     }
 
-    fn request_context() -> RequestContext {
-        request_context_with_roles(Vec::new())
+    fn request_context_enforced() -> RequestContext {
+        request_context_with_roles_enforced(Vec::new())
     }
 
-    fn request_context_with_roles(user_roles: Vec<NodeId>) -> RequestContext {
-        request_context_with_roles_and_security_mode(user_roles, MessageSecurityMode::None)
+    fn request_context_with_roles_enforced(user_roles: Vec<NodeId>) -> RequestContext {
+        request_context_with_roles_and_security_mode_enforced(user_roles, MessageSecurityMode::None)
     }
 
-    fn request_context_with_roles_and_security_mode(
+    fn request_context_with_roles_and_security_mode_enforced(
         user_roles: Vec<NodeId>,
         security_mode: MessageSecurityMode,
     ) -> RequestContext {
-        request_context_with_options(user_roles, security_mode, false)
+        request_context_with_options(user_roles, security_mode, false, true)
     }
 
-    fn request_context_with_address_space_modification() -> RequestContext {
-        request_context_with_roles_and_address_space_modification(Vec::new())
-    }
-
-    fn request_context_with_roles_and_address_space_modification(
+    fn request_context_with_roles_and_address_space_modification_enforced(
         user_roles: Vec<NodeId>,
     ) -> RequestContext {
-        request_context_with_options(user_roles, MessageSecurityMode::None, true)
+        request_context_with_options(user_roles, MessageSecurityMode::None, true, true)
     }
 
     fn request_context_with_options(
         user_roles: Vec<NodeId>,
         security_mode: MessageSecurityMode,
         clients_can_modify_address_space: bool,
+        enforce_role_based_access: bool,
     ) -> RequestContext {
-        let mut builder = ServerBuilder::new_anonymous("test");
+        let mut builder = ServerBuilder::new_anonymous("test")
+            .enforce_role_based_access(enforce_role_based_access);
         builder.config_mut().limits.clients_can_modify_address_space =
             clients_can_modify_address_space;
         let (_server, handle) = builder.build().expect("test server should build");
@@ -1796,8 +1794,10 @@ mod tests {
 
     #[tokio::test]
     async fn add_nodes_denies_configured_parent_without_add_node_permission_per_operation() {
-        let context = request_context_with_address_space_modification();
         let operator = NodeId::new(0, "Operator");
+        let context = request_context_with_roles_and_address_space_modification_enforced(vec![
+            operator.clone(),
+        ]);
         let denied_parent_id = NodeId::new(1, "denied_parent");
         let open_parent_id = NodeId::new(1, "open_parent");
         let denied_new_id = NodeId::new(1, "denied_new");
@@ -1808,7 +1808,11 @@ mod tests {
                 "denied_parent",
                 Some(vec![role_permission(&operator, PermissionType::DeleteNode)]),
             ))),
-            NodeType::Object(Box::new(object_node(&open_parent_id, "open_parent", None))),
+            NodeType::Object(Box::new(object_node(
+                &open_parent_id,
+                "open_parent",
+                Some(vec![role_permission(&operator, PermissionType::AddNode)]),
+            ))),
         ]);
         let mut denied = add_object_node_item(&denied_parent_id, &denied_new_id);
         let mut open = add_object_node_item(&open_parent_id, &open_new_id);
@@ -1830,8 +1834,10 @@ mod tests {
 
     #[tokio::test]
     async fn delete_nodes_denies_configured_node_without_delete_node_permission_per_operation() {
-        let context = request_context_with_address_space_modification();
         let operator = NodeId::new(0, "Operator");
+        let context = request_context_with_roles_and_address_space_modification_enforced(vec![
+            operator.clone(),
+        ]);
         let denied_id = NodeId::new(1, "delete_denied");
         let open_id = NodeId::new(1, "delete_open");
         let manager = node_management_manager(vec![
@@ -1840,7 +1846,11 @@ mod tests {
                 "delete_denied",
                 Some(vec![role_permission(&operator, PermissionType::AddNode)]),
             ))),
-            NodeType::Object(Box::new(object_node(&open_id, "delete_open", None))),
+            NodeType::Object(Box::new(object_node(
+                &open_id,
+                "delete_open",
+                Some(vec![role_permission(&operator, PermissionType::DeleteNode)]),
+            ))),
         ]);
         let mut denied = delete_node_item(&denied_id);
         let mut open = delete_node_item(&open_id);
@@ -1863,8 +1873,10 @@ mod tests {
     #[tokio::test]
     async fn add_references_denies_configured_source_without_add_reference_permission_per_operation(
     ) {
-        let context = request_context_with_address_space_modification();
         let operator = NodeId::new(0, "Operator");
+        let context = request_context_with_roles_and_address_space_modification_enforced(vec![
+            operator.clone(),
+        ]);
         let denied_source_id = NodeId::new(1, "add_reference_denied_source");
         let denied_target_id = NodeId::new(1, "add_reference_denied_target");
         let open_source_id = NodeId::new(1, "add_reference_open_source");
@@ -1886,7 +1898,10 @@ mod tests {
             NodeType::Object(Box::new(object_node(
                 &open_source_id,
                 "add_reference_open_source",
-                None,
+                Some(vec![role_permission(
+                    &operator,
+                    PermissionType::AddReference,
+                )]),
             ))),
             NodeType::Object(Box::new(object_node(
                 &open_target_id,
@@ -1923,8 +1938,10 @@ mod tests {
     #[tokio::test]
     async fn delete_references_denies_configured_source_without_remove_reference_permission_per_operation(
     ) {
-        let context = request_context_with_address_space_modification();
         let operator = NodeId::new(0, "Operator");
+        let context = request_context_with_roles_and_address_space_modification_enforced(vec![
+            operator.clone(),
+        ]);
         let denied_source_id = NodeId::new(1, "delete_reference_denied_source");
         let denied_target_id = NodeId::new(1, "delete_reference_denied_target");
         let open_source_id = NodeId::new(1, "delete_reference_open_source");
@@ -1946,7 +1963,10 @@ mod tests {
             NodeType::Object(Box::new(object_node(
                 &open_source_id,
                 "delete_reference_open_source",
-                None,
+                Some(vec![role_permission(
+                    &operator,
+                    PermissionType::RemoveReference,
+                )]),
             ))),
             NodeType::Object(Box::new(object_node(
                 &open_target_id,
@@ -1995,15 +2015,20 @@ mod tests {
 
     #[tokio::test]
     async fn browse_omits_forward_target_without_browse_permission() {
-        let context = request_context();
         let operator = NodeId::new(0, "Operator");
+        let context = request_context_with_roles_enforced(vec![operator.clone()]);
         let parent_id = NodeId::new(1, "parent");
         let visible_id = NodeId::new(1, "visible");
         let denied_id = NodeId::new(1, "denied");
         let manager = browse_manager(
             &parent_id,
             vec![
-                (visible_id.clone(), "visible", None, None),
+                (
+                    visible_id.clone(),
+                    "visible",
+                    Some(vec![role_permission(&operator, PermissionType::Browse)]),
+                    None,
+                ),
                 (
                     denied_id.clone(),
                     "denied",
@@ -2022,8 +2047,8 @@ mod tests {
 
     #[tokio::test]
     async fn browse_omits_inverse_target_without_browse_permission() {
-        let context = request_context();
         let operator = NodeId::new(0, "Operator");
+        let context = request_context_with_roles_enforced(vec![operator.clone()]);
         let parent_id = NodeId::new(1, "parent");
         let child_id = NodeId::new(1, "child");
         let manager = browse_manager(&parent_id, vec![(child_id.clone(), "child", None, None)]);
@@ -2045,7 +2070,8 @@ mod tests {
 
     #[tokio::test]
     async fn browse_keeps_access_restricted_target_when_apply_to_browse_is_unset() {
-        let context = request_context();
+        let operator = NodeId::new(0, "Operator");
+        let context = request_context_with_roles_enforced(vec![operator.clone()]);
         let parent_id = NodeId::new(1, "parent");
         let child_id = NodeId::new(1, "encrypted");
         let manager = browse_manager(
@@ -2053,7 +2079,7 @@ mod tests {
             vec![(
                 child_id.clone(),
                 "encrypted",
-                None,
+                Some(vec![role_permission(&operator, PermissionType::Browse)]),
                 Some(AccessRestrictionType::EncryptionRequired),
             )],
         );
@@ -2067,7 +2093,8 @@ mod tests {
 
     #[tokio::test]
     async fn browse_omits_target_when_apply_to_browse_security_is_not_met() {
-        let context = request_context();
+        let operator = NodeId::new(0, "Operator");
+        let context = request_context_with_roles_enforced(vec![operator.clone()]);
         let parent_id = NodeId::new(1, "parent");
         let child_id = NodeId::new(1, "encrypted");
         let manager = browse_manager(
@@ -2075,7 +2102,7 @@ mod tests {
             vec![(
                 child_id,
                 "encrypted",
-                None,
+                Some(vec![role_permission(&operator, PermissionType::Browse)]),
                 Some(
                     AccessRestrictionType::EncryptionRequired
                         | AccessRestrictionType::ApplyRestrictionsToBrowse,
@@ -2091,8 +2118,9 @@ mod tests {
 
     #[tokio::test]
     async fn browse_keeps_apply_to_browse_target_when_security_is_met() {
-        let context = request_context_with_roles_and_security_mode(
-            Vec::new(),
+        let operator = NodeId::new(0, "Operator");
+        let context = request_context_with_roles_and_security_mode_enforced(
+            vec![operator.clone()],
             MessageSecurityMode::SignAndEncrypt,
         );
         let parent_id = NodeId::new(1, "parent");
@@ -2102,7 +2130,7 @@ mod tests {
             vec![(
                 child_id.clone(),
                 "encrypted",
-                None,
+                Some(vec![role_permission(&operator, PermissionType::Browse)]),
                 Some(
                     AccessRestrictionType::EncryptionRequired
                         | AccessRestrictionType::ApplyRestrictionsToBrowse,
@@ -2119,8 +2147,8 @@ mod tests {
 
     #[tokio::test]
     async fn history_read_denies_configured_variable_without_read_history_permission() {
-        let context = request_context();
         let operator = NodeId::new(0, "Operator");
+        let context = request_context_with_roles_enforced(vec![operator.clone()]);
         let denied_id = NodeId::new(1, "denied_history");
         let open_id = NodeId::new(1, "open_history");
         let manager = history_manager(vec![
@@ -2128,7 +2156,13 @@ mod tests {
                 &denied_id,
                 Some(vec![role_permission(&operator, PermissionType::Read)]),
             ))),
-            NodeType::Variable(Box::new(history_variable(&open_id, None))),
+            NodeType::Variable(Box::new(history_variable(
+                &open_id,
+                Some(vec![role_permission(
+                    &operator,
+                    PermissionType::ReadHistory,
+                )]),
+            ))),
         ]);
         let mut denied = history_read_node(&denied_id, false);
         let mut open = history_read_node(&open_id, false);
@@ -2146,7 +2180,7 @@ mod tests {
     #[tokio::test]
     async fn history_read_allows_variable_with_read_history_permission() {
         let operator = NodeId::new(0, "Operator");
-        let context = request_context_with_roles(vec![operator.clone()]);
+        let context = request_context_with_roles_enforced(vec![operator.clone()]);
         let node_id = NodeId::new(1, "readable_history");
         let manager = history_manager(vec![NodeType::Variable(Box::new(history_variable(
             &node_id,
@@ -2168,8 +2202,8 @@ mod tests {
 
     #[tokio::test]
     async fn history_read_denies_configured_event_source_without_read_history_permission() {
-        let context = request_context();
         let operator = NodeId::new(0, "Operator");
+        let context = request_context_with_roles_enforced(vec![operator.clone()]);
         let node_id = NodeId::new(1, "event_history");
         let manager = history_manager(vec![NodeType::Object(Box::new(history_event_object(
             &node_id,
@@ -2192,7 +2226,7 @@ mod tests {
     #[tokio::test]
     async fn history_update_insert_data_requires_insert_history_permission() {
         let operator = NodeId::new(0, "Operator");
-        let context = request_context_with_roles(vec![operator.clone()]);
+        let context = request_context_with_roles_enforced(vec![operator.clone()]);
         let node_id = NodeId::new(1, "insert_history");
         let manager = history_manager(vec![NodeType::Variable(Box::new(history_variable(
             &node_id,
@@ -2236,7 +2270,7 @@ mod tests {
     #[tokio::test]
     async fn history_update_replace_data_requires_modify_history_permission() {
         let operator = NodeId::new(0, "Operator");
-        let context = request_context_with_roles(vec![operator.clone()]);
+        let context = request_context_with_roles_enforced(vec![operator.clone()]);
         let node_id = NodeId::new(1, "replace_history");
         let manager = history_manager(vec![NodeType::Variable(Box::new(history_variable(
             &node_id,
@@ -2280,7 +2314,7 @@ mod tests {
     #[tokio::test]
     async fn history_update_structure_data_requires_modify_history_permission() {
         let operator = NodeId::new(0, "Operator");
-        let context = request_context_with_roles(vec![operator.clone()]);
+        let context = request_context_with_roles_enforced(vec![operator.clone()]);
         let node_id = NodeId::new(1, "structure_history");
         let manager = history_manager(vec![NodeType::Variable(Box::new(history_variable(
             &node_id,
@@ -2324,7 +2358,7 @@ mod tests {
     #[tokio::test]
     async fn history_update_delete_details_require_delete_history_permission() {
         let operator = NodeId::new(0, "Operator");
-        let context = request_context_with_roles(vec![operator.clone()]);
+        let context = request_context_with_roles_enforced(vec![operator.clone()]);
         let node_id = NodeId::new(1, "delete_history");
         let manager = history_manager(vec![NodeType::Variable(Box::new(history_variable(
             &node_id,
@@ -2368,7 +2402,7 @@ mod tests {
     #[tokio::test]
     async fn history_update_delete_event_requires_delete_history_permission() {
         let operator = NodeId::new(0, "Operator");
-        let context = request_context_with_roles(vec![operator.clone()]);
+        let context = request_context_with_roles_enforced(vec![operator.clone()]);
         let node_id = NodeId::new(1, "delete_event_history");
         let manager = history_manager(vec![NodeType::Object(Box::new(history_event_object(
             &node_id,
@@ -2391,7 +2425,7 @@ mod tests {
     #[tokio::test]
     async fn history_update_insert_event_requires_insert_history_permission() {
         let operator = NodeId::new(0, "Operator");
-        let context = request_context_with_roles(vec![operator.clone()]);
+        let context = request_context_with_roles_enforced(vec![operator.clone()]);
         let node_id = NodeId::new(1, "insert_event_history");
         let manager = history_manager(vec![NodeType::Object(Box::new(history_event_object(
             &node_id,
@@ -2413,8 +2447,8 @@ mod tests {
 
     #[tokio::test]
     async fn method_dispatch_authorization_denies_only_call_without_call_permission() {
-        let context = request_context();
         let operator = NodeId::new(0, "Operator");
+        let context = request_context_with_roles_enforced(vec![operator.clone()]);
         let object_id = NodeId::new(1, "object");
         let denied_method_id = NodeId::new(1, "denied_method");
         let open_method_id = NodeId::new(1, "open_method");
@@ -2425,7 +2459,10 @@ mod tests {
                     denied_method_id.clone(),
                     Some(vec![role_permission(&operator, PermissionType::Read)]),
                 ),
-                (open_method_id.clone(), None),
+                (
+                    open_method_id.clone(),
+                    Some(vec![role_permission(&operator, PermissionType::Call)]),
+                ),
             ],
         );
         let mut denied = method_call(&object_id, &denied_method_id);
@@ -2459,7 +2496,7 @@ mod tests {
     #[tokio::test]
     async fn method_dispatch_authorization_allows_call_permission() {
         let operator = NodeId::new(0, "Operator");
-        let context = request_context_with_roles(vec![operator.clone()]);
+        let context = request_context_with_roles_enforced(vec![operator.clone()]);
         let object_id = NodeId::new(1, "object");
         let method_id = NodeId::new(1, "method");
         let manager = method_manager(
@@ -2484,7 +2521,7 @@ mod tests {
 
     #[tokio::test]
     async fn method_dispatch_authorization_rejects_encryption_required_unencrypted_channel() {
-        let context = request_context();
+        let context = request_context_enforced();
         let object_id = NodeId::new(1, "object");
         let method_id = NodeId::new(1, "method");
         let manager = method_manager_with_access_restrictions(

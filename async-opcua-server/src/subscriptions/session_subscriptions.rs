@@ -104,6 +104,8 @@ pub struct SessionSubscriptions {
     type_tree_for_user: Arc<dyn TypeTreeForUserStatic>,
     /// Weak reference to server node managers, used for delivery-time event-source metadata lookup.
     node_managers: NodeManagersRef,
+    /// Whether unconfigured RolePermissions fail closed for this session's event delivery.
+    enforce_role_based_access: bool,
 }
 
 impl SessionSubscriptions {
@@ -113,6 +115,7 @@ impl SessionSubscriptions {
         session: Arc<RwLock<Session>>,
         type_tree_for_user: Arc<dyn TypeTreeForUserStatic>,
         node_managers: NodeManagersRef,
+        enforce_role_based_access: bool,
     ) -> Self {
         Self {
             user_token,
@@ -126,6 +129,7 @@ impl SessionSubscriptions {
             session,
             type_tree_for_user,
             node_managers,
+            enforce_role_based_access,
         }
     }
 
@@ -1197,7 +1201,11 @@ impl SessionSubscriptions {
         let source_role_permissions = self.source_role_permissions(&source_node_id);
         let user_roles = self.session.read().roles();
 
-        rbac::decision::event_receive_allowed(&user_roles, source_role_permissions.as_deref())
+        rbac::decision::event_receive_allowed_with_enforcement(
+            &user_roles,
+            source_role_permissions.as_deref(),
+            self.enforce_role_based_access,
+        )
     }
 
     fn source_role_permissions(&self, source_node_id: &NodeId) -> Option<Vec<RolePermissionType>> {

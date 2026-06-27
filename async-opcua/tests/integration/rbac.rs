@@ -4,9 +4,16 @@
 //! enforcement (the anonymous session holds the well-known Anonymous role i=15644, so nodes are
 //! permissioned for/against it to exercise allow + deny).
 
-use crate::utils::{read_value_id, setup};
+use crate::utils::{
+    client_user_token, default_server, read_value_id, setup, test_node_manager, TestNodeManager,
+    Tester, CLIENT_USERPASS_ID,
+};
 use opcua::{
-    server::address_space::{AccessLevel, MethodBuilder, VariableBuilder},
+    client::Session,
+    server::{
+        address_space::{AccessLevel, MethodBuilder, VariableBuilder},
+        secure_well_known_permissions, IdentityMappingRule, ServerBuilder, WellKnownRole,
+    },
     types::{
         AccessRestrictionType, AttributeId, CallMethodRequest, DataTypeId, NodeId, ObjectId,
         PermissionType, ReferenceTypeId, RolePermissionType, StatusCode, TimestampsToReturn,
@@ -311,7 +318,7 @@ async fn roleset_exposes_well_known_roles() {
 /// is denied (Bad_UserAccessDenied) — the list excludes the session's roles (fail-closed).
 #[tokio::test]
 async fn read_denied_when_role_not_granted() {
-    let (tester, nm, session) = setup().await;
+    let (tester, nm, session) = setup_enforced().await;
     let id = add_rw_var(
         &tester,
         &nm,
@@ -332,7 +339,7 @@ async fn read_denied_when_role_not_granted() {
 /// US3 / Part 3 §8.55 Write: granted Read but not Write ⇒ the write is denied and the value is unchanged.
 #[tokio::test]
 async fn write_denied_without_write_permission() {
-    let (tester, nm, session) = setup().await;
+    let (tester, nm, session) = setup_enforced().await;
     let id = add_rw_var(
         &tester,
         &nm,
@@ -360,7 +367,7 @@ async fn write_denied_without_write_permission() {
 /// US3 / Part 3 §8.55 Write: granted Read+Write ⇒ the write succeeds.
 #[tokio::test]
 async fn write_allowed_with_write_permission() {
-    let (tester, nm, session) = setup().await;
+    let (tester, nm, session) = setup_enforced().await;
     let id = add_rw_var(
         &tester,
         &nm,
@@ -407,7 +414,7 @@ async fn unconfigured_node_is_permissive() {
 /// US3 / Part 3 §5.6.2: UserAccessLevel reflects the role-effective permissions — Read granted, Write not.
 #[tokio::test]
 async fn user_access_level_reflects_roles() {
-    let (tester, nm, session) = setup().await;
+    let (tester, nm, session) = setup_enforced().await;
     let id = add_rw_var(
         &tester,
         &nm,
@@ -437,7 +444,7 @@ async fn user_access_level_reflects_roles() {
 /// denied; one granting Call to the session's role succeeds.
 #[tokio::test]
 async fn call_enforced_by_role() {
-    let (_tester, nm, session) = setup().await;
+    let (_tester, nm, session) = setup_enforced().await;
 
     let make_method = |name: &str, role: u32| {
         let id = nm.inner().next_node_id();
@@ -512,14 +519,19 @@ fn objects_folder_browse() -> opcua::types::BrowseDescription {
 /// omitted from Browse results (a sibling with no restriction stays visible).
 #[tokio::test]
 async fn browse_omits_node_without_browse_permission() {
-    let (tester, nm, session) = setup().await;
+    let (tester, nm, session) = setup_enforced().await;
     let hidden = add_rw_var(
         &tester,
         &nm,
         "HiddenFromAnon",
         vec![rp(OPERATOR_ROLE, PermissionType::Browse)],
     );
-    let visible = add_rw_var(&tester, &nm, "VisibleToAnon", Vec::new());
+    let visible = add_rw_var(
+        &tester,
+        &nm,
+        "VisibleToAnon",
+        vec![rp(ANONYMOUS_ROLE, PermissionType::Browse)],
+    );
 
     let r = session
         .browse(&[objects_folder_browse()], 1000, None)
@@ -540,7 +552,7 @@ async fn browse_omits_node_without_browse_permission() {
 /// rejected with Bad_SecurityModeInsufficient.
 #[tokio::test]
 async fn encryption_required_rejects_unencrypted_read() {
-    let (tester, nm, session) = setup().await; // None security policy
+    let (tester, nm, session) = setup_enforced().await; // None security policy
     let id = add_permissioned_var(
         &tester,
         &nm,
@@ -563,12 +575,12 @@ async fn encryption_required_rejects_unencrypted_read() {
 /// (the session service path), so it must not be wrongly blocked.
 #[tokio::test]
 async fn session_required_allows_session_access() {
-    let (tester, nm, session) = setup().await;
+    let (tester, nm, session) = setup_enforced().await;
     let id = add_permissioned_var(
         &tester,
         &nm,
         "SessReq",
-        Vec::new(),
+        vec![rp(ANONYMOUS_ROLE, PermissionType::Read)], // grant Read so SessionRequired is what's tested
         Some(AccessRestrictionType::SessionRequired),
     );
     let r = session
@@ -586,12 +598,14 @@ async fn session_required_allows_session_access() {
 /// omitted from Browse; without the bit, AccessRestrictions do not affect Browse.
 #[tokio::test]
 async fn apply_restrictions_to_browse_filters_node() {
-    let (tester, nm, session) = setup().await; // None channel ⇒ EncryptionRequired unmet
+    let (tester, nm, session) = setup_enforced().await; // None channel ⇒ EncryptionRequired unmet
+                                                        // Both nodes grant Browse to Anonymous so the Browse PERMISSION passes and the AccessRestriction
+                                                        // (not the fail-closed RolePermissions check) is what governs visibility.
     let applied = add_permissioned_var(
         &tester,
         &nm,
         "EncReqBrowseApplied",
-        Vec::new(),
+        vec![rp(ANONYMOUS_ROLE, PermissionType::Browse)],
         Some(
             AccessRestrictionType::EncryptionRequired
                 | AccessRestrictionType::ApplyRestrictionsToBrowse,
@@ -601,7 +615,7 @@ async fn apply_restrictions_to_browse_filters_node() {
         &tester,
         &nm,
         "EncReqBrowseNotApplied",
-        Vec::new(),
+        vec![rp(ANONYMOUS_ROLE, PermissionType::Browse)],
         Some(AccessRestrictionType::EncryptionRequired),
     );
 
@@ -627,6 +641,7 @@ async fn namespace_default_governs_and_node_overrides() {
     use std::time::Duration;
     // Configure ns 1 (the TestNodeManager namespace) to default-grant Read to Operator only.
     let server = crate::utils::default_server()
+        .enforce_role_based_access(true)
         .default_role_permissions(2, vec![rp(OPERATOR_ROLE, PermissionType::Read)])
         .with_node_manager(crate::utils::test_node_manager());
     let mut tester = crate::utils::Tester::new(server, false).await;
@@ -704,5 +719,277 @@ async fn role_management_denied_to_non_security_admin() {
         r.status_code,
         StatusCode::BadUserAccessDenied,
         "AddRole must be denied to a non-SecurityAdmin session"
+    );
+}
+
+/// US1 / Part 3 §8.55 (ReadRolePermissions): reading the RolePermissions attribute (24) is gated by
+/// the ReadRolePermissions permission. A node that grants Read but NOT ReadRolePermissions to the
+/// session lets Value through while denying the RolePermissions attribute read.
+#[tokio::test]
+async fn read_role_permissions_attribute_gated_by_permission() {
+    let (tester, nm, session) = setup_enforced().await;
+    // Anonymous gets Read but not ReadRolePermissions.
+    let id = add_permissioned_var(
+        &tester,
+        &nm,
+        "RpGated",
+        vec![rp(ANONYMOUS_ROLE, PermissionType::Read)],
+        None,
+    );
+
+    let r = session
+        .read(
+            &[
+                read_value_id(AttributeId::Value, id.clone()),
+                read_value_id(AttributeId::RolePermissions, id),
+            ],
+            TimestampsToReturn::Neither,
+            0.0,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        r[0].status(),
+        StatusCode::Good,
+        "Read permission lets Value through"
+    );
+    assert_eq!(
+        r[1].status(),
+        StatusCode::BadUserAccessDenied,
+        "reading RolePermissions without ReadRolePermissions must be denied"
+    );
+}
+
+// ---- US8: configuration API (identity mapping rules, global enforce posture, secure preset) ----
+
+/// Build a custom-configured server (the given builder + the TestNodeManager), stand it up, and
+/// connect anonymously over the unsecured endpoint. Returns the tester, node manager, and session.
+async fn setup_with(
+    builder: ServerBuilder,
+) -> (
+    Tester,
+    std::sync::Arc<TestNodeManager>,
+    std::sync::Arc<Session>,
+) {
+    use std::time::Duration;
+    let mut tester = Tester::new(builder.with_node_manager(test_node_manager()), false).await;
+    let nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<TestNodeManager>()
+        .unwrap();
+    let (session, lp) = tester.connect_default().await.unwrap();
+    lp.spawn();
+    tokio::time::timeout(Duration::from_secs(2), session.wait_for_connection())
+        .await
+        .unwrap();
+    (tester, nm, session)
+}
+
+/// Like `setup`, but with global RBAC enforcement enabled. Node-level RolePermissions and
+/// AccessRestrictions only deny when `enforce_role_based_access` is on; the default posture is
+/// fully permissive (see `unconfigured_node_is_permissive`), so the enforcement assertions below
+/// must run against an enforcing server.
+async fn setup_enforced() -> (
+    Tester,
+    std::sync::Arc<TestNodeManager>,
+    std::sync::Arc<Session>,
+) {
+    setup_with(default_server().enforce_role_based_access(true)).await
+}
+
+/// US8 / Part 3 §4.8 (deny-by-default once enforcement is on): with `enforce_role_based_access`
+/// ON, a node with NO configured RolePermissions (and no namespace default) is DENIED — the
+/// opposite of the default permissive posture proven by `unconfigured_node_is_permissive`.
+#[tokio::test]
+async fn enforce_posture_denies_unconfigured_node() {
+    let (tester, nm, session) = setup_with(default_server().enforce_role_based_access(true)).await;
+    let id = add_rw_var(&tester, &nm, "EnforcedUnconfigured", Vec::new());
+    let r = session
+        .read(
+            &[read_value_id(AttributeId::Value, id)],
+            TimestampsToReturn::Neither,
+            0.0,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        r[0].status(),
+        StatusCode::BadUserAccessDenied,
+        "global enforce posture must fail closed on a node with no configured RolePermissions"
+    );
+}
+
+/// US8 / Part 18 §4.4.3 (IdentityMappingRule): a configured `identity_mapping_rule` granting a role
+/// to the anonymous identity is ADDITIVE — the session holds both Anonymous and the mapped role, so
+/// permissions granted to EITHER role apply (union). Here a node grants Read to Anonymous and Write
+/// to Operator; the anonymous session, also mapped to Operator, can do both.
+#[tokio::test]
+async fn identity_mapping_unions_anonymous_and_mapped_role() {
+    let builder = default_server()
+        .enforce_role_based_access(true)
+        .identity_mapping_rule(
+            WellKnownRole::Operator.node_id(),
+            IdentityMappingRule::anonymous(),
+        );
+    let (tester, nm, session) = setup_with(builder).await;
+    let id = add_rw_var(
+        &tester,
+        &nm,
+        "UnionVar",
+        vec![
+            rp(ANONYMOUS_ROLE, PermissionType::Read),
+            rp(OPERATOR_ROLE, PermissionType::Write),
+        ],
+    );
+
+    // Read is granted via the Anonymous role.
+    let r = session
+        .read(
+            &[read_value_id(AttributeId::Value, id.clone())],
+            TimestampsToReturn::Neither,
+            0.0,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        r[0].status(),
+        StatusCode::Good,
+        "Read granted to Anonymous must succeed"
+    );
+
+    // Write is granted only via the mapped Operator role — proves the mapping took effect (union).
+    let r = session.write(&[write_double(&id, 7.0)]).await.unwrap();
+    assert_eq!(
+        r[0],
+        StatusCode::Good,
+        "Write granted to Operator must succeed for the anonymous→Operator mapped session"
+    );
+}
+
+/// US8 / Part 18 §4.4.3: an identity mapping keyed on the activated UserName grants the mapped role
+/// to that user. A username session mapped to Operator can write an Operator-permissioned node that
+/// a plain anonymous session (Anonymous role only) could not.
+#[tokio::test]
+async fn username_identity_maps_to_role() {
+    use std::time::Duration;
+    let builder = default_server()
+        .enforce_role_based_access(true)
+        .identity_mapping_rule(
+            WellKnownRole::Operator.node_id(),
+            IdentityMappingRule::user_name(CLIENT_USERPASS_ID),
+        );
+    let mut tester = Tester::new(builder.with_node_manager(test_node_manager()), false).await;
+    let nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<TestNodeManager>()
+        .unwrap();
+    let id = add_rw_var(
+        &tester,
+        &nm,
+        "OperatorWritable",
+        vec![rp(OPERATOR_ROLE, PermissionType::Write)],
+    );
+
+    let (session, lp) = tester
+        .connect(
+            opcua::crypto::SecurityPolicy::None,
+            opcua::types::MessageSecurityMode::None,
+            client_user_token(),
+        )
+        .await
+        .unwrap();
+    lp.spawn();
+    tokio::time::timeout(Duration::from_secs(2), session.wait_for_connection())
+        .await
+        .unwrap();
+
+    let r = session.write(&[write_double(&id, 3.0)]).await.unwrap();
+    assert_eq!(
+        r[0],
+        StatusCode::Good,
+        "the configured username→Operator mapping must grant Write to the username session"
+    );
+}
+
+/// US8 / Part 18 §4.6 (AddRole): with an identity mapping granting SecurityAdmin to the session, the
+/// SecurityAdmin-gated RoleSet management Methods become callable — the complement of
+/// `role_management_denied_to_non_security_admin`.
+#[tokio::test]
+async fn security_admin_mapping_unlocks_role_management() {
+    let builder = default_server().identity_mapping_rule(
+        WellKnownRole::SecurityAdmin.node_id(),
+        IdentityMappingRule::anonymous(),
+    );
+    let (_tester, _nm, session) = setup_with(builder).await;
+    let r = session
+        .call_one(CallMethodRequest {
+            object_id: NodeId::new(0, 15606), // Server.ServerCapabilities.RoleSet
+            method_id: NodeId::new(0, 16301), // RoleSet AddRole
+            input_arguments: Some(vec![
+                Variant::from("Maintainer"),
+                Variant::from("urn:test:roles"),
+            ]),
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        r.status_code,
+        StatusCode::Good,
+        "AddRole must succeed for a session mapped to SecurityAdmin"
+    );
+}
+
+/// US8 / T097 / Part 3 §4.9.2: the secure preset (a) turns on global enforcement — an unconfigured
+/// node is denied — and (b) assigns the well-known roles their spec-suggested permission sets. This
+/// independently asserts the key invariants of §4.9.2: Anonymous reads but cannot write/call,
+/// Operator can write+call, and SecurityAdmin manages role permissions.
+#[tokio::test]
+async fn secure_preset_enables_enforcement_and_grants_spec_permissions() {
+    // (a) The preset enables global enforcement: an unconfigured node fails closed.
+    let (tester, nm, session) = setup_with(default_server().with_secure_role_preset()).await;
+    let id = add_rw_var(&tester, &nm, "PresetUnconfigured", Vec::new());
+    let r = session
+        .read(
+            &[read_value_id(AttributeId::Value, id)],
+            TimestampsToReturn::Neither,
+            0.0,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        r[0].status(),
+        StatusCode::BadUserAccessDenied,
+        "with_secure_role_preset must enable global enforcement (unconfigured node denied)"
+    );
+
+    // (b) The preset's well-known-role permission sets match Part 3 §4.9.2.
+    let perms = secure_well_known_permissions();
+    let perm_for = |role: WellKnownRole| {
+        perms
+            .iter()
+            .find(|p| p.role_id == role.node_id())
+            .unwrap_or_else(|| panic!("preset must define {role:?}"))
+            .permissions
+    };
+    let anon = perm_for(WellKnownRole::Anonymous);
+    assert!(
+        anon.contains(PermissionType::Read),
+        "Anonymous must have Read"
+    );
+    assert!(
+        !anon.contains(PermissionType::Write) && !anon.contains(PermissionType::Call),
+        "Anonymous must NOT have Write or Call (§4.9.2)"
+    );
+    let op = perm_for(WellKnownRole::Operator);
+    assert!(
+        op.contains(PermissionType::Write) && op.contains(PermissionType::Call),
+        "Operator must have Write and Call (§4.9.2)"
+    );
+    let sec = perm_for(WellKnownRole::SecurityAdmin);
+    assert!(
+        sec.contains(PermissionType::WriteRolePermissions),
+        "SecurityAdmin must have WriteRolePermissions (§4.9.2)"
     );
 }

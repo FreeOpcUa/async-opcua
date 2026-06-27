@@ -1,27 +1,76 @@
 use std::str::FromStr;
 
 use opcua_types::{IdentityCriteriaType, IdentityMappingRuleType, NodeId, StatusCode, UAString};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// Runtime representation of Part 18 IdentityMappingRuleType criteria used for role resolution.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum IdentityMappingRule {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum IdentityMappingRule {
+    /// Matches anonymous identities.
     AnonymousIdentity,
+    /// Matches any successfully authenticated non-anonymous identity.
     AuthenticatedUser,
+    /// Matches a user-name identity by user name.
     UserName(String),
+    /// Matches an X.509 identity by certificate thumbprint.
     Thumbprint(String),
+    /// Matches an identity that has already been granted the referenced role.
+    #[serde(
+        serialize_with = "serialize_node_id",
+        deserialize_with = "deserialize_node_id"
+    )]
     Role(NodeId),
+    /// Matches an issued-token identity by group identifier.
     GroupId(String),
+    /// Matches a client application URI.
     Application(String),
 }
 
 /// Error returned when a generated identity mapping rule cannot be represented by the runtime model.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum IdentityMappingRuleConversionError {
+pub enum IdentityMappingRuleConversionError {
+    /// The generated rule used a criteria type that is not supported by the runtime resolver.
     UnsupportedCriteriaType(IdentityCriteriaType),
+    /// The generated role criteria could not be parsed as a NodeId.
     InvalidRoleNodeId(StatusCode),
 }
 
 impl IdentityMappingRule {
+    /// Creates a rule that matches anonymous identities.
+    pub fn anonymous() -> Self {
+        Self::AnonymousIdentity
+    }
+
+    /// Creates a rule that matches any successfully authenticated non-anonymous identity.
+    pub fn authenticated_user() -> Self {
+        Self::AuthenticatedUser
+    }
+
+    /// Creates a rule that matches a user-name identity by user name.
+    pub fn user_name(user_name: impl Into<String>) -> Self {
+        Self::UserName(user_name.into())
+    }
+
+    /// Creates a rule that matches an X.509 identity by certificate thumbprint.
+    pub fn thumbprint(thumbprint: impl Into<String>) -> Self {
+        Self::Thumbprint(thumbprint.into())
+    }
+
+    /// Creates a rule that matches an identity already granted the referenced role.
+    pub fn role(role_node_id: NodeId) -> Self {
+        Self::Role(role_node_id)
+    }
+
+    /// Creates a rule that matches an issued-token identity by group identifier.
+    pub fn group_id(group_id: impl Into<String>) -> Self {
+        Self::GroupId(group_id.into())
+    }
+
+    /// Creates a rule that matches a client application URI.
+    pub fn application(application_uri: impl Into<String>) -> Self {
+        Self::Application(application_uri.into())
+    }
+
     pub(crate) fn criteria_type(&self) -> IdentityCriteriaType {
         match self {
             Self::AnonymousIdentity => IdentityCriteriaType::Anonymous,
@@ -44,6 +93,21 @@ impl IdentityMappingRule {
             Self::Role(value) => UAString::from(value.to_string()),
         }
     }
+}
+
+fn serialize_node_id<S>(node_id: &NodeId, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    node_id.to_string().serialize(serializer)
+}
+
+fn deserialize_node_id<'de, D>(deserializer: D) -> Result<NodeId, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let node_id = String::deserialize(deserializer)?;
+    NodeId::from_str(&node_id).map_err(serde::de::Error::custom)
 }
 
 impl From<&IdentityMappingRule> for IdentityCriteriaType {

@@ -409,28 +409,11 @@ impl RoleResolver {
     }
 
     pub(crate) fn resolve(&self, identity: &ResolvedIdentity) -> Vec<NodeId> {
-        if identity.is_anonymous() {
-            let anonymous = WellKnownRole::Anonymous.node_id();
-            return self
-                .roles
-                .iter()
-                .find(|role| role.node_id == anonymous)
-                .filter(|role| role.allows_application(identity.application_uri.as_deref()))
-                .filter(|role| role.allows_endpoint(identity.endpoint_url.as_deref()))
-                .map(|_| vec![anonymous])
-                .unwrap_or_default();
-        }
-
-        let anonymous = WellKnownRole::Anonymous.node_id();
         let authenticated_user = WellKnownRole::AuthenticatedUser.node_id();
         let mut granted = Vec::new();
         let mut grant_authenticated_user = false;
 
         for role in &self.roles {
-            if role.node_id == anonymous {
-                continue;
-            }
-
             if role
                 .identity_rules
                 .iter()

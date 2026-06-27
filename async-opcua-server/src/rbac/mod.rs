@@ -11,14 +11,21 @@ use opcua_types::{NodeId, ObjectId};
 
 pub(crate) mod decision;
 pub(crate) mod defaults;
+mod preset;
 pub(crate) mod resolver;
 #[cfg(feature = "generated-address-space")]
 pub(crate) mod role_management;
 pub(crate) mod rules;
 
+pub use preset::{
+    anonymous_permissions, authenticated_user_permissions, configure_admin_permissions,
+    engineer_permissions, observer_permissions, operator_permissions,
+    secure_well_known_permissions, security_admin_permissions, supervisor_permissions,
+};
+
 /// Standard OPC UA well-known roles used by RoleSet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum WellKnownRole {
+pub enum WellKnownRole {
     /// Anonymous role.
     Anonymous,
     /// AuthenticatedUser role.
@@ -50,7 +57,7 @@ impl WellKnownRole {
     ];
 
     /// Returns the standard namespace 0 NodeId for this well-known role.
-    pub(crate) fn node_id(self) -> NodeId {
+    pub fn node_id(self) -> NodeId {
         match self {
             Self::Anonymous => ObjectId::WellKnownRole_Anonymous.into(),
             Self::AuthenticatedUser => ObjectId::WellKnownRole_AuthenticatedUser.into(),

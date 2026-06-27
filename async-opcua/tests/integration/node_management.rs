@@ -32,13 +32,22 @@ const WRITABLE_NS: &str = "urn:writable-address-space-test";
 async fn setup_simple(
     gate_on: bool,
 ) -> (Tester, Arc<SimpleNodeManager>, u16, NodeId, Arc<Session>) {
-    let mut server = crate::utils::default_server().with_node_manager(simple_node_manager(
-        NamespaceMetadata {
-            namespace_uri: WRITABLE_NS.to_owned(),
-            ..Default::default()
-        },
-        "writable",
-    ));
+    setup_simple_rbac(gate_on, false).await
+}
+
+async fn setup_simple_rbac(
+    gate_on: bool,
+    enforce_rbac: bool,
+) -> (Tester, Arc<SimpleNodeManager>, u16, NodeId, Arc<Session>) {
+    let mut server = crate::utils::default_server()
+        .enforce_role_based_access(enforce_rbac)
+        .with_node_manager(simple_node_manager(
+            NamespaceMetadata {
+                namespace_uri: WRITABLE_NS.to_owned(),
+                ..Default::default()
+            },
+            "writable",
+        ));
     server.limits_mut().clients_can_modify_address_space = gate_on;
     let mut tester = Tester::new(server, false).await;
     let nm = tester
@@ -1149,7 +1158,8 @@ async fn add_nodes_emits_audit_event() {
 /// so a source granting AddReference only to Operator denies it; an unpermissioned source allows it.
 #[tokio::test]
 async fn simple_add_reference_enforced_by_role_permission() {
-    let (_tester, nm, ns, parent, session) = setup_simple(true).await;
+    // RBAC enforcement is opt-in; enable it so node-level RolePermissions are honored.
+    let (_tester, nm, ns, parent, session) = setup_simple_rbac(true, true).await;
     let src = NodeId::new(ns, "RbacRefSrc");
     let tgt = NodeId::new(ns, "RbacRefTgt");
     {
@@ -1157,7 +1167,7 @@ async fn simple_add_reference_enforced_by_role_permission() {
         ObjectBuilder::new(&src, "RbacRefSrc", "RbacRefSrc")
             .organized_by(parent.clone())
             .role_permissions(vec![RolePermissionType {
-                role_id: NodeId::new(0, 15680), // Operator only
+                role_id: NodeId::new(0, 15680), // Operator only — anonymous session lacks it
                 permissions: PermissionType::AddReference,
             }])
             .insert(&mut *sp);
@@ -1179,9 +1189,19 @@ async fn simple_add_reference_enforced_by_role_permission() {
         .unwrap();
     assert_eq!(denied, vec![StatusCode::BadUserAccessDenied]);
 
-    // Control: a source with no role_permissions permits AddReference.
+    // Control: a source granting AddReference to the Anonymous role the session holds is allowed.
+    // (Under opt-in enforcement an UNconfigured node would fail closed, so the grant is explicit.)
     let open = NodeId::new(ns, "OpenRefSrc");
-    seed_object(&nm, &parent, &open, "OpenRefSrc");
+    {
+        let mut sp = nm.address_space().write();
+        ObjectBuilder::new(&open, "OpenRefSrc", "OpenRefSrc")
+            .organized_by(parent.clone())
+            .role_permissions(vec![RolePermissionType {
+                role_id: NodeId::new(0, 15644), // Anonymous — held by the anonymous session
+                permissions: PermissionType::AddReference,
+            }])
+            .insert(&mut *sp);
+    }
     let allowed = session
         .add_references(&[AddReferencesItem {
             source_node_id: open,

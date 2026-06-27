@@ -4537,15 +4537,41 @@ fn make_variable_794(
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
         node: opcua::nodes::Variable::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 2254u32),
-                opcua::types::NodeClass::Variable,
-                opcua::types::QualifiedName::new(0u16, "ServerArray"),
-                opcua::types::LocalizedText::new("", "ServerArray"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
+            {
+                let mut base = opcua::nodes::Base::new_full(
+                    opcua::types::NodeId::new(0u16, 2254u32),
+                    opcua::types::NodeClass::Variable,
+                    opcua::types::QualifiedName::new(0u16, "ServerArray"),
+                    opcua::types::LocalizedText::new("", "ServerArray"),
+                    None,
+                    Some(0u32),
+                    Some(0u32),
+                );
+                opcua::nodes::NodeBase::set_role_permissions(
+                    &mut base,
+                    vec![
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15644u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                33u64 as i32,
+                            ),
+                        },
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15716u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                59391u64 as i32,
+                            ),
+                        },
+                        opcua::types::RolePermissionType {
+                            role_id: opcua::types::NodeId::new(0u16, 15704u32),
+                            permissions: opcua::types::PermissionType::from_bits_truncate(
+                                59391u64 as i32,
+                            ),
+                        },
+                    ],
+                );
+                base
+            },
             opcua::types::NodeId::new(0u16, 12u32),
             false,
             1i32,

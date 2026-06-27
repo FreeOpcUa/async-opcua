@@ -4610,15 +4610,31 @@ fn make_variable_1152(
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
         node: opcua::nodes::Variable::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 16192u32),
-                opcua::types::NodeClass::Variable,
-                opcua::types::QualifiedName::new(0u16, "Identities"),
-                opcua::types::LocalizedText::new("", "Identities"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
+            {
+                let mut base = opcua::nodes::Base::new_full(
+                    opcua::types::NodeId::new(0u16, 16192u32),
+                    opcua::types::NodeClass::Variable,
+                    opcua::types::QualifiedName::new(0u16, "Identities"),
+                    opcua::types::LocalizedText::new("", "Identities"),
+                    None,
+                    Some(0u32),
+                    Some(0u32),
+                );
+                opcua::nodes::NodeBase::set_role_permissions(
+                    &mut base,
+                    vec![opcua::types::RolePermissionType {
+                        role_id: opcua::types::NodeId::new(0u16, 15704u32),
+                        permissions: opcua::types::PermissionType::from_bits_truncate(
+                            59391u64 as i32,
+                        ),
+                    }],
+                );
+                opcua::nodes::NodeBase::set_access_restrictions(
+                    &mut base,
+                    opcua::types::AccessRestrictionType::from_bits_truncate(3u8 as i16),
+                );
+                base
+            },
             opcua::types::NodeId::new(0u16, 15634u32),
             false,
             1i32,
@@ -4649,15 +4665,31 @@ fn make_variable_1154(
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
         node: opcua::nodes::Variable::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 16203u32),
-                opcua::types::NodeClass::Variable,
-                opcua::types::QualifiedName::new(0u16, "Identities"),
-                opcua::types::LocalizedText::new("", "Identities"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
+            {
+                let mut base = opcua::nodes::Base::new_full(
+                    opcua::types::NodeId::new(0u16, 16203u32),
+                    opcua::types::NodeClass::Variable,
+                    opcua::types::QualifiedName::new(0u16, "Identities"),
+                    opcua::types::LocalizedText::new("", "Identities"),
+                    None,
+                    Some(0u32),
+                    Some(0u32),
+                );
+                opcua::nodes::NodeBase::set_role_permissions(
+                    &mut base,
+                    vec![opcua::types::RolePermissionType {
+                        role_id: opcua::types::NodeId::new(0u16, 15704u32),
+                        permissions: opcua::types::PermissionType::from_bits_truncate(
+                            59391u64 as i32,
+                        ),
+                    }],
+                );
+                opcua::nodes::NodeBase::set_access_restrictions(
+                    &mut base,
+                    opcua::types::AccessRestrictionType::from_bits_truncate(3u8 as i16),
+                );
+                base
+            },
             opcua::types::NodeId::new(0u16, 15634u32),
             false,
             1i32,
@@ -4688,15 +4720,31 @@ fn make_variable_1156(
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
         node: opcua::nodes::Variable::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 18626u32),
-                opcua::types::NodeClass::Variable,
-                opcua::types::QualifiedName::new(0u16, "Identities"),
-                opcua::types::LocalizedText::new("", "Identities"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
+            {
+                let mut base = opcua::nodes::Base::new_full(
+                    opcua::types::NodeId::new(0u16, 18626u32),
+                    opcua::types::NodeClass::Variable,
+                    opcua::types::QualifiedName::new(0u16, "Identities"),
+                    opcua::types::LocalizedText::new("", "Identities"),
+                    None,
+                    Some(0u32),
+                    Some(0u32),
+                );
+                opcua::nodes::NodeBase::set_role_permissions(
+                    &mut base,
+                    vec![opcua::types::RolePermissionType {
+                        role_id: opcua::types::NodeId::new(0u16, 15704u32),
+                        permissions: opcua::types::PermissionType::from_bits_truncate(
+                            59391u64 as i32,
+                        ),
+                    }],
+                );
+                opcua::nodes::NodeBase::set_access_restrictions(
+                    &mut base,
+                    opcua::types::AccessRestrictionType::from_bits_truncate(3u8 as i16),
+                );
+                base
+            },
             opcua::types::NodeId::new(0u16, 15634u32),
             false,
             1i32,
@@ -4727,15 +4775,31 @@ fn make_variable_1158(
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
         node: opcua::nodes::Variable::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 16214u32),
-                opcua::types::NodeClass::Variable,
-                opcua::types::QualifiedName::new(0u16, "Identities"),
-                opcua::types::LocalizedText::new("", "Identities"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
+            {
+                let mut base = opcua::nodes::Base::new_full(
+                    opcua::types::NodeId::new(0u16, 16214u32),
+                    opcua::types::NodeClass::Variable,
+                    opcua::types::QualifiedName::new(0u16, "Identities"),
+                    opcua::types::LocalizedText::new("", "Identities"),
+                    None,
+                    Some(0u32),
+                    Some(0u32),
+                );
+                opcua::nodes::NodeBase::set_role_permissions(
+                    &mut base,
+                    vec![opcua::types::RolePermissionType {
+                        role_id: opcua::types::NodeId::new(0u16, 15704u32),
+                        permissions: opcua::types::PermissionType::from_bits_truncate(
+                            59391u64 as i32,
+                        ),
+                    }],
+                );
+                opcua::nodes::NodeBase::set_access_restrictions(
+                    &mut base,
+                    opcua::types::AccessRestrictionType::from_bits_truncate(3u8 as i16),
+                );
+                base
+            },
             opcua::types::NodeId::new(0u16, 15634u32),
             false,
             1i32,
@@ -4766,15 +4830,31 @@ fn make_variable_1159(
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
         node: opcua::nodes::Variable::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 15416u32),
-                opcua::types::NodeClass::Variable,
-                opcua::types::QualifiedName::new(0u16, "ApplicationsExclude"),
-                opcua::types::LocalizedText::new("", "ApplicationsExclude"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
+            {
+                let mut base = opcua::nodes::Base::new_full(
+                    opcua::types::NodeId::new(0u16, 15416u32),
+                    opcua::types::NodeClass::Variable,
+                    opcua::types::QualifiedName::new(0u16, "ApplicationsExclude"),
+                    opcua::types::LocalizedText::new("", "ApplicationsExclude"),
+                    None,
+                    Some(0u32),
+                    Some(0u32),
+                );
+                opcua::nodes::NodeBase::set_role_permissions(
+                    &mut base,
+                    vec![opcua::types::RolePermissionType {
+                        role_id: opcua::types::NodeId::new(0u16, 15704u32),
+                        permissions: opcua::types::PermissionType::from_bits_truncate(
+                            59391u64 as i32,
+                        ),
+                    }],
+                );
+                opcua::nodes::NodeBase::set_access_restrictions(
+                    &mut base,
+                    opcua::types::AccessRestrictionType::from_bits_truncate(3u8 as i16),
+                );
+                base
+            },
             opcua::types::NodeId::new(0u16, 1u32),
             false,
             -1i32,
@@ -4840,15 +4920,31 @@ fn make_variable_1160(
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
         node: opcua::nodes::Variable::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 16215u32),
-                opcua::types::NodeClass::Variable,
-                opcua::types::QualifiedName::new(0u16, "Applications"),
-                opcua::types::LocalizedText::new("", "Applications"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
+            {
+                let mut base = opcua::nodes::Base::new_full(
+                    opcua::types::NodeId::new(0u16, 16215u32),
+                    opcua::types::NodeClass::Variable,
+                    opcua::types::QualifiedName::new(0u16, "Applications"),
+                    opcua::types::LocalizedText::new("", "Applications"),
+                    None,
+                    Some(0u32),
+                    Some(0u32),
+                );
+                opcua::nodes::NodeBase::set_role_permissions(
+                    &mut base,
+                    vec![opcua::types::RolePermissionType {
+                        role_id: opcua::types::NodeId::new(0u16, 15704u32),
+                        permissions: opcua::types::PermissionType::from_bits_truncate(
+                            59391u64 as i32,
+                        ),
+                    }],
+                );
+                opcua::nodes::NodeBase::set_access_restrictions(
+                    &mut base,
+                    opcua::types::AccessRestrictionType::from_bits_truncate(3u8 as i16),
+                );
+                base
+            },
             opcua::types::NodeId::new(0u16, 12u32),
             false,
             1i32,
@@ -4879,15 +4975,31 @@ fn make_variable_1161(
 ) -> opcua::nodes::ImportedItem {
     opcua::nodes::ImportedItem {
         node: opcua::nodes::Variable::new_full(
-            opcua::nodes::Base::new_full(
-                opcua::types::NodeId::new(0u16, 15417u32),
-                opcua::types::NodeClass::Variable,
-                opcua::types::QualifiedName::new(0u16, "EndpointsExclude"),
-                opcua::types::LocalizedText::new("", "EndpointsExclude"),
-                None,
-                Some(0u32),
-                Some(0u32),
-            ),
+            {
+                let mut base = opcua::nodes::Base::new_full(
+                    opcua::types::NodeId::new(0u16, 15417u32),
+                    opcua::types::NodeClass::Variable,
+                    opcua::types::QualifiedName::new(0u16, "EndpointsExclude"),
+                    opcua::types::LocalizedText::new("", "EndpointsExclude"),
+                    None,
+                    Some(0u32),
+                    Some(0u32),
+                );
+                opcua::nodes::NodeBase::set_role_permissions(
+                    &mut base,
+                    vec![opcua::types::RolePermissionType {
+                        role_id: opcua::types::NodeId::new(0u16, 15704u32),
+                        permissions: opcua::types::PermissionType::from_bits_truncate(
+                            59391u64 as i32,
+                        ),
+                    }],
+                );
+                opcua::nodes::NodeBase::set_access_restrictions(
+                    &mut base,
+                    opcua::types::AccessRestrictionType::from_bits_truncate(3u8 as i16),
+                );
+                base
+            },
             opcua::types::NodeId::new(0u16, 1u32),
             false,
             -1i32,

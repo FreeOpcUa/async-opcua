@@ -244,12 +244,64 @@ impl<'a> NodeSetCodeGenerator<'a> {
         let user_write_mask = node.user_write_mask.0;
         let node_id = self.resolve_node_id(&node.node_id)?;
 
-        Ok(parse_quote! {
+        let base: Expr = parse_quote! {
             opcua::nodes::Base::new_full(
                 #node_id, #node_class, #browse_name, #name, #description,
                 Some(#write_mask), Some(#user_write_mask)
             )
-        })
+        };
+
+        let role_permissions = node
+            .role_permissions
+            .as_ref()
+            .map(|list| &list.role_permissions)
+            .filter(|role_permissions| !role_permissions.is_empty());
+        let access_restrictions = node.access_restrictions.0;
+
+        if role_permissions.is_none() && access_restrictions == 0 {
+            return Ok(base);
+        }
+
+        let role_permissions_setter = match role_permissions {
+            Some(role_permissions) => {
+                let mut items = Vec::with_capacity(role_permissions.len());
+                for role_permission in role_permissions {
+                    let role_id = self.resolve_node_id(&role_permission.node_id)?;
+                    let permissions = role_permission.permissions;
+                    items.push(quote! {
+                        opcua::types::RolePermissionType {
+                            role_id: #role_id,
+                            permissions: opcua::types::PermissionType::from_bits_truncate(#permissions as i32),
+                        }
+                    });
+                }
+                quote! {
+                    opcua::nodes::NodeBase::set_role_permissions(
+                        &mut base,
+                        vec![#(#items),*],
+                    );
+                }
+            }
+            None => quote! {},
+        };
+
+        let access_restrictions_setter = if access_restrictions != 0 {
+            quote! {
+                opcua::nodes::NodeBase::set_access_restrictions(
+                    &mut base,
+                    opcua::types::AccessRestrictionType::from_bits_truncate(#access_restrictions as i16),
+                );
+            }
+        } else {
+            quote! {}
+        };
+
+        Ok(parse_quote! {{
+            let mut base = #base;
+            #role_permissions_setter
+            #access_restrictions_setter
+            base
+        }})
     }
 
     fn generate_object(&self, node: &UAObject) -> Result<Expr, CodeGenError> {
@@ -460,5 +512,64 @@ impl<'a> NodeSetCodeGenerator<'a> {
             func,
             name: func_name_str,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use opcua_xml::schema::ua_node_set::{
+        AccessRestriction, ListOfRolePermissions, Locale, QualifiedName, ReleaseStatus,
+        RolePermission, WriteMask,
+    };
+    use quote::quote;
+
+    use super::*;
+
+    fn base_node() -> UANodeBase {
+        UANodeBase {
+            display_names: vec![LocalizedText {
+                text: "Test node".to_owned(),
+                locale: Locale("en".to_owned()),
+            }],
+            description: Vec::new(),
+            category: Vec::new(),
+            documentation: None,
+            references: None,
+            role_permissions: None,
+            node_id: NodeId("ns=1;i=1000".to_owned()),
+            browse_name: QualifiedName("1:TestNode".to_owned()),
+            write_mask: WriteMask(0),
+            user_write_mask: WriteMask(0),
+            access_restrictions: AccessRestriction(0),
+            symbolic_name: None,
+            release_status: ReleaseStatus::Released,
+        }
+    }
+
+    #[test]
+    fn generate_base_preserves_role_permissions_and_access_restrictions() {
+        let aliases = HashMap::new();
+        let types = HashMap::new();
+        let type_info = HashMap::new();
+        let generator = NodeSetCodeGenerator::new("en", &aliases, &types, &type_info).unwrap();
+        let mut node = base_node();
+        node.role_permissions = Some(ListOfRolePermissions {
+            role_permissions: vec![RolePermission {
+                node_id: NodeId("i=15644".to_owned()),
+                permissions: 33,
+            }],
+        });
+        node.access_restrictions = AccessRestriction(3);
+
+        let base = generator.generate_base(&node, "Object").unwrap();
+        let rendered = quote!(#base).to_string();
+
+        assert!(rendered.contains("opcua :: nodes :: NodeBase :: set_role_permissions"));
+        assert!(rendered.contains("opcua :: types :: RolePermissionType"));
+        assert!(rendered.contains("opcua :: types :: PermissionType :: from_bits_truncate"));
+        assert!(rendered.contains("opcua :: nodes :: NodeBase :: set_access_restrictions"));
+        assert!(rendered.contains("opcua :: types :: AccessRestrictionType :: from_bits_truncate"));
     }
 }

@@ -63,6 +63,12 @@ pub use history::InMemoryEventHistory;
 pub use identity_token::IdentityToken;
 pub use info::ServerInfo;
 pub use opcua_types::event_field::EventField;
+pub use rbac::{
+    anonymous_permissions, authenticated_user_permissions, configure_admin_permissions,
+    engineer_permissions, observer_permissions, operator_permissions, rules::IdentityMappingRule,
+    secure_well_known_permissions, security_admin_permissions, supervisor_permissions,
+    WellKnownRole,
+};
 pub use reverse_connect::ReverseConnectTargetConfig;
 #[cfg(feature = "wss")]
 pub use rustls;

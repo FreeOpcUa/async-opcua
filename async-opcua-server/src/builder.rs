@@ -5,11 +5,14 @@ use rustls_pki_types::{pem::PemObject, CertificateDer, PrivateKeyDer};
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
-use crate::{constants, node_manager::TypeTreeForUser};
+use crate::{
+    config::IdentityMappingRuleConfig, constants, node_manager::TypeTreeForUser,
+    rbac::rules::IdentityMappingRule,
+};
 use opcua_core::config::Config;
 use opcua_crypto::SecurityPolicy;
 use opcua_types::{
-    AccessRestrictionType, BuildInfo, MessageSecurityMode, RolePermissionType, TypeLoader,
+    AccessRestrictionType, BuildInfo, MessageSecurityMode, NodeId, RolePermissionType, TypeLoader,
     TypeLoaderCollection,
 };
 
@@ -398,6 +401,31 @@ impl ServerBuilder {
         self
     }
 
+    /// Set whether missing RolePermissions fail closed globally.
+    ///
+    /// The default is `false` so existing servers without RolePermissions remain permissive.
+    pub fn enforce_role_based_access(mut self, enforce: bool) -> Self {
+        self.config.limits.enforce_role_based_access = enforce;
+        self
+    }
+
+    /// Apply an opt-in secure RBAC baseline for the server namespace.
+    ///
+    /// This turns on global fail-closed role enforcement and installs the Part 3 well-known role
+    /// suggested permissions as namespace 0 default RolePermissions.
+    pub fn with_secure_role_preset(self) -> Self {
+        self.enforce_role_based_access(true)
+            .default_role_permissions(0, crate::rbac::secure_well_known_permissions())
+    }
+
+    /// Add an identity-to-role mapping applied to the role resolver at startup.
+    pub fn identity_mapping_rule(mut self, role: NodeId, rule: IdentityMappingRule) -> Self {
+        self.config
+            .identity_mapping_rules
+            .push(IdentityMappingRuleConfig::new(role, rule));
+        self
+    }
+
     /// PKI folder, either absolute or relative to executable.
     pub fn pki_dir(mut self, pki_dir: impl Into<PathBuf>) -> Self {
         self.config.pki_dir = pki_dir.into();
@@ -670,6 +698,10 @@ fn build_wss_rustls_config(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        config::IdentityMappingRuleConfig, rbac::resolver::ResolvedIdentity,
+        secure_well_known_permissions, IdentityMappingRule, WellKnownRole,
+    };
     use opcua_types::{NodeId, PermissionType};
 
     fn role_permission(role_id: NodeId, permissions: PermissionType) -> RolePermissionType {
@@ -704,6 +736,97 @@ mod tests {
         );
     }
 
+    #[test]
+    fn builder_stores_identity_mapping_rules_in_config() {
+        let role = WellKnownRole::SecurityAdmin.node_id();
+        let rule = IdentityMappingRule::anonymous();
+        let builder = ServerBuilder::new().identity_mapping_rule(role.clone(), rule.clone());
+
+        assert_eq!(
+            builder.config().identity_mapping_rules,
+            vec![IdentityMappingRuleConfig::new(role, rule)]
+        );
+    }
+
+    #[test]
+    fn builder_stores_role_based_access_enforcement_in_config() {
+        let builder = ServerBuilder::new().enforce_role_based_access(true);
+        assert!(builder.config().limits.enforce_role_based_access);
+
+        let builder = builder.enforce_role_based_access(false);
+        assert!(!builder.config().limits.enforce_role_based_access);
+    }
+
+    #[test]
+    fn secure_role_preset_enables_enforcement_and_namespace_zero_defaults() {
+        let builder = ServerBuilder::new().with_secure_role_preset();
+        let defaults = builder
+            .config()
+            .namespace_defaults
+            .get(&0)
+            .expect("secure preset should configure namespace 0 defaults");
+
+        assert!(builder.config().limits.enforce_role_based_access);
+        assert_eq!(
+            defaults.default_role_permissions.as_deref(),
+            Some(secure_well_known_permissions().as_slice())
+        );
+    }
+
+    #[test]
+    fn secure_well_known_permissions_use_spec_grounded_masks() {
+        let permissions = secure_well_known_permissions();
+        let permissions_for = |role: WellKnownRole| {
+            permissions
+                .iter()
+                .find(|entry| entry.role_id == role.node_id())
+                .map(|entry| entry.permissions)
+                .expect("well-known role should be present in secure preset")
+        };
+        let read_only =
+            PermissionType::Browse | PermissionType::Read | PermissionType::ReadRolePermissions;
+        let observer = PermissionType::Browse
+            | PermissionType::Read
+            | PermissionType::ReadHistory
+            | PermissionType::ReceiveEvents;
+        let operator = observer | PermissionType::Write | PermissionType::Call;
+        let engineer = operator
+            | PermissionType::WriteAttribute
+            | PermissionType::WriteHistorizing
+            | PermissionType::InsertHistory
+            | PermissionType::ModifyHistory
+            | PermissionType::DeleteHistory;
+        let supervisor = operator;
+        let configure_admin = PermissionType::Browse
+            | PermissionType::Read
+            | PermissionType::Write
+            | PermissionType::WriteAttribute
+            | PermissionType::AddNode
+            | PermissionType::DeleteNode
+            | PermissionType::AddReference
+            | PermissionType::RemoveReference;
+        let security_admin = PermissionType::Browse
+            | PermissionType::Read
+            | PermissionType::ReadRolePermissions
+            | PermissionType::WriteRolePermissions;
+
+        assert_eq!(permissions.len(), WellKnownRole::ALL.len());
+        assert_eq!(permissions_for(WellKnownRole::Anonymous), read_only);
+        assert_eq!(permissions_for(WellKnownRole::AuthenticatedUser), read_only);
+        assert_eq!(permissions_for(WellKnownRole::Observer), observer);
+        assert_eq!(permissions_for(WellKnownRole::Operator), operator);
+        assert_eq!(permissions_for(WellKnownRole::Engineer), engineer);
+        assert_eq!(permissions_for(WellKnownRole::Supervisor), supervisor);
+        assert_eq!(
+            permissions_for(WellKnownRole::ConfigureAdmin),
+            configure_admin
+        );
+        assert_eq!(
+            permissions_for(WellKnownRole::SecurityAdmin),
+            security_admin
+        );
+    }
+
     #[tokio::test]
     async fn server_info_uses_namespace_defaults_from_builder() {
         let role_permissions = vec![role_permission(
@@ -724,5 +847,20 @@ mod tests {
             handle.info().namespace_defaults.access_restrictions(2),
             Some(AccessRestrictionType::EncryptionRequired)
         );
+    }
+
+    #[tokio::test]
+    async fn server_info_uses_identity_mapping_rules_from_builder() {
+        let security_admin = WellKnownRole::SecurityAdmin.node_id();
+        let (_server, handle) = ServerBuilder::new_anonymous("identity mapping test")
+            .identity_mapping_rule(security_admin.clone(), IdentityMappingRule::anonymous())
+            .build()
+            .expect("test server should build");
+        let identity = ResolvedIdentity::anonymous(None::<&str>, Some("opc.tcp://localhost:4840"));
+
+        let roles = handle.info().role_resolver.read().resolve(&identity);
+
+        assert!(roles.contains(&WellKnownRole::Anonymous.node_id()));
+        assert!(roles.contains(&security_admin));
     }
 }

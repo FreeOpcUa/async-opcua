@@ -91,6 +91,7 @@ struct SessionEntry {
 }
 
 impl SessionEntry {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         session_id: u32,
         limits: SubscriptionLimits,
@@ -98,10 +99,17 @@ impl SessionEntry {
         session: Arc<RwLock<Session>>,
         type_tree: Arc<dyn TypeTreeForUserStatic>,
         node_managers: NodeManagersRef,
+        enforce_role_based_access: bool,
         cleanup_tx: mpsc::UnboundedSender<SubscriptionCleanup>,
     ) -> Self {
-        let subs =
-            SessionSubscriptions::new(limits, key, session, Arc::clone(&type_tree), node_managers);
+        let subs = SessionSubscriptions::new(
+            limits,
+            key,
+            session,
+            Arc::clone(&type_tree),
+            node_managers,
+            enforce_role_based_access,
+        );
         Self {
             handle: actor::spawn(session_id, subs, type_tree, cleanup_tx),
         }
@@ -477,6 +485,7 @@ impl SubscriptionCache {
                         context.session.clone(),
                         context.info.type_tree_getter.get_type_tree_static(context),
                         self.node_managers.clone(),
+                        context.enforce_role_based_access(),
                         cleanup_tx,
                     )
                 })
@@ -517,6 +526,7 @@ impl SubscriptionCache {
                     context.session.clone(),
                     context.info.type_tree_getter.get_type_tree_static(context),
                     self.node_managers.clone(),
+                    context.enforce_role_based_access(),
                     cleanup_tx,
                 )
             })

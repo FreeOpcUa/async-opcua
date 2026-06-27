@@ -1,8 +1,8 @@
 //! Central RolePermissions authorization decisions.
 //!
-//! A node with no effective RolePermissions is permissive for backwards compatibility. Once a
-//! RolePermissions list applies, authorization fails closed unless the union of the session's
-//! matching role grants contains the required [`PermissionType`] bit.
+//! Node-level RBAC enforcement is OPT-IN via `enforce_role_based_access` (default off). When off,
+//! the server is fully permissive and these checks never deny; when on, configured nodes are
+//! enforced and unconfigured nodes fail closed.
 
 use crate::{
     address_space::NodeType, node_manager::RequestContext, rbac::defaults::NamespaceDefaults,
@@ -25,19 +25,32 @@ pub(crate) fn effective_role_permissions<'a>(
     namespace_defaults.role_permissions(node.as_node().node_id().namespace)
 }
 
-/// Returns `true` if `user_roles` grant `required` in the effective RolePermissions list.
+/// Returns `true` for the default permissive posture.
 ///
-/// `None` means the node has no RolePermissions configured, so access remains governed by the
-/// existing AccessLevel/Executable checks and is permitted here. `Some(_)` means a RolePermissions
-/// list applies and the decision fails closed when no listed role matches the session roles.
+/// Use [`authorize_with_enforcement`] for the opt-in enforced posture.
 #[must_use]
 pub(crate) fn authorize(
     user_roles: &[NodeId],
     effective: Option<&[RolePermissionType]>,
     required: PermissionType,
 ) -> bool {
-    let Some(role_permissions) = effective else {
+    authorize_with_enforcement(user_roles, effective, required, false)
+}
+
+/// Returns `true` if `user_roles` grant `required`, applying the configured global posture.
+#[must_use]
+pub(crate) fn authorize_with_enforcement(
+    user_roles: &[NodeId],
+    effective: Option<&[RolePermissionType]>,
+    required: PermissionType,
+    enforce_role_based_access: bool,
+) -> bool {
+    if !enforce_role_based_access {
         return true;
+    }
+
+    let Some(role_permissions) = effective else {
+        return false;
     };
 
     let granted = role_permissions
@@ -61,10 +74,11 @@ pub(crate) fn authorize_ctx(
     node: &NodeType,
     required: PermissionType,
 ) -> bool {
-    authorize(
+    authorize_with_enforcement(
         context.user_roles(),
         effective_role_permissions(&context.info().namespace_defaults, node),
         required,
+        context.enforce_role_based_access(),
     )
 }
 
@@ -81,17 +95,27 @@ pub(crate) fn effective_access_restrictions(
 
 /// Returns `true` if the session roles may receive Events from an event source.
 ///
-/// `None` means the source node could not be resolved or has no RolePermissions configured, so
-/// event delivery remains permissive for backwards compatibility.
+/// This wrapper uses the default permissive posture.
 #[must_use]
 pub(crate) fn event_receive_allowed(
     user_roles: &[NodeId],
     source_role_permissions: Option<&[RolePermissionType]>,
 ) -> bool {
-    authorize(
+    event_receive_allowed_with_enforcement(user_roles, source_role_permissions, false)
+}
+
+/// Returns `true` if the session roles may receive Events, applying the global posture.
+#[must_use]
+pub(crate) fn event_receive_allowed_with_enforcement(
+    user_roles: &[NodeId],
+    source_role_permissions: Option<&[RolePermissionType]>,
+    enforce_role_based_access: bool,
+) -> bool {
+    authorize_with_enforcement(
         user_roles,
         source_role_permissions,
         PermissionType::ReceiveEvents,
+        enforce_role_based_access,
     )
 }
 
@@ -131,6 +155,10 @@ pub(crate) fn access_restrictions_ok_ctx(
     context: &RequestContext,
     node: &NodeType,
 ) -> Result<(), StatusCode> {
+    if !context.enforce_role_based_access() {
+        return Ok(());
+    }
+
     access_restrictions_ok(
         effective_access_restrictions(&context.info().namespace_defaults, node),
         context.security_mode(),
@@ -181,11 +209,21 @@ pub(crate) fn permission_for_call() -> PermissionType {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rbac::defaults::NamespaceDefaults;
+    use crate::{
+        authenticator::UserToken,
+        identity_token::{IdentityToken, POLICY_ID_ANONYMOUS},
+        node_manager::{DefaultTypeTreeGetter, RequestContextInner},
+        rbac::defaults::NamespaceDefaults,
+        session::instance::Session,
+        ServerBuilder,
+    };
+    use opcua_core::sync::RwLock;
     use opcua_nodes::{EventNotifier, Object};
     use opcua_types::{
-        AccessRestrictionType, LocalizedText, MessageSecurityMode, QualifiedName, StatusCode,
+        AccessRestrictionType, AnonymousIdentityToken, ApplicationDescription, ByteString,
+        LocalizedText, MessageSecurityMode, QualifiedName, StatusCode, UAString,
     };
+    use std::sync::Arc;
 
     fn role(id: &'static str) -> NodeId {
         NodeId::new(0, id)
@@ -208,6 +246,55 @@ mod tests {
         .into()
     }
 
+    fn request_context_with_roles_and_enforcement(
+        user_roles: Vec<NodeId>,
+        enforce_role_based_access: bool,
+    ) -> RequestContext {
+        let (_server, handle) = ServerBuilder::new_anonymous("rbac decision test")
+            .without_node_managers()
+            .enforce_role_based_access(enforce_role_based_access)
+            .build()
+            .expect("test server should build");
+        let info = handle.info().clone();
+        let session = Session::create(
+            &info,
+            NodeId::new(0, 1),
+            1,
+            60_000,
+            0,
+            0,
+            UAString::from("opc.tcp://localhost"),
+            opcua_crypto::SecurityPolicy::None.to_str().to_string(),
+            IdentityToken::Anonymous(AnonymousIdentityToken {
+                policy_id: UAString::from(POLICY_ID_ANONYMOUS),
+            }),
+            None,
+            ByteString::null(),
+            UAString::from("test"),
+            ApplicationDescription::default(),
+            MessageSecurityMode::None,
+        );
+
+        RequestContext {
+            current_node_manager_index: 0,
+            inner: Arc::new(RequestContextInner {
+                session: Arc::new(RwLock::new(session)),
+                session_id: 1,
+                authenticator: info.authenticator.clone(),
+                token: UserToken("anonymous".to_string()),
+                user_roles: Arc::new(user_roles),
+                type_tree: info.type_tree.clone(),
+                type_tree_getter: Arc::new(DefaultTypeTreeGetter),
+                subscriptions: handle.subscriptions().clone(),
+                info,
+            }),
+        }
+    }
+
+    fn request_context_with_roles_enforced(user_roles: Vec<NodeId>) -> RequestContext {
+        request_context_with_roles_and_enforcement(user_roles, true)
+    }
+
     #[test]
     fn authorize_permits_unconfigured_permissions() {
         let user_roles = [role("Operator")];
@@ -215,6 +302,49 @@ mod tests {
         let allowed = authorize(&user_roles, None, PermissionType::Read);
 
         assert!(allowed);
+    }
+
+    #[test]
+    fn authorize_permits_configured_permissions_when_enforcement_disabled() {
+        let user_roles = [role("Observer")];
+        let operator = role("Operator");
+        let permissions = [grant(&operator, PermissionType::Read)];
+
+        let allowed = authorize(&user_roles, Some(&permissions), PermissionType::Read);
+
+        assert!(allowed);
+    }
+
+    #[tokio::test]
+    async fn authorize_ctx_permits_unconfigured_permissions_when_enforcement_disabled() {
+        let context = request_context_with_roles_and_enforcement(vec![role("Operator")], false);
+        let node = object_node(3, "Open");
+
+        let allowed = authorize_ctx(&context, &node, PermissionType::Read);
+
+        assert!(allowed);
+    }
+
+    #[tokio::test]
+    async fn authorize_ctx_denies_unconfigured_permissions_when_enforcement_enabled() {
+        let context = request_context_with_roles_enforced(vec![role("Operator")]);
+        let node = object_node(3, "Unconfigured");
+
+        let allowed = authorize_ctx(&context, &node, PermissionType::Read);
+
+        assert!(!allowed);
+    }
+
+    #[tokio::test]
+    async fn authorize_ctx_evaluates_configured_permissions_when_enforcement_enabled() {
+        let operator = role("Operator");
+        let context = request_context_with_roles_enforced(vec![operator.clone()]);
+        let mut node = object_node(3, "Configured");
+        node.as_mut_node()
+            .set_role_permissions(vec![grant(&operator, PermissionType::Browse)]);
+
+        assert!(authorize_ctx(&context, &node, PermissionType::Browse));
+        assert!(!authorize_ctx(&context, &node, PermissionType::Read));
     }
 
     #[test]
@@ -264,7 +394,8 @@ mod tests {
         let operator = role("Operator");
         let permissions = [grant(&operator, PermissionType::Read)];
 
-        let allowed = authorize(&user_roles, Some(&permissions), PermissionType::Read);
+        let allowed =
+            authorize_with_enforcement(&user_roles, Some(&permissions), PermissionType::Read, true);
 
         assert!(!allowed);
     }
@@ -278,7 +409,8 @@ mod tests {
             PermissionType::Read | PermissionType::Browse,
         )];
 
-        let allowed = authorize(&user_roles, Some(&permissions), PermissionType::Read);
+        let allowed =
+            authorize_with_enforcement(&user_roles, Some(&permissions), PermissionType::Read, true);
 
         assert!(allowed);
     }
@@ -289,7 +421,8 @@ mod tests {
         let user_roles = [observer.clone()];
         let permissions = [grant(&observer, PermissionType::Browse)];
 
-        let allowed = authorize(&user_roles, Some(&permissions), PermissionType::Read);
+        let allowed =
+            authorize_with_enforcement(&user_roles, Some(&permissions), PermissionType::Read, true);
 
         assert!(!allowed);
     }
@@ -304,7 +437,12 @@ mod tests {
             grant(&operator, PermissionType::Write),
         ];
 
-        let allowed = authorize(&user_roles, Some(&permissions), PermissionType::Write);
+        let allowed = authorize_with_enforcement(
+            &user_roles,
+            Some(&permissions),
+            PermissionType::Write,
+            true,
+        );
 
         assert!(allowed);
     }
@@ -319,12 +457,21 @@ mod tests {
     }
 
     #[test]
+    fn event_receive_allowed_denies_unconfigured_source_when_enforcement_enabled() {
+        let user_roles = [role("Observer")];
+
+        let allowed = event_receive_allowed_with_enforcement(&user_roles, None, true);
+
+        assert!(!allowed);
+    }
+
+    #[test]
     fn event_receive_allowed_denies_when_receive_events_is_not_granted() {
         let observer = role("Observer");
         let permissions = [grant(&observer, PermissionType::Read)];
         let user_roles = [observer];
 
-        let allowed = event_receive_allowed(&user_roles, Some(&permissions));
+        let allowed = event_receive_allowed_with_enforcement(&user_roles, Some(&permissions), true);
 
         assert!(!allowed);
     }
@@ -335,7 +482,7 @@ mod tests {
         let permissions = [grant(&observer, PermissionType::ReceiveEvents)];
         let user_roles = [observer];
 
-        let allowed = event_receive_allowed(&user_roles, Some(&permissions));
+        let allowed = event_receive_allowed_with_enforcement(&user_roles, Some(&permissions), true);
 
         assert!(allowed);
     }
@@ -398,6 +545,18 @@ mod tests {
         ] {
             assert_eq!(access_restrictions_ok(restrictions, security_mode), Ok(()));
         }
+    }
+
+    #[tokio::test]
+    async fn access_restrictions_ctx_ignores_restrictions_when_enforcement_disabled() {
+        let context = request_context_with_roles_and_enforcement(Vec::new(), false);
+        let mut node = object_node(3, "EncryptedWhenEnforced");
+        node.as_mut_node()
+            .set_access_restrictions(AccessRestrictionType::EncryptionRequired);
+
+        let result = access_restrictions_ok_ctx(&context, &node);
+
+        assert_eq!(result, Ok(()));
     }
 
     #[test]

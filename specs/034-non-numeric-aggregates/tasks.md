@@ -44,11 +44,11 @@ parallelizable (different concern, no incomplete deps). All engine work is in
 **Goal**: NumberOfTransitions counts value changes vs the previous non-Bad value, for any value type.
 **Independent test**: a Boolean flipping 4× reads 4; a numeric 1→2→3 reads 2 (previously 0).
 
-- [ ] T009 [US2] Rewrite `agg_number_of_transitions` in `engine.rs`: order the prior **non-Bad** value + in-interval **non-Bad** points (Good OR Uncertain — wider than Count's Good-only, per §5.4.3.24) by timestamp and count consecutive pairs whose `Variant` value differs (`!=`); remove the `variant_to_f64` + zero-crossing `(w0==0.0)!=(w1==0.0)` logic; keep the result StatusCode (`percent_values_status`) and timestamps (Spec: Part 13 §5.4.3.24 NumberOfTransitions)
-- [ ] T010 [US2] Update the existing numeric NumberOfTransitions expected values in `tests/aggregates_tests.rs` to the spec-correct value-change counts and add an inline comment citing §5.4.3.24 (the prior values counted zero-crossings and were wrong) (Spec: FR-007; §5.4.3.24)
-- [ ] T011 [P] [US2] [Claude] Test: a Boolean source that changes value 4× within the interval reads NumberOfTransitions = 4 (Spec: SC-002; §5.4.3.24)
-- [ ] T012 [P] [US2] [Claude] Test: an Enumeration/String source with no value change reads 0; a numeric 1.0→2.0→3.0 source reads 2 (the corrected value) (Spec: §5.4.3.24; FR-007)
-- [ ] T012a [P] [US2] [Claude] Test: the Good-vs-non-Bad distinction — an interval with an Uncertain-status point that changes value contributes a transition for NumberOfTransitions (non-Bad) but is excluded from Count (Good-only); pins the §5.4.3.21-vs-§5.4.3.24 status difference (Spec: §5.4.3.21 / §5.4.3.24)
+- [X] T009 [US2] Rewrite `agg_number_of_transitions` in `engine.rs`: order the prior **non-Bad** value + in-interval **non-Bad** points (Good OR Uncertain — wider than Count's Good-only, per §5.4.3.24) by timestamp and count consecutive pairs whose `Variant` value differs (`!=`); remove the `variant_to_f64` + zero-crossing `(w0==0.0)!=(w1==0.0)` logic; keep the result StatusCode (`percent_values_status`) and timestamps (Spec: Part 13 §5.4.3.24 NumberOfTransitions)
+- [X] T010 [US2] Update the existing numeric NumberOfTransitions expected values in `tests/aggregates_tests.rs` to the spec-correct value-change counts and add an inline comment citing §5.4.3.24 (the prior values counted zero-crossings and were wrong) (Spec: FR-007; §5.4.3.24)
+- [X] T011 [P] [US2] [Claude] Test: a Boolean source that changes value 4× within the interval reads NumberOfTransitions = 4 (Spec: SC-002; §5.4.3.24)
+- [X] T012 [P] [US2] [Claude] Test: an Enumeration/String source with no value change reads 0; a numeric 1.0→2.0→3.0 source reads 2 (the corrected value) (Spec: §5.4.3.24; FR-007)
+- [X] T012a [P] [US2] [Claude] Test: the Good-vs-non-Bad distinction — an interval with an Uncertain-status point that changes value contributes a transition for NumberOfTransitions (non-Bad) but is excluded from Count (Good-only); pins the §5.4.3.21-vs-§5.4.3.24 status difference (Spec: §5.4.3.21 / §5.4.3.24)
 
 **Checkpoint**: NumberOfTransitions is value-change based and correct for numeric and non-numeric.
 

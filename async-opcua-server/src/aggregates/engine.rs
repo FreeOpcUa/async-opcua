@@ -1160,37 +1160,30 @@ fn agg_duration_in_state_non_zero(input: &AggregateInput<'_>) -> DataValue {
 
 fn agg_number_of_transitions(input: &AggregateInput<'_>) -> DataValue {
     let mut points = Vec::with_capacity(input.values.len() + usize::from(input.prior.is_some()));
-    if let Some(prior_value) = input.prior.and_then(|value| {
-        if value.status.is_none_or(|status| status.is_good()) {
-            value.value.as_ref().and_then(variant_to_f64)
-        } else {
-            None
-        }
-    }) {
-        points.push((input.interval_start, prior_value));
+    if let Some(prior_value) = input
+        .prior
+        .filter(|value| value.status.is_none_or(|status| !status.is_bad()))
+    {
+        points.push(prior_value);
     }
 
-    let mut values = input.values.to_vec();
+    let mut values: Vec<_> = input
+        .values
+        .iter()
+        .copied()
+        .filter(|value| {
+            let timestamp = get_value_timestamp(value);
+            timestamp >= input.interval_start
+                && timestamp < input.interval_end
+                && value.status.is_none_or(|status| !status.is_bad())
+        })
+        .collect();
     values.sort_by_key(|value| get_value_timestamp(value));
-    points.extend(values.into_iter().filter_map(|value| {
-        let timestamp = get_value_timestamp(value);
-        if timestamp >= input.interval_start
-            && timestamp < input.interval_end
-            && value.status.is_none_or(|status| status.is_good())
-        {
-            value
-                .value
-                .as_ref()
-                .and_then(variant_to_f64)
-                .map(|numeric| (timestamp, numeric))
-        } else {
-            None
-        }
-    }));
+    points.extend(values);
 
     let count = points
         .windows(2)
-        .filter(|window| (window[0].1 == 0.0) != (window[1].1 == 0.0))
+        .filter(|window| window[0].value.as_ref() != window[1].value.as_ref())
         .count() as i32;
     let status = if input.values.is_empty() {
         StatusCode::Good

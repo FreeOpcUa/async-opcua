@@ -662,7 +662,8 @@ fn phase_e_duration_in_state_and_transitions() {
         phase_e_eval(&series, 11308).value,
         Some(Variant::Double(4000.0))
     );
-    // NumberOfTransitions over [0, 5, 0] = 0->5 and 5->0 = 2 zero/non-zero changes.
+    // NumberOfTransitions over [0, 5, 0] = 0->5 and 5->0 = 2 value changes (Part 13 §5.4.3.24,
+    // value-change semantics — here it coincides with the old zero-crossing count).
     assert_eq!(phase_e_eval(&series, 2355).value, Some(Variant::Int32(2)));
 }
 
@@ -931,4 +932,64 @@ fn count_numeric_with_bad_point_unchanged_good_only() {
     let vals = [&g0, &g1, &g2, &bad];
     let count = calculate_aggregate(&vals, &NodeId::new(0u16, ID_COUNT), start, end);
     assert_eq!(count.value, Some(Variant::Int32(3)));
+}
+
+// --- US2: NumberOfTransitions = value changes, any type (Part 13 §5.4.3.24) -
+
+const ID_NUM_TRANSITIONS: u32 = 2355;
+
+#[test]
+fn transitions_boolean_counts_each_flip() {
+    let (start, end) = phase_b_interval();
+    // SC-002: a Boolean flipping 4× → 4 (true,false,true,false,true).
+    let (a, b, c, d, e) = (
+        good_v(Variant::Boolean(true), 1),
+        good_v(Variant::Boolean(false), 2),
+        good_v(Variant::Boolean(true), 3),
+        good_v(Variant::Boolean(false), 4),
+        good_v(Variant::Boolean(true), 5),
+    );
+    let vals = [&a, &b, &c, &d, &e];
+    let n = calculate_aggregate(&vals, &NodeId::new(0u16, ID_NUM_TRANSITIONS), start, end);
+    assert_eq!(n.value, Some(Variant::Int32(4)));
+}
+
+#[test]
+fn transitions_value_change_not_zero_crossing() {
+    let (start, end) = phase_b_interval();
+    // A String series with no change → 0 transitions.
+    let (s0, s1, s2) = (
+        good_v(Variant::from("on"), 1),
+        good_v(Variant::from("on"), 2),
+        good_v(Variant::from("on"), 3),
+    );
+    let same = [&s0, &s1, &s2];
+    let n0 = calculate_aggregate(&same, &NodeId::new(0u16, ID_NUM_TRANSITIONS), start, end);
+    assert_eq!(n0.value, Some(Variant::Int32(0)));
+
+    // The numeric correction: 1.0 → 2.0 → 3.0 has 2 value changes (the old zero-crossing logic
+    // returned 0 because all values are non-zero). Part 13 §5.4.3.24.
+    let (g1, g2, g3) = (good(1.0, 1), good(2.0, 2), good(3.0, 3));
+    let rising = [&g1, &g2, &g3];
+    let n2 = calculate_aggregate(&rising, &NodeId::new(0u16, ID_NUM_TRANSITIONS), start, end);
+    assert_eq!(n2.value, Some(Variant::Int32(2)));
+}
+
+#[test]
+fn transitions_nonbad_vs_count_good_only() {
+    let (start, end) = phase_b_interval();
+    // Good-vs-non-Bad distinction (§5.4.3.21 Count is Good-only; §5.4.3.24 transitions are non-Bad):
+    // values 1.0(Good) → 2.0(Uncertain) → 2.0(Good).
+    let g0 = good(1.0, 1);
+    let u1 = dv(2.0, 2, StatusCode::Uncertain);
+    let g2 = good(2.0, 3);
+    let vals = [&g0, &u1, &g2];
+
+    // NumberOfTransitions includes the Uncertain point: 1→2 is a change, 2→2 is not → 1.
+    let n = calculate_aggregate(&vals, &NodeId::new(0u16, ID_NUM_TRANSITIONS), start, end);
+    assert_eq!(n.value, Some(Variant::Int32(1)));
+
+    // Count excludes the Uncertain point (Good-only) → 2.
+    let c = calculate_aggregate(&vals, &NodeId::new(0u16, ID_COUNT), start, end);
+    assert_eq!(c.value, Some(Variant::Int32(2)));
 }

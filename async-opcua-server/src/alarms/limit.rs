@@ -3,12 +3,13 @@
 
 use crate::address_space::{AddressSpace, ObjectBuilder, VariableBuilder};
 use crate::alarms::replace_condition_type_definition;
+use crate::alarms::source_monitor::{source_value_as_f64, SourceMonitoredAlarm};
 use crate::alarms::state_machine::ConditionStateMachine;
 use opcua_core::events::AlarmEvent;
 use opcua_nodes::{DefaultTypeTree, NodeType};
 use opcua_types::{
-    AttributeId, BrowseDirection, DataEncoding, DataTypeId, DateTime, LocalizedText, NodeId,
-    NumericRange, ObjectTypeId, QualifiedName, Range, ReferenceTypeId, StatusCode,
+    AttributeId, BrowseDirection, DataEncoding, DataTypeId, DataValue, DateTime, LocalizedText,
+    NodeId, NumericRange, ObjectTypeId, QualifiedName, Range, ReferenceTypeId, StatusCode,
     TimestampsToReturn, VariableTypeId, Variant,
 };
 use std::sync::Mutex;
@@ -304,6 +305,8 @@ impl LimitEvaluator {
 pub struct LimitAlarm {
     /// Base A&C lifecycle state machine.
     pub condition: ConditionStateMachine,
+    /// Bound AlarmConditionType InputNode source variable, or null when not bound.
+    pub source_node: NodeId,
     /// Limit thresholds, deadbands, severities, and evaluation mode.
     pub config: LimitConfig,
     /// Exclusive LimitState.CurrentState variable node.
@@ -321,6 +324,17 @@ impl LimitAlarm {
     #[must_use]
     pub fn condition_state_machine(&self) -> ConditionStateMachine {
         self.condition.clone()
+    }
+
+    /// Returns the bound AlarmConditionType InputNode source variable.
+    #[must_use]
+    pub fn source_node(&self) -> &NodeId {
+        &self.source_node
+    }
+
+    /// Sets the bound AlarmConditionType InputNode source variable.
+    pub fn set_source_node(&mut self, source: NodeId) {
+        self.source_node = source;
     }
 
     /// Creates an ExclusiveLimitAlarmType instance and its LimitState nodes in the address space.
@@ -396,6 +410,7 @@ impl LimitAlarm {
 
         Self {
             condition,
+            source_node: NodeId::null(),
             config: cfg,
             limit_current_state_id,
             limit_current_state_id_id,
@@ -462,6 +477,7 @@ impl LimitAlarm {
 
         Self {
             condition,
+            source_node: NodeId::null(),
             config: cfg,
             limit_current_state_id: NodeId::null(),
             limit_current_state_id_id: NodeId::null(),
@@ -587,6 +603,24 @@ impl LimitAlarm {
         if let Some(id) = &self.non_exclusive_state_ids.low_low {
             set_variable_value(address_space, id, Variant::from(state.low_low));
         }
+    }
+}
+
+impl SourceMonitoredAlarm for LimitAlarm {
+    fn source_node(&self) -> &NodeId {
+        &self.source_node
+    }
+
+    fn condition_id(&self) -> &NodeId {
+        &self.condition.condition_id
+    }
+
+    fn re_evaluate(
+        &self,
+        address_space: &mut AddressSpace,
+        value: &DataValue,
+    ) -> Option<AlarmEvent> {
+        source_value_as_f64(value).and_then(|value| self.update_value(address_space, value))
     }
 }
 

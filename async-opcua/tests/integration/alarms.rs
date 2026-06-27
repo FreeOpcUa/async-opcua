@@ -8,14 +8,14 @@ use chrono::TimeDelta;
 use opcua::client::HistoryReadAction;
 use opcua::{
     server::{
-        address_space::AddressSpace,
+        address_space::{AccessLevel, AddressSpace, VariableBuilder},
         node_manager::memory::{simple_node_manager, CoreNodeManager, SimpleNodeManager},
     },
     types::{
-        AttributeId, BrowsePath, ByteString, CallMethodRequest, LocalizedText, MethodId,
+        AttributeId, BrowsePath, ByteString, CallMethodRequest, DataValue, LocalizedText, MethodId,
         MonitoredItemCreateRequest, MonitoringMode, MonitoringParameters, NodeId, ObjectId,
         ObjectTypeId, QualifiedName, ReadValueId, ReferenceTypeId, RelativePath,
-        RelativePathElement, StatusCode, TimestampsToReturn, Variant,
+        RelativePathElement, StatusCode, TimestampsToReturn, Variant, WriteValue,
     },
 };
 use opcua_client::alarms::client::{get_alarm_event_select_clauses, parse_alarm_event};
@@ -1818,4 +1818,293 @@ async fn condition_event_history_read_returns_recorded_events() {
         .collect();
     assert!(messages.contains(&"first".to_string()));
     assert!(messages.contains(&"second".to_string()));
+}
+
+// ---------------------------------------------------------------------------
+// US1 — automatic alarm source monitoring (Part 9 §5.8.2 InputNode / §4.4).
+// A limit alarm bound to a writable source Variable auto-fires when that variable's
+// Value is written — no manual update_value (contrast drive_limit above).
+// ---------------------------------------------------------------------------
+
+fn make_writable_double(nm: &SimpleNodeManager, id: &str) -> NodeId {
+    let nid = NodeId::new(2, id);
+    let mut space = nm.address_space().write();
+    let var = VariableBuilder::new(&nid, id, id)
+        .data_type(DataTypeId::Double)
+        .value(0.0f64)
+        .access_level(AccessLevel::CURRENT_READ | AccessLevel::CURRENT_WRITE)
+        .user_access_level(AccessLevel::CURRENT_READ | AccessLevel::CURRENT_WRITE)
+        .component_of(ObjectId::ObjectsFolder)
+        .build();
+    space.insert::<_, NodeId>(var, None);
+    nid
+}
+
+fn write_double(node: &NodeId, v: f64) -> WriteValue {
+    WriteValue {
+        node_id: node.clone(),
+        attribute_id: AttributeId::Value as u32,
+        index_range: Default::default(),
+        value: DataValue::new_now(v),
+    }
+}
+
+/// Create a limit alarm, bind it to `input` as its InputNode, register its condition methods, and
+/// register it for automatic source monitoring. Returns the alarm handle (for state reads).
+fn monitor_limit_alarm(
+    nm: &SimpleNodeManager,
+    core_nm: &CoreNodeManager,
+    device: &str,
+    event_source: &NodeId,
+    input: &NodeId,
+    cfg: LimitConfig,
+) -> Arc<LimitAlarm> {
+    let mut alarm = register_limit_alarm(
+        nm.address_space(),
+        nm,
+        device,
+        "Level",
+        event_source.clone(),
+        cfg,
+    );
+    alarm.set_source_node(input.clone());
+    let registry = ConditionRegistry::new();
+    registry.register(alarm.condition_state_machine());
+    register_condition_methods(core_nm, registry, nm.address_space().clone());
+    let alarm = Arc::new(alarm);
+    nm.inner()
+        .alarm_source_registry()
+        .register(input.clone(), alarm.clone());
+    alarm
+}
+
+async fn sub_with_events(
+    session: &opcua_client::Session,
+    source: &NodeId,
+) -> tokio::sync::mpsc::UnboundedReceiver<(ReadValueId, Option<Vec<Variant>>)> {
+    let (notifs, _dv, events) = ChannelNotifications::new();
+    let sub_id = session
+        .create_subscription(Duration::from_millis(100), 100, 20, 1000, 0, true, notifs)
+        .await
+        .unwrap();
+    let _item = add_event_item(session, sub_id, source).await;
+    events
+}
+
+#[tokio::test]
+async fn limit_alarm_auto_fires_on_source_write() {
+    let (tester, nm, session) = setup_alarms().await;
+    let core_nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<CoreNodeManager>()
+        .unwrap();
+    let event_source = make_event_source(&nm, "AutoSrc13");
+    let input = make_writable_double(&nm, "AutoIn13");
+    monitor_limit_alarm(
+        &nm,
+        &core_nm,
+        "AutoTank13",
+        &event_source,
+        &input,
+        exclusive_level_cfg(),
+    );
+    let mut events = sub_with_events(&session, &event_source).await;
+
+    let r = session.write(&[write_double(&input, 105.0)]).await.unwrap();
+    assert_eq!(r[0], StatusCode::Good, "the write itself succeeds");
+    let e = recv_alarm(&mut events).await;
+    assert!(
+        e.active_state,
+        "writing above High auto-activates the alarm"
+    );
+    assert_eq!(e.severity, 400);
+}
+
+#[tokio::test]
+async fn limit_alarm_auto_clears_on_source_write_back_in_range() {
+    let (tester, nm, session) = setup_alarms().await;
+    let core_nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<CoreNodeManager>()
+        .unwrap();
+    let event_source = make_event_source(&nm, "AutoSrc14");
+    let input = make_writable_double(&nm, "AutoIn14");
+    monitor_limit_alarm(
+        &nm,
+        &core_nm,
+        "AutoTank14",
+        &event_source,
+        &input,
+        exclusive_level_cfg(),
+    );
+    let mut events = sub_with_events(&session, &event_source).await;
+
+    session.write(&[write_double(&input, 105.0)]).await.unwrap();
+    assert!(recv_alarm(&mut events).await.active_state);
+    // Back well within limits (deadband cleared) → inactive.
+    session.write(&[write_double(&input, 50.0)]).await.unwrap();
+    assert!(
+        !recv_alarm(&mut events).await.active_state,
+        "in-range write clears the alarm"
+    );
+}
+
+#[tokio::test]
+async fn two_alarms_on_one_source_both_auto_evaluate() {
+    let (tester, nm, session) = setup_alarms().await;
+    let core_nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<CoreNodeManager>()
+        .unwrap();
+    let src_a = make_event_source(&nm, "AutoSrc15a");
+    let src_b = make_event_source(&nm, "AutoSrc15b");
+    let input = make_writable_double(&nm, "AutoIn15");
+    let alarm_a = monitor_limit_alarm(
+        &nm,
+        &core_nm,
+        "TankA15",
+        &src_a,
+        &input,
+        exclusive_level_cfg(),
+    );
+    let alarm_b = monitor_limit_alarm(
+        &nm,
+        &core_nm,
+        "TankB15",
+        &src_b,
+        &input,
+        exclusive_level_cfg(),
+    );
+
+    session.write(&[write_double(&input, 105.0)]).await.unwrap();
+    // One write re-evaluated both alarms (Part 9 §4.4): both conditions are Active.
+    let space = nm.address_space().read();
+    assert!(alarm_a.condition_state_machine().get_active(&space));
+    assert!(alarm_b.condition_state_machine().get_active(&space));
+}
+
+#[tokio::test]
+async fn write_to_unbound_source_does_not_fire() {
+    let (_tester, nm, session) = setup_alarms().await;
+    // An event-notifier to subscribe on, plus a separate writable variable with NO alarm bound.
+    let event_source = make_event_source(&nm, "UnboundSrc16");
+    let plain = make_writable_double(&nm, "Unbound16");
+    let mut events = sub_with_events(&session, &event_source).await;
+    session.write(&[write_double(&plain, 999.0)]).await.unwrap();
+    // No alarm bound to this source → no event within a generous window.
+    let got = timeout(Duration::from_millis(500), events.recv()).await;
+    assert!(
+        got.is_err(),
+        "writing a source with no bound alarm emits nothing"
+    );
+}
+
+#[tokio::test]
+async fn disabled_alarm_does_not_auto_fire() {
+    let (tester, nm, session) = setup_alarms().await;
+    let core_nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<CoreNodeManager>()
+        .unwrap();
+    let event_source = make_event_source(&nm, "AutoSrc17");
+    let input = make_writable_double(&nm, "AutoIn17");
+    let alarm = monitor_limit_alarm(
+        &nm,
+        &core_nm,
+        "AutoTank17",
+        &event_source,
+        &input,
+        exclusive_level_cfg(),
+    );
+    {
+        let mut space = nm.address_space().write();
+        alarm
+            .condition_state_machine()
+            .set_enabled(&mut space, false);
+    }
+    let mut events = sub_with_events(&session, &event_source).await;
+    session.write(&[write_double(&input, 105.0)]).await.unwrap();
+    let got = timeout(Duration::from_millis(500), events.recv()).await;
+    assert!(
+        got.is_err(),
+        "a disabled alarm does not auto-fire (Part 9 §5.5.2)"
+    );
+}
+
+#[tokio::test]
+async fn programmatic_set_source_value_auto_fires() {
+    let (tester, nm, session) = setup_alarms().await;
+    let core_nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<CoreNodeManager>()
+        .unwrap();
+    let event_source = make_event_source(&nm, "AutoSrc18a");
+    let input = make_writable_double(&nm, "AutoIn18a");
+    monitor_limit_alarm(
+        &nm,
+        &core_nm,
+        "AutoTank18a",
+        &event_source,
+        &input,
+        exclusive_level_cfg(),
+    );
+    let mut events = sub_with_events(&session, &event_source).await;
+
+    // FR-011: a programmatic server-side set (not via the Write service) also drives the alarm.
+    nm.inner()
+        .set_source_value(&input, DataValue::new_now(105.0f64));
+    assert!(recv_alarm(&mut events).await.active_state);
+}
+
+#[tokio::test]
+async fn non_numeric_source_write_does_not_panic_or_fire() {
+    let (tester, nm, session) = setup_alarms().await;
+    let core_nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<CoreNodeManager>()
+        .unwrap();
+    let event_source = make_event_source(&nm, "AutoSrc18");
+    // A BaseDataType source accepts a non-numeric value, so it reaches the re-eval hook.
+    let input = NodeId::new(2, "AutoIn18");
+    {
+        let mut space = nm.address_space().write();
+        let var = VariableBuilder::new(&input, "AutoIn18", "AutoIn18")
+            .data_type(DataTypeId::BaseDataType)
+            .value(0.0f64)
+            .access_level(AccessLevel::CURRENT_READ | AccessLevel::CURRENT_WRITE)
+            .user_access_level(AccessLevel::CURRENT_READ | AccessLevel::CURRENT_WRITE)
+            .component_of(ObjectId::ObjectsFolder)
+            .build();
+        space.insert::<_, NodeId>(var, None);
+    }
+    monitor_limit_alarm(
+        &nm,
+        &core_nm,
+        "AutoTank18",
+        &event_source,
+        &input,
+        exclusive_level_cfg(),
+    );
+    let mut events = sub_with_events(&session, &event_source).await;
+
+    // Write a String to the bound source: the write path must not panic, and source_value_as_f64
+    // returns None (no usable numeric) → no alarm event (Constitution IV; the value is unusable).
+    let wv = WriteValue {
+        node_id: input.clone(),
+        attribute_id: AttributeId::Value as u32,
+        index_range: Default::default(),
+        value: DataValue::new_now("not a number"),
+    };
+    let _ = session.write(&[wv]).await.unwrap(); // no panic regardless of write status
+    let got = timeout(Duration::from_millis(500), events.recv()).await;
+    assert!(
+        got.is_err(),
+        "a non-numeric source value triggers no alarm event"
+    );
 }

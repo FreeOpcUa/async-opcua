@@ -5,13 +5,14 @@ use opcua_core::{trace_read_lock, trace_write_lock};
 use opcua_nodes::{HasNodeId, NodeSetImport};
 
 use crate::{
-    address_space::{read_node_value, write_node_value, AddressSpace},
+    address_space::{read_node_value, write_node_value, AddressSpace, NodeType},
+    alarms::{AlarmSourceRegistry, ServerAlarmEvent},
     history::read::modification_infos_or_none,
     node_manager::{
         DefaultTypeTree, MethodCall, MonitoredItemRef, MonitoredItemUpdateRef, NodeManagerBuilder,
         NodeManagersRef, ParsedReadValueId, RequestContext, ServerContext, SyncSampler, WriteNode,
     },
-    CreateMonitoredItem,
+    CreateMonitoredItem, SubscriptionCache,
 };
 use opcua_core::sync::RwLock;
 use opcua_types::{
@@ -131,11 +132,14 @@ pub struct SimpleNodeManagerImpl {
     name: String,
     samplers: SyncSampler,
     history_backend: RwLock<Option<Arc<dyn crate::history::HistoryStorageBackend>>>,
+    subscriptions: RwLock<Option<Arc<SubscriptionCache>>>,
+    alarm_sources: AlarmSourceRegistry,
 }
 
 #[async_trait]
 impl InMemoryNodeManagerImpl for SimpleNodeManagerImpl {
     async fn init(&self, _address_space: &mut AddressSpace, context: ServerContext) {
+        *self.subscriptions.write() = Some(context.subscriptions.clone());
         self.samplers.run(
             Duration::from_micros(
                 // If this is set too low the server will just spin at 100% CPU. Cap it at
@@ -280,12 +284,40 @@ impl InMemoryNodeManagerImpl for SimpleNodeManagerImpl {
         address_space: &RwLock<AddressSpace>,
         nodes_to_write: &mut [&mut WriteNode],
     ) -> Result<(), StatusCode> {
-        let address_space = trace_read_lock!(address_space);
-        let type_tree = trace_read_lock!(context.type_tree);
-        let cbs = trace_read_lock!(self.write_cbs);
+        let mut source_writes: Vec<(NodeId, DataValue)> = Vec::new();
 
-        for write in nodes_to_write {
-            self.write_node_value(&cbs, context, &address_space, &type_tree, write);
+        {
+            let address_space = trace_read_lock!(address_space);
+            let type_tree = trace_read_lock!(context.type_tree);
+            let cbs = trace_read_lock!(self.write_cbs);
+
+            for write in nodes_to_write {
+                self.write_node_value(&cbs, context, &address_space, &type_tree, write);
+
+                let source = &write.value().node_id;
+                if write.status().is_good()
+                    && write.value().attribute_id == AttributeId::Value
+                    && !self.alarm_source_registry().alarms_for(source).is_empty()
+                {
+                    source_writes.push((source.clone(), write.value().value.clone()));
+                }
+            }
+        }
+
+        if !source_writes.is_empty() {
+            let mut address_space = trace_write_lock!(address_space);
+
+            for (source, value) in source_writes {
+                for alarm in self.alarm_source_registry().alarms_for(&source) {
+                    if let Some(ev) = alarm.re_evaluate(&mut address_space, &value) {
+                        let wrapper = ServerAlarmEvent { event: &ev };
+                        context.subscriptions.notify_events(std::iter::once((
+                            &wrapper as &dyn opcua_nodes::Event,
+                            &ev.source_node,
+                        )));
+                    }
+                }
+            }
         }
 
         Ok(())
@@ -705,12 +737,62 @@ impl SimpleNodeManagerImpl {
             node_managers,
             samplers: SyncSampler::new(),
             history_backend: RwLock::new(None),
+            subscriptions: RwLock::new(None),
+            alarm_sources: AlarmSourceRegistry::new(),
         }
     }
 
     /// Sets the historical storage backend for this node manager.
     pub fn set_history_backend(&self, backend: Arc<dyn crate::history::HistoryStorageBackend>) {
         *self.history_backend.write() = Some(backend);
+    }
+
+    /// Returns the registry of alarms bound to source Variables.
+    pub fn alarm_source_registry(&self) -> &AlarmSourceRegistry {
+        &self.alarm_sources
+    }
+
+    /// Programmatically sets a source Variable value and re-evaluates bound alarms.
+    pub fn set_source_value(&self, source: &NodeId, value: DataValue) {
+        if let Some(manager) = self
+            .node_managers
+            .get_by_name::<SimpleNodeManager>(&self.name)
+        {
+            manager.set_source_value(source, value);
+        }
+    }
+
+    fn set_source_value_on_address_space(
+        &self,
+        address_space: &RwLock<AddressSpace>,
+        source: &NodeId,
+        value: DataValue,
+    ) {
+        let subscriptions = self.subscriptions.read().clone();
+        let mut space = trace_write_lock!(address_space);
+
+        let Some(mut node) = space.find_mut(source) else {
+            return;
+        };
+
+        let NodeType::Variable(variable) = &mut *node else {
+            return;
+        };
+
+        variable.set_data_value(value.clone());
+        drop(node);
+
+        for alarm in self.alarm_source_registry().alarms_for(source) {
+            if let Some(ev) = alarm.re_evaluate(&mut space, &value) {
+                if let Some(subscriptions) = subscriptions.as_ref() {
+                    let wrapper = ServerAlarmEvent { event: &ev };
+                    subscriptions.notify_events(std::iter::once((
+                        &wrapper as &dyn opcua_nodes::Event,
+                        &ev.source_node,
+                    )));
+                }
+            }
+        }
     }
 
     fn read_node_value(
@@ -844,6 +926,17 @@ impl SimpleNodeManagerImpl {
     }
 }
 
+impl InMemoryNodeManager<SimpleNodeManagerImpl> {
+    /// Programmatically sets a source Variable value and re-evaluates bound alarms.
+    pub fn set_source_value(&self, source: &NodeId, value: DataValue) {
+        self.inner().set_source_value_on_address_space(
+            self.address_space().as_ref(),
+            source,
+            value,
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use async_trait::async_trait;
@@ -908,6 +1001,29 @@ mod tests {
     impl RecordingHistoryBackend {
         fn calls(&self) -> Vec<HistoryBackendCall> {
             self.calls.read().clone()
+        }
+    }
+
+    struct TestSourceAlarm {
+        source: NodeId,
+        condition: NodeId,
+    }
+
+    impl crate::alarms::SourceMonitoredAlarm for TestSourceAlarm {
+        fn source_node(&self) -> &NodeId {
+            &self.source
+        }
+
+        fn condition_id(&self) -> &NodeId {
+            &self.condition
+        }
+
+        fn re_evaluate(
+            &self,
+            _address_space: &mut AddressSpace,
+            _value: &DataValue,
+        ) -> Option<opcua_core::events::AlarmEvent> {
+            None
         }
     }
 
@@ -1060,6 +1176,31 @@ mod tests {
             "history-update-test",
             NodeManagersRef::new_empty(),
         )
+    }
+
+    #[test]
+    fn alarm_source_registry_starts_empty_and_is_reachable() {
+        let manager = manager();
+        let source = NodeId::new(1, "source");
+
+        assert!(manager
+            .alarm_source_registry()
+            .alarms_for(&source)
+            .is_empty());
+
+        let condition = NodeId::new(1, "condition");
+        let alarm = Arc::new(TestSourceAlarm {
+            source: source.clone(),
+            condition: condition.clone(),
+        });
+
+        manager
+            .alarm_source_registry()
+            .register(source.clone(), alarm);
+
+        let alarms = manager.alarm_source_registry().alarms_for(&source);
+        assert_eq!(alarms.len(), 1);
+        assert_eq!(alarms[0].condition_id(), &condition);
     }
 
     fn update_data_node(node_id: &NodeId, entry_count: usize) -> HistoryUpdateNode {

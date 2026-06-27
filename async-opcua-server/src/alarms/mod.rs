@@ -10,6 +10,7 @@ pub mod limit;
 pub mod methods;
 pub mod refresh_events;
 pub mod registry;
+pub mod source_monitor;
 pub mod state_machine;
 pub mod transitions;
 
@@ -39,4 +40,5 @@ pub use methods::{register_condition_methods, register_dialog_condition_methods}
 pub use methods::{AlarmMethodHandler, ConditionRefreshHandler};
 pub use refresh_events::{RefreshEndEvent, RefreshStartEvent};
 pub use registry::ConditionRegistry;
+pub use source_monitor::{AlarmSourceRegistry, SourceMonitoredAlarm};
 pub use state_machine::{Branch, ConditionStateMachine, ShelvingState};

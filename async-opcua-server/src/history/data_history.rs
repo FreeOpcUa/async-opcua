@@ -1,0 +1,220 @@
+//! In-memory historical data storage.
+
+use std::collections::{BTreeMap, HashMap};
+
+use async_trait::async_trait;
+use opcua_core::sync::RwLock;
+use opcua_types::{
+    DataValue, DateTime, HistoryUpdateType, ModificationInfo, NodeId, PerformUpdateType,
+    StatusCode, UAString,
+};
+
+use crate::history::HistoryStorageBackend;
+
+const DEFAULT_MAX_VALUES_PER_NODE: usize = 10_000;
+
+/// A superseded value retained when a raw entry is replaced, updated-over, or deleted.
+type ModifiedEntry = (DataValue, ModificationInfo);
+/// Per-node modified-history store: original source-ticks → the superseded entries at that timestamp.
+type ModifiedStore = HashMap<NodeId, BTreeMap<i64, Vec<ModifiedEntry>>>;
+
+/// In-memory historical data backend for raw `DataValue` history.
+pub struct InMemoryDataHistory {
+    raw_values: RwLock<HashMap<NodeId, BTreeMap<i64, DataValue>>>,
+    modified_values: RwLock<ModifiedStore>,
+    max_per_node: usize,
+}
+
+impl InMemoryDataHistory {
+    /// Creates an in-memory data history backend with a default per-node cap.
+    pub fn new() -> Self {
+        Self::with_capacity(DEFAULT_MAX_VALUES_PER_NODE)
+    }
+
+    /// Creates an in-memory data history backend with the given per-node cap.
+    pub fn with_capacity(max_per_node: usize) -> Self {
+        Self {
+            raw_values: RwLock::new(HashMap::new()),
+            modified_values: RwLock::new(HashMap::new()),
+            max_per_node,
+        }
+    }
+
+    fn record_modified(
+        &self,
+        node_id: &NodeId,
+        source_ticks: i64,
+        value: DataValue,
+        update_type: HistoryUpdateType,
+    ) {
+        // ponytail: user_name is empty because the storage layer has no request context.
+        let info = ModificationInfo {
+            modification_time: DateTime::now(),
+            update_type,
+            user_name: UAString::null(),
+        };
+
+        let mut modified_values = self.modified_values.write();
+        modified_values
+            .entry(node_id.clone())
+            .or_default()
+            .entry(source_ticks)
+            .or_default()
+            .push((value, info));
+    }
+
+    fn enforce_raw_capacity(&self, values: &mut BTreeMap<i64, DataValue>) {
+        while values.len() > self.max_per_node {
+            let Some(oldest_tick) = values.keys().next().copied() else {
+                break;
+            };
+            values.remove(&oldest_tick);
+        }
+    }
+}
+
+impl Default for InMemoryDataHistory {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl HistoryStorageBackend for InMemoryDataHistory {
+    async fn read_raw_modified(
+        &self,
+        node_id: &NodeId,
+        start_time: DateTime,
+        end_time: DateTime,
+        num_values_per_node: u32,
+        _return_bounds: bool,
+        continuation_point: Option<Vec<u8>>,
+    ) -> Result<(Vec<DataValue>, Vec<ModificationInfo>, Option<Vec<u8>>), StatusCode> {
+        let start_tick = start_time.ticks();
+        let end_tick = end_time.ticks();
+        if start_tick > end_tick {
+            return Ok((Vec::new(), Vec::new(), None));
+        }
+
+        let Some(node_values) = self.raw_values.read().get(node_id).cloned() else {
+            return Ok((Vec::new(), Vec::new(), None));
+        };
+
+        let continuation_tick = decode_continuation_tick(continuation_point)?;
+        let effective_start = continuation_tick.map_or(start_tick, |tick| tick.max(start_tick));
+        let limit = (num_values_per_node > 0).then_some(num_values_per_node as usize);
+
+        let mut values = Vec::with_capacity(limit.unwrap_or(0).min(node_values.len()));
+        let mut next_token = None;
+        for (tick, value) in node_values.range(effective_start..end_tick) {
+            if limit.is_some_and(|limit| values.len() >= limit) {
+                next_token = Some(encode_continuation_tick(*tick));
+                break;
+            }
+            values.push(value.clone());
+        }
+
+        Ok((values, Vec::new(), next_token))
+    }
+
+    async fn update_data(
+        &self,
+        node_id: &NodeId,
+        perform_insert_replace: PerformUpdateType,
+        values: Vec<DataValue>,
+    ) -> Result<Vec<StatusCode>, StatusCode> {
+        if values.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut results = Vec::with_capacity(values.len());
+        let mut raw_values = self.raw_values.write();
+        let node_values = raw_values.entry(node_id.clone()).or_default();
+
+        for value in values {
+            let source_ticks = source_ticks(&value);
+            let status = match perform_insert_replace {
+                PerformUpdateType::Insert => {
+                    if let std::collections::btree_map::Entry::Vacant(entry) =
+                        node_values.entry(source_ticks)
+                    {
+                        entry.insert(value);
+                        self.enforce_raw_capacity(node_values);
+                        StatusCode::GoodEntryInserted
+                    } else {
+                        StatusCode::BadEntryExists
+                    }
+                }
+                PerformUpdateType::Replace => {
+                    if let Some(old_value) = node_values.get(&source_ticks).cloned() {
+                        self.record_modified(
+                            node_id,
+                            source_ticks,
+                            old_value,
+                            HistoryUpdateType::Replace,
+                        );
+                        node_values.insert(source_ticks, value);
+                        StatusCode::GoodEntryReplaced
+                    } else {
+                        StatusCode::BadNoEntryExists
+                    }
+                }
+                PerformUpdateType::Update => {
+                    if let Some(old_value) = node_values.get(&source_ticks).cloned() {
+                        self.record_modified(
+                            node_id,
+                            source_ticks,
+                            old_value,
+                            HistoryUpdateType::Update,
+                        );
+                        node_values.insert(source_ticks, value);
+                        StatusCode::GoodEntryReplaced
+                    } else {
+                        node_values.insert(source_ticks, value);
+                        self.enforce_raw_capacity(node_values);
+                        StatusCode::GoodEntryInserted
+                    }
+                }
+                PerformUpdateType::Remove => {
+                    if node_values.remove(&source_ticks).is_some() {
+                        StatusCode::Good
+                    } else {
+                        StatusCode::BadNoEntryExists
+                    }
+                }
+            };
+            results.push(status);
+        }
+
+        Ok(results)
+    }
+}
+
+fn source_ticks(value: &DataValue) -> i64 {
+    value.source_timestamp.unwrap_or_else(DateTime::now).ticks()
+}
+
+fn decode_continuation_tick(token: Option<Vec<u8>>) -> Result<Option<i64>, StatusCode> {
+    let Some(token) = token else {
+        return Ok(None);
+    };
+    let bytes: [u8; 8] = token
+        .as_slice()
+        .try_into()
+        .map_err(|_| StatusCode::BadContinuationPointInvalid)?;
+    Ok(Some(i64::from_le_bytes(bytes)))
+}
+
+fn encode_continuation_tick(tick: i64) -> Vec<u8> {
+    tick.to_le_bytes().to_vec()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_constructs_in_memory_data_history() {
+        let _history = InMemoryDataHistory::default();
+    }
+}

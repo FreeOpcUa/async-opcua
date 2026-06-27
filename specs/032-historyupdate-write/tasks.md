@@ -60,16 +60,16 @@ modes + modified recording) so the default `InMemoryNodeManager`/`SimpleNodeMana
 without sqlite.
 **Independent test**: UpdateData matrix + HistoryRead raw against the in-memory store, no sqlite.
 
-- [ ] T022 [US2] Create `async-opcua-server/src/history/data_history.rs` with `InMemoryDataHistory` (per-node `BTreeMap<source-ticks, DataValue>` raw store + parallel modified store), `new()`/`with_capacity()` (Spec: Part 11 §5.5; mirror `InMemoryEventHistory`)
-- [ ] T023 [US2] Implement `HistoryStorageBackend::read_raw_modified` (raw branch) on `InMemoryDataHistory` per the T007a signature: ordered values within [start, end), an empty `ModificationInfo` vec for the raw branch, bounded, continuation consistent with the existing backend (Spec: Part 11 §6.4; Part 4 §11.6)
-- [ ] T024 [US2] Implement `update_data` Insert/Replace/Update/Remove on `InMemoryDataHistory` with the same result-code matrix as sqlite (Spec: Part 11 §6.8.2; Part 4 §11.7.2)
-- [ ] T025 [US2] Record a modified-history entry on `InMemoryDataHistory` Replace/Update-overwrite (parallel modified map) (Spec: Part 11 §6.5)
-- [ ] T026 [US2] Export `InMemoryDataHistory` from `async-opcua-server/src/history/mod.rs` + crate root, mirroring `InMemoryEventHistory` (Spec: FR-009)
-- [ ] T027 [US2] Bound per-node store size (optional capacity) and ensure no panic on empty/duplicate input (Spec: FR-013; Constitution IV)
-- [ ] T028 [P] [US2] [Claude] in-memory test: Insert N values → read_raw returns them in time order (Spec: Part 11 §6.4/§6.8.2)
-- [ ] T029 [P] [US2] [Claude] in-memory test: full Insert/Replace/Update/Remove result matrix matches sqlite/US1 (Spec: Part 11 §6.8.2)
-- [ ] T030 [P] [US2] [Claude] in-memory test: a manager with no history backend still returns `Bad_HistoryOperationUnsupported` (Spec: FR-011; SC-005)
-- [ ] T031 [P] [US2] [Claude] in-memory test: empty value array / `start > end` read handled without panic (Spec: FR-013)
+- [X] T022 [US2] Create `async-opcua-server/src/history/data_history.rs` with `InMemoryDataHistory` (per-node `BTreeMap<source-ticks, DataValue>` raw store + parallel modified store), `new()`/`with_capacity()` (Spec: Part 11 §5.5; mirror `InMemoryEventHistory`)
+- [X] T023 [US2] Implement `HistoryStorageBackend::read_raw_modified` (raw branch) on `InMemoryDataHistory` per the T007a signature: ordered values within [start, end), an empty `ModificationInfo` vec for the raw branch, bounded, continuation consistent with the existing backend (Spec: Part 11 §6.4; Part 4 §11.6)
+- [X] T024 [US2] Implement `update_data` Insert/Replace/Update/Remove on `InMemoryDataHistory` with the same result-code matrix as sqlite (Spec: Part 11 §6.8.2; Part 4 §11.7.2)
+- [X] T025 [US2] Record a modified-history entry on `InMemoryDataHistory` Replace/Update-overwrite (parallel modified map) (Spec: Part 11 §6.5)
+- [X] T026 [US2] Export `InMemoryDataHistory` from `async-opcua-server/src/history/mod.rs` + crate root, mirroring `InMemoryEventHistory` (Spec: FR-009)
+- [X] T027 [US2] Bound per-node store size (optional capacity) and ensure no panic on empty/duplicate input (Spec: FR-013; Constitution IV)
+- [X] T028 [P] [US2] [Claude] in-memory test: Insert N values → read_raw returns them in time order (Spec: Part 11 §6.4/§6.8.2)
+- [X] T029 [P] [US2] [Claude] in-memory test: full Insert/Replace/Update/Remove result matrix matches sqlite/US1 (Spec: Part 11 §6.8.2)
+- [X] T030 [P] [US2] [Claude] in-memory test: a manager with no history backend still returns `Bad_HistoryOperationUnsupported` (Spec: FR-011; SC-005)
+- [X] T031 [P] [US2] [Claude] in-memory test: empty value array / `start > end` read handled without panic (Spec: FR-013)
 
 **Checkpoint**: default in-memory data history works for UpdateData + raw read.
 

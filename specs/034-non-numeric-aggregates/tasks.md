@@ -72,11 +72,11 @@ parallelizable (different concern, no incomplete deps). All engine work is in
 **Goal**: in-state durations classify a value's zero/non-zero state across types.
 **Independent test**: a Boolean false-then-true series splits the interval into Zero/NonZero durations.
 
-- [ ] T016 [US4] Add a `ZeroState { Zero, NonZero, Unknown }` enum + `classify(value: Option<&Variant>) -> ZeroState` in `engine.rs`: null/`Empty` → Zero, Boolean false → Zero / true → NonZero, numeric `==0` → Zero / `!=0` → NonZero (reuse `variant_to_f64`), any other type → Unknown (Spec: Part 13 §5.4.3.22 / §5.4.3.23; data-model.md)
-- [ ] T017 [US4] Add a `zero_state: ZeroState` field to `StateRegion`, computed via `classify` at knot construction in `state_regions`; keep the existing numeric `== 0.0` partition byte-identical for numeric sources (Spec: FR-007; §5.4.3.22/23)
-- [ ] T018 [US4] Rewrite `agg_duration_in_state_zero` to sum regions with `zero_state == Zero` and `agg_duration_in_state_non_zero` to sum `zero_state == NonZero` (Unknown excluded from both); drop the `region.value == Some(0.0)` checks (Spec: Part 13 §5.4.3.22 / §5.4.3.23)
-- [ ] T019 [P] [US4] [Claude] Test: a Boolean source that is `false` for the first span and `true` for the second reads DurationInStateZero = first span and DurationInStateNonZero = second (Spec: §5.4.3.22 / §5.4.3.23)
-- [ ] T020 [P] [US4] [Claude] Test: a numeric 0/non-0 series returns the SAME in-state durations as before (regression); a ByteString source is excluded from both and does not panic (Spec: FR-007; SC-006)
+- [X] T016 [US4] Add a `ZeroState { Zero, NonZero, Unknown }` enum + `classify(value: Option<&Variant>) -> ZeroState` in `engine.rs`: null/`Empty` → Zero, Boolean false → Zero / true → NonZero, numeric `==0` → Zero / `!=0` → NonZero (reuse `variant_to_f64`), any other type → Unknown (Spec: Part 13 §5.4.3.22 / §5.4.3.23; data-model.md)
+- [X] T017 [US4] Add a `zero_state: ZeroState` field to `StateRegion`, computed via `classify` at knot construction in `state_regions`; keep the existing numeric `== 0.0` partition byte-identical for numeric sources (Spec: FR-007; §5.4.3.22/23)
+- [X] T018 [US4] Rewrite `agg_duration_in_state_zero` to sum regions with `zero_state == Zero` and `agg_duration_in_state_non_zero` to sum `zero_state == NonZero` (Unknown excluded from both); drop the `region.value == Some(0.0)` checks (Spec: Part 13 §5.4.3.22 / §5.4.3.23)
+- [X] T019 [P] [US4] [Claude] Test: a Boolean source that is `false` for the first span and `true` for the second reads DurationInStateZero = first span and DurationInStateNonZero = second (Spec: §5.4.3.22 / §5.4.3.23)
+- [X] T020 [P] [US4] [Claude] Test: a numeric 0/non-0 series returns the SAME in-state durations as before (regression); a ByteString source is excluded from both and does not panic (Spec: FR-007; SC-006)
 
 **Checkpoint**: in-state durations work for Boolean and numeric; exotic types are safely excluded.
 
@@ -84,11 +84,11 @@ parallelizable (different concern, no incomplete deps). All engine work is in
 
 ## Phase 7: Polish & cross-cutting
 
-- [ ] T021 [P] [Claude] No-panic matrix test: feed Boolean, String, Enumeration, Guid, ByteString, DateTime, null (`Variant::Empty`), and Bad-status values through Count / NumberOfTransitions / DurationGood / DurationInStateZero and assert no panic (Spec: FR-008; SC-006; Constitution IV)
-- [ ] T021a [P] [Claude] Test: AnnotationCount (`i=2351`) still reports `Bad_AggregateNotSupported` (confirms it stays out of scope and this feature did not accidentally enable it) (Spec: FR-009; §5.4.3.25)
-- [ ] T022 [P] Run the FULL `cargo test -p async-opcua-server` — all green except the intentionally-updated numeric NumberOfTransitions vectors (T010); confirm no other numeric aggregate result changed (Spec: SC-004)
-- [ ] T023 [P] Build + `cargo clippy` under `--no-default-features` and `--all-features`; `cargo fmt --all --check` clean (Spec: FR-010; SC-005; Constitution V)
-- [ ] T024 Update `specs/completeness-backlog.md` (aggregates follow-on: non-numeric aggregates done; note the NumberOfTransitions numeric correction) + memory (Spec: project process)
+- [X] T021 [P] [Claude] No-panic matrix test: feed Boolean, String, Enumeration, Guid, ByteString, DateTime, null (`Variant::Empty`), and Bad-status values through Count / NumberOfTransitions / DurationGood / DurationInStateZero and assert no panic (Spec: FR-008; SC-006; Constitution IV)
+- [X] T021a [P] [Claude] Test: AnnotationCount (`i=2351`) still reports `Bad_AggregateNotSupported` (confirms it stays out of scope and this feature did not accidentally enable it) (Spec: FR-009; §5.4.3.25)
+- [X] T022 [P] Run the FULL `cargo test -p async-opcua-server` — all green except the intentionally-updated numeric NumberOfTransitions vectors (T010); confirm no other numeric aggregate result changed (Spec: SC-004)
+- [X] T023 [P] Build + `cargo clippy` under `--no-default-features` and `--all-features`; `cargo fmt --all --check` clean (Spec: FR-010; SC-005; Constitution V)
+- [X] T024 Update `specs/completeness-backlog.md` (aggregates follow-on: non-numeric aggregates done; note the NumberOfTransitions numeric correction) + memory (Spec: project process)
 
 ---
 

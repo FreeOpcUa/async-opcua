@@ -124,6 +124,28 @@ pub fn variant_to_f64(variant: &Variant) -> Option<f64> {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum ZeroState {
+    Zero,
+    NonZero,
+    Unknown,
+}
+
+fn classify(value: Option<&Variant>) -> ZeroState {
+    match value {
+        None | Some(Variant::Empty) => ZeroState::Zero,
+        Some(Variant::Boolean(false)) => ZeroState::Zero,
+        Some(Variant::Boolean(true)) => ZeroState::NonZero,
+        Some(value) => variant_to_f64(value).map_or(ZeroState::Unknown, |numeric| {
+            if numeric == 0.0 {
+                ZeroState::Zero
+            } else {
+                ZeroState::NonZero
+            }
+        }),
+    }
+}
+
 /// Retrieves the timestamp of a DataValue, prioritizing source_timestamp then server_timestamp.
 pub fn get_value_timestamp(value: &DataValue) -> DateTime {
     value
@@ -271,7 +293,7 @@ struct AggregatePreamble {
 struct StateRegion {
     duration_ms: f64,
     status: StatusCode,
-    value: Option<f64>,
+    zero_state: ZeroState,
 }
 
 fn bad_no_data(interval_start: DateTime) -> DataValue {
@@ -376,7 +398,7 @@ fn state_regions(input: &AggregateInput<'_>) -> Vec<StateRegion> {
         knots.push((
             input.interval_start,
             prior.status.unwrap_or(StatusCode::Good),
-            prior.value.as_ref().and_then(variant_to_f64),
+            classify(prior.value.as_ref()),
         ));
     }
 
@@ -386,7 +408,7 @@ fn state_regions(input: &AggregateInput<'_>) -> Vec<StateRegion> {
             Some((
                 timestamp,
                 value.status.unwrap_or(StatusCode::Good),
-                value.value.as_ref().and_then(variant_to_f64),
+                classify(value.value.as_ref()),
             ))
         } else {
             None
@@ -399,25 +421,25 @@ fn state_regions(input: &AggregateInput<'_>) -> Vec<StateRegion> {
 
     let mut regions = Vec::with_capacity(knots.len());
     for window in knots.windows(2) {
-        let (left_time, status, value) = window[0];
+        let (left_time, status, zero_state) = window[0];
         let (right_time, _, _) = window[1];
         let duration_ms = (right_time.ticks() - left_time.ticks()) as f64 / 1e4;
         if duration_ms > 0.0 {
             regions.push(StateRegion {
                 duration_ms,
                 status,
-                value,
+                zero_state,
             });
         }
     }
 
-    let (last_time, status, value) = knots[knots.len() - 1];
+    let (last_time, status, zero_state) = knots[knots.len() - 1];
     let duration_ms = (input.interval_end.ticks() - last_time.ticks()) as f64 / 1e4;
     if duration_ms > 0.0 {
         regions.push(StateRegion {
             duration_ms,
             status,
-            value,
+            zero_state,
         });
     }
 
@@ -1149,13 +1171,11 @@ fn agg_percent_bad(input: &AggregateInput<'_>) -> DataValue {
 }
 
 fn agg_duration_in_state_zero(input: &AggregateInput<'_>) -> DataValue {
-    state_duration(input, |region| region.value == Some(0.0))
+    state_duration(input, |region| region.zero_state == ZeroState::Zero)
 }
 
 fn agg_duration_in_state_non_zero(input: &AggregateInput<'_>) -> DataValue {
-    state_duration(input, |region| {
-        region.value.is_some_and(|value| value != 0.0)
-    })
+    state_duration(input, |region| region.zero_state == ZeroState::NonZero)
 }
 
 fn agg_number_of_transitions(input: &AggregateInput<'_>) -> DataValue {

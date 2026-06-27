@@ -31,10 +31,13 @@ _Last refreshed 2026-06-27 (after RBAC #031 + HistoryUpdate #032)._
   the sqlite backend AND a new in-memory store. Memory `feature-032-historyupdate-write`.
 
 ## To build (spec features, YAGNI-deferred)
-- **Aggregates follow-ons (Part 13):** HistoryUpdate of aggregates; annotation history AnnotationCount;
-  non-numeric / complex aggregates.
-- **Security/PKI:** ChannelThumbprint binding; multi-cert mixed server (RSA+ECC per endpoint); better
-  server security-check framework (`TODO.md`).
+- **Aggregates follow-ons (Part 13):** HistoryUpdate of aggregates; annotation history AnnotationCount.
+  (Non-numeric/any-value-type aggregates **DONE** — feature 034, PRs #210–#213: Count/
+  NumberOfTransitions/Duration/Percent/WorstQuality/DurationInState* work for any Variant; also fixed
+  a numeric NumberOfTransitions bug. Memory `feature-034-non-numeric-aggregates`.)
+- **Security/PKI:** ChannelThumbprint binding **(already done — verified PRs #37/#38/#42)**; multi-cert
+  mixed server (RSA+ECC per endpoint — LARGE, needs a transport-layer cert-selection refactor, decide
+  separately); better server security-check framework (`TODO.md`).
 
 ## Real constraints (need a new dep/infra — distinct from YAGNI; decide separately)
 - FindServersOnNetwork — needs mDNS (new dep + LDS-ME multicast).

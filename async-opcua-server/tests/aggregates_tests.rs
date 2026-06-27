@@ -1039,3 +1039,103 @@ fn worst_quality_is_value_type_independent() {
         Some(Variant::StatusCode(StatusCode::BadDeviceFailure))
     );
 }
+
+// --- US4: DurationInStateZero/NonZero generalize across value types ----------
+// Zero-state: Boolean false / numeric 0 / null = zero; true / non-0 = non-zero;
+// other types (Guid/ByteString/…) excluded from both (Part 13 §5.4.3.22/23).
+
+const ID_DUR_IN_STATE_ZERO: u32 = 11307;
+const ID_DUR_IN_STATE_NON_ZERO: u32 = 11308;
+
+#[test]
+fn duration_in_state_boolean_splits_false_and_true() {
+    let (start, end) = phase_b_interval();
+    // false held over [2s, 7s) = 5000 ms (zero state); true held over [7s, 10s) = 3000 ms (non-zero).
+    let f = good_v(Variant::Boolean(false), 2);
+    let t = good_v(Variant::Boolean(true), 7);
+    let vals = [&f, &t];
+    let z = calculate_aggregate(&vals, &NodeId::new(0u16, ID_DUR_IN_STATE_ZERO), start, end);
+    assert_eq!(z.value, Some(Variant::Double(5000.0)));
+    let nz = calculate_aggregate(
+        &vals,
+        &NodeId::new(0u16, ID_DUR_IN_STATE_NON_ZERO),
+        start,
+        end,
+    );
+    assert_eq!(nz.value, Some(Variant::Double(3000.0)));
+}
+
+#[test]
+fn duration_in_state_numeric_parity_and_bytestring_excluded() {
+    let (start, end) = phase_b_interval();
+    // Numeric 0/non-0 with the same timing reproduces the Boolean split (classify parity, FR-007).
+    let z0 = dv(0.0, 2, StatusCode::Good);
+    let nz0 = dv(5.0, 7, StatusCode::Good);
+    let num = [&z0, &nz0];
+    let z = calculate_aggregate(&num, &NodeId::new(0u16, ID_DUR_IN_STATE_ZERO), start, end);
+    assert_eq!(z.value, Some(Variant::Double(5000.0)));
+    let nz = calculate_aggregate(
+        &num,
+        &NodeId::new(0u16, ID_DUR_IN_STATE_NON_ZERO),
+        start,
+        end,
+    );
+    assert_eq!(nz.value, Some(Variant::Double(3000.0)));
+
+    // A ByteString source has no natural zero → excluded from both, and must not panic.
+    let b0 = good_v(
+        Variant::ByteString(opcua_types::ByteString::from(vec![1u8, 2, 3])),
+        2,
+    );
+    let b1 = good_v(
+        Variant::ByteString(opcua_types::ByteString::from(vec![4u8, 5, 6])),
+        7,
+    );
+    let bytes = [&b0, &b1];
+    let bz = calculate_aggregate(&bytes, &NodeId::new(0u16, ID_DUR_IN_STATE_ZERO), start, end);
+    assert_eq!(bz.value, Some(Variant::Double(0.0)));
+    let bnz = calculate_aggregate(
+        &bytes,
+        &NodeId::new(0u16, ID_DUR_IN_STATE_NON_ZERO),
+        start,
+        end,
+    );
+    assert_eq!(bnz.value, Some(Variant::Double(0.0)));
+}
+
+// --- Polish: no panic on any value type; AnnotationCount stays unsupported ---
+
+#[test]
+fn aggregates_never_panic_on_any_value_type() {
+    let (start, end) = phase_b_interval();
+    // SC-006 / FR-008: every value type (+ null + Bad status) is safe in every touched aggregate.
+    let variants: Vec<Variant> = vec![
+        Variant::Boolean(true),
+        Variant::from("s"),
+        Variant::Int32(7),
+        Variant::Guid(Box::new(opcua_types::Guid::null())),
+        Variant::ByteString(opcua_types::ByteString::from(vec![1u8, 2])),
+        Variant::DateTime(Box::new(DateTime::from((2026, 6, 6, 12, 0, 1)))),
+        Variant::Empty,
+    ];
+    // Count, NumberOfTransitions, DurationGood/Bad, PercentGood, DurationInStateZero/NonZero, WorstQuality.
+    let agg_ids = [2352u32, 2355, 2360, 2361, 2362, 11307, 11308, 2364];
+    for v in &variants {
+        let p0 = good_v(v.clone(), 2);
+        let p1 = dvv(v.clone(), 6, StatusCode::BadDeviceFailure);
+        let vals = [&p0, &p1];
+        for id in agg_ids {
+            let r = calculate_aggregate(&vals, &NodeId::new(0u16, id), start, end);
+            assert!(r.status.is_some(), "aggregate {id} returned no status");
+        }
+    }
+}
+
+#[test]
+fn annotation_count_stays_unsupported() {
+    let (start, end) = phase_b_interval();
+    // FR-009: AnnotationCount (2351) was never enabled by this feature.
+    let v = good_v(Variant::Boolean(true), 2);
+    let r = calculate_aggregate(&[&v], &NodeId::new(0u16, 2351), start, end);
+    assert_eq!(r.status, Some(StatusCode::BadAggregateNotSupported));
+}

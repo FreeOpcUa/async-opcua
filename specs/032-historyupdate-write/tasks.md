@@ -120,11 +120,11 @@ with correct `HistoryUpdateType` and modification metadata, on both backends.
 backends; read via the existing annotation path.
 **Independent test**: write annotations, read them back.
 
-- [ ] T049 [US5] Implement sqlite `update_structure_data` for `Annotation` values: Insert/Replace/Update/Remove with the UpdateData result matrix, into the annotation store read by `read_annotations` (Spec: Part 11 §6.8.3; Part 4 §11.7.3)
-- [ ] T050 [US5] Add an in-memory annotation store + `update_structure_data` on `InMemoryDataHistory`, plus `read_annotations` (Spec: Part 11 §6.8.3)
-- [ ] T051 [US5] Validate that non-`Annotation` structure payloads return a per-entry error rather than panicking (Spec: FR-013; Part 11 §6.8.3)
-- [ ] T052 [P] [US5] [Claude] test (both backends): Insert annotation → `Good_EntryInserted`, read_annotations returns it (Spec: Part 11 §6.8.3)
-- [ ] T053 [P] [US5] [Claude] test (both backends): Replace + Remove annotation at T behave per the result matrix (Spec: Part 11 §6.8.3)
+- [X] T049 [US5] Implement sqlite `update_structure_data` for `Annotation` values: Insert/Replace/Update/Remove with the UpdateData result matrix, into the annotation store read by `read_annotations` (Spec: Part 11 §6.8.3; Part 4 §11.7.3)
+- [X] T050 [US5] Add an in-memory annotation store + `update_structure_data` on `InMemoryDataHistory`, plus `read_annotations` (Spec: Part 11 §6.8.3)
+- [X] T051 [US5] Validate that non-`Annotation` structure payloads return a per-entry error rather than panicking (Spec: FR-013; Part 11 §6.8.3)
+- [X] T052 [P] [US5] [Claude] test (both backends): Insert annotation → `Good_EntryInserted`, read_annotations returns it (Spec: Part 11 §6.8.3)
+- [X] T053 [P] [US5] [Claude] test (both backends): Replace + Remove annotation at T behave per the result matrix (Spec: Part 11 §6.8.3)
 
 **Checkpoint**: annotation write complete on both backends.
 

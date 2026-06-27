@@ -339,3 +339,98 @@ async fn never_modified_value_has_no_modified_entry() {
     assert!(vals.is_empty());
     assert_eq!(double(&read_all(&b, &n).await[0]), 1.0);
 }
+
+// ---- US5: annotation history write/read, parity with sqlite ----
+
+fn annotation_at(ticks: i64, msg: &str) -> DataValue {
+    let ann = opcua_types::Annotation {
+        message: msg.into(),
+        user_name: "tester".into(),
+        annotation_time: DateTime::from(ticks),
+    };
+    DataValue::new_at(
+        opcua_types::ExtensionObject::from_message(ann),
+        DateTime::from(ticks),
+    )
+}
+
+fn annotation_msg(dv: &DataValue) -> String {
+    let Some(Variant::ExtensionObject(eo)) = dv.value.as_ref() else {
+        panic!("annotation must be an ExtensionObject");
+    };
+    eo.inner_as::<opcua_types::Annotation>()
+        .expect("Annotation")
+        .message
+        .to_string()
+}
+
+#[tokio::test]
+async fn annotation_insert_replace_remove_and_read() {
+    let b = InMemoryDataHistory::new();
+    let n = node();
+    assert_eq!(
+        b.update_structure_data(
+            &n,
+            PerformUpdateType::Insert,
+            vec![annotation_at(100, "first")]
+        )
+        .await
+        .unwrap(),
+        vec![StatusCode::GoodEntryInserted]
+    );
+    let (anns, _cp) = b.read_annotations(&n, &[], None).await.unwrap();
+    assert_eq!(anns.len(), 1);
+    assert_eq!(annotation_msg(&anns[0]), "first");
+    assert_eq!(
+        b.update_structure_data(
+            &n,
+            PerformUpdateType::Insert,
+            vec![annotation_at(100, "dup")]
+        )
+        .await
+        .unwrap(),
+        vec![StatusCode::BadEntryExists]
+    );
+    assert_eq!(
+        b.update_structure_data(
+            &n,
+            PerformUpdateType::Replace,
+            vec![annotation_at(100, "second")]
+        )
+        .await
+        .unwrap(),
+        vec![StatusCode::GoodEntryReplaced]
+    );
+    let (anns, _cp) = b.read_annotations(&n, &[], None).await.unwrap();
+    assert_eq!(annotation_msg(&anns[0]), "second");
+    assert_eq!(
+        b.update_structure_data(&n, PerformUpdateType::Remove, vec![annotation_at(100, "")])
+            .await
+            .unwrap(),
+        vec![StatusCode::Good]
+    );
+    assert!(b
+        .read_annotations(&n, &[], None)
+        .await
+        .unwrap()
+        .0
+        .is_empty());
+}
+
+#[tokio::test]
+async fn non_annotation_value_is_rejected_not_panicked() {
+    let b = InMemoryDataHistory::new();
+    let n = node();
+    assert_eq!(
+        b.update_structure_data(&n, PerformUpdateType::Insert, vec![at(100, 1.0)])
+            .await
+            .unwrap(),
+        vec![StatusCode::BadTypeMismatch]
+    );
+    assert!(b
+        .read_annotations(&n, &[], None)
+        .await
+        .unwrap()
+        .0
+        .is_empty());
+}

@@ -38,5 +38,21 @@ pub fn run_migrations(conn: &Connection) -> Result<(), Error> {
          ON modified_historical_data (node_id, source_timestamp ASC, modification_time ASC)",
         [],
     )?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS historical_annotations (
+            node_id TEXT NOT NULL,
+            source_timestamp INTEGER NOT NULL,
+            server_timestamp INTEGER NOT NULL,
+            value_blob BLOB NOT NULL,
+            status_code INTEGER NOT NULL,
+            PRIMARY KEY (node_id, source_timestamp)
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_historical_annotations_query
+         ON historical_annotations (node_id, source_timestamp ASC)",
+        [],
+    )?;
     Ok(())
 }

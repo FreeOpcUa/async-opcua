@@ -5,8 +5,8 @@ use std::collections::{BTreeMap, HashMap};
 use async_trait::async_trait;
 use opcua_core::sync::RwLock;
 use opcua_types::{
-    DataValue, DateTime, HistoryUpdateType, ModificationInfo, NodeId, PerformUpdateType,
-    StatusCode, UAString,
+    Annotation, DataValue, DateTime, HistoryUpdateType, ModificationInfo, NodeId,
+    PerformUpdateType, StatusCode, UAString, Variant,
 };
 
 use crate::history::{HistoryRawModifiedResult, HistoryStorageBackend};
@@ -17,11 +17,14 @@ const DEFAULT_MAX_VALUES_PER_NODE: usize = 10_000;
 type ModifiedEntry = (DataValue, ModificationInfo);
 /// Per-node modified-history store: original source-ticks → the superseded entries at that timestamp.
 type ModifiedStore = HashMap<NodeId, BTreeMap<i64, Vec<ModifiedEntry>>>;
+/// Per-node annotation-history store: source-ticks → annotation `DataValue`.
+type AnnotationStore = HashMap<NodeId, BTreeMap<i64, DataValue>>;
 
 /// In-memory historical data backend for raw `DataValue` history.
 pub struct InMemoryDataHistory {
     raw_values: RwLock<HashMap<NodeId, BTreeMap<i64, DataValue>>>,
     modified_values: RwLock<ModifiedStore>,
+    annotation_values: RwLock<AnnotationStore>,
     max_per_node: usize,
 }
 
@@ -36,6 +39,7 @@ impl InMemoryDataHistory {
         Self {
             raw_values: RwLock::new(HashMap::new()),
             modified_values: RwLock::new(HashMap::new()),
+            annotation_values: RwLock::new(HashMap::new()),
             max_per_node,
         }
     }
@@ -175,6 +179,35 @@ impl HistoryStorageBackend for InMemoryDataHistory {
         Ok((values, Vec::new(), next_token))
     }
 
+    async fn read_annotations(
+        &self,
+        node_id: &NodeId,
+        req_times: &[DateTime],
+        continuation_point: Option<Vec<u8>>,
+    ) -> Result<(Vec<DataValue>, Option<Vec<u8>>), StatusCode> {
+        if continuation_point.is_some() {
+            return Err(StatusCode::BadContinuationPointInvalid);
+        }
+
+        let annotation_values = self.annotation_values.read();
+        let Some(node_values) = annotation_values.get(node_id) else {
+            return Ok((Vec::new(), None));
+        };
+
+        if req_times.is_empty() {
+            return Ok((node_values.values().cloned().collect(), None));
+        }
+
+        let mut values = Vec::with_capacity(req_times.len());
+        for req_time in req_times {
+            if let Some(value) = node_values.get(&req_time.ticks()) {
+                values.push(value.clone());
+            }
+        }
+
+        Ok((values, None))
+    }
+
     async fn update_data(
         &self,
         node_id: &NodeId,
@@ -242,6 +275,73 @@ impl HistoryStorageBackend for InMemoryDataHistory {
                             .entry(source_ticks)
                             .or_default()
                             .push((value, delete_modification_info()));
+                        StatusCode::Good
+                    } else {
+                        StatusCode::BadNoEntryExists
+                    }
+                }
+            };
+            results.push(status);
+        }
+
+        Ok(results)
+    }
+
+    async fn update_structure_data(
+        &self,
+        node_id: &NodeId,
+        perform: PerformUpdateType,
+        values: Vec<DataValue>,
+    ) -> Result<Vec<StatusCode>, StatusCode> {
+        if values.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut results = Vec::with_capacity(values.len());
+        let mut annotation_values = self.annotation_values.write();
+        let node_values = annotation_values.entry(node_id.clone()).or_default();
+
+        for value in values {
+            if !is_annotation_data_value(&value) {
+                results.push(StatusCode::BadTypeMismatch);
+                continue;
+            }
+
+            let source_ticks = source_ticks(&value);
+            let status = match perform {
+                PerformUpdateType::Insert => {
+                    if let std::collections::btree_map::Entry::Vacant(entry) =
+                        node_values.entry(source_ticks)
+                    {
+                        entry.insert(value);
+                        StatusCode::GoodEntryInserted
+                    } else {
+                        StatusCode::BadEntryExists
+                    }
+                }
+                PerformUpdateType::Replace => {
+                    if let std::collections::btree_map::Entry::Occupied(mut entry) =
+                        node_values.entry(source_ticks)
+                    {
+                        entry.insert(value);
+                        StatusCode::GoodEntryReplaced
+                    } else {
+                        StatusCode::BadNoEntryExists
+                    }
+                }
+                PerformUpdateType::Update => {
+                    if let std::collections::btree_map::Entry::Occupied(mut entry) =
+                        node_values.entry(source_ticks)
+                    {
+                        entry.insert(value);
+                        StatusCode::GoodEntryReplaced
+                    } else {
+                        node_values.insert(source_ticks, value);
+                        StatusCode::GoodEntryInserted
+                    }
+                }
+                PerformUpdateType::Remove => {
+                    if node_values.remove(&source_ticks).is_some() {
                         StatusCode::Good
                     } else {
                         StatusCode::BadNoEntryExists
@@ -368,6 +468,13 @@ impl HistoryStorageBackend for InMemoryDataHistory {
 
 fn source_ticks(value: &DataValue) -> i64 {
     value.source_timestamp.unwrap_or_else(DateTime::now).ticks()
+}
+
+fn is_annotation_data_value(value: &DataValue) -> bool {
+    matches!(
+        value.value.as_ref(),
+        Some(Variant::ExtensionObject(object)) if object.inner_as::<Annotation>().is_some()
+    )
 }
 
 fn delete_modification_info() -> ModificationInfo {

@@ -7,9 +7,9 @@ use opcua_server::{
     history::{HistoryRawModifiedResult, HistoryStorageBackend},
 };
 use opcua_types::{
-    AggregateConfiguration, BinaryEncodable, ContextOwned, DataValue, DateTime, EventFilter,
-    HistoryEventFieldList, HistoryUpdateType, ModificationInfo, NodeId, PerformUpdateType,
-    StatusCode, UAString,
+    AggregateConfiguration, Annotation, BinaryEncodable, ContextOwned, DataValue, DateTime,
+    EventFilter, HistoryEventFieldList, HistoryUpdateType, ModificationInfo, NodeId,
+    PerformUpdateType, StatusCode, UAString, Variant,
 };
 use parking_lot::Mutex;
 use rusqlite::{params, Connection, Error as SqliteError, OptionalExtension};
@@ -118,6 +118,13 @@ fn insert_modified_historical_data(
         ],
     )?;
     Ok(())
+}
+
+fn is_annotation_data_value(value: &DataValue) -> bool {
+    matches!(
+        value.value.as_ref(),
+        Some(Variant::ExtensionObject(object)) if object.inner_as::<Annotation>().is_some()
+    )
 }
 
 impl SqliteHistoryBackend {
@@ -626,15 +633,58 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
 
     async fn read_annotations(
         &self,
-        _node_id: &NodeId,
-        _req_times: &[DateTime],
+        node_id: &NodeId,
+        req_times: &[DateTime],
         continuation_point: Option<Vec<u8>>,
     ) -> Result<(Vec<DataValue>, Option<Vec<u8>>), StatusCode> {
         if continuation_point.is_some() {
             return Err(StatusCode::BadContinuationPointInvalid);
         }
 
-        Ok((Vec::new(), None))
+        let conn = self.connection.clone();
+        let node_id_str = node_id.to_string();
+        let req_ticks = req_times
+            .iter()
+            .map(|timestamp| timestamp.ticks())
+            .collect::<Vec<_>>();
+
+        let values: Result<Vec<DataValue>, SqliteError> = tokio::task::spawn_blocking(move || {
+            let conn = conn.lock();
+
+            if req_ticks.is_empty() {
+                let mut stmt = conn.prepare(
+                    "SELECT source_timestamp, server_timestamp, value_blob, status_code
+                         FROM historical_annotations
+                         WHERE node_id = ?1
+                         ORDER BY source_timestamp ASC",
+                )?;
+                let rows = stmt.query_map(params![node_id_str], query::row_to_datavalue)?;
+                rows.collect()
+            } else {
+                let mut stmt = conn.prepare(
+                    "SELECT source_timestamp, server_timestamp, value_blob, status_code
+                         FROM historical_annotations
+                         WHERE node_id = ?1 AND source_timestamp = ?2",
+                )?;
+                let mut values = Vec::with_capacity(req_ticks.len());
+                for source_ticks in req_ticks {
+                    if let Some(value) = stmt
+                        .query_row(params![&node_id_str, source_ticks], query::row_to_datavalue)
+                        .optional()?
+                    {
+                        values.push(value);
+                    }
+                }
+                Ok(values)
+            }
+        })
+        .await
+        .map_err(|_| StatusCode::BadInternalError)?;
+
+        values.map(|values| (values, None)).map_err(|err| {
+            tracing::error!("SQLite error in read_annotations: {:?}", err);
+            StatusCode::BadInternalError
+        })
     }
 
     async fn update_data(
@@ -810,6 +860,155 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
 
         results.map_err(|err| {
             tracing::error!("SQLite error in update_data: {:?}", err);
+            StatusCode::BadInternalError
+        })
+    }
+
+    async fn update_structure_data(
+        &self,
+        node_id: &NodeId,
+        perform: PerformUpdateType,
+        values: Vec<DataValue>,
+    ) -> Result<Vec<StatusCode>, StatusCode> {
+        self.prune_continuation_points();
+
+        let conn = self.connection.clone();
+        let node_id_str = node_id.to_string();
+
+        let results: Result<Vec<StatusCode>, SqliteError> =
+            tokio::task::spawn_blocking(move || {
+                let mut conn = conn.lock();
+                let tx = conn.transaction()?;
+                let mut status_codes = Vec::with_capacity(values.len());
+
+                for value in values {
+                    if !is_annotation_data_value(&value) {
+                        status_codes.push(StatusCode::BadTypeMismatch);
+                        continue;
+                    }
+
+                    let source_ticks = value.source_timestamp.unwrap_or_else(DateTime::now).ticks();
+                    let server_ticks = value.server_timestamp.unwrap_or_else(DateTime::now).ticks();
+                    let status_val = value.status.map(|status| status.bits() as i64).unwrap_or(0);
+
+                    let ctx_owned = ContextOwned::default();
+                    let ctx = ctx_owned.context();
+                    let blob = value.encode_to_vec(&ctx);
+
+                    let existing = tx
+                        .query_row(
+                            "SELECT 1 FROM historical_annotations
+                             WHERE node_id = ?1 AND source_timestamp = ?2",
+                            params![node_id_str, source_ticks],
+                            |_| Ok(()),
+                        )
+                        .optional()?;
+
+                    match perform {
+                        PerformUpdateType::Insert => {
+                            if existing.is_some() {
+                                status_codes.push(StatusCode::BadEntryExists);
+                            } else {
+                                tx.execute(
+                                    "INSERT INTO historical_annotations (
+                                        node_id,
+                                        source_timestamp,
+                                        server_timestamp,
+                                        value_blob,
+                                        status_code
+                                    ) VALUES (?1, ?2, ?3, ?4, ?5)",
+                                    params![
+                                        node_id_str,
+                                        source_ticks,
+                                        server_ticks,
+                                        blob,
+                                        status_val
+                                    ],
+                                )?;
+                                status_codes.push(StatusCode::GoodEntryInserted);
+                            }
+                        }
+                        PerformUpdateType::Replace => {
+                            if existing.is_some() {
+                                tx.execute(
+                                    "UPDATE historical_annotations
+                                     SET server_timestamp = ?3,
+                                         value_blob = ?4,
+                                         status_code = ?5
+                                     WHERE node_id = ?1 AND source_timestamp = ?2",
+                                    params![
+                                        node_id_str,
+                                        source_ticks,
+                                        server_ticks,
+                                        blob,
+                                        status_val
+                                    ],
+                                )?;
+                                status_codes.push(StatusCode::GoodEntryReplaced);
+                            } else {
+                                status_codes.push(StatusCode::BadNoEntryExists);
+                            }
+                        }
+                        PerformUpdateType::Update => {
+                            if existing.is_some() {
+                                tx.execute(
+                                    "UPDATE historical_annotations
+                                     SET server_timestamp = ?3,
+                                         value_blob = ?4,
+                                         status_code = ?5
+                                     WHERE node_id = ?1 AND source_timestamp = ?2",
+                                    params![
+                                        node_id_str,
+                                        source_ticks,
+                                        server_ticks,
+                                        blob,
+                                        status_val
+                                    ],
+                                )?;
+                                status_codes.push(StatusCode::GoodEntryReplaced);
+                            } else {
+                                tx.execute(
+                                    "INSERT INTO historical_annotations (
+                                        node_id,
+                                        source_timestamp,
+                                        server_timestamp,
+                                        value_blob,
+                                        status_code
+                                    ) VALUES (?1, ?2, ?3, ?4, ?5)",
+                                    params![
+                                        node_id_str,
+                                        source_ticks,
+                                        server_ticks,
+                                        blob,
+                                        status_val
+                                    ],
+                                )?;
+                                status_codes.push(StatusCode::GoodEntryInserted);
+                            }
+                        }
+                        PerformUpdateType::Remove => {
+                            if existing.is_some() {
+                                tx.execute(
+                                    "DELETE FROM historical_annotations
+                                     WHERE node_id = ?1 AND source_timestamp = ?2",
+                                    params![node_id_str, source_ticks],
+                                )?;
+                                status_codes.push(StatusCode::Good);
+                            } else {
+                                status_codes.push(StatusCode::BadNoEntryExists);
+                            }
+                        }
+                    }
+                }
+
+                tx.commit()?;
+                Ok(status_codes)
+            })
+            .await
+            .map_err(|_| StatusCode::BadInternalError)?;
+
+        results.map_err(|err| {
+            tracing::error!("SQLite error in update_structure_data: {:?}", err);
             StatusCode::BadInternalError
         })
     }

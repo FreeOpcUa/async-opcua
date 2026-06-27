@@ -1,4 +1,8 @@
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Weak},
+    time::Duration,
+};
 
 use async_trait::async_trait;
 use opcua_core::{trace_read_lock, trace_write_lock};
@@ -133,13 +137,22 @@ pub struct SimpleNodeManagerImpl {
     samplers: SyncSampler,
     history_backend: RwLock<Option<Arc<dyn crate::history::HistoryStorageBackend>>>,
     subscriptions: RwLock<Option<Arc<SubscriptionCache>>>,
-    alarm_sources: AlarmSourceRegistry,
+    alarm_sources: Arc<AlarmSourceRegistry>,
+    source_alarm_sampler_started: RwLock<bool>,
 }
 
 #[async_trait]
 impl InMemoryNodeManagerImpl for SimpleNodeManagerImpl {
     async fn init(&self, _address_space: &mut AddressSpace, context: ServerContext) {
         *self.subscriptions.write() = Some(context.subscriptions.clone());
+        let manager = self
+            .node_managers
+            .get_by_name::<SimpleNodeManager>(&self.name)
+            .expect("simple node manager must be registered before sampling alarm sources");
+        self.spawn_alarm_source_sampler(
+            Arc::clone(manager.address_space()),
+            Arc::downgrade(&context.subscriptions),
+        );
         self.samplers.run(
             Duration::from_micros(
                 // If this is set too low the server will just spin at 100% CPU. Cap it at
@@ -308,15 +321,13 @@ impl InMemoryNodeManagerImpl for SimpleNodeManagerImpl {
             let mut address_space = trace_write_lock!(address_space);
 
             for (source, value) in source_writes {
-                for alarm in self.alarm_source_registry().alarms_for(&source) {
-                    if let Some(ev) = alarm.re_evaluate(&mut address_space, &value) {
-                        let wrapper = ServerAlarmEvent { event: &ev };
-                        context.subscriptions.notify_events(std::iter::once((
-                            &wrapper as &dyn opcua_nodes::Event,
-                            &ev.source_node,
-                        )));
-                    }
-                }
+                Self::reevaluate_and_dispatch(
+                    self.alarm_source_registry(),
+                    &mut address_space,
+                    Some(context.subscriptions.as_ref()),
+                    &source,
+                    &value,
+                );
             }
         }
 
@@ -738,7 +749,8 @@ impl SimpleNodeManagerImpl {
             samplers: SyncSampler::new(),
             history_backend: RwLock::new(None),
             subscriptions: RwLock::new(None),
-            alarm_sources: AlarmSourceRegistry::new(),
+            alarm_sources: Arc::new(AlarmSourceRegistry::new()),
+            source_alarm_sampler_started: RwLock::new(false),
         }
     }
 
@@ -749,7 +761,7 @@ impl SimpleNodeManagerImpl {
 
     /// Returns the registry of alarms bound to source Variables.
     pub fn alarm_source_registry(&self) -> &AlarmSourceRegistry {
-        &self.alarm_sources
+        self.alarm_sources.as_ref()
     }
 
     /// Binds a limit alarm to a source Variable and registers it for source writes.
@@ -760,8 +772,45 @@ impl SimpleNodeManagerImpl {
             .monitor_alarm_source(source, alarm)
     }
 
+    /// Binds a limit alarm to a source Variable with opt-in periodic source sampling.
+    pub fn monitor_alarm_source_sampled(
+        &self,
+        source: &NodeId,
+        alarm: LimitAlarm,
+        interval: Duration,
+    ) -> Arc<LimitAlarm> {
+        self.node_managers
+            .get_by_name::<SimpleNodeManager>(&self.name)
+            .expect("simple node manager must be registered before monitoring alarm sources")
+            .monitor_alarm_source_sampled(source, alarm, interval)
+    }
+
     fn monitor_alarm_source_on_address_space(
         &self,
+        address_space: &RwLock<AddressSpace>,
+        source: &NodeId,
+        alarm: LimitAlarm,
+    ) -> Arc<LimitAlarm> {
+        let alarm = Self::bind_alarm_source_on_address_space(address_space, source, alarm);
+        self.alarm_source_registry()
+            .register(source.clone(), alarm.clone());
+        alarm
+    }
+
+    fn monitor_alarm_source_sampled_on_address_space(
+        &self,
+        address_space: &RwLock<AddressSpace>,
+        source: &NodeId,
+        alarm: LimitAlarm,
+        interval: Duration,
+    ) -> Arc<LimitAlarm> {
+        let alarm = Self::bind_alarm_source_on_address_space(address_space, source, alarm);
+        self.alarm_source_registry()
+            .register_sampled(source.clone(), alarm.clone(), interval);
+        alarm
+    }
+
+    fn bind_alarm_source_on_address_space(
         address_space: &RwLock<AddressSpace>,
         source: &NodeId,
         alarm: LimitAlarm,
@@ -775,10 +824,108 @@ impl SimpleNodeManagerImpl {
             alarm.write_has_condition_reference(&mut space, source);
         }
 
-        let alarm = Arc::new(alarm);
-        self.alarm_source_registry()
-            .register(source.clone(), alarm.clone());
-        alarm
+        Arc::new(alarm)
+    }
+
+    fn spawn_alarm_source_sampler(
+        &self,
+        address_space: Arc<RwLock<AddressSpace>>,
+        subscriptions: Weak<SubscriptionCache>,
+    ) {
+        {
+            let mut started = self.source_alarm_sampler_started.write();
+            if *started {
+                return;
+            }
+            *started = true;
+        }
+
+        let alarm_sources = Arc::clone(&self.alarm_sources);
+        tokio::spawn(async move {
+            Self::run_alarm_source_sampler(address_space, alarm_sources, subscriptions).await;
+        });
+    }
+
+    async fn run_alarm_source_sampler(
+        address_space: Arc<RwLock<AddressSpace>>,
+        alarm_sources: Arc<AlarmSourceRegistry>,
+        subscriptions: Weak<SubscriptionCache>,
+    ) {
+        const SOURCE_ALARM_SAMPLER_TICK: Duration = Duration::from_millis(100);
+
+        let mut ticker = tokio::time::interval(SOURCE_ALARM_SAMPLER_TICK);
+        ticker.tick().await;
+
+        let mut last_fire: HashMap<(NodeId, NodeId), tokio::time::Instant> = HashMap::new();
+        loop {
+            let now = ticker.tick().await;
+            let Some(subscriptions) = subscriptions.upgrade() else {
+                break;
+            };
+
+            for (source, alarm, sampling_interval) in alarm_sources.sampled_bindings() {
+                let key = (source.clone(), alarm.condition_id().clone());
+                let due = match last_fire.get(&key) {
+                    Some(last) => now.duration_since(*last) >= sampling_interval,
+                    None => true,
+                };
+                if !due {
+                    continue;
+                }
+                last_fire.insert(key, now);
+
+                let Some(value) = Self::read_current_source_value(&address_space, &source) else {
+                    continue;
+                };
+
+                let mut space = trace_write_lock!(address_space);
+                Self::reevaluate_and_dispatch(
+                    alarm_sources.as_ref(),
+                    &mut space,
+                    Some(subscriptions.as_ref()),
+                    &source,
+                    &value,
+                );
+            }
+        }
+    }
+
+    fn read_current_source_value(
+        address_space: &RwLock<AddressSpace>,
+        source: &NodeId,
+    ) -> Option<DataValue> {
+        let space = trace_read_lock!(address_space);
+        let node = space.find(source)?;
+        if !matches!(&*node, NodeType::Variable(_)) {
+            return None;
+        }
+
+        node.as_node().get_attribute(
+            TimestampsToReturn::Both,
+            AttributeId::Value,
+            &NumericRange::None,
+            &opcua_types::DataEncoding::Binary,
+        )
+    }
+
+    fn reevaluate_and_dispatch(
+        alarm_sources: &AlarmSourceRegistry,
+        space: &mut AddressSpace,
+        subscriptions: Option<&SubscriptionCache>,
+        source: &NodeId,
+        value: &DataValue,
+    ) {
+        for alarm in alarm_sources.alarms_for(source) {
+            if let Some(ev) = alarm.re_evaluate(space, value) {
+                if let Some(subscriptions) = subscriptions {
+                    let wrapper = ServerAlarmEvent { event: &ev };
+                    subscriptions.notify_events(std::iter::once((
+                        &wrapper as &dyn opcua_nodes::Event,
+                        &ev.source_node,
+                    )));
+                }
+            }
+        }
     }
 
     /// Programmatically sets a source Variable value and re-evaluates bound alarms.
@@ -811,17 +958,13 @@ impl SimpleNodeManagerImpl {
         variable.set_data_value(value.clone());
         drop(node);
 
-        for alarm in self.alarm_source_registry().alarms_for(source) {
-            if let Some(ev) = alarm.re_evaluate(&mut space, &value) {
-                if let Some(subscriptions) = subscriptions.as_ref() {
-                    let wrapper = ServerAlarmEvent { event: &ev };
-                    subscriptions.notify_events(std::iter::once((
-                        &wrapper as &dyn opcua_nodes::Event,
-                        &ev.source_node,
-                    )));
-                }
-            }
-        }
+        Self::reevaluate_and_dispatch(
+            self.alarm_source_registry(),
+            &mut space,
+            subscriptions.as_deref(),
+            source,
+            &value,
+        );
     }
 
     fn read_node_value(
@@ -965,6 +1108,21 @@ impl InMemoryNodeManager<SimpleNodeManagerImpl> {
         )
     }
 
+    /// Binds a limit alarm to a source Variable with opt-in periodic source sampling.
+    pub fn monitor_alarm_source_sampled(
+        &self,
+        source: &NodeId,
+        alarm: LimitAlarm,
+        interval: Duration,
+    ) -> Arc<LimitAlarm> {
+        self.inner().monitor_alarm_source_sampled_on_address_space(
+            self.address_space().as_ref(),
+            source,
+            alarm,
+            interval,
+        )
+    }
+
     /// Programmatically sets a source Variable value and re-evaluates bound alarms.
     pub fn set_source_value(&self, source: &NodeId, value: DataValue) {
         self.inner().set_source_value_on_address_space(
@@ -985,6 +1143,7 @@ mod tests {
     };
 
     use crate::{
+        alarms::{LimitConfig, LimitDef, LimitMode},
         authenticator::UserToken,
         history::{HistoryRawModifiedResult, HistoryStorageBackend},
         identity_token::IdentityToken,
@@ -1239,6 +1398,58 @@ mod tests {
         let alarms = manager.alarm_source_registry().alarms_for(&source);
         assert_eq!(alarms.len(), 1);
         assert_eq!(alarms[0].condition_id(), &condition);
+    }
+
+    #[test]
+    fn monitor_alarm_source_sampled_registers_sampled_binding() {
+        let manager = manager();
+        let address_space = RwLock::new(AddressSpace::new());
+        let source = NodeId::new(2, "sampled-source");
+        let interval = Duration::from_millis(250);
+        let alarm = {
+            let mut space = address_space.write();
+            space.add_namespace("urn:test:sampled", 2);
+            space.add_variables(
+                vec![crate::address_space::Variable::new(
+                    &source,
+                    "SampledSource",
+                    "SampledSource",
+                    0.0,
+                )],
+                &NodeId::from(opcua_types::ObjectId::ObjectsFolder),
+            );
+
+            let cfg = LimitConfig::new(LimitMode::Exclusive)
+                .with_high(LimitDef {
+                    value: 10.0,
+                    deadband: 0.0,
+                    severity: 500,
+                })
+                .build()
+                .expect("limit config should be valid");
+
+            LimitAlarm::create_exclusive_in_address_space(
+                &mut space,
+                2,
+                "Device",
+                "High",
+                source.clone(),
+                cfg,
+            )
+        };
+
+        let alarm = manager.monitor_alarm_source_sampled_on_address_space(
+            &address_space,
+            &source,
+            alarm,
+            interval,
+        );
+
+        let sampled = manager.alarm_source_registry().sampled_bindings();
+        assert_eq!(sampled.len(), 1);
+        assert_eq!(sampled[0].0, source);
+        assert_eq!(sampled[0].1.condition_id(), &alarm.condition.condition_id);
+        assert_eq!(sampled[0].2, interval);
     }
 
     fn update_data_node(node_id: &NodeId, entry_count: usize) -> HistoryUpdateNode {

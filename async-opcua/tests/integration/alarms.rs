@@ -2191,3 +2191,92 @@ async fn source_has_condition_reference_to_alarm() {
         "the source variable must reference the alarm via HasCondition"
     );
 }
+
+// ---------------------------------------------------------------------------
+// US4 — opt-in periodic sampling. For out-of-band source changes (not via Write),
+// a per-binding sampling interval polls the InputNode and re-evaluates (Part 9 §4.4).
+// ---------------------------------------------------------------------------
+
+/// Change a source variable's Value directly in the address space, bypassing the node-manager
+/// Write path — so ONLY the sampler (if any) will notice. Mirrors an out-of-band source update.
+fn set_value_out_of_band(nm: &SimpleNodeManager, id: &NodeId, v: f64) {
+    let mut guard = nm.address_space().write();
+    let space: &mut AddressSpace = &mut guard;
+    if let Some(mut node) = space.find_mut(id) {
+        if let opcua::nodes::NodeType::Variable(ref mut var) = &mut *node {
+            let _ = var.set_value(&opcua_types::NumericRange::None, Variant::from(v));
+        }
+    };
+}
+
+fn bind_sampled(
+    nm: &SimpleNodeManager,
+    device: &str,
+    event_source: &NodeId,
+    input: &NodeId,
+    cfg: LimitConfig,
+    interval: Duration,
+) -> (Arc<LimitAlarm>, NodeId) {
+    let alarm = register_limit_alarm(
+        nm.address_space(),
+        nm,
+        device,
+        "Level",
+        event_source.clone(),
+        cfg,
+    );
+    let condition_id = alarm.condition_state_machine().condition_id.clone();
+    let alarm = nm.monitor_alarm_source_sampled(input, alarm, interval);
+    (alarm, condition_id)
+}
+
+#[tokio::test]
+async fn sampled_alarm_fires_on_out_of_band_change() {
+    let (_tester, nm, session) = setup_alarms().await;
+    let event_source = make_event_source(&nm, "SampSrc29");
+    let input = make_writable_double(&nm, "SampIn29");
+    bind_sampled(
+        &nm,
+        "SampTank29",
+        &event_source,
+        &input,
+        exclusive_level_cfg(),
+        Duration::from_millis(100),
+    );
+    let mut events = sub_with_events(&session, &event_source).await;
+    // Out-of-band change (no Write dispatch): the sampler must pick it up within ~one interval.
+    set_value_out_of_band(&nm, &input, 105.0);
+    let got = timeout(Duration::from_secs(2), recv_alarm(&mut events))
+        .await
+        .expect("the sampler activates the alarm within one interval");
+    assert!(got.active_state);
+}
+
+#[tokio::test]
+async fn unsampled_alarm_ignores_out_of_band_until_write() {
+    let (_tester, nm, session) = setup_alarms().await;
+    let event_source = make_event_source(&nm, "SampSrc30");
+    let input = make_writable_double(&nm, "SampIn30");
+    // Bound WITHOUT sampling (write-driven only).
+    bind_via_helper(
+        &nm,
+        "SampTank30",
+        &event_source,
+        &input,
+        exclusive_level_cfg(),
+    );
+    let mut events = sub_with_events(&session, &event_source).await;
+    // Out-of-band change is invisible to the write-driven path: no event.
+    set_value_out_of_band(&nm, &input, 105.0);
+    let none = timeout(Duration::from_millis(500), events.recv()).await;
+    assert!(
+        none.is_err(),
+        "without sampling, an out-of-band change emits nothing"
+    );
+    // A real Write through the node manager re-evaluates and fires.
+    session.write(&[write_double(&input, 106.0)]).await.unwrap();
+    let got = timeout(Duration::from_secs(2), recv_alarm(&mut events))
+        .await
+        .expect("a Write drives the alarm");
+    assert!(got.active_state);
+}

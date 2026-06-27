@@ -6,6 +6,7 @@ use opcua_core::sync::RwLock;
 use opcua_types::{DataValue, NodeId, Variant};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 /// Alarm that can be re-evaluated when its bound source Variable changes.
 pub trait SourceMonitoredAlarm: Send + Sync {
@@ -48,9 +49,15 @@ pub fn source_value_as_f64(value: &DataValue) -> Option<f64> {
     }
 }
 
+#[derive(Clone)]
+struct SourceBinding {
+    alarm: Arc<dyn SourceMonitoredAlarm>,
+    sampling_interval: Option<Duration>,
+}
+
 /// Alarms grouped by the source Variable NodeId they monitor.
 pub struct AlarmSourceRegistry {
-    bindings: RwLock<HashMap<NodeId, Vec<Arc<dyn SourceMonitoredAlarm>>>>,
+    bindings: RwLock<HashMap<NodeId, Vec<SourceBinding>>>,
 }
 
 impl Default for AlarmSourceRegistry {
@@ -70,7 +77,31 @@ impl AlarmSourceRegistry {
 
     /// Registers an alarm under a source Variable NodeId.
     pub fn register(&self, source: NodeId, alarm: Arc<dyn SourceMonitoredAlarm>) {
-        self.bindings.write().entry(source).or_default().push(alarm);
+        self.bindings
+            .write()
+            .entry(source)
+            .or_default()
+            .push(SourceBinding {
+                alarm,
+                sampling_interval: None,
+            });
+    }
+
+    /// Registers an alarm under a source Variable NodeId with opt-in periodic sampling.
+    pub fn register_sampled(
+        &self,
+        source: NodeId,
+        alarm: Arc<dyn SourceMonitoredAlarm>,
+        interval: Duration,
+    ) {
+        self.bindings
+            .write()
+            .entry(source)
+            .or_default()
+            .push(SourceBinding {
+                alarm,
+                sampling_interval: Some(interval),
+            });
     }
 
     /// Removes the alarm bound to `condition_id` from a source Variable.
@@ -79,7 +110,7 @@ impl AlarmSourceRegistry {
         let remove_source = if let Some(alarms) = bindings.get_mut(source) {
             // ponytail: condition_id is the stable unregister key; Arc pointer identity is
             // not used because callers are not required to pass back the original Arc handle.
-            alarms.retain(|alarm| alarm.condition_id() != condition_id);
+            alarms.retain(|binding| binding.alarm.condition_id() != condition_id);
             alarms.is_empty()
         } else {
             false
@@ -96,8 +127,29 @@ impl AlarmSourceRegistry {
         self.bindings
             .read()
             .get(source)
-            .cloned()
+            .map(|bindings| {
+                bindings
+                    .iter()
+                    .map(|binding| Arc::clone(&binding.alarm))
+                    .collect()
+            })
             .unwrap_or_default()
+    }
+
+    /// Returns all alarm bindings that opted into periodic source sampling.
+    #[must_use]
+    pub fn sampled_bindings(&self) -> Vec<(NodeId, Arc<dyn SourceMonitoredAlarm>, Duration)> {
+        self.bindings
+            .read()
+            .iter()
+            .flat_map(|(source, bindings)| {
+                bindings.iter().filter_map(move |binding| {
+                    binding
+                        .sampling_interval
+                        .map(|interval| (source.clone(), Arc::clone(&binding.alarm), interval))
+                })
+            })
+            .collect()
     }
 }
 
@@ -105,6 +157,7 @@ impl AlarmSourceRegistry {
 mod tests {
     use super::*;
     use opcua_types::{StatusCode, Variant};
+    use std::time::Duration;
 
     struct SmokeAlarm {
         source: NodeId,
@@ -176,6 +229,31 @@ mod tests {
         assert_eq!(remaining.len(), 1, "only AlarmA1 removed");
         assert_eq!(remaining[0].condition_id(), &NodeId::new(2, "AlarmA2"));
         assert_eq!(registry.alarms_for(&src_b).len(), 1);
+    }
+
+    #[test]
+    fn sampled_bindings_include_only_sampled_alarm_bindings() {
+        let registry = AlarmSourceRegistry::default();
+        let sampled_source = NodeId::new(2, "SampledSource");
+        let plain_source = NodeId::new(2, "PlainSource");
+        let interval = Duration::from_millis(250);
+
+        registry.register_sampled(
+            sampled_source.clone(),
+            smoke(&sampled_source, "SampledAlarm"),
+            interval,
+        );
+        registry.register(plain_source.clone(), smoke(&plain_source, "PlainAlarm"));
+
+        let sampled = registry.sampled_bindings();
+
+        assert_eq!(sampled.len(), 1);
+        assert_eq!(sampled[0].0, sampled_source);
+        assert_eq!(sampled[0].1.condition_id(), &NodeId::new(2, "SampledAlarm"));
+        assert_eq!(sampled[0].2, interval);
+
+        registry.unregister(&sampled_source, &NodeId::new(2, "SampledAlarm"));
+        assert!(registry.sampled_bindings().is_empty());
     }
 
     #[test]

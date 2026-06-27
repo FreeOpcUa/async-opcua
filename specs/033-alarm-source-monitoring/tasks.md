@@ -83,11 +83,11 @@ Active(High) + event with no manual call.
 **Goal**: poll the InputNode each interval for out-of-band sources.
 **Independent test**: change the source out-of-band → alarm activates within one interval.
 
-- [ ] T026 [US4] Add an optional per-binding `sampling_interval` (None = write-driven only) to the registry/binding in `alarms/source_monitor.rs` (Spec: Part 9 §4.4 continuous source monitoring)
-- [ ] T027 [US4] Implement a server-side sampling task: each interval, read the InputNode's current Value, call `re_evaluate`, and dispatch any event — reusing the US1 dispatch path (Spec: Part 9 §4.4 / §5.8)
-- [ ] T028 [US4] Verify idempotence: an unchanged in-limits value on a sampling tick emits no event (rely on the existing deadband/state-transition logic; no write+sample double-fire) (Spec: Part 9 §5.8.2 deadband)
-- [ ] T029 [P] [US4] [Claude] Integration test: with sampling enabled, an out-of-band source change to exceed a limit activates the alarm within one interval (Spec: Part 9 §4.4)
-- [ ] T030 [P] [US4] [Claude] Integration test: with sampling OFF, an out-of-band change re-evaluates only on the next write (Spec: Part 9 §4.4)
+- [X] T026 [US4] Add an optional per-binding `sampling_interval` (None = write-driven only) to the registry/binding in `alarms/source_monitor.rs` (Spec: Part 9 §4.4 continuous source monitoring)
+- [X] T027 [US4] Implement a server-side sampling task: each interval, read the InputNode's current Value, call `re_evaluate`, and dispatch any event — reusing the US1 dispatch path (Spec: Part 9 §4.4 / §5.8)
+- [X] T028 [US4] Verify idempotence: an unchanged in-limits value on a sampling tick emits no event (rely on the existing deadband/state-transition logic; no write+sample double-fire) (Spec: Part 9 §5.8.2 deadband)
+- [X] T029 [P] [US4] [Claude] Integration test: with sampling enabled, an out-of-band source change to exceed a limit activates the alarm within one interval (Spec: Part 9 §4.4)
+- [X] T030 [P] [US4] [Claude] Integration test: with sampling OFF, an out-of-band change re-evaluates only on the next write (Spec: Part 9 §4.4)
 
 **Checkpoint**: out-of-band sources covered without polling cost on the common case.
 

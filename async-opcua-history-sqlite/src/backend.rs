@@ -677,6 +677,23 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
 
         raw_values.sort_by_key(get_value_timestamp);
 
+        let annotation_times: Vec<DateTime> = if aggregate_type == &NodeId::new(0u16, 2351u32) {
+            match self.read_annotations(node_id, &[], None).await {
+                Ok((dvs, _)) => {
+                    let mut timestamps: Vec<DateTime> = dvs
+                        .iter()
+                        .map(get_value_timestamp)
+                        .filter(|timestamp| *timestamp >= start_time && *timestamp <= end_time)
+                        .collect();
+                    timestamps.sort();
+                    timestamps
+                }
+                Err(_) => Vec::new(),
+            }
+        } else {
+            Vec::new()
+        };
+
         let processed_values = compute_processed_intervals(
             &raw_values,
             aggregate_type,
@@ -685,6 +702,7 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
             end_time,
             processing_interval,
             stepped,
+            &annotation_times,
         );
 
         Ok((processed_values, None))

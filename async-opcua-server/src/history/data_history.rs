@@ -554,4 +554,57 @@ mod tests {
     fn default_constructs_in_memory_data_history() {
         let _history = InMemoryDataHistory::default();
     }
+
+    // Feature 035 / FR-007: a backend that does not support annotations (uses the default
+    // `read_annotations`, which returns Bad_HistoryOperationUnsupported) must make AnnotationCount
+    // return 0, never propagate the error.
+    struct NoAnnotationBackend;
+
+    #[async_trait]
+    impl HistoryStorageBackend for NoAnnotationBackend {
+        async fn read_raw_modified(
+            &self,
+            _node_id: &NodeId,
+            _start_time: DateTime,
+            _end_time: DateTime,
+            _num_values_per_node: u32,
+            _return_bounds: bool,
+            _is_read_modified: bool,
+            _continuation_point: Option<Vec<u8>>,
+        ) -> Result<HistoryRawModifiedResult, StatusCode> {
+            Ok((Vec::new(), Vec::new(), None))
+        }
+
+        async fn update_data(
+            &self,
+            _node_id: &NodeId,
+            _perform_insert_replace: PerformUpdateType,
+            _values: Vec<DataValue>,
+        ) -> Result<Vec<StatusCode>, StatusCode> {
+            Ok(Vec::new())
+        }
+        // read_annotations + read_processed use the trait defaults.
+    }
+
+    #[tokio::test]
+    async fn annotation_count_is_zero_when_backend_has_no_annotation_support() {
+        let b = NoAnnotationBackend;
+        let (vals, _cp) = b
+            .read_processed(
+                &NodeId::new(2, "x"),
+                DateTime::from(0),
+                DateTime::from(100_000_000),
+                100_000.0,
+                &NodeId::new(0u16, 2351u32),
+                &opcua_types::AggregateConfiguration::default(),
+                true,
+                None,
+            )
+            .await
+            .expect("read_processed must not error even without annotation support");
+        // Every interval reports 0 (the annotation read failed → empty set), all Good — no error/panic.
+        assert!(vals
+            .iter()
+            .all(|v| v.value == Some(Variant::Int32(0)) && v.status == Some(StatusCode::Good)));
+    }
 }

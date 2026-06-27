@@ -604,6 +604,7 @@ impl MonitoredItem {
                 &aggregate_type,
                 &AggregateInput {
                     values: &values_in,
+                    annotations: &[],
                     prior,
                     next,
                     interval_start,

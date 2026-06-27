@@ -16,6 +16,7 @@ const AGG_MAXIMUM: u32 = 2347;
 const AGG_MINIMUM_ACTUAL_TIME: u32 = 2348;
 const AGG_MAXIMUM_ACTUAL_TIME: u32 = 2349;
 const AGG_RANGE: u32 = 2350;
+const AGG_ANNOTATION_COUNT: u32 = 2351;
 const AGG_COUNT: u32 = 2352;
 const AGG_NUMBER_OF_TRANSITIONS: u32 = 2355;
 const AGG_DELTA: u32 = 2359;
@@ -52,6 +53,7 @@ const SUPPORTED_AGGREGATE_IDS: &[u32] = &[
     AGG_MINIMUM_ACTUAL_TIME,
     AGG_MAXIMUM_ACTUAL_TIME,
     AGG_RANGE,
+    AGG_ANNOTATION_COUNT,
     AGG_TIME_AVERAGE2,
     AGG_MINIMUM2,
     AGG_MAXIMUM2,
@@ -271,6 +273,8 @@ pub fn calculate_std_dev_sample(values: &[f64]) -> Option<f64> {
 pub struct AggregateInput<'a> {
     /// Raw values whose timestamp falls inside the interval, time-sorted.
     pub values: &'a [&'a DataValue],
+    /// Annotation source timestamps whose timestamp falls inside the interval, time-sorted.
+    pub annotations: &'a [DateTime],
     /// Last raw value at/before the interval's earlier boundary.
     pub prior: Option<&'a DataValue>,
     /// First raw value after the interval's later boundary.
@@ -1067,6 +1071,16 @@ fn agg_count(input: &AggregateInput<'_>) -> DataValue {
     }
 }
 
+fn agg_annotation_count(input: &AggregateInput<'_>) -> DataValue {
+    DataValue {
+        value: Some(Variant::Int32(input.annotations.len() as i32)),
+        status: Some(StatusCode::Good),
+        source_timestamp: Some(input.interval_start),
+        server_timestamp: Some(DateTime::now()),
+        ..Default::default()
+    }
+}
+
 fn good_double_result(value: f64, interval_start: DateTime) -> DataValue {
     DataValue {
         value: Some(Variant::Double(value)),
@@ -1414,7 +1428,7 @@ pub fn dispatch_aggregate(aggregate_type: &NodeId, input: &AggregateInput<'_>) -
         opcua_types::Identifier::Numeric(AGG_MAXIMUM_ACTUAL_TIME2) => {
             agg_maximum_actual_time2(input)
         }
-        // AnnotationCount (2351) is intentionally unsupported until annotations are modeled.
+        opcua_types::Identifier::Numeric(AGG_ANNOTATION_COUNT) => agg_annotation_count(input),
         opcua_types::Identifier::Numeric(AGG_COUNT) => agg_count(input),
         opcua_types::Identifier::Numeric(AGG_NUMBER_OF_TRANSITIONS) => {
             agg_number_of_transitions(input)
@@ -1447,6 +1461,9 @@ pub fn dispatch_aggregate(aggregate_type: &NodeId, input: &AggregateInput<'_>) -
 }
 
 /// Computes processed aggregate values for each partitioned interval.
+// Mirrors the HistoryRead ReadProcessed parameters (raw values, aggregate, config, range, interval,
+// stepped, annotations); grouping them into a struct would only shuffle the same fields around.
+#[allow(clippy::too_many_arguments)]
 pub fn compute_processed_intervals(
     raw_values: &[DataValue],
     aggregate_type: &NodeId,
@@ -1455,6 +1472,7 @@ pub fn compute_processed_intervals(
     end_time: DateTime,
     processing_interval: f64,
     stepped: bool,
+    annotation_times: &[DateTime],
 ) -> Vec<DataValue> {
     partition_intervals(start_time, end_time, processing_interval)
         .into_iter()
@@ -1472,6 +1490,11 @@ pub fn compute_processed_intervals(
                     timestamp >= min_t && timestamp < max_t
                 })
                 .collect();
+            let annotations: Vec<DateTime> = annotation_times
+                .iter()
+                .copied()
+                .filter(|timestamp| *timestamp >= min_t && *timestamp < max_t)
+                .collect();
 
             let prior = raw_values
                 .iter()
@@ -1483,6 +1506,7 @@ pub fn compute_processed_intervals(
 
             let input = AggregateInput {
                 values: &values_in_interval,
+                annotations: &annotations,
                 prior,
                 next,
                 interval_start,

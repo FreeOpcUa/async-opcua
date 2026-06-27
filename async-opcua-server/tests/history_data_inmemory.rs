@@ -434,3 +434,49 @@ async fn non_annotation_value_is_rejected_not_panicked() {
         .0
         .is_empty());
 }
+
+// ---- Feature 035: AnnotationCount aggregate over in-memory annotations ----
+
+#[tokio::test]
+async fn annotation_count_aggregate_over_in_memory_annotations() {
+    use opcua_types::AggregateConfiguration;
+    let b = InMemoryDataHistory::new();
+    let n = node();
+    // 3 annotations at 1s, 3s, 7s (ticks: 1s = 10_000_000 ticks).
+    for (sec, msg) in [(1i64, "a"), (3, "b"), (7, "c")] {
+        b.update_structure_data(
+            &n,
+            PerformUpdateType::Insert,
+            vec![annotation_at(sec * 10_000_000, msg)],
+        )
+        .await
+        .unwrap();
+    }
+    let cfg = AggregateConfiguration::default();
+    // AnnotationCount (2351) over [0s, 10s]; the per-interval counts must sum to 3, all Good.
+    let (vals, _cp) = b
+        .read_processed(
+            &n,
+            DateTime::from(0),
+            DateTime::from(100_000_000),
+            100_000.0,
+            &NodeId::new(0u16, 2351u32),
+            &cfg,
+            true,
+            None,
+        )
+        .await
+        .unwrap();
+    let total: i32 = vals
+        .iter()
+        .map(|v| match v.value {
+            Some(Variant::Int32(c)) => c,
+            _ => 0,
+        })
+        .sum();
+    assert_eq!(total, 3, "AnnotationCount over the range = 3");
+    assert!(
+        vals.iter().all(|v| v.status == Some(StatusCode::Good)),
+        "all intervals Good"
+    );
+}

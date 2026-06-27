@@ -448,3 +448,47 @@ async fn non_annotation_value_is_rejected_not_panicked() {
     let (anns, _cp) = b.read_annotations(&n, &[], None).await.unwrap();
     assert!(anns.is_empty());
 }
+
+// ---- Feature 035: AnnotationCount aggregate parity with the in-memory backend ----
+
+#[tokio::test]
+async fn annotation_count_aggregate_matches_in_memory() {
+    use opcua_types::AggregateConfiguration;
+    let b = SqliteHistoryBackend::new_in_memory().unwrap();
+    let n = node();
+    // Same fixture as the in-memory test: 3 annotations at 1s, 3s, 7s.
+    for (sec, msg) in [(1i64, "a"), (3, "b"), (7, "c")] {
+        b.update_structure_data(
+            &n,
+            PerformUpdateType::Insert,
+            vec![annotation_at(sec * 10_000_000, msg)],
+        )
+        .await
+        .unwrap();
+    }
+    let cfg = AggregateConfiguration::default();
+    let (vals, _cp) = b
+        .read_processed(
+            &n,
+            DateTime::from(0),
+            DateTime::from(100_000_000),
+            100_000.0,
+            &NodeId::new(0u16, 2351u32),
+            &cfg,
+            None,
+        )
+        .await
+        .unwrap();
+    let total: i32 = vals
+        .iter()
+        .map(|v| match v.value {
+            Some(Variant::Int32(c)) => c,
+            _ => 0,
+        })
+        .sum();
+    assert_eq!(
+        total, 3,
+        "sqlite AnnotationCount over the range = 3 (parity)"
+    );
+    assert!(vals.iter().all(|v| v.status == Some(StatusCode::Good)));
+}

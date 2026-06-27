@@ -817,13 +817,13 @@ async fn browse_advertised_aggregate_functions() {
     let refs = r[0].references.clone().unwrap_or_default();
 
     let ids: Vec<NodeId> = refs.iter().map(|f| f.node_id.node_id.clone()).collect();
-    // A representative aggregate from each phase must be advertised.
-    for id in [2341u32, 2343, 2352, 11286, 2360, 2355] {
+    // A representative aggregate from each phase must be advertised, incl. AnnotationCount (2351).
+    for id in [2341u32, 2343, 2352, 11286, 2360, 2355, 2351] {
         assert!(
             ids.contains(&NodeId::new(0u16, id)),
             "aggregate i={id} should be advertised; got {ids:?}"
         );
     }
-    // The full built-in set (34 aggregates) is advertised.
-    assert_eq!(ids.len(), 34, "advertised aggregate function count");
+    // The full built-in set (35 aggregates, incl. AnnotationCount) is advertised.
+    assert_eq!(ids.len(), 35, "advertised aggregate function count");
 }

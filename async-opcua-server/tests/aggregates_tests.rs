@@ -22,6 +22,7 @@ fn calculate_aggregate(
         aggregate_type,
         &AggregateInput {
             values,
+            annotations: &[],
             prior: None,
             next: None,
             interval_start: start,
@@ -42,8 +43,8 @@ fn aggregate_node_ids_match_the_standard_registry() {
     assert_eq!(aggregate_maximum(), NodeId::new(0u16, 2347u32));
     assert_eq!(aggregate_std_dev(), NodeId::new(0u16, 11426u32));
 
-    // A request for a supported standard id is computed; an unimplemented id (2351 =
-    // AggregateFunction_AnnotationCount, needs annotation history) reports BadAggregateNotSupported.
+    // A request for a supported standard id is computed; AnnotationCount (2351) is now supported
+    // too (feature 035) and is asserted below.
     let start = DateTime::from((2026, 6, 6, 12, 0, 0));
     let end = DateTime::from((2026, 6, 6, 12, 0, 10));
     let v = DataValue {
@@ -61,10 +62,10 @@ fn aggregate_node_ids_match_the_standard_registry() {
         calculate_aggregate(&[&v], &NodeId::new(0u16, 2352u32), start, end).status,
         Some(StatusCode::Good)
     );
-    // AnnotationCount (2351) is intentionally not implemented.
+    // AnnotationCount (2351) is now supported (feature 035): with no annotations it computes 0/Good.
     assert_eq!(
         calculate_aggregate(&[&v], &NodeId::new(0u16, 2351u32), start, end).status,
-        Some(StatusCode::BadAggregateNotSupported)
+        Some(StatusCode::Good)
     );
 }
 
@@ -409,6 +410,7 @@ fn phase_c_one_interval(id: u32) -> DataValue {
         end,
         10_000.0,
         true,
+        &[],
     );
     assert_eq!(out.len(), 1, "expected exactly one interval for id {id}");
     out.remove(0)
@@ -477,6 +479,7 @@ fn phase_c_interpolative_before_data_is_bad_no_data() {
         end,
         10_000.0,
         true,
+        &[],
     );
     assert_eq!(out[0].status, Some(StatusCode::BadNoData));
 }
@@ -501,6 +504,7 @@ fn phase_d_one_interval(id: u32) -> DataValue {
         end,
         10_000.0,
         true,
+        &[],
     );
     assert_eq!(out.len(), 1, "expected one interval for id {id}");
     out.remove(0)
@@ -582,6 +586,7 @@ fn phase_d_no_prior_degrades_to_in_interval() {
         end,
         10_000.0,
         true,
+        &[],
     );
     assert_eq!(out[0].value, Some(Variant::Double(10.0)));
 }
@@ -613,6 +618,7 @@ fn phase_e_eval(series: &[DataValue], id: u32) -> DataValue {
         end,
         10_000.0,
         true,
+        &[],
     );
     assert_eq!(out.len(), 1, "expected one interval for id {id}");
     out.remove(0)
@@ -688,7 +694,7 @@ fn supported_aggregates_matches_dispatch() {
     let start = DateTime::from((2026, 6, 6, 12, 0, 0));
     let end = DateTime::from((2026, 6, 6, 12, 0, 10));
     let ids = supported_aggregates();
-    assert_eq!(ids.len(), 34, "advertised aggregate count");
+    assert_eq!(ids.len(), 35, "advertised aggregate count");
     for id in &ids {
         let status = calculate_aggregate(&[], id, start, end).status;
         assert_ne!(
@@ -697,11 +703,11 @@ fn supported_aggregates_matches_dispatch() {
             "advertised aggregate {id} must be dispatched (got {status:?})"
         );
     }
-    // AnnotationCount (2351) is deliberately unsupported and must NOT be advertised.
-    assert!(!ids.contains(&NodeId::new(0u16, 2351u32)));
+    // AnnotationCount (2351) is now advertised and computed (feature 035).
+    assert!(ids.contains(&NodeId::new(0u16, 2351u32)));
     assert_eq!(
         calculate_aggregate(&[], &NodeId::new(0u16, 2351u32), start, end).status,
-        Some(StatusCode::BadAggregateNotSupported)
+        Some(StatusCode::Good)
     );
 }
 
@@ -727,6 +733,7 @@ fn phase_f_time_average_excludes_bad_regions() {
         end,
         10_000.0,
         true,
+        &[],
     );
     match &ta[0].value {
         Some(Variant::Double(v)) => assert!((v - 100.0 / 7.0).abs() < 1e-9, "TimeAverage got {v}"),
@@ -744,6 +751,7 @@ fn phase_f_time_average_excludes_bad_regions() {
         end,
         10_000.0,
         true,
+        &[],
     );
     match &total[0].value {
         Some(Variant::Double(v)) => assert!((v - 100.0).abs() < 1e-9, "Total got {v}"),
@@ -766,7 +774,16 @@ fn phase_g_status_honors_custom_aggregate_configuration() {
 
     // Default config (100/100): 66.7% good < 100 -> Uncertain_DataSubNormal.
     let default_cfg = AggregateConfiguration::default();
-    let r = compute_processed_intervals(&series, &avg_id, &default_cfg, start, end, 10_000.0, true);
+    let r = compute_processed_intervals(
+        &series,
+        &avg_id,
+        &default_cfg,
+        start,
+        end,
+        10_000.0,
+        true,
+        &[],
+    );
     assert_eq!(r[0].value, Some(Variant::Double(15.0)));
     assert_eq!(r[0].status, Some(StatusCode::UncertainDataSubNormal));
 
@@ -778,7 +795,16 @@ fn phase_g_status_honors_custom_aggregate_configuration() {
         percent_data_good: 50,
         use_sloped_extrapolation: false,
     };
-    let r = compute_processed_intervals(&series, &avg_id, &cfg_good50, start, end, 10_000.0, true);
+    let r = compute_processed_intervals(
+        &series,
+        &avg_id,
+        &cfg_good50,
+        start,
+        end,
+        10_000.0,
+        true,
+        &[],
+    );
     assert_eq!(r[0].status, Some(StatusCode::Good));
 
     // percent_data_bad = 30: 33.3% bad >= 30 -> Bad.
@@ -787,13 +813,30 @@ fn phase_g_status_honors_custom_aggregate_configuration() {
         percent_data_good: 100,
         ..cfg_good50
     };
-    let r = compute_processed_intervals(&series, &avg_id, &cfg_bad30, start, end, 10_000.0, true);
+    let r = compute_processed_intervals(
+        &series,
+        &avg_id,
+        &cfg_bad30,
+        start,
+        end,
+        10_000.0,
+        true,
+        &[],
+    );
     assert_eq!(r[0].status, Some(StatusCode::Bad));
 
     // TreatUncertainAsBad: an Uncertain value counts as Good by default (-> Good), as Bad when set.
     let series_u = vec![good(10.0, 2), dv(20.0, 4, StatusCode::Uncertain)];
-    let r =
-        compute_processed_intervals(&series_u, &avg_id, &default_cfg, start, end, 10_000.0, true);
+    let r = compute_processed_intervals(
+        &series_u,
+        &avg_id,
+        &default_cfg,
+        start,
+        end,
+        10_000.0,
+        true,
+        &[],
+    );
     assert_eq!(r[0].status, Some(StatusCode::Good)); // uncertain folded into good, no bad -> Good
     let cfg_uab = AggregateConfiguration {
         treat_uncertain_as_bad: true,
@@ -801,7 +844,16 @@ fn phase_g_status_honors_custom_aggregate_configuration() {
         percent_data_good: 100,
         ..cfg_good50
     };
-    let r = compute_processed_intervals(&series_u, &avg_id, &cfg_uab, start, end, 10_000.0, true);
+    let r = compute_processed_intervals(
+        &series_u,
+        &avg_id,
+        &cfg_uab,
+        start,
+        end,
+        10_000.0,
+        true,
+        &[],
+    );
     assert_eq!(r[0].status, Some(StatusCode::UncertainDataSubNormal));
 }
 
@@ -817,13 +869,13 @@ fn phase_h_sloped_interpolation_differs_from_stepped() {
     let cfg = AggregateConfiguration::default();
     let ta = NodeId::new(0u16, 2343);
 
-    let stepped = compute_processed_intervals(&series, &ta, &cfg, start, end, 10_000.0, true);
+    let stepped = compute_processed_intervals(&series, &ta, &cfg, start, end, 10_000.0, true, &[]);
     match &stepped[0].value {
         Some(Variant::Double(v)) => assert!((v - 15.0).abs() < 1e-9, "stepped got {v}"),
         other => panic!("expected Double, got {other:?}"),
     }
 
-    let sloped = compute_processed_intervals(&series, &ta, &cfg, start, end, 10_000.0, false);
+    let sloped = compute_processed_intervals(&series, &ta, &cfg, start, end, 10_000.0, false, &[]);
     match &sloped[0].value {
         Some(Variant::Double(v)) => assert!((v - 17.5).abs() < 1e-9, "sloped got {v}"),
         other => panic!("expected Double, got {other:?}"),
@@ -1103,7 +1155,7 @@ fn duration_in_state_numeric_parity_and_bytestring_excluded() {
     assert_eq!(bnz.value, Some(Variant::Double(0.0)));
 }
 
-// --- Polish: no panic on any value type; AnnotationCount stays unsupported ---
+// --- Polish: no panic on any value type ---
 
 #[test]
 fn aggregates_never_panic_on_any_value_type() {
@@ -1131,11 +1183,62 @@ fn aggregates_never_panic_on_any_value_type() {
     }
 }
 
+// --- Feature 035: AnnotationCount aggregate (Part 13 §5.4.3.20, i=2351) ------
+
+const ID_ANNOTATION_COUNT: u32 = 2351;
+
+/// Dispatch AnnotationCount directly over a set of annotation timestamps (single interval).
+fn annotation_count(annotations: &[DateTime], start: DateTime, end: DateTime) -> DataValue {
+    let config = AggregateConfiguration::default();
+    dispatch_aggregate(
+        &NodeId::new(0u16, ID_ANNOTATION_COUNT),
+        &AggregateInput {
+            values: &[],
+            annotations,
+            prior: None,
+            next: None,
+            interval_start: start,
+            interval_end: end,
+            config: &config,
+            stepped: true,
+        },
+    )
+}
+
 #[test]
-fn annotation_count_stays_unsupported() {
+fn annotation_count_counts_annotations_in_interval() {
     let (start, end) = phase_b_interval();
-    // FR-009: AnnotationCount (2351) was never enabled by this feature.
-    let v = good_v(Variant::Boolean(true), 2);
-    let r = calculate_aggregate(&[&v], &NodeId::new(0u16, 2351), start, end);
-    assert_eq!(r.status, Some(StatusCode::BadAggregateNotSupported));
+    let t = |s| DateTime::from((2026, 6, 6, 12, 0, s));
+    // SC-001: N ∈ {0, 1, 3} annotations → AnnotationCount = N, Good (was Bad_AggregateNotSupported).
+    let none = annotation_count(&[], start, end);
+    assert_eq!(none.value, Some(Variant::Int32(0)));
+    assert_eq!(none.status, Some(StatusCode::Good));
+    assert_eq!(none.source_timestamp, Some(start));
+    assert_eq!(
+        annotation_count(&[t(2)], start, end).value,
+        Some(Variant::Int32(1))
+    );
+    assert_eq!(
+        annotation_count(&[t(1), t(3), t(5)], start, end).value,
+        Some(Variant::Int32(3))
+    );
+}
+
+#[test]
+fn annotation_count_partitions_per_interval() {
+    let t = |s| DateTime::from((2026, 6, 6, 12, 0, s));
+    let (start, end) = (t(0), t(10));
+    let cfg = AggregateConfiguration::default();
+    let id = NodeId::new(0u16, ID_ANNOTATION_COUNT);
+    // SC-002: annotations at 1,3,7 over 5s intervals → [0,5) counts 2, [5,10) counts 1.
+    let annotations = [t(1), t(3), t(7)];
+    let r = compute_processed_intervals(&[], &id, &cfg, start, end, 5000.0, true, &annotations);
+    assert_eq!(r.len(), 2);
+    assert_eq!(r[0].value, Some(Variant::Int32(2)));
+    assert_eq!(r[1].value, Some(Variant::Int32(1)));
+    // FR-003: a boundary timestamp lands in the start-inclusive interval [5,10), not [0,5).
+    let boundary = [t(5)];
+    let rb = compute_processed_intervals(&[], &id, &cfg, start, end, 5000.0, true, &boundary);
+    assert_eq!(rb[0].value, Some(Variant::Int32(0)));
+    assert_eq!(rb[1].value, Some(Variant::Int32(1)));
 }

@@ -14,12 +14,13 @@ use opcua_core::ResponseMessage;
 use opcua_types::{
     match_extension_object_owned, ByteString, DataValue, DateTime, DeleteAtTimeDetails,
     DeleteEventDetails, DeleteRawModifiedDetails, Error, ExtensionObject, HistoryData,
-    HistoryReadRequest, HistoryReadResponse, HistoryReadResult, HistoryReadValueId,
-    HistoryUpdateRequest, HistoryUpdateResponse, HistoryUpdateResult, IntegerId, NodeId,
-    NumericRange, PerformUpdateType, QualifiedName, ReadAnnotationDataDetails, ReadAtTimeDetails,
-    ReadEventDetails, ReadProcessedDetails, ReadRawModifiedDetails, ReadRequest, ReadResponse,
-    ReadValueId, StatusCode, TimestampsToReturn, UpdateDataDetails, UpdateEventDetails,
-    UpdateStructureDataDetails, WriteRequest, WriteResponse, WriteValue,
+    HistoryModifiedData, HistoryReadRequest, HistoryReadResponse, HistoryReadResult,
+    HistoryReadValueId, HistoryUpdateRequest, HistoryUpdateResponse, HistoryUpdateResult,
+    IntegerId, ModificationInfo, NodeId, NumericRange, PerformUpdateType, QualifiedName,
+    ReadAnnotationDataDetails, ReadAtTimeDetails, ReadEventDetails, ReadProcessedDetails,
+    ReadRawModifiedDetails, ReadRequest, ReadResponse, ReadValueId, StatusCode, TimestampsToReturn,
+    UpdateDataDetails, UpdateEventDetails, UpdateStructureDataDetails, WriteRequest, WriteResponse,
+    WriteValue,
 };
 use tracing::{debug_span, Instrument};
 
@@ -742,6 +743,76 @@ impl Session {
         };
 
         Ok((values, cp))
+    }
+
+    /// Helper method to perform a modified history read for a single node.
+    ///
+    /// See OPC UA Part 11 §6.5 for modified values and [`ModificationInfo`], and Part 4 §11.6
+    /// for `ReadRawModifiedDetails` `isReadModified`.
+    pub async fn history_read_modified(
+        &self,
+        node_id: NodeId,
+        start_time: DateTime,
+        end_time: DateTime,
+        num_values_per_node: u32,
+        return_bounds: bool,
+        continuation_point: Option<ByteString>,
+    ) -> Result<(Vec<DataValue>, Vec<ModificationInfo>, Option<ByteString>), Error> {
+        let details = ReadRawModifiedDetails {
+            is_read_modified: true,
+            start_time,
+            end_time,
+            num_values_per_node,
+            return_bounds,
+        };
+
+        let action = HistoryReadAction::ReadRawModifiedDetails(details);
+        let value_id = HistoryReadValueId {
+            node_id,
+            index_range: NumericRange::None,
+            data_encoding: QualifiedName::null(),
+            continuation_point: continuation_point.unwrap_or_default(),
+        };
+
+        let results = self
+            .history_read(action, TimestampsToReturn::Both, false, &[value_id])
+            .await?;
+        if results.is_empty() {
+            return Err(Error::new(
+                StatusCode::BadUnexpectedError,
+                "No results returned from history read",
+            ));
+        }
+
+        let result = &results[0];
+        if result.status_code.is_bad() {
+            return Err(Error::new(result.status_code, "History read failed"));
+        }
+
+        if result.history_data.is_null() {
+            let cp = if result.continuation_point.is_null() {
+                None
+            } else {
+                Some(result.continuation_point.clone())
+            };
+            return Ok((Vec::new(), Vec::new(), cp));
+        }
+
+        let history_data_obj = result.history_data.clone();
+        let history_modified_data = match_extension_object_owned!(history_data_obj,
+            v: HistoryModifiedData => v,
+            _ => return Err(Error::new(StatusCode::BadDecodingError, "Failed to decode HistoryModifiedData")),
+        );
+
+        let values = history_modified_data.data_values.unwrap_or_default();
+        let modification_infos = history_modified_data.modification_infos.unwrap_or_default();
+        let cp = if result.continuation_point.is_null() {
+            None
+        } else {
+            Some(result.continuation_point.clone())
+        };
+
+        Ok((values, modification_infos, cp))
     }
 
     /// Helper method to update/insert historical data values for a single node.

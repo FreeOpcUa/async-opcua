@@ -12,8 +12,8 @@ tests and runs the full suite (codex sandbox cannot bind sockets).
 
 ## Phase 1: Setup
 
-- [ ] T001 Confirm the existing HistoryUpdate surface compiles and inventory the gap: `HistoryUpdateDetails` variants + dispatch in `async-opcua-server/src/node_manager/history.rs`, the `HistoryStorageBackend` trait in `async-opcua-server/src/history/backend.rs`, and the sqlite `update_data` in `async-opcua-history-sqlite/src/backend.rs` (Spec: Part 11 §6; Part 4 §11.7)
-- [ ] T002 [P] Confirm `cargo test -p async-opcua-server --lib`, `-p async-opcua-history-sqlite`, and the integration suite are green at baseline before changes (Spec: SC-005)
+- [X] T001 Confirm the existing HistoryUpdate surface compiles and inventory the gap: `HistoryUpdateDetails` variants + dispatch in `async-opcua-server/src/node_manager/history.rs`, the `HistoryStorageBackend` trait in `async-opcua-server/src/history/backend.rs`, and the sqlite `update_data` in `async-opcua-history-sqlite/src/backend.rs` (Spec: Part 11 §6; Part 4 §11.7)
+- [X] T002 [P] Confirm `cargo test -p async-opcua-server --lib`, `-p async-opcua-history-sqlite`, and the integration suite are green at baseline before changes (Spec: SC-005)
 
 ## Phase 2: Foundational (BLOCKING — all stories depend on this)
 
@@ -154,14 +154,14 @@ backends; read via the existing annotation path.
 drives the full surface; integration tests cover it.
 **Independent test**: run the integration server, issue each operation from the client, read back.
 
-- [ ] T062 [US7] Wire `InMemoryDataHistory` into a node manager via the existing `set_history_backend(Arc::new(InMemoryDataHistory::new()))` so a historized variable accepts HistoryUpdate + HistoryRead on the default path (Spec: Part 11 §5.5; FR-009)
-- [ ] T063 [US7] The client `Session::history_update` + `history_update_data` already exist (async-opcua-client/src/session/services/attributes.rs); confirm they accept every `HistoryUpdateDetails` variant and add per-operation convenience helpers (delete/event/annotation) only where missing (Spec: Part 4 §11.7)
-- [ ] T064 [US7] Expose a historized variable + event source in the demo server (`samples/demo-server`) accepting HistoryUpdate (Spec: FR-012)
-- [ ] T065 [P] [US7] [Claude] integration test `async-opcua/tests/integration/history_update.rs`: client UpdateData → HistoryRead raw round-trip on the default in-memory path (Spec: SC-004)
-- [ ] T066 [P] [US7] [Claude] integration test: client Replace then HistoryRead modified returns the superseded value (Spec: SC-003)
-- [ ] T067 [P] [US7] [Claude] integration test: client DeleteAtTime + DeleteRawModified per-entry results round-trip (Spec: SC-002)
-- [ ] T068 [P] [US7] [Claude] integration test: a session lacking InsertHistory/ModifyHistory/DeleteHistory is denied (existing RBAC, enforced) (Spec: Part 3 §8.55; FR-010)
-- [ ] T069 [P] [US7] [Claude] integration test: HistoryUpdate on an unhistorized node returns `Bad_HistoryOperationUnsupported` per node (Spec: FR-011)
+- [X] T062 [US7] Wire `InMemoryDataHistory` into a node manager via the existing `set_history_backend(Arc::new(InMemoryDataHistory::new()))` so a historized variable accepts HistoryUpdate + HistoryRead on the default path (Spec: Part 11 §5.5; FR-009)
+- [X] T063 [US7] The client `Session::history_update` + `history_update_data` already exist (async-opcua-client/src/session/services/attributes.rs); confirm they accept every `HistoryUpdateDetails` variant and add per-operation convenience helpers (delete/event/annotation) only where missing (Spec: Part 4 §11.7)
+- [X] T064 [US7] Expose a historized variable + event source in the demo server (`samples/demo-server`) accepting HistoryUpdate (Spec: FR-012)
+- [X] T065 [P] [US7] [Claude] integration test `async-opcua/tests/integration/history_update.rs`: client UpdateData → HistoryRead raw round-trip on the default in-memory path (Spec: SC-004)
+- [X] T066 [P] [US7] [Claude] integration test: client Replace then HistoryRead modified returns the superseded value (Spec: SC-003)
+- [X] T067 [P] [US7] [Claude] integration test: client DeleteAtTime + DeleteRawModified per-entry results round-trip (Spec: SC-002)
+- [X] T068 [P] [US7] [Claude] integration test: a session lacking InsertHistory/ModifyHistory/DeleteHistory is denied (existing RBAC, enforced) (Spec: Part 3 §8.55; FR-010)
+- [X] T069 [P] [US7] [Claude] integration test: HistoryUpdate on an unhistorized node returns `Bad_HistoryOperationUnsupported` per node (Spec: FR-011)
 
 **Checkpoint**: full write surface usable and demonstrated end-to-end.
 
@@ -169,12 +169,12 @@ drives the full surface; integration tests cover it.
 
 ## Phase 10: Polish & cross-cutting
 
-- [ ] T070 [P] Run the FULL `cargo test -p async-opcua-server` (all binaries) + `-p async-opcua-history-sqlite` + the integration suite — zero regressions (Spec: SC-005)
-- [ ] T071 [P] Build + test under `--no-default-features` and `--all-features`; fix any feature-gating gaps (Spec: SC-006; FR-014)
-- [ ] T072 [P] `cargo clippy --workspace --all-targets` (default + no-default legs) + `cargo fmt --all --check` clean (Spec: Constitution V)
-- [ ] T073 [P] Security review of the write path: per-entry results, bounded allocations, no panic on empty/inverted/duplicate input, RBAC gate intact (Spec: Constitution IV)
-- [ ] T074 [P] Confirm per-operation result codes match Part 4 §11.7 tables (not whole-request failure) across all six operations (Spec: Part 4 §11.7; SC-002)
-- [ ] T075 [P] Add a docs section (e.g. `docs/server.md` or `docs/advanced_server.md`) on HistoryUpdate + the in-memory data history backend, mirroring quickstart.md (Spec: FR-012)
+- [X] T070 [P] Run the FULL `cargo test -p async-opcua-server` (all binaries) + `-p async-opcua-history-sqlite` + the integration suite — zero regressions (Spec: SC-005)
+- [X] T071 [P] Build + test under `--no-default-features` and `--all-features`; fix any feature-gating gaps (Spec: SC-006; FR-014)
+- [X] T072 [P] `cargo clippy --workspace --all-targets` (default + no-default legs) + `cargo fmt --all --check` clean (Spec: Constitution V)
+- [X] T073 [P] Security review of the write path: per-entry results, bounded allocations, no panic on empty/inverted/duplicate input, RBAC gate intact (Spec: Constitution IV)
+- [X] T074 [P] Confirm per-operation result codes match Part 4 §11.7 tables (not whole-request failure) across all six operations (Spec: Part 4 §11.7; SC-002)
+- [X] T075 [P] Add a docs section (e.g. `docs/server.md` or `docs/advanced_server.md`) on HistoryUpdate + the in-memory data history backend, mirroring quickstart.md (Spec: FR-012)
 - [ ] T076 Update `specs/SESSION-HANDOFF.md` + memory with the HistoryUpdate feature outcome (Spec: project process)
 
 ---

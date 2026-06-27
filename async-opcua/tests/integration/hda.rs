@@ -225,3 +225,207 @@ async fn history_update_unknown_node_is_rejected() {
         .unwrap_err();
     assert_eq!(StatusCode::BadNodeIdUnknown, e.status());
 }
+
+// ---- US7: end-to-end HistoryUpdate against the default in-memory data history ----
+
+use opcua::client::HistoryUpdateAction;
+use opcua::server::InMemoryDataHistory;
+use opcua::types::DeleteAtTimeDetails;
+
+/// Like `setup_hda` but backs the SimpleNodeManager with the in-memory data history (no sqlite).
+async fn setup_hda_inmemory() -> (Tester, Arc<SimpleNodeManager>, Arc<opcua_client::Session>) {
+    let namespace = opcua::server::diagnostics::NamespaceMetadata {
+        namespace_uri: "urn:rustopcuatestserver".to_owned(),
+        namespace_index: 2,
+        ..Default::default()
+    };
+    let server = default_server().with_node_manager(simple_node_manager(namespace, "test"));
+    let mut tester = Tester::new(server, false).await;
+    let nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<SimpleNodeManager>()
+        .expect("SimpleNodeManager not found");
+    nm.inner()
+        .set_history_backend(Arc::new(InMemoryDataHistory::new()));
+    let (session, lp) = tester.connect_default().await.unwrap();
+    lp.spawn();
+    timeout(Duration::from_secs(2), session.wait_for_connection())
+        .await
+        .unwrap();
+    (tester, nm, session)
+}
+
+fn insert_historized(nm: &SimpleNodeManager, id: &NodeId, history_write: bool) {
+    let mut space = nm.address_space().write();
+    let mut al = AccessLevel::HISTORY_READ | AccessLevel::CURRENT_READ | AccessLevel::CURRENT_WRITE;
+    if history_write {
+        al |= AccessLevel::HISTORY_WRITE;
+    }
+    let var = VariableBuilder::new(id, "h", "h")
+        .data_type(DataTypeId::Double)
+        .historizing(true)
+        .value(0.0f64)
+        .user_access_level(al)
+        .access_level(al)
+        .build();
+    space.insert(var, None::<&[(_, &NodeId, _)]>);
+}
+
+fn dv(ticks: i64, v: f64) -> DataValue {
+    DataValue::new_at(Variant::from(v), DateTime::from(ticks))
+}
+
+#[tokio::test]
+async fn e2e_inmemory_update_then_read_roundtrip() {
+    let (_t, nm, session) = setup_hda_inmemory().await;
+    let id = NodeId::new(2, "E2EVar");
+    insert_historized(&nm, &id, true);
+
+    let r = session
+        .history_update_data(
+            id.clone(),
+            PerformUpdateType::Insert,
+            vec![dv(100, 1.0), dv(200, 2.0)],
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        r,
+        vec![StatusCode::GoodEntryInserted, StatusCode::GoodEntryInserted]
+    );
+
+    let (values, _cp) = session
+        .history_read_raw(
+            id,
+            DateTime::from(0),
+            DateTime::from(1000),
+            100,
+            false,
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(values.len(), 2);
+}
+
+#[tokio::test]
+async fn e2e_replace_then_read_modified() {
+    let (_t, nm, session) = setup_hda_inmemory().await;
+    let id = NodeId::new(2, "E2EModVar");
+    insert_historized(&nm, &id, true);
+
+    session
+        .history_update_data(id.clone(), PerformUpdateType::Insert, vec![dv(100, 1.0)])
+        .await
+        .unwrap();
+    session
+        .history_update_data(id.clone(), PerformUpdateType::Replace, vec![dv(100, 2.0)])
+        .await
+        .unwrap();
+
+    let (values, infos, _cp) = session
+        .history_read_modified(
+            id,
+            DateTime::from(0),
+            DateTime::from(1000),
+            100,
+            false,
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        values.len(),
+        1,
+        "the superseded value is readable as modified"
+    );
+    assert_eq!(infos.len(), 1);
+    assert_eq!(
+        infos[0].update_type,
+        opcua::types::HistoryUpdateType::Replace
+    );
+}
+
+#[tokio::test]
+async fn e2e_delete_at_time_via_client() {
+    let (_t, nm, session) = setup_hda_inmemory().await;
+    let id = NodeId::new(2, "E2EDelVar");
+    insert_historized(&nm, &id, true);
+
+    session
+        .history_update_data(
+            id.clone(),
+            PerformUpdateType::Insert,
+            vec![dv(100, 1.0), dv(300, 3.0)],
+        )
+        .await
+        .unwrap();
+
+    let action = HistoryUpdateAction::from(DeleteAtTimeDetails {
+        node_id: id.clone(),
+        req_times: Some(vec![DateTime::from(100), DateTime::from(200)]),
+    });
+    let results = session.history_update(&[action]).await.unwrap();
+    assert_eq!(
+        results[0].operation_results,
+        Some(vec![StatusCode::Good, StatusCode::BadNoEntryExists])
+    );
+
+    let (values, _cp) = session
+        .history_read_raw(
+            id,
+            DateTime::from(0),
+            DateTime::from(1000),
+            100,
+            false,
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(values.len(), 1, "only the t=300 value remains");
+}
+
+#[tokio::test]
+async fn e2e_history_update_without_history_write_is_denied() {
+    let (_t, nm, session) = setup_hda_inmemory().await;
+    let id = NodeId::new(2, "E2ENoWrite");
+    insert_historized(&nm, &id, false); // no HISTORY_WRITE access bit
+
+    let e = session
+        .history_update_data(id, PerformUpdateType::Insert, vec![dv(100, 1.0)])
+        .await
+        .unwrap_err();
+    assert_eq!(e.status(), StatusCode::BadUserAccessDenied);
+}
+
+#[tokio::test]
+async fn e2e_history_update_without_backend_is_unsupported() {
+    // A SimpleNodeManager with NO history backend reports Unsupported (backwards compatible).
+    let namespace = opcua::server::diagnostics::NamespaceMetadata {
+        namespace_uri: "urn:rustopcuatestserver".to_owned(),
+        namespace_index: 2,
+        ..Default::default()
+    };
+    let server = default_server().with_node_manager(simple_node_manager(namespace, "test"));
+    let mut tester = Tester::new(server, false).await;
+    let nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<SimpleNodeManager>()
+        .unwrap();
+    // (no set_history_backend)
+    let (session, lp) = tester.connect_default().await.unwrap();
+    lp.spawn();
+    timeout(Duration::from_secs(2), session.wait_for_connection())
+        .await
+        .unwrap();
+
+    let id = NodeId::new(2, "E2ENoBackend");
+    insert_historized(&nm, &id, true);
+    let e = session
+        .history_update_data(id, PerformUpdateType::Insert, vec![dv(100, 1.0)])
+        .await
+        .unwrap_err();
+    assert_eq!(e.status(), StatusCode::BadHistoryOperationUnsupported);
+}

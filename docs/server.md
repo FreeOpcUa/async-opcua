@@ -341,3 +341,31 @@ The `demo-server` sample demonstrates more sophisticated logging using the [log4
 ## Advanced usage
 
 For advanced usage of the server, see [advanced_server](./advanced_server.md)
+## Writing history (HistoryUpdate)
+
+A node manager that holds a `HistoryStorageBackend` accepts the full OPC UA Part 11 HistoryUpdate
+service. Two backends ship in-tree: `async-opcua-server`'s `InMemoryDataHistory` (data) and
+`InMemoryEventHistory` (events), and the `async-opcua-history-sqlite` crate's `SqliteHistoryBackend`
+(persistent). Attach one with `nm.inner().set_history_backend(Arc::new(InMemoryDataHistory::new()))`
+on a `SimpleNodeManager`; a manager with no backend returns `Bad_HistoryOperationUnsupported`.
+
+Supported operations (per node, per-entry results per Part 4 §11.7):
+
+- **UpdateData** — `Insert` (`Good_EntryInserted` / `Bad_EntryExists`), `Replace`
+  (`Good_EntryReplaced` / `Bad_NoEntryExists`), `Update` (insert-or-replace), `Remove`.
+- **DeleteRawModified** — delete raw or modified values over a time range (`Bad_NoData` when empty).
+- **DeleteAtTime** — delete values at specific timestamps.
+- **UpdateStructureData** — write `Annotation` history.
+- **UpdateEvent / DeleteEvent** — event history keyed by EventId.
+
+A `Replace`, `Update`-over-existing, or any delete retains the superseded value as a *modified*
+entry (Part 11 §6.5); read them back with `Session::history_read_modified`, which returns the values
+plus their `ModificationInfo` (update type + modification time). Plain `Session::history_read_raw`
+returns the live values. History permissions (`InsertHistory`/`ModifyHistory`/`DeleteHistory`) and the
+`HISTORY_WRITE` access level gate writes.
+
+```rust ignore
+session.history_update_data(node_id, PerformUpdateType::Insert, vec![value]).await?;
+let (values, infos, _cp) =
+    session.history_read_modified(node_id, start, end, 100, false, None).await?;
+```

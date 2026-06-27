@@ -8,9 +8,9 @@ use crate::alarms::state_machine::ConditionStateMachine;
 use opcua_core::events::AlarmEvent;
 use opcua_nodes::{DefaultTypeTree, NodeType};
 use opcua_types::{
-    AttributeId, BrowseDirection, DataEncoding, DataTypeId, DataValue, DateTime, LocalizedText,
-    NodeId, NumericRange, ObjectTypeId, QualifiedName, Range, ReferenceTypeId, StatusCode,
-    TimestampsToReturn, VariableTypeId, Variant,
+    AttributeId, BrowseDirection, DataEncoding, DataTypeId, DataValue, DateTime, Identifier,
+    LocalizedText, NodeId, NumericRange, ObjectTypeId, QualifiedName, Range, ReferenceTypeId,
+    StatusCode, TimestampsToReturn, VariableTypeId, Variant,
 };
 use std::sync::Mutex;
 
@@ -20,6 +20,7 @@ const EXCLUSIVE_STATE_HIGH_HIGH_ID: u32 = 9329;
 const EXCLUSIVE_STATE_HIGH_ID: u32 = 9331;
 const EXCLUSIVE_STATE_LOW_ID: u32 = 9333;
 const EXCLUSIVE_STATE_LOW_LOW_ID: u32 = 9335;
+const INPUT_NODE_PROPERTY_NAME: &str = "InputNode";
 
 /// Selects whether limit state is mutually exclusive or independently tracked.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -335,6 +336,21 @@ impl LimitAlarm {
     /// Sets the bound AlarmConditionType InputNode source variable.
     pub fn set_source_node(&mut self, source: NodeId) {
         self.source_node = source;
+    }
+
+    /// Ensures the AlarmConditionType InputNode property exists and writes the source NodeId.
+    pub fn write_input_node_property(&mut self, address_space: &mut AddressSpace, source: &NodeId) {
+        let input_node_id = ensure_input_node_property(address_space, &self.condition.condition_id);
+        set_variable_value(address_space, &input_node_id, Variant::from(source.clone()));
+        self.source_node = source.clone();
+    }
+
+    /// Ensures the bound source has a forward HasCondition reference to this condition.
+    pub fn write_has_condition_reference(&self, address_space: &mut AddressSpace, source: &NodeId) {
+        let condition_id = &self.condition.condition_id;
+        if !address_space.has_reference(source, condition_id, ReferenceTypeId::HasCondition) {
+            address_space.insert_reference(source, condition_id, ReferenceTypeId::HasCondition);
+        }
     }
 
     /// Creates an ExclusiveLimitAlarmType instance and its LimitState nodes in the address space.
@@ -982,5 +998,219 @@ fn set_variable_value(address_space: &mut AddressSpace, node_id: &NodeId, value:
         if let NodeType::Variable(ref mut var) = &mut *node {
             let _ = var.set_value(&opcua_types::NumericRange::None, value);
         }
+    }
+}
+
+fn ensure_input_node_property(address_space: &mut AddressSpace, condition_id: &NodeId) -> NodeId {
+    if let Some(node_id) = find_input_node_property(address_space, condition_id) {
+        return node_id;
+    }
+
+    let node_id = input_node_property_node_id(condition_id);
+    if !address_space.node_exists(&node_id) {
+        VariableBuilder::new(
+            &node_id,
+            QualifiedName::new(0, INPUT_NODE_PROPERTY_NAME),
+            INPUT_NODE_PROPERTY_NAME,
+        )
+        .data_type(DataTypeId::NodeId)
+        .has_type_definition(VariableTypeId::PropertyType)
+        .value(NodeId::null())
+        .writable()
+        .property_of(condition_id.clone())
+        .insert(address_space);
+    } else if !address_space.has_reference(condition_id, &node_id, ReferenceTypeId::HasProperty) {
+        address_space.insert_reference(condition_id, &node_id, ReferenceTypeId::HasProperty);
+    }
+
+    node_id
+}
+
+fn find_input_node_property(address_space: &AddressSpace, condition_id: &NodeId) -> Option<NodeId> {
+    let type_tree = DefaultTypeTree::new();
+    address_space
+        .find_node_by_browse_name(
+            condition_id,
+            Some((ReferenceTypeId::HasProperty, false)),
+            &type_tree,
+            BrowseDirection::Forward,
+            QualifiedName::new(0, INPUT_NODE_PROPERTY_NAME),
+        )
+        .map(|node| node.as_node().node_id().clone())
+}
+
+fn input_node_property_node_id(condition_id: &NodeId) -> NodeId {
+    let base = match &condition_id.identifier {
+        Identifier::String(value) => value
+            .value()
+            .as_deref()
+            .map(str::to_owned)
+            .unwrap_or_else(|| condition_id.to_string()),
+        _ => condition_id.to_string(),
+    };
+
+    NodeId::new(
+        condition_id.namespace,
+        format!("{base}_{INPUT_NODE_PROPERTY_NAME}"),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_address_space() -> AddressSpace {
+        let mut address_space = AddressSpace::new();
+        address_space.add_namespace("http://opcfoundation.org/UA/", 0);
+        address_space.add_namespace("urn:test", 2);
+        address_space
+    }
+
+    fn input_node_property_id(address_space: &AddressSpace, condition_id: &NodeId) -> NodeId {
+        let type_tree = DefaultTypeTree::new();
+        address_space
+            .find_node_by_browse_name(
+                condition_id,
+                Some((ReferenceTypeId::HasProperty, false)),
+                &type_tree,
+                BrowseDirection::Forward,
+                QualifiedName::new(0, "InputNode"),
+            )
+            .map(|node| node.as_node().node_id().clone())
+            .expect("InputNode property should exist")
+    }
+
+    fn node_value(address_space: &AddressSpace, node_id: &NodeId) -> Variant {
+        let node = address_space
+            .find(node_id)
+            .expect("variable node should exist");
+        let NodeType::Variable(var) = &*node else {
+            panic!("node should be a variable");
+        };
+
+        var.value(
+            TimestampsToReturn::Neither,
+            &NumericRange::None,
+            &DataEncoding::Binary,
+            0.0,
+        )
+        .value
+        .expect("variable should have a value")
+    }
+
+    #[test]
+    fn write_input_node_property_creates_and_updates_condition_property() {
+        let mut address_space = test_address_space();
+        let cfg = LimitConfig::new(LimitMode::Exclusive)
+            .with_high(LimitDef {
+                value: 100.0,
+                deadband: 1.0,
+                severity: 700,
+            })
+            .build()
+            .expect("limit config should be valid");
+        let mut alarm = LimitAlarm::create_exclusive_in_address_space(
+            &mut address_space,
+            2,
+            "DeviceA",
+            "HighTemperature",
+            NodeId::new(2, "InitialSource"),
+            cfg,
+        );
+        let condition_id = alarm.condition.condition_id.clone();
+        let type_tree = DefaultTypeTree::new();
+
+        assert!(address_space
+            .find_node_by_browse_name(
+                &condition_id,
+                Some((ReferenceTypeId::HasProperty, false)),
+                &type_tree,
+                BrowseDirection::Forward,
+                QualifiedName::new(0, "InputNode"),
+            )
+            .is_none());
+
+        let source = NodeId::new(2, "DeviceA.Temperature");
+        alarm.write_input_node_property(&mut address_space, &source);
+
+        assert_eq!(alarm.source_node(), &source);
+        let input_node_id = input_node_property_id(&address_space, &condition_id);
+        assert!(address_space.has_reference(
+            &condition_id,
+            &input_node_id,
+            ReferenceTypeId::HasProperty
+        ));
+        assert!(address_space.has_reference(
+            &input_node_id,
+            &NodeId::from(VariableTypeId::PropertyType),
+            ReferenceTypeId::HasTypeDefinition
+        ));
+
+        let node = address_space
+            .find(&input_node_id)
+            .expect("InputNode property should exist");
+        let NodeType::Variable(var) = &*node else {
+            panic!("InputNode property should be a variable");
+        };
+        assert_eq!(var.data_type(), NodeId::from(DataTypeId::NodeId));
+        drop(node);
+        assert_eq!(
+            node_value(&address_space, &input_node_id),
+            Variant::from(source)
+        );
+
+        let updated_source = NodeId::new(2, "DeviceA.Pressure");
+        alarm.write_input_node_property(&mut address_space, &updated_source);
+
+        assert_eq!(alarm.source_node(), &updated_source);
+        assert_eq!(
+            input_node_property_id(&address_space, &condition_id),
+            input_node_id
+        );
+        assert_eq!(
+            node_value(&address_space, &input_node_id),
+            Variant::from(updated_source)
+        );
+    }
+
+    #[test]
+    fn write_has_condition_reference_adds_forward_source_reference_idempotently() {
+        let mut address_space = test_address_space();
+        let cfg = LimitConfig::new(LimitMode::Exclusive)
+            .with_high(LimitDef {
+                value: 100.0,
+                deadband: 1.0,
+                severity: 700,
+            })
+            .build()
+            .expect("limit config should be valid");
+        let alarm = LimitAlarm::create_exclusive_in_address_space(
+            &mut address_space,
+            2,
+            "DeviceA",
+            "HighTemperature",
+            NodeId::new(2, "InitialSource"),
+            cfg,
+        );
+        let condition_id = alarm.condition.condition_id.clone();
+        let source = NodeId::new(2, "DeviceA.Temperature");
+
+        alarm.write_has_condition_reference(&mut address_space, &source);
+        alarm.write_has_condition_reference(&mut address_space, &source);
+
+        assert!(address_space.has_reference(&source, &condition_id, ReferenceTypeId::HasCondition));
+
+        let type_tree = DefaultTypeTree::new();
+        let reference_count = address_space
+            .find_references(
+                &source,
+                Some((ReferenceTypeId::HasCondition, false)),
+                &type_tree,
+                BrowseDirection::Forward,
+            )
+            .filter(|reference| reference.target_node == &condition_id)
+            .count();
+
+        assert_eq!(reference_count, 1);
     }
 }

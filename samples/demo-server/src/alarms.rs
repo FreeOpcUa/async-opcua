@@ -7,7 +7,7 @@ use std::{sync::Arc, time::Duration};
 use opcua::{
     nodes::Event,
     server::{
-        address_space::VariableBuilder,
+        address_space::{AccessLevel, EventNotifier, ObjectBuilder, VariableBuilder},
         alarms::{
             register_condition_methods, transitions::trigger_alarm_transition, ConditionRegistry,
             LimitAlarm, LimitConfig, LimitDef, LimitMode, ServerAlarmEvent,
@@ -29,6 +29,8 @@ pub fn add_alarm_demo(
 ) {
     let source_node_id = NodeId::new(ns, "DemoAlarmSource");
     let tank_level_node_id = NodeId::new(ns, "TankLevel");
+    let temperature_node_id = NodeId::new(ns, "DemoTemperature");
+    let temperature_event_source_node_id = NodeId::new(ns, "DemoTemperatureSource");
     let alarms_folder_id = NodeId::new(ns, "alarms");
 
     {
@@ -43,6 +45,26 @@ pub fn add_alarm_demo(
         VariableBuilder::new(&source_node_id, "DemoAlarmSource", "Demo Alarm Source")
             .data_type(DataTypeId::Boolean)
             .value(false)
+            .organized_by(&alarms_folder_id)
+            .insert(&mut *address_space);
+
+        ObjectBuilder::new(
+            &temperature_event_source_node_id,
+            "DemoTemperatureSource",
+            "Demo Temperature Source",
+        )
+        .event_notifier(EventNotifier::SUBSCRIBE_TO_EVENTS)
+        .organized_by(&alarms_folder_id)
+        .insert(&mut *address_space);
+
+        // Part 9 sections 5.8.2 and 4.4: this writable Variable becomes the
+        // AlarmConditionType InputNode and ConditionSource when bound below.
+        let temperature_access = AccessLevel::CURRENT_READ | AccessLevel::CURRENT_WRITE;
+        VariableBuilder::new(&temperature_node_id, "DemoTemperature", "Demo Temperature")
+            .data_type(DataTypeId::Double)
+            .value(20.0f64)
+            .access_level(temperature_access)
+            .user_access_level(temperature_access)
             .organized_by(&alarms_folder_id)
             .insert(&mut *address_space);
 
@@ -93,10 +115,28 @@ pub fn add_alarm_demo(
         tank_level_node_id.clone(),
         limit_alarm_config,
     );
+    let temperature_alarm_config = LimitConfig::new(LimitMode::Exclusive)
+        .with_high(LimitDef {
+            value: 75.0,
+            deadband: 1.0,
+            severity: 500,
+        })
+        .build()
+        .expect("demo temperature alarm configuration is valid");
+    let temperature_alarm = register_limit_alarm(
+        manager.address_space(),
+        &manager,
+        "Demo",
+        "DemoTemperatureHigh",
+        temperature_event_source_node_id.clone(),
+        temperature_alarm_config,
+    );
+    let temperature_alarm = manager.monitor_alarm_source(&temperature_node_id, temperature_alarm);
 
     let registry = ConditionRegistry::new();
     registry.register(condition.clone());
     registry.register(limit_alarm.condition_state_machine());
+    registry.register(temperature_alarm.condition_state_machine());
     register_condition_methods(
         &core_node_manager,
         registry,

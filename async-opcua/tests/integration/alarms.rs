@@ -2108,3 +2108,86 @@ async fn non_numeric_source_write_does_not_panic_or_fire() {
         "a non-numeric source value triggers no alarm event"
     );
 }
+
+// ---------------------------------------------------------------------------
+// US2 / US3 — browsable binding + one-call configuration helper.
+// monitor_alarm_source sets the InputNode property + HasCondition reference + registers
+// the source→alarm index in one call (Part 9 §5.8.2 / §4.4).
+// ---------------------------------------------------------------------------
+
+fn bind_via_helper(
+    nm: &SimpleNodeManager,
+    device: &str,
+    event_source: &NodeId,
+    input: &NodeId,
+    cfg: LimitConfig,
+) -> (Arc<LimitAlarm>, NodeId) {
+    let alarm = register_limit_alarm(
+        nm.address_space(),
+        nm,
+        device,
+        "Level",
+        event_source.clone(),
+        cfg,
+    );
+    let condition_id = alarm.condition_state_machine().condition_id.clone();
+    let alarm = nm.monitor_alarm_source(input, alarm);
+    (alarm, condition_id)
+}
+
+#[tokio::test]
+async fn monitor_alarm_source_one_call_drives_alarm() {
+    let (_tester, nm, session) = setup_alarms().await;
+    let event_source = make_event_source(&nm, "BrSrc24");
+    let input = make_writable_double(&nm, "BrIn24");
+    bind_via_helper(
+        &nm,
+        "BrTank24",
+        &event_source,
+        &input,
+        exclusive_level_cfg(),
+    );
+    let mut events = sub_with_events(&session, &event_source).await;
+    // One-call binding: a source write drives the alarm with no further setup.
+    session.write(&[write_double(&input, 105.0)]).await.unwrap();
+    assert!(recv_alarm(&mut events).await.active_state);
+}
+
+#[tokio::test]
+async fn input_node_property_reads_back_the_source() {
+    let (_tester, nm, session) = setup_alarms().await;
+    let event_source = make_event_source(&nm, "BrSrc21");
+    let input = make_writable_double(&nm, "BrIn21");
+    let (_alarm, condition_id) = bind_via_helper(
+        &nm,
+        "BrTank21",
+        &event_source,
+        &input,
+        exclusive_level_cfg(),
+    );
+    // Part 9 §5.8.2: the AlarmConditionType InputNode property resolves to the source variable.
+    match read_value_via_path(&session, &condition_id, &["InputNode"]).await {
+        Some(Variant::NodeId(n)) => assert_eq!(*n, input),
+        other => panic!("InputNode = {other:?}, expected {input:?}"),
+    }
+}
+
+#[tokio::test]
+async fn source_has_condition_reference_to_alarm() {
+    let (_tester, nm, _session) = setup_alarms().await;
+    let event_source = make_event_source(&nm, "BrSrc22");
+    let input = make_writable_double(&nm, "BrIn22");
+    let (_alarm, condition_id) = bind_via_helper(
+        &nm,
+        "BrTank22",
+        &event_source,
+        &input,
+        exclusive_level_cfg(),
+    );
+    // Part 9 §4.4: the source node HasCondition the bound alarm.
+    let space = nm.address_space().read();
+    assert!(
+        space.has_reference(&input, &condition_id, ReferenceTypeId::HasCondition),
+        "the source variable must reference the alarm via HasCondition"
+    );
+}

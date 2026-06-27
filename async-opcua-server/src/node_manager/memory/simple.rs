@@ -6,7 +6,7 @@ use opcua_nodes::{HasNodeId, NodeSetImport};
 
 use crate::{
     address_space::{read_node_value, write_node_value, AddressSpace, NodeType},
-    alarms::{AlarmSourceRegistry, ServerAlarmEvent},
+    alarms::{AlarmSourceRegistry, LimitAlarm, ServerAlarmEvent},
     history::read::modification_infos_or_none,
     node_manager::{
         DefaultTypeTree, MethodCall, MonitoredItemRef, MonitoredItemUpdateRef, NodeManagerBuilder,
@@ -752,6 +752,35 @@ impl SimpleNodeManagerImpl {
         &self.alarm_sources
     }
 
+    /// Binds a limit alarm to a source Variable and registers it for source writes.
+    pub fn monitor_alarm_source(&self, source: &NodeId, alarm: LimitAlarm) -> Arc<LimitAlarm> {
+        self.node_managers
+            .get_by_name::<SimpleNodeManager>(&self.name)
+            .expect("simple node manager must be registered before monitoring alarm sources")
+            .monitor_alarm_source(source, alarm)
+    }
+
+    fn monitor_alarm_source_on_address_space(
+        &self,
+        address_space: &RwLock<AddressSpace>,
+        source: &NodeId,
+        alarm: LimitAlarm,
+    ) -> Arc<LimitAlarm> {
+        let mut alarm = alarm;
+        alarm.set_source_node(source.clone());
+
+        {
+            let mut space = trace_write_lock!(address_space);
+            alarm.write_input_node_property(&mut space, source);
+            alarm.write_has_condition_reference(&mut space, source);
+        }
+
+        let alarm = Arc::new(alarm);
+        self.alarm_source_registry()
+            .register(source.clone(), alarm.clone());
+        alarm
+    }
+
     /// Programmatically sets a source Variable value and re-evaluates bound alarms.
     pub fn set_source_value(&self, source: &NodeId, value: DataValue) {
         if let Some(manager) = self
@@ -927,6 +956,15 @@ impl SimpleNodeManagerImpl {
 }
 
 impl InMemoryNodeManager<SimpleNodeManagerImpl> {
+    /// Binds a limit alarm to a source Variable and registers it for source writes.
+    pub fn monitor_alarm_source(&self, source: &NodeId, alarm: LimitAlarm) -> Arc<LimitAlarm> {
+        self.inner().monitor_alarm_source_on_address_space(
+            self.address_space().as_ref(),
+            source,
+            alarm,
+        )
+    }
+
     /// Programmatically sets a source Variable value and re-evaluates bound alarms.
     pub fn set_source_value(&self, source: &NodeId, value: DataValue) {
         self.inner().set_source_value_on_address_space(

@@ -56,10 +56,10 @@ Active(High) + event with no manual call.
 **Goal**: the InputNode property + HasCondition references make the binding discoverable.
 **Independent test**: read the alarm's InputNode and browse the source's conditions.
 
-- [ ] T019 [US2] On binding, set the AlarmConditionType `InputNode` property node to the source Variable's NodeId in the address space (Spec: Part 9 §5.8.2 InputNode)
-- [ ] T020 [US2] On binding, add a `HasCondition` reference from the source node to the alarm so the alarm is reachable from its source (Spec: Part 9 §4.4 ConditionSource / HasCondition)
-- [ ] T021 [P] [US2] [Claude] Integration test: read the alarm's `InputNode` property → returns the source NodeId (Spec: Part 9 §5.8.2)
-- [ ] T022 [P] [US2] [Claude] Integration test: browse the source node's `HasCondition` references → reach the bound alarm (Spec: Part 9 §4.4)
+- [X] T019 [US2] On binding, set the AlarmConditionType `InputNode` property node to the source Variable's NodeId in the address space (Spec: Part 9 §5.8.2 InputNode)
+- [X] T020 [US2] On binding, add a `HasCondition` reference from the source node to the alarm so the alarm is reachable from its source (Spec: Part 9 §4.4 ConditionSource / HasCondition)
+- [X] T021 [P] [US2] [Claude] Integration test: read the alarm's `InputNode` property → returns the source NodeId (Spec: Part 9 §5.8.2)
+- [X] T022 [P] [US2] [Claude] Integration test: browse the source node's `HasCondition` references → reach the bound alarm (Spec: Part 9 §4.4)
 
 **Checkpoint**: the binding is spec-conformantly browsable.
 
@@ -70,9 +70,9 @@ Active(High) + event with no manual call.
 **Goal**: one call attaches an alarm to a source (InputNode + HasCondition + index).
 **Independent test**: helper binds in one call; source writes drive the alarm and the binding is browsable.
 
-- [ ] T023 [US3] Add `InMemoryNodeManager::monitor_alarm_source(source: &NodeId, alarm)` that sets the InputNode property (T019), adds HasCondition (T020), and registers the source→alarm index (T004) in one call (Spec: Part 9 §5.8.2 / §4.4)
-- [ ] T024 [P] [US3] [Claude] Integration test: after `monitor_alarm_source`, a source write drives the alarm (US1) and the binding is browsable (US2) (Spec: Part 9 §5.8.2)
-- [ ] T025 [US3] Wire an alarm to a writable source variable in the demo server (`samples/demo-server`) using the helper (Spec: Part 9 §5.8.2; FR-006)
+- [X] T023 [US3] Add `InMemoryNodeManager::monitor_alarm_source(source: &NodeId, alarm)` that sets the InputNode property (T019), adds HasCondition (T020), and registers the source→alarm index (T004) in one call (Spec: Part 9 §5.8.2 / §4.4)
+- [X] T024 [P] [US3] [Claude] Integration test: after `monitor_alarm_source`, a source write drives the alarm (US1) and the binding is browsable (US2) (Spec: Part 9 §5.8.2)
+- [X] T025 [US3] Wire an alarm to a writable source variable in the demo server (`samples/demo-server`) using the helper (Spec: Part 9 §5.8.2; FR-006)
 
 **Checkpoint**: integrators declare the binding once; the server handles the rest.
 

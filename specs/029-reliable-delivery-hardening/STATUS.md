@@ -49,4 +49,14 @@ Tests: 4 new `part4_overflow_*` tests + corrected existing test; full `async-opc
 
 ## Remaining in this feature
 
-- Polish verification (T011) and final PR/sync bookkeeping (T012).
+None.
+
+## Closeout - 2026-06-28
+
+- Final local gate passed: `cargo fmt --all --check`, `cargo test -p async-opcua-server`,
+  `cargo test -p async-opcua --test integration_tests subscriptions`,
+  `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`,
+  `cargo clippy --locked -p async-opcua --no-default-features -- -D warnings`, and the
+  no-default core-crate build matrix command from CI.
+- PRs #223, #224, and #225 were merged into the fork with green CI for US1/US2/US3 coverage.
+- No documented EventQueueOverflowEventType gap remains; it is implemented and covered end-to-end.

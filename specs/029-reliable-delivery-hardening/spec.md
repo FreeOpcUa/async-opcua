@@ -2,7 +2,7 @@
 
 **Feature Branch**: `029-reliable-delivery-hardening`
 **Created**: 2026-06-22
-**Status**: Draft
+**Status**: Complete
 **Input**: Harden + characterize the OPC UA server reliable notification-delivery path (MonitoredItem
 queues, overflow, Publish/Acknowledge/Republish, subscription lifecycle) for the
 producer-faster-than-consumer pattern a DCS→PLC telegram design relies on. Spec behavior is anchored
@@ -174,6 +174,15 @@ publish requests past the session bound.
 - Verification division: Claude authors all tests (anchored to Part 4); codex implements any
   production fix a failing test reveals (one task per dispatch, no tests, no git).
 - PRs target the fork `occamsshavingkit/async-opcua`.
+
+## Closeout Findings (2026-06-28)
+- US1 fixed monitored-item overflow conformance defects: discardOldest=TRUE overflow-bit placement,
+  QueueSize==1 overflow-bit suppression, queue-shrink discard direction, and stale overflow state.
+- US2 and US3 added Republish/ack/sequence/lifecycle/request-queue coverage without finding further
+  production violations.
+- EventQueueOverflowEventType is implemented and covered end-to-end; no documented feature gap remains
+  for FR-007.
+- Final local gate and fork CI were green for the feature closeout PR sequence.
 
 ## Out of Scope
 - The SIL-3 Safety (Part 15) re-sync handshake (separate feature).

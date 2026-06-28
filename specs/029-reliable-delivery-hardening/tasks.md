@@ -26,8 +26,8 @@ minimal fail-closed). One commit per user story. PR to fork.
 - Commit US3.
 
 ## Phase 5: Polish & merge
-- [ ] T011 [claude-test] Full `cargo test -p async-opcua-server` + integration suite green; clippy (`--all-features`, `--no-default-features` core crates) `-D warnings`; `cargo fmt --check`.
-- [ ] T012 Push, PR to fork, merge when CI green; sync master; record findings (any bug fixed, any documented gap) in memory + the spec.
+- [X] T011 [claude-test] Full `cargo test -p async-opcua-server` + integration suite green; clippy (`--all-features`, `--no-default-features` core crates) `-D warnings`; `cargo fmt --check`. Verified 2026-06-28 with `cargo fmt --all --check`, `cargo test -p async-opcua-server`, `cargo test -p async-opcua --test integration_tests subscriptions`, `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`, `cargo clippy --locked -p async-opcua --no-default-features -- -D warnings`, and `RUSTFLAGS="-D warnings" cargo build --locked --no-default-features -p async-opcua -p async-opcua-types -p async-opcua-core -p async-opcua-crypto -p async-opcua-client -p async-opcua-server -p async-opcua-nodes`.
+- [X] T012 Push, PR to fork, merge when CI green; sync master; record findings (any bug fixed, any documented gap) in memory + the spec. Completed by PRs #223, #224, #225, and this closeout PR; findings recorded in `STATUS.md` and `spec.md`.
 
 ## Analyze
 Coverage: FR-001→T002; FR-002→T003; FR-003→T005; FR-004→T006; FR-005→T008; FR-006→T004/T007/T010;

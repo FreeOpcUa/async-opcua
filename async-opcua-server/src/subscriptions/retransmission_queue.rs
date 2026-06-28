@@ -172,7 +172,9 @@ mod tests {
     use std::sync::Arc;
     use std::time::Instant;
 
-    use opcua_types::{DateTime, NotificationMessage, StatusCode};
+    use opcua_types::{
+        DataValue, DateTime, MonitoredItemNotification, NotificationMessage, StatusCode,
+    };
 
     use super::super::subscription::DataChangeNotificationVecPool;
     use super::RetransmissionQueue;
@@ -183,6 +185,18 @@ mod tests {
             seq,
             DateTime::now(),
             StatusCode::Good,
+        ))
+    }
+
+    fn data_change_msg(seq: u32) -> Arc<NotificationMessage> {
+        Arc::new(NotificationMessage::data_change(
+            seq,
+            DateTime::now(),
+            vec![MonitoredItemNotification {
+                client_handle: seq,
+                value: DataValue::new_now(seq as i32),
+            }],
+            Vec::new(),
         ))
     }
 
@@ -267,26 +281,67 @@ mod tests {
         assert!(q.get_message(8, 42).is_none());
     }
 
+    #[test]
+    fn data_change_buffers_are_reclaimed_on_eviction_ack_and_remove() {
+        let mut q = RetransmissionQueue::new();
+        let mut pool = DataChangeNotificationVecPool::default();
+
+        q.enqueue(&mut pool, 1, 1, data_change_msg(1));
+        q.enqueue(&mut pool, 1, 1, data_change_msg(2));
+        assert_eq!(
+            pool.reclaimed_data_change_vec_count(),
+            1,
+            "capacity eviction reclaims the evicted data-change Vec"
+        );
+
+        let acked = q.ack(1, 2).expect("acked entry must be returned");
+        RetransmissionQueue::reclaim_non_acked_publish(&mut pool, acked);
+        assert_eq!(
+            pool.reclaimed_data_change_vec_count(),
+            2,
+            "ack caller can reclaim the removed data-change Vec"
+        );
+
+        q.enqueue(&mut pool, 4, 2, data_change_msg(10));
+        q.enqueue(&mut pool, 4, 2, data_change_msg(11));
+        let removed = q.remove_subscription(2);
+        assert_eq!(removed.len(), 2);
+        for entry in removed {
+            RetransmissionQueue::reclaim_non_acked_publish(&mut pool, entry);
+        }
+        assert_eq!(
+            pool.reclaimed_data_change_vec_count(),
+            4,
+            "remove_subscription caller can reclaim every removed data-change Vec"
+        );
+    }
+
     // SC-001: ack-flood and teardown over a large queue complete in sub-quadratic time. A quadratic
     // implementation would miss this generous absolute bound by orders of magnitude.
     #[test]
     fn large_scale_ack_flood_and_teardown_are_bounded() {
         const N: u32 = 50_000;
+        const SUBS: u32 = 4;
         let mut q = RetransmissionQueue::new();
         let mut pool = DataChangeNotificationVecPool::default();
         for seq in 0..N {
-            q.enqueue(&mut pool, N as usize + 1, 1, msg(seq));
+            let sub = seq % SUBS + 1;
+            q.enqueue(&mut pool, N as usize + 1, sub, msg(seq));
         }
         assert_eq!(q.len(), N as usize);
 
         let start = Instant::now();
-        // Ack-flood: acknowledge half the keys.
+        // Ack-flood: acknowledge a large interleaved batch across subscriptions.
         for seq in 0..N / 2 {
-            assert!(q.ack(1, seq).is_some());
+            let sub = seq % SUBS + 1;
+            assert!(q.ack(sub, seq).is_some());
         }
-        // Teardown: remove the rest in one bulk op.
-        let removed = q.remove_subscription(1);
-        assert_eq!(removed.len() as u32, N - N / 2);
+        // Teardown: bulk-remove each remaining subscription bucket.
+        let mut removed_count = 0;
+        for sub in 1..=SUBS {
+            removed_count += q.remove_subscription(sub).len();
+        }
+        assert_eq!(removed_count as u32, N - N / 2);
         let elapsed = start.elapsed();
 
         assert!(q.is_empty());

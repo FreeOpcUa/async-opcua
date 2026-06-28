@@ -68,6 +68,11 @@ impl DataChangeNotificationVecPool {
             self.free_events.push(events);
         }
     }
+
+    #[cfg(test)]
+    pub(super) fn reclaimed_data_change_vec_count(&self) -> usize {
+        self.free.len()
+    }
 }
 
 impl Default for DataChangeNotificationVecPool {

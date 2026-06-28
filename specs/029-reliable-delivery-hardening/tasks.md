@@ -20,9 +20,9 @@ minimal fail-closed). One commit per user story. PR to fork.
 - Commit US2.
 
 ## Phase 4: US3 — lifecycle / request-queue (P3)
-- [ ] T008 [claude-test] Lifetime expiry: a subscription with no Publish requests for its full lifetime → `Bad_Timeout` StatusChangeNotification + MonitoredItems removed. Publish-request overflow → `Bad_TooManyPublishRequests` with earlier requests still completing.
-- [ ] T009 [claude-test] Event-queue overflow (§5.13.1.5): verify EventQueueOverflowEventType behavior if implemented; otherwise record a documented gap (test marked `#[ignore]` + a note) per FR-007 — do NOT silently skip.
-- [ ] T010 [codex] (CONDITIONAL) Fix any spec violation T008 reveals. Skip if green.
+- [X] T008 [claude-test] Lifetime expiry: a subscription with no Publish requests for its full lifetime → `Bad_Timeout` StatusChangeNotification + MonitoredItems removed. Publish-request overflow → `Bad_TooManyPublishRequests` with earlier requests still completing.
+- [X] T009 [claude-test] Event-queue overflow (§5.13.1.5): verify EventQueueOverflowEventType behavior if implemented; otherwise record a documented gap (test marked `#[ignore]` + a note) per FR-007 — do NOT silently skip.
+- [X] T010 [codex] (CONDITIONAL) Fix any spec violation T008 reveals. Skipped: T008 passed against existing behavior; no production fix required.
 - Commit US3.
 
 ## Phase 5: Polish & merge

@@ -1576,10 +1576,11 @@ async fn modify_unknown_monitored_item_is_rejected() {
 async fn subscription_lifetime_expiry_sends_status_change() {
     // Part 4 §5.14.1.2: when no Publish requests arrive for max_lifetime_count publishing cycles
     // the subscription's lifetime counter expires, the subscription is closed, and a
-    // StatusChangeNotification with Bad_Timeout is delivered. End-to-end check of the state-machine
-    // terminal transition (Closed27); the high-level client auto-publishes, so this drives the raw
-    // services and deliberately withholds Publish requests.
-    let (_tester, _nm, session) = setup().await;
+    // StatusChangeNotification with Bad_Timeout is delivered. Closing the subscription also deletes
+    // its MonitoredItems. End-to-end check of the state-machine terminal transition (Closed27); the
+    // high-level client auto-publishes, so this drives the raw services and deliberately withholds
+    // Publish requests.
+    let (tester, nm, session) = setup().await;
 
     let res = CreateSubscription::new(&session)
         .publishing_interval(Duration::from_millis(50))
@@ -1592,6 +1593,44 @@ async fn subscription_lifetime_expiry_sends_status_change() {
         .await
         .unwrap();
     let sub_id = res.subscription_id;
+
+    let id = nm.inner().next_node_id();
+    nm.inner().add_node(
+        nm.address_space(),
+        tester.handle.type_tree(),
+        VariableBuilder::new(&id, "LifetimeExpiryVar", "LifetimeExpiryVar")
+            .value(1i32)
+            .data_type(DataTypeId::Int32)
+            .access_level(AccessLevel::CURRENT_READ)
+            .user_access_level(AccessLevel::CURRENT_READ)
+            .build()
+            .into(),
+        &ObjectId::ObjectsFolder.into(),
+        &ReferenceTypeId::Organizes.into(),
+        Some(&VariableTypeId::BaseDataVariableType.into()),
+        Vec::new(),
+    );
+    let created = CreateMonitoredItems::new(sub_id, &session)
+        .item(MonitoredItemCreateRequest {
+            item_to_monitor: ReadValueId {
+                node_id: id,
+                attribute_id: AttributeId::Value as u32,
+                ..Default::default()
+            },
+            monitoring_mode: MonitoringMode::Reporting,
+            requested_parameters: MonitoringParameters {
+                sampling_interval: 0.0,
+                queue_size: 10,
+                discard_oldest: true,
+                ..Default::default()
+            },
+        })
+        .timestamps_to_return(TimestampsToReturn::Both)
+        .send(session.channel())
+        .await
+        .unwrap();
+    let item_id = created.results[0].result.monitored_item_id;
+    assert_eq!(StatusCode::Good, created.results[0].result.status_code);
 
     // Let the lifetime expire without sending any Publish requests.
     tokio::time::sleep(Duration::from_millis(800)).await;
@@ -1612,6 +1651,17 @@ async fn subscription_lifetime_expiry_sends_status_change() {
         .inner_as::<opcua_types::StatusChangeNotification>()
         .expect("notification was not a StatusChangeNotification");
     assert_eq!(StatusCode::BadTimeout, sc.status);
+
+    let err = DeleteMonitoredItems::new(sub_id, &session)
+        .item(item_id)
+        .send(session.channel())
+        .await
+        .unwrap_err();
+    assert_eq!(
+        StatusCode::BadSubscriptionIdInvalid,
+        err.status(),
+        "expired subscription should no longer own the monitored item"
+    );
 }
 
 #[tokio::test]

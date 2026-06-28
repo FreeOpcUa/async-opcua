@@ -1257,11 +1257,12 @@ mod tests {
     use std::{
         collections::{HashSet, VecDeque},
         sync::Arc,
-        time::Duration,
+        time::{Duration, Instant},
     };
 
+    use chrono::Utc;
     use hashbrown::HashMap;
-    use opcua_core::sync::RwLock;
+    use opcua_core::{sync::RwLock, ResponseMessage};
     use opcua_crypto::SecurityPolicy;
     use opcua_types::{
         ApplicationDescription, ByteString, DataValue, DateTime, MessageSecurityMode,
@@ -1269,8 +1270,10 @@ mod tests {
         StatusCode, SubscriptionAcknowledgement, UAString,
     };
 
+    use super::super::pool::NotificationBuffer;
     use super::super::retransmission_queue::RetransmissionQueue;
-    use super::super::{PersistentSessionKey, Subscription};
+    use super::super::subscription::TickReason;
+    use super::super::{PendingPublish, PersistentSessionKey, Subscription};
     use super::{DataChangeNotificationVecPool, SessionSubscriptions};
     use crate::{
         authenticator::UserToken,
@@ -1290,6 +1293,44 @@ mod tests {
             }],
             Vec::new(),
         ))
+    }
+
+    fn pending_publish(
+        request_handle: u32,
+        deadline: Instant,
+    ) -> (
+        PendingPublish,
+        tokio::sync::oneshot::Receiver<ResponseMessage>,
+    ) {
+        let (response, recv) = tokio::sync::oneshot::channel();
+        let request = PublishRequest {
+            request_header: RequestHeader {
+                request_handle,
+                ..Default::default()
+            },
+            subscription_acknowledgements: None,
+        };
+
+        (
+            PendingPublish {
+                response,
+                request: Box::new(request),
+                ack_results: None,
+                deadline,
+            },
+            recv,
+        )
+    }
+
+    async fn assert_publish_response(
+        recv: tokio::sync::oneshot::Receiver<ResponseMessage>,
+        request_handle: u32,
+        status: StatusCode,
+    ) {
+        let response = recv.await.expect("publish response should be sent");
+        let header = response.response_header();
+        assert_eq!(header.request_handle, request_handle);
+        assert_eq!(header.service_result, status);
     }
 
     fn test_session_subscriptions(subscription_id: u32) -> SessionSubscriptions {
@@ -1390,6 +1431,56 @@ mod tests {
             Some(vec![7])
         );
         assert!(retransmission_queue.get_message(1, 7).is_some());
+    }
+
+    #[tokio::test]
+    async fn publish_queue_overflow_rejects_oldest_and_preserves_newer_requests() {
+        // Feature 029 T008, grounded in Part 4 §5.14.5.1/§5.14.5.3: when the
+        // queued Publish request limit is exceeded, the oldest Publish request is
+        // de-queued with Bad_TooManyPublishRequests and later queued requests remain serviceable.
+        let sub_id = 1;
+        let mut subs = test_session_subscriptions(sub_id);
+        subs.limits.max_pending_publish_requests = 2;
+        subs.limits.max_publish_requests_per_subscription = 2;
+        let now = Utc::now();
+        let now_instant = Instant::now();
+        let deadline = now_instant + Duration::from_secs(30);
+
+        let (publish_1, response_1) = pending_publish(1, deadline);
+        let (publish_2, response_2) = pending_publish(2, deadline);
+        let (publish_3, response_3) = pending_publish(3, deadline);
+
+        subs.enqueue_publish_request(&now, now_instant, publish_1);
+        subs.enqueue_publish_request(&now, now_instant, publish_2);
+        assert_eq!(subs.publish_request_queue.len(), 2);
+
+        subs.enqueue_publish_request(&now, now_instant, publish_3);
+        assert_publish_response(response_1, 1, StatusCode::BadTooManyPublishRequests).await;
+        assert_eq!(subs.publish_request_queue.len(), 2);
+
+        subs.queue_status_change(
+            sub_id,
+            1,
+            DateTime::from(now),
+            StatusCode::GoodSubscriptionTransferred,
+        );
+        subs.queue_status_change(
+            sub_id,
+            2,
+            DateTime::from(now),
+            StatusCode::GoodSubscriptionTransferred,
+        );
+        let mut buffer = NotificationBuffer::new();
+        subs.tick(
+            &now,
+            now_instant,
+            TickReason::ReceivePublishRequest,
+            &mut buffer,
+        );
+
+        assert_publish_response(response_2, 2, StatusCode::Good).await;
+        assert_publish_response(response_3, 3, StatusCode::Good).await;
+        assert!(subs.publish_request_queue.is_empty());
     }
 
     #[tokio::test]

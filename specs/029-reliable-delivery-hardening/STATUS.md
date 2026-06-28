@@ -28,12 +28,25 @@ known-empty start, and fixed in `async-opcua-server/src/subscriptions/monitored_
 Tests: 4 new `part4_overflow_*` tests + corrected existing test; full `async-opcua-server` suite and
 9 end-to-end `async-opcua` integration subscription tests green.
 
+## US2 — Republish / ack / sequence-number behavior: DONE
+
+- Republish now has coverage for held messages and evicted messages returning
+  `Bad_MessageNotAvailable`.
+- Publish acknowledgement result coverage verifies ordered `Good`, `Bad_SequenceNumberUnknown`, and
+  `Bad_SubscriptionIdInvalid` responses.
+- Live subscription coverage verifies sequence numbers skip 0, roll over to 1, and remain
+  republishable after the wrap.
+
+## US3 — Lifecycle / request-queue behavior: DONE
+
+- Lifetime expiry coverage verifies `Bad_Timeout` `StatusChangeNotification`, subscription removal,
+  and post-expiry monitored-item ownership failure.
+- Publish-request queue pressure coverage verifies the oldest request is rejected with
+  `Bad_TooManyPublishRequests` and newer queued requests still complete.
+- Event queue overflow is implemented and covered end-to-end by
+  `event_queue_overflow_inserts_overflow_event`: the first discarded event inserts a single
+  `EventQueueOverflowEventType` in addition to the retained event queue.
+
 ## Remaining in this feature
-- **D — EventQueueOverflowEventType (NOT done; documented gap)**: §5.13.1.5 requires, on the first
-  event discard, an `EventQueueOverflowEventType` Event placed in the queue *in addition to* QueueSize
-  (at the front if `discardOldest`, else the end). The impl has no event-overflow indicator at all.
-  This is a missing FEATURE (needs constructing the event), separable from the overflow bug fixes —
-  next increment.
-- **US2** (republish/ack/sequence-number live behavior incl. roll-over to 1) and **US3**
-  (lifetime→Bad_Timeout, publish-request-queue overflow) characterization — next increments,
-  testable via `async-opcua/tests/integration/subscriptions.rs`.
+
+- Polish verification (T011) and final PR/sync bookkeeping (T012).

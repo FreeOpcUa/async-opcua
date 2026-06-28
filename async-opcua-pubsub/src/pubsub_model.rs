@@ -1,7 +1,7 @@
 //! Read-only PubSub information-model reflection.
 
 use crate::{
-    config::{PubSubConnectionConfig, PublishedDataItemsConfig},
+    config::{DataSetReaderConfig, PubSubConnectionConfig, PublishedDataItemsConfig},
     subscriber::DataSetReaderStatus,
 };
 use opcua_server::address_space::{AddressSpace, ObjectBuilder, VariableBuilder};
@@ -166,99 +166,14 @@ pub fn reflect_pubsub_config_with_status(
             );
 
             for dataset_reader in &reader_group.dataset_readers {
-                let dataset_reader_id = dataset_reader_node_id(
+                let dataset_reader_id = reflect_dataset_reader(
+                    address_space,
                     namespace,
                     &config.connection_id,
-                    dataset_reader.dataset_reader_id,
-                );
-                ensure_object(
-                    address_space,
-                    &dataset_reader_id,
-                    &dataset_reader.dataset_reader_id.to_string(),
-                    ObjectTypeId::DataSetReaderType,
-                );
-                address_space.insert_reference(
                     &reader_group_id,
-                    &dataset_reader_id,
-                    ReferenceTypeId::HasDataSetReader,
+                    dataset_reader,
+                    reader_statuses,
                 );
-
-                let dataset_reader_property_id = dataset_reader_id_property_node_id(
-                    namespace,
-                    &config.connection_id,
-                    dataset_reader.dataset_reader_id,
-                );
-                ensure_u16_property(
-                    address_space,
-                    &dataset_reader_property_id,
-                    &dataset_reader_id,
-                    "DataSetReaderId",
-                    dataset_reader.dataset_reader_id,
-                );
-
-                let target_count_property_id = dataset_reader_target_count_property_node_id(
-                    namespace,
-                    &config.connection_id,
-                    dataset_reader.dataset_reader_id,
-                );
-                ensure_u32_property(
-                    address_space,
-                    &target_count_property_id,
-                    &dataset_reader_id,
-                    "TargetVariableCount",
-                    dataset_reader.effective_target_variables().len() as u32,
-                );
-
-                let status = reader_statuses
-                    .iter()
-                    .find(|(reader_id, _)| *reader_id == dataset_reader.dataset_reader_id)
-                    .map(|(_, status)| status);
-                let state = status.map_or(PubSubState::PreOperational, |status| status.state);
-                ensure_i32_property(
-                    address_space,
-                    &dataset_reader_state_property_node_id(
-                        namespace,
-                        &config.connection_id,
-                        dataset_reader.dataset_reader_id,
-                    ),
-                    &dataset_reader_id,
-                    "ReaderState",
-                    state as i32,
-                );
-                ensure_u64_property(
-                    address_space,
-                    &dataset_reader_accepted_count_property_node_id(
-                        namespace,
-                        &config.connection_id,
-                        dataset_reader.dataset_reader_id,
-                    ),
-                    &dataset_reader_id,
-                    "AcceptedCount",
-                    status.map_or(0, |status| status.accepted_count),
-                );
-                ensure_u64_property(
-                    address_space,
-                    &dataset_reader_filtered_count_property_node_id(
-                        namespace,
-                        &config.connection_id,
-                        dataset_reader.dataset_reader_id,
-                    ),
-                    &dataset_reader_id,
-                    "FilteredCount",
-                    status.map_or(0, |status| status.filtered_count),
-                );
-                ensure_u64_property(
-                    address_space,
-                    &dataset_reader_dropped_count_property_node_id(
-                        namespace,
-                        &config.connection_id,
-                        dataset_reader.dataset_reader_id,
-                    ),
-                    &dataset_reader_id,
-                    "DroppedCount",
-                    status.map_or(0, |status| status.dropped_count),
-                );
-
                 map.readers
                     .push((dataset_reader.dataset_reader_id, dataset_reader_id));
             }
@@ -266,6 +181,112 @@ pub fn reflect_pubsub_config_with_status(
     }
 
     map
+}
+
+fn reflect_dataset_reader(
+    address_space: &mut AddressSpace,
+    namespace: u16,
+    connection_id: &str,
+    reader_group_id: &NodeId,
+    dataset_reader: &DataSetReaderConfig,
+    reader_statuses: &[(u16, DataSetReaderStatus)],
+) -> NodeId {
+    let dataset_reader_id =
+        dataset_reader_node_id(namespace, connection_id, dataset_reader.dataset_reader_id);
+    ensure_object(
+        address_space,
+        &dataset_reader_id,
+        &dataset_reader.dataset_reader_id.to_string(),
+        ObjectTypeId::DataSetReaderType,
+    );
+    address_space.insert_reference(
+        reader_group_id,
+        &dataset_reader_id,
+        ReferenceTypeId::HasDataSetReader,
+    );
+
+    ensure_u16_property(
+        address_space,
+        &dataset_reader_id_property_node_id(
+            namespace,
+            connection_id,
+            dataset_reader.dataset_reader_id,
+        ),
+        &dataset_reader_id,
+        "DataSetReaderId",
+        dataset_reader.dataset_reader_id,
+    );
+    ensure_u32_property(
+        address_space,
+        &dataset_reader_target_count_property_node_id(
+            namespace,
+            connection_id,
+            dataset_reader.dataset_reader_id,
+        ),
+        &dataset_reader_id,
+        "TargetVariableCount",
+        dataset_reader.effective_target_variables().len() as u32,
+    );
+    reflect_dataset_reader_status(
+        address_space,
+        namespace,
+        connection_id,
+        &dataset_reader_id,
+        dataset_reader.dataset_reader_id,
+        reader_statuses
+            .iter()
+            .find(|(reader_id, _)| *reader_id == dataset_reader.dataset_reader_id)
+            .map(|(_, status)| status),
+    );
+
+    dataset_reader_id
+}
+
+fn reflect_dataset_reader_status(
+    address_space: &mut AddressSpace,
+    namespace: u16,
+    connection_id: &str,
+    dataset_reader_node_id: &NodeId,
+    dataset_reader_id: u16,
+    status: Option<&DataSetReaderStatus>,
+) {
+    let state = status.map_or(PubSubState::PreOperational, |status| status.state);
+    ensure_i32_property(
+        address_space,
+        &dataset_reader_state_property_node_id(namespace, connection_id, dataset_reader_id),
+        dataset_reader_node_id,
+        "ReaderState",
+        state as i32,
+    );
+    ensure_u64_property(
+        address_space,
+        &dataset_reader_accepted_count_property_node_id(
+            namespace,
+            connection_id,
+            dataset_reader_id,
+        ),
+        dataset_reader_node_id,
+        "AcceptedCount",
+        status.map_or(0, |status| status.accepted_count),
+    );
+    ensure_u64_property(
+        address_space,
+        &dataset_reader_filtered_count_property_node_id(
+            namespace,
+            connection_id,
+            dataset_reader_id,
+        ),
+        dataset_reader_node_id,
+        "FilteredCount",
+        status.map_or(0, |status| status.filtered_count),
+    );
+    ensure_u64_property(
+        address_space,
+        &dataset_reader_dropped_count_property_node_id(namespace, connection_id, dataset_reader_id),
+        dataset_reader_node_id,
+        "DroppedCount",
+        status.map_or(0, |status| status.dropped_count),
+    );
 }
 
 /// Reflects the top-level PublishedDataItems DataSets under the `PublishedDataSets` folder.

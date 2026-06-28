@@ -49,7 +49,10 @@ boundary) — see "Breaking changes" below.
   byte-identical. The primitives are validated against RFC 6979/5903/5869 vectors;
   EC application certificates are required (a server presents a single instance
   certificate, so it is RSA-only or ECC-only). Third-party interop is not yet
-  validated — see `docs/setup.md` and the feature's `research.md`.
+  validated — see `docs/setup.md` and the feature's `research.md`. Security
+  review covered the Part 6 key-agreement path, ChannelThumbprint binding,
+  curve/cert matching, malformed handshake rejection, and secret logging; the
+  decode path was fuzzed with zero aborts.
 * **Certificate validation conformance (OPC UA Part 4 §6.1.3, Table 100)** — both
   server (validating client certs) and client (validating server certs) now build
   and verify the CA trust chain, verify each signature up the chain, check the

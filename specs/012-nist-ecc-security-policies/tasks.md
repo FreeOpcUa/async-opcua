@@ -169,7 +169,10 @@ RFC 5869 Expand Info=salt; key layout Sig|Enc|IV; P256=32/16/16 (SHA256/AES128),
 - [X] T025 Interop validation (SC-007): if an open62541 / UA-.NETStandard ECC peer is available, connect our client↔their server and theirs↔ours in both modes; otherwise document the gap in research.md.
   — VERIFIED 2026-06-28 via documented-gap path in `research.md`: no local open62541/UA-.NETStandard
   ECC peer or `OPCUA_ECC_INTEROP_*` endpoint is available; no wire-interop claim is made.
-- [ ] T026 [P] Update `docs/setup.md` (ECC deployment + `ecc` feature) and release notes; record the security-review note (handshake/crypto path).
+- [X] T026 [P] Update `docs/setup.md` (ECC deployment + `ecc` feature) and release notes; record the security-review note (handshake/crypto path).
+  — VERIFIED 2026-06-28: `docs/setup.md` points to the ECC feature and demo ECC deployment profile;
+  `CHANGELOG.md` records release-note/security-review coverage; `docs/crypto.md` records the secure-channel
+  handshake review note and fixes the stale `ECC_nistP256` AES size.
 - [ ] T027 Final gate: `cargo fmt --all --check` + `cargo clippy --all-targets --all-features -- -D warnings` + `cargo test --workspace` + `verify-clean-codegen`; confirm RSA/None wire byte-identity preserved.
 
 ---

@@ -46,6 +46,30 @@ The OPC UA server crate also provides some other features that you may or may no
 * `ecc` - When enabled, compiles in the pure-Rust NIST elliptic-curve security policies `ECC_nistP256` (P-256 / SHA-256 / AES-128) and `ECC_nistP384` (P-384 / SHA-384 / AES-256), with both `Sign` and `SignAndEncrypt` message modes. These use ephemeral-ephemeral ECDH + HKDF for session keys and ECDSA for the handshake signature (no C toolchain; via the RustCrypto `p256`/`p384`/`ecdsa`/`hkdf` crates). It is **default-enabled on `-core`/`-client`/`-server`/`-crypto`** but **opt-in on the umbrella `async-opcua` crate** — add `features = ["ecc"]` there to use ECC. With the feature off, the ECC policy URIs are still *recognized* but report **unsupported** and are rejected (`BadSecurityPolicyRejected`); RSA/None are byte-identical. An ECC endpoint requires an **EC** application certificate: because a server has a single application instance certificate (RSA *or* EC), a server is ECC-only or RSA-only — to offer both, run RSA and ECC on separate endpoints/hosts (one-server mixed RSA+ECC multi-cert is a future enhancement).
 * `wss` - When enabled (default is **disabled**), compiles in the `opc.wss` (OPC UA over secure WebSocket) transport. TLS is layered via `tokio-rustls` on the in-tree `rustls` 0.23; the crate re-exports that exact `rustls` (`opcua::client::rustls` / `opcua::server::rustls`) so callers of the advanced config APIs cannot version-skew. The WSS/TLS certificate is **separate** from the OPC UA application certificate. Server: `ServerBuilder::websocket_tls(cert_pem, key_pem)` (hardened convenience) or `websocket_rustls_config(Arc<rustls::ServerConfig>)` (full control), served via `run_with_wss`. Client: secure-by-default WebPKI hostname verification, with `ClientBuilder::websocket_ca_pem` / `websocket_rustls_config` for custom trust and a loudly-gated `dangerously_accept_invalid_wss_certs` test-only escape hatch. The WebSocket subprotocol/ALPN is `opcua+uacp`. WSS secures only the transport — the OPC UA `SecurityPolicy` (sign/encrypt, application-cert auth, user tokens) still runs inside the WebSocket exactly as over `opc.tcp`.
 
+### ECC endpoint deployment
+
+For the umbrella crate, enable ECC explicitly:
+
+```toml
+async-opcua = { version = "0.19", features = ["client", "server", "ecc"] }
+```
+
+ECC secure-channel endpoints must use an EC ApplicationInstance certificate whose curve matches the
+policy being validated. The demo server includes a separate ECC profile and launcher that provision
+an EC certificate before startup:
+
+```bash
+cd samples/demo-server
+./run-conformance.sh ecc        # ECC profile with a P-256 certificate on :4856
+./run-conformance.sh ecc p384   # ECC profile with a P-384 certificate on :4856
+```
+
+See `samples/demo-server/sample.server.ecc.conf` and `docs/ctt-conformance.md` for the full UACTT
+workflow. Do not reuse the RSA sample keypair for ECC endpoints; RSA certificates cannot produce
+ECDSA signatures. Current server instances have one ApplicationInstance certificate, so mixed RSA
+and ECC deployments should run separate profiles/instances until multi-certificate selection is
+implemented.
+
 ## Cryptographic backend (`aws-lc-rs` feature, default on)
 
 The RSA private-key **decrypt** path (OpenSecureChannel + legacy identity-token decryption) has two selectable backends:

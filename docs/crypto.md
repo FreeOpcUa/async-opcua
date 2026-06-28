@@ -69,8 +69,23 @@ errors rather than panics.
 Behind the `ecc` feature, `async-opcua-crypto` also implements the elliptic-curve
 security policies (pure Rust, RustCrypto — no OpenSSL/C):
 
-* ECC_nistP256 - ECDH on P-256 / ECDSA / SHA-256 / AES-256
+* ECC_nistP256 - ECDH on P-256 / ECDSA / SHA-256 / AES-128
 * ECC_nistP384 - ECDH on P-384 / ECDSA / SHA-384 / AES-256
+
+For secure channels (Part 6 §6.8.1), `OpenSecureChannel` carries ephemeral EC
+public keys in `ClientNonce` / `ServerNonce`; NIST curve points are encoded as
+zero-padded big-endian `x || y`, and the ECDH shared secret feeds HKDF to derive
+the same signing/encryption/IV material shape used by the existing symmetric
+layer. After key derivation, ECC secure channels use the same AES-CBC + HMAC
+message protection as RSA secure channels; only the handshake signature and key
+agreement differ.
+
+Security-review note: the ECC handshake/crypto path was reviewed against the
+Part 6 key-agreement requirements, the ChannelThumbprint binding, certificate
+curve matching, malformed point/signature rejection, and secret logging. The
+path is covered by RFC/NIST vectors, loopback channel tests, negative tests, and
+the `fuzz_comms` decode-path fuzz target. Third-party ECC wire interop remains a
+documented gap until an open62541 or UA-.NETStandard ECC peer is available.
 
 ### Token EphemeralKey exchange (Part 6 §6.8.2)
 

@@ -59,7 +59,9 @@ fn datasetreader_binds_incoming_fields_into_target_variables() {
             dataset_writer_id: 7,
             publisher_id: None,
             subscribed_variables: vec![target.clone()],
+            ..DataSetReaderConfig::default()
         }],
+        ..ReaderGroupConfig::default()
     }];
 
     // A matching DataSetMessage (writer id 7) binds its field into the target variable.

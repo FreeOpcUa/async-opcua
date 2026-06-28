@@ -56,7 +56,9 @@ fn reader_group(target: &NodeId) -> ReaderGroupConfig {
             dataset_writer_id: 0,
             publisher_id: None,
             subscribed_variables: vec![target.clone()],
+            ..DataSetReaderConfig::default()
         }],
+        ..ReaderGroupConfig::default()
     }
 }
 

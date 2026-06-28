@@ -36,8 +36,9 @@ pub mod fx;
 pub mod security;
 
 pub use config::{
-    DataSetReaderConfig, DataSetWriterConfig, MessageEncoding, PubSubConnectionConfig,
-    PublishedDataItemsConfig, PublishedDataSetConfig, ReaderGroupConfig, WriterGroupConfig,
+    DataSetFieldEncoding, DataSetMessageKind, DataSetReaderConfig, DataSetWriterConfig,
+    FieldTargetConfig, MessageEncoding, PubSubConnectionConfig, PublishedDataItemsConfig,
+    PublishedDataSetConfig, ReaderGroupConfig, WriterGroupConfig,
 };
 pub use config_methods::{register_pubsub_config_methods, PubSubConfigManager};
 
@@ -57,7 +58,10 @@ pub use transport::websocket::WebSocketPublisher;
 
 pub use codec::json::{json_value_to_opcua, JsonDataSetMessage, JsonNetworkMessage};
 pub use codec::uadp::{PublisherId, UadpDataSetMessage, UadpNetworkMessage};
-pub use subscriber::{apply_network_message, decode_and_apply};
+pub use subscriber::{
+    apply_network_message, decode_and_apply, DataSetReaderStatus, SubscriberApplyOutcome,
+    SubscriberError, SubscriberRuntime,
+};
 
 /// Bridge module to monitor AddressSpace changes and publish events.
 pub mod bridge;

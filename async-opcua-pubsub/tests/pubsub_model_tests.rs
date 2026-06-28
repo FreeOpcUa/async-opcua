@@ -141,7 +141,9 @@ fn reflect_pubsub_config_materializes_reader_side_instances() {
                 dataset_writer_id: 7,
                 publisher_id: None,
                 subscribed_variables: vec![],
+                ..DataSetReaderConfig::default()
             }],
+            ..ReaderGroupConfig::default()
         }],
     };
 

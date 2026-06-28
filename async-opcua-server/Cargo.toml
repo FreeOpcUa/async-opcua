@@ -64,7 +64,7 @@ wss = [
 moka = { version = "0.12", features = ["future", "sync"] }
 # opc.wss transport (feature 009 / R5 / FR-044), gated by the `wss` feature.
 tokio-tungstenite = { workspace = true, optional = true }
-mdns-sd = { workspace = true, optional = true }
+mdns-sd = { workspace = true, optional = true, features = ["async"] }
 tokio-rustls = { workspace = true, optional = true }
 rustls = { workspace = true, optional = true }
 rustls-pki-types = { workspace = true, optional = true }

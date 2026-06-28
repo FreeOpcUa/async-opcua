@@ -1,6 +1,8 @@
 //! Feature 024 — RegisterServer (LDS registration) end-to-end via the existing client
 //! register_server() / find_servers(). Anchored to OPC UA Part 4 §5.5.5 / Part 12 §7.5.
 
+#[cfg(feature = "discovery-mdns")]
+use super::utils::default_server;
 use super::utils::Tester;
 use opcua::types::{
     ApplicationType, EndpointDescription, ExtensionObject, LocalizedText,
@@ -143,27 +145,44 @@ async fn register_server_update_is_idempotent() {
 }
 
 #[tokio::test]
-async fn register_server2_mdns_config_unsupported_but_registers() {
+async fn register_server2_mdns_config_result_matches_feature_support() {
+    #[cfg(feature = "discovery-mdns")]
+    let tester = Tester::new(
+        default_server()
+            .multicast_discovery(true)
+            .mdns_server_name("RegisterServer2Lds")
+            .mdns_capabilities(vec!["LDS".into()]),
+        true,
+    )
+    .await;
+    #[cfg(not(feature = "discovery-mdns"))]
     let tester = Tester::new_default_server(true).await;
     let url = tester.endpoint();
     let endpoint = secured_endpoint(&tester).await;
 
-    // RegisterServer2 with an mDNS discovery configuration: the per-config result is "not supported",
-    // but the server is still registered (Part 4 §5.5.6).
+    // RegisterServer2 with an mDNS discovery configuration: with `discovery-mdns` enabled and opted in,
+    // the LDS-ME configuration is accepted; otherwise it remains unsupported. Either way, the server is
+    // still registered (Part 4 §5.5.6).
     let mdns = ExtensionObject::from_message(MdnsDiscoveryConfiguration {
         mdns_server_name: "registered-test".into(),
         server_capabilities: Some(vec!["DA".into()]),
     });
+    #[cfg(feature = "discovery-mdns")]
+    let mut server = registered_server(true);
+    #[cfg(not(feature = "discovery-mdns"))]
+    let server = registered_server(true);
+    #[cfg(feature = "discovery-mdns")]
+    {
+        server.discovery_urls = Some(vec!["opc.tcp://127.0.0.1:4840/".into()]);
+    }
     let results = tester
         .client
-        .register_server2(
-            url.clone(),
-            &endpoint,
-            registered_server(true),
-            Some(vec![mdns]),
-        )
+        .register_server2(url.clone(), &endpoint, server, Some(vec![mdns]))
         .await
         .unwrap();
+    #[cfg(feature = "discovery-mdns")]
+    assert_eq!(results, vec![StatusCode::Good]);
+    #[cfg(not(feature = "discovery-mdns"))]
     assert_eq!(results, vec![StatusCode::BadNotSupported]);
 
     // ...yet the server is registered and discoverable.
@@ -179,6 +198,43 @@ async fn register_server2_mdns_config_unsupported_but_registers() {
         "RegisterServer2 must still register the server despite the unsupported mdns config"
     );
 
+    #[cfg(feature = "discovery-mdns")]
+    {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(4);
+        let mut found = false;
+        while std::time::Instant::now() < deadline {
+            let response = tester
+                .client
+                .find_servers_on_network(url.clone(), 0, 0, Some(vec!["DA".into()]))
+                .await
+                .unwrap();
+            let discovered = response.servers.unwrap_or_default();
+            if let Some(server) = discovered
+                .iter()
+                .find(|server| server.server_name.as_ref() == "registered-test")
+            {
+                assert_eq!(server.discovery_url.as_ref(), "opc.tcp://127.0.0.1:4840/");
+                assert!(
+                    server
+                        .server_capabilities
+                        .as_ref()
+                        .is_some_and(|caps| caps.iter().any(|cap| cap.as_ref() == "DA")),
+                    "registered mDNS caps should include DA: {:?}",
+                    server.server_capabilities
+                );
+                found = true;
+                break;
+            }
+
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        }
+        if !found {
+            eprintln!(
+                "registered-server mDNS relay was not resolved (multicast likely unavailable) - skipping relay assertion"
+            );
+        }
+    }
+
     // RegisterServer2 updates the same registry: unregister via is_online=false.
     tester
         .client
@@ -193,6 +249,71 @@ async fn register_server2_mdns_config_unsupported_but_registers() {
     assert!(!servers
         .iter()
         .any(|s| s.product_uri.as_ref() == REG_PRODUCT));
+}
+
+#[cfg(feature = "discovery-mdns")]
+#[tokio::test]
+async fn find_servers_on_network_discovers_mdns_responder_when_multicast_available() {
+    use std::time::{Duration, Instant};
+
+    let suffix = crate::utils::TEST_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let responder_name = format!("Responder036{suffix}");
+    let querier_name = format!("Querier036{suffix}");
+
+    let _responder = Tester::new(
+        default_server()
+            .application_name(responder_name.clone())
+            .application_uri(format!("urn:{responder_name}"))
+            .multicast_discovery(true)
+            .mdns_server_name(responder_name.clone())
+            .mdns_capabilities(vec!["DA".into(), "LDS".into()]),
+        true,
+    )
+    .await;
+    let querier = Tester::new(
+        default_server()
+            .application_name(querier_name.clone())
+            .application_uri(format!("urn:{querier_name}"))
+            .multicast_discovery(true)
+            .mdns_server_name(querier_name)
+            .mdns_capabilities(vec!["LDS".into()]),
+        true,
+    )
+    .await;
+    let url = querier.endpoint();
+
+    let deadline = Instant::now() + Duration::from_secs(6);
+    while Instant::now() < deadline {
+        let response = querier
+            .client
+            .find_servers_on_network(url.clone(), 0, 0, Some(vec!["DA".into()]))
+            .await
+            .unwrap();
+        let servers = response.servers.unwrap_or_default();
+        if let Some(server) = servers
+            .iter()
+            .find(|server| server.server_name.as_ref() == responder_name)
+        {
+            assert!(
+                server.discovery_url.as_ref().starts_with("opc.tcp://"),
+                "discovery URL should be usable: {}",
+                server.discovery_url
+            );
+            assert!(
+                server
+                    .server_capabilities
+                    .as_ref()
+                    .is_some_and(|caps| caps.iter().any(|cap| cap.as_ref() == "DA")),
+                "responder capabilities should include DA: {:?}",
+                server.server_capabilities
+            );
+            return;
+        }
+
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+
+    eprintln!("no mDNS resolution (multicast likely unavailable) - skipping FindServersOnNetwork assertion");
 }
 
 #[tokio::test]

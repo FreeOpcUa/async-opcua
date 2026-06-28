@@ -1068,8 +1068,9 @@ mod tests {
     };
 
     use super::{
-        reclaim_data_change_notification_vecs, DataChangeNotificationVecPool, HandledState,
-        Subscription, SubscriptionStateParams, TickReason, UpdateStateAction,
+        super::retransmission_queue::RetransmissionQueue, reclaim_data_change_notification_vecs,
+        DataChangeNotificationVecPool, HandledState, Subscription, SubscriptionStateParams,
+        TickReason, UpdateStateAction,
     };
 
     #[global_allocator]
@@ -1179,6 +1180,18 @@ mod tests {
                 })
             })
             .collect()
+    }
+
+    fn make_queued_data_change_message(sequence_number: u32) -> NotificationMessage {
+        NotificationMessage::data_change(
+            sequence_number,
+            DateTime::now(),
+            vec![MonitoredItemNotification {
+                client_handle: sequence_number,
+                value: DataValue::new_now(sequence_number as i32),
+            }],
+            Vec::new(),
+        )
     }
 
     fn measure_publish_baseline_once(
@@ -1450,6 +1463,49 @@ mod tests {
 
             reclaim_data_change_notification_vecs(message, &mut data_change_notification_pool);
         }
+    }
+
+    #[test]
+    fn subscription_queue_pressure_drops_oldest_and_reports_only_retained_sequences() {
+        // Feature 029 T003, grounded in Part 4 1.05.07 §5.14.1.1: when the bounded
+        // notification/retransmission path overflows, the oldest message is deleted and the
+        // availableSequenceNumbers list reflects only messages still held for Republish.
+        let mut sub = Subscription::new(7, true, Duration::from_millis(100), 100, 20, 1, 2, 1000);
+
+        for sequence_number in 1..=4 {
+            sub.enqueue_notification(make_queued_data_change_message(sequence_number));
+        }
+        sub.enforce_queued_notification_limit();
+
+        assert_eq!(sub.discarded_message_count(), 2);
+        assert_eq!(
+            sub.notifications
+                .iter()
+                .map(|message| message.sequence_number)
+                .collect::<Vec<_>>(),
+            vec![3, 4],
+            "oldest queued NotificationMessages are discarded first"
+        );
+
+        let mut retransmission_queue = RetransmissionQueue::new();
+        let mut data_change_notification_pool = DataChangeNotificationVecPool::default();
+        while let Some(message) = sub.take_notification() {
+            retransmission_queue.enqueue(
+                &mut data_change_notification_pool,
+                4,
+                sub.id(),
+                Arc::new(message),
+            );
+        }
+
+        assert_eq!(
+            retransmission_queue.available_sequence_numbers(sub.id()),
+            Some(vec![3, 4])
+        );
+        assert!(retransmission_queue.get_message(sub.id(), 1).is_none());
+        assert!(retransmission_queue.get_message(sub.id(), 2).is_none());
+        assert!(retransmission_queue.get_message(sub.id(), 3).is_some());
+        assert!(retransmission_queue.get_message(sub.id(), 4).is_some());
     }
 
     #[test]

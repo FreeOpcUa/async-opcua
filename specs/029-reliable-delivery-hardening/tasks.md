@@ -5,12 +5,12 @@ fix, dispatched ONLY when a [claude-test] proves a spec violation (one task/disp
 minimal fail-closed). One commit per user story. PR to fork.
 
 ## Phase 1: Baseline
-- [ ] T001 [claude-test] Run `cargo test -p async-opcua-server` + the subscription integration tests green on current code (baseline).
+- [X] T001 [claude-test] Run `cargo test -p async-opcua-server` + the subscription integration tests green on current code (baseline). Verified with `cargo test -p async-opcua-server`, `cargo test -p async-opcua --test integration_tests subscriptions`, and `cargo test -p async-opcua --test integration_tests datachange_overflow`.
 
 ## Phase 2: US1 — overflow + consumer-lag (P1)
-- [ ] T002 [claude-test] MonitoredItem overflow tests (§5.13.1.5): discardOldest=TRUE (oldest dropped, NEXT value gets Overflow bit), discardOldest=FALSE (last-added replaced, NEWEST value gets Overflow bit), QueueSize==1 (policy ignored, no Overflow bit), and queue-order preservation. Drive `MonitoredItem` directly in an in-crate test.
-- [ ] T003 [claude-test] Subscription-level queue pressure: exceed `max_queued_notifications` → oldest dropped, `discarded_message_count` increments, `availableSequenceNumbers` lists only held messages.
-- [ ] T004 [codex] (CONDITIONAL) If T002/T003 reveal a Part-4 violation (esp. discardOldest=FALSE overflow-bit placement), fix the production code minimally to conform. Skip if all green.
+- [X] T002 [claude-test] MonitoredItem overflow tests (§5.13.1.5): discardOldest=TRUE (oldest dropped, NEXT value gets Overflow bit), discardOldest=FALSE (last-added replaced, NEWEST value gets Overflow bit), QueueSize==1 (policy ignored, no Overflow bit), and queue-order preservation. Drive `MonitoredItem` directly in an in-crate test. Covered by `part4_overflow_*` tests in `monitored_item.rs`.
+- [X] T003 [claude-test] Subscription-level queue pressure: exceed `max_queued_notifications` → oldest dropped, `discarded_message_count` increments, `availableSequenceNumbers` lists only held messages.
+- [X] T004 [codex] (CONDITIONAL) If T002/T003 reveal a Part-4 violation (esp. discardOldest=FALSE overflow-bit placement), fix the production code minimally to conform. Skipped: T002/T003 passed against existing behavior; no production fix required.
 - Commit US1.
 
 ## Phase 3: US2 — republish / ack / sequence (P2)

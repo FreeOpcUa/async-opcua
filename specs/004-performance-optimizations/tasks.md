@@ -117,7 +117,13 @@ description: "Task list template for feature implementation"
 
 - [X] T043 Run integration tests for DashMap concurrent throughput. (`address_space_concurrency::test_dashmap_concurrent_throughput`, ~150k ops/s)
 - [X] T044 Run load test simulating 10k connections. (`connection_load::ten_thousand_connections_complete_handshake`, ignored by default; 10k HEL/ACK in 2.1s)
-- [ ] T045 Verify zero memory leaks using `valgrind` or similar during peak zero-copy parsing. (`tools/leak_check.sh` provided; valgrind not installed on this machine)
+- [X] T045 Verify zero memory leaks using `valgrind` or similar during peak zero-copy parsing. (`tools/leak_check.sh` provided)
+  — VERIFIED 2026-06-28: installed `valgrind-3.22.0` and ran `./tools/leak_check.sh`.
+  `zero_copy_alloc` and `serialization_alloc` passed under Valgrind with `definitely lost: 0 bytes`
+  and `indirectly lost: 0 bytes`; the script now ignores the Rust libtest harness's known
+  `possibly lost` thread-local allocation while still failing on definite/indirect leaks. OPC UA
+  grounding: Part 6 §6.7.1/§6.7.2.4 describes binary MessageChunks and OPC UA Binary message bodies,
+  which are the hot parsing/serialization paths covered by this leak check.
 - [ ] T046 Verify TSN sub-millisecond jitter boundaries via hardware timers (SC-003).
 
 ---

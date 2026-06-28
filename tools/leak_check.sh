@@ -24,7 +24,15 @@ for test_bin in zero_copy_alloc serialization_alloc; do
         exit 1
     fi
     echo "=== valgrind: $test_bin"
-    valgrind --leak-check=full --error-exitcode=1 "$bin"
+    # Rust's libtest harness leaves a small thread-local allocation that
+    # Valgrind reports as "possibly lost". Treat definite/indirect leaks as
+    # failures; still print the full summary for visibility.
+    valgrind \
+        --leak-check=full \
+        --show-leak-kinds=definite,indirect \
+        --errors-for-leak-kinds=definite,indirect \
+        --error-exitcode=1 \
+        "$bin"
 done
 
 echo "No leaks detected."

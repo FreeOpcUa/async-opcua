@@ -2,7 +2,7 @@
 
 **Feature Branch**: `012-nist-ecc-security-policies`
 **Created**: 2026-06-20
-**Status**: Draft
+**Status**: Complete
 **Input**: Add the OPC UA elliptic-curve security policies `ECC_nistP256` and `ECC_nistP384` to the
 client and server secure channel, using a pure-Rust crypto backend. The stack today supports only
 RSA-based policies; this adds the NIST ECC half of the OPC UA ECC policy family (brainpool deferred).
@@ -164,3 +164,16 @@ RSA/None behavior is byte-identical.
 - **Out of scope (deferred):** the brainpool policies `ECC_brainpoolP256r1` / `ECC_brainpoolP384r1` (usable Rust arithmetic exists only in pre-release/unaudited `bp256`/`bp384` 0.14-rc crates — revisit when they stabilize or gate behind an audited C backend); PubSub ECC security; ECC-based user-identity-token encryption (unless trivially shared with the existing path); any C/OpenSSL crypto backend.
 - Interop validation against a third-party ECC peer may be unavailable in CI; SC-007 allows falling back to spec/RFC vectors + loopback with the gap documented.
 - Reuses existing infrastructure: the secure-channel/chunking framework, symmetric AES/HMAC code, X.509 handling, and certificate trust validation — ECC changes the asymmetric/key-agreement half only.
+
+## Closeout Findings
+
+- Completed 2026-06-28. Final gate passed locally: `cargo fmt --all --check`,
+  `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test --workspace`, and the
+  CI-equivalent clean-codegen sequence all exited successfully.
+- Generated code remained clean after rerunning all three codegen configs and `cargo fmt --all`
+  (`git diff --exit-code` clean).
+- Existing RSA/None behavior remains covered by the full workspace test suite plus the targeted
+  `async-opcua-crypto --no-default-features` policy test proving ECC is recognized-but-unsupported
+  while RSA/None stay supported. No new source changes were required in the final closeout branch.
+- Third-party ECC wire interop remains unvalidated because no open62541 or UA-.NETStandard ECC peer
+  was available; SC-007 is closed via the documented-gap path in `research.md`.

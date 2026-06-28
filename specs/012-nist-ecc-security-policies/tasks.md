@@ -173,7 +173,20 @@ RFC 5869 Expand Info=salt; key layout Sig|Enc|IV; P256=32/16/16 (SHA256/AES128),
   — VERIFIED 2026-06-28: `docs/setup.md` points to the ECC feature and demo ECC deployment profile;
   `CHANGELOG.md` records release-note/security-review coverage; `docs/crypto.md` records the secure-channel
   handshake review note and fixes the stale `ECC_nistP256` AES size.
-- [ ] T027 Final gate: `cargo fmt --all --check` + `cargo clippy --all-targets --all-features -- -D warnings` + `cargo test --workspace` + `verify-clean-codegen`; confirm RSA/None wire byte-identity preserved.
+- [X] T027 Final gate: `cargo fmt --all --check` + `cargo clippy --all-targets --all-features -- -D warnings` + `cargo test --workspace` + `verify-clean-codegen`; confirm RSA/None wire byte-identity preserved.
+  — VERIFIED 2026-06-28:
+  `cargo fmt --all --check`;
+  `cargo clippy --all-targets --all-features -- -D warnings`;
+  `cargo test --workspace`;
+  `cargo run --locked --bin async-opcua-codegen code_gen_config.yml`;
+  `cargo run --locked --bin async-opcua-codegen samples/custom-codegen/code_gen_config.yml`;
+  `cargo run --locked --bin async-opcua-codegen async-opcua-fx/code_gen_config.yml`;
+  `cargo fmt --all`;
+  `git diff --exit-code`;
+  `cargo test -p async-opcua-crypto --no-default-features security_policy::tests::ecc_policies_recognized_but_unsupported_when_feature_off`.
+  OPC UA Part 6 §6.8.1 grounding: after ECC key derivation, ECC SecureChannels behave like RSA
+  SecureChannels at the symmetric layer; RSA/None preservation is backed by the full workspace suite,
+  the `ecc`-off policy test, and no final-branch source changes.
 
 ---
 

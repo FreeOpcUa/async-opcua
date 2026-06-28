@@ -331,12 +331,55 @@ namespace DotnetInterop
             Check("CreateMonitoredItems (event filter) on Server", evItem.Status.Created && StatusCode.IsGood(evItem.Status.Error?.StatusCode ?? StatusCodes.Good),
                   evItem.Status.Error?.StatusCode.ToString());
 
+            // Raw service probes for status-code rows from the Part 4/8 matrix.
+            session.CreateMonitoredItems(null, sub.Id, TimestampsToReturn.Both,
+                new MonitoredItemCreateRequestCollection {
+                    CreateDataChangeItem("PercentDeadbandAnalog", 9001, PercentDeadbandFilter(10.0)),
+                    CreateDataChangeItem("PercentDeadbandPlain", 9002),
+                },
+                out MonitoredItemCreateResultCollection dcResults, out _);
+            Check("CreateMonitoredItems PercentDeadband with EURange is Good",
+                  dcResults.Count == 2 && dcResults[0].StatusCode == StatusCodes.Good,
+                  dcResults.Count > 0 ? dcResults[0].StatusCode.ToString() : "no result");
+            Check("CreateMonitoredItems plain DataAccess node is Good",
+                  dcResults.Count == 2 && dcResults[1].StatusCode == StatusCodes.Good,
+                  dcResults.Count > 1 ? dcResults[1].StatusCode.ToString() : "no result");
+
+            if (dcResults.Count == 2 && dcResults[1].StatusCode == StatusCodes.Good)
+            {
+                session.ModifyMonitoredItems(null, sub.Id, TimestampsToReturn.Both,
+                    new MonitoredItemModifyRequestCollection {
+                        new MonitoredItemModifyRequest {
+                            MonitoredItemId = dcResults[1].MonitoredItemId,
+                            RequestedParameters = MonitoringParams(9003, PercentDeadbandFilter(10.0)),
+                        },
+                    },
+                    out MonitoredItemModifyResultCollection modResults, out _);
+                Check("ModifyMonitoredItems PercentDeadband without EURange -> BadDeadbandFilterInvalid",
+                      modResults.Count == 1 && modResults[0].StatusCode == StatusCodes.BadDeadbandFilterInvalid,
+                      modResults.Count > 0 ? modResults[0].StatusCode.ToString() : "no result");
+            }
+
+            ExpectServiceFault(
+                "CreateMonitoredItems over subscription limit -> BadTooManyMonitoredItems",
+                () => session.CreateMonitoredItems(null, sub.Id, TimestampsToReturn.Both,
+                    new MonitoredItemCreateRequestCollection(
+                        Enumerable.Range(0, 9).Select(i => CreateDataChangeItem("Int32", (uint)(9100 + i)))),
+                    out _, out _),
+                StatusCodes.BadTooManyMonitoredItems);
+
             // DeleteMonitoredItems + DeleteSubscription.
             sub.RemoveItem(mi);
             sub.ApplyChanges();
             Check("DeleteMonitoredItems", true);
             session.RemoveSubscription(sub);
             Check("DeleteSubscriptions", true);
+
+            ExpectServiceFault(
+                "Publish with no subscriptions -> BadNoSubscription",
+                () => session.Publish(null, new SubscriptionAcknowledgementCollection(),
+                    out _, out _, out _, out _, out _, out _),
+                StatusCodes.BadNoSubscription);
         }
 
         // ---- HistoryRead ---------------------------------------------------------------------
@@ -361,6 +404,12 @@ namespace DotnetInterop
                       results.Count > 0 ? results[0].StatusCode.ToString() : "no result");
             }
             catch (ServiceResultException ex) { Check("HistoryRead raw on HistoricalDouble returns values", false, ex.StatusCode.ToString()); }
+
+            ExpectServiceFault(
+                "HistoryRead with TimestampsToReturn.Neither -> BadTimestampsToReturnInvalid",
+                () => session.HistoryRead(null, new ExtensionObject(details), TimestampsToReturn.Neither, false, toRead,
+                    out _, out _),
+                StatusCodes.BadTimestampsToReturnInvalid);
         }
 
         // ---- Error paths ---------------------------------------------------------------------
@@ -398,6 +447,55 @@ namespace DotnetInterop
             var endpoint = new ConfiguredEndpoint(null, selected, EndpointConfiguration.Create(config));
             return await Session.Create(config, endpoint, false, "async-opcua-dotnet-interop", 60000,
                 identity ?? new UserIdentity(new AnonymousIdentityToken()), null);
+        }
+
+        static void ExpectServiceFault(string name, Action action, uint expected)
+        {
+            try
+            {
+                action();
+                Check(name, false, "no service fault");
+            }
+            catch (ServiceResultException ex)
+            {
+                Check(name, ex.StatusCode == expected, ex.StatusCode.ToString());
+            }
+        }
+
+        static MonitoredItemCreateRequest CreateDataChangeItem(string nodeName, uint clientHandle, ExtensionObject filter = null)
+        {
+            return new MonitoredItemCreateRequest
+            {
+                ItemToMonitor = new ReadValueId
+                {
+                    NodeId = new NodeId(nodeName, nsi),
+                    AttributeId = Attributes.Value,
+                },
+                MonitoringMode = MonitoringMode.Reporting,
+                RequestedParameters = MonitoringParams(clientHandle, filter),
+            };
+        }
+
+        static MonitoringParameters MonitoringParams(uint clientHandle, ExtensionObject filter = null)
+        {
+            return new MonitoringParameters
+            {
+                ClientHandle = clientHandle,
+                SamplingInterval = 100,
+                QueueSize = 1,
+                DiscardOldest = true,
+                Filter = filter ?? ExtensionObject.Null,
+            };
+        }
+
+        static ExtensionObject PercentDeadbandFilter(double deadbandValue)
+        {
+            return new ExtensionObject(new DataChangeFilter
+            {
+                Trigger = DataChangeTrigger.StatusValue,
+                DeadbandType = (uint)DeadbandType.Percent,
+                DeadbandValue = deadbandValue,
+            });
         }
 
         static async Task<ApplicationConfiguration> BuildConfig()

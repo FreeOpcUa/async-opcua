@@ -25,6 +25,12 @@ import {
   StatusCodes,
   BrowseDirection,
   makeBrowsePath,
+  DataChangeFilter,
+  DataChangeTrigger,
+  DeadbandType,
+  HistoryReadRequest,
+  ReadRawModifiedDetails,
+  PublishRequest,
 } from "node-opcua";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -74,6 +80,16 @@ function check(name, cond, detail = "") {
   } else {
     failures++;
     console.error(`  \x1b[31mFAIL\x1b[0m ${name}${detail ? "  — " + detail : ""}`);
+  }
+}
+
+async function expectServiceFault(name, action, expected) {
+  try {
+    const response = await action();
+    const sc = response && response.responseHeader && response.responseHeader.serviceResult;
+    check(name, sc && sc.equals(expected), sc ? sc.toString() : "no service result");
+  } catch (e) {
+    check(name, e.message && e.message.includes(expected.name), e.message);
   }
 }
 
@@ -806,6 +822,109 @@ async function testFailureModes() {
         misc.toString(),
       );
       await sub.terminate();
+
+      // Part 8 percent-deadband validation: PercentDeadband requires an EURange property.
+      const daSub = ClientSubscription.create(session, {
+        requestedPublishingInterval: 200,
+        requestedLifetimeCount: 100,
+        requestedMaxKeepAliveCount: 10,
+        maxNotificationsPerPublish: 100,
+        publishingEnabled: true,
+        priority: 1,
+      });
+      await new Promise((res) => daSub.on("started", res));
+      const percentFilter = new DataChangeFilter({
+        trigger: DataChangeTrigger.StatusValue,
+        deadbandType: DeadbandType.Percent,
+        deadbandValue: 10,
+      });
+      const monitoringParameters = (clientHandle, filter = null) => ({
+        clientHandle,
+        samplingInterval: 100,
+        queueSize: 1,
+        discardOldest: true,
+        filter,
+      });
+      const dataChangeItem = (nodeId, clientHandle, filter = null) => ({
+        itemToMonitor: { nodeId, attributeId: AttributeIds.Value },
+        monitoringMode: MonitoringMode.Reporting,
+        requestedParameters: monitoringParameters(clientHandle, filter),
+      });
+
+      const da = await session.createMonitoredItems({
+        subscriptionId: daSub.subscriptionId,
+        timestampsToReturn: TimestampsToReturn.Both,
+        itemsToCreate: [
+          dataChangeItem(`ns=${ns};s=PercentDeadbandAnalog`, 2001, percentFilter),
+          dataChangeItem(`ns=${ns};s=PercentDeadbandPlain`, 2002),
+        ],
+      });
+      check(
+        "CreateMonitoredItems PercentDeadband with EURange is Good",
+        da.results[0].statusCode.equals(StatusCodes.Good),
+        da.results[0].statusCode.toString(),
+      );
+      check(
+        "CreateMonitoredItems plain DataAccess node is Good",
+        da.results[1].statusCode.equals(StatusCodes.Good),
+        da.results[1].statusCode.toString(),
+      );
+
+      const dm = await session.modifyMonitoredItems({
+        subscriptionId: daSub.subscriptionId,
+        timestampsToReturn: TimestampsToReturn.Both,
+        itemsToModify: [
+          {
+            monitoredItemId: da.results[1].monitoredItemId,
+            requestedParameters: monitoringParameters(2003, percentFilter),
+          },
+        ],
+      });
+      check(
+        "ModifyMonitoredItems PercentDeadband without EURange -> BadDeadbandFilterInvalid",
+        dm.results[0].statusCode.equals(StatusCodes.BadDeadbandFilterInvalid),
+        dm.results[0].statusCode.toString(),
+      );
+
+      await expectServiceFault(
+        "CreateMonitoredItems over subscription limit -> BadTooManyMonitoredItems",
+        () =>
+          session.createMonitoredItems({
+            subscriptionId: daSub.subscriptionId,
+            timestampsToReturn: TimestampsToReturn.Both,
+            itemsToCreate: Array.from({ length: 9 }, (_, i) =>
+              dataChangeItem(`ns=${ns};s=Int32`, 2100 + i),
+            ),
+          }),
+        StatusCodes.BadTooManyMonitoredItems,
+      );
+      await daSub.terminate();
+
+      await expectServiceFault(
+        "Publish with no subscriptions -> BadNoSubscription",
+        () => session.publish(new PublishRequest({ subscriptionAcknowledgements: [] })),
+        StatusCodes.BadNoSubscription,
+      );
+
+      await expectServiceFault(
+        "HistoryRead with TimestampsToReturn.Neither -> BadTimestampsToReturnInvalid",
+        () =>
+          session.historyRead(
+            new HistoryReadRequest({
+              historyReadDetails: new ReadRawModifiedDetails({
+                isReadModified: false,
+                startTime: new Date(Date.now() - 5 * 60 * 1000),
+                endTime: new Date(Date.now() + 60 * 1000),
+                numValuesPerNode: 100,
+                returnBounds: false,
+              }),
+              timestampsToReturn: TimestampsToReturn.Neither,
+              releaseContinuationPoints: false,
+              nodesToRead: [{ nodeId: `ns=${ns};s=HistoricalDouble` }],
+            }),
+          ),
+        StatusCodes.BadTimestampsToReturnInvalid,
+      );
     },
   );
 }

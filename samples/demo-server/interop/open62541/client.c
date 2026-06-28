@@ -330,6 +330,60 @@ static void test_service_breadth(void) {
             check("Monitored item on unknown node -> BadNodeIdUnknown", 0,
                   "subscription create failed");
         }
+
+        /* Part 4 §5.13.2: creating more monitored items than the interop limit
+         * returns the exact Bad_TooManyMonitoredItems service result. */
+        UA_CreateSubscriptionResponse limitSub =
+            UA_Client_Subscriptions_create(client, sreq, NULL, NULL, NULL);
+        if(limitSub.responseHeader.serviceResult == UA_STATUSCODE_GOOD) {
+            UA_MonitoredItemCreateRequest limitItems[9];
+            for(size_t i = 0; i < 9; i++)
+                limitItems[i] = UA_MonitoredItemCreateRequest_default(UA_NODEID_STRING(ns, "Int32"));
+            UA_CreateMonitoredItemsRequest cmireq;
+            UA_CreateMonitoredItemsRequest_init(&cmireq);
+            cmireq.subscriptionId = limitSub.subscriptionId;
+            cmireq.timestampsToReturn = UA_TIMESTAMPSTORETURN_BOTH;
+            cmireq.itemsToCreate = limitItems;
+            cmireq.itemsToCreateSize = 9;
+            UA_CreateMonitoredItemsResponse cmiresp =
+                UA_Client_MonitoredItems_createDataChanges(client, cmireq, NULL, NULL, NULL);
+            check("CreateMonitoredItems over subscription limit -> BadTooManyMonitoredItems",
+                  cmiresp.responseHeader.serviceResult ==
+                      UA_STATUSCODE_BADTOOMANYMONITOREDITEMS,
+                  UA_StatusCode_name(cmiresp.responseHeader.serviceResult));
+            UA_CreateMonitoredItemsResponse_clear(&cmiresp);
+            UA_Client_Subscriptions_deleteSingle(client, limitSub.subscriptionId);
+        } else {
+            check("CreateMonitoredItems over subscription limit -> BadTooManyMonitoredItems", 0,
+                  "subscription create failed");
+        }
+
+        /* Part 4 §5.11.3.2 / Part 11: HistoryRead must reject TimestampsToReturn=Neither. */
+        UA_ReadRawModifiedDetails details;
+        UA_ReadRawModifiedDetails_init(&details);
+        details.isReadModified = false;
+        details.startTime = UA_DateTime_now() - (UA_DateTime)5 * 60 * UA_DATETIME_SEC;
+        details.endTime = UA_DateTime_now() + (UA_DateTime)60 * UA_DATETIME_SEC;
+        details.numValuesPerNode = 100;
+        details.returnBounds = false;
+
+        UA_HistoryReadValueId histNode;
+        UA_HistoryReadValueId_init(&histNode);
+        histNode.nodeId = UA_NODEID_STRING(ns, "HistoricalDouble");
+
+        UA_HistoryReadRequest hreq;
+        UA_HistoryReadRequest_init(&hreq);
+        UA_ExtensionObject_setValueNoDelete(
+            &hreq.historyReadDetails, &details, &UA_TYPES[UA_TYPES_READRAWMODIFIEDDETAILS]);
+        hreq.timestampsToReturn = UA_TIMESTAMPSTORETURN_NEITHER;
+        hreq.releaseContinuationPoints = false;
+        hreq.nodesToRead = &histNode;
+        hreq.nodesToReadSize = 1;
+        UA_HistoryReadResponse hresp = UA_Client_Service_historyRead(client, hreq);
+        check("HistoryRead with TimestampsToReturn.Neither -> BadTimestampsToReturnInvalid",
+              hresp.responseHeader.serviceResult == UA_STATUSCODE_BADTIMESTAMPSTORETURNINVALID,
+              UA_StatusCode_name(hresp.responseHeader.serviceResult));
+        UA_HistoryReadResponse_clear(&hresp);
     }
 
     /* Reading an invalid attribute id is a per-operation Bad_AttributeIdInvalid. */

@@ -39,6 +39,7 @@ pub fn add_scalar_variables(
     // Add static scalar values
     add_static_scalar_variables(&manager, ns, &static_folder_id);
     add_static_array_variables(&manager, ns, &static_folder_id);
+    add_data_access_conformance_variables(&manager, ns, &static_folder_id);
 
     // Add dynamically changing scalar values
     add_dynamic_scalar_variables(&manager, ns, &dynamic_folder_id);
@@ -229,6 +230,51 @@ fn add_static_array_variables(manager: &SimpleNodeManager, ns: u16, static_folde
             .writable()
             .insert(&mut *address_space);
     });
+}
+
+fn add_data_access_conformance_variables(
+    manager: &SimpleNodeManager,
+    ns: u16,
+    static_folder_id: &NodeId,
+) {
+    let address_space = manager.address_space();
+    let mut address_space = address_space.write();
+
+    let folder_id = NodeId::new(ns, "data_access");
+    address_space.add_folder(&folder_id, "DataAccess", "DataAccess", static_folder_id);
+
+    let analog_id = NodeId::new(ns, "PercentDeadbandAnalog");
+    VariableBuilder::new(&analog_id, "PercentDeadbandAnalog", "PercentDeadbandAnalog")
+        .data_type(DataTypeId::Double)
+        .value(50.0f64)
+        .organized_by(&folder_id)
+        .writable()
+        .insert(&mut *address_space);
+
+    VariableBuilder::new(
+        &NodeId::new(ns, "PercentDeadbandAnalog_EURange"),
+        QualifiedName::new(0, "EURange"),
+        "EURange",
+    )
+    .data_type(DataTypeId::Range)
+    .value(Range {
+        low: 0.0,
+        high: 100.0,
+    })
+    .has_type_definition(VariableTypeId::PropertyType)
+    .property_of(analog_id)
+    .insert(&mut *address_space);
+
+    VariableBuilder::new(
+        &NodeId::new(ns, "PercentDeadbandPlain"),
+        "PercentDeadbandPlain",
+        "PercentDeadbandPlain",
+    )
+    .data_type(DataTypeId::Double)
+    .value(50.0f64)
+    .organized_by(&folder_id)
+    .writable()
+    .insert(&mut *address_space);
 }
 
 fn add_dynamic_scalar_variables(manager: &SimpleNodeManager, ns: u16, dynamic_folder_id: &NodeId) {

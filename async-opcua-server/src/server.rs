@@ -361,6 +361,19 @@ impl Server {
             None
         };
 
+        #[cfg(feature = "discovery-mdns")]
+        let registered_mdns = if config.multicast_discovery.enabled {
+            match crate::discovery_mdns::MdnsAdvertisementRegistry::new() {
+                Ok(registry) => Some(Arc::new(registry)),
+                Err(e) => {
+                    warn!("mDNS registered-server advertisements unavailable: {e}");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         let type_tree = Arc::new(RwLock::new(DefaultTypeTree::new()));
 
         let info = ServerInfo {
@@ -398,6 +411,8 @@ impl Server {
             registered_servers: RwLock::new(Default::default()),
             #[cfg(feature = "discovery-mdns")]
             mdns,
+            #[cfg(feature = "discovery-mdns")]
+            registered_mdns,
             diagnostics: ServerDiagnostics {
                 enabled: config.diagnostics,
                 ..Default::default()

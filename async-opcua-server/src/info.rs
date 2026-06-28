@@ -28,6 +28,8 @@ use opcua_crypto::identity::{LocalOAuth2Validator, OAuth2IdentityValidator};
 use opcua_crypto::{
     verify_x509_identity_token, CertificateStore, PrivateKey, SecurityPolicy, X509,
 };
+#[cfg(feature = "discovery-mdns")]
+use opcua_types::MdnsDiscoveryConfiguration;
 use opcua_types::{
     profiles, status_code::StatusCode, ActivateSessionRequest, AnonymousIdentityToken,
     ApplicationDescription, ApplicationType, EndpointDescription, RegisteredServer,
@@ -47,6 +49,61 @@ use super::identity_token::{IdentityToken, POLICY_ID_ANONYMOUS, POLICY_ID_X509};
 use super::{OperationalLimits, ServerCapabilities, ANONYMOUS_USER_TOKEN_ID};
 
 const MAX_REGISTERED_SERVERS: usize = 1000;
+
+#[cfg(feature = "discovery-mdns")]
+fn registered_mdns_name(server: &RegisteredServer, config: &MdnsDiscoveryConfiguration) -> String {
+    if !config.mdns_server_name.is_null() && !config.mdns_server_name.is_empty() {
+        return bounded_mdns_string(
+            config.mdns_server_name.as_ref(),
+            crate::discovery_mdns::MAX_STR,
+        );
+    }
+
+    let name = server
+        .server_names
+        .as_ref()
+        .and_then(|names| names.first())
+        .map(|name| name.text.as_ref())
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| server.server_uri.as_ref());
+    bounded_mdns_string(name, crate::discovery_mdns::MAX_STR)
+}
+
+#[cfg(feature = "discovery-mdns")]
+fn registered_mdns_capabilities(config: &MdnsDiscoveryConfiguration) -> Vec<String> {
+    let mut caps: Vec<String> = config
+        .server_capabilities
+        .as_ref()
+        .into_iter()
+        .flat_map(|caps| caps.iter())
+        .filter(|cap| !cap.is_null() && !cap.is_empty())
+        .take(crate::discovery_mdns::MAX_CAPS)
+        .map(|cap| bounded_mdns_string(cap.as_ref(), crate::discovery_mdns::MAX_CAP_LEN))
+        .collect();
+
+    if caps.is_empty() {
+        caps.push("NA".to_owned());
+    }
+
+    caps
+}
+
+#[cfg(feature = "discovery-mdns")]
+fn bounded_mdns_string(value: &str, max_len: usize) -> String {
+    if value.len() <= max_len {
+        return value.to_owned();
+    }
+
+    let mut output = String::with_capacity(max_len);
+    for ch in value.chars() {
+        let next_len = output.len().saturating_add(ch.len_utf8());
+        if next_len > max_len {
+            break;
+        }
+        output.push(ch);
+    }
+    output
+}
 
 /// Server state is any configuration associated with the server as a whole that individual sessions might
 /// be interested in.
@@ -108,6 +165,10 @@ pub struct ServerInfo {
     /// Servers discovered via OPC UA Part 12 multicast discovery.
     #[cfg(feature = "discovery-mdns")]
     pub(crate) mdns: Option<std::sync::Arc<crate::discovery_mdns::MdnsDiscovery>>,
+    /// mDNS advertisements for servers registered via RegisterServer2 discovery configuration.
+    #[cfg(feature = "discovery-mdns")]
+    pub(crate) registered_mdns:
+        Option<std::sync::Arc<crate::discovery_mdns::MdnsAdvertisementRegistry>>,
     /// Current server diagnostics.
     pub diagnostics: ServerDiagnostics,
     /// Performance metrics for this server instance.
@@ -244,6 +305,56 @@ impl ServerInfo {
 
         registered_servers.insert(server_uri, server);
         StatusCode::Good
+    }
+
+    #[cfg(feature = "discovery-mdns")]
+    pub(crate) fn apply_register_server2_mdns_configuration(
+        &self,
+        server: &RegisteredServer,
+        config: &MdnsDiscoveryConfiguration,
+    ) -> StatusCode {
+        let Some(registered_mdns) = &self.registered_mdns else {
+            return StatusCode::BadNotSupported;
+        };
+
+        if !server.is_online {
+            self.remove_registered_mdns(&server.server_uri);
+            return StatusCode::Good;
+        }
+
+        let Some(discovery_url) = server
+            .discovery_urls
+            .as_ref()
+            .and_then(|urls| urls.first())
+            .filter(|url| !url.is_null() && !url.is_empty())
+        else {
+            return StatusCode::BadDiscoveryUrlMissing;
+        };
+        let mdns_name = registered_mdns_name(server, config);
+        if mdns_name.is_empty() {
+            return StatusCode::BadServerNameMissing;
+        }
+        let caps = registered_mdns_capabilities(config);
+
+        match registered_mdns.register(
+            server.server_uri.as_ref(),
+            &mdns_name,
+            discovery_url.as_ref(),
+            &caps,
+        ) {
+            Ok(()) => StatusCode::Good,
+            Err(e) => {
+                warn!("RegisterServer2 mDNS advertisement unavailable: {e}");
+                StatusCode::BadNotSupported
+            }
+        }
+    }
+
+    #[cfg(feature = "discovery-mdns")]
+    pub(crate) fn remove_registered_mdns(&self, server_uri: &UAString) {
+        if let Some(registered_mdns) = &self.registered_mdns {
+            registered_mdns.unregister(server_uri.as_ref());
+        }
     }
 
     /// Returns servers as `ServerOnNetwork` records for FindServersOnNetwork (Part 4 §5.5.3).

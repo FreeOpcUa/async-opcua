@@ -26,11 +26,14 @@ use opcua_core::{
     sync::RwLock,
 };
 use opcua_crypto::{CertificateStore, SecurityPolicy};
+#[cfg(feature = "discovery-mdns")]
+use opcua_types::MdnsDiscoveryConfiguration;
 use opcua_types::{
-    ChannelSecurityToken, DateTime, FindServersOnNetworkResponse, FindServersResponse,
-    GetEndpointsResponse, MessageSecurityMode, NodeId, OpenSecureChannelRequest,
-    OpenSecureChannelResponse, RegisterServer2Response, RegisterServerResponse, ResponseHeader,
-    SecurityTokenRequestType, ServiceFault, StatusCode, UAString,
+    ChannelSecurityToken, DateTime, ExtensionObject, FindServersOnNetworkResponse,
+    FindServersResponse, GetEndpointsResponse, MessageSecurityMode, NodeId,
+    OpenSecureChannelRequest, OpenSecureChannelResponse, RegisterServer2Response,
+    RegisterServerResponse, ResponseHeader, SecurityTokenRequestType, ServiceFault, StatusCode,
+    UAString,
 };
 use tokio_util::sync::CancellationToken;
 use tracing_futures::Instrument;
@@ -84,6 +87,25 @@ pub(crate) enum ControllerCommand {
 }
 
 type PendingMessageResponse = dyn Future<Output = Result<Response, String>> + Send + Sync + 'static;
+
+fn register_server2_configuration_result(
+    info: &ServerInfo,
+    server: &opcua_types::RegisteredServer,
+    registration_status: StatusCode,
+    configuration: &ExtensionObject,
+) -> StatusCode {
+    #[cfg(feature = "discovery-mdns")]
+    {
+        if registration_status == StatusCode::Good {
+            if let Some(mdns) = configuration.inner_as::<MdnsDiscoveryConfiguration>() {
+                return info.apply_register_server2_mdns_configuration(server, mdns);
+            }
+        }
+    }
+
+    let _ = (info, server, registration_status, configuration);
+    StatusCode::BadNotSupported
+}
 
 /// Master type managing a single connection.
 pub(crate) struct SessionController<T: ConnectionTransport> {
@@ -603,6 +625,10 @@ impl<T: ConnectionTransport> SessionController<T> {
                     StatusCode::Good => self.info.apply_register_server(request.server.clone()),
                     e => e,
                 };
+                #[cfg(feature = "discovery-mdns")]
+                if status == StatusCode::Good && !request.server.is_online {
+                    self.info.remove_registered_mdns(&request.server.server_uri);
+                }
                 if let Err(e) = self.transport.enqueue_message_for_send(
                     &mut self.channel,
                     RegisterServerResponse {
@@ -631,10 +657,22 @@ impl<T: ConnectionTransport> SessionController<T> {
                         .discovery_configuration
                         .as_ref()
                         .map(|configurations| {
-                            // Discovery configuration payloads are intentionally not decoded here:
-                            // this server does not support any RegisterServer2 discovery config type.
-                            vec![StatusCode::BadNotSupported; configurations.len()]
+                            configurations
+                                .iter()
+                                .map(|configuration| {
+                                    register_server2_configuration_result(
+                                        &self.info,
+                                        &request.server,
+                                        status,
+                                        configuration,
+                                    )
+                                })
+                                .collect()
                         });
+                #[cfg(feature = "discovery-mdns")]
+                if status == StatusCode::Good && !request.server.is_online {
+                    self.info.remove_registered_mdns(&request.server.server_uri);
+                }
                 if let Err(e) = self.transport.enqueue_message_for_send(
                     &mut self.channel,
                     RegisterServer2Response {

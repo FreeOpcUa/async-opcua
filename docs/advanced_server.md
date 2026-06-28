@@ -323,10 +323,11 @@ let server = ServerBuilder::new()
   configured capabilities (TXT `path=` / `caps=`), withdrawn on shutdown.
 - **`FindServersOnNetwork`** merges the multicast-discovered servers with the pull-based registered
   servers and applies the requested capability filter against the advertised capabilities.
+- **`RegisterServer2` mDNS discovery configurations** are honored when the feature is compiled and
+  multicast discovery is enabled: the LDS advertises the registering server with the supplied mDNS name
+  and capabilities. If the feature is off or multicast discovery is not opted in, the per-configuration
+  result remains `BadNotSupported` while the pull-based registration still succeeds.
 - **Where multicast is unavailable** (containers, CI, locked-down networks), enabling the feature is safe:
   advertising/discovery degrade to a no-op (logged at warn) and the server runs normally.
 - With the feature **off** (the default and the minimal build), `mdns-sd` is absent and
   `FindServersOnNetwork` / `RegisterServer` behave exactly as the pull-based discovery did before.
-
-Re-advertising *other* servers' `RegisterServer2` registrations over mDNS (the full LDS-ME relay role) is
-a documented follow-on; today a server advertises itself.

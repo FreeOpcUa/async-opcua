@@ -19,7 +19,7 @@ Status: ✅ covered · 🟡 partial · ⬜ gap
 | Conformance area | Spec | Tests | Oracle | Status |
 |---|---|---|---|---|
 | Discovery — GetEndpoints / FindServers | §5.4 | `discovery.rs`; all 4 interop harnesses; dotnet `DiscoveryChecks` | ref-stack + interop | ✅ |
-| Discovery — RegisterServer / FindServersOnNetwork | §5.4 | `discovery.rs` | self | 🟡 (registered-servers only; no mDNS) |
+| Discovery — RegisterServer / FindServersOnNetwork | §5.4 | `discovery.rs` | self | ✅ (registered servers + opt-in LDS-ME mDNS) |
 | SecureChannel — Open/Renew across policy×mode | §5.5 | `conformance.rs` matrix; dotnet `SecurityMatrixChecks` (5 endpoints); `wss.rs`; `legacy_crypto.rs` | ref-stack + interop | ✅ |
 | Session — Create/Activate/Close + identity tokens | §5.6 | `conformance.rs` token matrix; `hardening.rs` (session binding); dotnet `IdentityTokenChecks` | ref-stack + interop | ✅ |
 | NodeManagement — Add/Delete Nodes/References | §5.7 | `node_management.rs` | self | ✅ (gated `clients_can_modify_address_space`) |

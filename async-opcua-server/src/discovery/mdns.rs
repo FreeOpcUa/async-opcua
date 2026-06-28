@@ -4,12 +4,14 @@
 
 use std::{
     collections::HashMap,
+    net::IpAddr,
     sync::{atomic::Ordering, Arc},
     time::{Duration, Instant},
 };
 
 use futures::never::Never;
 use opcua_core::sync::RwLock;
+use opcua_core::{comms::url::hostname_port_from_url, constants::DEFAULT_OPC_UA_SERVER_PORT};
 
 /// Maximum number of capability identifiers accepted from a DNS-SD TXT record.
 pub(crate) const MAX_CAPS: usize = 64;
@@ -39,17 +41,39 @@ pub(crate) fn build_service_info(
     path: &str,
     caps: &[String],
 ) -> Result<mdns_sd::ServiceInfo, mdns_sd::Error> {
+    build_service_info_with_optional_ip(mdns_name, host_name, None, port, path, caps)
+        .map(mdns_sd::ServiceInfo::enable_addr_auto)
+}
+
+fn build_service_info_with_optional_ip(
+    mdns_name: &str,
+    host_name: &str,
+    ip: Option<IpAddr>,
+    port: u16,
+    path: &str,
+    caps: &[String],
+) -> Result<mdns_sd::ServiceInfo, mdns_sd::Error> {
     let host_name = host_name_dot_local(host_name);
 
-    mdns_sd::ServiceInfo::new(
-        OPCUA_MDNS_SERVICE_TYPE,
-        mdns_name,
-        &host_name,
-        (),
-        port,
-        Some(encode_txt(path, caps)),
-    )
-    .map(mdns_sd::ServiceInfo::enable_addr_auto)
+    if let Some(ip) = ip {
+        mdns_sd::ServiceInfo::new(
+            OPCUA_MDNS_SERVICE_TYPE,
+            mdns_name,
+            &host_name,
+            ip,
+            port,
+            Some(encode_txt(path, caps)),
+        )
+    } else {
+        mdns_sd::ServiceInfo::new(
+            OPCUA_MDNS_SERVICE_TYPE,
+            mdns_name,
+            &host_name,
+            (),
+            port,
+            Some(encode_txt(path, caps)),
+        )
+    }
 }
 
 /// Starts advertising an OPC UA TCP endpoint via mDNS.
@@ -81,6 +105,75 @@ impl MdnsResponder {
 impl Drop for MdnsResponder {
     fn drop(&mut self) {
         self.shutdown();
+    }
+}
+
+/// mDNS advertisements for servers that registered with this LDS via RegisterServer2.
+pub(crate) struct MdnsAdvertisementRegistry {
+    daemon: mdns_sd::ServiceDaemon,
+    fullnames_by_server_uri: RwLock<HashMap<String, String>>,
+}
+
+impl MdnsAdvertisementRegistry {
+    pub(crate) fn new() -> Result<Self, mdns_sd::Error> {
+        Ok(Self {
+            daemon: mdns_sd::ServiceDaemon::new()?,
+            fullnames_by_server_uri: RwLock::new(HashMap::new()),
+        })
+    }
+
+    pub(crate) fn register(
+        &self,
+        server_uri: &str,
+        mdns_name: &str,
+        discovery_url: &str,
+        caps: &[String],
+    ) -> Result<(), mdns_sd::Error> {
+        let (host, port) = hostname_port_from_url(discovery_url, DEFAULT_OPC_UA_SERVER_PORT)
+            .map_err(|status| {
+                mdns_sd::Error::Msg(format!(
+                    "registered server discovery URL is not an opc.tcp endpoint: {status}"
+                ))
+            })?;
+        let ip = host.parse::<IpAddr>().ok();
+        let srv_host = if ip.is_some() {
+            mdns_name.to_owned()
+        } else {
+            host
+        };
+        let path = discovery_path(Some(discovery_url));
+        let info =
+            build_service_info_with_optional_ip(mdns_name, &srv_host, ip, port, &path, caps)?;
+        let fullname = info.get_fullname().to_owned();
+
+        self.unregister(server_uri);
+        self.daemon.register(info)?;
+        self.fullnames_by_server_uri
+            .write()
+            .insert(server_uri.to_owned(), fullname);
+        Ok(())
+    }
+
+    pub(crate) fn unregister(&self, server_uri: &str) {
+        let Some(fullname) = self.fullnames_by_server_uri.write().remove(server_uri) else {
+            return;
+        };
+        let _ = self.daemon.unregister(&fullname);
+    }
+}
+
+impl Drop for MdnsAdvertisementRegistry {
+    fn drop(&mut self) {
+        let fullnames: Vec<_> = self
+            .fullnames_by_server_uri
+            .write()
+            .drain()
+            .map(|(_, fullname)| fullname)
+            .collect();
+        for fullname in fullnames {
+            let _ = self.daemon.unregister(&fullname);
+        }
+        let _ = self.daemon.shutdown();
     }
 }
 
@@ -192,8 +285,8 @@ pub(crate) async fn run_browser(
 ) -> Result<(), mdns_sd::Error> {
     let rx = daemon.browse(OPCUA_MDNS_SERVICE_TYPE)?;
 
-    if let Err(e) = tokio::task::spawn_blocking(move || loop {
-        match rx.recv() {
+    loop {
+        match rx.recv_async().await {
             Ok(mdns_sd::ServiceEvent::ServiceResolved(svc)) => {
                 if let Some(d) = from_resolved_service(svc.as_ref()) {
                     discovery.insert(d);
@@ -205,10 +298,6 @@ pub(crate) async fn run_browser(
             Ok(_) => {}
             Err(_) => break,
         }
-    })
-    .await
-    {
-        tracing::warn!("mDNS browser task stopped unexpectedly: {e}");
     }
 
     Ok(())

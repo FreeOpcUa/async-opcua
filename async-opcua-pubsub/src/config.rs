@@ -1,6 +1,9 @@
-use opcua_types::{ConfigurationVersionDataType, NodeId};
+use opcua_types::{
+    AttributeId, ConfigurationVersionDataType, Guid, MessageSecurityMode, NodeId,
+    OverrideValueHandling, StatusCode,
+};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::str::FromStr;
+use std::{collections::HashSet, str::FromStr, time::Duration};
 
 use crate::codec::uadp::PublisherId;
 
@@ -40,6 +43,22 @@ where
         node_ids.push(node_id);
     }
     Ok(node_ids)
+}
+
+fn serialize_node_id<S>(node_id: &NodeId, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str(&node_id.to_string())
+}
+
+fn deserialize_node_id<'de, D>(deserializer: D) -> Result<NodeId, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    NodeId::from_str(&s)
+        .map_err(|e| serde::de::Error::custom(format!("Invalid NodeId: {s}, error: {e:?}")))
 }
 
 /// The collection of variables grouped together in a single payload.
@@ -104,16 +123,133 @@ pub struct WriterGroupConfig {
     pub dataset_writers: Vec<DataSetWriterConfig>,
 }
 
+/// Supported field encodings for DataSetReader application.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum DataSetFieldEncoding {
+    /// Supported Variant/DataValue-compatible field encoding.
+    #[default]
+    Variant,
+    /// RawData field encoding is rejected by the subscriber runtime for this feature.
+    RawData,
+}
+
+/// Supported DataSetMessage kinds for DataSetReader application.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum DataSetMessageKind {
+    /// Supported key-frame DataSetMessage.
+    #[default]
+    KeyFrame,
+    /// Delta frames are rejected by the subscriber runtime for this feature.
+    DeltaFrame,
+    /// Event DataSetMessages are rejected by the subscriber runtime for this feature.
+    Event,
+}
+
+/// Maps a received DataSet field to a target Variable.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FieldTargetConfig {
+    /// Zero-based DataSet field index.
+    pub dataset_field_index: usize,
+    /// Optional stable DataSet field id from metadata.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_guid",
+        serialize_with = "serialize_optional_guid"
+    )]
+    pub dataset_field_id: Option<Guid>,
+    /// Target Variable NodeId.
+    #[serde(
+        deserialize_with = "deserialize_node_id",
+        serialize_with = "serialize_node_id"
+    )]
+    pub target_node_id: NodeId,
+    /// Target AttributeId. This feature supports Value only.
+    #[serde(
+        default = "default_value_attribute",
+        deserialize_with = "deserialize_attribute_id",
+        serialize_with = "serialize_attribute_id"
+    )]
+    pub attribute_id: AttributeId,
+    /// Optional NumericRange string. Non-empty ranges are rejected until implemented.
+    #[serde(default)]
+    pub index_range: Option<String>,
+    /// Override value handling. This feature supports Disabled only.
+    #[serde(
+        default = "default_override_value_handling",
+        deserialize_with = "deserialize_override_value_handling",
+        serialize_with = "serialize_override_value_handling"
+    )]
+    pub override_value_handling: OverrideValueHandling,
+}
+
+impl FieldTargetConfig {
+    /// Creates a Value-attribute target for a field index.
+    #[must_use]
+    pub fn value(dataset_field_index: usize, target_node_id: NodeId) -> Self {
+        Self {
+            dataset_field_index,
+            dataset_field_id: None,
+            target_node_id,
+            attribute_id: AttributeId::Value,
+            index_range: None,
+            override_value_handling: OverrideValueHandling::Disabled,
+        }
+    }
+}
+
 /// Maps received DataSet fields to target variables.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DataSetReaderConfig {
+    /// Optional human-readable reader name, unique within a ReaderGroup when present.
+    #[serde(default)]
+    pub name: Option<String>,
     /// Unique identifier for the dataset reader.
     pub dataset_reader_id: u16,
     /// The dataset writer ID this reader consumes.
     pub dataset_writer_id: u16,
     /// Optional PublisherId filter for incoming NetworkMessages.
+    #[serde(default)]
     pub publisher_id: Option<PublisherId>,
+    /// Optional UADP WriterGroupId filter.
+    #[serde(default)]
+    pub writer_group_id: Option<u16>,
+    /// Optional UADP NetworkMessageNumber filter.
+    #[serde(default)]
+    pub network_message_number: Option<u16>,
+    /// DataSetReader message receive timeout.
+    #[serde(default)]
+    pub message_receive_timeout: Option<Duration>,
+    /// Configured metadata major version, if known.
+    #[serde(default)]
+    pub metadata_major_version: Option<u32>,
+    /// DataSetReader security mode override.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_optional_message_security_mode",
+        serialize_with = "serialize_optional_message_security_mode"
+    )]
+    pub security_mode: Option<MessageSecurityMode>,
+    /// DataSetReader security policy URI override.
+    #[serde(default)]
+    pub security_policy_uri: Option<String>,
+    /// DataSetReader security group id override.
+    #[serde(default)]
+    pub security_group_id: Option<String>,
+    /// Subscriber message encoding. Only UADP is supported for this feature.
+    #[serde(default = "default_message_encoding")]
+    pub message_encoding: MessageEncoding,
+    /// Subscriber field encoding. RawData is rejected for this feature.
+    #[serde(default)]
+    pub field_encoding: DataSetFieldEncoding,
+    /// Subscriber DataSetMessage kind. Delta/event messages are rejected for this feature.
+    #[serde(default)]
+    pub message_kind: DataSetMessageKind,
+    /// FieldTargetDataType-equivalent target mappings.
+    #[serde(default)]
+    pub target_variables: Vec<FieldTargetConfig>,
     /// Target variable NodeIds in received field order.
+    #[serde(default)]
     #[serde(
         deserialize_with = "deserialize_node_ids",
         serialize_with = "serialize_node_ids"
@@ -121,13 +257,109 @@ pub struct DataSetReaderConfig {
     pub subscribed_variables: Vec<NodeId>,
 }
 
+impl Default for DataSetReaderConfig {
+    fn default() -> Self {
+        Self {
+            name: None,
+            dataset_reader_id: 0,
+            dataset_writer_id: 0,
+            publisher_id: None,
+            writer_group_id: None,
+            network_message_number: None,
+            message_receive_timeout: None,
+            metadata_major_version: None,
+            security_mode: None,
+            security_policy_uri: None,
+            security_group_id: None,
+            message_encoding: MessageEncoding::Uadp,
+            field_encoding: DataSetFieldEncoding::Variant,
+            message_kind: DataSetMessageKind::KeyFrame,
+            target_variables: Vec::new(),
+            subscribed_variables: Vec::new(),
+        }
+    }
+}
+
+impl DataSetReaderConfig {
+    /// Returns explicit target mappings or legacy subscribed-variable mappings in field order.
+    #[must_use]
+    pub fn effective_target_variables(&self) -> Vec<FieldTargetConfig> {
+        if !self.target_variables.is_empty() {
+            return self.target_variables.clone();
+        }
+
+        self.subscribed_variables
+            .iter()
+            .cloned()
+            .enumerate()
+            .map(|(index, target)| FieldTargetConfig::value(index, target))
+            .collect()
+    }
+
+    fn validate(&self) -> Result<(), StatusCode> {
+        if self.message_encoding != MessageEncoding::Uadp {
+            return Err(StatusCode::BadNotSupported);
+        }
+        if self.field_encoding != DataSetFieldEncoding::Variant {
+            return Err(StatusCode::BadNotSupported);
+        }
+        if self.message_kind != DataSetMessageKind::KeyFrame {
+            return Err(StatusCode::BadNotSupported);
+        }
+
+        let targets = self.effective_target_variables();
+        let mut seen_targets = HashSet::with_capacity(targets.len());
+        for target in targets {
+            if target.attribute_id != AttributeId::Value {
+                return Err(StatusCode::BadNotSupported);
+            }
+            if matches!(target.index_range.as_deref(), Some(range) if !range.is_empty()) {
+                return Err(StatusCode::BadNotSupported);
+            }
+            if target.override_value_handling != OverrideValueHandling::Disabled {
+                return Err(StatusCode::BadNotSupported);
+            }
+            if !seen_targets.insert(target.target_node_id) {
+                return Err(StatusCode::BadConfigurationError);
+            }
+        }
+
+        Ok(())
+    }
+}
+
 /// Groups configured DataSetReaders for inbound PubSub traffic.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ReaderGroupConfig {
     /// Unique identifier for the reader group.
     pub reader_group_id: u16,
+    /// Shared ReaderGroup security mode for received NetworkMessages.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_optional_message_security_mode",
+        serialize_with = "serialize_optional_message_security_mode"
+    )]
+    pub security_mode: Option<MessageSecurityMode>,
+    /// Shared ReaderGroup security policy URI.
+    #[serde(default)]
+    pub security_policy_uri: Option<String>,
+    /// Shared ReaderGroup security group id.
+    #[serde(default)]
+    pub security_group_id: Option<String>,
     /// List of dataset readers in this reader group.
     pub dataset_readers: Vec<DataSetReaderConfig>,
+}
+
+impl Default for ReaderGroupConfig {
+    fn default() -> Self {
+        Self {
+            reader_group_id: 0,
+            security_mode: None,
+            security_policy_uri: None,
+            security_group_id: None,
+            dataset_readers: Vec::new(),
+        }
+    }
 }
 
 /// Represents dataset publishing structures.
@@ -144,6 +376,183 @@ pub struct PubSubConnectionConfig {
     /// List of reader groups associated with this connection.
     #[serde(default)]
     pub reader_groups: Vec<ReaderGroupConfig>,
+}
+
+impl PubSubConnectionConfig {
+    /// Validates subscriber-side ReaderGroup/DataSetReader configuration.
+    pub fn validate_subscriber_config(&self) -> Result<(), StatusCode> {
+        if self.reader_groups.is_empty() {
+            return Ok(());
+        }
+
+        if !self.address.trim().starts_with("udp://") {
+            return Err(StatusCode::BadNotSupported);
+        }
+
+        for reader_group in &self.reader_groups {
+            validate_unique_reader_names(reader_group)?;
+            for reader in &reader_group.dataset_readers {
+                reader.validate()?;
+                validate_security(reader_group, reader)?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+fn validate_unique_reader_names(reader_group: &ReaderGroupConfig) -> Result<(), StatusCode> {
+    let mut names = HashSet::new();
+    for reader in &reader_group.dataset_readers {
+        let Some(name) = reader.name.as_deref().filter(|name| !name.is_empty()) else {
+            continue;
+        };
+        if !names.insert(name) {
+            return Err(StatusCode::BadConfigurationError);
+        }
+    }
+    Ok(())
+}
+
+fn validate_security(
+    reader_group: &ReaderGroupConfig,
+    reader: &DataSetReaderConfig,
+) -> Result<(), StatusCode> {
+    let mode = reader.security_mode.or(reader_group.security_mode);
+    if matches!(
+        mode,
+        Some(MessageSecurityMode::Sign | MessageSecurityMode::SignAndEncrypt)
+    ) {
+        let policy = reader
+            .security_policy_uri
+            .as_deref()
+            .or(reader_group.security_policy_uri.as_deref())
+            .unwrap_or_default();
+        let group_id = reader
+            .security_group_id
+            .as_deref()
+            .or(reader_group.security_group_id.as_deref())
+            .unwrap_or_default();
+        if policy.is_empty() || group_id.is_empty() {
+            return Err(StatusCode::BadConfigurationError);
+        }
+    }
+
+    Ok(())
+}
+
+const fn default_value_attribute() -> AttributeId {
+    AttributeId::Value
+}
+
+const fn default_override_value_handling() -> OverrideValueHandling {
+    OverrideValueHandling::Disabled
+}
+
+fn default_message_encoding() -> MessageEncoding {
+    MessageEncoding::Uadp
+}
+
+fn serialize_optional_guid<S>(value: &Option<Guid>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    value
+        .as_ref()
+        .map(ToString::to_string)
+        .serialize(serializer)
+}
+
+fn deserialize_optional_guid<'de, D>(deserializer: D) -> Result<Option<Guid>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<String>::deserialize(deserializer)?;
+    value
+        .map(|value| {
+            Guid::from_str(&value)
+                .map_err(|error| serde::de::Error::custom(format!("Invalid Guid: {error:?}")))
+        })
+        .transpose()
+}
+
+fn serialize_attribute_id<S>(value: &AttributeId, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_u32(*value as u32)
+}
+
+fn deserialize_attribute_id<'de, D>(deserializer: D) -> Result<AttributeId, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = u32::deserialize(deserializer)?;
+    AttributeId::from_u32(value)
+        .map_err(|_| serde::de::Error::custom(format!("Invalid AttributeId: {value}")))
+}
+
+fn serialize_override_value_handling<S>(
+    value: &OverrideValueHandling,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_i32(*value as i32)
+}
+
+fn deserialize_override_value_handling<'de, D>(
+    deserializer: D,
+) -> Result<OverrideValueHandling, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    match i32::deserialize(deserializer)? {
+        0 => Ok(OverrideValueHandling::Disabled),
+        1 => Ok(OverrideValueHandling::LastUsableValue),
+        2 => Ok(OverrideValueHandling::OverrideValue),
+        value => Err(serde::de::Error::custom(format!(
+            "Invalid OverrideValueHandling: {value}"
+        ))),
+    }
+}
+
+fn serialize_optional_message_security_mode<S>(
+    value: &Option<MessageSecurityMode>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    value
+        .as_ref()
+        .map(|value| *value as i32)
+        .serialize(serializer)
+}
+
+fn deserialize_optional_message_security_mode<'de, D>(
+    deserializer: D,
+) -> Result<Option<MessageSecurityMode>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<i32>::deserialize(deserializer)?;
+    value.map(message_security_mode_from_i32).transpose()
+}
+
+fn message_security_mode_from_i32<E: serde::de::Error>(
+    value: i32,
+) -> Result<MessageSecurityMode, E> {
+    match value {
+        0 => Ok(MessageSecurityMode::Invalid),
+        1 => Ok(MessageSecurityMode::None),
+        2 => Ok(MessageSecurityMode::Sign),
+        3 => Ok(MessageSecurityMode::SignAndEncrypt),
+        value => Err(serde::de::Error::custom(format!(
+            "Invalid MessageSecurityMode: {value}"
+        ))),
+    }
 }
 
 mod configuration_version_serde {

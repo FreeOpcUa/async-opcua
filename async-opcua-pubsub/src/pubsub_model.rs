@@ -1,8 +1,13 @@
 //! Read-only PubSub information-model reflection.
 
-use crate::config::{PubSubConnectionConfig, PublishedDataItemsConfig};
+use crate::{
+    config::{PubSubConnectionConfig, PublishedDataItemsConfig},
+    subscriber::DataSetReaderStatus,
+};
 use opcua_server::address_space::{AddressSpace, ObjectBuilder, VariableBuilder};
-use opcua_types::{DataTypeId, NodeId, ObjectTypeId, ReferenceTypeId, VariableTypeId, Variant};
+use opcua_types::{
+    DataTypeId, NodeId, ObjectTypeId, PubSubState, ReferenceTypeId, VariableTypeId, Variant,
+};
 
 const PUBLISH_SUBSCRIBE_ID: u32 = 14443;
 const PUBLISHED_DATA_SETS_ID: u32 = 17371;
@@ -27,6 +32,17 @@ pub fn reflect_pubsub_config(
     address_space: &mut AddressSpace,
     namespace: u16,
     configs: &[PubSubConnectionConfig],
+) -> PubSubModelMap {
+    reflect_pubsub_config_with_status(address_space, namespace, configs, &[])
+}
+
+/// Reflects PubSub configuration and supplied subscriber status snapshots into the AddressSpace.
+#[must_use]
+pub fn reflect_pubsub_config_with_status(
+    address_space: &mut AddressSpace,
+    namespace: u16,
+    configs: &[PubSubConnectionConfig],
+    reader_statuses: &[(u16, DataSetReaderStatus)],
 ) -> PubSubModelMap {
     let mut map = PubSubModelMap {
         connections: Vec::with_capacity(configs.len()),
@@ -180,6 +196,69 @@ pub fn reflect_pubsub_config(
                     dataset_reader.dataset_reader_id,
                 );
 
+                let target_count_property_id = dataset_reader_target_count_property_node_id(
+                    namespace,
+                    &config.connection_id,
+                    dataset_reader.dataset_reader_id,
+                );
+                ensure_u32_property(
+                    address_space,
+                    &target_count_property_id,
+                    &dataset_reader_id,
+                    "TargetVariableCount",
+                    dataset_reader.effective_target_variables().len() as u32,
+                );
+
+                let status = reader_statuses
+                    .iter()
+                    .find(|(reader_id, _)| *reader_id == dataset_reader.dataset_reader_id)
+                    .map(|(_, status)| status);
+                let state = status.map_or(PubSubState::PreOperational, |status| status.state);
+                ensure_i32_property(
+                    address_space,
+                    &dataset_reader_state_property_node_id(
+                        namespace,
+                        &config.connection_id,
+                        dataset_reader.dataset_reader_id,
+                    ),
+                    &dataset_reader_id,
+                    "ReaderState",
+                    state as i32,
+                );
+                ensure_u64_property(
+                    address_space,
+                    &dataset_reader_accepted_count_property_node_id(
+                        namespace,
+                        &config.connection_id,
+                        dataset_reader.dataset_reader_id,
+                    ),
+                    &dataset_reader_id,
+                    "AcceptedCount",
+                    status.map_or(0, |status| status.accepted_count),
+                );
+                ensure_u64_property(
+                    address_space,
+                    &dataset_reader_filtered_count_property_node_id(
+                        namespace,
+                        &config.connection_id,
+                        dataset_reader.dataset_reader_id,
+                    ),
+                    &dataset_reader_id,
+                    "FilteredCount",
+                    status.map_or(0, |status| status.filtered_count),
+                );
+                ensure_u64_property(
+                    address_space,
+                    &dataset_reader_dropped_count_property_node_id(
+                        namespace,
+                        &config.connection_id,
+                        dataset_reader.dataset_reader_id,
+                    ),
+                    &dataset_reader_id,
+                    "DroppedCount",
+                    status.map_or(0, |status| status.dropped_count),
+                );
+
                 map.readers
                     .push((dataset_reader.dataset_reader_id, dataset_reader_id));
             }
@@ -255,6 +334,63 @@ fn ensure_u16_property(
         .data_type(DataTypeId::UInt16)
         .has_type_definition(VariableTypeId::PropertyType)
         .value(Variant::UInt16(value))
+        .property_of(parent_id.clone())
+        .insert(address_space);
+}
+
+fn ensure_u32_property(
+    address_space: &mut AddressSpace,
+    node_id: &NodeId,
+    parent_id: &NodeId,
+    name: &str,
+    value: u32,
+) {
+    if address_space.node_exists(node_id) {
+        return;
+    }
+
+    VariableBuilder::new(node_id, name, name)
+        .data_type(DataTypeId::UInt32)
+        .has_type_definition(VariableTypeId::PropertyType)
+        .value(Variant::UInt32(value))
+        .property_of(parent_id.clone())
+        .insert(address_space);
+}
+
+fn ensure_i32_property(
+    address_space: &mut AddressSpace,
+    node_id: &NodeId,
+    parent_id: &NodeId,
+    name: &str,
+    value: i32,
+) {
+    if address_space.node_exists(node_id) {
+        return;
+    }
+
+    VariableBuilder::new(node_id, name, name)
+        .data_type(DataTypeId::Int32)
+        .has_type_definition(VariableTypeId::PropertyType)
+        .value(Variant::Int32(value))
+        .property_of(parent_id.clone())
+        .insert(address_space);
+}
+
+fn ensure_u64_property(
+    address_space: &mut AddressSpace,
+    node_id: &NodeId,
+    parent_id: &NodeId,
+    name: &str,
+    value: u64,
+) {
+    if address_space.node_exists(node_id) {
+        return;
+    }
+
+    VariableBuilder::new(node_id, name, name)
+        .data_type(DataTypeId::UInt64)
+        .has_type_definition(VariableTypeId::PropertyType)
+        .value(Variant::UInt64(value))
         .property_of(parent_id.clone())
         .insert(address_space);
 }
@@ -348,5 +484,60 @@ pub(crate) fn dataset_reader_id_property_node_id(
     NodeId::new(
         namespace,
         format!("DataSetReader:{connection_id}:{dataset_reader_id}:DataSetReaderId"),
+    )
+}
+
+fn dataset_reader_target_count_property_node_id(
+    namespace: u16,
+    connection_id: &str,
+    dataset_reader_id: u16,
+) -> NodeId {
+    NodeId::new(
+        namespace,
+        format!("DataSetReader:{connection_id}:{dataset_reader_id}:TargetVariableCount"),
+    )
+}
+
+fn dataset_reader_state_property_node_id(
+    namespace: u16,
+    connection_id: &str,
+    dataset_reader_id: u16,
+) -> NodeId {
+    NodeId::new(
+        namespace,
+        format!("DataSetReader:{connection_id}:{dataset_reader_id}:ReaderState"),
+    )
+}
+
+fn dataset_reader_accepted_count_property_node_id(
+    namespace: u16,
+    connection_id: &str,
+    dataset_reader_id: u16,
+) -> NodeId {
+    NodeId::new(
+        namespace,
+        format!("DataSetReader:{connection_id}:{dataset_reader_id}:AcceptedCount"),
+    )
+}
+
+fn dataset_reader_filtered_count_property_node_id(
+    namespace: u16,
+    connection_id: &str,
+    dataset_reader_id: u16,
+) -> NodeId {
+    NodeId::new(
+        namespace,
+        format!("DataSetReader:{connection_id}:{dataset_reader_id}:FilteredCount"),
+    )
+}
+
+fn dataset_reader_dropped_count_property_node_id(
+    namespace: u16,
+    connection_id: &str,
+    dataset_reader_id: u16,
+) -> NodeId {
+    NodeId::new(
+        namespace,
+        format!("DataSetReader:{connection_id}:{dataset_reader_id}:DroppedCount"),
     )
 }

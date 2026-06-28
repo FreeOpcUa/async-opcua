@@ -793,6 +793,7 @@ fn convert_reader_group(
             .enumerate()
             .map(|(reader_index, reader)| convert_data_set_reader(reader_index, reader))
             .collect(),
+        ..ReaderGroupConfig::default()
     }
 }
 
@@ -805,6 +806,7 @@ fn convert_data_set_reader(
         dataset_writer_id: data_set_reader.data_set_writer_id,
         publisher_id: None,
         subscribed_variables: Vec::new(),
+        ..DataSetReaderConfig::default()
     }
 }
 

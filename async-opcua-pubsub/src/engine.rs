@@ -5,15 +5,22 @@ use std::{collections::HashMap, sync::Arc};
 use opcua_core::sync::RwLock;
 use opcua_crypto::SecurityPolicy;
 use opcua_server::address_space::AddressSpace;
-use opcua_types::{Context, MessageSecurityMode, StatusCode};
+use opcua_types::{Context, ContextOwned, MessageSecurityMode, StatusCode};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
     codec::uadp::UadpNetworkMessage,
     security::{ReplayWindow, SecurityGroup, SharedSecurityGroup, UadpSecurityCodec},
+    subscriber::{
+        effective_security_config, DataSetReaderStatus, SubscriberApplyOutcome, SubscriberRuntime,
+        SubscriberSecurityConfig,
+    },
     transport::{
-        amqp::AmqpPublisher, mqtt::MqttPublisher, udp::UdpPublisher, websocket::WebSocketPublisher,
+        amqp::AmqpPublisher,
+        mqtt::MqttPublisher,
+        udp::{bind_subscriber_socket, UdpPublisher, UdpSubscriberEndpoint},
+        websocket::WebSocketPublisher,
     },
     PubSubConnectionConfig, PubSubPublisher,
 };
@@ -72,6 +79,9 @@ pub struct PubSubEngine {
     replay_windows: RwLock<HashMap<String, ReplayWindow>>,
     cancel_token: Option<CancellationToken>,
     publisher_handles: Vec<JoinHandle<()>>,
+    subscriber_runtime: Option<Arc<RwLock<SubscriberRuntime>>>,
+    subscriber_cancel_token: Option<CancellationToken>,
+    subscriber_handles: Vec<JoinHandle<()>>,
 }
 
 impl PubSubEngine {
@@ -84,6 +94,9 @@ impl PubSubEngine {
             replay_windows: RwLock::new(HashMap::new()),
             cancel_token: None,
             publisher_handles: Vec::new(),
+            subscriber_runtime: None,
+            subscriber_cancel_token: None,
+            subscriber_handles: Vec::new(),
         }
     }
 
@@ -99,12 +112,18 @@ impl PubSubEngine {
             replay_windows: RwLock::new(HashMap::new()),
             cancel_token: None,
             publisher_handles: Vec::new(),
+            subscriber_runtime: None,
+            subscriber_cancel_token: None,
+            subscriber_handles: Vec::new(),
         }
     }
 
     /// Adds a connection configuration to be started on the next engine start.
     pub fn add_connection(&mut self, connection: PubSubConnectionConfig) {
         self.connections.push(connection);
+        if self.subscriber_cancel_token.is_none() {
+            self.subscriber_runtime = None;
+        }
     }
 
     /// Removes a connection configuration by connection id.
@@ -113,7 +132,11 @@ impl PubSubEngine {
             .connections
             .iter()
             .position(|connection| connection.connection_id == connection_id)?;
-        Some(self.connections.remove(index))
+        let removed = self.connections.remove(index);
+        if self.subscriber_cancel_token.is_none() {
+            self.subscriber_runtime = None;
+        }
+        Some(removed)
     }
 
     /// Returns the configured PubSub connections.
@@ -226,6 +249,62 @@ impl PubSubEngine {
         Ok(message)
     }
 
+    /// Processes one subscriber datagram for the named connection.
+    pub fn process_subscriber_datagram(
+        &mut self,
+        connection_id: &str,
+        payload: &[u8],
+        ctx: &Context<'_>,
+    ) -> Result<SubscriberApplyOutcome, StatusCode> {
+        let connection = self
+            .connections
+            .iter()
+            .find(|connection| connection.connection_id == connection_id)
+            .cloned()
+            .ok_or(StatusCode::BadNotFound)?;
+        connection.validate_subscriber_config()?;
+
+        let reader_ids = connection_reader_ids(&connection);
+        let security = first_effective_security(&connection);
+        let runtime = self.ensure_subscriber_runtime()?;
+
+        if let Some(security) = security {
+            let security_policy = SecurityPolicy::from_uri(&security.security_policy_uri);
+            let decoded = if security_policy == SecurityPolicy::Unknown {
+                Err(StatusCode::BadSecurityChecksFailed)
+            } else {
+                self.decode_subscriber_uadp_message(
+                    &security.security_group_id,
+                    security.security_mode,
+                    security_policy,
+                    payload,
+                    ctx,
+                )
+            };
+
+            return match decoded {
+                Ok(message) => runtime.write().process_network_message(&message),
+                Err(status) => {
+                    runtime
+                        .write()
+                        .record_security_failure_for_readers(&reader_ids);
+                    Err(status)
+                }
+            };
+        }
+
+        let result = runtime.write().process_datagram(payload, ctx);
+        result
+    }
+
+    /// Returns a subscriber DataSetReader status snapshot.
+    #[must_use]
+    pub fn subscriber_status(&self, reader_id: u16) -> Option<DataSetReaderStatus> {
+        self.subscriber_runtime
+            .as_ref()
+            .and_then(|runtime| runtime.read().reader_status(reader_id))
+    }
+
     /// Returns true when the engine has started publisher loops.
     pub fn is_running(&self) -> bool {
         self.cancel_token.is_some()
@@ -234,6 +313,16 @@ impl PubSubEngine {
     /// Returns the number of active publisher coordinator handles.
     pub fn active_handle_count(&self) -> usize {
         self.publisher_handles.len()
+    }
+
+    /// Returns true when subscriber receive loops are running.
+    pub fn subscribers_are_running(&self) -> bool {
+        self.subscriber_cancel_token.is_some()
+    }
+
+    /// Returns the number of active subscriber receive task handles.
+    pub fn active_subscriber_handle_count(&self) -> usize {
+        self.subscriber_handles.len()
     }
 
     /// Starts transport publisher loops for all configured connections.
@@ -265,11 +354,103 @@ impl PubSubEngine {
 
     /// Stops all active publisher loops and waits for their coordinator tasks to finish.
     pub async fn stop(&mut self) {
+        self.stop_subscribers().await;
+
         if let Some(cancel_token) = self.cancel_token.take() {
             cancel_token.cancel();
         }
 
         while let Some(handle) = self.publisher_handles.pop() {
+            let _ = handle.await;
+        }
+    }
+
+    /// Starts UDP subscriber receive loops for configured ReaderGroups.
+    pub fn start_subscribers(&mut self) -> Result<(), StatusCode> {
+        if self.subscribers_are_running() {
+            return Ok(());
+        }
+
+        let connections = self
+            .connections
+            .iter()
+            .filter(|connection| !connection.reader_groups.is_empty())
+            .cloned()
+            .collect::<Vec<_>>();
+        if connections.is_empty() {
+            return Ok(());
+        }
+
+        for connection in &connections {
+            connection.validate_subscriber_config()?;
+        }
+
+        let runtime = self.ensure_subscriber_runtime()?;
+        let cancel_token = CancellationToken::new();
+        let mut handles = Vec::with_capacity(connections.len());
+
+        for connection in connections {
+            let endpoint = UdpSubscriberEndpoint::parse(&connection.address)?;
+            let runtime = runtime.clone();
+            let cancel_token = cancel_token.clone();
+            let connection_id = connection.connection_id;
+
+            handles.push(tokio::spawn(async move {
+                let socket = match bind_subscriber_socket(endpoint).await {
+                    Ok(socket) => socket,
+                    Err(status) => {
+                        tracing::error!(
+                            ?status,
+                            %connection_id,
+                            "failed to bind PubSub subscriber UDP socket"
+                        );
+                        return;
+                    }
+                };
+                let mut buf = vec![0_u8; 65_535];
+
+                loop {
+                    tokio::select! {
+                        _ = cancel_token.cancelled() => break,
+                        received = socket.recv_from(&mut buf) => {
+                            match received {
+                                Ok((len, _peer)) => {
+                                    let ctx_owned = ContextOwned::default();
+                                    let ctx = ctx_owned.context();
+                                    if let Err(status) = runtime.write().process_datagram(&buf[..len], &ctx) {
+                                        tracing::debug!(
+                                            ?status,
+                                            %connection_id,
+                                            "dropped PubSub subscriber UDP datagram"
+                                        );
+                                    }
+                                }
+                                Err(error) => {
+                                    tracing::warn!(
+                                        ?error,
+                                        %connection_id,
+                                        "failed to receive PubSub subscriber UDP datagram"
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }));
+        }
+
+        self.subscriber_cancel_token = Some(cancel_token);
+        self.subscriber_handles = handles;
+        Ok(())
+    }
+
+    /// Stops all subscriber receive loops and waits for them to finish.
+    pub async fn stop_subscribers(&mut self) {
+        if let Some(cancel_token) = self.subscriber_cancel_token.take() {
+            cancel_token.cancel();
+        }
+
+        while let Some(handle) = self.subscriber_handles.pop() {
             let _ = handle.await;
         }
     }
@@ -295,4 +476,42 @@ impl PubSubEngine {
                 .start_publishing(connection, cancel_token),
         }
     }
+
+    fn ensure_subscriber_runtime(&mut self) -> Result<Arc<RwLock<SubscriberRuntime>>, StatusCode> {
+        if let Some(runtime) = &self.subscriber_runtime {
+            return Ok(runtime.clone());
+        }
+
+        let runtime = SubscriberRuntime::with_connections(
+            self.address_space.clone(),
+            self.connections.clone(),
+        )?;
+        let runtime = Arc::new(RwLock::new(runtime));
+        self.subscriber_runtime = Some(runtime.clone());
+        Ok(runtime)
+    }
+}
+
+fn first_effective_security(
+    connection: &PubSubConnectionConfig,
+) -> Option<SubscriberSecurityConfig> {
+    connection
+        .reader_groups
+        .iter()
+        .flat_map(|reader_group| {
+            reader_group
+                .dataset_readers
+                .iter()
+                .filter_map(move |reader| effective_security_config(reader_group, reader))
+        })
+        .next()
+}
+
+fn connection_reader_ids(connection: &PubSubConnectionConfig) -> Vec<u16> {
+    connection
+        .reader_groups
+        .iter()
+        .flat_map(|reader_group| reader_group.dataset_readers.iter())
+        .map(|reader| reader.dataset_reader_id)
+        .collect()
 }

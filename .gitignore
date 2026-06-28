@@ -21,6 +21,11 @@ local/
 
 # Stray runtime logs
 *.log
+.env*
+*.tmp
+*.swp
+.DS_Store
+Thumbs.db
 
 # Prevent recurrence of throwaway developer debris (feature 009 / SEC-P3)
 /fix_*.py

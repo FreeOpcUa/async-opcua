@@ -1,3 +1,4 @@
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::UdpSocket;
@@ -18,6 +19,63 @@ use crate::{
 
 /// Maximum transmission unit for a single UDP packet to avoid IP-level fragmentation.
 const MTU: usize = 1400;
+
+/// Parsed UDP subscriber bind endpoint.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UdpSubscriberEndpoint {
+    /// Socket address used to bind the subscriber.
+    pub bind_addr: SocketAddr,
+    /// Multicast group to join when the target address is multicast.
+    pub multicast_addr: Option<Ipv4Addr>,
+}
+
+impl UdpSubscriberEndpoint {
+    /// Parses an OPC UA PubSub UDP URL such as `udp://239.0.0.1:4840`.
+    pub fn parse(address: &str) -> Result<Self, StatusCode> {
+        let addr = address
+            .trim()
+            .strip_prefix("udp://")
+            .unwrap_or(address.trim());
+        let socket_addr = addr
+            .parse::<SocketAddr>()
+            .map_err(|_| StatusCode::BadInvalidArgument)?;
+
+        match socket_addr.ip() {
+            IpAddr::V4(ip) if ip.is_multicast() => Ok(Self {
+                bind_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), socket_addr.port()),
+                multicast_addr: Some(ip),
+            }),
+            IpAddr::V4(_) => Ok(Self {
+                bind_addr: socket_addr,
+                multicast_addr: None,
+            }),
+            IpAddr::V6(_) => Err(StatusCode::BadNotSupported),
+        }
+    }
+}
+
+/// Binds a UDP socket for subscriber receive.
+pub async fn bind_subscriber_socket(
+    endpoint: UdpSubscriberEndpoint,
+) -> Result<UdpSocket, StatusCode> {
+    let socket = UdpSocket::bind(endpoint.bind_addr)
+        .await
+        .map_err(|_| StatusCode::BadCommunicationError)?;
+
+    if let Some(multicast_addr) = endpoint.multicast_addr {
+        socket
+            .join_multicast_v4(multicast_addr, Ipv4Addr::UNSPECIFIED)
+            .map_err(|_| StatusCode::BadCommunicationError)?;
+    }
+
+    Ok(socket)
+}
+
+/// Returns true for the crate's legacy custom UDP fragmentation header.
+#[must_use]
+pub fn is_custom_fragment_datagram(payload: &[u8]) -> bool {
+    payload.len() >= 7 && (payload[0] & 0x0f) != 1 && (payload[6] & 0x0f) == 1
+}
 
 /// UDP Multicast implementation of `PubSubPublisher` with datagram fragmentation.
 pub struct UdpPublisher {

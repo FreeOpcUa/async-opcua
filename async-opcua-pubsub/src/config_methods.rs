@@ -6,11 +6,12 @@ use opcua_core::sync::{Mutex, RwLock};
 use opcua_server::{address_space::AddressSpace, node_manager::memory::CoreNodeManager};
 use opcua_types::{
     ConfigurationVersionDataType, DataSetReaderDataType, DataSetWriterDataType, ExtensionObject,
-    MethodId, NodeId, PubSubConnectionDataType, PublishedVariableDataType, ReaderGroupDataType,
-    StatusCode, UAString, Variant, WriterGroupDataType,
+    MessageSecurityMode, MethodId, NodeId, PubSubConnectionDataType, PublishedVariableDataType,
+    ReaderGroupDataType, StatusCode, UAString, Variant, WriterGroupDataType,
 };
 
 use crate::{
+    codec::uadp::PublisherId,
     config::{
         DataSetReaderConfig, DataSetWriterConfig, MessageEncoding, PubSubConnectionConfig,
         PublishedDataItemsConfig, PublishedDataSetConfig, ReaderGroupConfig, WriterGroupConfig,
@@ -220,6 +221,9 @@ impl ReaderGroupConfig {
     pub fn from_data_type(value: &ReaderGroupDataType, reader_group_id: u16) -> ReaderGroupConfig {
         ReaderGroupConfig {
             reader_group_id,
+            security_mode: security_mode_option(value.security_mode),
+            security_policy_uri: None,
+            security_group_id: non_empty_ua_string(&value.security_group_id),
             dataset_readers: value
                 .data_set_readers
                 .as_deref()
@@ -244,10 +248,22 @@ impl DataSetReaderConfig {
         dataset_reader_id: u16,
     ) -> DataSetReaderConfig {
         DataSetReaderConfig {
+            name: non_empty_ua_string(&value.name),
             dataset_reader_id,
             dataset_writer_id: value.data_set_writer_id,
-            publisher_id: None,
+            publisher_id: publisher_id_from_variant(&value.publisher_id),
+            writer_group_id: Some(value.writer_group_id),
+            network_message_number: None,
+            message_receive_timeout: duration_from_millis(value.message_receive_timeout),
+            metadata_major_version: Some(
+                value.data_set_meta_data.configuration_version.major_version,
+            ),
+            security_mode: security_mode_option(value.security_mode),
+            security_policy_uri: None,
+            security_group_id: non_empty_ua_string(&value.security_group_id),
+            target_variables: Vec::new(),
             subscribed_variables: Vec::new(),
+            ..DataSetReaderConfig::default()
         }
     }
 }
@@ -988,6 +1004,35 @@ fn decode_u32_array(args: &[Variant], index: usize) -> Vec<u32> {
 
 fn ua_string_to_string(value: &UAString) -> String {
     value.to_string()
+}
+
+fn non_empty_ua_string(value: &UAString) -> Option<String> {
+    let value = ua_string_to_string(value);
+    (!value.is_empty()).then_some(value)
+}
+
+fn security_mode_option(value: MessageSecurityMode) -> Option<MessageSecurityMode> {
+    (value != MessageSecurityMode::Invalid).then_some(value)
+}
+
+fn duration_from_millis(value: f64) -> Option<std::time::Duration> {
+    value
+        .is_finite()
+        .then_some(value)
+        .filter(|millis| *millis > 0.0)
+        .map(|millis| std::time::Duration::from_secs_f64(millis / 1000.0))
+}
+
+fn publisher_id_from_variant(value: &Variant) -> Option<PublisherId> {
+    match value {
+        Variant::Byte(value) => Some(PublisherId::Byte(*value)),
+        Variant::UInt16(value) => Some(PublisherId::UInt16(*value)),
+        Variant::UInt32(value) => Some(PublisherId::UInt32(*value)),
+        Variant::UInt64(value) => Some(PublisherId::UInt64(*value)),
+        Variant::String(value) => Some(PublisherId::String(ua_string_to_string(value))),
+        Variant::Empty => None,
+        _ => None,
+    }
 }
 
 fn empty_published_dataset() -> PublishedDataSetConfig {

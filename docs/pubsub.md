@@ -19,6 +19,7 @@ pub struct PubSubConnectionConfig {
     pub name: String,
     pub address: String, // e.g. "udp://239.0.0.1:4840" or "mqtt://localhost:1883"
     pub writer_groups: Vec<WriterGroupConfig>,
+    pub reader_groups: Vec<ReaderGroupConfig>,
 }
 
 pub struct WriterGroupConfig {
@@ -36,6 +37,23 @@ pub struct DataSetWriterConfig {
 
 pub struct PublishedDataSetConfig {
     pub published_variables: Vec<NodeId>,
+}
+
+pub struct ReaderGroupConfig {
+    pub reader_group_id: u16,
+    pub security_mode: Option<MessageSecurityMode>,
+    pub security_policy_uri: Option<String>,
+    pub security_group_id: Option<String>,
+    pub dataset_readers: Vec<DataSetReaderConfig>,
+}
+
+pub struct DataSetReaderConfig {
+    pub dataset_reader_id: u16,
+    pub dataset_writer_id: u16,
+    pub publisher_id: Option<PublisherId>,
+    pub writer_group_id: Option<u16>,
+    pub network_message_number: Option<u16>,
+    pub target_variables: Vec<FieldTargetConfig>,
 }
 ```
 
@@ -65,6 +83,7 @@ let config = PubSubConnectionConfig {
             },
         }],
     }],
+    reader_groups: Vec::new(),
 };
 
 // 2. Start the PubSub bridge with an OPC UA Server instance
@@ -72,15 +91,61 @@ let server = Arc::new(server_instance);
 let _bridge = async_opcua_pubsub::start_pubsub_bridge(config, server).await.unwrap();
 ```
 
+## 4. Running a UADP Subscriber
+
+The subscriber runtime applies matching UADP key-frame DataSetMessages to configured target Variables. Matching uses the configured PublisherId, WriterGroupId, NetworkMessageNumber, and DataSetWriterId filters; omitted PublisherId/WriterGroupId/NetworkMessageNumber and a DataSetWriterId of `0` act as wildcards.
+
+```rust
+use std::sync::Arc;
+
+use opcua_core::sync::RwLock;
+use opcua_pubsub::{
+    DataSetReaderConfig, FieldTargetConfig, PubSubConnectionConfig, ReaderGroupConfig,
+    SubscriberRuntime,
+};
+use opcua_server::address_space::AddressSpace;
+use opcua_types::{ContextOwned, NodeId};
+
+let address_space = Arc::new(RwLock::new(AddressSpace::new()));
+let target = NodeId::new(2, "TemperatureTarget");
+
+let config = PubSubConnectionConfig {
+    connection_id: "subscriber-1".to_string(),
+    name: "LineSubscriber".to_string(),
+    address: "udp://239.0.0.1:4840".to_string(),
+    writer_groups: Vec::new(),
+    reader_groups: vec![ReaderGroupConfig {
+        reader_group_id: 1,
+        dataset_readers: vec![DataSetReaderConfig {
+            dataset_reader_id: 1,
+            dataset_writer_id: 10,
+            target_variables: vec![FieldTargetConfig::value(0, target)],
+            ..DataSetReaderConfig::default()
+        }],
+        ..ReaderGroupConfig::default()
+    }],
+};
+
+let mut runtime = SubscriberRuntime::with_connections(address_space, vec![config])?;
+let ctx_owned = ContextOwned::default();
+let ctx = ctx_owned.context();
+runtime.process_datagram(&udp_payload, &ctx)?;
+let status = runtime.reader_status(1);
+```
+
 ## Limitations and experimental features
 
-- **Publisher only**: there is no subscriber/reader side yet, beyond decoding
-  secured UADP messages for registered security groups.
+- **Subscriber scope**: the reader side supports brokerless UDP UADP key-frame
+  DataSetMessages with Variant/DataValue-compatible fields and Value-attribute
+  target writes. JSON mapping, broker transports, RawData payloads, delta frames,
+  event DataSetMessages, non-Value target attributes, index ranges, and the
+  crate's legacy publisher fragmentation header are rejected with
+  `BadNotSupported`.
 - **Message security**: secured UADP NetworkMessages use the OPC UA Part 14
   SecurityHeader, SecurityTokenId, MessageNonce, AES-CTR payload encryption,
-  HMAC-SHA256 signing, and subscriber anti-replay checks. The remaining
-  verification gap is live third-party interop against an external PubSub CTR
-  implementation in CI.
+  HMAC-SHA256 signing, and subscriber anti-replay checks before target Variables
+  are updated. Secure subscriber processing requires a registered
+  `SecurityGroup` and matching ReaderGroup/DataSetReader security settings.
 - **TSN is a simulated stub**: the `tsn://` transport is gated behind the
   off-by-default `tsn` feature of `async-opcua-pubsub`. Its AF_XDP socket is
   a simulated loopback and scheduling shells out to `tc taprio`; it has not

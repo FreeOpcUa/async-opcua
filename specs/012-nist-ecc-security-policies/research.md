@@ -141,6 +141,15 @@ lengths are fixed by the algorithms themselves (HMAC-SHA256/384 output = 32/48; 
     connects our client to an external ECC server given `OPCUA_ECC_INTEROP_URL` (+ optional
     `OPCUA_ECC_INTEROP_POLICY`), so a real interop run is one command away when a peer is available:
     `OPCUA_ECC_INTEROP_URL=opc.tcp://host:port cargo test -p async-opcua --features ecc -- --ignored ecc_interop`.
+  - **T025 refresh (2026-06-28):** end-to-end third-party ECC interop is still **UNVALIDATED** in
+    this workspace because no ECC-capable peer is available to run. Probe results: `open62541`,
+    `ua_server`, `dotnet`, and `podman` are absent from `PATH`; Docker is available (`29.6.0`) but
+    there is no local open62541/OPC UA/.NET reference image; no `OPCUA_ECC_INTEROP_*` environment
+    endpoint is configured. The existing `samples/demo-server/interop/open62541` and `dotnet`
+    harnesses drive the async-opcua demo server with third-party clients and are not an ECC
+    client↔reference-server plus reference-client↔our-server pair for `ECC_nistP256`/`ECC_nistP384`.
+    Therefore SC-007 is closed via its documented-gap path, not by claiming wire interop. Correctness
+    remains anchored by Part 6 §6.8.1, RFC/NIST vectors, loopback tests, negative tests, and T024 fuzzing.
 - All former `[verify-on-impl]` crypto items are now CLOSED — pinned from Part 6 §6.8 (verbatim) and
   cross-confirmed against UA-.NETStandard source (signature P1363, ephemeral X‖Y, raw-x IKM, URIs).
   The **only** residual risk is end-to-end **interop validation** (SC-007): loopback + vectors prove

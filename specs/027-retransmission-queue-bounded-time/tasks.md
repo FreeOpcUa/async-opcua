@@ -25,7 +25,7 @@
 ## Phase 4: Polish & merge
 
 - [X] T006 [claude-test] Run `cargo test -p async-opcua-server` (still green = SC-003), the three clippy legs (`--all-features`, `--no-default-features` core crates, json-off) under `-D warnings`, and `cargo fmt --check`.
-- [ ] T007 Push branch, open PR to `occamsshavingkit/async-opcua`, merge when CI green; sync master.
+- [X] T007 Push branch, open PR to `occamsshavingkit/async-opcua`, merge when CI green; sync master. Completed via PR #220.
 
 ## Dependencies & order
 T001 → T002 → T003 (same files, sequential) → T004/T005 → T006 → T007. MVP = T002+T003 (sub-quadratic, behavior-identical); T004/T005 prove it.

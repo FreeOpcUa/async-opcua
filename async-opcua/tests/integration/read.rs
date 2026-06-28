@@ -25,21 +25,27 @@ use opcua_client::{services::Read, DefaultRetryPolicy, ExponentialBackoff, UAReq
 async fn read() {
     let (tester, _nm, session) = setup().await;
 
-    // Read the service level
+    // Read the service level, plus the ServerArray, which must contain this
+    // server's application URI at index 0 (OPC UA Part 5, 6.3.1).
     tester.handle.set_service_level(123);
     let r = session
         .read(
-            &[read_value_id(
-                AttributeId::Value,
-                VariableId::Server_ServiceLevel,
-            )],
+            &[
+                read_value_id(AttributeId::Value, VariableId::Server_ServiceLevel),
+                read_value_id(AttributeId::Value, VariableId::Server_ServerArray),
+            ],
             TimestampsToReturn::Both,
             0.0,
         )
         .await
         .unwrap();
-    assert_eq!(1, r.len());
-    assert_eq!(&Variant::Byte(123), r[0].value.as_ref().unwrap())
+    assert_eq!(2, r.len());
+    assert_eq!(&Variant::Byte(123), r[0].value.as_ref().unwrap());
+    assert_eq!(Some(StatusCode::Good), r[1].status);
+    assert_eq!(
+        array_value(&r[1]),
+        &vec![Variant::String("urn:integration_server".into())]
+    );
 }
 
 #[tokio::test]

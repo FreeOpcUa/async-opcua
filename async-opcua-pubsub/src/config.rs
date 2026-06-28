@@ -329,7 +329,7 @@ impl DataSetReaderConfig {
 }
 
 /// Groups configured DataSetReaders for inbound PubSub traffic.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ReaderGroupConfig {
     /// Unique identifier for the reader group.
     pub reader_group_id: u16,
@@ -348,18 +348,6 @@ pub struct ReaderGroupConfig {
     pub security_group_id: Option<String>,
     /// List of dataset readers in this reader group.
     pub dataset_readers: Vec<DataSetReaderConfig>,
-}
-
-impl Default for ReaderGroupConfig {
-    fn default() -> Self {
-        Self {
-            reader_group_id: 0,
-            security_mode: None,
-            security_policy_uri: None,
-            security_group_id: None,
-            dataset_readers: Vec::new(),
-        }
-    }
 }
 
 /// Represents dataset publishing structures.

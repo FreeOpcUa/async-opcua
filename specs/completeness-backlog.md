@@ -46,7 +46,8 @@ _Last refreshed 2026-06-27 (after RBAC #031 + HistoryUpdate #032)._
   cargo-deny-clean). RegisterServer2 mDNS discovery configurations now advertise registered servers when
   the feature is compiled and multicast discovery is opted in. The "new dep" concern was vetted, not a
   blocker. Memory `feature-036-mdns-discovery`.
-- OCSP revocation — needs OCSP responder/online infra (CRL chain validation done, PR #40).
+- OCSP revocation — the core validator accepts supplied/stapled OCSP responses; remaining work is live
+  OCSP fetching/responder infrastructure if an online-revocation deployment needs it.
 - Nano/Micro/Embedded conformance-profile builds — feature alias + minimal example; the default node
   managers assume the core address space (memory `todo-embedded-profiles`).
 

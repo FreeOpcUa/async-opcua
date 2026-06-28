@@ -135,9 +135,8 @@ references indexed `by_source`/`by_target`; node lookup is `HashMap` (O(1)).
   which are feature-gated. They are always compiled, forcing AMQP/MQTT/WebSocket + libsqlite3-sys onto
   every async-opcua user. **Fix:** `optional = true` + `pubsub`/`history` features. Cut = 2 always-on
   subsystems + their transitive deps from default builds.
-- **`delete`** — `async-opcua-safety/src/cli.rs` (135 lines): a CLI module inside the safety *library*
-  crate (`pub mod cli`), wired to no `[[bin]]`, nothing runs it. The crate's `Spdu`/`SafetyValidator`
-  ARE used (server `node_access.rs`); only the `cli` submodule is dead. Delete it + the `pub mod cli`.
+- **DONE — `delete`** — the dead `async-opcua-safety/src/cli.rs` library submodule and its sole-use
+  `clap`/`hex` dependencies are gone; the live `Spdu`/`SafetyValidator` API remains.
 - **Scope (not a code cut)** — breadth question: PubSub (3 transports), GDS push+pull, FOTA, programs
   engine, OAuth2, Safety/SPDU were added to tick OPC UA facets. Whether the deployment needs each is a
   product call. Real signal to gather: which of these subsystems have zero tests/callers.

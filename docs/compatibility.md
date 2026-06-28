@@ -19,10 +19,13 @@ The following services are supported in the server:
 
 * Discovery service set
   * GetEndpoints
-  * FindServers - stub that only ever returns the current server URI.
-  * FindServersOnNetwork - stub that returns BadServiceUnsupported
-  * RegisterServer - stub that returns BadServiceUnsupported
-  * RegisterServer2 - stub that returns BadServiceUnsupported
+  * FindServers - returns the current server and online servers registered with the in-process LDS registry.
+  * FindServersOnNetwork - supported from the in-process registry; mDNS LDS-ME discovery is available behind the
+    off-by-default `discovery-mdns` feature and multicast-discovery configuration.
+  * RegisterServer
+  * RegisterServer2 - supports registration; mDNS discovery configurations are honored when `discovery-mdns`
+    is compiled and multicast discovery is enabled, otherwise those per-configuration results return
+    `BadNotSupported`.
 
 * SecureChannel service set
   * OpenSecureChannel
@@ -47,8 +50,8 @@ The following services are supported in the server:
   * DeleteReferences
   
 * Query service set
-  * QueryFirst - not implemented in any node manager, but the framework exists.
-  * QueryNext - not implemented in any node manager, but the framework exists.
+  * QueryFirst
+  * QueryNext
 
 * View service set
   * Browse

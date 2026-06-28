@@ -35,13 +35,13 @@ not base-profile violations — flagged as such.
 
 ---
 
-## Tier 1 — Security / PKI conformance (highest value, CONFIRMED real)
+## Tier 1 — Security / PKI conformance
 
 | # | Gap | Spec | Confirmed? | Notes |
 |---|-----|------|-----------|-------|
-| 1 | **Certificate validation is trust-list (leaf-pinning) only** — no CA **chain** walk, no **CRL/OCSP revocation**, no **KeyUsage**/BasicConstraints check (`certificate_store.rs`, `x509.rs`). | Part 2 §6.1.3, Part 4 §6.1.3 | ✅ verified | Leaf-pinning IS a valid, secure model for closed deployments; this is about supporting the **full PKI/CA + revocation** model the spec defines. Cohesive subsystem. **Best first feature.** |
-| 2 | **Session-activation hardening TODOs** — endpoint-URL not checked against server-cert hostname (`manager.rs:213`); client-cert / user-token not bound to the secure channel (`manager.rs:593`). | Part 4 §5.6, §6.1.3 | ✅ TODOs in code | Real, security-relevant (confused-deputy / token reuse). Small, targeted. |
-| 3 | **ECC-encrypted identity-token secrets** — secret encryption supports RSA only; no ECC path now that ECC policies exist. | Part 4 §7.41.2.3 | ✅ | Natural follow-on to the ECC work; medium. |
+| 1 | ✅ **DONE (feature 013 + later OCSP work)** — certificate validation builds/verifies CA chains, enforces usage and security-policy checks, validates CRLs, and validates supplied/stapled OCSP responses. | Part 2 §6.1.3, Part 4 §6.1.3 | ✅ verified | Remaining scope is operational/live OCSP fetching or responder infrastructure, not the core validation engine. |
+| 2 | ✅ **DONE (feature 014)** — ActivateSession binds the client certificate to the secure channel and endpoint-host behavior is locked by regression tests. | Part 4 §5.6, §6.1.3 | ✅ verified | Deferred only: stricter same-channel re-activation policy and any client-side ergonomics. |
+| 3 | ✅ **DONE (feature 016)** — ECC `EccEncryptedSecret` identity-token secrets are supported for username/issued-token paths. | Part 4 §7.40.2.5 / Part 6 §6.8.3 | ✅ verified | Remaining optional variants: RSA-DH / authenticated-encryption forms if a target profile requires them. |
 
 ## Tier 2 — Encoding / Part 6 edge conformance (medium; binary-vector testable)
 
@@ -58,17 +58,17 @@ not base-profile violations — flagged as such.
 | 6 | ✅ **DONE (feature 022)** — **Writable address space / Node Management**: the in-memory node manager now implements AddNodes/DeleteNodes/AddReferences/DeleteReferences (Object+Variable node classes), gated by the new opt-in `clients_can_modify_address_space` config flag (default OFF = read-only, unchanged). Part 4 §5.7 status codes; additive (CoreNodeManager/overrides untouched). Deferred: GeneralModelChangeEventType emission, persistence, full 9-node-class AddNodes, server-assigned (null) ids on the default (use `handle_new_node` to opt in). | NodeManagement | Opt-in per node manager. |
 | 7 | ✅ **DONE (feature 023)** — **Query**: the prior "CoreNodeManager doesn't implement Query" was STALE — `InMemoryNodeManager::query` → QueryFirst/QueryNext handlers, used by CoreNodeManager, already work (verified: 67 FolderType nodes, pagination w/o loss, continuation release). The real gap was the missing CLIENT API, now added (`Session::query_first`/`query_next`) with first end-to-end coverage. Confirmed: non-default `view` → `BadViewIdUnknown`. | Query | Client API + e2e tests; server already worked. |
 | 8 | ✅ **DONE (features 024 + 036)** — **RegisterServer / RegisterServer2**: implemented with a bounded in-memory LDS registry on ServerInfo; FindServers returns registered (online) servers; RegisterServer2 mDNS discovery configurations are honored when `discovery-mdns` is compiled and multicast discovery is opted in, otherwise the per-config result remains `BadNotSupported` while registration still succeeds. **FindServersOnNetwork / LDS-ME mDNS**: implemented behind the off-by-default `discovery-mdns` feature, merging pull-based registrations with multicast-discovered servers and capability filtering discovered records. | LDS registration + LDS-ME multicast | Done; mDNS remains opt-in and dependency-gated. |
-| 9 | ✅ **Method Call DONE (feature 021)**; **Audit events DEFERRED** — the security-critical audit events already fire (`AuditActivateSessionEventType` on auth/activation failures, `AuditSecurityEventType` on service/response failures). The rest of the `Audit*EventType` hierarchy (certificate/write/node-management/method/success events) is **non-mandatory** (only required if the server claims the Auditing facet) — documented gap, not implemented. | Methods / Auditing | Methods done; full audit hierarchy non-mandatory, deferred. |
+| 9 | ✅ **Method Call DONE (feature 021)**; ✅ **Audit hierarchy DONE** — typed method callbacks are implemented and the Audit*EventType hierarchy now covers certificate/session/channel/cancel/write/method/node-management paths. | Methods / Auditing | Complete for the implemented service surface; exact CTT auditing claims still depend on the server profile being asserted. |
 
 ---
 
 ## Recommendation
-- **First speckit feature: Tier 1 #1 — Certificate-validation conformance** (CA chain + CRL revocation +
-  KeyUsage). Highest security × conformance value, cohesive (`certificate_store.rs` / `x509.rs`), and
-  testable with crafted cert chains/CRLs. Pairs naturally with #2 (session-activation hardening).
-- **If you want a small warm-up:** Tier 2 #4 (NumericRange) — tiny, clean, vector-testable.
-- **Before/instead of more prose-mining:** get demo-server in front of the **CTT**; it will produce a
-  harder, behavior-driven defect list than this scan.
+- Treat the original prose-scanned conformance gaps above as mostly closed; the current highest-value
+  conformance work is to run the demo server against the OPC Foundation **CTT** and promote behavioral
+  failures into focused Spec Kit features.
+- Existing live follow-ups are narrower: reliable notification-delivery edge tests (feature 029),
+  embedded-profile build aliases/example, live third-party PubSub CTR interop, and operational OCSP
+  fetching/responder infrastructure if a deployment requires online revocation.
 
 Each item → one speckit feature, ECC-style: extract the normative SHALL/MUST → check impl → fix →
 independent tests anchored to spec text / official vectors / crafted PKI fixtures.

@@ -114,8 +114,8 @@ treat them as defects:
 | UACTT area | Expected behavior | StatusCode | Why |
 |------------|-------------------|------------|-----|
 | **NodeManagement** (AddNodes / AddReferences / DeleteNodes / DeleteReferences) | Not supported | `Bad_ServiceUnsupported` | The CoreNodeManager address space is read-only by design (`clients_can_modify_address_space: false`); writability is an opt-in per node manager. |
-| **Query** (QueryFirst / QueryNext) over the core address space | Service exists, but the standard address space is not queryable; a non-default `view` is rejected | `Bad_ViewIdUnknown` (and effectively unimplemented for CoreNodeManager) | The Query service framework is present; CoreNodeManager does not implement `QueryProvider`. |
-| **Discovery / LDS registration** (FindServersOnNetwork / RegisterServer / RegisterServer2) | Not supported | `Bad_ServiceUnsupported` | LDS registration is not required by base/embedded; only needed for LDS integration. |
+| **Query** (QueryFirst / QueryNext) with a non-default `view` | Rejected | `Bad_ViewIdUnknown` | Default-view Query over the in-memory/core address space is implemented; alternate views are not. |
+| **Discovery / LDS-ME multicast** (FindServersOnNetwork mDNS records) | Conditional | varies | RegisterServer/RegisterServer2 and pull-based FindServersOnNetwork are implemented. Multicast LDS-ME records require the off-by-default `discovery-mdns` feature and multicast discovery configuration. |
 | **Method Call** on core methods; **Audit events** (Part 4 §5.6) | Partial | varies | Non-mandatory; low priority. The demo server defines its own methods (see `methods.rs`) which the UACTT *can* call. |
 
 Everything outside this table (Security, SecureChannel/Session, Read/Write,

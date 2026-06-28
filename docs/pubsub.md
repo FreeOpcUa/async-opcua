@@ -76,11 +76,11 @@ let _bridge = async_opcua_pubsub::start_pubsub_bridge(config, server).await.unwr
 
 - **Publisher only**: there is no subscriber/reader side yet, beyond decoding
   secured UADP messages for registered security groups.
-- **Message security is non-interoperable**: the security envelope used by
-  this implementation (`OPCUAPS1`) is a proprietary format, not the UADP
-  SecurityHeader defined in OPC UA Part 14. Messages signed or encrypted by
-  this stack cannot be consumed by other PubSub implementations. Treat PubSub
-  security as experimental until the spec header is implemented.
+- **Message security**: secured UADP NetworkMessages use the OPC UA Part 14
+  SecurityHeader, SecurityTokenId, MessageNonce, AES-CTR payload encryption,
+  HMAC-SHA256 signing, and subscriber anti-replay checks. The remaining
+  verification gap is live third-party interop against an external PubSub CTR
+  implementation in CI.
 - **TSN is a simulated stub**: the `tsn://` transport is gated behind the
   off-by-default `tsn` feature of `async-opcua-pubsub`. Its AF_XDP socket is
   a simulated loopback and scheduling shells out to `tc taprio`; it has not

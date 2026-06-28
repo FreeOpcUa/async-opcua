@@ -232,9 +232,10 @@ Configuration:
 * `check_time(false)` (server) / `verify_server_certs(false)` (client) suppress the validity-period
   step as before; `trust_client_certs` / `trust_server_certs` still auto-trust an unknown peer cert.
 
-Pure-Rust only (no OpenSSL/C): chain and CRL handling are built on `x509-cert` plus the in-tree RSA
-and ECDSA verifiers. OCSP and typed `AuditCertificate*` events are not yet implemented (suppressed
-non-critical findings are currently reported via the log).
+Pure-Rust only (no OpenSSL/C): chain, CRL, and supplied/stapled OCSP handling are built on `x509-cert`,
+`x509-ocsp`, and the in-tree RSA and ECDSA verifiers. The `CertificateStore` does not perform live OCSP
+fetching; it validates OCSP responses only when supplied to the chain-validation context. Certificate
+validation failures emit the matching `AuditCertificate*` event subtype where the server has audit context.
 
 ### X509 Fields
 

@@ -1,9 +1,9 @@
 # Tasks: Delete the Dead async-opcua-safety CLI Module
 
-- [ ] T001 Confirm baseline: `cargo test -p async-opcua-safety` green on current code.
-- [ ] T002 Delete `async-opcua-safety/src/cli.rs`; remove `pub mod cli;` from `async-opcua-safety/src/lib.rs`.
-- [ ] T003 Remove the `clap` and `hex` dependencies from `async-opcua-safety/Cargo.toml` (sole-use by cli.rs, verified).
-- [ ] T004 Verify: `cargo test -p async-opcua-safety` green; `cargo tree -p async-opcua-safety` no longer lists clap/hex; workspace `cargo clippy --all-targets --all-features -- -D warnings` clean; `cargo fmt --check`.
+- [X] T001 Confirm baseline: `cargo test -p async-opcua-safety` green on current code.
+- [X] T002 Delete `async-opcua-safety/src/cli.rs`; remove `pub mod cli;` from `async-opcua-safety/src/lib.rs`.
+- [X] T003 Remove the `clap` and `hex` dependencies from `async-opcua-safety/Cargo.toml` (sole-use by cli.rs, verified).
+- [X] T004 Verify: `cargo test -p async-opcua-safety` green; `cargo tree -p async-opcua-safety` no longer lists clap/hex; workspace `cargo clippy --all-targets --all-features -- -D warnings` clean; `cargo fmt --check`.
 - [ ] T005 Commit, push, PR to fork, merge when CI green; sync master.
 
 ## Analyze

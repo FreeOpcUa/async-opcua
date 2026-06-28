@@ -59,7 +59,7 @@ discards sequence_number.
   the documented behavior changes (required OAuth2 issuer config; any pubsub-IV wire impact), the
   black-channel-CRC clarification, AND the REJECTED US1-cert findings (why they were false positives) +
   the two open verify items (cert pathlen, trust_unknown_certs sig path).
-- [ ] T014 Final gate: fmt + clippy --all-targets --all-features + no-default/json-off legs + touched-
+- [X] T014 Final gate: fmt + clippy --all-targets --all-features + no-default/json-off legs + touched-
   crate tests single-threaded + existing-suite spot-check.
 
 ## Notes

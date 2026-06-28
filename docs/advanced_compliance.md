@@ -8,7 +8,7 @@ This page documents the server service surface added for advanced OPC UA complia
 | --- | --- | --- | --- |
 | PubSub key distribution | `GetSecurityKeys` | `async-opcua-server/src/services/security.rs` | Returns current and future security keys for a registered PubSub security group. |
 | Event filtering | `CreateMonitoredItems` with `EventFilter` | `async-opcua-server/src/services/subscription/` | Applies `SelectClauses` and `WhereClause` predicates before event notification. |
-| Encrypted credentials | `ActivateSession` | `async-opcua-server/src/session/negotiate.rs` | Decrypts RSA-OAEP encrypted identity-token secrets and tarpits failed validation. |
+| Encrypted credentials | `ActivateSession` | `async-opcua-server/src/session/negotiate.rs` | Decrypts legacy RSA, RSA-OAEP, and ECC `EccEncryptedSecret` identity-token secrets and tarpits failed validation. |
 | Graph queries | `QueryFirst`, `QueryNext` | `async-opcua-server/src/services/query/` | Filters address-space nodes by type, properties, and related-node joins with pagination. |
 
 ## PubSub `GetSecurityKeys`
@@ -76,13 +76,16 @@ Field access is validated against the event type tree. Unauthorized selected fie
 
 ## `ActivateSession` Encrypted Secrets
 
-`ActivateSession` accepts identity-token secrets encrypted with standard RSA-OAEP algorithms. This extends the existing service; it is not a separate OPC UA endpoint.
+`ActivateSession` accepts identity-token secrets encrypted with legacy RSA, standard RSA-OAEP, and ECC
+`EccEncryptedSecret` algorithms. This extends the existing service; it is not a separate OPC UA endpoint.
 
 Handling rules:
 
 - An empty encryption algorithm keeps the secret as raw bytes.
 - Legacy OPC UA encrypted secrets are still handled by the legacy decrypt path.
 - RSA-OAEP encrypted secrets are accepted when the algorithm URI matches the asymmetric encryption algorithm for `Basic256Sha256`, `Aes128Sha256RsaOaep`, or `Aes256Sha256RsaPss`.
+- ECC encrypted secrets are accepted as Part 4 `EccEncryptedSecret` envelopes under ECC security
+  policies, bound to the session server nonce and consumed server ephemeral key.
 - Deprecated secure-channel policies return `BadSecurityPolicyRejected` unless legacy crypto is explicitly enabled.
 - Failed encrypted identity-token validation waits 100 ms with `tokio::time::sleep` and then returns `BadUserAccessDenied`.
 

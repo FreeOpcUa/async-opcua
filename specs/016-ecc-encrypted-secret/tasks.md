@@ -59,7 +59,7 @@ verify padding → check Nonce==current server nonce → extract. Reuse `ecdh_sh
   build + parse the Table 186 layout (ExtensionObject TypeId/EncodingMask=1/Length prefix, common header,
   unencrypted KeyData, encrypted-payload blob boundary, trailing Signature). Bound every
   attacker-influenced length before allocating; parse is panic-free and fail-closed. (codex; depends T003)
-- [ ] T006 Envelope asymmetric signing in `ecc.rs`: compute the ECDSA Signature over the
+- [X] T006 Envelope asymmetric signing in `ecc.rs`: compute the ECDSA Signature over the
   data-to-sign (all bytes preceding the Signature, per Figure 39) with `asymmetric_sign`, and verify it
   with `asymmetric_verify_signature` against a signer cert — used by encrypt/decrypt. (codex; depends T005)
 

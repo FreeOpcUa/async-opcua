@@ -220,6 +220,22 @@ fn serialize_status_code() {
 }
 
 #[test]
+fn json_int64_encodes_as_decimal_string() {
+    // OPC-10000-6 5.4.2.3: Int64 JSON values are encoded as decimal strings.
+    let value = to_value(&-9_007_199_254_740_993i64).unwrap();
+
+    assert_eq!(value, json!("-9007199254740993"));
+}
+
+#[test]
+fn json_uint64_encodes_as_decimal_string() {
+    // OPC-10000-6 5.4.2.3: UInt64 JSON values are encoded as decimal strings.
+    let value = to_value(&18_446_744_073_709_551_615u64).unwrap();
+
+    assert_eq!(value, json!("18446744073709551615"));
+}
+
+#[test]
 fn serialize_extension_object() {
     let v = ExtensionObject::null();
     let json = to_value(&v).unwrap();
@@ -313,40 +329,52 @@ fn serialize_variant_empty() {
     // Empty (0)
     test_ser_de_variant(Variant::Empty, json!(null));
     test_json_to_variant(json!(null), Variant::Empty);
-    test_json_to_variant(json!({"Type": 0}), Variant::Empty);
-    test_json_to_variant(json!({"Type": 0, "Body": null}), Variant::Empty);
+    test_json_to_variant(json!({"UaType": 0}), Variant::Empty);
+    test_json_to_variant(json!({"UaType": 0, "Body": null}), Variant::Empty);
+}
+
+#[test]
+fn json_variant_uses_uatype_and_body_fields() {
+    // OPC-10000-6 5.4.2.17: Variant JSON uses the UaType discriminator and Body payload fields.
+    let value = to_value(&Variant::Double(1.25)).unwrap();
+
+    assert_eq!(value, json!({"UaType": 11, "Body": 1.25}));
+    assert!(value.get("Type").is_none());
 }
 
 #[test]
 fn serialize_variant_boolean() {
     // Boolean
-    test_ser_de_variant(Variant::Boolean(true), json!({"Type": 1, "Body": true}));
-    test_ser_de_variant(Variant::Boolean(false), json!({"Type": 1, "Body": false}));
+    test_ser_de_variant(Variant::Boolean(true), json!({"UaType": 1, "Body": true}));
+    test_ser_de_variant(Variant::Boolean(false), json!({"UaType": 1, "Body": false}));
 }
 
 #[test]
 fn serialize_variant_numeric() {
     // 8, 16 and 32-bit numerics. Missing body should be treated as the default
     // numeric value, i.e. 0
-    test_ser_de_variant(Variant::SByte(-1), json!({"Type": 2, "Body": -1}));
-    test_json_to_variant(json!({"Type": 2}), Variant::SByte(0));
-    test_ser_de_variant(Variant::Byte(1), json!({"Type": 3, "Body": 1}));
-    test_json_to_variant(json!({"Type": 3}), Variant::Byte(0));
-    test_ser_de_variant(Variant::Int16(-2), json!({"Type": 4, "Body": -2}));
-    test_json_to_variant(json!({"Type": 4}), Variant::Int16(0));
-    test_ser_de_variant(Variant::UInt16(2), json!({"Type": 5, "Body": 2}));
-    test_json_to_variant(json!({"Type": 5}), Variant::UInt16(0));
-    test_ser_de_variant(Variant::Int32(-3), json!({"Type": 6, "Body": -3}));
-    test_json_to_variant(json!({"Type": 6}), Variant::Int32(0));
-    test_ser_de_variant(Variant::UInt32(3), json!({"Type": 7, "Body": 3}));
-    test_json_to_variant(json!({"Type": 7}), Variant::UInt32(0));
+    test_ser_de_variant(Variant::SByte(-1), json!({"UaType": 2, "Body": -1}));
+    test_json_to_variant(json!({"UaType": 2}), Variant::SByte(0));
+    test_ser_de_variant(Variant::Byte(1), json!({"UaType": 3, "Body": 1}));
+    test_json_to_variant(json!({"UaType": 3}), Variant::Byte(0));
+    test_ser_de_variant(Variant::Int16(-2), json!({"UaType": 4, "Body": -2}));
+    test_json_to_variant(json!({"UaType": 4}), Variant::Int16(0));
+    test_ser_de_variant(Variant::UInt16(2), json!({"UaType": 5, "Body": 2}));
+    test_json_to_variant(json!({"UaType": 5}), Variant::UInt16(0));
+    test_ser_de_variant(Variant::Int32(-3), json!({"UaType": 6, "Body": -3}));
+    test_json_to_variant(json!({"UaType": 6}), Variant::Int32(0));
+    test_ser_de_variant(Variant::UInt32(3), json!({"UaType": 7, "Body": 3}));
+    test_json_to_variant(json!({"UaType": 7}), Variant::UInt32(0));
 
     // Int64 & UInt64 are encoded as strings. Missing body should be treated as the default
     // numeric value, i.e. 0
-    test_ser_de_variant(Variant::Int64(-1i64), json!({"Type": 8, "Body": -1}));
-    test_json_to_variant(json!({"Type": 8}), Variant::Int64(0));
-    test_ser_de_variant(Variant::UInt64(1000u64), json!({"Type": 9, "Body": 1000}));
-    test_json_to_variant(json!({"Type": 9}), Variant::UInt64(0));
+    test_ser_de_variant(Variant::Int64(-1i64), json!({"UaType": 8, "Body": "-1"}));
+    test_json_to_variant(json!({"UaType": 8}), Variant::Int64(0));
+    test_ser_de_variant(
+        Variant::UInt64(1000u64),
+        json!({"UaType": 9, "Body": "1000"}),
+    );
+    test_json_to_variant(json!({"UaType": 9}), Variant::UInt64(0));
 }
 
 #[test]
@@ -359,18 +387,18 @@ fn serialize_variant_float() {
     let f32_val = 123.456f32;
     let variant = Variant::Float(f32_val);
     let value = to_value(&variant).unwrap();
-    assert_eq!(*value.get("Type").unwrap(), json!(10));
+    assert_eq!(*value.get("UaType").unwrap(), json!(10));
     let body = value.get("Body").unwrap();
     assert_eq!(body.as_f64().unwrap() as f32, f32_val);
 
     // Test for NaN
     let v = to_value(&Variant::Float(f32::NAN)).unwrap();
-    let json = json!({"Type": 10, "Body": "NaN"});
+    let json = json!({"UaType": 10, "Body": "NaN"});
     assert_eq!(v, json);
 
     // This test is a bit different because assert_eq won't work since comparing NaN to itself always yields
     // false so impossible to use assert_eq!().
-    let value = from_value::<Variant>(json!({"Type": 10, "Body": "NaN"})).unwrap();
+    let value = from_value::<Variant>(json!({"UaType": 10, "Body": "NaN"})).unwrap();
     if let Variant::Float(v) = value {
         assert!(v.is_nan())
     } else {
@@ -380,11 +408,11 @@ fn serialize_variant_float() {
     // Tests for Infinity
     test_ser_de_variant(
         Variant::Float(f32::INFINITY),
-        json!({"Type": 10, "Body": "Infinity"}),
+        json!({"UaType": 10, "Body": "Infinity"}),
     );
     test_ser_de_variant(
         Variant::Float(f32::NEG_INFINITY),
-        json!({"Type": 10, "Body": "-Infinity"}),
+        json!({"UaType": 10, "Body": "-Infinity"}),
     );
 }
 
@@ -393,17 +421,17 @@ fn serialize_variant_double() {
     // Double
     test_ser_de_variant(
         Variant::Double(-451.001),
-        json!({"Type": 11, "Body": -451.001}),
+        json!({"UaType": 11, "Body": -451.001}),
     );
-    test_json_to_variant(json!({"Type": 11}), Variant::Double(0.0));
+    test_json_to_variant(json!({"UaType": 11}), Variant::Double(0.0));
 
     let v = to_value(&Variant::Double(f64::NAN)).unwrap();
-    let json = json!({"Type": 11, "Body": "NaN"});
+    let json = json!({"UaType": 11, "Body": "NaN"});
     assert_eq!(v, json);
 
     // This test is a bit different because assert_eq won't work since comparing NaN to itself always yields
     // false so impossible to use assert_eq!().
-    let value = from_value::<Variant>(json!({"Type": 11, "Body": "NaN"})).unwrap();
+    let value = from_value::<Variant>(json!({"UaType": 11, "Body": "NaN"})).unwrap();
     if let Variant::Double(v) = value {
         assert!(v.is_nan())
     } else {
@@ -413,11 +441,11 @@ fn serialize_variant_double() {
     // Tests for Infinity
     test_ser_de_variant(
         Variant::Double(f64::INFINITY),
-        json!({"Type": 11, "Body": "Infinity"}),
+        json!({"UaType": 11, "Body": "Infinity"}),
     );
     test_ser_de_variant(
         Variant::Double(f64::NEG_INFINITY),
-        json!({"Type": 11, "Body": "-Infinity"}),
+        json!({"UaType": 11, "Body": "-Infinity"}),
     );
 }
 
@@ -426,15 +454,15 @@ fn serialize_variant_string() {
     // String (12)
     test_ser_de_variant(
         Variant::String(UAString::from("Hello")),
-        json!({"Type": 12, "Body": "Hello"}),
+        json!({"UaType": 12, "Body": "Hello"}),
     );
     test_ser_de_variant(
         Variant::String(UAString::null()),
-        json!({"Type": 12, "Body": null}),
+        json!({"UaType": 12, "Body": null}),
     );
-    test_json_to_variant(json!({"Type": 12}), Variant::String(UAString::null()));
+    test_json_to_variant(json!({"UaType": 12}), Variant::String(UAString::null()));
     test_json_to_variant(
-        json!({"Type": 12, "Body": null}),
+        json!({"UaType": 12, "Body": null}),
         Variant::String(UAString::null()),
     );
 }
@@ -447,7 +475,7 @@ fn serialize_variant_datetime() {
         json!({
             // Feature 019: JSON DateTime now emits minimal lossless fractional digits (AutoSi),
             // so a whole-second value has no `.000` suffix (valid ISO 8601, §5.4.2.6).
-            "Type": 13, "Body": "2000-01-01T00:00:00Z"
+            "UaType": 13, "Body": "2000-01-01T00:00:00Z"
         }),
     );
 }
@@ -458,11 +486,11 @@ fn serialize_variant_guid() {
     let guid = Guid::new();
     test_ser_de_variant(
         Variant::Guid(Box::new(guid.clone())),
-        json!({"Type": 14, "Body": guid.to_string()}),
+        json!({"UaType": 14, "Body": guid.to_string()}),
     );
     test_ser_de_variant(
         Variant::Guid(Box::default()),
-        json!({"Type": 14, "Body": "00000000-0000-0000-0000-000000000000"}),
+        json!({"UaType": 14, "Body": "00000000-0000-0000-0000-000000000000"}),
     );
 }
 
@@ -471,10 +499,13 @@ fn serialize_variant_bytestring() {
     // ByteString (15)
     let v = ByteString::from(&[0x1, 0x2, 0x3, 0x4]);
     let base64 = v.as_base64();
-    test_ser_de_variant(Variant::ByteString(v), json!({"Type": 15, "Body": base64}));
+    test_ser_de_variant(
+        Variant::ByteString(v),
+        json!({"UaType": 15, "Body": base64}),
+    );
     test_ser_de_variant(
         Variant::ByteString(ByteString::null()),
-        json!({"Type": 15, "Body": null}),
+        json!({"UaType": 15, "Body": null}),
     );
 }
 
@@ -484,11 +515,11 @@ fn serialize_variant_xmlelement() {
     // was a coverage gap, not a bug). Body is the XML string; null XmlElement → null body.
     test_ser_de_variant(
         Variant::from(crate::XmlElement::from("<a>1</a>")),
-        json!({"Type": 16, "Body": "<a>1</a>"}),
+        json!({"UaType": 16, "Body": "<a>1</a>"}),
     );
     test_ser_de_variant(
         Variant::from(crate::XmlElement::null()),
-        json!({"Type": 16, "Body": null}),
+        json!({"UaType": 16, "Body": null}),
     );
 }
 
@@ -497,7 +528,7 @@ fn serialize_variant_node_id() {
     // NodeId (17)
     test_ser_de_variant(
         Variant::NodeId(Box::new(NodeId::new(5, "Hello World"))),
-        json!({"Type": 17, "Body": { "IdType": 1, "Id": "Hello World", "Namespace": 5}}),
+        json!({"UaType": 17, "Body": { "IdType": 1, "Id": "Hello World", "Namespace": 5}}),
     );
 }
 
@@ -509,7 +540,7 @@ fn serialize_variant_expanded_node_id() {
             NodeId::new(5, "Hello World"),
             20,
         )))),
-        json!({"Type": 18, "Body": { "IdType": 1, "Id": "Hello World", "Namespace": 5, "ServerUri": 20}}),
+        json!({"UaType": 18, "Body": { "IdType": 1, "Id": "Hello World", "Namespace": 5, "ServerUri": 20}}),
     );
 }
 
@@ -518,12 +549,12 @@ fn serialize_variant_status_code() {
     // StatusCode (19)
     test_ser_de_variant(
         Variant::StatusCode(StatusCode::Good),
-        json!({"Type": 19, "Body": 0}),
+        json!({"UaType": 19, "Body": 0}),
     );
 
     test_ser_de_variant(
         Variant::StatusCode(StatusCode::BadServerHalted),
-        json!({"Type": 19, "Body": 0x800E0000u32}),
+        json!({"UaType": 19, "Body": 0x800E0000u32}),
     );
 }
 
@@ -532,7 +563,7 @@ fn serialize_variant_qualified_name() {
     // QualifiedName (20)
     test_ser_de_variant(
         Variant::QualifiedName(Box::default()),
-        json!({"Type": 20, "Body": null}),
+        json!({"UaType": 20, "Body": null}),
     );
 }
 
@@ -541,7 +572,7 @@ fn serialize_variant_localized_text() {
     // LocalizedText (21)
     test_ser_de_variant(
         Variant::LocalizedText(Box::new(LocalizedText::null())),
-        json!({"Type": 21, "Body": {}}),
+        json!({"UaType": 21, "Body": {}}),
     );
 }
 
@@ -550,7 +581,7 @@ fn serialize_variant_extension_object() {
     // ExtensionObject (22)
     test_ser_de_variant(
         Variant::ExtensionObject(ExtensionObject::null()),
-        json!({"Type": 22, "Body": null}),
+        json!({"UaType": 22, "Body": null}),
     );
     let argument = Argument {
         name: "Arg".into(),
@@ -568,7 +599,7 @@ fn serialize_variant_extension_object() {
     test_ser_de_variant(
         Variant::ExtensionObject(ExtensionObject::from_message(argument)),
         json!({
-            "Type": 22,
+            "UaType": 22,
             "Body": {
                 "UaTypeId": {
                     "Id": ObjectId::Argument_Encoding_DefaultJson as i32
@@ -607,7 +638,7 @@ fn serialize_variant_data_value() {
 
     test_ser_de_variant(
         Variant::DataValue(Box::new(v)),
-        json!({"Type": 23, "Body": { "ServerTimestamp": now_str.clone(), "SourceTimestamp": now_str }}),
+        json!({"UaType": 23, "Body": { "ServerTimestamp": now_str.clone(), "SourceTimestamp": now_str }}),
     );
 }
 
@@ -616,12 +647,12 @@ fn serialize_variant_variant() {
     // Variant (24)
     test_ser_de_variant(
         Variant::Variant(Box::new(Variant::Empty)),
-        json!({"Type": 24, "Body": null}),
+        json!({"UaType": 24, "Body": null}),
     );
 
     test_ser_de_variant(
         Variant::Variant(Box::new(Variant::Double(1.2))),
-        json!({"Type": 24, "Body": { "Type": 11, "Body": 1.2 }}),
+        json!({"UaType": 24, "Body": { "UaType": 11, "Body": 1.2 }}),
     );
 }
 
@@ -630,7 +661,7 @@ fn serialize_variant_diagnostic_info() {
     // DiagnosticInfo (25)
     test_ser_de_variant(
         Variant::DiagnosticInfo(Box::default()),
-        json!({"Type": 25, "Body": {}}),
+        json!({"UaType": 25, "Body": {}}),
     );
 
     test_ser_de_variant(
@@ -641,7 +672,7 @@ fn serialize_variant_diagnostic_info() {
             locale: Some(4),
             ..Default::default()
         })),
-        json!({"Type": 25, "Body": {
+        json!({"UaType": 25, "Body": {
             "SymbolicId": 2,
             "NamespaceUri": 3,
             "AdditionalInfo": "info",
@@ -654,7 +685,7 @@ fn serialize_variant_diagnostic_info() {
 fn serialize_variant_single_dimension_array() {
     test_ser_de_variant(
         Variant::from(vec![1, 2, 3]),
-        json!({"Type": 6, "Body": [1, 2, 3]}),
+        json!({"UaType": 6, "Body": [1, 2, 3]}),
     );
 
     test_ser_de_variant(
@@ -662,7 +693,7 @@ fn serialize_variant_single_dimension_array() {
             LocalizedText::new("en", "Test"),
             LocalizedText::new("en", "Test2"),
         ]),
-        json!({"Type": 21, "Body": [{
+        json!({"UaType": 21, "Body": [{
             "Locale": "en",
             "Text": "Test"
         }, {
@@ -686,7 +717,7 @@ fn serialize_variant_multi_dimension_array() {
     test_ser_de_variant(
         v.into(),
         json!({
-            "Type": 6,
+            "UaType": 6,
             "Body": [1, 2, 3, 4, 5, 6],
             "Dimensions": [2, 3]
         }),

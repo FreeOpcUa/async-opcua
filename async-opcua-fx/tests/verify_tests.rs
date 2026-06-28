@@ -140,3 +140,30 @@ fn verify_functional_entity_only_checks_endpoints_with_expected_variables() {
         StatusCode::Good
     );
 }
+
+#[test]
+fn fx_verify_requires_lock_returns_bad_requires_lock() {
+    let group = NodeId::new(3, "ControlGroup");
+    let mut state = state_with(AssetVerificationResultEnum::Match, StatusCode::Good);
+    let endpoint = ConnectionEndpointConfigurationDataType {
+        connection_endpoint: ConnectionEndpointDefinitionDataType::Node(NodeId::new(2, "EP")),
+        expected_verification_variables: Some(vec![NodeIdValuePair::default()]),
+        control_groups: Some(vec![group]),
+        ..Default::default()
+    };
+
+    let results = process_establish_connections(
+        &mut state,
+        FxCommandMask::VerifyFunctionalEntityCmd,
+        &[],
+        &[endpoint],
+        &[],
+        &[],
+    );
+
+    // OPC-10000-81/83 EstablishConnections VerifyFunctionalEntityCmd requires the named lock.
+    assert_eq!(
+        results.connection_endpoint_results[0].functional_entity_node_result,
+        StatusCode::BadRequiresLock
+    );
+}

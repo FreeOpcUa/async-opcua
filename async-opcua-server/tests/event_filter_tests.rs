@@ -12,15 +12,16 @@ use std::{
 use opcua_client::{services::Read, ClientBuilder, EventCallback, IdentityToken, Session};
 use opcua_core::ResponseMessage;
 use opcua_crypto::SecurityPolicy;
-use opcua_nodes::{BaseEventType, Event};
+use opcua_nodes::{BaseEventType, DefaultTypeTree, Event};
 use opcua_server::{
-    ServerBuilder, ServerEndpoint, ServerHandle, ServerUserToken, ANONYMOUS_USER_TOKEN_ID,
+    services::subscription::filter::ParsedEventFilter, ServerBuilder, ServerEndpoint, ServerHandle,
+    ServerUserToken, ANONYMOUS_USER_TOKEN_ID,
 };
 use opcua_types::{
-    AttributeId, ByteString, ContentFilter, ContentFilterBuilder, EventFilter, ExtensionObject,
-    FilterOperator, MessageSecurityMode, MonitoredItemCreateRequest, MonitoringMode,
-    MonitoringParameters, NodeId, NumericRange, ObjectId, ObjectTypeId, Operand, ReadRequest,
-    ReadValueId, SimpleAttributeOperand, StatusCode, TimestampsToReturn, Variant,
+    AttributeId, ByteString, ContentFilter, ContentFilterBuilder, ContentFilterElement,
+    EventFilter, ExtensionObject, FilterOperator, MessageSecurityMode, MonitoredItemCreateRequest,
+    MonitoringMode, MonitoringParameters, NodeId, NumericRange, ObjectId, ObjectTypeId, Operand,
+    ReadRequest, ReadValueId, SimpleAttributeOperand, StatusCode, TimestampsToReturn, Variant,
 };
 use tokio::{net::TcpListener, sync::mpsc};
 
@@ -250,6 +251,71 @@ async fn event_filter_rejects_unsupported_where_clause_operator() {
     );
 }
 
+#[test]
+fn unsupported_event_filter_operator_returns_bad_filter_operator_unsupported() {
+    let status = first_where_element_status(EventFilter {
+        select_clauses: Some(vec![SimpleAttributeOperand::new_value(
+            ObjectTypeId::BaseEventType,
+            "Severity",
+        )]),
+        where_clause: ContentFilter {
+            elements: Some(vec![(
+                FilterOperator::RelatedTo,
+                vec![
+                    Operand::literal(NodeId::from(ObjectId::Server)),
+                    Operand::literal(NodeId::null()),
+                    Operand::literal(NodeId::null()),
+                    Operand::literal(NodeId::null()),
+                    Operand::literal(0u32),
+                    Operand::literal(false),
+                ],
+            )
+                .into()]),
+        },
+    });
+
+    // OPC-10000-4 7.7: unsupported ContentFilter operators report BadFilterOperatorUnsupported.
+    assert_eq!(status, StatusCode::BadFilterOperatorUnsupported);
+}
+
+#[test]
+fn event_filter_wrong_operand_count_returns_bad_filter_operand_count_mismatch() {
+    let status = first_where_element_status(EventFilter {
+        select_clauses: Some(vec![SimpleAttributeOperand::new_value(
+            ObjectTypeId::BaseEventType,
+            "Severity",
+        )]),
+        where_clause: ContentFilter {
+            elements: Some(vec![ContentFilterElement::from((
+                FilterOperator::GreaterThanOrEqual,
+                vec![Operand::literal(500u16)],
+            ))]),
+        },
+    });
+
+    // OPC-10000-4 7.7: wrong operand counts report BadFilterOperandCountMismatch.
+    assert_eq!(status, StatusCode::BadFilterOperandCountMismatch);
+}
+
+#[test]
+fn event_filter_invalid_operand_returns_bad_filter_operand_invalid() {
+    let status = first_where_element_status(EventFilter {
+        select_clauses: Some(vec![SimpleAttributeOperand::new_value(
+            ObjectTypeId::BaseEventType,
+            "Severity",
+        )]),
+        where_clause: ContentFilter {
+            elements: Some(vec![ContentFilterElement::from((
+                FilterOperator::Not,
+                vec![Operand::element(1)],
+            ))]),
+        },
+    });
+
+    // OPC-10000-4 7.7: invalid operands report BadFilterOperandInvalid.
+    assert_eq!(status, StatusCode::BadFilterOperandInvalid);
+}
+
 #[tokio::test]
 async fn failed_username_activation_dispatches_audit_event() {
     let server = EventFilterServer::start("failed-auth-audit").await;
@@ -410,6 +476,18 @@ fn event_monitored_item(filter: EventFilter) -> MonitoredItemCreateRequest {
             discard_oldest: true,
         },
     )
+}
+
+fn first_where_element_status(filter: EventFilter) -> StatusCode {
+    let type_tree = DefaultTypeTree::new();
+    let (result, parsed) = ParsedEventFilter::parse(filter, &type_tree);
+    assert!(parsed.is_err());
+
+    result
+        .where_clause_result
+        .element_results
+        .expect("where clause element result should be present")[0]
+        .status_code
 }
 
 fn severity_filter(min_severity: u16) -> EventFilter {

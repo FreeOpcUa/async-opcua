@@ -310,6 +310,7 @@ impl AsyncSecureChannel {
         // Temporarily poll the transport task while we're waiting for a response.
         let resp = loop {
             tokio::select! {
+                biased;
                 r = &mut request_fut => break r?,
                 r = transport.poll() => {
                     if let TransportPollResult::Closed(e) = r {

@@ -222,6 +222,72 @@ fn max_message_size() {
     assert_eq!(err.status(), StatusCode::BadResponseTooLarge);
 }
 
+#[test]
+fn oversized_tcp_message_chunk_returns_bad_tcp_message_too_large() {
+    let _ = Test::setup();
+
+    let mut data = Vec::new();
+    let ctx_r = ContextOwned::default();
+    let ctx = ctx_r.context();
+    MessageChunkHeader {
+        message_type: MessageChunkType::Message,
+        is_final: MessageIsFinalType::Final,
+        message_size: 65,
+        secure_channel_id: 1,
+    }
+    .encode(&mut data, &ctx)
+    .unwrap();
+
+    let mut options = ctx_r.options().clone();
+    options.max_message_size = 64;
+    let ctx_r = ContextOwned::new_default(Default::default(), options);
+    let ctx = ctx_r.context();
+    let err = MessageChunk::decode(&mut Cursor::new(data), &ctx).unwrap_err();
+
+    // OPC-10000-6 7.1.2.3: oversized TCP chunks are rejected with BadTcpMessageTooLarge.
+    assert_eq!(err.status(), StatusCode::BadTcpMessageTooLarge);
+}
+
+#[test]
+fn request_over_message_size_limit_returns_bad_request_too_large() {
+    let _ = Test::setup();
+
+    let mut secure_channel = SecureChannel::new_no_certificate_store();
+    secure_channel.set_role(Role::Client);
+    let request = RequestMessage::OpenSecureChannel(Box::new(OpenSecureChannelRequest {
+        request_header: RequestHeader {
+            authentication_token: NodeId::new(0, 99),
+            timestamp: DateTime::now(),
+            request_handle: 1,
+            return_diagnostics: DiagnosticBits::empty(),
+            audit_entry_id: UAString::null(),
+            timeout_hint: 123456,
+            additional_header: ExtensionObject::null(),
+        },
+        client_protocol_version: 77,
+        request_type: SecurityTokenRequestType::Renew,
+        security_mode: MessageSecurityMode::SignAndEncrypt,
+        client_nonce: ByteString::null(),
+        requested_lifetime: 4664,
+    }));
+    let ctx_r = ContextOwned::default();
+    let ctx = ctx_r.context();
+    let max_message_size = request.byte_len(&ctx) - 1;
+
+    let err = Chunker::encode(
+        SequenceNumberHandle::new_at(true, 1000),
+        100,
+        max_message_size,
+        0,
+        &secure_channel,
+        &request,
+    )
+    .unwrap_err();
+
+    // OPC-10000-4 7.38.2: client request encoding over negotiated limits uses BadRequestTooLarge.
+    assert_eq!(err.status(), StatusCode::BadRequestTooLarge);
+}
+
 fn validate_chunk_sequence_numbers(
     secure_channel: &SecureChannel,
     chunks: &[MessageChunk],

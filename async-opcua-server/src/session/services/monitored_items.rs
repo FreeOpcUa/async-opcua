@@ -326,6 +326,49 @@ pub(crate) async fn modify_monitored_items(
         request.info.operational_limits.max_monitored_items_per_call
     );
 
+    let mut percent_deadband_item_ids = Vec::new();
+    for item in &items_to_modify {
+        let Some(filter) = item
+            .requested_parameters
+            .filter
+            .inner_as::<DataChangeFilter>()
+        else {
+            continue;
+        };
+
+        if filter.deadband_type == DeadbandType::Percent as u32 {
+            percent_deadband_item_ids.push(item.monitored_item_id);
+        }
+    }
+
+    let eu_ranges = if percent_deadband_item_ids.is_empty() {
+        HashMap::new()
+    } else {
+        let item_node_ids = match request
+            .subscriptions
+            .monitored_item_node_ids(
+                request.session_id,
+                request.request.subscription_id,
+                percent_deadband_item_ids,
+            )
+            .await
+        {
+            Ok(item_node_ids) => item_node_ids,
+            Err(e) => return service_fault!(request, e),
+        };
+        let nodes_to_lookup: Vec<&NodeId> = item_node_ids.values().collect();
+        let ranges_by_node = get_eu_range(&nodes_to_lookup, &context, &node_managers).await;
+        item_node_ids
+            .into_iter()
+            .filter_map(|(item_id, node_id)| {
+                ranges_by_node
+                    .get(&node_id)
+                    .copied()
+                    .map(|range| (item_id, range))
+            })
+            .collect()
+    };
+
     // Call modify first, then only pass successful modify's to the node managers.
     let results = {
         match request
@@ -336,6 +379,7 @@ pub(crate) async fn modify_monitored_items(
                 request.info.clone(),
                 request.request.timestamps_to_return,
                 items_to_modify,
+                eu_ranges.into_iter().collect(),
             )
             .await
         {

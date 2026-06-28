@@ -368,6 +368,64 @@ async fn alarm_acknowledge_confirm_error_paths() {
     );
 }
 
+#[tokio::test]
+async fn acknowledge_disabled_condition_returns_bad_condition_disabled() {
+    // OPC UA Part 9 §5.7.2 with §5.5.2: a disabled Condition reports Bad_ConditionDisabled.
+    let (tester, nm, session) = setup_alarms().await;
+    let core_nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<CoreNodeManager>()
+        .expect("CoreNodeManager not found");
+
+    let source = make_event_source(&nm, "DisabledAckDevice");
+    let state_machine = register_alarm_condition(
+        nm.address_space(),
+        &nm,
+        "DisabledAckDevice",
+        "Temp",
+        source,
+        "alarm",
+    );
+    let registry = ConditionRegistry::new();
+    registry.register(state_machine.clone());
+    register_condition_methods(&core_nm, registry, nm.address_space().clone());
+
+    let event = {
+        let mut space = nm.address_space().write();
+        let event = trigger_alarm_transition(
+            &mut space,
+            &state_machine,
+            true,
+            800,
+            LocalizedText::new("en", "active"),
+        )
+        .unwrap()
+        .expect("active transition should produce an event id");
+        state_machine.set_enabled(&mut space, false);
+        event
+    };
+
+    let response = session
+        .call_one(CallMethodRequest {
+            object_id: state_machine.condition_id.clone(),
+            method_id: MethodId::AcknowledgeableConditionType_Acknowledge.into(),
+            input_arguments: Some(vec![
+                Variant::from(ByteString::from(event.event_id.clone())),
+                Variant::from(LocalizedText::new("en", "ack disabled")),
+            ]),
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(response.status_code, StatusCode::BadConditionDisabled);
+    let space = nm.address_space().read();
+    assert!(
+        !state_machine.get_acked(&space),
+        "disabled acknowledge must not mutate AckedState"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // ConditionRefresh (Part 9 §5.5.7) / ConditionRefresh2 (§5.5.8) — A&C subscriber
 // end-to-end. Independent of the implementation; anchored to the spec behavior:
@@ -1278,6 +1336,41 @@ async fn shelving_transitions_and_suppressed_or_shelved() {
         StatusCode::Good
     );
     assert_eq!(state(&sm), (ShelvingState::Unshelved, false));
+}
+
+#[tokio::test]
+async fn timed_shelve_out_of_range_returns_bad_shelving_time_out_of_range() {
+    // OPC UA Part 9 §5.8.17.4: TimedShelve rejects shelving times outside the acceptable range.
+    let (tester, nm, session) = setup_alarms().await;
+    let core_nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<CoreNodeManager>()
+        .expect("CoreNodeManager not found");
+    let source = make_event_source(&nm, "BadTimedShelveDevice");
+    let sm = register_alarm_condition(
+        nm.address_space(),
+        &nm,
+        "BadTimedShelveDevice",
+        "Temp",
+        source,
+        "Temp alarm",
+    );
+    let registry = ConditionRegistry::new();
+    registry.register(sm.clone());
+    register_condition_methods(&core_nm, registry, nm.address_space().clone());
+
+    let status = call_shelve(
+        &session,
+        &sm.shelving_state_id,
+        MethodId::ShelvedStateMachineType_TimedShelve,
+        Some(vec![Variant::Double(0.0)]),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BadShelvingTimeOutOfRange);
+    let space = nm.address_space().read();
+    assert_eq!(sm.get_shelving_state(&space), ShelvingState::Unshelved);
 }
 
 // ---------------------------------------------------------------------------

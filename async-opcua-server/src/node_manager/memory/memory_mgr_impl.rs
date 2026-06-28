@@ -20,10 +20,11 @@ use opcua_nodes::{
     VariableType, View,
 };
 use opcua_types::{
-    AddNodeAttributes, AttributesMask, DataTypeId, DataValue, ExpandedNodeId, LocalizedText,
-    ModelChangeStructureDataType, MonitoringMode, NodeClass, NodeId, ObjectId, PermissionType,
-    ReadAnnotationDataDetails, ReadAtTimeDetails, ReadEventDetails, ReadProcessedDetails,
-    ReadRawModifiedDetails, ReferenceTypeId, StatusCode, TimestampsToReturn, Variant, WriteMask,
+    AddNodeAttributes, AttributesMask, BrowseDirection, DataTypeId, DataValue, ExpandedNodeId,
+    LocalizedText, ModelChangeStructureDataType, MonitoringMode, NodeClass, NodeId, ObjectId,
+    PermissionType, ReadAnnotationDataDetails, ReadAtTimeDetails, ReadEventDetails,
+    ReadProcessedDetails, ReadRawModifiedDetails, ReferenceTypeId, StatusCode, TimestampsToReturn,
+    Variant, WriteMask,
 };
 
 const MODEL_CHANGE_NODE_ADDED: u8 = 1;
@@ -136,6 +137,27 @@ fn add_nodes_impl(
 
             if item.reference_type_id().is_null() {
                 item.set_result(NodeId::null(), StatusCode::BadReferenceTypeIdInvalid);
+                continue;
+            }
+
+            let type_tree = context.type_tree.read();
+            if address_space
+                .find_node_by_browse_name(
+                    &parent_id,
+                    None::<(NodeId, bool)>,
+                    &*type_tree,
+                    BrowseDirection::Forward,
+                    item.browse_name().clone(),
+                )
+                .is_some()
+            {
+                item.set_result(NodeId::null(), StatusCode::BadBrowseNameDuplicated);
+                continue;
+            }
+            drop(type_tree);
+
+            if let Err(status) = validate_type_definition(&address_space, item) {
+                item.set_result(NodeId::null(), status);
                 continue;
             }
 
@@ -305,6 +327,15 @@ fn add_references_impl(
                 }
                 continue;
             }
+            if reference_type_is_abstract(&address_space, item.reference_type_id()) {
+                if handle_source {
+                    item.set_source_result(StatusCode::BadReferenceTypeIdInvalid);
+                }
+                if handle_target {
+                    item.set_target_result(StatusCode::BadReferenceTypeIdInvalid);
+                }
+                continue;
+            }
 
             if handle_source && !source_exists {
                 item.set_source_result(StatusCode::BadSourceNodeIdInvalid);
@@ -466,6 +497,48 @@ fn delete_references_impl(
     notify_model_changes(context, changes);
 }
 
+fn reference_type_is_abstract(address_space: &AddressSpace, reference_type_id: &NodeId) -> bool {
+    address_space
+        .find(reference_type_id)
+        .is_some_and(|reference_type| match &*reference_type {
+            NodeType::ReferenceType(reference_type) => reference_type.is_abstract(),
+            _ => false,
+        })
+}
+
+fn validate_type_definition(
+    address_space: &AddressSpace,
+    item: &AddNodeItem,
+) -> Result<(), StatusCode> {
+    let type_definition_id = &item.type_definition_id().node_id;
+    if type_definition_id.is_null()
+        || !address_space
+            .namespaces()
+            .contains_key(&type_definition_id.namespace)
+    {
+        return Ok(());
+    }
+
+    let Some(type_definition) = address_space.find(type_definition_id) else {
+        return Err(StatusCode::BadTypeDefinitionInvalid);
+    };
+
+    match (item.node_class(), &*type_definition) {
+        (NodeClass::Object, NodeType::ObjectType(object_type)) if object_type.is_abstract() => {
+            Err(StatusCode::BadTypeDefinitionInvalid)
+        }
+        (NodeClass::Variable, NodeType::VariableType(variable_type))
+            if variable_type.is_abstract() =>
+        {
+            Err(StatusCode::BadTypeDefinitionInvalid)
+        }
+        (NodeClass::Object, NodeType::ObjectType(_))
+        | (NodeClass::Variable, NodeType::VariableType(_)) => Ok(()),
+        (NodeClass::Object | NodeClass::Variable, _) => Err(StatusCode::BadTypeDefinitionInvalid),
+        _ => Ok(()),
+    }
+}
+
 fn next_unused_node_id(address_space: &AddressSpace, namespace: u16) -> NodeId {
     loop {
         let node_id = NodeId::next_numeric(namespace);
@@ -589,6 +662,7 @@ fn build_variable(
     }
     if mask.contains(AttributesMask::ARRAY_DIMENSIONS) {
         if let Some(array_dimensions) = attributes.array_dimensions.as_ref() {
+            validate_array_dimensions(attributes.value_rank, array_dimensions)?;
             node.set_array_dimensions(array_dimensions);
         } else {
             return Err(StatusCode::BadNodeAttributesInvalid);
@@ -691,6 +765,7 @@ fn build_variable_type(
     }
     if mask.contains(AttributesMask::ARRAY_DIMENSIONS) {
         if let Some(array_dimensions) = attributes.array_dimensions.as_ref() {
+            validate_array_dimensions(attributes.value_rank, array_dimensions)?;
             node.set_array_dimensions(array_dimensions);
         } else {
             return Err(StatusCode::BadNodeAttributesInvalid);
@@ -710,6 +785,14 @@ fn build_variable_type(
     Ok(node)
 }
 
+fn validate_array_dimensions(value_rank: i32, array_dimensions: &[u32]) -> Result<(), StatusCode> {
+    if value_rank >= 1 && array_dimensions.len() != value_rank as usize {
+        Err(StatusCode::BadNodeAttributesInvalid)
+    } else {
+        Ok(())
+    }
+}
+
 fn build_reference_type(
     node_id: &NodeId,
     browse_name: impl Into<opcua_types::QualifiedName>,
@@ -719,6 +802,12 @@ fn build_reference_type(
     let mask = attributes_mask(attributes.specified_attributes)?;
     let display_name =
         display_name_or_browse_name(&mask, attributes.display_name.clone(), &browse_name);
+    if mask.contains(AttributesMask::SYMMETRIC)
+        && attributes.symmetric
+        && mask.contains(AttributesMask::INVERSE_NAME)
+    {
+        return Err(StatusCode::BadNodeAttributesInvalid);
+    }
 
     let mut node = ReferenceType::new(node_id, browse_name, display_name, None, false, false);
     if mask.contains(AttributesMask::IS_ABSTRACT) {

@@ -7,7 +7,7 @@ use tracing::error;
 use crate::{
     transport::{
         tcp::TransportConfiguration, Connector, ConnectorBuilder, DefaultConnector,
-        TransportPollResult,
+        DefaultTransport, SecureChannelEventLoop, TransportPollResult,
     },
     AsyncSecureChannel, ClientConfig, ClientEndpoint, IdentityToken,
 };
@@ -188,6 +188,28 @@ impl Client {
             .connect_to_endpoint_directly(endpoint)?
             .user_identity_token(identity_token)
             .build(self.certificate_store.clone())
+    }
+
+    /// Opens only a secure channel to the provided endpoint.
+    ///
+    /// This is intended for manual service flows where the caller sends services such as
+    /// `CreateSession` explicitly and is responsible for polling the returned channel event loop.
+    /// It does not create or activate an OPC UA Session.
+    pub async fn open_secure_channel_to_endpoint_directly(
+        &mut self,
+        endpoint: impl Into<EndpointDescription>,
+        identity_token: IdentityToken,
+    ) -> Result<(AsyncSecureChannel, SecureChannelEventLoop<DefaultTransport>), Error> {
+        let endpoint = endpoint.into();
+        let connector: DefaultConnector = endpoint.clone().build()?;
+        let endpoint_info = EndpointInfo {
+            endpoint,
+            user_identity_token: identity_token,
+            preferred_locales: self.config.preferred_locales.clone(),
+        };
+        let channel = self.channel_from_endpoint_info(endpoint_info, self.config.channel_lifetime);
+        let channel_loop = channel.connect_no_retry(&connector).await?;
+        Ok((channel, channel_loop))
     }
 
     /// Creates a new [`Session`] using the default endpoint specified in the config. If

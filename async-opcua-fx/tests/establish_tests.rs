@@ -2,7 +2,8 @@
 
 use async_opcua_fx::{
     process_close_connections, process_establish_connections, AssetVerificationDataType,
-    FxCommandMask, FxConnectionState, PubSubCommunicationConfigurationDataType,
+    ConnectionEndpointConfigurationDataType, ConnectionEndpointDefinitionDataType, FxCommandMask,
+    FxConnectionState, PubSubCommunicationConfigurationDataType,
     PubSubReserveCommunicationIds2DataType,
 };
 use opcua_pubsub::{MessageEncoding, PubSubConnectionConfig, WriterGroupConfig};
@@ -14,6 +15,17 @@ fn reserve_request(num_wg: u16, num_dsw: u16) -> PubSubReserveCommunicationIds2D
     PubSubReserveCommunicationIds2DataType {
         num_req_writer_group_ids: num_wg,
         num_req_data_set_writer_ids: num_dsw,
+        ..Default::default()
+    }
+}
+
+fn endpoint_with_control_groups(
+    endpoint: &str,
+    control_groups: &[NodeId],
+) -> ConnectionEndpointConfigurationDataType {
+    ConnectionEndpointConfigurationDataType {
+        connection_endpoint: ConnectionEndpointDefinitionDataType::Node(NodeId::new(2, endpoint)),
+        control_groups: Some(control_groups.to_vec()),
         ..Default::default()
     }
 }
@@ -143,4 +155,47 @@ fn close_unknown_endpoint_is_not_found() {
     let mut state = FxConnectionState::new();
     let statuses = process_close_connections(&mut state, &[NodeId::new(1, "missing")], true);
     assert_eq!(statuses, vec![StatusCode::BadNotFound]);
+}
+
+#[test]
+fn fx_establish_conflicting_owner_returns_bad_locked() {
+    let control_group = NodeId::new(3, "G");
+    let endpoint = endpoint_with_control_groups("EP", std::slice::from_ref(&control_group));
+    let mut state = FxConnectionState::new();
+
+    state.set_lock_context("appA");
+    let first = process_establish_connections(
+        &mut state,
+        FxCommandMask::EstablishControlCmd,
+        &[],
+        std::slice::from_ref(&endpoint),
+        &[],
+        &[],
+    );
+    assert_eq!(
+        first.connection_endpoint_results[0]
+            .establish_control_result
+            .as_ref()
+            .unwrap()[0],
+        StatusCode::Good
+    );
+
+    state.set_lock_context("appB");
+    let second = process_establish_connections(
+        &mut state,
+        FxCommandMask::EstablishControlCmd,
+        &[],
+        &[endpoint],
+        &[],
+        &[],
+    );
+
+    // OPC-10000-81/83 EstablishConnections reports BadLocked for a conflicting owner.
+    assert_eq!(
+        second.connection_endpoint_results[0]
+            .establish_control_result
+            .as_ref()
+            .unwrap()[0],
+        StatusCode::BadLocked
+    );
 }

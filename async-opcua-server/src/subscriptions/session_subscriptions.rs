@@ -422,6 +422,7 @@ impl SessionSubscriptions {
         info: &ServerInfo,
         timestamps_to_return: TimestampsToReturn,
         requests: Vec<MonitoredItemModifyRequest>,
+        eu_ranges: HashMap<u32, (f64, f64)>,
         type_tree: &dyn TypeTree,
     ) -> Result<Vec<MonitoredItemUpdateRef>, StatusCode> {
         let Some(sub) = self.subscriptions.get_mut(&subscription_id) else {
@@ -430,8 +431,9 @@ impl SessionSubscriptions {
         let mut results = Vec::with_capacity(requests.len());
         for request in requests {
             if let Some(item) = sub.get_mut(&request.monitored_item_id) {
+                let eu_range = eu_ranges.get(&request.monitored_item_id).copied();
                 let (filter_result, status) =
-                    item.modify(info, timestamps_to_return, &request, type_tree);
+                    item.modify(info, timestamps_to_return, &request, eu_range, type_tree);
                 let filter_result = filter_result.unwrap_or_else(ExtensionObject::null);
 
                 results.push(MonitoredItemUpdateRef::new(
@@ -466,6 +468,23 @@ impl SessionSubscriptions {
             }
         }
 
+        Ok(results)
+    }
+
+    pub(super) fn monitored_item_node_ids(
+        &self,
+        subscription_id: u32,
+        monitored_item_ids: &[u32],
+    ) -> Result<HashMap<u32, NodeId>, StatusCode> {
+        let Some(sub) = self.subscriptions.get(&subscription_id) else {
+            return Err(StatusCode::BadSubscriptionIdInvalid);
+        };
+        let mut results = HashMap::with_capacity(monitored_item_ids.len());
+        for monitored_item_id in monitored_item_ids {
+            if let Some(item) = sub.get(monitored_item_id) {
+                results.insert(*monitored_item_id, item.item_to_monitor().node_id.clone());
+            }
+        }
         Ok(results)
     }
 

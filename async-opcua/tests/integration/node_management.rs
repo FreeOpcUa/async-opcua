@@ -3,18 +3,20 @@ use std::{sync::Arc, time::Duration};
 use super::utils::{setup, Tester};
 use opcua::{
     client::Session,
+    nodes::ReferenceTypeBuilder,
     server::{
-        address_space::{EventNotifier, NodeBase, NodeType, ObjectBuilder},
+        address_space::{EventNotifier, NodeBase, NodeType, ObjectBuilder, ObjectTypeBuilder},
         diagnostics::NamespaceMetadata,
         node_manager::memory::{simple_node_manager, SimpleNodeManager},
     },
     types::{
-        AddNodeAttributes, AddNodesItem, AddReferencesItem, AttributeId, BrowseDescription,
-        BrowseDirection, DataTypeAttributes, DeleteNodesItem, DeleteReferencesItem, ExpandedNodeId,
-        MethodAttributes, NodeClass, NodeId, ObjectAttributes, ObjectId, ObjectTypeAttributes,
-        ObjectTypeId, PermissionType, QualifiedName, ReadValueId, ReferenceTypeAttributes,
-        ReferenceTypeId, RolePermissionType, StatusCode, TimestampsToReturn,
-        VariableTypeAttributes, ViewAttributes,
+        AddNodeAttributes, AddNodesItem, AddReferencesItem, AttributeId, AttributesMask,
+        BrowseDescription, BrowseDirection, DataTypeAttributes, DataTypeId, DeleteNodesItem,
+        DeleteReferencesItem, ExpandedNodeId, MethodAttributes, NodeClass, NodeId,
+        ObjectAttributes, ObjectId, ObjectTypeAttributes, ObjectTypeId, PermissionType,
+        QualifiedName, ReadValueId, ReferenceTypeAttributes, ReferenceTypeId, RolePermissionType,
+        StatusCode, TimestampsToReturn, UAString, VariableAttributes, VariableTypeAttributes,
+        VariableTypeId, Variant, ViewAttributes,
     },
 };
 
@@ -221,6 +223,74 @@ async fn simple_writable_error_statuses() {
 }
 
 #[tokio::test]
+async fn add_nodes_duplicate_browse_name_returns_bad_browse_name_duplicated() {
+    let (_tester, _nm, ns, parent, session) = setup_simple(true).await;
+
+    let first = session
+        .add_nodes(&[object_item(
+            parent.clone(),
+            ns,
+            "DuplicateBrowseName",
+            NodeId::new(ns, "DuplicateBrowseNameA").into(),
+        )])
+        .await
+        .unwrap();
+    assert_eq!(first[0].status_code, StatusCode::Good);
+
+    // OPC UA Part 4 5.8.2.4: duplicate BrowseName under the same parent is rejected.
+    let duplicate = session
+        .add_nodes(&[object_item(
+            parent,
+            ns,
+            "DuplicateBrowseName",
+            NodeId::new(ns, "DuplicateBrowseNameB").into(),
+        )])
+        .await
+        .unwrap();
+
+    assert_eq!(
+        duplicate[0].status_code,
+        StatusCode::BadBrowseNameDuplicated
+    );
+}
+
+#[tokio::test]
+async fn add_nodes_mismatched_node_class_returns_bad_node_class_invalid() {
+    let (_tester, _nm, ns, parent, session) = setup_simple(true).await;
+    let mut item = object_item(
+        parent,
+        ns,
+        "InvalidNodeClass",
+        NodeId::new(ns, "InvalidNodeClass").into(),
+    );
+    item.node_class = NodeClass::Unspecified;
+    item.type_definition = ExpandedNodeId::null();
+
+    // OPC UA Part 4 5.8.2.4: an invalid node class is rejected with BadNodeClassInvalid.
+    let result = session.add_nodes(&[item]).await.unwrap();
+
+    assert_eq!(result[0].status_code, StatusCode::BadNodeClassInvalid);
+}
+
+#[tokio::test]
+async fn add_nodes_foreign_namespace_returns_bad_node_id_rejected() {
+    let (_tester, _nm, ns, parent, session) = setup_simple(true).await;
+
+    // OPC UA Part 4 5.8.2.4: a requested NodeId in an unsupported namespace is rejected.
+    let result = session
+        .add_nodes(&[object_item(
+            parent,
+            ns,
+            "ForeignNamespace",
+            NodeId::new(ns + 100, "ForeignNamespace").into(),
+        )])
+        .await
+        .unwrap();
+
+    assert_eq!(result[0].status_code, StatusCode::BadNodeIdRejected);
+}
+
+#[tokio::test]
 async fn simple_gate_off_refuses_modification() {
     let (_tester, _nm, ns, parent, session) = setup_simple(false).await;
 
@@ -386,6 +456,167 @@ async fn simple_writable_reference_errors() {
     // Null reference type (rejected at item validation) -> BadReferenceTypeIdInvalid.
     let r = add(&session, a.clone(), a.clone(), NodeId::null()).await;
     assert_eq!(r, vec![StatusCode::BadReferenceTypeIdInvalid]);
+}
+
+#[tokio::test]
+async fn add_references_external_local_only_reference_returns_bad_reference_local_only() {
+    let (_tester, nm, ns, parent, session) = setup_simple(true).await;
+    let source = NodeId::new(ns, "LocalOnlySource");
+    let target = NodeId::new(ns, "LocalOnlyTarget");
+    seed_object(&nm, &parent, &source, "LocalOnlySource");
+    seed_object(&nm, &parent, &target, "LocalOnlyTarget");
+
+    // OPC UA Part 4 5.8.4: local-only reference types are invalid for remote server targets.
+    let result = session
+        .add_references(&[AddReferencesItem {
+            source_node_id: source,
+            reference_type_id: ReferenceTypeId::Organizes.into(),
+            is_forward: true,
+            target_server_uri: UAString::from("urn:remote-server"),
+            target_node_id: target.into(),
+            target_node_class: NodeClass::Object,
+        }])
+        .await
+        .unwrap();
+
+    assert_eq!(result, vec![StatusCode::BadReferenceLocalOnly]);
+}
+
+#[tokio::test]
+async fn add_nodes_array_dimensions_value_rank_mismatch_returns_bad_node_attributes_invalid() {
+    let (_tester, _nm, ns, parent, session) = setup_simple(true).await;
+    let mask = AttributesMask::DISPLAY_NAME
+        | AttributesMask::DATA_TYPE
+        | AttributesMask::VALUE_RANK
+        | AttributesMask::ARRAY_DIMENSIONS;
+
+    // OPC UA Part 3 5.6: ArrayDimensions length must match a concrete ValueRank.
+    let result = session
+        .add_nodes(&[AddNodesItem {
+            parent_node_id: parent.into(),
+            reference_type_id: ReferenceTypeId::HasComponent.into(),
+            requested_new_node_id: NodeId::new(ns, "RankMismatchVariable").into(),
+            browse_name: QualifiedName::new(ns, "RankMismatchVariable"),
+            node_class: NodeClass::Variable,
+            node_attributes: AddNodeAttributes::Variable(VariableAttributes {
+                specified_attributes: mask.bits(),
+                display_name: "RankMismatchVariable".into(),
+                data_type: DataTypeId::Double.into(),
+                value_rank: 1,
+                array_dimensions: Some(vec![2, 3]),
+                value: Variant::Empty,
+                ..Default::default()
+            })
+            .as_extension_object(),
+            type_definition: ExpandedNodeId::new(VariableTypeId::BaseDataVariableType),
+        }])
+        .await
+        .unwrap();
+
+    assert_eq!(result[0].status_code, StatusCode::BadNodeAttributesInvalid);
+}
+
+#[tokio::test]
+async fn add_nodes_abstract_type_definition_returns_bad_type_definition_invalid() {
+    let (_tester, nm, ns, parent, session) = setup_simple(true).await;
+    let abstract_type = NodeId::new(ns, "AbstractObjectType");
+    {
+        let mut sp = nm.address_space().write();
+        ObjectTypeBuilder::new(&abstract_type, "AbstractObjectType", "AbstractObjectType")
+            .is_abstract(true)
+            .subtype_of(ObjectTypeId::BaseObjectType)
+            .insert(&mut *sp);
+    }
+
+    // OPC UA Part 3 5.6/6: abstract type definitions cannot be instantiated.
+    let mut item = object_item(
+        parent,
+        ns,
+        "AbstractTypeInstance",
+        NodeId::new(ns, "AbstractTypeInstance").into(),
+    );
+    item.type_definition = abstract_type.into();
+    let result = session.add_nodes(&[item]).await.unwrap();
+
+    assert_eq!(result[0].status_code, StatusCode::BadTypeDefinitionInvalid);
+}
+
+#[tokio::test]
+async fn add_references_abstract_reference_type_returns_bad_reference_type_id_invalid() {
+    let (tester, nm, ns, parent, session) = setup_simple(true).await;
+    let source = NodeId::new(ns, "AbstractReferenceSource");
+    let target = NodeId::new(ns, "AbstractReferenceTarget");
+    seed_object(&nm, &parent, &source, "AbstractReferenceSource");
+    seed_object(&nm, &parent, &target, "AbstractReferenceTarget");
+
+    let abstract_reference_type = NodeId::new(ns, "AbstractReferenceType");
+    {
+        let mut sp = nm.address_space().write();
+        ReferenceTypeBuilder::new(
+            &abstract_reference_type,
+            "AbstractReferenceType",
+            "AbstractReferenceType",
+        )
+        .is_abstract(true)
+        .subtype_of(ReferenceTypeId::References)
+        .insert(&mut *sp);
+    }
+    let references_type = NodeId::from(ReferenceTypeId::References);
+    tester.handle.type_tree().write().add_type_node(
+        &abstract_reference_type,
+        &references_type,
+        NodeClass::ReferenceType,
+    );
+
+    // OPC UA Part 3 5.3.1: abstract ReferenceTypes are not valid instance references.
+    let result = session
+        .add_references(&[AddReferencesItem {
+            source_node_id: source,
+            reference_type_id: abstract_reference_type,
+            is_forward: true,
+            target_server_uri: Default::default(),
+            target_node_id: target.into(),
+            target_node_class: NodeClass::Object,
+        }])
+        .await
+        .unwrap();
+
+    assert_eq!(result, vec![StatusCode::BadReferenceTypeIdInvalid]);
+}
+
+#[tokio::test]
+async fn symmetric_reference_type_with_inverse_name_returns_bad_node_attributes_invalid() {
+    let (_tester, _nm, ns, parent, session) = setup_simple(true).await;
+    let mask = AttributesMask::DISPLAY_NAME
+        | AttributesMask::IS_ABSTRACT
+        | AttributesMask::SYMMETRIC
+        | AttributesMask::INVERSE_NAME;
+
+    // OPC UA Part 3 5.3.2: symmetric ReferenceTypes do not define an InverseName.
+    let result = session
+        .add_nodes(&[AddNodesItem {
+            parent_node_id: parent.into(),
+            reference_type_id: ReferenceTypeId::HasComponent.into(),
+            requested_new_node_id: NodeId::new(ns, "SymmetricWithInverseName").into(),
+            browse_name: QualifiedName::new(ns, "SymmetricWithInverseName"),
+            node_class: NodeClass::ReferenceType,
+            node_attributes: AddNodeAttributes::ReferenceType(ReferenceTypeAttributes {
+                specified_attributes: mask.bits(),
+                display_name: "SymmetricWithInverseName".into(),
+                description: Default::default(),
+                write_mask: Default::default(),
+                user_write_mask: Default::default(),
+                is_abstract: false,
+                symmetric: true,
+                inverse_name: "InverseName".into(),
+            })
+            .as_extension_object(),
+            type_definition: ExpandedNodeId::null(),
+        }])
+        .await
+        .unwrap();
+
+    assert_eq!(result[0].status_code, StatusCode::BadNodeAttributesInvalid);
 }
 
 /// Edge: deleting a node that has references stays consistent (parent reference removed, no dangling

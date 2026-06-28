@@ -445,18 +445,21 @@ impl MonitoredItem {
         info: &ServerInfo,
         timestamps_to_return: TimestampsToReturn,
         request: &MonitoredItemModifyRequest,
+        eu_range: Option<(f64, f64)>,
         type_tree: &dyn TypeTree,
     ) -> (Option<ExtensionObject>, StatusCode) {
         self.timestamps_to_return = timestamps_to_return;
+        let eu_range = eu_range.or(self.eu_range);
         let (filter_res, filter) = FilterType::from_filter(
             request.requested_parameters.filter.clone(),
-            self.eu_range,
+            eu_range,
             type_tree,
         );
         self.filter = match filter {
             Ok(f) => f,
             Err(e) => return (filter_res, e),
         };
+        self.eu_range = eu_range;
         // The filter may have changed to/from/within an AggregateFilter: restart the aggregation
         // window so a new aggregate item starts flushing and a reconfigured one uses the new
         // interval, rather than carrying the old buffer/deadline (or none at all).

@@ -788,6 +788,7 @@ impl SubscriptionCache {
         info: Arc<ServerInfo>,
         timestamps_to_return: TimestampsToReturn,
         requests: Vec<MonitoredItemModifyRequest>,
+        eu_ranges: HashMap<u32, (f64, f64)>,
     ) -> Result<Vec<MonitoredItemUpdateRef>, StatusCode> {
         let Some(cache) = ({
             let lck = trace_read_lock!(self.inner);
@@ -807,9 +808,31 @@ impl SubscriptionCache {
                     &info,
                     timestamps_to_return,
                     requests,
+                    eu_ranges,
                     type_tree.get(),
                 )
             })
+            .await
+            .map_err(|_| StatusCode::BadNoSubscription)?
+    }
+
+    pub(crate) async fn monitored_item_node_ids(
+        &self,
+        session_id: u32,
+        subscription_id: u32,
+        monitored_item_ids: Vec<u32>,
+    ) -> Result<HashMap<u32, NodeId>, StatusCode> {
+        let Some(cache) = ({
+            let lck = trace_read_lock!(self.inner);
+            lck.session_subscriptions
+                .get(&session_id)
+                .map(SessionEntry::handle)
+        }) else {
+            return Err(StatusCode::BadNoSubscription);
+        };
+
+        cache
+            .legacy(move |subs| subs.monitored_item_node_ids(subscription_id, &monitored_item_ids))
             .await
             .map_err(|_| StatusCode::BadNoSubscription)?
     }

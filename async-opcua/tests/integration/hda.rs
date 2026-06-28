@@ -2,11 +2,16 @@ use std::{sync::Arc, time::Duration};
 
 use crate::utils::{default_server, Tester};
 use opcua::{
+    client::HistoryReadAction,
     server::{
         address_space::{AccessLevel, VariableBuilder},
         node_manager::memory::{simple_node_manager, SimpleNodeManager},
     },
-    types::{DataTypeId, DataValue, DateTime, NodeId, PerformUpdateType, StatusCode, Variant},
+    types::{
+        DataTypeId, DataValue, DateTime, HistoryReadValueId, NodeId, NumericRange,
+        PerformUpdateType, QualifiedName, ReadRawModifiedDetails, StatusCode, TimestampsToReturn,
+        Variant,
+    },
 };
 use opcua_history_sqlite::SqliteHistoryBackend;
 use tokio::time::timeout;
@@ -204,6 +209,41 @@ async fn history_read_invalid_continuation_point_is_rejected() {
         .await
         .unwrap_err();
     assert_eq!(StatusCode::BadContinuationPointInvalid, e.status());
+}
+
+#[tokio::test]
+async fn history_read_neither_timestamps_returns_bad_timestamps_to_return_invalid() {
+    // OPC UA Part 4 §5.11.3.2: HistoryRead with TimestampsToReturn::Neither is invalid.
+    let (_tester, nm, session, _backend) = setup_hda().await;
+    let hist = NodeId::new(2, "HistNeitherTimestamps");
+    insert_hist_node(&nm, &hist);
+
+    let now = DateTime::now();
+    let details = ReadRawModifiedDetails {
+        is_read_modified: false,
+        start_time: DateTime::from(now.ticks() - 10_000_000),
+        end_time: DateTime::from(now.ticks() + 10_000_000),
+        num_values_per_node: 10,
+        return_bounds: false,
+    };
+    let value_id = HistoryReadValueId {
+        node_id: hist,
+        index_range: NumericRange::None,
+        data_encoding: QualifiedName::null(),
+        continuation_point: Default::default(),
+    };
+
+    let err = session
+        .history_read(
+            HistoryReadAction::ReadRawModifiedDetails(details),
+            TimestampsToReturn::Neither,
+            false,
+            &[value_id],
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(err.status(), StatusCode::BadTimestampsToReturnInvalid);
 }
 
 #[tokio::test]

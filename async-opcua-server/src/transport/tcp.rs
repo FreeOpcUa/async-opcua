@@ -8,14 +8,14 @@ use opcua_core::{
     comms::{
         buffer::SendBuffer,
         chunker::Chunker,
-        message_chunk::{MessageChunk, MessageIsFinalType},
+        message_chunk::{MessageChunk, MessageChunkType, MessageIsFinalType},
         message_chunk_info::ChunkInfo,
         secure_channel::{DecryptedChunkStorage, SecureChannel},
         sequence_number::SequenceNumberHandle,
         tcp_codec::{Message, TcpCodec},
         tcp_types::{AcknowledgeMessage, ErrorMessage, MIN_CHUNK_SIZE},
     },
-    RequestMessage, ResponseMessage,
+    MessageType, RequestMessage, ResponseMessage,
 };
 use tracing::error;
 use tracing_futures::Instrument;
@@ -43,6 +43,13 @@ pub(crate) trait ConnectionTransport: Send + 'static {
         channel: &mut SecureChannel,
         message: ResponseMessage,
         request_id: u32,
+    ) -> Result<(), StatusCode>;
+    fn enqueue_message_for_send_with_message_type(
+        &mut self,
+        channel: &mut SecureChannel,
+        message: ResponseMessage,
+        request_id: u32,
+        message_type: MessageChunkType,
     ) -> Result<(), StatusCode>;
     fn client_protocol_version(&self) -> u32;
     fn poll<'a>(
@@ -351,29 +358,53 @@ where
         message: ResponseMessage,
         request_id: u32,
     ) -> Result<(), StatusCode> {
+        self.enqueue_message_for_send_with_message_type_inner(channel, message, request_id, None)
+    }
+
+    fn enqueue_message_for_send_with_message_type_inner(
+        &mut self,
+        channel: &mut SecureChannel,
+        message: ResponseMessage,
+        request_id: u32,
+        message_type: Option<MessageChunkType>,
+    ) -> Result<(), StatusCode> {
+        let wire_message_type = message_type.unwrap_or_else(|| message.message_type());
         if !self.outgoing_sequence_numbers_configured
-            && matches!(message, ResponseMessage::OpenSecureChannel(_))
+            && matches!(wire_message_type, MessageChunkType::OpenSecureChannel)
         {
             self.send_buffer
                 .configure_sequence_numbers(channel.security_policy().legacy_sequence_numbers());
             self.outgoing_sequence_numbers_configured = true;
         }
 
-        match self.send_buffer.write(request_id, message, channel) {
+        let result = if let Some(message_type) = message_type {
+            self.send_buffer
+                .write_with_message_type(request_id, message, channel, message_type)
+        } else {
+            self.send_buffer.write(request_id, message, channel)
+        };
+
+        match result {
             Ok(_) => Ok(()),
             Err(e) => {
                 tracing::warn!("Failed to encode outgoing message: {e:?}");
                 if let Some((request_id, request_handle)) = e.full_context() {
-                    self.send_buffer.write(
-                        request_id,
-                        ResponseMessage::ServiceFault(Box::new(ServiceFault {
-                            response_header: ResponseHeader::new_service_result(
-                                request_handle,
-                                e.into(),
-                            ),
-                        })),
-                        channel,
-                    )?;
+                    let fault = ResponseMessage::ServiceFault(Box::new(ServiceFault {
+                        response_header: ResponseHeader::new_service_result(
+                            request_handle,
+                            e.into(),
+                        ),
+                    }));
+                    if let Some(message_type) = message_type {
+                        self.send_buffer.write_with_message_type(
+                            request_id,
+                            fault,
+                            channel,
+                            message_type,
+                        )?;
+                    } else {
+                        self.send_buffer.write(request_id, fault, channel)?;
+                    }
                     Ok(())
                 } else {
                     Err(e.into())
@@ -568,6 +599,21 @@ where
         request_id: u32,
     ) -> Result<(), StatusCode> {
         self.enqueue_message_for_send_inner(channel, message, request_id)
+    }
+
+    fn enqueue_message_for_send_with_message_type(
+        &mut self,
+        channel: &mut SecureChannel,
+        message: ResponseMessage,
+        request_id: u32,
+        message_type: MessageChunkType,
+    ) -> Result<(), StatusCode> {
+        self.enqueue_message_for_send_with_message_type_inner(
+            channel,
+            message,
+            request_id,
+            Some(message_type),
+        )
     }
 
     fn client_protocol_version(&self) -> u32 {

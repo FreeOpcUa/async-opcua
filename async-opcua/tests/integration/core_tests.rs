@@ -15,7 +15,8 @@ use opcua::{
     core::config::Config,
     crypto::{KeySize, PrivateKey, SecurityPolicy},
     types::{
-        ApplicationType, DecodingOptions, MessageSecurityMode, NodeId, ReadValueId, StatusCode,
+        ApplicationType, AttributeId, BrowseDescription, BrowseDirection, DecodingOptions,
+        MessageSecurityMode, NodeClass, NodeId, ObjectId, ReadValueId, ReferenceTypeId, StatusCode,
         TimestampsToReturn, VariableId, Variant,
     },
 };
@@ -583,4 +584,85 @@ async fn cancel_is_a_clean_noop() {
         )
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn namespace_metadata_properties_read_node_class_variable() {
+    let mut tester = Tester::new(test_server(), false).await;
+    let (session, lp) = tester.connect_default().await.unwrap();
+    lp.spawn();
+    tokio::time::timeout(Duration::from_secs(20), session.wait_for_connection())
+        .await
+        .unwrap();
+
+    let metadata_refs = session
+        .browse(
+            &[BrowseDescription {
+                node_id: ObjectId::Server_Namespaces.into(),
+                browse_direction: BrowseDirection::Forward,
+                reference_type_id: ReferenceTypeId::HasComponent.into(),
+                include_subtypes: false,
+                node_class_mask: NodeClass::Object as u32,
+                result_mask: 0x3f,
+            }],
+            1000,
+            None,
+        )
+        .await
+        .unwrap();
+    let metadata_node = metadata_refs[0]
+        .references
+        .as_ref()
+        .and_then(|refs| refs.first())
+        .expect("test namespace metadata should be browsable")
+        .node_id
+        .node_id
+        .clone();
+
+    let property_refs = session
+        .browse(
+            &[BrowseDescription {
+                node_id: metadata_node,
+                browse_direction: BrowseDirection::Forward,
+                reference_type_id: ReferenceTypeId::HasProperty.into(),
+                include_subtypes: false,
+                node_class_mask: NodeClass::Variable as u32,
+                result_mask: 0x3f,
+            }],
+            1000,
+            None,
+        )
+        .await
+        .unwrap();
+    let namespace_uri_property = property_refs[0]
+        .references
+        .as_ref()
+        .and_then(|refs| {
+            refs.iter()
+                .find(|reference| reference.browse_name.name.as_ref() == "NamespaceUri")
+        })
+        .expect("NamespaceUri metadata property should be browsable")
+        .node_id
+        .node_id
+        .clone();
+
+    // OPC UA Part 5 6.3.14: NamespaceMetadata properties are Variable nodes.
+    let values = session
+        .read(
+            &[ReadValueId {
+                node_id: namespace_uri_property,
+                attribute_id: AttributeId::NodeClass as u32,
+                ..Default::default()
+            }],
+            TimestampsToReturn::Neither,
+            0.0,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(values[0].status(), StatusCode::Good);
+    assert_eq!(
+        values[0].value,
+        Some(Variant::Int32(NodeClass::Variable as i32))
+    );
 }

@@ -4,7 +4,20 @@ name: Interop conformance harness
 # the OPC Foundation .NET Standard reference stack) across the conformance surface — the repeatable
 # substitute for the official UACTT.
 'on':
-  workflow_call: null
+  workflow_call:
+    inputs:
+      external_endpoint:
+        description: Optional OPC UA endpoint for portable external implementation checks.
+        required: false
+        type: string
+        default: ''
+  workflow_dispatch:
+    inputs:
+      external_endpoint:
+        description: Optional OPC UA endpoint for portable external implementation checks.
+        required: false
+        type: string
+        default: ''
 
 jobs:
   interop:
@@ -43,3 +56,25 @@ jobs:
       # is built on; the most comprehensive of the four harnesses (~65 checks).
       - name: .NET (OPC Foundation reference) interop harness
         run: ./samples/demo-server/interop/dotnet/run-dotnet.sh
+
+  external-interop:
+    if: ${{ inputs.external_endpoint != '' }}
+    runs-on: ubuntu-latest
+    env:
+      OPCUA_EXTERNAL_ENDPOINT: ${{ inputs.external_endpoint }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Provision .NET 8 SDK
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install asyncua dependencies
+        run: sudo apt-get update && sudo apt-get install -y python3-venv
+
+      - name: .NET portable external interop harness
+        run: ./samples/demo-server/interop/dotnet/run-dotnet.sh --external "$OPCUA_EXTERNAL_ENDPOINT" --security auto
+
+      - name: asyncua portable external interop harness
+        run: ./samples/demo-server/interop/asyncua/run-asyncua.sh --external "$OPCUA_EXTERNAL_ENDPOINT"

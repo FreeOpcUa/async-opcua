@@ -160,7 +160,12 @@ RFC 5869 Expand Info=salt; key layout Sig|Enc|IV; P256=32/16/16 (SHA256/AES128),
 
 ## Phase 8: Polish & Cross-Cutting
 
-- [ ] T024 [P] Fuzz the ECC handshake/decode path: `cargo +nightly fuzz run fuzz_comms --features nightly -- -max_total_time=<n>` → zero aborts.
+- [X] T024 [P] Fuzz the ECC handshake/decode path: `cargo +nightly fuzz run fuzz_comms --features nightly -- -max_total_time=<n>` → zero aborts.
+  — VERIFIED 2026-06-28: `cargo +nightly fuzz run fuzz_comms --features nightly -- -max_total_time=60`
+  completed 15,629,845 runs in 61s with zero aborts/crashes. Grounded in OPC UA Part 6 §6.8.1:
+  ECC `OpenSecureChannel` exchanges ephemeral public keys, performs curve-specific shared-secret
+  calculation, and derives channel keys with HKDF; `fuzz_comms` exercises the untrusted TCP
+  message decode path that reaches secure-channel handshake decoding.
 - [ ] T025 Interop validation (SC-007): if an open62541 / UA-.NETStandard ECC peer is available, connect our client↔their server and theirs↔ours in both modes; otherwise document the gap in research.md.
 - [ ] T026 [P] Update `docs/setup.md` (ECC deployment + `ecc` feature) and release notes; record the security-review note (handshake/crypto path).
 - [ ] T027 Final gate: `cargo fmt --all --check` + `cargo clippy --all-targets --all-features -- -D warnings` + `cargo test --workspace` + `verify-clean-codegen`; confirm RSA/None wire byte-identity preserved.

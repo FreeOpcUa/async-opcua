@@ -10,6 +10,7 @@ Usage:  python3 asyncua-test.py [endpoint]   (env NOTRUST_ENDPOINT enables the u
 Exit code is the number of failed checks (0 = all passed).
 """
 import asyncio
+import datetime
 import os
 import sys
 
@@ -191,6 +192,95 @@ async def test_failure_modes(client, ns):
     check("BrowseNext with an invalid continuation point -> BadContinuationPointInvalid",
           bnres[0].StatusCode.value == ua.StatusCodes.BadContinuationPointInvalid,
           ua.StatusCode(bnres[0].StatusCode.value).name)
+
+    def percent_deadband_filter():
+        data_change_filter = ua.DataChangeFilter()
+        data_change_filter.Trigger = ua.DataChangeTrigger.StatusValue
+        data_change_filter.DeadbandType = ua.DeadbandType.Percent
+        data_change_filter.DeadbandValue = 10.0
+        return data_change_filter
+
+    def monitoring_parameters(client_handle, mfilter=None):
+        params = ua.MonitoringParameters()
+        params.ClientHandle = client_handle
+        params.SamplingInterval = 100.0
+        params.QueueSize = 1
+        params.DiscardOldest = True
+        if mfilter is not None:
+            params.Filter = mfilter
+        return params
+
+    def data_change_create(nodeid, client_handle, mfilter=None):
+        item = ua.MonitoredItemCreateRequest()
+        item.ItemToMonitor = ua.ReadValueId()
+        item.ItemToMonitor.NodeId = nodeid
+        item.ItemToMonitor.AttributeId = ua.AttributeIds.Value
+        item.MonitoringMode = ua.MonitoringMode.Reporting
+        item.RequestedParameters = monitoring_parameters(client_handle, mfilter)
+        return item
+
+    da_sub = await client.create_subscription(200, SubHandler())
+    try:
+        da_params = ua.CreateMonitoredItemsParameters()
+        da_params.SubscriptionId = da_sub.subscription_id
+        da_params.TimestampsToReturn = ua.TimestampsToReturn.Both
+        da_params.ItemsToCreate = [
+            data_change_create(ua.NodeId("PercentDeadbandAnalog", ns), 2001, percent_deadband_filter()),
+            data_change_create(ua.NodeId("PercentDeadbandPlain", ns), 2002),
+        ]
+        da_results = await client.uaclient.create_monitored_items(da_params)
+        check("CreateMonitoredItems PercentDeadband with EURange is Good",
+              da_results[0].StatusCode.value == ua.StatusCodes.Good,
+              ua.StatusCode(da_results[0].StatusCode.value).name)
+        check("CreateMonitoredItems plain DataAccess node is Good",
+              da_results[1].StatusCode.value == ua.StatusCodes.Good,
+              ua.StatusCode(da_results[1].StatusCode.value).name)
+
+        mod_params = ua.ModifyMonitoredItemsParameters()
+        mod_params.SubscriptionId = da_sub.subscription_id
+        mod_params.TimestampsToReturn = ua.TimestampsToReturn.Both
+        mod_item = ua.MonitoredItemModifyRequest()
+        mod_item.MonitoredItemId = da_results[1].MonitoredItemId
+        mod_item.RequestedParameters = monitoring_parameters(2003, percent_deadband_filter())
+        mod_params.ItemsToModify = [mod_item]
+        mod_results = await client.uaclient.modify_monitored_items(mod_params)
+        check("ModifyMonitoredItems PercentDeadband without EURange -> BadDeadbandFilterInvalid",
+              mod_results[0].StatusCode.value == ua.StatusCodes.BadDeadbandFilterInvalid,
+              ua.StatusCode(mod_results[0].StatusCode.value).name)
+
+        over_params = ua.CreateMonitoredItemsParameters()
+        over_params.SubscriptionId = da_sub.subscription_id
+        over_params.TimestampsToReturn = ua.TimestampsToReturn.Both
+        over_params.ItemsToCreate = [
+            data_change_create(ua.NodeId("Int32", ns), 2100 + i)
+            for i in range(9)
+        ]
+        await expect_raises("CreateMonitoredItems over subscription limit -> BadTooManyMonitoredItems",
+                            client.uaclient.create_monitored_items(over_params),
+                            ua.StatusCodes.BadTooManyMonitoredItems)
+    finally:
+        await da_sub.delete()
+
+    await expect_raises("Publish with no subscriptions -> BadNoSubscription",
+                        client.uaclient.publish([]),
+                        ua.StatusCodes.BadNoSubscription)
+
+    hist_details = ua.ReadRawModifiedDetails()
+    hist_details.IsReadModified = False
+    hist_details.StartTime = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=5)
+    hist_details.EndTime = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=1)
+    hist_details.NumValuesPerNode = 100
+    hist_details.ReturnBounds = False
+    hist_node = ua.HistoryReadValueId()
+    hist_node.NodeId = ua.NodeId("HistoricalDouble", ns)
+    hist_params = ua.HistoryReadParameters()
+    hist_params.HistoryReadDetails = hist_details
+    hist_params.TimestampsToReturn = ua.TimestampsToReturn.Neither
+    hist_params.ReleaseContinuationPoints = False
+    hist_params.NodesToRead = [hist_node]
+    await expect_raises("HistoryRead with TimestampsToReturn.Neither -> BadTimestampsToReturnInvalid",
+                        client.uaclient.history_read(hist_params),
+                        ua.StatusCodes.BadTimestampsToReturnInvalid)
 
 
 async def test_auth_failures():

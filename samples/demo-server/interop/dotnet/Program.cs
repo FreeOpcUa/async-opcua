@@ -7,7 +7,9 @@
 // identity tokens, the attribute/view/method/subscription/history services and their error paths
 // across the demo server's whole surface — every feature we can drive from a client.
 //
-// Usage:  dotnet run -- <endpoint-url>
+// Usage:
+//   dotnet run -- <endpoint-url>
+//   dotnet run -- --profile portable --security auto <endpoint-url>
 // Exit code is the number of failed checks (0 = all passed).
 using System;
 using System.Collections.Generic;
@@ -27,48 +29,133 @@ namespace DotnetInterop
         const string Pass = "sample1_password";
         static int checks = 0, failures = 0;
         static ushort nsi = 0;
+        const string Green = "\u001b[32m";
+        const string Red = "\u001b[31m";
+        const string Reset = "\u001b[0m";
+
+        enum InteropProfile { AsyncOpcuaDemo, Portable }
+        enum SecurityPreference { None, Best, Auto }
+
+        sealed class Options
+        {
+            public string Url = "opc.tcp://127.0.0.1:4855";
+            public InteropProfile Profile = InteropProfile.AsyncOpcuaDemo;
+            public SecurityPreference Security = SecurityPreference.Auto;
+            public bool ShowHelp = false;
+
+            public static Options Parse(string[] args)
+            {
+                var options = new Options();
+                for (int i = 0; i < args.Length; i++)
+                {
+                    string arg = args[i];
+                    if (arg == "-h" || arg == "--help")
+                    {
+                        options.ShowHelp = true;
+                    }
+                    else if (arg == "--url")
+                    {
+                        options.Url = RequireValue(args, ref i, arg);
+                    }
+                    else if (arg == "--profile")
+                    {
+                        options.Profile = ParseProfile(RequireValue(args, ref i, arg));
+                    }
+                    else if (arg == "--security")
+                    {
+                        options.Security = ParseSecurity(RequireValue(args, ref i, arg));
+                    }
+                    else if (arg.StartsWith("--", StringComparison.Ordinal))
+                    {
+                        throw new ArgumentException($"unknown option: {arg}");
+                    }
+                    else
+                    {
+                        options.Url = arg;
+                    }
+                }
+                return options;
+            }
+
+            static string RequireValue(string[] args, ref int index, string option)
+            {
+                if (index + 1 >= args.Length)
+                    throw new ArgumentException($"{option} requires a value");
+                index++;
+                return args[index];
+            }
+
+            static InteropProfile ParseProfile(string value)
+            {
+                switch (value)
+                {
+                    case "demo":
+                    case "async-opcua-demo":
+                        return InteropProfile.AsyncOpcuaDemo;
+                    case "portable":
+                    case "external":
+                        return InteropProfile.Portable;
+                    default:
+                        throw new ArgumentException($"unknown profile: {value}");
+                }
+            }
+
+            static SecurityPreference ParseSecurity(string value)
+            {
+                switch (value)
+                {
+                    case "none":
+                        return SecurityPreference.None;
+                    case "best":
+                        return SecurityPreference.Best;
+                    case "auto":
+                        return SecurityPreference.Auto;
+                    default:
+                        throw new ArgumentException($"unknown security preference: {value}");
+                }
+            }
+        }
 
         static void Check(string name, bool ok, string detail = null)
         {
             checks++;
-            if (ok) Console.WriteLine($"  [32mok[0m   {name}");
-            else { failures++; Console.WriteLine($"  [31mFAIL[0m {name}{(detail != null ? "  — " + detail : "")}"); }
+            if (ok) Console.WriteLine($"  {Green}ok{Reset}   {name}");
+            else { failures++; Console.WriteLine($"  {Red}FAIL{Reset} {name}{(detail != null ? "  — " + detail : "")}"); }
         }
 
         static void Section(string s) => Console.WriteLine($"\n=== {s} ===");
 
         static async Task<int> Main(string[] args)
         {
-            string url = args.Length > 0 ? args[0] : "opc.tcp://127.0.0.1:4855";
+            Options options;
+            try
+            {
+                options = Options.Parse(args);
+            }
+            catch (ArgumentException ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+                PrintUsage();
+                return 2;
+            }
+
+            if (options.ShowHelp)
+            {
+                PrintUsage();
+                return 0;
+            }
+
             var config = await BuildConfig();
 
             try
             {
-                await DiscoveryChecks(config, url);
-                await SecurityMatrixChecks(config, url);
-                await IdentityTokenChecks(config, url);
-
-                using (var session = await Connect(config, url, useSecurity: false))
+                if (options.Profile == InteropProfile.Portable)
                 {
-                    nsi = (ushort)ReadNamespaceArray(session).IndexOf(DemoNs);
-                    Check("DemoServer namespace present", nsi > 0, $"ns={nsi}");
-
-                    Section("Attribute service: Read");
-                    ReadChecks(session);
-                    Section("Attribute service: Write");
-                    WriteChecks(session);
-                    Section("View service: Browse / BrowseNext / Translate / Register");
-                    ViewChecks(session);
-                    Section("Method service");
-                    MethodChecks(session);
-                    Section("Subscription / MonitoredItem service");
-                    await SubscriptionChecks(session);
-                    Section("HistoryRead service");
-                    HistoryChecks(session);
-                    Section("Error paths");
-                    ErrorChecks(session);
-
-                    session.Close();
+                    await PortableChecks(config, options);
+                }
+                else
+                {
+                    await DemoChecks(config, options.Url);
                 }
             }
             catch (Exception ex)
@@ -76,8 +163,161 @@ namespace DotnetInterop
                 Check("client ran without unhandled exception", false, ex.ToString());
             }
 
-            Console.WriteLine($"\n{(failures == 0 ? "[32mall checks passed[0m" : $"[31m{failures} check(s) failed[0m")} ({checks - failures}/{checks})");
+            Console.WriteLine($"\n{(failures == 0 ? $"{Green}all checks passed{Reset}" : $"{Red}{failures} check(s) failed{Reset}")} ({checks - failures}/{checks})");
             return failures;
+        }
+
+        static void PrintUsage()
+        {
+            Console.WriteLine(@"OPC UA .NET reference-stack interop client
+
+Usage:
+  dotnet run --project samples/demo-server/interop/dotnet/interop.csproj -- [options] [endpoint-url]
+
+Profiles:
+  async-opcua-demo  Full async-opcua demo-server suite. This is the default.
+  portable          External implementation smoke using standard OPC UA nodes only.
+
+Options:
+  --profile <async-opcua-demo|portable>
+  --security <none|best|auto>   Portable profile endpoint selection. Default: auto.
+  --url <endpoint-url>          Alternative to positional endpoint-url.
+  -h, --help
+
+Examples:
+  dotnet run -- --profile portable --security auto opc.tcp://127.0.0.1:4840
+  dotnet run -- --profile async-opcua-demo opc.tcp://127.0.0.1:4855");
+        }
+
+        static async Task DemoChecks(ApplicationConfiguration config, string url)
+        {
+            await DiscoveryChecks(config, url);
+            await SecurityMatrixChecks(config, url);
+            await IdentityTokenChecks(config, url);
+
+            using (var session = await Connect(config, url, useSecurity: false))
+            {
+                nsi = (ushort)ReadNamespaceArray(session).IndexOf(DemoNs);
+                Check("DemoServer namespace present", nsi > 0, $"ns={nsi}");
+
+                Section("Attribute service: Read");
+                ReadChecks(session);
+                Section("Attribute service: Write");
+                WriteChecks(session);
+                Section("View service: Browse / BrowseNext / Translate / Register");
+                ViewChecks(session);
+                Section("Method service");
+                MethodChecks(session);
+                Section("Subscription / MonitoredItem service");
+                await SubscriptionChecks(session);
+                Section("HistoryRead service");
+                HistoryChecks(session);
+                Section("Error paths");
+                ErrorChecks(session);
+
+                session.Close();
+            }
+        }
+
+        static async Task PortableChecks(ApplicationConfiguration config, Options options)
+        {
+            Section("Portable external implementation smoke");
+            EndpointDescriptionCollection endpoints = await PortableDiscoveryChecks(config, options.Url, options.Security);
+            EndpointDescription selected = SelectPortableEndpoint(endpoints, options.Security);
+            Check($"selected endpoint for security={options.Security.ToString().ToLowerInvariant()}",
+                  selected != null,
+                  selected == null ? "no matching endpoint" : $"{SecurityPolicies.GetDisplayName(selected.SecurityPolicyUri)}/{selected.SecurityMode}");
+            if (selected == null) return;
+
+            using (var session = await Connect(config, selected))
+            {
+                Check("anonymous session activates", session.Connected);
+                PortableReadChecks(session);
+                PortableBrowseChecks(session);
+                PortableErrorChecks(session);
+                session.Close();
+            }
+        }
+
+        static async Task<EndpointDescriptionCollection> PortableDiscoveryChecks(
+            ApplicationConfiguration config,
+            string url,
+            SecurityPreference security)
+        {
+            Section("Discovery service");
+            using var dc = DiscoveryClient.Create(new Uri(url), EndpointConfiguration.Create(config));
+            var servers = await dc.FindServersAsync(null);
+            Check("FindServers completes", servers.Count > 0, $"count={servers.Count}");
+            var endpoints = await dc.GetEndpointsAsync(null);
+            Check("GetEndpoints returns at least one endpoint", endpoints.Count > 0, $"count={endpoints.Count}");
+            if (security == SecurityPreference.None)
+            {
+                Check("GetEndpoints includes SecurityPolicy None",
+                      endpoints.Any(e => e.SecurityMode == MessageSecurityMode.None),
+                      $"none={endpoints.Count(e => e.SecurityMode == MessageSecurityMode.None)}");
+            }
+            return endpoints;
+        }
+
+        static EndpointDescription SelectPortableEndpoint(EndpointDescriptionCollection endpoints, SecurityPreference security)
+        {
+            EndpointDescription none = endpoints.FirstOrDefault(e => e.SecurityMode == MessageSecurityMode.None);
+            EndpointDescription best = endpoints
+                .Where(e => e.SecurityMode != MessageSecurityMode.None)
+                .OrderByDescending(e => e.SecurityLevel)
+                .FirstOrDefault()
+                ?? endpoints.OrderByDescending(e => e.SecurityLevel).FirstOrDefault();
+
+            switch (security)
+            {
+                case SecurityPreference.None:
+                    return none;
+                case SecurityPreference.Best:
+                    return best;
+                case SecurityPreference.Auto:
+                    return none ?? best;
+                default:
+                    return none;
+            }
+        }
+
+        static void PortableReadChecks(Session session)
+        {
+            Section("Attribute service: standard reads");
+            var currentTime = session.ReadValue(new NodeId(2258u));
+            Check("read ServerStatus/CurrentTime (i=2258)",
+                  StatusCode.IsGood(currentTime.StatusCode) && currentTime.Value != null,
+                  $"{currentTime.StatusCode} {currentTime.Value?.GetType().Name}");
+
+            var state = session.ReadValue(new NodeId(2259u));
+            Check("read ServerStatus/State (i=2259)",
+                  StatusCode.IsGood(state.StatusCode) && state.Value != null,
+                  $"{state.StatusCode} {state.Value?.GetType().Name}");
+
+            var namespaceArray = session.ReadValue(new NodeId(2255u));
+            bool namespaceOk = StatusCode.IsGood(namespaceArray.StatusCode)
+                               && (namespaceArray.Value is IEnumerable<string> || namespaceArray.Value is Array);
+            Check("read NamespaceArray (i=2255)", namespaceOk, $"{namespaceArray.StatusCode} {namespaceArray.Value?.GetType().Name}");
+        }
+
+        static void PortableBrowseChecks(Session session)
+        {
+            Section("View service: standard browse");
+            session.Browse(null, null, ObjectIds.ObjectsFolder, 0, BrowseDirection.Forward,
+                ReferenceTypeIds.HierarchicalReferences, true, 0, out byte[] cp, out ReferenceDescriptionCollection refs);
+            Check("browse Objects folder (i=85)", refs.Count > 0, $"refs={refs.Count}");
+        }
+
+        static void PortableErrorChecks(Session session)
+        {
+            Section("Portable error path");
+            var read = new ReadValueIdCollection {
+                new ReadValueId { NodeId = new NodeId(999999999u), AttributeId = Attributes.Value },
+            };
+            session.Read(null, 0, TimestampsToReturn.Neither, read, out DataValueCollection values, out _);
+            Check("read unknown numeric NodeId returns BadNodeIdUnknown",
+                  values.Count == 1 && values[0].StatusCode == StatusCodes.BadNodeIdUnknown,
+                  values.Count > 0 ? values[0].StatusCode.ToString() : "no result");
         }
 
         // ---- Discovery (no session) ----------------------------------------------------------
@@ -444,6 +684,11 @@ namespace DotnetInterop
         static async Task<Session> Connect(ApplicationConfiguration config, string url, bool useSecurity, IUserIdentity identity = null)
         {
             var selected = CoreClientUtils.SelectEndpoint(config, url, useSecurity);
+            return await Connect(config, selected, identity);
+        }
+
+        static async Task<Session> Connect(ApplicationConfiguration config, EndpointDescription selected, IUserIdentity identity = null)
+        {
             var endpoint = new ConfiguredEndpoint(null, selected, EndpointConfiguration.Create(config));
             return await Session.Create(config, endpoint, false, "async-opcua-dotnet-interop", 60000,
                 identity ?? new UserIdentity(new AnonymousIdentityToken()), null);

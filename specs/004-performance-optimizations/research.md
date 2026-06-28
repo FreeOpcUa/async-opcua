@@ -24,6 +24,13 @@
 *   **Rationale**: `AF_XDP` provides kernel-bypass user-space packet injection, giving us absolute lowest latency and deterministic sub-millisecond jitter (SC-003). `tc taprio` ensures the fallback is still hardware-scheduled.
 *   **Alternatives considered**:
     *   Standard `std::net::UdpSocket`: Insufficient for strict real-time deterministic latency.
+*   **T046 status (2026-06-28)**: Sub-millisecond TSN jitter has **not** been validated on this host.
+    Non-invasive probes found no PTP hardware clock (`/dev/ptp*` absent), no hardware timestamp modes
+    from `ethtool -T` on the available physical NICs (`enp3s0f0np0`, `enp3s0f1np1`, `enxfad8f50be0ba`),
+    no `ptp4l`/`phc2sys`/`hwstamp_ctl`/`cyclictest` tooling, and no effective raw-socket capability
+    in the current process (`CapEff: 0`). The `tsn_jitter` test compiles with `--features tsn`, but
+    remains ignored because the current transport is a simulated loopback stub. Therefore SC-003 is
+    retained as an external hardware-validation gap, not claimed as satisfied.
 
 ## Decision 5: Functional Safety (Part 15) Target
 *   **Decision**: Build the `SPDU` (Safety Protocol Data Unit) wrapper with strict IEC 61508 SIL 3 CRC signatures.

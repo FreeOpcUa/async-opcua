@@ -2,7 +2,7 @@
 
 **Feature Branch**: `[004-performance-optimizations]`  
 **Created**: 2026-06-07  
-**Status**: Draft  
+**Status**: Complete with documented TSN hardware-validation gap
 **Input**: User description: "Refactor AddressSpace to use DashMap to remove global RwLock bottleneck, implement zero-copy TCP serialization in async-opcua-core/src/comms, switch history cache to async-aware LRU pruning, implement OPC-UA over TSN (Time-Sensitive Networking), and implement the OPC-UA Safety profile (Part 15)."
 
 ## Clarifications

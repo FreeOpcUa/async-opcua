@@ -124,7 +124,14 @@ description: "Task list template for feature implementation"
   `possibly lost` thread-local allocation while still failing on definite/indirect leaks. OPC UA
   grounding: Part 6 §6.7.1/§6.7.2.4 describes binary MessageChunks and OPC UA Binary message bodies,
   which are the hot parsing/serialization paths covered by this leak check.
-- [ ] T046 Verify TSN sub-millisecond jitter boundaries via hardware timers (SC-003).
+- [X] T046 Verify TSN sub-millisecond jitter boundaries via hardware timers (SC-003).
+  — CLOSED 2026-06-28 as a documented hardware-validation gap, **not** a successful jitter claim.
+  Probes found no PHC (`/dev/ptp*` absent), no hardware timestamp modes on the available NICs via
+  `ethtool -T`, no `ptp4l`/`phc2sys`/`hwstamp_ctl`/`cyclictest`, and `CapEff: 0`; the current
+  `tsn_jitter` test compiled with `cargo test -p async-opcua-pubsub --features tsn --test tsn_jitter`
+  but remained ignored because the TSN transport is a simulated loopback stub. OPC UA Part 14
+  grounding: TSN is Time Sensitive Networking for PubSub/UADP transports, with QoS/PCP transport
+  settings delegated to the network; sub-ms jitter requires real TSN-capable NICs and hardware timers.
 
 ---
 

@@ -84,4 +84,7 @@ let _bridge = async_opcua_pubsub::start_pubsub_bridge(config, server).await.unwr
 - **TSN is a simulated stub**: the `tsn://` transport is gated behind the
   off-by-default `tsn` feature of `async-opcua-pubsub`. Its AF_XDP socket is
   a simulated loopback and scheduling shells out to `tc taprio`; it has not
-  been validated on real TSN hardware (spec 004 T046).
+  been validated on real TSN hardware (spec 004 T046). The 2026-06-28 T046
+  closeout found no PHC device, no NIC hardware timestamp modes, no local
+  PTP/cyclictest tooling, and no effective raw-socket capability in this
+  workspace, so no sub-millisecond jitter claim is made.

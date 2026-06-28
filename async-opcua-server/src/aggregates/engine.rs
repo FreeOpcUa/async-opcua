@@ -320,6 +320,16 @@ fn bad_aggregate_not_supported(interval_start: DateTime) -> DataValue {
     }
 }
 
+fn bad_aggregate_invalid_inputs(interval_start: DateTime) -> DataValue {
+    DataValue {
+        value: None,
+        status: Some(StatusCode::BadAggregateInvalidInputs),
+        source_timestamp: Some(interval_start),
+        server_timestamp: Some(DateTime::now()),
+        ..Default::default()
+    }
+}
+
 fn aggregate_preamble(input: &AggregateInput<'_>) -> Result<AggregatePreamble, DataValue> {
     let statuses: Vec<Option<StatusCode>> = input.values.iter().map(|v| v.status).collect();
     let quality = compute_aggregate_quality(&statuses);
@@ -1404,8 +1414,60 @@ fn simple_bound_at(before: Option<&DataValue>) -> Option<f64> {
         .and_then(variant_to_f64)
 }
 
+fn aggregate_requires_numeric_inputs(aggregate_type: &NodeId) -> bool {
+    matches!(
+        aggregate_type.identifier,
+        opcua_types::Identifier::Numeric(
+            AGG_INTERPOLATIVE
+                | AGG_AVERAGE
+                | AGG_TIME_AVERAGE
+                | AGG_TOTAL
+                | AGG_MINIMUM
+                | AGG_MAXIMUM
+                | AGG_MINIMUM_ACTUAL_TIME
+                | AGG_MAXIMUM_ACTUAL_TIME
+                | AGG_RANGE
+                | AGG_TIME_AVERAGE2
+                | AGG_MINIMUM2
+                | AGG_MAXIMUM2
+                | AGG_RANGE2
+                | AGG_TOTAL2
+                | AGG_MINIMUM_ACTUAL_TIME2
+                | AGG_MAXIMUM_ACTUAL_TIME2
+                | AGG_START_BOUND
+                | AGG_END_BOUND
+                | AGG_DELTA_BOUNDS
+                | AGG_STANDARD_DEVIATION_SAMPLE
+                | AGG_STANDARD_DEVIATION_POPULATION
+                | AGG_VARIANCE_SAMPLE
+                | AGG_VARIANCE_POPULATION
+        )
+    )
+}
+
+fn has_invalid_numeric_input(input: &AggregateInput<'_>) -> bool {
+    let values = input
+        .values
+        .iter()
+        .copied()
+        .chain(input.prior)
+        .chain(input.next);
+
+    values
+        .filter(|value| value.status.is_none_or(|status| status.is_good()))
+        .any(|value| {
+            value.value.as_ref().is_some_and(|variant| {
+                !matches!(variant, Variant::Empty) && variant_to_f64(variant).is_none()
+            })
+        })
+}
+
 /// Dispatches an aggregate calculation to the implementation for the requested aggregate NodeId.
 pub fn dispatch_aggregate(aggregate_type: &NodeId, input: &AggregateInput<'_>) -> DataValue {
+    if aggregate_requires_numeric_inputs(aggregate_type) && has_invalid_numeric_input(input) {
+        return bad_aggregate_invalid_inputs(input.interval_start);
+    }
+
     match aggregate_type.identifier {
         opcua_types::Identifier::Numeric(AGG_INTERPOLATIVE) => agg_interpolative(input),
         opcua_types::Identifier::Numeric(AGG_AVERAGE) => agg_average(input),

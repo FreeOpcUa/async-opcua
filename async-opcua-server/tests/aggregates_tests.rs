@@ -216,6 +216,36 @@ fn test_calculate_aggregate_min_max() {
     assert_eq!(max_res.value, Some(Variant::Double(50.0)));
 }
 
+#[test]
+fn aggregate_invalid_inputs_returns_bad_aggregate_invalid_inputs() {
+    let start = DateTime::from((2026, 6, 6, 12, 0, 0));
+    let end = DateTime::from((2026, 6, 6, 12, 0, 10));
+    let config = AggregateConfiguration::default();
+    let invalid = DataValue {
+        value: Some(Variant::from("not numeric")),
+        source_timestamp: Some(start),
+        status: Some(StatusCode::Good),
+        ..Default::default()
+    };
+
+    let result = dispatch_aggregate(
+        &NodeId::new(0u16, ID_AVERAGE),
+        &AggregateInput {
+            values: &[&invalid],
+            annotations: &[],
+            prior: None,
+            next: None,
+            interval_start: start,
+            interval_end: end,
+            config: &config,
+            stepped: true,
+        },
+    );
+
+    // OPC-10000-13 5.3.2: invalid aggregate data inputs/conversions report BadAggregateInvalidInputs.
+    assert_eq!(result.status, Some(StatusCode::BadAggregateInvalidInputs));
+}
+
 // ---------------------------------------------------------------------------
 // Phase B: simple in-interval aggregates. Expected values hand-computed and
 // cross-checked against OPC 10000-13 §5.4.3 (verified via the opc-ua-reference

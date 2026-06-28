@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use opcua_core::sync::RwLock;
 use opcua_pubsub::{
+    transport::udp::{bind_subscriber_socket, UdpSubscriberEndpoint},
     DataSetFieldEncoding, DataSetMessageKind, DataSetReaderConfig, FieldTargetConfig,
     MessageEncoding, PubSubConnectionConfig, PublisherId, ReaderGroupConfig, SubscriberError,
     SubscriberRuntime, UadpDataSetMessage, UadpNetworkMessage,
@@ -14,6 +15,7 @@ use opcua_types::{
     AttributeId, BinaryEncodable, ContextOwned, DataEncoding, DataTypeId, NodeId, NumericRange,
     OverrideValueHandling, StatusCode, TimestampsToReturn, Variant,
 };
+use tokio::net::UdpSocket;
 
 fn target_value(space: &AddressSpace, node: &NodeId) -> Option<Variant> {
     space
@@ -322,6 +324,20 @@ fn validation_rejects_unsupported_subscriber_modes() {
         connection(event).validate_subscriber_config().unwrap_err(),
         StatusCode::BadNotSupported
     );
+}
+
+#[tokio::test]
+async fn udp_subscriber_bind_conflict_returns_bad_communication_error() {
+    let held_socket = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let endpoint = UdpSubscriberEndpoint {
+        bind_addr: held_socket.local_addr().unwrap(),
+        multicast_addr: None,
+    };
+
+    let err = bind_subscriber_socket(endpoint).await.unwrap_err();
+
+    // OPC-10000-14 5.4.6.2.2: UDP subscriber transport bind failures map to BadCommunicationError.
+    assert_eq!(err, StatusCode::BadCommunicationError);
 }
 
 #[test]

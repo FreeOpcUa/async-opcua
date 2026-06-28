@@ -238,14 +238,41 @@ macro_rules! json_enc_number {
     };
 }
 
+macro_rules! json_enc_string_number {
+    ($t:ty) => {
+        impl JsonEncodable for $t {
+            fn encode(
+                &self,
+                stream: &mut JsonStreamWriter<&mut dyn Write>,
+                _ctx: &crate::Context<'_>,
+            ) -> EncodingResult<()> {
+                stream.string_value(&self.to_string())?;
+                Ok(())
+            }
+        }
+
+        impl JsonDecodable for $t {
+            fn decode(
+                stream: &mut JsonStreamReader<&mut dyn Read>,
+                _ctx: &Context<'_>,
+            ) -> EncodingResult<Self> {
+                match stream.peek()? {
+                    ValueType::String => Ok(stream.next_str()?.parse()?),
+                    _ => Ok(stream.next_number()??),
+                }
+            }
+        }
+    };
+}
+
 json_enc_number!(u8);
 json_enc_number!(u16);
 json_enc_number!(u32);
-json_enc_number!(u64);
 json_enc_number!(i8);
 json_enc_number!(i16);
 json_enc_number!(i32);
-json_enc_number!(i64);
+json_enc_string_number!(u64);
+json_enc_string_number!(i64);
 json_enc_float!(f32);
 json_enc_float!(f64);
 

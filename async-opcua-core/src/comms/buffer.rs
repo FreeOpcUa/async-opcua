@@ -3,7 +3,7 @@
 
 use std::{
     collections::VecDeque,
-    io::{BufRead, Cursor},
+    io::{BufRead, Cursor, Read, Write},
 };
 
 use tracing::trace;
@@ -13,10 +13,12 @@ use crate::{
         chunker::Chunker, message_chunk::MessageChunk, secure_channel::SecureChannel,
         tcp_codec::TcpCodec,
     },
-    Message,
+    Message, MessageType,
 };
 
-use opcua_types::{Error, SimpleBinaryEncodable, StatusCode};
+use opcua_types::{
+    BuiltInDataEncoding, EncodingResult, Error, NodeId, ObjectId, SimpleBinaryEncodable, StatusCode,
+};
 
 use super::{
     sequence_number::SequenceNumberHandle,
@@ -34,6 +36,75 @@ enum PendingPayload {
     Chunk(MessageChunk),
     Ack(AcknowledgeMessage),
     Error(ErrorMessage),
+}
+
+struct MessageWithChunkType<M> {
+    message: M,
+    message_type: crate::comms::message_chunk::MessageChunkType,
+}
+
+impl<M> MessageWithChunkType<M> {
+    fn new(message: M, message_type: crate::comms::message_chunk::MessageChunkType) -> Self {
+        Self {
+            message,
+            message_type,
+        }
+    }
+}
+
+impl<M: opcua_types::BinaryEncodable> opcua_types::BinaryEncodable for MessageWithChunkType<M> {
+    fn byte_len(&self, ctx: &opcua_types::Context<'_>) -> usize {
+        self.message.byte_len(ctx)
+    }
+
+    fn fixed_byte_len() -> Option<usize>
+    where
+        Self: Sized,
+    {
+        M::fixed_byte_len()
+    }
+
+    fn encode<S: Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua_types::Context<'_>,
+    ) -> EncodingResult<()> {
+        self.message.encode(stream, ctx)
+    }
+
+    fn override_encoding(&self) -> Option<BuiltInDataEncoding> {
+        self.message.override_encoding()
+    }
+}
+
+impl<M> MessageType for MessageWithChunkType<M> {
+    fn message_type(&self) -> crate::comms::message_chunk::MessageChunkType {
+        self.message_type
+    }
+}
+
+impl<M: Message> Message for MessageWithChunkType<M> {
+    fn request_handle(&self) -> u32 {
+        self.message.request_handle()
+    }
+
+    fn decode_by_object_id<S: Read>(
+        stream: &mut S,
+        object_id: ObjectId,
+        ctx: &opcua_types::Context<'_>,
+    ) -> EncodingResult<Self>
+    where
+        Self: Sized,
+    {
+        Ok(Self {
+            message: M::decode_by_object_id(stream, object_id, ctx)?,
+            message_type: crate::comms::message_chunk::MessageChunkType::Message,
+        })
+    }
+
+    fn type_id(&self) -> NodeId {
+        self.message.type_id()
+    }
 }
 
 /// General implementation of a buffer of outgoing messages.
@@ -189,6 +260,25 @@ impl SendBuffer {
                 .extend(self.chunk_scratch.drain(..).map(PendingPayload::Chunk));
             Ok(request_id)
         }
+    }
+
+    /// Encode a message while forcing the transport chunk type.
+    ///
+    /// This is used for service faults that respond to OpenSecureChannel. The
+    /// encoded body remains a normal ServiceFault, but the wire chunk type must
+    /// still match the OpenSecureChannel request.
+    pub fn write_with_message_type(
+        &mut self,
+        request_id: u32,
+        message: impl Message,
+        secure_channel: &SecureChannel,
+        message_type: crate::comms::message_chunk::MessageChunkType,
+    ) -> Result<u32, Error> {
+        self.write(
+            request_id,
+            MessageWithChunkType::new(message, message_type),
+            secure_channel,
+        )
     }
 
     /// Get the next request ID.

@@ -40,6 +40,7 @@ use super::{
 
 static NEXT_SESSION_ID: AtomicU32 = AtomicU32::new(1);
 const SESSION_ACTOR_QUEUE_CAPACITY: usize = 256;
+const CLOSED_SESSION_TOKEN_TOMBSTONE_SECS: u64 = 300;
 
 pub(super) fn next_session_id() -> (NodeId, u32) {
     // Session id will be a string identifier
@@ -138,6 +139,7 @@ pub struct SessionManager {
     /// Lock-free lookup from authentication token to the session actor's
     /// message queue.
     actor_senders: Arc<DashMap<NodeId, mpsc::Sender<SessionMessage>>>,
+    closed_auth_tokens: Arc<DashMap<NodeId, Instant>>,
     info: Arc<ServerInfo>,
     notify: Arc<Notify>,
 }
@@ -149,6 +151,7 @@ impl SessionManager {
             sessions: Default::default(),
             auth_tokens: Default::default(),
             actor_senders: Default::default(),
+            closed_auth_tokens: Default::default(),
             info,
             notify,
         }
@@ -177,6 +180,7 @@ impl SessionManager {
 
     /// Register an authentication token for direct session lookup.
     pub fn register_token(&self, token: NodeId, session: Arc<RwLock<Session>>) {
+        self.closed_auth_tokens.remove(&token);
         self.auth_tokens.insert(token, session);
     }
 
@@ -184,6 +188,24 @@ impl SessionManager {
     pub fn deregister_token(&self, token: &NodeId) {
         self.actor_senders.remove(token);
         self.auth_tokens.remove(token);
+        self.remember_closed_token(token.clone());
+    }
+
+    /// Return true if the token belonged to a recently closed session.
+    pub fn is_closed_token(&self, token: &NodeId) -> bool {
+        self.prune_closed_tokens();
+        self.closed_auth_tokens.contains_key(token)
+    }
+
+    fn remember_closed_token(&self, token: NodeId) {
+        self.prune_closed_tokens();
+        self.closed_auth_tokens.insert(token, Instant::now());
+    }
+
+    fn prune_closed_tokens(&self) {
+        let cutoff = Instant::now() - Duration::from_secs(CLOSED_SESSION_TOKEN_TOMBSTONE_SECS);
+        self.closed_auth_tokens
+            .retain(|_, closed_at| *closed_at >= cutoff);
     }
 
     #[allow(dead_code)]
@@ -233,10 +255,12 @@ impl SessionManager {
 
         let auth_tokens = Arc::clone(&self.auth_tokens);
         let actor_senders = Arc::clone(&self.actor_senders);
+        let closed_auth_tokens = Arc::clone(&self.closed_auth_tokens);
         let mut actor =
             SessionActor::new(context, receiver).with_termination_cleanup(move |terminated| {
                 auth_tokens.remove(&terminated.authentication_token);
                 actor_senders.remove(&terminated.authentication_token);
+                closed_auth_tokens.insert(terminated.authentication_token.clone(), Instant::now());
                 cleanup_session(&terminated.session_id);
             });
 

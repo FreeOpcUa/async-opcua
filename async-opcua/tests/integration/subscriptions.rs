@@ -469,6 +469,82 @@ async fn subscription_limits() {
 }
 
 #[tokio::test]
+async fn create_monitored_items_over_limit_returns_bad_too_many_monitored_items() {
+    let mut server = test_server();
+    server
+        .limits_mut()
+        .subscriptions
+        .max_monitored_items_per_sub = 1;
+    let mut tester = Tester::new(server, false).await;
+    let (session, lp) = tester.connect_default().await.unwrap();
+    lp.spawn();
+    timeout(Duration::from_secs(10), session.wait_for_connection())
+        .await
+        .unwrap();
+
+    let (notifs, _data, _) = ChannelNotifications::new();
+    let sub_id = session
+        .create_subscription(Duration::from_millis(100), 100, 20, 1000, 0, true, notifs)
+        .await
+        .unwrap();
+
+    // OPC UA Part 4 5.13.2.3: exceeding monitored-item capacity returns BadTooManyMonitoredItems.
+    let err = session
+        .create_monitored_items(
+            sub_id,
+            TimestampsToReturn::Both,
+            vec![
+                MonitoredItemCreateRequest {
+                    item_to_monitor: ReadValueId {
+                        node_id: NodeId::new(2, "OverLimitA"),
+                        attribute_id: AttributeId::Value as u32,
+                        ..Default::default()
+                    },
+                    monitoring_mode: MonitoringMode::Reporting,
+                    requested_parameters: MonitoringParameters {
+                        sampling_interval: 100.0,
+                        ..Default::default()
+                    },
+                },
+                MonitoredItemCreateRequest {
+                    item_to_monitor: ReadValueId {
+                        node_id: NodeId::new(2, "OverLimitB"),
+                        attribute_id: AttributeId::Value as u32,
+                        ..Default::default()
+                    },
+                    monitoring_mode: MonitoringMode::Reporting,
+                    requested_parameters: MonitoringParameters {
+                        sampling_interval: 100.0,
+                        ..Default::default()
+                    },
+                },
+            ],
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(err.status(), StatusCode::BadTooManyMonitoredItems);
+}
+
+#[tokio::test]
+async fn modify_missing_subscription_returns_bad_no_subscription() {
+    let mut tester = Tester::new(test_server(), false).await;
+    let (session, lp) = tester.connect_default().await.unwrap();
+    lp.spawn();
+    timeout(Duration::from_secs(10), session.wait_for_connection())
+        .await
+        .unwrap();
+
+    // OPC UA Part 4 5.14: a session with no Subscriptions reports BadNoSubscription.
+    let err = ModifySubscription::new(999_999, &session)
+        .send(session.channel())
+        .await
+        .unwrap_err();
+
+    assert_eq!(err.status(), StatusCode::BadNoSubscription);
+}
+
+#[tokio::test]
 async fn transfer_subscriptions() {
     let server = test_server();
     let mut tester = Tester::new(server, false).await;
@@ -891,6 +967,182 @@ async fn test_data_change_filters() {
 }
 
 #[tokio::test]
+async fn modify_monitored_items_percent_deadband_without_eurange_returns_bad_deadband_filter_invalid(
+) {
+    // OPC UA Part 8 §7.2: PercentDeadband applies only to AnalogItems with an EURange property.
+    let (tester, nm, session) = setup().await;
+
+    let id = nm.inner().next_node_id();
+    nm.inner().add_node(
+        nm.address_space(),
+        tester.handle.type_tree(),
+        VariableBuilder::new(&id, "NoEuRangeVar", "NoEuRangeVar")
+            .value(10.0f64)
+            .data_type(DataTypeId::Double)
+            .access_level(AccessLevel::CURRENT_READ)
+            .user_access_level(AccessLevel::CURRENT_READ)
+            .build()
+            .into(),
+        &ObjectId::ObjectsFolder.into(),
+        &ReferenceTypeId::Organizes.into(),
+        Some(&VariableTypeId::BaseDataVariableType.into()),
+        Vec::new(),
+    );
+
+    let (notifs, _data, _) = ChannelNotifications::new();
+    let sub_id = session
+        .create_subscription(Duration::from_millis(100), 100, 20, 1000, 0, true, notifs)
+        .await
+        .unwrap();
+
+    let created = session
+        .create_monitored_items(
+            sub_id,
+            TimestampsToReturn::Both,
+            vec![MonitoredItemCreateRequest {
+                item_to_monitor: ReadValueId {
+                    node_id: id,
+                    attribute_id: AttributeId::Value as u32,
+                    ..Default::default()
+                },
+                monitoring_mode: MonitoringMode::Reporting,
+                requested_parameters: MonitoringParameters {
+                    sampling_interval: 0.0,
+                    queue_size: 10,
+                    discard_oldest: true,
+                    ..Default::default()
+                },
+            }],
+        )
+        .await
+        .unwrap();
+    assert_eq!(created[0].result.status_code, StatusCode::Good);
+
+    let modified = session
+        .modify_monitored_items(
+            sub_id,
+            TimestampsToReturn::Both,
+            &[MonitoredItemModifyRequest {
+                monitored_item_id: created[0].result.monitored_item_id,
+                requested_parameters: MonitoringParameters {
+                    sampling_interval: 0.0,
+                    queue_size: 10,
+                    discard_oldest: true,
+                    filter: ExtensionObject::from_message(DataChangeFilter {
+                        trigger: DataChangeTrigger::StatusValue,
+                        deadband_type: DeadbandType::Percent as u32,
+                        deadband_value: 10.0,
+                    }),
+                    ..Default::default()
+                },
+            }],
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        modified[0].status_code,
+        StatusCode::BadDeadbandFilterInvalid
+    );
+}
+
+#[tokio::test]
+async fn modify_monitored_items_percent_deadband_with_eurange_succeeds() {
+    // OPC UA Part 8 §7.2: PercentDeadband is valid when the monitored AnalogItem exposes EURange.
+    let (tester, nm, session) = setup().await;
+
+    let id = nm.inner().next_node_id();
+    nm.inner().add_node(
+        nm.address_space(),
+        tester.handle.type_tree(),
+        VariableBuilder::new(&id, "WithEuRangeVar", "WithEuRangeVar")
+            .value(10.0f64)
+            .data_type(DataTypeId::Double)
+            .access_level(AccessLevel::CURRENT_READ)
+            .user_access_level(AccessLevel::CURRENT_READ)
+            .build()
+            .into(),
+        &ObjectId::ObjectsFolder.into(),
+        &ReferenceTypeId::Organizes.into(),
+        Some(&VariableTypeId::BaseDataVariableType.into()),
+        Vec::new(),
+    );
+
+    let prop_id = nm.inner().next_node_id();
+    nm.inner().add_node(
+        nm.address_space(),
+        tester.handle.type_tree(),
+        VariableBuilder::new(&prop_id, "EURange", "EURange")
+            .value(Range {
+                low: 0.0,
+                high: 100.0,
+            })
+            .data_type(DataTypeId::Range)
+            .access_level(AccessLevel::CURRENT_READ)
+            .user_access_level(AccessLevel::CURRENT_READ)
+            .build()
+            .into(),
+        &id,
+        &ReferenceTypeId::HasProperty.into(),
+        Some(&VariableTypeId::PropertyType.into()),
+        Vec::new(),
+    );
+
+    let (notifs, _data, _) = ChannelNotifications::new();
+    let sub_id = session
+        .create_subscription(Duration::from_millis(100), 100, 20, 1000, 0, true, notifs)
+        .await
+        .unwrap();
+
+    let created = session
+        .create_monitored_items(
+            sub_id,
+            TimestampsToReturn::Both,
+            vec![MonitoredItemCreateRequest {
+                item_to_monitor: ReadValueId {
+                    node_id: id,
+                    attribute_id: AttributeId::Value as u32,
+                    ..Default::default()
+                },
+                monitoring_mode: MonitoringMode::Reporting,
+                requested_parameters: MonitoringParameters {
+                    sampling_interval: 0.0,
+                    queue_size: 10,
+                    discard_oldest: true,
+                    ..Default::default()
+                },
+            }],
+        )
+        .await
+        .unwrap();
+    assert_eq!(created[0].result.status_code, StatusCode::Good);
+
+    let modified = session
+        .modify_monitored_items(
+            sub_id,
+            TimestampsToReturn::Both,
+            &[MonitoredItemModifyRequest {
+                monitored_item_id: created[0].result.monitored_item_id,
+                requested_parameters: MonitoringParameters {
+                    sampling_interval: 0.0,
+                    queue_size: 10,
+                    discard_oldest: true,
+                    filter: ExtensionObject::from_message(DataChangeFilter {
+                        trigger: DataChangeTrigger::StatusValue,
+                        deadband_type: DeadbandType::Percent as u32,
+                        deadband_value: 10.0,
+                    }),
+                    ..Default::default()
+                },
+            }],
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(modified[0].status_code, StatusCode::Good);
+}
+
+#[tokio::test]
 async fn test_manual_republish() {
     let (tester, nm, session) = setup().await;
 
@@ -978,6 +1230,159 @@ async fn test_manual_republish() {
     assert_eq!(items.len(), 1);
     let value = items[0].value.value.as_ref().unwrap();
     assert_eq!(value, &Variant::Int32(-1));
+}
+
+#[tokio::test]
+async fn publish_ack_unknown_sequence_returns_bad_sequence_number_unknown() {
+    // OPC UA Part 4 §5.14.5.4: Publish acknowledgement of an unknown sequence number
+    // returns Bad_SequenceNumberUnknown as the per-ack result.
+    let (tester, nm, session) = setup().await;
+
+    let id = nm.inner().next_node_id();
+    nm.inner().add_node(
+        nm.address_space(),
+        tester.handle.type_tree(),
+        VariableBuilder::new(&id, "AckSeqVar", "AckSeqVar")
+            .value(1i32)
+            .data_type(DataTypeId::Int32)
+            .access_level(AccessLevel::CURRENT_READ)
+            .user_access_level(AccessLevel::CURRENT_READ)
+            .build()
+            .into(),
+        &ObjectId::ObjectsFolder.into(),
+        &ReferenceTypeId::Organizes.into(),
+        Some(&VariableTypeId::BaseDataVariableType.into()),
+        Vec::new(),
+    );
+
+    let res = CreateSubscription::new(&session)
+        .publishing_interval(Duration::from_millis(50))
+        .max_lifetime_count(100)
+        .max_keep_alive_count(2)
+        .max_notifications_per_publish(1000)
+        .priority(0)
+        .publishing_enabled(true)
+        .send(session.channel())
+        .await
+        .unwrap();
+    let sub_id = res.subscription_id;
+
+    let res = CreateMonitoredItems::new(sub_id, &session)
+        .item(MonitoredItemCreateRequest {
+            item_to_monitor: ReadValueId {
+                node_id: id.clone(),
+                attribute_id: AttributeId::Value as u32,
+                ..Default::default()
+            },
+            monitoring_mode: MonitoringMode::Reporting,
+            requested_parameters: MonitoringParameters {
+                sampling_interval: 0.0,
+                queue_size: 10,
+                discard_oldest: true,
+                ..Default::default()
+            },
+        })
+        .timestamps_to_return(TimestampsToReturn::Both)
+        .send(session.channel())
+        .await
+        .unwrap();
+    assert_eq!(res.results[0].result.status_code, StatusCode::Good);
+
+    let first = Publish::new(&session)
+        .timeout(Duration::from_millis(500))
+        .send(session.channel())
+        .await
+        .unwrap();
+    let unknown_sequence = first
+        .notification_message
+        .sequence_number
+        .wrapping_add(10_000);
+
+    nm.set_value(
+        tester.handle.subscriptions(),
+        &id,
+        None,
+        DataValue::new_now(2i32),
+    )
+    .unwrap();
+
+    let response = Publish::new(&session)
+        .ack(sub_id, unknown_sequence)
+        .timeout(Duration::from_millis(500))
+        .send(session.channel())
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.results,
+        Some(vec![StatusCode::BadSequenceNumberUnknown])
+    );
+}
+
+#[tokio::test]
+async fn excess_publish_requests_return_bad_too_many_publish_requests() {
+    // OPC UA Part 4 §5.14.5.1/§5.14.5.3: when the queued Publish request
+    // limit is exceeded, the oldest Publish request is rejected with Bad_TooManyPublishRequests.
+    let mut server = test_server();
+    server
+        .limits_mut()
+        .subscriptions
+        .max_pending_publish_requests = 1;
+    server
+        .limits_mut()
+        .subscriptions
+        .max_publish_requests_per_subscription = 1;
+
+    let mut tester = Tester::new(server, false).await;
+    let (session, lp) = tester.connect_default().await.unwrap();
+    lp.spawn();
+    timeout(Duration::from_secs(10), session.wait_for_connection())
+        .await
+        .unwrap();
+
+    let _sub_id = CreateSubscription::new(&session)
+        .publishing_interval(Duration::from_secs(30))
+        .max_lifetime_count(100)
+        .max_keep_alive_count(100)
+        .max_notifications_per_publish(1000)
+        .priority(0)
+        .publishing_enabled(true)
+        .send(session.channel())
+        .await
+        .unwrap()
+        .subscription_id;
+
+    let first_session = session.clone();
+    let second_session = session.clone();
+    let mut first = tokio::spawn(async move {
+        Publish::new(&first_session)
+            .timeout(Duration::from_secs(5))
+            .send(first_session.channel())
+            .await
+    });
+    let mut second = tokio::spawn(async move {
+        Publish::new(&second_session)
+            .timeout(Duration::from_secs(5))
+            .send(second_session.channel())
+            .await
+    });
+
+    let status = timeout(Duration::from_secs(2), async {
+        tokio::select! {
+            result = &mut first => {
+                second.abort();
+                result.unwrap().unwrap_err().status()
+            }
+            result = &mut second => {
+                first.abort();
+                result.unwrap().unwrap_err().status()
+            }
+        }
+    })
+    .await
+    .expect("one queued Publish request should be rejected promptly");
+
+    assert_eq!(status, StatusCode::BadTooManyPublishRequests);
 }
 
 #[tokio::test]

@@ -78,6 +78,12 @@ pub(crate) async fn add_nodes(
     )
     .await;
 
+    for item in &mut to_add {
+        if item.status() == StatusCode::BadNotSupported && !item.requested_new_node_id().is_null() {
+            item.set_result(NodeId::null(), StatusCode::BadNodeIdRejected);
+        }
+    }
+
     let (results, diagnostic_infos) =
         consume_results(to_add, request.request.request_header.return_diagnostics);
 

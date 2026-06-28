@@ -1,5 +1,5 @@
 use opcua_crypto::SecurityPolicy;
-use opcua_types::{ByteString, MessageSecurityMode};
+use opcua_types::{ByteString, MessageSecurityMode, StatusCode};
 
 use crate::comms::secure_channel::*;
 
@@ -85,4 +85,18 @@ fn secure_channel_nonce_none() {
     assert!(sc
         .validate_secure_channel_nonce_length(&ByteString::from(b""))
         .is_ok());
+}
+
+#[test]
+fn bad_nonce_invalid_status_is_exact() {
+    let mut sc = SecureChannel::new_no_certificate_store();
+    sc.set_security_mode(MessageSecurityMode::SignAndEncrypt);
+    sc.set_security_policy(SecurityPolicy::Basic256);
+
+    // OPC-10000-4 7.38.2: invalid secure-channel nonce length maps to BadNonceInvalid.
+    let err = sc
+        .validate_secure_channel_nonce_length(&ByteString::from(b"too-short"))
+        .unwrap_err();
+
+    assert_eq!(err.status(), StatusCode::BadNonceInvalid);
 }

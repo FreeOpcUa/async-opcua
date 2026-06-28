@@ -10,7 +10,11 @@ use opcua::{
     crypto::SecurityPolicy,
     types::{MessageSecurityMode, NodeId, ReadValueId, StatusCode, VariableId},
 };
-use opcua_client::{services::Read, UARequest};
+use opcua_client::{
+    services::{CloseSession, CreateSession, Read},
+    transport::TransportPollResult,
+    UARequest,
+};
 
 use crate::utils::{default_server, hostname, setup, Tester};
 
@@ -200,4 +204,182 @@ async fn session_token_used_on_another_channel_is_rejected() {
         .send(session_b.channel())
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn service_before_activate_session_returns_bad_session_not_activated() {
+    let mut tester = Tester::new(default_server(), false).await;
+    let endpoint: opcua::types::EndpointDescription = (
+        tester.endpoint().as_str(),
+        SecurityPolicy::None.to_str(),
+        MessageSecurityMode::None,
+    )
+        .into();
+
+    let (channel, mut channel_loop) = tester
+        .client
+        .open_secure_channel_to_endpoint_directly(endpoint.clone(), IdentityToken::Anonymous)
+        .await
+        .unwrap();
+    let channel_poller = tokio::spawn(async move {
+        loop {
+            if matches!(channel_loop.poll().await, TransportPollResult::Closed(_)) {
+                break;
+            }
+        }
+    });
+
+    let created = CreateSession::new_manual(
+        tester.client.certificate_store(),
+        &endpoint,
+        1,
+        Duration::from_secs(5),
+        NodeId::null(),
+        channel.request_handle(),
+    )
+    .endpoint_url(tester.endpoint())
+    .send(&channel)
+    .await
+    .unwrap();
+
+    let service_level = ReadValueId::from(<VariableId as Into<NodeId>>::into(
+        VariableId::Server_ServiceLevel,
+    ));
+
+    // OPC UA Part 4 7.38.2: session-bound services before ActivateSession fail with the exact code.
+    let result = Read::new_manual(
+        1,
+        Duration::from_secs(5),
+        created.authentication_token,
+        channel.request_handle(),
+    )
+    .node(service_level)
+    .send(&channel)
+    .await;
+
+    channel.close_channel().await;
+    let _ = tokio::time::timeout(Duration::from_secs(5), channel_poller).await;
+
+    match result {
+        Err(e) => assert_eq!(e.status(), StatusCode::BadSessionNotActivated),
+        Ok(_) => panic!("Read before ActivateSession was wrongly accepted"),
+    }
+}
+
+#[tokio::test]
+async fn request_after_close_session_returns_bad_session_closed() {
+    let mut tester = Tester::new(default_server(), false).await;
+    let endpoint: opcua::types::EndpointDescription = (
+        tester.endpoint().as_str(),
+        SecurityPolicy::None.to_str(),
+        MessageSecurityMode::None,
+    )
+        .into();
+
+    let (channel, mut channel_loop) = tester
+        .client
+        .open_secure_channel_to_endpoint_directly(endpoint.clone(), IdentityToken::Anonymous)
+        .await
+        .unwrap();
+    let channel_poller = tokio::spawn(async move {
+        loop {
+            if matches!(channel_loop.poll().await, TransportPollResult::Closed(_)) {
+                break;
+            }
+        }
+    });
+
+    let created = CreateSession::new_manual(
+        tester.client.certificate_store(),
+        &endpoint,
+        1,
+        Duration::from_secs(5),
+        NodeId::null(),
+        channel.request_handle(),
+    )
+    .endpoint_url(tester.endpoint())
+    .send(&channel)
+    .await
+    .unwrap();
+    let authentication_token = created.authentication_token;
+
+    CloseSession::new_manual(
+        1,
+        Duration::from_secs(5),
+        authentication_token.clone(),
+        channel.request_handle(),
+    )
+    .send(&channel)
+    .await
+    .unwrap();
+
+    let service_level = ReadValueId::from(<VariableId as Into<NodeId>>::into(
+        VariableId::Server_ServiceLevel,
+    ));
+
+    // OPC UA Part 4 7.38.2: requests using a closed Session fail with BadSessionClosed.
+    let result = Read::new_manual(
+        1,
+        Duration::from_secs(5),
+        authentication_token,
+        channel.request_handle(),
+    )
+    .node(service_level)
+    .send(&channel)
+    .await;
+
+    channel.close_channel().await;
+    let _ = tokio::time::timeout(Duration::from_secs(5), channel_poller).await;
+
+    match result {
+        Err(e) => assert_eq!(e.status(), StatusCode::BadSessionClosed),
+        Ok(_) => panic!("Read after CloseSession was wrongly accepted"),
+    }
+}
+
+#[tokio::test]
+async fn request_with_invalid_authentication_token_returns_bad_session_id_invalid() {
+    let mut tester = Tester::new(default_server(), false).await;
+    let endpoint: opcua::types::EndpointDescription = (
+        tester.endpoint().as_str(),
+        SecurityPolicy::None.to_str(),
+        MessageSecurityMode::None,
+    )
+        .into();
+
+    let (channel, mut channel_loop) = tester
+        .client
+        .open_secure_channel_to_endpoint_directly(endpoint, IdentityToken::Anonymous)
+        .await
+        .unwrap();
+    let channel_poller = tokio::spawn(async move {
+        loop {
+            if matches!(channel_loop.poll().await, TransportPollResult::Closed(_)) {
+                break;
+            }
+        }
+    });
+
+    let service_level = ReadValueId::from(<VariableId as Into<NodeId>>::into(
+        VariableId::Server_ServiceLevel,
+    ));
+
+    // OPC UA Part 4 7.38.2: an unknown authentication token is an invalid Session id.
+    let result = Read::new_manual(
+        1,
+        Duration::from_secs(5),
+        NodeId::new(0, "never-issued-authentication-token"),
+        channel.request_handle(),
+    )
+    .node(service_level)
+    .send(&channel)
+    .await;
+
+    channel.close_channel().await;
+    let _ = tokio::time::timeout(Duration::from_secs(5), channel_poller).await;
+
+    match result {
+        Err(e) => assert_eq!(e.status(), StatusCode::BadSessionIdInvalid),
+        Ok(_) => panic!("Read with an invalid authentication token was wrongly accepted"),
+    }
 }

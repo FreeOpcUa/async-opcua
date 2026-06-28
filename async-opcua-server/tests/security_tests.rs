@@ -13,17 +13,20 @@ use std::{
 
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use opcua_client::{ClientBuilder, IdentityToken};
 use opcua_crypto::{
     AlternateNames, CertificateStore, KeySize, PrivateKey, SecurityPolicy, X509Data, X509,
 };
 use opcua_server::{
     authenticator::{issued_token_security_policy, user_pass_security_policy_id, AuthManager},
     authorization::SessionAuthorizationProfile,
+    diagnostics::NamespaceMetadata,
+    node_manager::memory::simple_node_manager,
     services::security::{
         GetSecurityKeysRequest, GetSecurityKeysResponse, SecurityGroupKeys, SecurityKeyService,
         CURRENT_SECURITY_TOKEN_ID,
     },
-    ServerBuilder, ServerEndpoint, ServerHandle, ServerUserToken,
+    ServerBuilder, ServerEndpoint, ServerHandle, ServerUserToken, ANONYMOUS_USER_TOKEN_ID,
 };
 use opcua_types::{
     issued_token_types, ActivateSessionRequest, ByteString, Error, ExtensionObject,
@@ -31,6 +34,7 @@ use opcua_types::{
     UserNameIdentityToken, UserTokenPolicy, UserTokenType,
 };
 use serde_json::{json, Value};
+use tokio::net::TcpListener;
 
 const OAUTH2_PATH: &str = "/oauth2";
 const OAUTH2_ISSUER: &str = "https://issuer.example";
@@ -184,6 +188,98 @@ fn get_security_keys_handler_rejects_invalid_requests() {
 
     assert_eq!(empty_group, StatusCode::BadInvalidArgument);
     assert_eq!(zero_count, StatusCode::BadInvalidArgument);
+}
+
+#[tokio::test]
+async fn open_secure_channel_untrusted_client_cert_returns_bad_security_checks_failed() {
+    let temp = TempPath::new("open-secure-channel-untrusted-client");
+    let server_pki = temp.path().join("server-pki");
+    let client_pki = temp.path().join("client-pki");
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("security test listener should bind");
+    let endpoint_url = format!(
+        "opc.tcp://127.0.0.1:{}/",
+        listener
+            .local_addr()
+            .expect("security test listener should have address")
+            .port()
+    );
+    let port = listener
+        .local_addr()
+        .expect("security test listener should have address")
+        .port();
+
+    let (server, handle) = ServerBuilder::new()
+        .application_name("OpenSecureChannel Security Test Server")
+        .application_uri("urn:open-secure-channel-security-test-server")
+        .product_uri("urn:open-secure-channel-security-test-server")
+        .host("127.0.0.1")
+        .port(port)
+        .pki_dir(&server_pki)
+        .create_sample_keypair(true)
+        .trust_client_certs(false)
+        .discovery_urls(vec![endpoint_url.clone()])
+        .add_endpoint(
+            "secured",
+            (
+                "/",
+                SecurityPolicy::Aes128Sha256RsaOaep,
+                MessageSecurityMode::SignAndEncrypt,
+                &[ANONYMOUS_USER_TOKEN_ID] as &[&str],
+            ),
+        )
+        .with_node_manager(simple_node_manager(
+            NamespaceMetadata {
+                namespace_uri: "urn:open-secure-channel-security-test".to_string(),
+                namespace_index: 2,
+                ..Default::default()
+            },
+            "open-secure-channel-security-test",
+        ))
+        .build()
+        .expect("OpenSecureChannel security test server should build");
+    handle.info().port.store(port, Ordering::Relaxed);
+    let endpoint = handle
+        .info()
+        .endpoints(&UAString::from(endpoint_url.as_str()), &None)
+        .expect("security test endpoint should be described")
+        .into_iter()
+        .find(|endpoint| {
+            endpoint.security_policy_uri.as_ref() == SecurityPolicy::Aes128Sha256RsaOaep.to_uri()
+                && endpoint.security_mode == MessageSecurityMode::SignAndEncrypt
+        })
+        .expect("secured security test endpoint should be advertised");
+    let server_task = tokio::spawn(async move {
+        let _ = server.run_with(listener).await;
+    });
+
+    let mut client = ClientBuilder::new()
+        .application_name("OpenSecureChannel Security Test Client")
+        .application_uri("urn:open-secure-channel-security-test-client")
+        .product_uri("urn:open-secure-channel-security-test-client")
+        .pki_dir(&client_pki)
+        .create_sample_keypair(true)
+        .trust_server_certs(true)
+        .session_retry_limit(0)
+        .session_retry_initial(Duration::from_millis(20))
+        .client()
+        .expect("OpenSecureChannel security test client should build");
+
+    let (_session, event_loop) = client
+        .connect_to_endpoint_directly(endpoint, IdentityToken::Anonymous)
+        .expect("session event loop should be created before channel polling");
+
+    // OPC UA Part 4 6.1.3: an untrusted application certificate fails the
+    // secured OpenSecureChannel trust check.
+    let status = tokio::time::timeout(Duration::from_secs(10), event_loop.run())
+        .await
+        .expect("OpenSecureChannel rejection should complete");
+
+    handle.cancel();
+    server_task.abort();
+
+    assert_eq!(status, StatusCode::BadSecurityChecksFailed);
 }
 
 fn security_group_keys(first_token_id: u32) -> SecurityGroupKeys {

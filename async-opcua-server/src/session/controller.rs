@@ -17,6 +17,7 @@ use tracing::{debug, debug_span, error, trace, warn};
 
 use opcua_core::{
     comms::{
+        message_chunk::MessageChunkType,
         secure_channel::{Role, SecureChannel},
         security_header::SecurityHeader,
         tcp_types::ErrorMessage,
@@ -442,10 +443,12 @@ impl<T: ConnectionTransport> SessionController<T> {
                     self.info.diagnostics.inc_security_rejected_requests();
                 }
                 match res {
-                    Ok(r) => match self
-                        .transport
-                        .enqueue_message_for_send(&mut self.channel, r, id)
-                    {
+                    Ok(r) => match self.transport.enqueue_message_for_send_with_message_type(
+                        &mut self.channel,
+                        r,
+                        id,
+                        MessageChunkType::OpenSecureChannel,
+                    ) {
                         Ok(_) => RequestProcessResult::Ok,
                         Err(e) => {
                             error!("Failed to send open secure channel response: {e}");
@@ -705,31 +708,37 @@ impl<T: ConnectionTransport> SessionController<T> {
                 let mgr = trace_read_lock!(self.session_manager);
                 let session = mgr.find_by_token(&message.request_header().authentication_token);
                 let actor_sender = mgr.actor_sender(&message.request_header().authentication_token);
+                let session_was_closed =
+                    mgr.is_closed_token(&message.request_header().authentication_token);
 
-                let (session_id, session, user_token) =
-                    match Self::validate_request(&message, session, &self.channel) {
-                        Ok(s) => s,
-                        Err(e) => {
-                            self.info.diagnostics.inc_rejected_requests();
-                            self.info.diagnostics.inc_security_rejected_requests();
-                            dispatch_service_failure(
-                                &self.subscriptions,
-                                &self.info,
-                                &unauthenticated_audit_context,
-                                e.response_header().service_result,
-                            );
-                            match self
-                                .transport
-                                .enqueue_message_for_send(&mut self.channel, e, id)
-                            {
-                                Ok(_) => return RequestProcessResult::Ok,
-                                Err(e) => {
-                                    error!("Failed to send request response: {e}");
-                                    return RequestProcessResult::Close;
-                                }
+                let (session_id, session, user_token) = match Self::validate_request(
+                    &message,
+                    session,
+                    session_was_closed,
+                    &self.channel,
+                ) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        self.info.diagnostics.inc_rejected_requests();
+                        self.info.diagnostics.inc_security_rejected_requests();
+                        dispatch_service_failure(
+                            &self.subscriptions,
+                            &self.info,
+                            &unauthenticated_audit_context,
+                            e.response_header().service_result,
+                        );
+                        match self
+                            .transport
+                            .enqueue_message_for_send(&mut self.channel, e, id)
+                        {
+                            Ok(_) => return RequestProcessResult::Ok,
+                            Err(e) => {
+                                error!("Failed to send request response: {e}");
+                                return RequestProcessResult::Close;
                             }
                         }
-                    };
+                    }
+                };
 
                 debug!("Received request on session {session_id}");
                 let audit_context = AuditEventContext::new(
@@ -881,11 +890,15 @@ impl<T: ConnectionTransport> SessionController<T> {
     fn validate_request(
         message: &RequestMessage,
         session: Option<Arc<RwLock<Session>>>,
+        session_was_closed: bool,
         channel: &SecureChannel,
     ) -> Result<(u32, Arc<RwLock<Session>>, UserToken), ResponseMessage> {
         let header = message.request_header();
 
         let Some(session) = session else {
+            if session_was_closed {
+                return Err(ServiceFault::new(header, StatusCode::BadSessionClosed).into());
+            }
             return Err(ServiceFault::new(header, StatusCode::BadSessionIdInvalid).into());
         };
 

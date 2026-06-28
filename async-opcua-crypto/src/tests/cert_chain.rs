@@ -1076,6 +1076,34 @@ fn required_revocation_without_crl_is_unknown() {
 }
 
 #[test]
+fn unknown_issuer_revocation_status_returns_bad_certificate_issuer_revocation_unknown() {
+    let k = keys();
+    let root = root_ca();
+    let intermediate = intermediate_ca();
+    let leaf = leaf_via_intermediate(t(2030, 1, 1));
+    let clean_leaf_issuer_crl =
+        make_crl(INT_CN, &k.intermediate, &[], t(2024, 1, 1), t(2030, 1, 1));
+
+    let trusted = [root];
+    let issuers = [intermediate];
+    let crls = [clean_leaf_issuer_crl];
+    let options = ValidationOptions {
+        revocation_mode: RevocationMode::Required,
+        ..Default::default()
+    };
+    let now = now_valid();
+    let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
+    let err = validate_certificate_chain(&leaf, &ctx)
+        .expect_err("missing issuer CRL in Required mode must report issuer revocation unknown");
+
+    // OPC-10000-4 6.1.3: unknown issuer revocation status uses BadCertificateIssuerRevocationUnknown.
+    assert_eq!(
+        err.status(),
+        StatusCode::BadCertificateIssuerRevocationUnknown
+    );
+}
+
+#[test]
 fn required_revocation_with_clean_crl_is_accepted() {
     let k = keys();
     let root = root_ca();

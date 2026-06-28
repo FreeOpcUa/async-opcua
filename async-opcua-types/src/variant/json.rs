@@ -76,7 +76,7 @@ impl JsonEncodable for Variant {
 
         stream.begin_object()?;
 
-        stream.name("Type")?;
+        stream.name("UaType")?;
         stream.number_value(type_id as u32)?;
 
         if let Variant::Array(a) = self {
@@ -200,7 +200,7 @@ impl JsonDecodable for Variant {
         let mut raw_value = None;
         while stream.has_next()? {
             match stream.next_name()? {
-                "Type" => {
+                "Type" | "UaType" => {
                     let ty: u32 = stream.next_number()??;
                     if ty != 0 {
                         type_id = Some(VariantScalarTypeId::try_from(ty).map_err(|_| {

@@ -97,6 +97,12 @@ pub(crate) async fn history_read(
     request: Request<HistoryReadRequest>,
 ) -> Response {
     let context = request.context();
+    if matches!(
+        request.request.timestamps_to_return,
+        TimestampsToReturn::Invalid | TimestampsToReturn::Neither
+    ) {
+        return service_fault!(request, StatusCode::BadTimestampsToReturnInvalid);
+    }
     let Some(items) = request.request.nodes_to_read else {
         return service_fault!(request, StatusCode::BadNothingToDo);
     };

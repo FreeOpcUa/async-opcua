@@ -276,6 +276,13 @@ fn verify_functional_entities(
         .iter()
         .filter(|endpoint_config| has_expected_verification_variables(endpoint_config))
     {
+        if let Some(status) = verify_required_control_group_locks(state, endpoint_config) {
+            let mut result = endpoint_result_with_status(status, EndpointResultField::Verification);
+            result.connection_endpoint_id = endpoint_config.connection_endpoint_node_id();
+            results.connection_endpoint_results.push(result);
+            return Err(status);
+        }
+
         let status = verifier.verify_functional_entity(endpoint_config);
         let mut result = endpoint_result_with_status(status, EndpointResultField::Verification);
         result.connection_endpoint_id = endpoint_config.connection_endpoint_node_id();
@@ -287,6 +294,25 @@ fn verify_functional_entities(
     }
 
     Ok(())
+}
+
+fn verify_required_control_group_locks(
+    state: &FxConnectionState,
+    endpoint_config: &ConnectionEndpointConfigurationDataType,
+) -> Option<StatusCode> {
+    for control_group in endpoint_config
+        .control_groups
+        .as_deref()
+        .unwrap_or_default()
+    {
+        match state.control_locks.get(control_group) {
+            Some(existing_owner) if existing_owner == &state.lock_context => {}
+            Some(_) => return Some(StatusCode::BadLocked),
+            None => return Some(StatusCode::BadRequiresLock),
+        }
+    }
+
+    None
 }
 
 fn has_expected_verification_variables(

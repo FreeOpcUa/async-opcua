@@ -1509,6 +1509,91 @@ mod tests {
     }
 
     #[test]
+    fn live_subscription_sequence_rollover_skips_zero_and_remains_republishable() {
+        // Feature 029 T006, grounded in Part 4 §5.14.1.1: the first NotificationMessage is 1, zero is
+        // never used, and rollover returns to 1. Drive the live subscription path, not just Handle.
+        let mut buffer = super::NotificationBuffer::new();
+        let mut data_change_notification_pool = DataChangeNotificationVecPool::default();
+        let mut sub = Subscription::new(9, true, Duration::from_millis(100), 100, 20, 1, 100, 1);
+        let start = Instant::now();
+        let start_dt = Utc::now();
+
+        sub.last_time_publishing_interval_elapsed = start;
+        sub.tick(
+            &start_dt,
+            start,
+            TickReason::TickTimerFired,
+            true,
+            &mut buffer,
+            &mut data_change_notification_pool,
+        );
+        assert_eq!(sub.state, SubscriptionState::Normal);
+
+        sub.insert(
+            1,
+            new_monitored_item(
+                1,
+                ReadValueId {
+                    node_id: NodeId::null(),
+                    attribute_id: AttributeId::Value as u32,
+                    ..Default::default()
+                },
+                MonitoringMode::Reporting,
+                FilterType::None,
+                SamplingInterval::NonZero(TimeDelta::milliseconds(100)),
+                true,
+                Some(DataValue::new_at(0, start_dt.into())),
+            ),
+        );
+        sub.sequence_number.set_next(u32::MAX - 1);
+
+        let t1 = start_dt + TimeDelta::milliseconds(100);
+        let t2 = start_dt + TimeDelta::milliseconds(200);
+        sub.notify_data_value(&1, DataValue::new_at(1, t1.into()), &t1.into());
+        sub.notify_data_value(&1, DataValue::new_at(2, t2.into()), &t2.into());
+
+        let (time, time_inst) = offset(start_dt, start, 300);
+        sub.tick(
+            &time,
+            time_inst,
+            TickReason::TickTimerFired,
+            true,
+            &mut buffer,
+            &mut data_change_notification_pool,
+        );
+
+        let messages = std::iter::from_fn(|| sub.take_notification()).collect::<Vec<_>>();
+        let sequence_numbers = messages
+            .iter()
+            .map(|message| message.sequence_number)
+            .collect::<Vec<_>>();
+        assert_eq!(sequence_numbers, vec![u32::MAX - 1, u32::MAX, 1]);
+        assert!(!sequence_numbers.contains(&0));
+
+        let mut retransmission_queue = RetransmissionQueue::new();
+        for message in messages {
+            retransmission_queue.enqueue(
+                &mut data_change_notification_pool,
+                8,
+                sub.id(),
+                Arc::new(message),
+            );
+        }
+
+        assert_eq!(
+            retransmission_queue.available_sequence_numbers(sub.id()),
+            Some(vec![u32::MAX - 1, u32::MAX, 1])
+        );
+        assert_eq!(
+            retransmission_queue
+                .get_message(sub.id(), 1)
+                .expect("wrapped sequence remains available for Republish")
+                .sequence_number,
+            1
+        );
+    }
+
+    #[test]
     fn monitored_item_refs_include_node_attribute_and_handles_for_revalidation() {
         let mut sub =
             Subscription::new(42, true, Duration::from_millis(100), 100, 20, 1, 100, 1000);

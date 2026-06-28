@@ -14,9 +14,9 @@ minimal fail-closed). One commit per user story. PR to fork.
 - Commit US1.
 
 ## Phase 3: US2 — republish / ack / sequence (P2)
-- [ ] T005 [claude-test] Republish: held sequence → exact message returned; sequence evicted past the retransmission bound → `Bad_MessageNotAvailable`. Ack status: Good / `Bad_SequenceNumberUnknown` / `Bad_SubscriptionIdInvalid`.
-- [ ] T006 [claude-test] Sequence-number semantics in a LIVE subscription: strictly +1, never 0, first=1, rolls over to 1 (drive enough publishes or seed the Handle near u32::MAX); Republish still works after roll-over.
-- [ ] T007 [codex] (CONDITIONAL) Fix any spec violation T005/T006 reveals. Skip if green.
+- [X] T005 [claude-test] Republish: held sequence → exact message returned; sequence evicted past the retransmission bound → `Bad_MessageNotAvailable`. Ack status: Good / `Bad_SequenceNumberUnknown` / `Bad_SubscriptionIdInvalid`.
+- [X] T006 [claude-test] Sequence-number semantics in a LIVE subscription: strictly +1, never 0, first=1, rolls over to 1 (drive enough publishes or seed the Handle near u32::MAX); Republish still works after roll-over.
+- [X] T007 [codex] (CONDITIONAL) Fix any spec violation T005/T006 reveals. Skipped: T005/T006 passed against existing behavior; no production fix required.
 - Commit US2.
 
 ## Phase 4: US3 — lifecycle / request-queue (P3)

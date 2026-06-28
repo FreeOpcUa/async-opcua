@@ -1254,12 +1254,102 @@ fn event_source_node(event: &dyn Event) -> Option<NodeId> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::{
+        collections::{HashSet, VecDeque},
+        sync::Arc,
+        time::Duration,
+    };
 
-    use opcua_types::{DateTime, NotificationMessage, StatusCode};
+    use hashbrown::HashMap;
+    use opcua_core::sync::RwLock;
+    use opcua_crypto::SecurityPolicy;
+    use opcua_types::{
+        ApplicationDescription, ByteString, DataValue, DateTime, MessageSecurityMode,
+        MonitoredItemNotification, NodeId, NotificationMessage, PublishRequest, RequestHeader,
+        StatusCode, SubscriptionAcknowledgement, UAString,
+    };
 
     use super::super::retransmission_queue::RetransmissionQueue;
+    use super::super::{PersistentSessionKey, Subscription};
     use super::{DataChangeNotificationVecPool, SessionSubscriptions};
+    use crate::{
+        authenticator::UserToken,
+        identity_token::{IdentityToken, POLICY_ID_ANONYMOUS},
+        node_manager::NodeManagersRef,
+        session::instance::Session,
+        ServerBuilder,
+    };
+
+    fn data_change_msg(seq: u32) -> Arc<NotificationMessage> {
+        Arc::new(NotificationMessage::data_change(
+            seq,
+            DateTime::now(),
+            vec![MonitoredItemNotification {
+                client_handle: seq,
+                value: DataValue::new_now(seq as i32),
+            }],
+            Vec::new(),
+        ))
+    }
+
+    fn test_session_subscriptions(subscription_id: u32) -> SessionSubscriptions {
+        let (_server, handle) = ServerBuilder::new_anonymous("session subscriptions unit test")
+            .without_node_managers()
+            .build()
+            .expect("test server should build");
+        let info = handle.info();
+        let user_token = UserToken(POLICY_ID_ANONYMOUS.to_string());
+        let session = Session::create(
+            info,
+            NodeId::new(1, "session-subscriptions-test-token"),
+            1,
+            60_000,
+            0,
+            0,
+            UAString::from(info.base_endpoint()),
+            SecurityPolicy::None.to_uri().to_string(),
+            IdentityToken::None,
+            None,
+            ByteString::null(),
+            UAString::from("session-subscriptions-unit-test"),
+            ApplicationDescription::default(),
+            MessageSecurityMode::None,
+        );
+
+        let mut subscriptions = HashMap::new();
+        subscriptions.insert(
+            subscription_id,
+            Subscription::new(
+                subscription_id,
+                true,
+                Duration::from_millis(100),
+                100,
+                20,
+                0,
+                20,
+                1000,
+            ),
+        );
+
+        SessionSubscriptions {
+            user_token: PersistentSessionKey::new(
+                &user_token,
+                MessageSecurityMode::None,
+                "session-subscriptions-unit-test",
+            ),
+            subscriptions,
+            publish_request_queue: VecDeque::new(),
+            pending_status_changes: VecDeque::new(),
+            transferring: HashSet::new(),
+            retransmission_queue: RetransmissionQueue::new(),
+            data_change_notification_pool: DataChangeNotificationVecPool::default(),
+            limits: info.config.limits.subscriptions,
+            session: Arc::new(RwLock::new(session)),
+            type_tree_for_user: info.type_tree.clone(),
+            node_managers: NodeManagersRef::new_empty(),
+            enforce_role_based_access: false,
+        }
+    }
 
     #[test]
     fn keep_alive_messages_are_not_queued_for_retransmission() {
@@ -1300,5 +1390,98 @@ mod tests {
             Some(vec![7])
         );
         assert!(retransmission_queue.get_message(1, 7).is_some());
+    }
+
+    #[tokio::test]
+    async fn republish_evicted_sequence_returns_message_not_available() {
+        // Feature 029 T005, grounded in Part 4 §5.14.6.3: Republish of a message no
+        // longer available in the retransmission queue returns Bad_MessageNotAvailable.
+        let sub_id = 1;
+        let mut subs = test_session_subscriptions(sub_id);
+
+        SessionSubscriptions::enqueue_retransmission_notification(
+            &mut subs.retransmission_queue,
+            &mut subs.data_change_notification_pool,
+            2,
+            sub_id,
+            data_change_msg(1),
+        );
+        SessionSubscriptions::enqueue_retransmission_notification(
+            &mut subs.retransmission_queue,
+            &mut subs.data_change_notification_pool,
+            2,
+            sub_id,
+            data_change_msg(2),
+        );
+        SessionSubscriptions::enqueue_retransmission_notification(
+            &mut subs.retransmission_queue,
+            &mut subs.data_change_notification_pool,
+            2,
+            sub_id,
+            data_change_msg(3),
+        );
+
+        assert_eq!(subs.available_sequence_numbers(sub_id), Some(vec![2, 3]));
+        assert_eq!(
+            subs.find_notification_message(sub_id, 1).unwrap_err(),
+            StatusCode::BadMessageNotAvailable
+        );
+        assert_eq!(
+            subs.find_notification_message(sub_id, 3)
+                .expect("held sequence should be available")
+                .sequence_number,
+            3
+        );
+    }
+
+    #[tokio::test]
+    async fn publish_ack_results_follow_request_order_and_status_codes() {
+        // Feature 029 T005, grounded in Part 4 §5.14.5.2/§5.14.5.4: ack result
+        // order mirrors the request and distinguishes Good, unknown sequence, and invalid subscription.
+        let sub_id = 1;
+        let mut subs = test_session_subscriptions(sub_id);
+        SessionSubscriptions::enqueue_retransmission_notification(
+            &mut subs.retransmission_queue,
+            &mut subs.data_change_notification_pool,
+            4,
+            sub_id,
+            data_change_msg(10),
+        );
+
+        let request = PublishRequest {
+            request_header: RequestHeader::default(),
+            subscription_acknowledgements: Some(vec![
+                SubscriptionAcknowledgement {
+                    subscription_id: sub_id,
+                    sequence_number: 10,
+                },
+                SubscriptionAcknowledgement {
+                    subscription_id: sub_id,
+                    sequence_number: 999,
+                },
+                SubscriptionAcknowledgement {
+                    subscription_id: sub_id + 1,
+                    sequence_number: 10,
+                },
+            ]),
+        };
+
+        assert_eq!(
+            subs.process_subscription_acks(&request),
+            Some(vec![
+                StatusCode::Good,
+                StatusCode::BadSequenceNumberUnknown,
+                StatusCode::BadSubscriptionIdInvalid,
+            ])
+        );
+        assert_eq!(
+            subs.process_subscription_acks(&request),
+            Some(vec![
+                StatusCode::BadSequenceNumberUnknown,
+                StatusCode::BadSequenceNumberUnknown,
+                StatusCode::BadSubscriptionIdInvalid,
+            ]),
+            "the first successful ack removes the message from the retransmission queue"
+        );
     }
 }

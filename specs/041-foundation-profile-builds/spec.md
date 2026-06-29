@@ -58,7 +58,7 @@ A developer can tell the difference between profile benchmark builds, official O
 
 ### Edge Cases
 
-- Selecting no profile or multiple profile features must fail at compile time for the benchmark sample.
+- Selecting no profile or multiple profile packages must fail at compile time for the benchmark sample.
 - Benchmark builds must not accidentally use the full generated core namespace path.
 - The Embedded benchmark may need stronger crypto features than Nano and Micro; that must be explicit in the selected build target.
 - CI must not require third-party certification tools.
@@ -71,7 +71,7 @@ A developer can tell the difference between profile benchmark builds, official O
 - **FR-001**: The repository MUST provide buildable Nano, Micro, and Embedded OPC Foundation server profile benchmark variants.
 - **FR-002**: Each benchmark variant MUST select exactly one OPC Foundation target profile URI at compile time for reporting.
 - **FR-003**: Each benchmark variant MUST use the smallest available server feature surface and MUST NOT depend on the generated core namespace.
-- **FR-004**: Benchmark variants MUST NOT populate `ServerCapabilities.ServerProfileArray` merely because a benchmark feature was selected.
+- **FR-004**: Benchmark variants MUST NOT populate `ServerCapabilities.ServerProfileArray` merely because a benchmark package was selected.
 - **FR-005**: Tests MUST verify that each benchmark variant selects the expected target URI and leaves profile conformance claims empty.
 - **FR-006**: CI MUST build all three benchmark variants under the embedded build profile.
 - **FR-007**: CI MUST fail a benchmark variant that pulls in the generated core namespace.
@@ -100,3 +100,4 @@ A developer can tell the difference between profile benchmark builds, official O
 - These builds are benchmark targets and CI guards, not official OPC Foundation certification results.
 - The existing embedded Cargo profile remains the size-reporting profile for CI.
 - The library does not yet expose fine-grained service-set Cargo gates; this feature uses the smallest existing server surface and records service-set gating as follow-up work.
+- Separate benchmark packages are preferred over mutually exclusive benchmark features because this repository runs `--workspace --all-features` CI.

@@ -54,11 +54,11 @@ OPC UA classifies servers into profiles which are bundles of _facets_ that defin
 
 These are the _basic_ characteristics of each profile, but the full requirements are described [here](https://apps.opcfoundation.org/profilereporting/).
 
-The repository includes a `samples/foundation-profile-server` sample with separate benchmark
-features for the 2017 Nano, Micro, and Embedded server profile URIs. Those builds are footprint
-benchmarks that use the smaller `base-server` surface and omit generated namespace code; they do
-not advertise profile conformance through `ServerCapabilities.ServerProfileArray`. Use OPC
-Foundation conformance tooling for certification-grade evidence.
+The repository includes separate Foundation profile benchmark samples for the 2017 Nano, Micro,
+and Embedded server profile URIs. Those builds are footprint benchmarks that use the smaller
+`base-server` surface and omit generated namespace code; they do not advertise profile conformance
+through `ServerCapabilities.ServerProfileArray`. Use OPC Foundation conformance tooling for
+certification-grade evidence.
 
 Servers may implement further facets in addition to these that offer other functionality.
 

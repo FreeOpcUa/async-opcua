@@ -12,7 +12,7 @@ Fields:
 - `requires_constant_time_crypto`: Whether the build explicitly enables the default constant-time crypto backend.
 
 Validation rules:
-- Exactly one profile benchmark must be selected at compile time.
+- Each profile benchmark package must represent one profile target.
 - Each benchmark must have exactly one target URI.
 - Benchmark builds must not advertise the target URI as an OPC Foundation conformance claim.
 - Benchmark builds must omit generated core namespace dependencies.
@@ -22,7 +22,7 @@ Validation rules:
 Represents one CI row for building and reporting a benchmark binary.
 
 Fields:
-- `profile`: Profile key passed to Cargo features.
+- `profile`: Profile key represented by the package.
 - `package`: Workspace package name to build.
 - `binary_path`: Expected embedded-profile binary path.
 - `size_report`: Human-readable size line emitted in CI logs.

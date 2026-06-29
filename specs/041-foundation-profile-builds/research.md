@@ -2,7 +2,7 @@
 
 ## Decision: Treat profile builds as benchmark configurations, not conformance claims
 
-**Rationale**: OPC UA Part 7 describes profiles as named aggregations of ConformanceUnits, and profile conformance requires all mandatory ConformanceUnits in the profile to pass their tests. A size benchmark cannot prove that by selecting a Cargo feature. The benchmark should target a profile-oriented service surface and report size, while leaving `ServerCapabilities.ServerProfileArray` empty unless a later conformance-validating path populates it.
+**Rationale**: OPC UA Part 7 describes profiles as named aggregations of ConformanceUnits, and profile conformance requires all mandatory ConformanceUnits in the profile to pass their tests. A size benchmark cannot prove that by selecting a package. The benchmark should target a profile-oriented service surface and report size, while leaving `ServerCapabilities.ServerProfileArray` empty unless a later conformance-validating path populates it.
 
 **Alternatives considered**:
 - Advertise the selected profile URI from the sample. Rejected because it would overclaim conformance.
@@ -29,13 +29,13 @@ Selected target URIs:
 - Use the full `server` feature for benchmark rows. Rejected because it measures generated namespace size, not profile-oriented library use.
 - Require the generated namespace for all profile rows. Rejected because the benchmark goal is footprint measurement, not a conformance claim.
 
-## Decision: Use mutually exclusive sample Cargo features
+## Decision: Use separate sample packages for profile benchmarks
 
-**Rationale**: Compile-time feature selection gives CI exact build commands and prevents a binary from accidentally mixing benchmark tiers.
+**Rationale**: Compile-time package selection gives CI exact build commands and prevents a binary from accidentally mixing benchmark tiers. Separate packages also remain compatible with repository-wide `cargo build --workspace --all-features`; mutually exclusive Cargo features do not.
 
 **Alternatives considered**:
-- Runtime `--profile` argument. Rejected because one binary could silently drift and CI would not prove distinct feature selections.
-- Three near-identical sample crates. Rejected because it duplicates code without adding verification value.
+- Runtime `--profile` argument. Rejected because one binary could silently drift and CI would not prove distinct package selections.
+- Mutually exclusive Cargo features in one sample crate. Rejected because workspace `--all-features` builds enable all features at once.
 
 ## Decision: Extend footprint CI with a profile benchmark matrix
 

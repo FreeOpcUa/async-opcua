@@ -74,4 +74,4 @@ The `async-opcua` github repo contains a number of samples that may be used as r
 7. [event-client](../samples/event-client) - an OPC-UA client that will connect to a server and subscribe to alarms / events.
 8. [custom-codegen](../samples/custom-codegen) - an OPC-UA server that implements an OPC-UA companion standard generated using `async-opcua-codegen`.
 9. [minimal-server](../samples/minimal-server) - a minimal embedded-footprint server shell that uses the umbrella crate with `base-server` and omits the generated core namespace.
-10. [foundation-profile-server](../samples/foundation-profile-server) - OPC Foundation Nano, Micro, and Embedded profile benchmark builds that use `base-server` and omit the generated core namespace.
+10. [foundation-profile-nano-server](../samples/foundation-profile-nano-server), [foundation-profile-micro-server](../samples/foundation-profile-micro-server), and [foundation-profile-embedded-server](../samples/foundation-profile-embedded-server) - OPC Foundation profile benchmark builds that use `base-server` and omit the generated core namespace.

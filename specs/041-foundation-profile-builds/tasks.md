@@ -2,7 +2,7 @@
 
 **Input**: Design documents from `/specs/041-foundation-profile-builds/`  
 **Prerequisites**: [plan.md](./plan.md), [spec.md](./spec.md), [research.md](./research.md), [data-model.md](./data-model.md), [contracts/](./contracts/), [quickstart.md](./quickstart.md)  
-**Tests**: Required because this feature changes Cargo feature selection, CI build coverage, benchmark dependency boundaries, and documentation claims.
+**Tests**: Required because this feature changes Cargo package selection, CI build coverage, benchmark dependency boundaries, and documentation claims.
 **Format**: `[ID] [P?] [Story] Description with file path`
 
 ## Phase 1: Setup
@@ -31,15 +31,15 @@
 
 **Goal**: Maintainers can build Nano, Micro, and Embedded profile benchmark variants and each variant targets exactly one URI without advertising profile conformance.
 
-**Independent Test**: `cargo test --locked -p async-opcua-foundation-profile-server --no-default-features --features <profile>` passes for `nano`, `micro`, and `embedded`.
+**Independent Test**: `cargo test --locked -p async-opcua-foundation-profile-<profile>-server` passes for `nano`, `micro`, and `embedded`.
 
-- [X] T009 [US1] Update profile benchmark manifest to use `base-server` in `samples/foundation-profile-server/Cargo.toml`
-- [X] T010 [US1] Update profile benchmark implementation in `samples/foundation-profile-server/src/main.rs`
-- [X] T011 [US1] Validate Nano benchmark tests with `cargo test --locked -p async-opcua-foundation-profile-server --no-default-features --features nano`
-- [X] T012 [US1] Validate Micro benchmark tests with `cargo test --locked -p async-opcua-foundation-profile-server --no-default-features --features micro`
-- [X] T013 [US1] Validate Embedded benchmark tests with `cargo test --locked -p async-opcua-foundation-profile-server --no-default-features --features embedded`
-- [X] T014 [US1] Validate invalid profile selections fail with `cargo check --locked -p async-opcua-foundation-profile-server --no-default-features` and a multi-profile feature selection
-- [X] T015 [US1] Validate generated namespace absence for all profile features with `cargo tree --locked -p async-opcua-foundation-profile-server --no-default-features --features <profile> -e normal`
+- [X] T009 [US1] Add profile benchmark manifests using `base-server` in `samples/foundation-profile-*-server/Cargo.toml`
+- [X] T010 [US1] Add profile benchmark implementations in `samples/foundation-profile-*-server/src/main.rs`
+- [X] T011 [US1] Validate Nano benchmark tests with `cargo test --locked -p async-opcua-foundation-profile-nano-server`
+- [X] T012 [US1] Validate Micro benchmark tests with `cargo test --locked -p async-opcua-foundation-profile-micro-server`
+- [X] T013 [US1] Validate Embedded benchmark tests with `cargo test --locked -p async-opcua-foundation-profile-embedded-server`
+- [X] T014 [US1] Validate workspace builds include profile benchmark packages with `cargo build --locked --workspace`
+- [X] T015 [US1] Validate generated namespace absence for all profile packages with `cargo tree --locked -p async-opcua-foundation-profile-<profile>-server -e normal`
 
 ---
 
@@ -50,10 +50,10 @@
 **Independent Test**: The footprint workflow commands build Nano, Micro, and Embedded variants and print one size line per profile.
 
 - [X] T016 [US2] Extend `.github/workflows/ci_footprint.yml` with a Foundation profile benchmark matrix
-- [X] T017 [US2] Validate Nano embedded build with `cargo build --locked --profile embedded -p async-opcua-foundation-profile-server --no-default-features --features nano`
-- [X] T018 [US2] Validate Micro embedded build with `cargo build --locked --profile embedded -p async-opcua-foundation-profile-server --no-default-features --features micro`
-- [X] T019 [US2] Validate Embedded embedded build with `cargo build --locked --profile embedded -p async-opcua-foundation-profile-server --no-default-features --features embedded`
-- [X] T020 [US2] Validate local size reporting for `target/embedded/async-opcua-foundation-profile-server`
+- [X] T017 [US2] Validate Nano embedded build with `cargo build --locked --profile embedded -p async-opcua-foundation-profile-nano-server`
+- [X] T018 [US2] Validate Micro embedded build with `cargo build --locked --profile embedded -p async-opcua-foundation-profile-micro-server`
+- [X] T019 [US2] Validate Embedded embedded build with `cargo build --locked --profile embedded -p async-opcua-foundation-profile-embedded-server`
+- [X] T020 [US2] Validate local size reporting for `target/embedded/async-opcua-foundation-profile-<profile>-server`
 
 ---
 
@@ -75,7 +75,7 @@
 **Purpose**: Final formatting, linting, and status verification.
 
 - [X] T025 Run `cargo fmt --all`
-- [X] T026 Run focused clippy for profile benchmark sample with `cargo clippy --locked -p async-opcua-foundation-profile-server --no-default-features --features embedded -- -D warnings`
+- [X] T026 Run focused clippy for profile benchmark sample with `cargo clippy --locked -p async-opcua-foundation-profile-embedded-server -- -D warnings`
 - [X] T027 Run `git diff --check`
 - [X] T028 Confirm all tasks are marked complete in `specs/041-foundation-profile-builds/tasks.md` and inspect final git status
 
@@ -93,7 +93,7 @@
 ## Parallel Opportunities
 
 - T002, T003, T004, and T005 can run in parallel during setup.
-- T011, T012, and T013 validate different feature selections and can run independently after T010.
+- T011, T012, and T013 validate different package selections and can run independently after T010.
 - T017, T018, and T019 validate different CI matrix rows and can run independently after T016.
 - T021, T022, and T023 touch different documentation files and can proceed in parallel after benchmark behavior is confirmed.
 
@@ -102,8 +102,8 @@
 ### MVP First
 
 1. Remove the profile URI advertising hook from this benchmark feature.
-2. Change the profile benchmark sample to use the `base-server` feature surface.
-3. Prove all three variants select the right target URI, leave advertised profiles empty, and omit generated namespace.
+2. Add separate profile benchmark packages that use the `base-server` feature surface.
+3. Prove all three variants select the right target URI, leave advertised profiles empty, build in workspace modes, and omit generated namespace.
 
 ### Incremental Delivery
 

@@ -198,37 +198,36 @@ instead of `"z"` if profiling shows you need more throughput headroom.
 The repository also ships CI-visible benchmark builds for the OPC Foundation 2017 Nano, Micro,
 and Embedded server profile family. These builds are footprint benchmarks: an integrator selects
 the library features they need, and unused feature surfaces should stay out of the linked binary.
-The current benchmark sample uses `base-server` and intentionally omits the generated core
-namespace. It labels each benchmark with a target profile URI, but it does not advertise
+The benchmark samples use `base-server` and intentionally omit the generated core namespace. They
+label each benchmark with a target profile URI, but they do not advertise
 `ServerCapabilities.ServerProfileArray` conformance.
 
-| Profile benchmark | Cargo feature | Target profile URI |
-|-------------------|---------------|--------------------|
-| Nano | `nano` | `http://opcfoundation.org/UA-Profile/Server/NanoEmbeddedDevice2017` |
-| Micro | `micro` | `http://opcfoundation.org/UA-Profile/Server/MicroEmbeddedDevice2017` |
-| Embedded | `embedded` | `http://opcfoundation.org/UA-Profile/Server/EmbeddedUA2017` |
+| Profile benchmark | Package | Target profile URI |
+|-------------------|---------|--------------------|
+| Nano | `async-opcua-foundation-profile-nano-server` | `http://opcfoundation.org/UA-Profile/Server/NanoEmbeddedDevice2017` |
+| Micro | `async-opcua-foundation-profile-micro-server` | `http://opcfoundation.org/UA-Profile/Server/MicroEmbeddedDevice2017` |
+| Embedded | `async-opcua-foundation-profile-embedded-server` | `http://opcfoundation.org/UA-Profile/Server/EmbeddedUA2017` |
 
 ```bash
-cargo build --locked -p async-opcua-foundation-profile-server \
-    --no-default-features --features nano
-cargo build --locked -p async-opcua-foundation-profile-server \
-    --no-default-features --features micro
-cargo build --locked -p async-opcua-foundation-profile-server \
-    --no-default-features --features embedded
+cargo build --locked -p async-opcua-foundation-profile-nano-server
+cargo build --locked -p async-opcua-foundation-profile-micro-server
+cargo build --locked -p async-opcua-foundation-profile-embedded-server
 
-for profile in nano micro embedded; do
+for package in \
+    async-opcua-foundation-profile-nano-server \
+    async-opcua-foundation-profile-micro-server \
+    async-opcua-foundation-profile-embedded-server
+do
     cargo build --locked --profile embedded \
-        -p async-opcua-foundation-profile-server \
-        --no-default-features --features "$profile"
-    stat -c "${profile}: %s bytes %n" \
-        target/embedded/async-opcua-foundation-profile-server
+        -p "$package"
+    stat -c "${package}: %s bytes %n" \
+        "target/embedded/$package"
 done
 ```
 
-The sample enforces exactly one profile benchmark feature at compile time. These builds are not
-official OPC Foundation certification results; use the OPC Foundation conformance tooling for
-certification-grade evidence, and only advertise profile URIs after validating the server's
-mandatory conformance units.
+Each package is one profile benchmark target. These builds are not official OPC Foundation
+certification results; use the OPC Foundation conformance tooling for certification-grade evidence,
+and only advertise profile URIs after validating the server's mandatory conformance units.
 
 ### Deployment limit profiles
 

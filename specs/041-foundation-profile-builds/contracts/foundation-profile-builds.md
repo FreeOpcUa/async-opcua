@@ -2,44 +2,43 @@
 
 ## Sample Build Contract
 
-Profile benchmark package: `async-opcua-foundation-profile-server`
+Profile benchmark packages:
+- `async-opcua-foundation-profile-nano-server`
+- `async-opcua-foundation-profile-micro-server`
+- `async-opcua-foundation-profile-embedded-server`
 
-Supported feature selections:
-- `nano`
-- `micro`
-- `embedded`
-
-Invalid feature selections:
-- no profile feature
-- more than one profile feature
+Supported packages:
+- `async-opcua-foundation-profile-nano-server`
+- `async-opcua-foundation-profile-micro-server`
+- `async-opcua-foundation-profile-embedded-server`
 
 Expected build commands:
 
 ```sh
-cargo build --locked -p async-opcua-foundation-profile-server --no-default-features --features nano
-cargo build --locked -p async-opcua-foundation-profile-server --no-default-features --features micro
-cargo build --locked -p async-opcua-foundation-profile-server --no-default-features --features embedded
+cargo build --locked -p async-opcua-foundation-profile-nano-server
+cargo build --locked -p async-opcua-foundation-profile-micro-server
+cargo build --locked -p async-opcua-foundation-profile-embedded-server
 ```
 
 Expected test commands:
 
 ```sh
-cargo test --locked -p async-opcua-foundation-profile-server --no-default-features --features nano
-cargo test --locked -p async-opcua-foundation-profile-server --no-default-features --features micro
-cargo test --locked -p async-opcua-foundation-profile-server --no-default-features --features embedded
+cargo test --locked -p async-opcua-foundation-profile-nano-server
+cargo test --locked -p async-opcua-foundation-profile-micro-server
+cargo test --locked -p async-opcua-foundation-profile-embedded-server
 ```
 
 Expected behavior:
-- The selected benchmark reports the target URI for its Foundation profile.
+- The selected benchmark package reports the target URI for its Foundation profile.
 - The built server leaves `ServerCapabilities.ServerProfileArray` empty.
 - The benchmark dependency tree omits `async-opcua-core-namespace`.
 
 Embedded profile size commands:
 
 ```sh
-cargo build --locked --profile embedded -p async-opcua-foundation-profile-server --no-default-features --features nano
-cargo build --locked --profile embedded -p async-opcua-foundation-profile-server --no-default-features --features micro
-cargo build --locked --profile embedded -p async-opcua-foundation-profile-server --no-default-features --features embedded
+cargo build --locked --profile embedded -p async-opcua-foundation-profile-nano-server
+cargo build --locked --profile embedded -p async-opcua-foundation-profile-micro-server
+cargo build --locked --profile embedded -p async-opcua-foundation-profile-embedded-server
 ```
 
 ## CI Contract

@@ -3,9 +3,9 @@
 ## Build all benchmark variants
 
 ```sh
-cargo build --locked -p async-opcua-foundation-profile-server --no-default-features --features nano
-cargo build --locked -p async-opcua-foundation-profile-server --no-default-features --features micro
-cargo build --locked -p async-opcua-foundation-profile-server --no-default-features --features embedded
+cargo build --locked -p async-opcua-foundation-profile-nano-server
+cargo build --locked -p async-opcua-foundation-profile-micro-server
+cargo build --locked -p async-opcua-foundation-profile-embedded-server
 ```
 
 Expected result: all three commands compile.
@@ -13,9 +13,9 @@ Expected result: all three commands compile.
 ## Verify target URI selection and conformance-claim behavior
 
 ```sh
-cargo test --locked -p async-opcua-foundation-profile-server --no-default-features --features nano
-cargo test --locked -p async-opcua-foundation-profile-server --no-default-features --features micro
-cargo test --locked -p async-opcua-foundation-profile-server --no-default-features --features embedded
+cargo test --locked -p async-opcua-foundation-profile-nano-server
+cargo test --locked -p async-opcua-foundation-profile-micro-server
+cargo test --locked -p async-opcua-foundation-profile-embedded-server
 ```
 
 Expected result: each selected build reports exactly its own target profile URI and does not populate `ServerCapabilities.ServerProfileArray`.
@@ -23,10 +23,14 @@ Expected result: each selected build reports exactly its own target profile URI 
 ## Confirm generated namespace is absent
 
 ```sh
-for profile in nano micro embedded; do
-  if cargo tree --locked -p async-opcua-foundation-profile-server --no-default-features --features "$profile" -e normal \
+for package in \
+  async-opcua-foundation-profile-nano-server \
+  async-opcua-foundation-profile-micro-server \
+  async-opcua-foundation-profile-embedded-server
+do
+  if cargo tree --locked -p "$package" -e normal \
     | grep -q 'async-opcua-core-namespace'; then
-    echo "unexpected generated namespace dependency in $profile benchmark"
+    echo "unexpected generated namespace dependency in $package"
     exit 1
   fi
 done
@@ -34,28 +38,25 @@ done
 
 Expected result: all three profile benchmark dependency trees omit the generated core namespace.
 
-## Confirm invalid selections fail
+## Confirm workspace builds
 
 ```sh
-if cargo check --locked -p async-opcua-foundation-profile-server --no-default-features; then
-  echo "expected no-profile build to fail"
-  exit 1
-fi
-
-if cargo check --locked -p async-opcua-foundation-profile-server --no-default-features --features nano,micro; then
-  echo "expected multi-profile build to fail"
-  exit 1
-fi
+cargo build --locked --workspace
+cargo build --locked --workspace --all-features
 ```
 
-Expected result: both invalid selections fail before producing a binary.
+Expected result: repository-wide workspace builds include all three benchmark packages.
 
 ## Build embedded-profile binaries and report sizes
 
 ```sh
-for profile in nano micro embedded; do
-  cargo build --locked --profile embedded -p async-opcua-foundation-profile-server --no-default-features --features "$profile"
-  stat -c "${profile}: %s bytes %n" target/embedded/async-opcua-foundation-profile-server
+for package in \
+  async-opcua-foundation-profile-nano-server \
+  async-opcua-foundation-profile-micro-server \
+  async-opcua-foundation-profile-embedded-server
+do
+  cargo build --locked --profile embedded -p "$package"
+  stat -c "${package}: %s bytes %n" "target/embedded/$package"
 done
 ```
 

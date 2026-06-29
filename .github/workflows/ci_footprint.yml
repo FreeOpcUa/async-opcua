@@ -33,10 +33,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        profile:
-          - nano
-          - micro
-          - embedded
+        include:
+          - profile: nano
+            package: async-opcua-foundation-profile-nano-server
+          - profile: micro
+            package: async-opcua-foundation-profile-micro-server
+          - profile: embedded
+            package: async-opcua-foundation-profile-embedded-server
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -47,17 +50,17 @@ jobs:
 
       - name: Verify profile benchmark omits generated namespace
         run: |
-          if cargo tree --locked -p async-opcua-foundation-profile-server --no-default-features --features "${{ matrix.profile }}" -e normal \
+          if cargo tree --locked -p "${{ matrix.package }}" -e normal \
             | grep -q 'async-opcua-core-namespace'; then
-            echo "async-opcua-foundation-profile-server ${{ matrix.profile }} unexpectedly depends on async-opcua-core-namespace"
+            echo "${{ matrix.package }} unexpectedly depends on async-opcua-core-namespace"
             exit 1
           fi
 
       - name: Build ${{ matrix.profile }} Foundation profile benchmark
-        run: cargo build --locked --profile embedded -p async-opcua-foundation-profile-server --no-default-features --features "${{ matrix.profile }}"
+        run: cargo build --locked --profile embedded -p "${{ matrix.package }}"
 
       - name: Report ${{ matrix.profile }} profile benchmark binary size
         run: |
-          size_bytes=$(stat -c '%s' target/embedded/async-opcua-foundation-profile-server)
-          echo "async-opcua-foundation-profile-server ${{ matrix.profile }} benchmark embedded size: ${size_bytes} bytes"
-          ls -lh target/embedded/async-opcua-foundation-profile-server
+          size_bytes=$(stat -c '%s' "target/embedded/${{ matrix.package }}")
+          echo "${{ matrix.package }} embedded size: ${size_bytes} bytes"
+          ls -lh "target/embedded/${{ matrix.package }}"

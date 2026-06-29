@@ -24,7 +24,7 @@ Add CI-visible OPC Foundation Nano, Micro, and Embedded server profile benchmark
 - **Correctness over completion**: Pass. The plan avoids advertising profile conformance without conformance-unit proof.
 - **Do it right once**: Pass. Benchmark builds measure feature footprint and dependency boundaries instead of adding a runtime profile-claim API.
 - **Individual task discipline**: Pass. Tasks are single-line, independently verifiable units.
-- **Security is paramount**: Pass. Embedded benchmark keeps explicit crypto feature selection; no parser/crypto downgrade or profile overclaim.
+- **Security is paramount**: Pass. Embedded benchmark keeps explicit crypto package selection; no parser/crypto downgrade or profile overclaim.
 - **Leave it better**: Pass. Existing footprint CI grows into a clearer profile benchmark matrix without dropping minimal-footprint coverage.
 
 ## Project Structure
@@ -45,9 +45,15 @@ specs/041-foundation-profile-builds/
 ### Source Code
 
 ```text
-samples/foundation-profile-server/
-├── Cargo.toml             # mutually exclusive nano/micro/embedded benchmark features
-└── src/main.rs            # selected profile benchmark server sample
+samples/foundation-profile-nano-server/
+├── Cargo.toml
+└── src/main.rs
+samples/foundation-profile-micro-server/
+├── Cargo.toml
+└── src/main.rs
+samples/foundation-profile-embedded-server/
+├── Cargo.toml
+└── src/main.rs
 
 .github/workflows/
 ├── ci_footprint.yml       # adds profile benchmark matrix
@@ -58,7 +64,7 @@ docs/opc_ua_overview.md    # profile/conformance distinction
 async-opcua/README.md      # sample listing
 ```
 
-**Structure Decision**: Extend the existing sample/workflow structure. Keep profile benchmarks separate from `samples/minimal-server` because they encode named Foundation profile benchmark tiers, but use the same `base-server` dependency principle so benchmark rows measure the library surface an integrator actually selects.
+**Structure Decision**: Extend the existing sample/workflow structure. Keep profile benchmarks separate from `samples/minimal-server` because they encode named Foundation profile benchmark tiers, and keep each profile in a separate package so repository-wide `--workspace --all-features` builds remain meaningful.
 
 ## Complexity Tracking
 

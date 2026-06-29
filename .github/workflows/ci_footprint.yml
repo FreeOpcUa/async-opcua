@@ -1,0 +1,66 @@
+name: Minimal footprint build
+'on':
+  workflow_call: null
+jobs:
+  footprint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Provision toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1
+        with:
+          toolchain: stable
+
+      - name: Verify minimal server omits generated namespace
+        run: |
+          if cargo tree --locked -p async-opcua-minimal-server -e normal | grep -q 'async-opcua-core-namespace'; then
+            echo "async-opcua-minimal-server unexpectedly depends on async-opcua-core-namespace"
+            exit 1
+          fi
+
+      - name: Build minimal embedded server
+        run: cargo build --locked --profile embedded -p async-opcua-minimal-server
+
+      - name: Report minimal binary size
+        run: |
+          size_bytes=$(stat -c '%s' target/embedded/async-opcua-minimal-server)
+          echo "async-opcua-minimal-server embedded size: ${size_bytes} bytes"
+          ls -lh target/embedded/async-opcua-minimal-server
+
+  foundation-profiles:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: nano
+            package: async-opcua-foundation-profile-nano-server
+          - profile: micro
+            package: async-opcua-foundation-profile-micro-server
+          - profile: embedded
+            package: async-opcua-foundation-profile-embedded-server
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Provision toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1
+        with:
+          toolchain: stable
+
+      - name: Verify profile benchmark omits generated namespace
+        run: |
+          if cargo tree --locked -p "${{ matrix.package }}" -e normal \
+            | grep -q 'async-opcua-core-namespace'; then
+            echo "${{ matrix.package }} unexpectedly depends on async-opcua-core-namespace"
+            exit 1
+          fi
+
+      - name: Build ${{ matrix.profile }} Foundation profile benchmark
+        run: cargo build --locked --profile embedded -p "${{ matrix.package }}"
+
+      - name: Report ${{ matrix.profile }} profile benchmark binary size
+        run: |
+          size_bytes=$(stat -c '%s' "target/embedded/${{ matrix.package }}")
+          echo "${{ matrix.package }} embedded size: ${size_bytes} bytes"
+          ls -lh "target/embedded/${{ matrix.package }}"

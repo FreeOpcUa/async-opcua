@@ -76,6 +76,9 @@ jobs:
       - name: Build (${{ matrix.name }})
         run: cargo build --locked ${{ matrix.args }}
 
+  footprint:
+    uses: ./.github/workflows/ci_footprint.yml
+
   test-external-server:
     runs-on: ubuntu-latest
     steps:

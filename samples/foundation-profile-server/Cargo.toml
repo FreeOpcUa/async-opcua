@@ -1,0 +1,20 @@
+[package]
+name = "async-opcua-foundation-profile-server"
+version = "0.13.0"
+authors = ["Adam Lock <locka99@gmail.com>"]
+edition = "2021"
+publish = false
+
+[features]
+default = []
+nano = []
+micro = []
+embedded = ["async-opcua/aws-lc-rs"]
+
+[dependencies]
+tokio = { version = "^1", default-features = false, features = ["macros", "rt", "signal"] }
+
+[dependencies.async-opcua]
+path = "../../async-opcua"
+features = ["base-server"]
+default-features = false

@@ -17,16 +17,16 @@
 
 pub use opcua_core::sync;
 
-#[cfg(feature = "server")]
+#[cfg(any(feature = "server", feature = "base-server"))]
 pub use opcua_macros::{Event, EventField};
 
 #[cfg(feature = "client")]
 #[doc(inline)]
 pub use opcua_client as client;
-#[cfg(feature = "server")]
+#[cfg(any(feature = "server", feature = "base-server"))]
 #[doc(inline)]
 pub use opcua_nodes as nodes;
-#[cfg(feature = "server")]
+#[cfg(any(feature = "server", feature = "base-server"))]
 #[doc(inline)]
 pub use opcua_server as server;
 

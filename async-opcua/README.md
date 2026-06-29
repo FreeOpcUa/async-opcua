@@ -36,11 +36,11 @@ There are also generated API docs on crates.io.
 # Features
 
 * `all`, enables the `server` and `client` features.
-* `server`, includes the server SDK.
-* `base-server`, includes the server SDK, but without the core address space. Most users should use the `server` feature.
+* `server`, includes the server SDK and generated core OPC-UA namespace. This is the usual feature for standards-complete server applications.
+* `base-server`, includes the server SDK without the generated core OPC-UA namespace. It is exposed through `opcua::server` for smaller embedded builds, but the application must provide or load the address space it needs. Most users should use the `server` feature.
 * `client`, includes the client SDK.
 * `json`, adds support for OPC-UA JSON to generated types.
-* `generated-address-space`, adds the core OPC-UA namespace. This is usually required for compliant OPC-UA servers.
+* `generated-address-space`, adds the core OPC-UA namespace. This is usually required for compliant OPC-UA servers and is included by `server`.
 * `discovery-server-registration`, allows the server to register itself with a local discovery server, by pulling in a client.
 * `xml`, adds support for loading generated types from XML, and for loading `NodeSet2.xml` files.
 
@@ -73,3 +73,5 @@ The `async-opcua` github repo contains a number of samples that may be used as r
 6. [mqtt-client](../samples/mqtt-client) - an OPC-UA client that subscribes to some values and publishes them to an MQTT broker.
 7. [event-client](../samples/event-client) - an OPC-UA client that will connect to a server and subscribe to alarms / events.
 8. [custom-codegen](../samples/custom-codegen) - an OPC-UA server that implements an OPC-UA companion standard generated using `async-opcua-codegen`.
+9. [minimal-server](../samples/minimal-server) - a minimal embedded-footprint server shell that uses the umbrella crate with `base-server` and omits the generated core namespace.
+10. [foundation-profile-server](../samples/foundation-profile-server) - OPC Foundation Nano, Micro, and Embedded profile benchmark builds that use `base-server` and omit the generated core namespace.

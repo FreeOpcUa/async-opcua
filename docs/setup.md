@@ -36,9 +36,9 @@ That's all you need. `async-opcua` has no dependencies apart from other rust cra
 The OPC UA server crate also provides some other features that you may or may not want to enable:
 
 * `client` - Includes the OPC UA client implementation.
-* `server` - Includes the OPC UA server implementation.
-* `base-server` - Includes the server implementation without `generated-address-space`.
-* `generated-address-space` - When enabled (default is enabled), server will contain generated code containing the core OPC-UA namespace. It is very unlikely that you do not want this feature, so it is enabled by default with the `server` feature. If you need to disable it, you should use the `base-server` feature instead. When disabled, the address space will only contain a root node, but the vast majority of OPC-UA clients will not work with it, and it will not be fully OPC-UA compliant.
+* `server` - Includes the OPC UA server implementation and the generated core OPC UA namespace. This is the usual feature for standards-complete server applications.
+* `base-server` - Includes the server implementation without `generated-address-space`. Use this only when you need a smaller binary and your application will provide or load the address space it needs.
+* `generated-address-space` - When enabled (default is enabled through the `server` feature), server will contain generated code containing the core OPC-UA namespace. It is very unlikely that you do not want this feature in a general-purpose OPC UA server. If you need to disable it, use the `base-server` feature instead. When disabled, the address space will only contain a root node, so most OPC-UA clients will not work with it until your application adds the required namespace content, and it will not be fully OPC-UA compliant by itself.
 * `discovery-server-registration` - When enabled (default is disabled), the server will periodically attempt to  register itself with a local discovery server. The server will use the on the client crate which requires more memory.
 * `json` - When enabled (default is disabled), built in types have support for encoding and decoding from JSON. Note that when this feature is enabled, custom types must implement json encoding to be stored in an `ExtensionObject`.
 * `xml` - When enabled (default is disabled), built in types implement `FromXml`, which creates them from an OPC-UA XML node. This is _not_ full XML support, but rather only what we need in order to support loading `NodeSet2` files at runtime.
@@ -165,18 +165,70 @@ The workspace defines an opt-in `embedded` profile (see the root `Cargo.toml`) t
 small binary and resident footprint:
 
 ```bash
-# size-optimized, feature-minimal build over musl (constant-time crypto kept):
+# smallest server shell through the public umbrella crate:
+cargo build --locked --profile embedded -p async-opcua-minimal-server
+stat -c '%s bytes %n' target/embedded/async-opcua-minimal-server
+
+# optional: confirm the generated core namespace is not linked by the sample:
+if cargo tree --locked -p async-opcua-minimal-server -e normal | grep -q 'async-opcua-core-namespace'; then
+    echo "unexpected generated namespace dependency"
+    exit 1
+fi
+
+# equivalent size-optimized musl build:
 cargo zigbuild --profile embedded --target aarch64-unknown-linux-musl \
-    -p async-opcua --no-default-features --features server,aws-lc-rs
+    -p async-opcua-minimal-server
 ```
 
 The profile sets `opt-level = "z"` (size), `lto = true`, `codegen-units = 1`, and
 `strip = true`. It deliberately keeps `panic = "unwind"` — **do not** switch this server to
 `panic = "abort"`: a malformed chunk must drop only the offending connection, and `abort`
 would turn that recoverable drop into a whole-process exit (a denial of service for every
-other client). Trim the dependency surface with `--no-default-features` plus only the features
-you use (e.g. `server`; add `json`/`xml` only if you need those encodings). Use `opt-level =
-"s"` instead of `"z"` if profiling shows you need more throughput headroom.
+other client). The `samples/minimal-server` manifest trims the dependency surface with
+`default-features = false` plus `base-server`; that omits the generated core namespace and
+default `aws-lc-rs` backend for the smallest C-toolchain-free server shell. The tradeoff is
+standards compliance: a `base-server` application must provide or load the address space it
+needs, while the full `server` feature keeps the generated namespace. For secured endpoints
+on an untrusted network, add the `aws-lc-rs` feature back to your application and use the
+`cargo-zigbuild` path above if you still need to cross-compile. Use `opt-level = "s"`
+instead of `"z"` if profiling shows you need more throughput headroom.
+
+### OPC Foundation profile benchmark builds
+
+The repository also ships CI-visible benchmark builds for the OPC Foundation 2017 Nano, Micro,
+and Embedded server profile family. These builds are footprint benchmarks: an integrator selects
+the library features they need, and unused feature surfaces should stay out of the linked binary.
+The current benchmark sample uses `base-server` and intentionally omits the generated core
+namespace. It labels each benchmark with a target profile URI, but it does not advertise
+`ServerCapabilities.ServerProfileArray` conformance.
+
+| Profile benchmark | Cargo feature | Target profile URI |
+|-------------------|---------------|--------------------|
+| Nano | `nano` | `http://opcfoundation.org/UA-Profile/Server/NanoEmbeddedDevice2017` |
+| Micro | `micro` | `http://opcfoundation.org/UA-Profile/Server/MicroEmbeddedDevice2017` |
+| Embedded | `embedded` | `http://opcfoundation.org/UA-Profile/Server/EmbeddedUA2017` |
+
+```bash
+cargo build --locked -p async-opcua-foundation-profile-server \
+    --no-default-features --features nano
+cargo build --locked -p async-opcua-foundation-profile-server \
+    --no-default-features --features micro
+cargo build --locked -p async-opcua-foundation-profile-server \
+    --no-default-features --features embedded
+
+for profile in nano micro embedded; do
+    cargo build --locked --profile embedded \
+        -p async-opcua-foundation-profile-server \
+        --no-default-features --features "$profile"
+    stat -c "${profile}: %s bytes %n" \
+        target/embedded/async-opcua-foundation-profile-server
+done
+```
+
+The sample enforces exactly one profile benchmark feature at compile time. These builds are not
+official OPC Foundation certification results; use the OPC Foundation conformance tooling for
+certification-grade evidence, and only advertise profile URIs after validating the server's
+mandatory conformance units.
 
 ### Deployment limit profiles
 

@@ -45,7 +45,7 @@ Sessions are created when the client presents an identity token to the server to
 
 ## Profiles
 
-OPA UA classifies servers into profiles which are bundles of _facets_ that define the services and minimum capabilities that a server should support. Each profile implements everything preceding it. 
+OPC UA classifies servers into profiles which are bundles of _facets_ that define the services and minimum capabilities that a server should support. Each profile implements everything preceding it.
 
 * Nano - 1 session, no encryption, user/pass tokens, OPC UA TCP, read attributes
 * Micro - 2+ sessions, monitor items
@@ -53,6 +53,12 @@ OPA UA classifies servers into profiles which are bundles of _facets_ that defin
 * Standard - 50+ sessions, 5+ subscriptions, diagnostics, register with discovery server, X509 user tokens
 
 These are the _basic_ characteristics of each profile, but the full requirements are described [here](https://apps.opcfoundation.org/profilereporting/).
+
+The repository includes a `samples/foundation-profile-server` sample with separate benchmark
+features for the 2017 Nano, Micro, and Embedded server profile URIs. Those builds are footprint
+benchmarks that use the smaller `base-server` surface and omit generated namespace code; they do
+not advertise profile conformance through `ServerCapabilities.ServerProfileArray`. Use OPC
+Foundation conformance tooling for certification-grade evidence.
 
 Servers may implement further facets in addition to these that offer other functionality.
 

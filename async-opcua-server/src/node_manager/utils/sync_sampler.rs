@@ -10,13 +10,16 @@ use crate::{MonitoredItemHandle, SubscriptionCache};
 use opcua_core::sync::Mutex;
 use opcua_types::{AttributeId, DataValue, MonitoringMode, NodeId};
 
+type SamplerCallback = Box<dyn FnMut() -> Option<DataValue> + Send>;
+type SharedSamplerCallback = Arc<Mutex<SamplerCallback>>;
+
 struct ItemRef {
     mode: MonitoringMode,
     sampling_interval: Duration,
 }
 
 struct SamplerItem {
-    sampler: Box<dyn FnMut() -> Option<DataValue> + Send>,
+    sampler: SharedSamplerCallback,
     sampling_interval: Duration,
     last_sample: Instant,
     enabled: bool,
@@ -37,6 +40,19 @@ impl SamplerItem {
         }
         self.sampling_interval = interval;
         self.enabled = enabled;
+    }
+}
+
+struct SamplerWorkItem {
+    sampler: SharedSamplerCallback,
+    node_id: NodeId,
+    attribute: AttributeId,
+}
+
+impl SamplerWorkItem {
+    fn sample(&self) -> Option<(DataValue, &NodeId, AttributeId)> {
+        let value = (self.sampler.lock())()?;
+        Some((value, &self.node_id, self.attribute))
     }
 }
 
@@ -95,8 +111,8 @@ impl SyncSampler {
     ) {
         let mut samplers = self.samplers.lock();
         let id = (node_id, attribute);
-        let sampler = samplers.entry(id).or_insert(SamplerItem {
-            sampler: Box::new(sampler),
+        let sampler = samplers.entry(id).or_insert_with(move || SamplerItem {
+            sampler: Arc::new(Mutex::new(Box::new(sampler))),
             sampling_interval,
             last_sample: Instant::now(),
             items: HashMap::new(),
@@ -175,27 +191,34 @@ impl SyncSampler {
     ) {
         let mut tick = tokio::time::interval(interval);
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let mut work_items = Vec::new();
         loop {
             tick.tick().await;
             let now = Instant::now();
-            let mut samplers = samplers.lock();
-            let values = samplers
-                .iter_mut()
-                .filter_map(|((node_id, attribute), sampler)| {
+            work_items.clear();
+            {
+                let mut samplers = samplers.lock();
+                for ((node_id, attribute), sampler) in samplers.iter_mut() {
                     if !sampler.enabled {
-                        return None;
+                        continue;
                     }
                     if sampler
                         .last_sample
                         .checked_add(sampler.sampling_interval)
                         .is_none_or(|v| v > now)
                     {
-                        return None;
+                        continue;
                     }
-                    let value = (sampler.sampler)()?;
                     sampler.last_sample = now;
-                    Some((value, node_id, *attribute))
-                });
+                    work_items.push(SamplerWorkItem {
+                        sampler: Arc::clone(&sampler.sampler),
+                        node_id: node_id.clone(),
+                        attribute: *attribute,
+                    });
+                }
+            }
+
+            let values = work_items.iter().filter_map(SamplerWorkItem::sample);
             subscriptions.notify_data_change(values);
         }
     }

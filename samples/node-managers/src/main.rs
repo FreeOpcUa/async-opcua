@@ -159,9 +159,7 @@ async fn run_sim(
             // Notify any listening clients of changes to the tags. Note that we only sample the value if
             // anyone is actually listening.
             for tag in sim.iter_tag_meta() {
-                if let Some(mut batch) =
-                    notifier.notify_for((ns_index, tag.tag), AttributeId::Value)
-                {
+                if let Some(batch) = notifier.notify_for((ns_index, tag.tag), AttributeId::Value) {
                     let Some(value) = sim.get_tag_value(tag.tag) else {
                         continue;
                     };

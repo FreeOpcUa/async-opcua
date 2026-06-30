@@ -356,7 +356,7 @@ impl AsyncSecureChannel {
             ))
         } else {
             let (cert, key) = {
-                let certificate_store = trace_write_lock!(self.certificate_store);
+                let certificate_store = trace_read_lock!(self.certificate_store);
                 (
                     certificate_store.read_own_cert().ok(),
                     certificate_store.read_own_pkey().ok(),

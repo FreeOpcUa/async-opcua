@@ -688,8 +688,12 @@ impl CoreNodeManagerImpl {
                 call.set_status(StatusCode::Good);
             }
             _ => {
-                let cbs = trace_read_lock!(self.method_with_context_cbs);
-                if let Some(cb) = cbs.get(call.method_id()) {
+                let cb = {
+                    let cbs = trace_read_lock!(self.method_with_context_cbs);
+                    cbs.get(call.method_id()).cloned()
+                };
+
+                if let Some(cb) = cb {
                     match cb(context, call.object_id(), call.arguments()) {
                         Ok(r) => {
                             call.set_outputs(r);

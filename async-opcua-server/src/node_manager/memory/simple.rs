@@ -34,12 +34,36 @@ use super::{
 pub type SimpleNodeManager = InMemoryNodeManager<SimpleNodeManagerImpl>;
 
 type WriteCB = Arc<dyn Fn(DataValue, &NumericRange) -> StatusCode + Send + Sync + 'static>;
+type WriteNotification = (DataValue, NodeId, AttributeId);
+type WriteNotificationTarget = (NodeId, AttributeId);
+enum PreparedWriteValue {
+    Complete {
+        notification: Option<WriteNotification>,
+    },
+    Callback {
+        cb: WriteCB,
+        value: DataValue,
+        index_range: NumericRange,
+        notification_target: WriteNotificationTarget,
+    },
+}
+
 type ReadCB = Arc<
     dyn Fn(&NumericRange, TimestampsToReturn, f64) -> Result<DataValue, StatusCode>
         + Send
         + Sync
         + 'static,
 >;
+enum PreparedReadValue {
+    Value(DataValue),
+    Callback {
+        cb: ReadCB,
+        index_range: NumericRange,
+        timestamps_to_return: TimestampsToReturn,
+        max_age: f64,
+    },
+}
+
 type MethodCB = Arc<dyn Fn(&[Variant]) -> Result<Vec<Variant>, StatusCode> + Send + Sync + 'static>;
 type MethodWithContextCB = Arc<
     dyn Fn(&RequestContext, &[Variant]) -> Result<Vec<Variant>, StatusCode> + Send + Sync + 'static,
@@ -189,20 +213,41 @@ impl InMemoryNodeManagerImpl for SimpleNodeManagerImpl {
         max_age: f64,
         timestamps_to_return: TimestampsToReturn,
     ) -> Vec<DataValue> {
-        let address_space = address_space.read();
-        let cbs = trace_read_lock!(self.read_cbs);
+        let reads: Vec<_> = {
+            let address_space = address_space.read();
+            let cbs = trace_read_lock!(self.read_cbs);
 
-        nodes
-            .iter()
-            .map(|n| {
-                self.read_node_value(
-                    &cbs,
-                    context,
-                    &address_space,
-                    n,
-                    max_age,
+            nodes
+                .iter()
+                .map(|n| {
+                    self.prepare_read_node_value(
+                        &cbs,
+                        context,
+                        &address_space,
+                        n,
+                        max_age,
+                        timestamps_to_return,
+                    )
+                })
+                .collect()
+        };
+
+        reads
+            .into_iter()
+            .map(|read| match read {
+                PreparedReadValue::Value(value) => value,
+                PreparedReadValue::Callback {
+                    cb,
+                    index_range,
                     timestamps_to_return,
-                )
+                    max_age,
+                } => match cb(&index_range, timestamps_to_return, max_age) {
+                    Err(e) => DataValue {
+                        status: Some(e),
+                        ..Default::default()
+                    },
+                    Ok(v) => v,
+                },
             })
             .collect()
     }
@@ -299,21 +344,25 @@ impl InMemoryNodeManagerImpl for SimpleNodeManagerImpl {
     ) -> Result<(), StatusCode> {
         let mut source_writes: Vec<(NodeId, DataValue)> = Vec::new();
 
-        {
-            let address_space = trace_read_lock!(address_space);
-            let type_tree = trace_read_lock!(context.type_tree);
-            let cbs = trace_read_lock!(self.write_cbs);
+        for write in nodes_to_write {
+            let prepared = {
+                let address_space = trace_read_lock!(address_space);
+                let type_tree = trace_read_lock!(context.type_tree);
+                let cbs = trace_read_lock!(self.write_cbs);
 
-            for write in nodes_to_write {
-                self.write_node_value(&cbs, context, &address_space, &type_tree, write);
+                self.prepare_write_node_value(&cbs, context, &address_space, &type_tree, write)
+            };
 
-                let source = &write.value().node_id;
-                if write.status().is_good()
-                    && write.value().attribute_id == AttributeId::Value
-                    && !self.alarm_source_registry().alarms_for(source).is_empty()
-                {
-                    source_writes.push((source.clone(), write.value().value.clone()));
-                }
+            if let Some(notification) = Self::finish_prepared_write(prepared, write) {
+                Self::notify_write_data_change(context, notification);
+            }
+
+            let source = &write.value().node_id;
+            if write.status().is_good()
+                && write.value().attribute_id == AttributeId::Value
+                && !self.alarm_source_registry().alarms_for(source).is_empty()
+            {
+                source_writes.push((source.clone(), write.value().value.clone()));
             }
         }
 
@@ -340,10 +389,13 @@ impl InMemoryNodeManagerImpl for SimpleNodeManagerImpl {
         _address_space: &RwLock<AddressSpace>,
         methods_to_call: &mut [&mut &mut MethodCall],
     ) -> Result<(), StatusCode> {
-        let cbs = trace_read_lock!(self.method_cbs);
-        let ctx_cbs = trace_read_lock!(self.method_with_context_cbs);
         for method in methods_to_call {
-            if let Some(cb) = ctx_cbs.get(method.method_id()) {
+            let ctx_cb = {
+                let ctx_cbs = trace_read_lock!(self.method_with_context_cbs);
+                ctx_cbs.get(method.method_id()).cloned()
+            };
+
+            if let Some(cb) = ctx_cb {
                 match cb(context, method.arguments()) {
                     Ok(r) => {
                         method.set_outputs(r);
@@ -351,14 +403,24 @@ impl InMemoryNodeManagerImpl for SimpleNodeManagerImpl {
                     }
                     Err(e) => method.set_status(e),
                 }
-            } else if let Some(cb) = cbs.get(method.method_id()) {
-                match cb(method.arguments()) {
-                    Ok(r) => {
-                        method.set_outputs(r);
-                        method.set_status(StatusCode::Good);
-                    }
-                    Err(e) => method.set_status(e),
+                continue;
+            }
+
+            let cb = {
+                let cbs = trace_read_lock!(self.method_cbs);
+                cbs.get(method.method_id()).cloned()
+            };
+
+            let Some(cb) = cb else {
+                continue;
+            };
+
+            match cb(method.arguments()) {
+                Ok(r) => {
+                    method.set_outputs(r);
+                    method.set_status(StatusCode::Good);
                 }
+                Err(e) => method.set_status(e),
             }
         }
 
@@ -967,7 +1029,7 @@ impl SimpleNodeManagerImpl {
         );
     }
 
-    fn read_node_value(
+    fn prepare_read_node_value(
         &self,
         cbs: &HashMap<NodeId, ReadCB>,
         context: &RequestContext,
@@ -975,45 +1037,50 @@ impl SimpleNodeManagerImpl {
         node_to_read: &ParsedReadValueId,
         max_age: f64,
         timestamps_to_return: TimestampsToReturn,
-    ) -> DataValue {
+    ) -> PreparedReadValue {
         let mut result_value = DataValue::null();
         // Check that the read is permitted.
         let node = match address_space.validate_node_read(context, node_to_read) {
             Ok(n) => n,
             Err(e) => {
                 result_value.status = Some(e);
-                return result_value;
+                return PreparedReadValue::Value(result_value);
             }
         };
 
-        // If there is a callback registered, call that, otherwise read it from the node hierarchy.
-        if let Some(cb) = cbs.get(&node_to_read.node_id) {
-            match cb(&node_to_read.index_range, timestamps_to_return, max_age) {
-                Err(e) => DataValue {
-                    status: Some(e),
-                    ..Default::default()
-                },
-                Ok(v) => v,
+        // If there is a callback registered, capture it; otherwise read from the node hierarchy.
+        if let Some(cb) = cbs.get(&node_to_read.node_id).cloned() {
+            PreparedReadValue::Callback {
+                cb,
+                index_range: node_to_read.index_range.clone(),
+                timestamps_to_return,
+                max_age,
             }
         } else {
             // If it can't be found, read it from the node hierarchy.
-            read_node_value(&node, context, node_to_read, max_age, timestamps_to_return)
+            PreparedReadValue::Value(read_node_value(
+                &node,
+                context,
+                node_to_read,
+                max_age,
+                timestamps_to_return,
+            ))
         }
     }
 
-    fn write_node_value(
+    fn prepare_write_node_value(
         &self,
         cbs: &HashMap<NodeId, WriteCB>,
         context: &RequestContext,
         address_space: &AddressSpace,
         type_tree: &DefaultTypeTree,
         write: &mut WriteNode,
-    ) {
+    ) -> PreparedWriteValue {
         let mut node = match address_space.validate_node_write(context, write.value(), type_tree) {
             Ok(v) => v,
             Err(e) => {
                 write.set_status(e);
-                return;
+                return PreparedWriteValue::Complete { notification: None };
             }
         };
 
@@ -1021,34 +1088,93 @@ impl SimpleNodeManagerImpl {
             || write.value().attribute_id != AttributeId::Value
         {
             write.set_status(StatusCode::BadNotWritable);
-            return;
+            return PreparedWriteValue::Complete { notification: None };
         }
 
-        if let Some(cb) = cbs.get(node.as_node().node_id()) {
-            // If there is a callback registered, call that.
-            write.set_status(cb(write.value().value.clone(), &write.value().index_range));
+        let attribute_id = write.value().attribute_id;
+        if let Some(cb) = cbs.get(node.as_node().node_id()).cloned() {
+            // Capture all callback inputs while internal guards are held, then invoke later.
+            PreparedWriteValue::Callback {
+                cb,
+                value: write.value().value.clone(),
+                index_range: write.value().index_range.clone(),
+                notification_target: (node.node_id().clone(), attribute_id),
+            }
         } else if write.value().value.value.is_some() {
             // If not, write the value to the node hierarchy.
             match write_node_value(&mut node, write.value()) {
                 Ok(_) => write.set_status(StatusCode::Good),
                 Err(e) => write.set_status(e),
             }
+            PreparedWriteValue::Complete {
+                notification: Self::notification_for_successful_write(
+                    write.status(),
+                    &node,
+                    attribute_id,
+                ),
+            }
         } else {
             // If no value is passed return an error.
             write.set_status(StatusCode::BadNothingToDo);
+            PreparedWriteValue::Complete { notification: None }
         }
-        if write.status().is_good() {
-            if let Some(val) = node.as_mut_node().get_attribute(
-                TimestampsToReturn::Both,
-                write.value().attribute_id,
-                &NumericRange::None,
-                &opcua_types::DataEncoding::Binary,
-            ) {
-                context.subscriptions.notify_data_change(
-                    [(val, node.node_id(), write.value().attribute_id)].into_iter(),
-                );
+    }
+
+    fn finish_prepared_write(
+        prepared: PreparedWriteValue,
+        write: &mut WriteNode,
+    ) -> Option<WriteNotification> {
+        match prepared {
+            PreparedWriteValue::Complete { notification } => notification,
+            PreparedWriteValue::Callback {
+                cb,
+                value,
+                index_range,
+                notification_target,
+            } => {
+                let notification_value = value.clone();
+                write.set_status(cb(value, &index_range));
+                if write.status().is_good() {
+                    let (node_id, attribute_id) = notification_target;
+                    Some((notification_value, node_id, attribute_id))
+                } else {
+                    None
+                }
             }
         }
+    }
+
+    fn notification_for_successful_write(
+        status: StatusCode,
+        node: &NodeType,
+        attribute_id: AttributeId,
+    ) -> Option<WriteNotification> {
+        if status.is_good() {
+            Self::write_notification_from_node(node, attribute_id)
+        } else {
+            None
+        }
+    }
+
+    fn write_notification_from_node(
+        node: &NodeType,
+        attribute_id: AttributeId,
+    ) -> Option<WriteNotification> {
+        node.as_node()
+            .get_attribute(
+                TimestampsToReturn::Both,
+                attribute_id,
+                &NumericRange::None,
+                &opcua_types::DataEncoding::Binary,
+            )
+            .map(|value| (value, node.node_id().clone(), attribute_id))
+    }
+
+    fn notify_write_data_change(context: &RequestContext, notification: WriteNotification) {
+        let (value, node_id, attribute_id) = notification;
+        context
+            .subscriptions
+            .notify_data_change([(value, &node_id, attribute_id)].into_iter());
     }
 
     /// Add a callback called on `Write` for the node given by `id`.

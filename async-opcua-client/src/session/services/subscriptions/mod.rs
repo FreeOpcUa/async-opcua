@@ -17,9 +17,7 @@ use std::{
     time::Duration,
 };
 
-use opcua_types::{
-    ExtensionObject, MonitoredItemCreateRequest, MonitoringMode, NotificationMessage, ReadValueId,
-};
+use opcua_types::{ExtensionObject, MonitoredItemCreateRequest, MonitoringMode, ReadValueId};
 
 pub use service::{
     CreateMonitoredItems, CreateSubscription, DeleteMonitoredItems, DeleteSubscriptions,
@@ -30,7 +28,8 @@ pub use service::{
 pub use event_loop_state::{SubscriptionCache, SubscriptionEventLoopState};
 
 use crate::session::services::subscriptions::{
-    service::CreatedMonitoredItem, state::SubscriptionState,
+    service::CreatedMonitoredItem,
+    state::{ClientDeliveryPacket, SubscriptionState},
 };
 
 pub(crate) struct CreateMonitoredItem {
@@ -344,11 +343,8 @@ impl Subscription {
         }
     }
 
-    pub(crate) fn on_notification(&mut self, notification: NotificationMessage) {
-        self.callback.on_subscription_notification(
-            notification,
-            MonitoredItemMap::new(&self.monitored_items, &self.client_handles),
-        );
+    pub(crate) fn deliver_notification_packet(&mut self, packet: ClientDeliveryPacket) {
+        packet.deliver_to(self.callback.as_mut());
     }
 
     fn clear_temporary_id(&mut self, temp_id: MonitoredItemId, remove_handle: bool) {

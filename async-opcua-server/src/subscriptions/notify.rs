@@ -1,20 +1,200 @@
 use hashbrown::HashMap;
 use opcua_nodes::Event;
-use opcua_types::{node_id::IntoNodeIdRef, AttributeId, DataValue, DateTime, ObjectId, Variant};
+use opcua_types::{
+    node_id::IntoNodeIdRef, AttributeId, DataEncoding, DataValue, DateTime, NumericRange, ObjectId,
+    Variant,
+};
 use parking_lot::RwLockReadGuard;
 
 use crate::{
     subscriptions::{
-        ring::NotificationWorkItem, MonitoredItemEntry, MonitoredItemKeyRef, SubscriptionCacheInner,
+        actor::SubscriptionActorHandle, ring::NotificationWorkItem, MonitoredItemEntry,
+        MonitoredItemKeyRef, SubscriptionCacheInner,
     },
     MonitoredItemHandle,
 };
+
+/// Owned metadata for one monitored item route captured from the cache.
+#[allow(dead_code)]
+#[derive(Clone)]
+pub(crate) struct NotificationRouteTarget {
+    pub(crate) session_id: u32,
+    pub(crate) subscription_id: u32,
+    pub(crate) monitored_item_id: u32,
+    pub(crate) handle: MonitoredItemHandle,
+    pub(crate) attribute_id: AttributeId,
+    pub(crate) index_range: NumericRange,
+    pub(crate) data_encoding: DataEncoding,
+}
+
+/// Owned routes for a single subscription actor.
+#[allow(dead_code)]
+#[derive(Clone)]
+pub(crate) struct NotificationRouteBatch {
+    pub(crate) session_id: u32,
+    pub(crate) subscription_id: u32,
+    pub(crate) subscription_handle: SubscriptionActorHandle,
+    pub(crate) targets: Vec<NotificationRouteTarget>,
+}
+
+impl NotificationRouteBatch {
+    fn new(
+        session_id: u32,
+        subscription_id: u32,
+        subscription_handle: SubscriptionActorHandle,
+    ) -> Self {
+        Self {
+            session_id,
+            subscription_id,
+            subscription_handle,
+            targets: Vec::new(),
+        }
+    }
+}
+
+/// Owned route lookup result for one notification source.
+///
+/// This snapshot owns the session, subscription, monitored-item, and sampling
+/// metadata needed after the global subscription cache guard has been released.
+#[allow(dead_code)]
+#[derive(Clone, Default)]
+pub(crate) struct NotificationRouteSnapshot {
+    batches: Vec<NotificationRouteBatch>,
+}
+
+#[allow(dead_code)]
+impl NotificationRouteSnapshot {
+    #[must_use]
+    pub(crate) fn empty() -> Self {
+        Self::default()
+    }
+
+    #[must_use]
+    pub(crate) fn for_data<'a>(
+        inner: &SubscriptionCacheInner,
+        node_id: impl IntoNodeIdRef<'a>,
+        attribute_id: AttributeId,
+    ) -> Self {
+        if attribute_id == AttributeId::EventNotifier {
+            return Self::empty();
+        }
+
+        let Some(items) = inner.monitored_items.get(&MonitoredItemKeyRef {
+            id: node_id.into_node_id_ref(),
+            attribute_id,
+        }) else {
+            return Self::empty();
+        };
+
+        let mut snapshot = Self::empty();
+        snapshot.extend_from_items(inner, attribute_id, items);
+        snapshot
+    }
+
+    #[must_use]
+    pub(crate) fn for_events<'a>(
+        inner: &SubscriptionCacheInner,
+        node_id: impl IntoNodeIdRef<'a>,
+    ) -> Self {
+        let id_ref = node_id.into_node_id_ref();
+        let is_server = id_ref == ObjectId::Server;
+        let mut snapshot = Self::empty();
+
+        if let Some(items) = inner.monitored_items.get(&MonitoredItemKeyRef {
+            id: id_ref,
+            attribute_id: AttributeId::EventNotifier,
+        }) {
+            snapshot.extend_from_items(inner, AttributeId::EventNotifier, items);
+        }
+
+        if !is_server {
+            if let Some(items) = inner.monitored_items.get(&MonitoredItemKeyRef {
+                id: ObjectId::Server.into_node_id_ref(),
+                attribute_id: AttributeId::EventNotifier,
+            }) {
+                snapshot.extend_from_items(inner, AttributeId::EventNotifier, items);
+            }
+        }
+
+        snapshot
+    }
+
+    #[must_use]
+    pub(crate) fn is_empty(&self) -> bool {
+        self.batches.is_empty()
+    }
+
+    #[must_use]
+    pub(crate) fn len(&self) -> usize {
+        self.batches.iter().map(|batch| batch.targets.len()).sum()
+    }
+
+    #[must_use]
+    pub(crate) fn batches(&self) -> &[NotificationRouteBatch] {
+        &self.batches
+    }
+
+    #[must_use]
+    pub(crate) fn into_batches(self) -> Vec<NotificationRouteBatch> {
+        self.batches
+    }
+
+    fn extend_from_items(
+        &mut self,
+        inner: &SubscriptionCacheInner,
+        attribute_id: AttributeId,
+        items: &HashMap<MonitoredItemHandle, MonitoredItemEntry>,
+    ) {
+        for (handle, entry) in items {
+            if !entry.enabled {
+                continue;
+            }
+
+            let subscription_id = handle.subscription_id;
+            let Some(session_id) = inner.subscription_to_session.get(&subscription_id).copied()
+            else {
+                continue;
+            };
+            let Some(session_entry) = inner.session_subscriptions.get(&session_id) else {
+                continue;
+            };
+
+            let batch_index = match self
+                .batches
+                .iter()
+                .position(|batch| batch.subscription_id == subscription_id)
+            {
+                Some(index) => index,
+                None => {
+                    self.batches.push(NotificationRouteBatch::new(
+                        session_id,
+                        subscription_id,
+                        session_entry.handle(),
+                    ));
+                    self.batches.len() - 1
+                }
+            };
+
+            self.batches[batch_index]
+                .targets
+                .push(NotificationRouteTarget {
+                    session_id,
+                    subscription_id,
+                    monitored_item_id: handle.monitored_item_id,
+                    handle: *handle,
+                    attribute_id,
+                    index_range: entry.index_range.clone(),
+                    data_encoding: entry.data_encoding.clone(),
+                });
+        }
+    }
+}
 
 /// Handle for notifying the subscription cache of a batch of changes,
 /// without allocating NodeIds unnecessarily.
 /// Notifications are actually submitted once the notifier is dropped.
 pub struct SubscriptionDataNotifier<'a> {
-    lock: RwLockReadGuard<'a, SubscriptionCacheInner>,
+    lock: Option<RwLockReadGuard<'a, SubscriptionCacheInner>>,
     by_subscription: HashMap<u32, Vec<(MonitoredItemHandle, DataValue)>>,
 }
 
@@ -71,7 +251,7 @@ impl<'a> SubscriptionDataNotifierBatch<'a> {
 impl<'a> SubscriptionDataNotifier<'a> {
     pub(super) fn new(lock: RwLockReadGuard<'a, SubscriptionCacheInner>) -> Self {
         Self {
-            lock,
+            lock: Some(lock),
             by_subscription: Default::default(),
         }
     }
@@ -97,7 +277,8 @@ impl<'a> SubscriptionDataNotifier<'a> {
             return None;
         }
 
-        let items = self.lock.monitored_items.get(&MonitoredItemKeyRef {
+        let lock = self.lock.as_deref()?;
+        let items = lock.monitored_items.get(&MonitoredItemKeyRef {
             id: node_id.into_node_id_ref(),
             attribute_id,
         })?;
@@ -128,53 +309,65 @@ impl<'a> SubscriptionDataNotifier<'a> {
 
 impl Drop for SubscriptionDataNotifier<'_> {
     fn drop(&mut self) {
+        let Some(lock) = self.lock.as_deref() else {
+            return;
+        };
+
+        let mut pending = Vec::with_capacity(self.by_subscription.len());
         for (sub_id, items) in std::mem::take(&mut self.by_subscription) {
-            let Some(session_id) = self.lock.subscription_to_session.get(&sub_id) else {
+            let Some(session_id) = lock.subscription_to_session.get(&sub_id) else {
                 continue;
             };
-            let Some(entry) = self.lock.session_subscriptions.get(session_id) else {
+            let Some(entry) = lock.session_subscriptions.get(session_id) else {
                 continue;
             };
+            pending.push((entry.handle(), items));
+        }
+
+        drop(self.lock.take());
+
+        for (subscription_handle, items) in pending {
             for (handle, value) in items {
                 let item = NotificationWorkItem::Data { handle, value };
-                entry.handle.push_notification(item);
+                subscription_handle.push_notification(item);
             }
         }
     }
+}
+
+struct PendingEventNotifications<'b> {
+    subscription_handle: SubscriptionActorHandle,
+    items: Vec<(MonitoredItemHandle, &'b dyn Event)>,
 }
 
 /// Handle for notifying the subscription cache of a batch of events,
 /// without allocating NodeIds unnecessarily.
 /// Notifications are actually submitted once the notifier is dropped.
 pub struct SubscriptionEventNotifier<'a, 'b> {
-    lock: RwLockReadGuard<'a, SubscriptionCacheInner>,
-    by_subscription: HashMap<u32, Vec<(MonitoredItemHandle, &'b dyn Event)>>,
+    lock: Option<RwLockReadGuard<'a, SubscriptionCacheInner>>,
+    by_subscription: HashMap<(u32, u32), PendingEventNotifications<'b>>,
 }
 
 /// Notifier for a specific node emitting events.
 pub struct SubscriptionEventNotifierBatch<'a, 'b> {
-    // An event may notify on both the server, and an emitting node.
-    // So we may in some cases need two maps of monitored item entries.
-    items: &'a HashMap<MonitoredItemHandle, MonitoredItemEntry>,
-    items_2: Option<&'a HashMap<MonitoredItemHandle, MonitoredItemEntry>>,
-    by_subscription: &'a mut HashMap<u32, Vec<(MonitoredItemHandle, &'b dyn Event)>>,
+    route_batches: Vec<NotificationRouteBatch>,
+    by_subscription: &'a mut HashMap<(u32, u32), PendingEventNotifications<'b>>,
 }
 
 impl<'b> SubscriptionEventNotifierBatch<'_, 'b> {
     /// Notify the referenced node of a new event.
     pub fn event(&mut self, event: &'b dyn Event) {
-        for (handle, entry) in self
-            .items
-            .iter()
-            .chain(self.items_2.iter().flat_map(|v| v.iter()))
-        {
-            if !entry.enabled {
-                continue;
+        for batch in &self.route_batches {
+            let pending = self
+                .by_subscription
+                .entry((batch.session_id, batch.subscription_id))
+                .or_insert_with(|| PendingEventNotifications {
+                    subscription_handle: batch.subscription_handle.clone(),
+                    items: Vec::new(),
+                });
+            for target in &batch.targets {
+                pending.items.push((target.handle, event));
             }
-            self.by_subscription
-                .entry(handle.subscription_id)
-                .or_default()
-                .push((*handle, event));
         }
     }
 }
@@ -182,7 +375,7 @@ impl<'b> SubscriptionEventNotifierBatch<'_, 'b> {
 impl<'a, 'b> SubscriptionEventNotifier<'a, 'b> {
     pub(super) fn new(lock: RwLockReadGuard<'a, SubscriptionCacheInner>) -> Self {
         Self {
-            lock,
+            lock: Some(lock),
             by_subscription: Default::default(),
         }
     }
@@ -203,30 +396,14 @@ impl<'a, 'b> SubscriptionEventNotifier<'a, 'b> {
         &'c mut self,
         node_id: impl IntoNodeIdRef<'a>,
     ) -> Option<SubscriptionEventNotifierBatch<'c, 'b>> {
-        let id_ref = node_id.into_node_id_ref();
-        let is_server = id_ref == ObjectId::Server;
-        let items = self.lock.monitored_items.get(&MonitoredItemKeyRef {
-            id: id_ref,
-            attribute_id: AttributeId::EventNotifier,
-        });
-        let server_items = if !is_server {
-            self.lock.monitored_items.get(&MonitoredItemKeyRef {
-                id: ObjectId::Server.into_node_id_ref(),
-                attribute_id: AttributeId::EventNotifier,
-            })
-        } else {
-            None
-        };
-
-        let (items, items_2) = match (items, server_items) {
-            (None, Some(v)) | (Some(v), None) => (v, None),
-            (Some(v), Some(v2)) => (v, Some(v2)),
-            (None, None) => return None,
-        };
+        let lock = self.lock.as_deref()?;
+        let snapshot = NotificationRouteSnapshot::for_events(lock, node_id);
+        if snapshot.is_empty() {
+            return None;
+        }
 
         Some(SubscriptionEventNotifierBatch {
-            items,
-            items_2,
+            route_batches: snapshot.into_batches(),
             by_subscription: &mut self.by_subscription,
         })
     }
@@ -246,19 +423,19 @@ impl<'a, 'b> SubscriptionEventNotifier<'a, 'b> {
 
 impl Drop for SubscriptionEventNotifier<'_, '_> {
     fn drop(&mut self) {
-        for (sub_id, items) in std::mem::take(&mut self.by_subscription) {
-            let Some(session_id) = self.lock.subscription_to_session.get(&sub_id) else {
-                continue;
-            };
-            let Some(entry) = self.lock.session_subscriptions.get(session_id) else {
-                continue;
-            };
+        drop(self.lock.take());
+
+        for (_, pending) in std::mem::take(&mut self.by_subscription) {
+            let PendingEventNotifications {
+                subscription_handle,
+                items,
+            } = pending;
             for (handle, event) in items {
                 let item = NotificationWorkItem::Event {
                     handle,
                     event: event.clone_box(),
                 };
-                entry.handle.push_notification(item);
+                subscription_handle.push_notification(item);
             }
         }
     }

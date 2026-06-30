@@ -309,7 +309,7 @@ impl SubscriberRuntime {
         }
 
         {
-            let space = self.address_space.write();
+            let space = self.address_space.read();
             for (target_node_id, _) in &writes {
                 let Some(node) = space.find(target_node_id) else {
                     return Err(SubscriberError::TargetNotFound);

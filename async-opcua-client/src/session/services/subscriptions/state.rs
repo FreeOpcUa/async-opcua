@@ -8,7 +8,58 @@ use opcua_types::{MonitoringMode, NotificationMessage, SubscriptionAcknowledgeme
 
 use crate::session::services::subscriptions::{MonitoredItemTempResult, TempMonitoredItem};
 
-use super::{CreateMonitoredItem, ModifyMonitoredItem, PublishLimits, Subscription};
+use super::{
+    CreateMonitoredItem, ModifyMonitoredItem, MonitoredItem, MonitoredItemId, MonitoredItemMap,
+    OnSubscriptionNotificationCore, PublishLimits, Subscription,
+};
+
+/// Owned notification delivery data captured while subscription state is locked.
+///
+/// The packet owns the [`NotificationMessage`] and the monitored-item lookup
+/// view needed by callbacks, so later delivery does not need to borrow
+/// `SubscriptionState` after the mutex is released.
+pub(crate) struct ClientDeliveryPacket {
+    sequence_number: u32,
+    acknowledgement_queued: bool,
+    notification: NotificationMessage,
+    monitored_items: HashMap<MonitoredItemId, MonitoredItem>,
+    client_handles: HashMap<u32, MonitoredItemId>,
+}
+
+impl ClientDeliveryPacket {
+    fn new(
+        notification: NotificationMessage,
+        acknowledgement_queued: bool,
+        subscription: &Subscription,
+    ) -> Self {
+        Self {
+            sequence_number: notification.sequence_number,
+            acknowledgement_queued,
+            notification,
+            monitored_items: subscription.monitored_items.clone(),
+            client_handles: subscription.client_handles.clone(),
+        }
+    }
+
+    pub(super) fn deliver_to(self, callback: &mut dyn OnSubscriptionNotificationCore) {
+        let Self {
+            sequence_number,
+            acknowledgement_queued,
+            notification,
+            monitored_items,
+            client_handles,
+            ..
+        } = self;
+
+        debug_assert_eq!(sequence_number, notification.sequence_number);
+        debug_assert_eq!(acknowledgement_queued, notification_has_data(&notification));
+
+        callback.on_subscription_notification(
+            notification,
+            MonitoredItemMap::new(&monitored_items, &client_handles),
+        );
+    }
+}
 
 /// State containing all known subscriptions in the session.
 pub struct SubscriptionState {
@@ -216,26 +267,31 @@ impl SubscriptionState {
         }
     }
 
-    pub(crate) fn handle_notification(
+    pub(crate) fn collect_client_delivery_packet(
         &mut self,
         subscription_id: u32,
         notification: NotificationMessage,
-    ) {
-        let has_data = notification
-            .notification_data
-            .as_ref()
-            .is_some_and(|v| !v.is_empty());
+    ) -> Option<ClientDeliveryPacket> {
+        let has_data = notification_has_data(&notification);
         if has_data {
             self.add_acknowledgement(subscription_id, notification.sequence_number);
         }
-        if let Some(sub) = self.subscriptions.get_mut(&subscription_id) {
-            sub.on_notification(notification);
-        } else if has_data {
-            tracing::warn!(
-                "Received notification for unknown subscription {}",
-                subscription_id
-            );
-        }
+
+        let Some(subscription) = self.subscriptions.get(&subscription_id) else {
+            if has_data {
+                tracing::warn!(
+                    "Received notification for unknown subscription {}",
+                    subscription_id
+                );
+            }
+            return None;
+        };
+
+        Some(ClientDeliveryPacket::new(
+            notification,
+            has_data,
+            subscription,
+        ))
     }
 
     fn set_keep_alive_timeout(&mut self) {
@@ -291,4 +347,11 @@ impl SubscriptionState {
     pub(super) fn next_temp_id(&mut self) -> u32 {
         self.temp_id_handle.next()
     }
+}
+
+fn notification_has_data(notification: &NotificationMessage) -> bool {
+    notification
+        .notification_data
+        .as_ref()
+        .is_some_and(|v| !v.is_empty())
 }

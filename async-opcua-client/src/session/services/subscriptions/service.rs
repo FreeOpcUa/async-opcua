@@ -8,7 +8,7 @@ use crate::{
         process_service_result, process_unexpected_response,
         request_builder::{builder_base, builder_debug, builder_error, RequestHeaderBuilder},
         services::subscriptions::{
-            callbacks::OnSubscriptionNotificationCore, ModifyMonitoredItem,
+            callbacks::OnSubscriptionNotificationCore, ModifyMonitoredItem, MonitoredItemMap,
             PreInsertMonitoredItems, Subscription,
         },
         session_debug, session_error, session_warn,
@@ -32,7 +32,7 @@ use opcua_types::{
 };
 use tracing::{debug_span, enabled, Instrument};
 
-use super::state::SubscriptionState;
+use super::state::{ClientDeliveryPacket, SubscriptionState};
 
 /// Create a subscription by sending a [`CreateSubscriptionRequest`] to the server.
 ///
@@ -567,6 +567,123 @@ impl UARequest for Publish {
             builder_error!(self, "publish failed {:?}", response);
             Err(process_unexpected_response(response))
         }
+    }
+}
+
+struct PendingClientDelivery {
+    subscription: Subscription,
+    packet: Option<ClientDeliveryPacket>,
+}
+
+struct PendingClientDeliveryGuard<'a> {
+    delivery: Option<PendingClientDelivery>,
+    subscription_state: &'a Mutex<SubscriptionState>,
+}
+
+impl PendingClientDelivery {
+    fn stage(
+        subscription_state: &mut SubscriptionState,
+        subscription_id: u32,
+        packet: ClientDeliveryPacket,
+    ) -> Option<Self> {
+        let mut subscription = subscription_state.delete_subscription(subscription_id)?;
+        let placeholder = Subscription {
+            subscription_id: subscription.subscription_id,
+            publishing_interval: subscription.publishing_interval,
+            lifetime_count: subscription.lifetime_count,
+            max_keep_alive_count: subscription.max_keep_alive_count,
+            max_notifications_per_publish: subscription.max_notifications_per_publish,
+            publishing_enabled: subscription.publishing_enabled,
+            priority: subscription.priority,
+            monitored_items: std::mem::take(&mut subscription.monitored_items),
+            client_handles: std::mem::take(&mut subscription.client_handles),
+            callback: Box::new(StagedSubscriptionCallback),
+        };
+
+        subscription_state.add_subscription(placeholder);
+
+        Some(Self {
+            subscription,
+            packet: Some(packet),
+        })
+    }
+
+    fn deliver(&mut self) {
+        if let Some(packet) = self.packet.take() {
+            self.subscription.deliver_notification_packet(packet);
+        }
+    }
+
+    fn restore(self, subscription_state: &mut SubscriptionState) {
+        let Self {
+            mut subscription, ..
+        } = self;
+
+        let Some(mut current_subscription) =
+            subscription_state.delete_subscription(subscription.subscription_id)
+        else {
+            return;
+        };
+
+        subscription.publishing_interval = current_subscription.publishing_interval;
+        subscription.lifetime_count = current_subscription.lifetime_count;
+        subscription.max_keep_alive_count = current_subscription.max_keep_alive_count;
+        subscription.max_notifications_per_publish =
+            current_subscription.max_notifications_per_publish;
+        subscription.publishing_enabled = current_subscription.publishing_enabled;
+        subscription.priority = current_subscription.priority;
+        subscription.monitored_items = std::mem::take(&mut current_subscription.monitored_items);
+        subscription.client_handles = std::mem::take(&mut current_subscription.client_handles);
+
+        subscription_state.add_subscription(subscription);
+    }
+}
+
+impl<'a> PendingClientDeliveryGuard<'a> {
+    fn new(
+        delivery: PendingClientDelivery,
+        subscription_state: &'a Mutex<SubscriptionState>,
+    ) -> Self {
+        Self {
+            delivery: Some(delivery),
+            subscription_state,
+        }
+    }
+
+    fn deliver(&mut self) {
+        if let Some(delivery) = self.delivery.as_mut() {
+            delivery.deliver();
+        }
+    }
+
+    fn restore(mut self) {
+        self.restore_now();
+    }
+
+    fn restore_now(&mut self) {
+        let Some(delivery) = self.delivery.take() else {
+            return;
+        };
+
+        let mut subscription_state = trace_lock!(self.subscription_state);
+        delivery.restore(&mut subscription_state);
+    }
+}
+
+impl Drop for PendingClientDeliveryGuard<'_> {
+    fn drop(&mut self) {
+        self.restore_now();
+    }
+}
+
+struct StagedSubscriptionCallback;
+
+impl OnSubscriptionNotificationCore for StagedSubscriptionCallback {
+    fn on_subscription_notification(
+        &mut self,
+        _notification: NotificationMessage,
+        _monitored_items: MonitoredItemMap<'_>,
+    ) {
     }
 }
 
@@ -2364,9 +2481,29 @@ impl Session {
                         }
                     }
                 }
-                let mut subscription_state = trace_lock!(self.subscription_state);
-                subscription_state.handle_notification(r.subscription_id, r.notification_message);
-                Ok(r.more_notifications)
+
+                let more_notifications = r.more_notifications;
+                let delivery = {
+                    let mut subscription_state = trace_lock!(self.subscription_state);
+                    subscription_state
+                        .collect_client_delivery_packet(r.subscription_id, r.notification_message)
+                        .and_then(|packet| {
+                            PendingClientDelivery::stage(
+                                &mut subscription_state,
+                                r.subscription_id,
+                                packet,
+                            )
+                        })
+                };
+
+                if let Some(delivery) = delivery {
+                    let mut delivery =
+                        PendingClientDeliveryGuard::new(delivery, &self.subscription_state);
+                    delivery.deliver();
+                    delivery.restore();
+                }
+
+                Ok(more_notifications)
             }
             Err(e) => {
                 if let Some(acks) = acks {
@@ -2533,6 +2670,93 @@ impl Session {
                     }
                 }
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        panic::{self, AssertUnwindSafe},
+        sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        },
+    };
+
+    use super::*;
+    use crate::session::services::subscriptions::PublishLimits;
+
+    #[test]
+    fn pending_client_delivery_restores_subscription_when_callback_panics() {
+        let counter = Arc::new(AtomicUsize::new(0));
+        let (publish_limits_tx, _publish_limits_rx) =
+            tokio::sync::watch::channel(PublishLimits::new());
+        let mut state = SubscriptionState::new(Duration::from_millis(1), publish_limits_tx);
+        state.add_subscription(Subscription::new(
+            1,
+            Duration::from_millis(100),
+            30,
+            10,
+            0,
+            0,
+            true,
+            Box::new(PanicSubscriptionCallback {
+                counter: Arc::clone(&counter),
+            }),
+        ));
+        let state = Mutex::new(state);
+
+        let first = stage_delivery(&state, 1);
+        let first_result = panic::catch_unwind(AssertUnwindSafe(|| {
+            let mut delivery = PendingClientDeliveryGuard::new(first, &state);
+            delivery.deliver();
+        }));
+        assert!(first_result.is_err());
+        assert!(state.lock().subscription_exists(1));
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+
+        let second = stage_delivery(&state, 2);
+        let second_result = panic::catch_unwind(AssertUnwindSafe(|| {
+            let mut delivery = PendingClientDeliveryGuard::new(second, &state);
+            delivery.deliver();
+        }));
+        assert!(second_result.is_err());
+        assert!(state.lock().subscription_exists(1));
+        assert_eq!(counter.load(Ordering::SeqCst), 2);
+    }
+
+    fn stage_delivery(
+        state: &Mutex<SubscriptionState>,
+        sequence_number: u32,
+    ) -> PendingClientDelivery {
+        let mut state = state.lock();
+        let packet = state
+            .collect_client_delivery_packet(
+                1,
+                NotificationMessage {
+                    sequence_number,
+                    publish_time: opcua_types::DateTime::default(),
+                    notification_data: None,
+                },
+            )
+            .expect("subscription should exist while staging delivery");
+        PendingClientDelivery::stage(&mut state, 1, packet)
+            .expect("delivery should be staged for an existing subscription")
+    }
+
+    struct PanicSubscriptionCallback {
+        counter: Arc<AtomicUsize>,
+    }
+
+    impl OnSubscriptionNotificationCore for PanicSubscriptionCallback {
+        fn on_subscription_notification(
+            &mut self,
+            _notification: NotificationMessage,
+            _monitored_items: MonitoredItemMap<'_>,
+        ) {
+            self.counter.fetch_add(1, Ordering::SeqCst);
+            panic!("intentional subscription callback panic");
         }
     }
 }

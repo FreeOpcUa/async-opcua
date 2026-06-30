@@ -36,8 +36,8 @@ use crate::{
 };
 use opcua_types::{
     ActivateSessionRequest, ActivateSessionResponse, ByteString, CloseSessionRequest,
-    CloseSessionResponse, CreateSessionRequest, CreateSessionResponse, Error, MessageSecurityMode,
-    NodeId, ResponseHeader, SignatureData, StatusCode, UAString,
+    CloseSessionResponse, CreateSessionRequest, CreateSessionResponse, EndpointDescription, Error,
+    MessageSecurityMode, NodeId, ResponseHeader, SignatureData, StatusCode, UAString,
 };
 
 use super::{
@@ -200,6 +200,321 @@ fn resolved_identity_from_activation(
     }
 }
 
+struct CreateSessionEndpointSelection {
+    server_endpoints: Vec<EndpointDescription>,
+}
+
+impl CreateSessionEndpointSelection {
+    fn preflight(info: &ServerInfo, request: &CreateSessionRequest) -> Result<Self, StatusCode> {
+        // OPC-10000-4 5.7.2: CreateSession endpoint validation is safe to
+        // prepare before the short manager commit as long as statuses remain unchanged.
+        let endpoints = info.new_endpoint_descriptions(request.endpoint_url.as_ref());
+        if request.endpoint_url.is_empty() {
+            error!("Create session was passed an null endpoint url");
+            return Err(StatusCode::BadTcpEndpointUrlInvalid);
+        }
+
+        let Some(server_endpoints) = endpoints else {
+            return Err(StatusCode::BadTcpEndpointUrlInvalid);
+        };
+
+        info.validate_endpoint_hostname(request.endpoint_url.as_ref())?;
+
+        Ok(Self { server_endpoints })
+    }
+}
+
+struct CreateSessionCertificateValidation {
+    client_certificate: Option<X509>,
+}
+
+impl CreateSessionCertificateValidation {
+    fn preflight(
+        certificate_store: &RwLock<CertificateStore>,
+        security_policy: SecurityPolicy,
+        request: &CreateSessionRequest,
+    ) -> Result<Self, StatusCode> {
+        // OPC-10000-4 5.7.2: secured CreateSession requests bind the client
+        // application certificate to the requested ApplicationDescription.
+        let client_certificate = if security_policy != SecurityPolicy::None {
+            let cert = X509::from_byte_string(&request.client_certificate)?;
+            let application_uri = if request.client_description.application_uri.is_empty() {
+                None
+            } else {
+                Some(request.client_description.application_uri.as_ref())
+            };
+            let store = trace_read_lock!(certificate_store);
+            store.validate_or_reject_application_instance_cert(
+                &cert,
+                security_policy,
+                None,
+                application_uri,
+            )?;
+            Some(cert)
+        } else {
+            None
+        };
+
+        Ok(Self { client_certificate })
+    }
+}
+
+struct CreateSessionServerSignature {
+    server_signature: SignatureData,
+    #[cfg(feature = "ecc")]
+    issued_ecdh_key: Option<(opcua_crypto::ecc::EphemeralKeyPair, SecurityPolicy)>,
+    #[cfg(feature = "ecc")]
+    ecdh_response_header: Option<opcua_types::ExtensionObject>,
+}
+
+impl CreateSessionServerSignature {
+    fn preflight(
+        info: &ServerInfo,
+        security_policy: SecurityPolicy,
+        request: &CreateSessionRequest,
+    ) -> Result<Self, StatusCode> {
+        // OPC-10000-4 5.7.2: the server signature proves possession of the
+        // server private key for the client certificate and nonce supplied in
+        // CreateSession, and can be prepared before the short manager commit.
+        let server_pkey = info.server_pkey.read();
+        let server_signature = if let Some(ref pkey) = *server_pkey {
+            match opcua_crypto::create_signature_data(
+                pkey,
+                security_policy,
+                &request.client_certificate,
+                &request.client_nonce,
+            ) {
+                Ok(signature) => signature,
+                Err(err) => {
+                    error!(
+                        "Cannot create signature data from private key, check log and error {:?}",
+                        err
+                    );
+                    if security_policy != SecurityPolicy::None {
+                        return Err(StatusCode::BadSecurityChecksFailed);
+                    }
+                    SignatureData::null()
+                }
+            }
+        } else {
+            SignatureData::null()
+        };
+
+        #[cfg(feature = "ecc")]
+        let mut issued_ecdh_key: Option<(
+            opcua_crypto::ecc::EphemeralKeyPair,
+            SecurityPolicy,
+        )> = None;
+        #[cfg(feature = "ecc")]
+        let ecdh_response_header = {
+            match opcua_crypto::ecc::read_ecdh_policy_uri(&request.request_header.additional_header)
+            {
+                Some(uri) => match server_pkey.as_ref() {
+                    Some(pkey) => match opcua_crypto::ecc::issue_server_ephemeral_key(&uri, pkey) {
+                        Ok((keypair, ephemeral_key)) => {
+                            issued_ecdh_key = Some((keypair, SecurityPolicy::from_uri(&uri)));
+                            Some(opcua_crypto::ecc::build_ecdh_key_response(ephemeral_key))
+                        }
+                        Err(e) => Some(opcua_crypto::ecc::build_ecdh_key_error(e.status())),
+                    },
+                    None => Some(opcua_crypto::ecc::build_ecdh_key_error(
+                        StatusCode::BadSecurityPolicyRejected,
+                    )),
+                },
+                None => None,
+            }
+        };
+
+        Ok(Self {
+            server_signature,
+            #[cfg(feature = "ecc")]
+            issued_ecdh_key,
+            #[cfg(feature = "ecc")]
+            ecdh_response_header,
+        })
+    }
+}
+
+pub(crate) struct CreateSessionDraft {
+    secure_channel_id: u32,
+    actor_construction: CreateSessionActorConstruction,
+    session_allocation: CreateSessionAllocation,
+}
+
+struct CreateSessionActorConstruction {
+    authentication_token: NodeId,
+    server_nonce: ByteString,
+    server_certificate: ByteString,
+    session_timeout: u64,
+    max_request_message_size: u32,
+    server_endpoints: Option<Vec<EndpointDescription>>,
+    session_id: NodeId,
+    session_id_numeric: u32,
+}
+
+struct CreateSessionAllocation {
+    session_arc: Arc<RwLock<Session>>,
+    response: CreateSessionResponse,
+}
+
+impl CreateSessionActorConstruction {
+    fn prepare(
+        info: &ServerInfo,
+        channel: &SecureChannel,
+        request: &CreateSessionRequest,
+        endpoint_selection: &CreateSessionEndpointSelection,
+        certificate_validation: &CreateSessionCertificateValidation,
+        server_signature: &mut CreateSessionServerSignature,
+    ) -> (Self, Session) {
+        // OPC-10000-4 5.7.2: these values are part of the session returned by
+        // CreateSession, but preparing them does not publish the Session or
+        // spawn its actor.
+        let authentication_token = NodeId::new(0, random::byte_string(32));
+        let server_nonce = random::byte_string(info.config.session_nonce_length);
+        let server_certificate = info.server_certificate_as_byte_string();
+        let session_timeout = info
+            .config
+            .max_session_timeout_ms
+            .min(request.requested_session_timeout.floor() as u64);
+        let max_request_message_size = info.config.limits.max_message_size as u32;
+        let server_endpoints = Some(endpoint_selection.server_endpoints.clone());
+        let security_policy = channel.security_policy();
+
+        let session = Session::create(
+            info,
+            authentication_token.clone(),
+            channel.secure_channel_id(),
+            session_timeout,
+            max_request_message_size,
+            request.max_response_message_size,
+            request.endpoint_url.clone(),
+            security_policy.to_uri().to_string(),
+            IdentityToken::None,
+            certificate_validation.client_certificate.clone(),
+            server_nonce.clone(),
+            request.session_name.clone(),
+            request.client_description.clone(),
+            channel.security_mode(),
+        );
+
+        #[cfg(feature = "ecc")]
+        let session = {
+            let mut session = session;
+            if let Some((keypair, policy)) = server_signature.issued_ecdh_key.take() {
+                session.set_ecdh_ephemeral_key(keypair, policy);
+            }
+            session
+        };
+        #[cfg(not(feature = "ecc"))]
+        let _ = server_signature;
+
+        let session_id = session.session_id().clone();
+        let session_id_numeric = session.session_id_numeric();
+
+        (
+            Self {
+                authentication_token,
+                server_nonce,
+                server_certificate,
+                session_timeout,
+                max_request_message_size,
+                server_endpoints,
+                session_id,
+                session_id_numeric,
+            },
+            session,
+        )
+    }
+}
+
+impl CreateSessionAllocation {
+    fn prepare(
+        session: Session,
+        request: &CreateSessionRequest,
+        actor_construction: &CreateSessionActorConstruction,
+        server_signature: &CreateSessionServerSignature,
+    ) -> Self {
+        // OPC-10000-4 5.7.2: allocation can prepare the publishable session
+        // handle and response body without registering the Session globally.
+        let session_arc = Arc::new(RwLock::new(session));
+        let response = CreateSessionResponse {
+            response_header: ResponseHeader::new_good(&request.request_header),
+            session_id: actor_construction.session_id.clone(),
+            authentication_token: actor_construction.authentication_token.clone(),
+            revised_session_timeout: actor_construction.session_timeout as f64,
+            server_nonce: actor_construction.server_nonce.clone(),
+            server_certificate: actor_construction.server_certificate.clone(),
+            server_endpoints: actor_construction.server_endpoints.clone(),
+            server_software_certificates: None,
+            server_signature: server_signature.server_signature.clone(),
+            max_request_message_size: actor_construction.max_request_message_size,
+        };
+        #[cfg(feature = "ecc")]
+        let response = {
+            let mut response = response;
+            if let Some(header) = server_signature.ecdh_response_header.clone() {
+                response.response_header.additional_header = header;
+            }
+            response
+        };
+
+        Self {
+            session_arc,
+            response,
+        }
+    }
+}
+
+impl CreateSessionDraft {
+    pub(crate) fn prepare_endpoint_preflight(
+        info: &ServerInfo,
+        channel: &SecureChannel,
+        certificate_store: &RwLock<CertificateStore>,
+        request: &CreateSessionRequest,
+    ) -> Result<Self, StatusCode> {
+        let endpoint_selection = CreateSessionEndpointSelection::preflight(info, request)?;
+        let security_policy = channel.security_policy();
+        if !matches!(security_policy, SecurityPolicy::None)
+            && request.client_nonce.len() < info.config.session_nonce_length
+        {
+            error!(
+                "Create session was passed a client nonce that is too short, expected at least {} bytes, got {}",
+                info.config.session_nonce_length,
+                request.client_nonce.len()
+            );
+            return Err(StatusCode::BadNonceInvalid);
+        }
+        let certificate_validation = CreateSessionCertificateValidation::preflight(
+            certificate_store,
+            security_policy,
+            request,
+        )?;
+        let server_signature =
+            CreateSessionServerSignature::preflight(info, security_policy, request)?;
+        let mut server_signature = server_signature;
+        let (actor_construction, session) = CreateSessionActorConstruction::prepare(
+            info,
+            channel,
+            request,
+            &endpoint_selection,
+            &certificate_validation,
+            &mut server_signature,
+        );
+        let session_allocation = CreateSessionAllocation::prepare(
+            session,
+            request,
+            &actor_construction,
+            &server_signature,
+        );
+
+        Ok(Self {
+            secure_channel_id: channel.secure_channel_id(),
+            actor_construction,
+            session_allocation,
+        })
+    }
+}
+
 /// Manages all sessions on the server.
 pub struct SessionManager {
     sessions: HashMap<NodeId, Arc<RwLock<Session>>>,
@@ -280,7 +595,6 @@ impl SessionManager {
             .retain(|_, closed_at| *closed_at >= cutoff);
     }
 
-    #[allow(dead_code)]
     pub(crate) fn actor_sender(
         &self,
         authentication_token: &NodeId,
@@ -396,207 +710,72 @@ impl SessionManager {
         });
     }
 
-    pub(crate) fn create_session(
+    pub(crate) fn commit_create_session_draft(
         &mut self,
-        channel: &mut SecureChannel,
-        certificate_store: &RwLock<CertificateStore>,
+        draft: CreateSessionDraft,
+        current_secure_channel_id: u32,
         node_managers: NodeManagers,
         subscriptions: Arc<SubscriptionCache>,
-        request: &CreateSessionRequest,
+        body_limit_key: Option<ClientResponseBodyLimitKey>,
     ) -> Result<CreateSessionResponse, StatusCode> {
+        // OPC-10000-4 5.7.2: CreateSession publishes a Session and its
+        // authentication token, so the global session limit must be checked
+        // immediately before those identifiers become visible.
         if self.sessions.len() >= self.info.config.limits.max_sessions {
             return Err(StatusCode::BadTooManySessions);
         }
-        let secure_channel_id = channel.secure_channel_id();
         let unactivated_count = self
             .sessions
             .values()
             .filter(|session| {
                 let session = trace_read_lock!(session);
-                session.secure_channel_id() == secure_channel_id && !session.is_activated()
+                session.secure_channel_id() == draft.secure_channel_id && !session.is_activated()
             })
             .count();
         if unactivated_count >= self.info.config.limits.max_unactivated_sessions_per_channel {
             return Err(StatusCode::BadTooManySessions);
         }
-
-        // TODO: Auditing and diagnostics.
-        let endpoints = self
-            .info
-            .new_endpoint_descriptions(request.endpoint_url.as_ref());
-        // Find matching end points for this url
-        if request.endpoint_url.is_empty() {
-            error!("Create session was passed an null endpoint url");
-            return Err(StatusCode::BadTcpEndpointUrlInvalid);
+        if current_secure_channel_id != draft.secure_channel_id {
+            // CreateSession binds the new Session to the SecureChannel that
+            // carried the request; a stale draft must not publish on another channel.
+            return Err(StatusCode::BadSecureChannelIdInvalid);
         }
 
-        let Some(endpoints) = endpoints else {
-            return Err(StatusCode::BadTcpEndpointUrlInvalid);
-        };
-
-        self.info
-            .validate_endpoint_hostname(request.endpoint_url.as_ref())?;
-
-        let security_policy = channel.security_policy();
-
-        if !matches!(security_policy, SecurityPolicy::None)
-            && request.client_nonce.len() < self.info.config.session_nonce_length
-        {
-            error!(
-                "Create session was passed a client nonce that is too short, expected at least {} bytes, got {}",
-                self.info.config.session_nonce_length,
-                request.client_nonce.len()
-            );
-            return Err(StatusCode::BadNonceInvalid);
-        }
-
-        let client_certificate = if security_policy != SecurityPolicy::None {
-            let cert = opcua_crypto::X509::from_byte_string(&request.client_certificate)?;
-            let application_uri = if request.client_description.application_uri.is_empty() {
-                None
-            } else {
-                Some(request.client_description.application_uri.as_ref())
-            };
-            let store = trace_read_lock!(certificate_store);
-            store.validate_or_reject_application_instance_cert(
-                &cert,
-                security_policy,
-                None,
-                application_uri,
-            )?;
-            Some(cert)
-        } else {
-            None
-        };
-
-        let session_timeout = self
-            .info
-            .config
-            .max_session_timeout_ms
-            .min(request.requested_session_timeout.floor() as u64);
-        let max_request_message_size = self.info.config.limits.max_message_size as u32;
-
-        let server_pkey = self.info.server_pkey.read();
-        let server_signature = if let Some(ref pkey) = *server_pkey {
-            match opcua_crypto::create_signature_data(
-                pkey,
-                security_policy,
-                &request.client_certificate,
-                &request.client_nonce,
-            ) {
-                Ok(signature) => signature,
-                Err(err) => {
-                    error!(
-                        "Cannot create signature data from private key, check log and error {:?}",
-                        err
-                    );
-                    if security_policy != SecurityPolicy::None {
-                        return Err(StatusCode::BadSecurityChecksFailed);
-                    }
-                    SignatureData::null()
-                }
-            }
-        } else {
-            SignatureData::null()
-        };
-
-        #[cfg(feature = "ecc")]
-        let mut issued_ecdh_key: Option<(
-            opcua_crypto::ecc::EphemeralKeyPair,
-            SecurityPolicy,
-        )> = None;
-        #[cfg(feature = "ecc")]
-        let ecdh_response_header = {
-            match opcua_crypto::ecc::read_ecdh_policy_uri(&request.request_header.additional_header)
-            {
-                Some(uri) => match server_pkey.as_ref() {
-                    Some(pkey) => match opcua_crypto::ecc::issue_server_ephemeral_key(&uri, pkey) {
-                        Ok((keypair, ephemeral_key)) => {
-                            issued_ecdh_key = Some((keypair, SecurityPolicy::from_uri(&uri)));
-                            Some(opcua_crypto::ecc::build_ecdh_key_response(ephemeral_key))
-                        }
-                        Err(e) => Some(opcua_crypto::ecc::build_ecdh_key_error(e.status())),
-                    },
-                    None => Some(opcua_crypto::ecc::build_ecdh_key_error(
-                        StatusCode::BadSecurityPolicyRejected,
-                    )),
-                },
-                None => None,
-            }
-        };
-
-        let authentication_token = NodeId::new(0, random::byte_string(32));
-        let server_nonce = random::byte_string(self.info.config.session_nonce_length);
-        let server_certificate = self.info.server_certificate_as_byte_string();
-        let server_endpoints = Some(endpoints);
-
-        let session = Session::create(
-            &self.info,
-            authentication_token.clone(),
+        let CreateSessionDraft {
             secure_channel_id,
-            session_timeout,
-            max_request_message_size,
-            request.max_response_message_size,
-            request.endpoint_url.clone(),
-            security_policy.to_uri().to_string(),
-            IdentityToken::None,
-            client_certificate,
-            server_nonce.clone(),
-            request.session_name.clone(),
-            request.client_description.clone(),
-            channel.security_mode(),
-        );
-        #[cfg(feature = "ecc")]
-        let mut session = session;
-        #[cfg(feature = "ecc")]
-        if let Some((keypair, policy)) = issued_ecdh_key {
-            session.set_ecdh_ephemeral_key(keypair, policy);
-        }
-        info!("Created new session with ID {}", session.session_id());
+            actor_construction,
+            session_allocation,
+            ..
+        } = draft;
+        let CreateSessionActorConstruction {
+            authentication_token,
+            session_id,
+            session_id_numeric,
+            ..
+        } = actor_construction;
+        let CreateSessionAllocation {
+            session_arc,
+            response,
+        } = session_allocation;
 
-        let session_id = session.session_id().clone();
-        let session_id_numeric = session.session_id_numeric();
-        let session_arc = Arc::new(RwLock::new(session));
-        self.sessions
-            .insert(session_id.clone(), session_arc.clone());
-        self.register_token(authentication_token.clone(), session_arc.clone());
+        info!("Created new session with ID {}", session_id);
+        self.sessions.insert(session_id, Arc::clone(&session_arc));
+        self.register_token(authentication_token.clone(), Arc::clone(&session_arc));
         self.spawn_session_actor(
-            authentication_token.clone(),
+            authentication_token,
             session_arc,
             session_id_numeric,
             node_managers,
             subscriptions,
         );
-        self.refresh_client_response_body_limit_for_channel(
-            secure_channel_id,
-            client_response_body_limit_key(channel),
-        );
+        self.refresh_client_response_body_limit_for_channel(secure_channel_id, body_limit_key);
 
-        // Increment metrics.
         self.info
             .diagnostics
             .set_current_session_count(self.sessions.len() as u32);
         self.info.diagnostics.inc_session_count();
 
         self.notify.notify_waiters();
-
-        #[cfg_attr(not(feature = "ecc"), allow(unused_mut))]
-        let mut response = CreateSessionResponse {
-            response_header: ResponseHeader::new_good(&request.request_header),
-            session_id,
-            authentication_token,
-            revised_session_timeout: session_timeout as f64,
-            server_nonce,
-            server_certificate,
-            server_endpoints,
-            server_software_certificates: None,
-            server_signature,
-            max_request_message_size,
-        };
-        #[cfg(feature = "ecc")]
-        if let Some(header) = ecdh_response_header {
-            response.response_header.additional_header = header;
-        }
 
         Ok(response)
     }
@@ -968,8 +1147,7 @@ pub(crate) async fn activate_session(
         ) {
             error!(
                 "activate session, rejected secure channel id {} does not match session channel {} (transfer not permitted for SecurityPolicy::None)",
-                secure_channel_id,
-                previous_secure_channel_id
+                secure_channel_id, previous_secure_channel_id
             );
             return Err(StatusCode::BadSecureChannelIdInvalid);
         }
@@ -1110,17 +1288,20 @@ pub(crate) async fn activate_session(
 
     // TODO: Audit
 
-    #[cfg_attr(not(feature = "ecc"), allow(unused_mut))]
-    let mut response = ActivateSessionResponse {
+    let response = ActivateSessionResponse {
         response_header: ResponseHeader::new_good(&request.request_header),
         server_nonce,
         results: None,
         diagnostic_infos: None,
     };
     #[cfg(feature = "ecc")]
-    if let Some(header) = ecdh_response_header {
-        response.response_header.additional_header = header;
-    }
+    let response = {
+        let mut response = response;
+        if let Some(header) = ecdh_response_header {
+            response.response_header.additional_header = header;
+        }
+        response
+    };
     Ok(response)
 }
 

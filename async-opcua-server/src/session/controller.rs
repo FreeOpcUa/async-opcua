@@ -18,6 +18,7 @@ use tracing::{debug, debug_span, error, trace, warn};
 
 use opcua_core::{
     comms::{
+        buffer::client_response_body_limit_key,
         message_chunk::MessageChunkType,
         secure_channel::{Role, SecureChannel},
         security_header::SecurityHeader,
@@ -49,6 +50,7 @@ use crate::{
 };
 
 use super::{
+    actor::SessionMessage,
     audit::{
         dispatch_activate_session, dispatch_certificate_audit, dispatch_create_session,
         dispatch_open_secure_channel, dispatch_open_secure_channel_certificate_audit,
@@ -56,7 +58,7 @@ use super::{
         dispatch_suppressed_certificate_audit_success, AuditEventContext,
     },
     instance::Session,
-    manager::{activate_session, close_session, SessionManager},
+    manager::{activate_session, close_session, CreateSessionDraft, SessionManager},
     message_handler::MessageHandler,
 };
 
@@ -128,6 +130,12 @@ pub(crate) struct SessionController<T: ConnectionTransport> {
 enum RequestProcessResult {
     Ok,
     Close,
+}
+
+struct SessionDispatchLookup {
+    session: Option<Arc<RwLock<Session>>>,
+    actor_sender: Option<tokio::sync::mpsc::Sender<SessionMessage>>,
+    session_was_closed: bool,
 }
 
 /// Backstop deadline for a request that specifies no timeout and where the
@@ -522,15 +530,26 @@ impl<T: ConnectionTransport> SessionController<T> {
 
             RequestMessage::CreateSession(request) => {
                 let _h = span.enter();
-                let mut mgr = trace_write_lock!(self.session_manager);
-                let res = mgr.create_session(
-                    &mut self.channel,
+                let res = CreateSessionDraft::prepare_endpoint_preflight(
+                    &self.info,
+                    &self.channel,
                     &self.certificate_store,
-                    self.node_managers.clone(),
-                    self.subscriptions.clone(),
                     &request,
-                );
-                drop(mgr);
+                )
+                .and_then(|draft| {
+                    let current_secure_channel_id = self.channel.secure_channel_id();
+                    let body_limit_key = client_response_body_limit_key(&self.channel);
+                    let node_managers = self.node_managers.clone();
+                    let subscriptions = self.subscriptions.clone();
+                    let mut mgr = trace_write_lock!(self.session_manager);
+                    mgr.commit_create_session_draft(
+                        draft,
+                        current_secure_channel_id,
+                        node_managers,
+                        subscriptions,
+                        body_limit_key,
+                    )
+                });
                 let (session_id, revised_timeout, status) = match &res {
                     Ok(response) => (
                         Some(response.session_id.clone()),
@@ -783,11 +802,19 @@ impl<T: ConnectionTransport> SessionController<T> {
                     None,
                 );
                 let return_diagnostics = message.request_header().return_diagnostics;
-                let mgr = trace_read_lock!(self.session_manager);
-                let session = mgr.find_by_token(&message.request_header().authentication_token);
-                let actor_sender = mgr.actor_sender(&message.request_header().authentication_token);
-                let session_was_closed =
-                    mgr.is_closed_token(&message.request_header().authentication_token);
+                let authentication_token = &message.request_header().authentication_token;
+                let SessionDispatchLookup {
+                    session,
+                    actor_sender,
+                    session_was_closed,
+                } = {
+                    let mgr = trace_read_lock!(self.session_manager);
+                    SessionDispatchLookup {
+                        session: mgr.find_by_token(authentication_token),
+                        actor_sender: mgr.actor_sender(authentication_token),
+                        session_was_closed: mgr.is_closed_token(authentication_token),
+                    }
+                };
 
                 let (session_id, session, user_token) = match Self::validate_request(
                     &message,

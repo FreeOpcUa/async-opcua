@@ -1,5 +1,6 @@
 mod actor;
 mod monitored_item;
+#[allow(dead_code, unreachable_pub)]
 mod notify;
 pub(crate) mod pool;
 mod retransmission_queue;
@@ -7,7 +8,7 @@ mod ring;
 mod session_subscriptions;
 mod subscription;
 
-use std::{hash::Hash, sync::Arc, time::Instant};
+use std::{cell::RefCell, hash::Hash, sync::Arc, time::Instant};
 
 use hashbrown::{Equivalent, HashMap};
 pub use monitored_item::{CreateMonitoredItem, MonitoredItem};
@@ -21,22 +22,20 @@ use tokio::sync::mpsc;
 use tracing::error;
 
 use actor::SubscriptionActorHandle;
-pub use notify::{
-    SubscriptionDataNotifier, SubscriptionDataNotifierBatch, SubscriptionEventNotifier,
-    SubscriptionEventNotifierBatch,
-};
+use notify::{NotificationRouteBatch, NotificationRouteSnapshot};
+pub use notify::{SubscriptionEventNotifier, SubscriptionEventNotifierBatch};
 
 use opcua_core::sync::{Mutex, RwLock};
 
 use opcua_types::{
-    node_id::{IdentifierRef, NodeIdRef},
+    node_id::{IdentifierRef, IntoNodeIdRef, NodeIdRef},
     AttributeId, CreateSubscriptionRequest, CreateSubscriptionResponse, DataEncoding, DataValue,
     DateTime, DateTimeUtc, MessageSecurityMode, ModifySubscriptionRequest,
     ModifySubscriptionResponse, MonitoredItemCreateResult, MonitoredItemModifyRequest,
     MonitoringMode, NodeId, NotificationMessage, NumericRange, PublishRequest, RepublishRequest,
     ResponseHeader, SetPublishingModeRequest, SetPublishingModeResponse, StatusCode,
     TimestampsToReturn, TransferResult, TransferSubscriptionsRequest,
-    TransferSubscriptionsResponse,
+    TransferSubscriptionsResponse, Variant,
 };
 
 use crate::node_manager::RequestContextInner;
@@ -160,6 +159,198 @@ pub struct SubscriptionCache {
     limits: SubscriptionLimits,
     cleanup_tx: mpsc::UnboundedSender<SubscriptionCleanup>,
     cleanup_rx: Mutex<Option<mpsc::UnboundedReceiver<SubscriptionCleanup>>>,
+}
+
+struct PendingDataNotifications {
+    subscription_handle: SubscriptionActorHandle,
+    items: Vec<(MonitoredItemHandle, DataValue)>,
+}
+
+/// Handle for notifying the subscription cache of a batch of changes,
+/// without allocating NodeIds unnecessarily.
+///
+/// Notifications are actually submitted once the notifier is dropped.
+pub struct SubscriptionDataNotifier<'a> {
+    cache: &'a SubscriptionCache,
+    by_subscription: RefCell<HashMap<(u32, u32), PendingDataNotifications>>,
+}
+
+/// Notifier for a specific node.
+pub struct SubscriptionDataNotifierBatch<'a> {
+    cache: &'a SubscriptionCache,
+    route_batches: Vec<NotificationRouteBatch>,
+    entries: Vec<(MonitoredItemHandle, MonitoredItemEntry)>,
+    by_subscription: &'a RefCell<HashMap<(u32, u32), PendingDataNotifications>>,
+}
+
+impl SubscriptionDataNotifierBatch<'_> {
+    /// Notify the referenced node of a change in value by providing a DataValue.
+    pub fn data_value(&self, value: impl Into<DataValue>) {
+        let value = value.into();
+        let deliveries = self
+            .route_batches
+            .iter()
+            .flat_map(|batch| {
+                batch.targets.iter().map(|target| {
+                    (
+                        target.session_id,
+                        target.subscription_id,
+                        batch.subscription_handle.clone(),
+                        target.handle,
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
+
+        for (session_id, subscription_id, subscription_handle, handle) in deliveries {
+            self.push(
+                session_id,
+                subscription_id,
+                subscription_handle,
+                handle,
+                value.clone(),
+            );
+        }
+    }
+
+    /// Submit a data value to a specific monitored item.
+    pub fn data_value_to_item(&self, value: impl Into<DataValue>, handle: &MonitoredItemHandle) {
+        let handle = *handle;
+        if let Some((session_id, subscription_handle)) =
+            self.subscription_handle(handle.subscription_id)
+        {
+            self.push(
+                session_id,
+                handle.subscription_id,
+                subscription_handle,
+                handle,
+                value.into(),
+            );
+        }
+    }
+
+    /// Notify the referenced node of a change in value by providing a Variant and source timestamp.
+    pub fn value(&self, value: impl Into<Variant>, source_timestamp: DateTime) {
+        let dv = DataValue::new_at(value, source_timestamp);
+        self.data_value(dv);
+    }
+
+    /// Get an iterator over the matched monitored item entries. This can be used to
+    /// conditionally sample using parameters for each monitored item.
+    ///
+    /// This only returns monitored item entries that are enabled.
+    pub fn entries(
+        &self,
+    ) -> impl Iterator<Item = (&MonitoredItemHandle, &MonitoredItemEntry)> + '_ {
+        self.entries.iter().map(|(handle, entry)| (handle, entry))
+    }
+
+    fn push(
+        &self,
+        session_id: u32,
+        subscription_id: u32,
+        subscription_handle: SubscriptionActorHandle,
+        handle: MonitoredItemHandle,
+        value: DataValue,
+    ) {
+        self.by_subscription
+            .borrow_mut()
+            .entry((session_id, subscription_id))
+            .or_insert_with(|| PendingDataNotifications {
+                subscription_handle,
+                items: Vec::new(),
+            })
+            .items
+            .push((handle, value));
+    }
+
+    fn subscription_handle(&self, subscription_id: u32) -> Option<(u32, SubscriptionActorHandle)> {
+        self.route_batches
+            .iter()
+            .find(|batch| batch.subscription_id == subscription_id)
+            .map(|batch| (batch.session_id, batch.subscription_handle.clone()))
+            .or_else(|| self.cache.subscription_handle_for_data(subscription_id))
+    }
+}
+
+impl<'a> SubscriptionDataNotifier<'a> {
+    fn new(cache: &'a SubscriptionCache) -> Self {
+        Self {
+            cache,
+            by_subscription: RefCell::new(HashMap::new()),
+        }
+    }
+
+    /// Maybe get a notifier for the given node ID and attribute ID.
+    ///
+    /// This allows you to only sample when a user is listening.
+    pub fn notify_for<'b, 'c>(
+        &'b mut self,
+        node_id: impl IntoNodeIdRef<'c>,
+        attribute_id: AttributeId,
+    ) -> Option<SubscriptionDataNotifierBatch<'b>> {
+        let snapshot = self.cache.data_route_snapshot(node_id, attribute_id);
+        if snapshot.is_empty() {
+            return None;
+        }
+
+        let route_batches = snapshot.into_batches();
+        let entries = route_batches
+            .iter()
+            .flat_map(|batch| {
+                batch.targets.iter().map(|target| {
+                    (
+                        target.handle,
+                        MonitoredItemEntry {
+                            enabled: true,
+                            data_encoding: target.data_encoding.clone(),
+                            index_range: target.index_range.clone(),
+                        },
+                    )
+                })
+            })
+            .collect();
+
+        Some(SubscriptionDataNotifierBatch {
+            cache: self.cache,
+            route_batches,
+            entries,
+            by_subscription: &self.by_subscription,
+        })
+    }
+
+    /// Notify the subscription cache of a change in value for the given node ID and attribute ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `node_id` - The node ID or reference to node ID for the changed node.
+    /// * `attribute_id` - The attribute ID of the changed value. Note that this may not be EventNotifier.
+    /// * `value` - The new value as a DataValue or something convertible to a DataValue.
+    pub fn notify<'b>(
+        &mut self,
+        node_id: impl IntoNodeIdRef<'b>,
+        attribute_id: AttributeId,
+        value: impl Into<DataValue>,
+    ) {
+        if let Some(batch) = self.notify_for(node_id, attribute_id) {
+            batch.data_value(value);
+        }
+    }
+}
+
+impl Drop for SubscriptionDataNotifier<'_> {
+    fn drop(&mut self) {
+        push_pending_data_notifications(std::mem::take(self.by_subscription.get_mut()));
+    }
+}
+
+fn push_pending_data_notifications(by_subscription: HashMap<(u32, u32), PendingDataNotifications>) {
+    for (_, pending) in by_subscription {
+        for (handle, value) in pending.items {
+            let item = NotificationWorkItem::Data { handle, value };
+            pending.subscription_handle.push_notification(item);
+        }
+    }
 }
 
 impl SubscriptionCache {
@@ -618,8 +809,8 @@ impl SubscriptionCache {
 
     /// Return a notifier for notifying the server of a batch of changes.
     ///
-    /// Note: This contains a lock, and should _not_ be kept around for long periods of time,
-    /// or held over await points.
+    /// Route lookup happens under a short-lived cache read lock. The returned notifier owns
+    /// matched routes and can be kept without retaining the cache guard.
     ///
     /// The notifier submits notifications only once dropped.
     ///
@@ -632,7 +823,27 @@ impl SubscriptionCache {
     /// }
     /// ```
     pub fn data_notifier(&self) -> SubscriptionDataNotifier<'_> {
-        SubscriptionDataNotifier::new(trace_read_lock!(self.inner))
+        SubscriptionDataNotifier::new(self)
+    }
+
+    fn data_route_snapshot<'a>(
+        &self,
+        node_id: impl IntoNodeIdRef<'a>,
+        attribute_id: AttributeId,
+    ) -> NotificationRouteSnapshot {
+        let lck = trace_read_lock!(self.inner);
+        NotificationRouteSnapshot::for_data(&lck, node_id, attribute_id)
+    }
+
+    fn subscription_handle_for_data(
+        &self,
+        subscription_id: u32,
+    ) -> Option<(u32, SubscriptionActorHandle)> {
+        let lck = trace_read_lock!(self.inner);
+        let session_id = *lck.subscription_to_session.get(&subscription_id)?;
+        lck.session_subscriptions
+            .get(&session_id)
+            .map(|entry| (session_id, entry.handle()))
     }
 
     /// Return a notifier for notifying the server of a batch of events.
@@ -662,10 +873,27 @@ impl SubscriptionCache {
         &self,
         items: impl Iterator<Item = (DataValue, &'a NodeId, AttributeId)>,
     ) {
-        let mut notif = self.data_notifier();
+        let mut by_subscription: HashMap<(u32, u32), PendingDataNotifications> = HashMap::new();
+
         for (dv, node_id, attribute_id) in items {
-            notif.notify(node_id, attribute_id, dv);
+            for batch in self
+                .data_route_snapshot(node_id, attribute_id)
+                .into_batches()
+            {
+                for target in batch.targets {
+                    by_subscription
+                        .entry((target.session_id, target.subscription_id))
+                        .or_insert_with(|| PendingDataNotifications {
+                            subscription_handle: batch.subscription_handle.clone(),
+                            items: Vec::new(),
+                        })
+                        .items
+                        .push((target.handle, dv.clone()));
+                }
+            }
         }
+
+        push_pending_data_notifications(by_subscription);
     }
 
     /// Notify with a dynamic sampler, to avoid getting values for nodes that
@@ -677,18 +905,40 @@ impl SubscriptionCache {
         items: impl Iterator<Item = (&'a NodeId, AttributeId)>,
         sample: impl Fn(&NodeId, AttributeId, &NumericRange, &DataEncoding) -> Option<DataValue>,
     ) {
-        let mut notif = self.data_notifier();
+        let mut by_subscription: HashMap<(u32, u32), PendingDataNotifications> = HashMap::new();
+
         for (id, attribute_id) in items {
-            if let Some(mut batch) = notif.notify_for(id, attribute_id) {
-                for (handle, entry) in batch.entries() {
-                    if let Some(value) =
-                        sample(id, attribute_id, &entry.index_range, &entry.data_encoding)
-                    {
-                        batch.data_value_to_item(value, handle);
-                    }
+            let route_batches = self.data_route_snapshot(id, attribute_id).into_batches();
+            if route_batches.is_empty() {
+                continue;
+            }
+
+            for NotificationRouteBatch {
+                subscription_handle,
+                targets,
+                ..
+            } in route_batches
+            {
+                for target in targets {
+                    let Some(value) =
+                        sample(id, attribute_id, &target.index_range, &target.data_encoding)
+                    else {
+                        continue;
+                    };
+
+                    by_subscription
+                        .entry((target.session_id, target.subscription_id))
+                        .or_insert_with(|| PendingDataNotifications {
+                            subscription_handle: subscription_handle.clone(),
+                            items: Vec::new(),
+                        })
+                        .items
+                        .push((target.handle, value));
                 }
             }
         }
+
+        push_pending_data_notifications(by_subscription);
     }
 
     /// Notify listening clients to events. Without a custom node manager implementing

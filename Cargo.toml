@@ -8,6 +8,7 @@ members = [
   "samples/*",
   "async-opcua-*",
   "tools/certificate-creator",
+  "tools/opcua-localhost-bench",
   "dotnet-tests/external-tests",
   "fuzz", "codegen-tests",
 ]

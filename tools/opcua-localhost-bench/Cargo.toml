@@ -1,0 +1,19 @@
+[package]
+name = "async-opcua-localhost-bench"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "async-opcua-localhost-bench"
+path = "src/main.rs"
+
+[dependencies]
+async-opcua = { path = "../../async-opcua", features = ["all", "json", "xml", "legacy-crypto", "wss"] }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+
+[lints]
+workspace = true

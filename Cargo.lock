@@ -685,6 +685,7 @@ dependencies = [
  "base64",
  "bitflags 2.11.0",
  "chrono",
+ "const-oid",
  "criterion",
  "crossbeam-queue",
  "dashmap",
@@ -695,12 +696,16 @@ dependencies = [
  "parking_lot",
  "postcard",
  "regex",
+ "rsa",
  "rustls",
  "rustls-pki-types",
  "serde",
  "serde_json",
  "serde_norway",
+ "sha1",
+ "sha2",
  "socket2 0.6.2",
+ "tempfile",
  "tokio",
  "tokio-rustls",
  "tokio-tungstenite 0.26.2",
@@ -708,6 +713,7 @@ dependencies = [
  "tracing",
  "tracing-futures",
  "uuid",
+ "x509-cert",
 ]
 
 [[package]]

@@ -177,6 +177,22 @@ macro_rules! response_enum {
                 }
             }
 
+            /// Get the mutable response header.
+            pub fn response_header_mut(&mut self) -> &mut ResponseHeader {
+                match self {
+                    $( Self::$name(value) => &mut value.response_header, )*
+                    $( Self::$shared_name(value) => &mut value.response_header, )*
+                }
+            }
+
+            /// Apply service-level diagnostics requested by the originating request.
+            pub fn apply_return_diagnostics(&mut self, return_diagnostics: DiagnosticBits) {
+                apply_response_header_diagnostics(
+                    self.response_header_mut(),
+                    return_diagnostics,
+                );
+            }
+
             /// Get the name of the request variant, for debugging and logging.
             pub fn type_name(&self) -> &'static str {
                 match self {
@@ -214,6 +230,95 @@ macro_rules! response_enum {
             }
         }
     };
+}
+
+const DIAGNOSTIC_NAMESPACE: &str = "urn:async-opcua:diagnostics";
+const SERVICE_RESULT_SYMBOLIC_ID: &str = "ServiceResult";
+const MAX_LOCALIZED_TEXT_BYTES: usize = 256;
+
+fn apply_response_header_diagnostics(
+    header: &mut ResponseHeader,
+    return_diagnostics: DiagnosticBits,
+) {
+    header.service_diagnostics = DiagnosticInfo::default();
+
+    if return_diagnostics.is_empty() {
+        header.string_table = None;
+        return;
+    }
+
+    if header.service_result == StatusCode::Good
+        || !return_diagnostics.intersects(service_level_diagnostic_bits())
+    {
+        return;
+    }
+
+    let mut string_table = header.string_table.take().unwrap_or_default();
+    if return_diagnostics.contains(DiagnosticBits::SERVICE_LEVEL_SYMBOLIC_ID) {
+        header.service_diagnostics.namespace_uri =
+            Some(string_table_index(&mut string_table, DIAGNOSTIC_NAMESPACE));
+        header.service_diagnostics.symbolic_id = Some(string_table_index(
+            &mut string_table,
+            SERVICE_RESULT_SYMBOLIC_ID,
+        ));
+    }
+
+    if return_diagnostics.contains(DiagnosticBits::SERVICE_LEVEL_LOCALIZED_TEXT) {
+        let localized_text =
+            truncate_to_byte_boundary(header.service_result.sub_code().description());
+        header.service_diagnostics.localized_text =
+            Some(string_table_index(&mut string_table, localized_text));
+    }
+
+    if return_diagnostics.contains(DiagnosticBits::SERVICE_LEVEL_ADDITIONAL_INFO) {
+        header.service_diagnostics.additional_info = Some(UAString::from(format!(
+            "serviceResult={} ({:#010X})",
+            header.service_result,
+            header.service_result.bits()
+        )));
+    }
+
+    if return_diagnostics.contains(DiagnosticBits::SERVICE_LEVEL_LOCALIZED_INNER_STATUS_CODE) {
+        header.service_diagnostics.inner_status_code = Some(header.service_result);
+    }
+
+    if !string_table.is_empty() {
+        header.string_table = Some(string_table);
+    } else {
+        header.string_table = None;
+    }
+}
+
+fn service_level_diagnostic_bits() -> DiagnosticBits {
+    DiagnosticBits::SERVICE_LEVEL_SYMBOLIC_ID
+        | DiagnosticBits::SERVICE_LEVEL_LOCALIZED_TEXT
+        | DiagnosticBits::SERVICE_LEVEL_ADDITIONAL_INFO
+        | DiagnosticBits::SERVICE_LEVEL_LOCALIZED_INNER_STATUS_CODE
+        | DiagnosticBits::SERVICE_LEVEL_LOCALIZED_INNER_DIAGNOSTICS
+}
+
+fn string_table_index(string_table: &mut Vec<UAString>, value: &str) -> i32 {
+    if let Some(index) = string_table
+        .iter()
+        .position(|entry| entry.as_ref() == value)
+    {
+        return index as i32;
+    }
+
+    string_table.push(UAString::from(value));
+    (string_table.len() - 1) as i32
+}
+
+fn truncate_to_byte_boundary(value: &str) -> &str {
+    if value.len() <= MAX_LOCALIZED_TEXT_BYTES {
+        return value;
+    }
+
+    let mut end = MAX_LOCALIZED_TEXT_BYTES;
+    while !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    &value[..end]
 }
 
 impl MessageType for ResponseMessage {

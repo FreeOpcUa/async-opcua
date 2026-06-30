@@ -11,7 +11,7 @@
 
 use chrono::{DateTime, TimeZone, Utc};
 use rsa::pkcs1v15::{Signature, SigningKey};
-use rsa::signature::{SignatureEncoding, Signer};
+use rsa::signature::{Keypair, SignatureEncoding, Signer};
 use sha1::{Digest, Sha1};
 use sha2::Sha256;
 use std::str::FromStr;
@@ -19,7 +19,7 @@ use std::sync::OnceLock;
 use std::time::{Duration as StdDuration, UNIX_EPOCH};
 
 use const_oid::db::rfc5280::{ID_KP_CLIENT_AUTH, ID_KP_SERVER_AUTH};
-use const_oid::db::rfc5912::SHA_256_WITH_RSA_ENCRYPTION;
+use const_oid::db::rfc5912::{SHA_1_WITH_RSA_ENCRYPTION, SHA_256_WITH_RSA_ENCRYPTION};
 use x509_cert::builder::{Builder, CertificateBuilder, Profile};
 use x509_cert::crl::{CertificateList, RevokedCert, TbsCertList};
 use x509_cert::der::asn1::{Any, BitString, Null, OctetString};
@@ -30,7 +30,10 @@ use x509_cert::ext::pkix::{
 };
 use x509_cert::name::Name;
 use x509_cert::serial_number::SerialNumber;
-use x509_cert::spki::{AlgorithmIdentifierOwned, SubjectPublicKeyInfoOwned};
+use x509_cert::spki::{
+    AlgorithmIdentifierOwned, DynSignatureAlgorithmIdentifier, EncodePublicKey,
+    SubjectPublicKeyInfoOwned,
+};
 use x509_cert::time::{Time, Validity};
 use x509_cert::Version;
 
@@ -116,15 +119,54 @@ fn to_time(dt: DateTime<Utc>) -> Time {
 }
 
 fn issue(spec: &CertSpec<'_>) -> X509 {
-    let subject_spki = spec.subject_key.public_key_to_info().expect("subject spki");
-    let issuer_spki = spec.issuer_key.public_key_to_info().expect("issuer spki");
     let signing_rsa = spec
         .signer_key
         .rsa_key_for_x509()
         .expect("signer rsa key")
         .clone();
     let signing_key = SigningKey::<Sha256>::new(signing_rsa);
+    issue_with_signing_key(spec, &signing_key)
+}
 
+fn issue_sha1(spec: &CertSpec<'_>) -> X509 {
+    let signing_rsa = spec
+        .signer_key
+        .rsa_key_for_x509()
+        .expect("signer rsa key")
+        .clone();
+    let signing_key = SigningKey::<Sha1>::new(signing_rsa);
+    issue_with_signing_key(spec, &signing_key)
+}
+
+fn issue_with_path_len(spec: &CertSpec<'_>, path_len_constraint: Option<u8>) -> X509 {
+    let signing_rsa = spec
+        .signer_key
+        .rsa_key_for_x509()
+        .expect("signer rsa key")
+        .clone();
+    let signing_key = SigningKey::<Sha256>::new(signing_rsa);
+    issue_with_signing_key_and_path_len(spec, &signing_key, path_len_constraint)
+}
+
+fn issue_with_signing_key<S>(spec: &CertSpec<'_>, signing_key: &S) -> X509
+where
+    S: Keypair + DynSignatureAlgorithmIdentifier + Signer<Signature>,
+    S::VerifyingKey: EncodePublicKey,
+{
+    issue_with_signing_key_and_path_len(spec, signing_key, None)
+}
+
+fn issue_with_signing_key_and_path_len<S>(
+    spec: &CertSpec<'_>,
+    signing_key: &S,
+    path_len_constraint: Option<u8>,
+) -> X509
+where
+    S: Keypair + DynSignatureAlgorithmIdentifier + Signer<Signature>,
+    S::VerifyingKey: EncodePublicKey,
+{
+    let subject_spki = spec.subject_key.public_key_to_info().expect("subject spki");
+    let issuer_spki = spec.issuer_key.public_key_to_info().expect("issuer spki");
     let subject = Name::from_str(&format!("CN={}", spec.subject_cn)).expect("subject name");
     let issuer = Name::from_str(&format!("CN={}", spec.issuer_cn)).expect("issuer name");
     let validity = Validity {
@@ -141,7 +183,7 @@ fn issue(spec: &CertSpec<'_>) -> X509 {
         validity,
         subject,
         subject_spki.clone(),
-        &signing_key,
+        signing_key,
     )
     .expect("certificate builder");
 
@@ -162,7 +204,7 @@ fn issue(spec: &CertSpec<'_>) -> X509 {
     builder
         .add_extension(&BasicConstraints {
             ca: spec.is_ca,
-            path_len_constraint: None,
+            path_len_constraint,
         })
         .expect("add basic constraints");
 
@@ -750,6 +792,156 @@ fn store_rejects_untrusted_leaf_and_files_it_under_rejected() {
 }
 
 #[test]
+fn store_missing_trusted_directory_fails_closed_even_with_trust_unknown_enabled() {
+    // OPC-10000-4 6.1.3 Trust List Check: a certificate is trusted only when the certificate
+    // or a CA in its chain is in the trusted certificates list. If that trust list is unavailable,
+    // validation must fail closed instead of auto-creating trust for the presented certificate.
+    let k = keys();
+    let leaf = issue(&CertSpec {
+        subject_cn: LEAF_CN,
+        subject_key: &k.leaf,
+        issuer_cn: LEAF_CN,
+        issuer_key: &k.leaf,
+        signer_key: &k.leaf,
+        is_ca: false,
+        key_usage: KuChoice::Default,
+        not_before: t(2020, 1, 1),
+        not_after: t(2035, 1, 1),
+        eku: Eku::Both,
+        serial: 162,
+    });
+    let (_tmp, mut store) = store_with(&[], &[]);
+    store.set_trust_unknown_certs(true);
+
+    let mut trusted_cert_path = store.trusted_certs_dir();
+    std::fs::remove_dir(&trusted_cert_path).expect("remove trusted directory");
+    trusted_cert_path.push(CertificateStore::cert_file_name(&leaf));
+
+    let err = store
+        .validate_or_reject_application_instance_cert(
+            &leaf,
+            SecurityPolicy::Basic256Sha256,
+            None,
+            None,
+        )
+        .expect_err("missing trusted storage must not silently trust the presented certificate");
+
+    assert_eq!(err.status(), StatusCode::BadCertificateUntrusted);
+    assert!(
+        !trusted_cert_path.exists(),
+        "validation must not add the certificate to unavailable trusted storage"
+    );
+}
+
+#[test]
+fn store_corrupt_trusted_certificate_file_fails_closed_with_certificate_context() {
+    // OPC-10000-4 6.1.3 Trust List Check: corrupt trust-list storage must not be treated as an
+    // empty trust list that can be silently repaired by trusting the presented certificate. The
+    // returned validation error must carry the certificate context needed for certificate audit.
+    let k = keys();
+    let leaf = issue(&CertSpec {
+        subject_cn: LEAF_CN,
+        subject_key: &k.leaf,
+        issuer_cn: LEAF_CN,
+        issuer_key: &k.leaf,
+        signer_key: &k.leaf,
+        is_ca: false,
+        key_usage: KuChoice::Default,
+        not_before: t(2020, 1, 1),
+        not_after: t(2035, 1, 1),
+        eku: Eku::Both,
+        serial: 163,
+    });
+    let (_tmp, mut store) = store_with(&[], &[]);
+    store.set_trust_unknown_certs(true);
+
+    let cert_file_name = CertificateStore::cert_file_name(&leaf);
+    let trusted_cert_path = store.trusted_certs_dir().join(&cert_file_name);
+    let corrupt_cert_bytes = b"not a DER certificate";
+    std::fs::write(&trusted_cert_path, corrupt_cert_bytes).expect("write corrupt trusted cert");
+
+    let err = store
+        .validate_or_reject_application_instance_cert(
+            &leaf,
+            SecurityPolicy::Basic256Sha256,
+            None,
+            None,
+        )
+        .expect_err("corrupt trusted storage must not silently trust the presented certificate");
+
+    assert_eq!(err.status(), StatusCode::BadCertificateUntrusted);
+    let context = err.to_string();
+    assert!(
+        context.contains(&cert_file_name),
+        "validation error must include auditable certificate context {cert_file_name:?}: {context}"
+    );
+    assert!(
+        context.contains(&leaf.thumbprint().as_hex_string()),
+        "validation error must include the certificate thumbprint for audit correlation: {context}"
+    );
+    assert_eq!(
+        std::fs::read(&trusted_cert_path)
+            .expect("corrupt trusted certificate file must still exist")
+            .as_slice(),
+        corrupt_cert_bytes,
+        "validation must not overwrite corrupt trust-list storage with the presented certificate"
+    );
+}
+
+#[test]
+fn store_rejected_directory_hit_reports_certificate_untrusted() {
+    let k = keys();
+    let leaf = issue(&CertSpec {
+        subject_cn: LEAF_CN,
+        subject_key: &k.leaf,
+        issuer_cn: LEAF_CN,
+        issuer_key: &k.leaf,
+        signer_key: &k.leaf,
+        is_ca: false,
+        key_usage: KuChoice::Default,
+        not_before: t(2020, 1, 1),
+        not_after: t(2035, 1, 1),
+        eku: Eku::Both,
+        serial: 160,
+    });
+    let (_tmp, store) = store_with(&[], &[]);
+    write_cert_to(&store.rejected_certs_dir(), &leaf);
+
+    let err = store
+        .validate_user_identity_cert(&leaf, SecurityPolicy::Basic256Sha256)
+        .expect_err("a certificate already in rejected/ must be reported as untrusted");
+
+    assert_eq!(err.status(), StatusCode::BadCertificateUntrusted);
+}
+
+#[test]
+fn store_user_identity_short_key_reports_policy_check_failed() {
+    let k = keys();
+    let short_key = PrivateKey::new(1024).expect("1024-bit key");
+    let root = root_ca();
+    let leaf = issue(&CertSpec {
+        subject_cn: LEAF_CN,
+        subject_key: &short_key,
+        issuer_cn: ROOT_CN,
+        issuer_key: &k.root,
+        signer_key: &k.root,
+        is_ca: false,
+        key_usage: KuChoice::Default,
+        not_before: t(2020, 1, 1),
+        not_after: t(2035, 1, 1),
+        eku: Eku::Both,
+        serial: 161,
+    });
+    let (_tmp, store) = store_with(&[&root], &[]);
+
+    let err = store
+        .validate_user_identity_cert(&leaf, SecurityPolicy::Basic256Sha256)
+        .expect_err("a user certificate key below the policy minimum must fail policy validation");
+
+    assert_eq!(err.status(), StatusCode::BadCertificatePolicyCheckFailed);
+}
+
+#[test]
 fn store_rejects_expired_ca_signed_leaf() {
     let k = keys();
     let root = root_ca();
@@ -917,6 +1109,77 @@ fn ca_without_keycertsign_is_issuer_use_not_allowed() {
 }
 
 #[test]
+fn ca_path_length_constraint_violation_is_issuer_use_not_allowed() {
+    // OPC-10000-4 6.1.3 Table 100 requires certificate chains and certificate usage to be
+    // validated. An intermediate with pathLenConstraint=0 cannot issue another CA certificate.
+    let k = keys();
+    let root = root_ca();
+    let constrained_intermediate = issue_with_path_len(
+        &CertSpec {
+            subject_cn: INT_CN,
+            subject_key: &k.intermediate,
+            issuer_cn: ROOT_CN,
+            issuer_key: &k.root,
+            signer_key: &k.root,
+            is_ca: true,
+            not_before: t(2020, 1, 1),
+            not_after: t(2034, 1, 1),
+            eku: Eku::None,
+            key_usage: KuChoice::Default,
+            serial: 205,
+        },
+        Some(0),
+    );
+    let subordinate_ca_cn = "async-opcua test subordinate ca";
+    let subordinate_ca = issue(&CertSpec {
+        subject_cn: subordinate_ca_cn,
+        subject_key: &k.rogue,
+        issuer_cn: INT_CN,
+        issuer_key: &k.intermediate,
+        signer_key: &k.intermediate,
+        is_ca: true,
+        not_before: t(2020, 1, 1),
+        not_after: t(2033, 1, 1),
+        eku: Eku::None,
+        key_usage: KuChoice::Default,
+        serial: 206,
+    });
+    let leaf = issue(&CertSpec {
+        subject_cn: LEAF_CN,
+        subject_key: &k.leaf,
+        issuer_cn: subordinate_ca_cn,
+        issuer_key: &k.rogue,
+        signer_key: &k.rogue,
+        is_ca: false,
+        not_before: t(2020, 1, 1),
+        not_after: t(2030, 1, 1),
+        eku: Eku::Both,
+        key_usage: KuChoice::Default,
+        serial: 207,
+    });
+
+    assert_eq!(
+        constrained_intermediate
+            .basic_constraints()
+            .expect("constrained intermediate basic constraints")
+            .path_len_constraint,
+        Some(0)
+    );
+
+    let trusted = [root];
+    let issuers = [constrained_intermediate, subordinate_ca];
+    let crls = empty_crls();
+    let options = ValidationOptions::default();
+    let now = now_valid();
+    let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
+
+    let err = validate_certificate_chain(&leaf, &ctx).expect_err(
+        "a chain with a subordinate CA below a pathLenConstraint=0 issuer must be rejected",
+    );
+    assert_eq!(err.status(), StatusCode::BadCertificateIssuerUseNotAllowed);
+}
+
+#[test]
 fn leaf_without_key_usage_extension_is_accepted() {
     // KeyUsage is optional; when absent the leaf is leniently accepted (only its presence is
     // constrained). EKU is likewise absent here.
@@ -956,9 +1219,60 @@ fn make_crl(
     this_update: DateTime<Utc>,
     next_update: DateTime<Utc>,
 ) -> CertificateList {
+    let signing_key = SigningKey::<Sha256>::new(
+        issuer_key
+            .rsa_key_for_x509()
+            .expect("crl signer key")
+            .clone(),
+    );
+    make_crl_with_signature_algorithm(
+        issuer_cn,
+        &signing_key,
+        SHA_256_WITH_RSA_ENCRYPTION,
+        revoked_serials,
+        this_update,
+        next_update,
+    )
+}
+
+/// Build a CA-signed CRL with a weak RSA-SHA1 signature for negative policy tests.
+fn make_crl_sha1(
+    issuer_cn: &str,
+    issuer_key: &PrivateKey,
+    revoked_serials: &[u32],
+    this_update: DateTime<Utc>,
+    next_update: DateTime<Utc>,
+) -> CertificateList {
+    let signing_key = SigningKey::<Sha1>::new(
+        issuer_key
+            .rsa_key_for_x509()
+            .expect("crl signer key")
+            .clone(),
+    );
+    make_crl_with_signature_algorithm(
+        issuer_cn,
+        &signing_key,
+        SHA_1_WITH_RSA_ENCRYPTION,
+        revoked_serials,
+        this_update,
+        next_update,
+    )
+}
+
+fn make_crl_with_signature_algorithm<S>(
+    issuer_cn: &str,
+    signing_key: &S,
+    signature_algorithm_oid: const_oid::ObjectIdentifier,
+    revoked_serials: &[u32],
+    this_update: DateTime<Utc>,
+    next_update: DateTime<Utc>,
+) -> CertificateList
+where
+    S: Signer<Signature>,
+{
     let issuer = Name::from_str(&format!("CN={issuer_cn}")).expect("crl issuer name");
     let algorithm = AlgorithmIdentifierOwned {
-        oid: SHA_256_WITH_RSA_ENCRYPTION,
+        oid: signature_algorithm_oid,
         parameters: Some(Any::from(Null)),
     };
     let revoked_certificates = if revoked_serials.is_empty() {
@@ -985,12 +1299,6 @@ fn make_crl(
         crl_extensions: None,
     };
     let tbs_der = tbs.to_der().expect("crl tbs der");
-    let signing_key = SigningKey::<Sha256>::new(
-        issuer_key
-            .rsa_key_for_x509()
-            .expect("crl signer key")
-            .clone(),
-    );
     let signature: Signature = signing_key.sign(&tbs_der);
     CertificateList {
         tbs_cert_list: tbs,
@@ -1165,6 +1473,38 @@ fn crl_with_forged_signature_is_not_trusted_for_revocation() {
         .expect("a CRL with an invalid signature must be ignored, not used to revoke");
 }
 
+#[test]
+fn crl_sha1_signature_is_policy_check_failed() {
+    // OPC-10000-4 6.1.3 Table 100 requires Security Policy Check failures to reject material that
+    // does not comply with the negotiated policy. Basic256Sha256 does not allow RSA-SHA1
+    // revocation signatures, so a clean SHA-1 CRL must not satisfy Required revocation mode.
+    let k = keys();
+    let root = root_ca();
+    let leaf = leaf_signed_by_root(406, t(2030, 1, 1));
+    let weak_crl = make_crl_sha1(ROOT_CN, &k.root, &[], t(2024, 1, 1), t(2030, 1, 1));
+
+    assert_eq!(
+        weak_crl.tbs_cert_list.signature.oid,
+        SHA_1_WITH_RSA_ENCRYPTION
+    );
+    assert_eq!(weak_crl.signature_algorithm.oid, SHA_1_WITH_RSA_ENCRYPTION);
+
+    let trusted = [root];
+    let issuers: [X509; 0] = [];
+    let crls = [weak_crl];
+    let options = ValidationOptions {
+        revocation_mode: RevocationMode::Required,
+        ..Default::default()
+    };
+    let now = now_valid();
+    let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
+
+    let err = validate_certificate_chain(&leaf, &ctx)
+        .expect_err("a clean CRL signed with RSA-SHA1 must fail the policy check");
+
+    assert_eq!(err.status(), StatusCode::BadCertificatePolicyCheckFailed);
+}
+
 // --- US4 tests: security-policy check + suppression -----------------------------------------
 
 fn suppress(steps: &[SuppressibleStep]) -> ValidationOptions {
@@ -1172,6 +1512,60 @@ fn suppress(steps: &[SuppressibleStep]) -> ValidationOptions {
         suppressed_steps: steps.iter().copied().collect(),
         ..Default::default()
     }
+}
+
+#[test]
+fn issuer_sha1_signature_is_policy_check_failed() {
+    // OPC-10000-4 6.1.3 Table 100 repeats the Security Policy Check for each certificate
+    // in the chain. Basic256Sha256 permits SHA-256/PSS certificate signatures, not RSA-SHA1.
+    let k = keys();
+    let root = root_ca();
+    let weak_intermediate = issue_sha1(&CertSpec {
+        subject_cn: INT_CN,
+        subject_key: &k.intermediate,
+        issuer_cn: ROOT_CN,
+        issuer_key: &k.root,
+        signer_key: &k.root,
+        is_ca: true,
+        not_before: t(2020, 1, 1),
+        not_after: t(2034, 1, 1),
+        eku: Eku::None,
+        key_usage: KuChoice::Default,
+        serial: 404,
+    });
+    let leaf = issue(&CertSpec {
+        subject_cn: LEAF_CN,
+        subject_key: &k.leaf,
+        issuer_cn: INT_CN,
+        issuer_key: &k.intermediate,
+        signer_key: &k.intermediate,
+        is_ca: false,
+        not_before: t(2020, 1, 1),
+        not_after: t(2030, 1, 1),
+        eku: Eku::Both,
+        key_usage: KuChoice::Default,
+        serial: 405,
+    });
+
+    assert_eq!(
+        weak_intermediate
+            .signature_and_algorithm()
+            .expect("issuer signature algorithm")
+            .algorithm_oid,
+        SHA_1_WITH_RSA_ENCRYPTION
+    );
+
+    let trusted = [root];
+    let issuers = [weak_intermediate];
+    let crls = empty_crls();
+    let options = ValidationOptions::default();
+    let now = now_valid();
+    let ctx = server_ctx(&trusted, &issuers, &crls, &options, &now);
+
+    let err = validate_certificate_chain(&leaf, &ctx)
+        .expect_err("an issuer signed with RSA-SHA1 must fail the certificate policy check");
+
+    assert_eq!(err.status(), StatusCode::BadCertificatePolicyCheckFailed);
 }
 
 #[test]
@@ -1374,6 +1768,28 @@ fn store_lenient_default_accepts_ca_signed_leaf_without_crl() {
             None,
         )
         .expect("the default lenient policy accepts a CA-signed leaf with no CRL present");
+}
+
+#[test]
+fn store_user_identity_validation_returns_suppressed_findings() {
+    // User identity validation must surface suppressed findings to the caller so ActivateSession
+    // can audit them; application-instance validation only logs these findings.
+    let root = root_ca();
+    let expired_leaf = leaf_signed_by_root(502, t(2021, 1, 1));
+    let (_tmp, mut store) = store_with(&[&root], &[]);
+    store.set_check_time(false);
+
+    let findings = store
+        .validate_user_identity_cert(&expired_leaf, SecurityPolicy::Basic256Sha256)
+        .expect("suppressing validity lets the user identity certificate pass");
+
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.step == SuppressibleStep::Validity
+                && finding.status == StatusCode::BadCertificateTimeInvalid),
+        "suppressed user identity certificate validation findings must be returned: {findings:?}"
+    );
 }
 
 // --- OCSP revocation (supplied/stapled responses) -----------------------------------------------

@@ -1,4 +1,8 @@
-use std::{collections::HashMap, io::Write, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    io::Write,
+    sync::Arc,
+};
 
 use crate::{
     json::{JsonDecodable, JsonEncodable, JsonReader, JsonStreamWriter, JsonWriter},
@@ -298,9 +302,13 @@ impl DynamicTypeLoader {
         match t.structure_type {
             crate::StructureType::Structure | crate::StructureType::StructureWithOptionalFields => {
                 let mut by_name = HashMap::new();
+                let mut seen_names = HashSet::new();
                 stream.begin_object()?;
                 while stream.has_next()? {
                     let name = stream.next_name()?;
+                    if !seen_names.insert(name.to_owned()) {
+                        return Err(Error::decoding(format!("duplicate JSON field name {name}")));
+                    }
                     let Some(field) = t.get_field_by_name(name) else {
                         stream.skip_value()?;
                         continue;
@@ -338,10 +346,14 @@ impl DynamicTypeLoader {
             crate::StructureType::Union => {
                 let mut value: Option<Variant> = None;
                 let mut discriminant: Option<u32> = None;
+                let mut seen_names = HashSet::new();
 
                 stream.begin_object()?;
                 while stream.has_next()? {
                     let name = stream.next_name()?;
+                    if !seen_names.insert(name.to_owned()) {
+                        return Err(Error::decoding(format!("duplicate JSON field name {name}")));
+                    }
                     match name {
                         "SwitchField" => {
                             discriminant = Some(stream.next_number()??);
@@ -544,6 +556,37 @@ mod tests {
         let obj3: ExtensionObject = JsonDecodable::decode(&mut reader, &ctx.context()).unwrap();
 
         assert_eq!(obj, obj3);
+    }
+
+    #[test]
+    fn json_dynamic_struct_duplicate_field_names_are_rejected() {
+        let mut type_tree = make_type_tree();
+        add_eu_information(&mut type_tree);
+
+        let loader = DynamicTypeLoader::new(Arc::new(type_tree));
+        let mut loaders = TypeLoaderCollection::new_empty();
+        loaders.add_type_loader(loader);
+        let ctx = ContextOwned::new(NamespaceMap::new(), loaders, DecodingOptions::test());
+        let payload = format!(
+            r#"{{
+                "UaTypeId": "i={}",
+                "UaBody": {{
+                    "NamespaceUri": "my.namespace.uri",
+                    "UnitId": 5,
+                    "UnitId": 6,
+                    "DisplayName": {{"Text": "Degrees Celsius"}},
+                    "Description": {{"Text": "Description"}}
+                }}
+            }}"#,
+            crate::ObjectId::EUInformation_Encoding_DefaultJson as i32
+        );
+
+        let res: crate::EncodingResult<ExtensionObject> =
+            crate::json::from_bytes(payload.as_bytes(), &ctx.context());
+        assert!(
+            res.is_err(),
+            "dynamic ExtensionObject JSON with duplicate field names must be rejected, got {res:?}"
+        );
     }
 
     #[test]

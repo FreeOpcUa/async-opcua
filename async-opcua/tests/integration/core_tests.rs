@@ -13,11 +13,13 @@ use opcua::{
     client::IdentityToken,
     core::comms::tcp_codec::{Message, TcpCodec},
     core::config::Config,
-    crypto::{KeySize, PrivateKey, SecurityPolicy},
+    crypto::{create_signature_data, CertificateStore, KeySize, PrivateKey, SecurityPolicy},
+    server::ANONYMOUS_USER_TOKEN_ID,
     types::{
-        ApplicationType, AttributeId, BrowseDescription, BrowseDirection, DecodingOptions,
-        MessageSecurityMode, NodeClass, NodeId, ObjectId, ReadValueId, ReferenceTypeId, StatusCode,
-        TimestampsToReturn, VariableId, Variant,
+        ActivateSessionRequest, ApplicationType, AttributeId, BrowseDescription, BrowseDirection,
+        DecodingOptions, ExtensionObject, MessageSecurityMode, NodeClass, NodeId, ObjectId,
+        ReadValueId, ReferenceTypeId, SignatureData, StatusCode, TimestampsToReturn, VariableId,
+        Variant, X509IdentityToken,
     },
 };
 use opcua_client::IssuedTokenWrapper;
@@ -234,6 +236,67 @@ async fn connect_basic128rsa15_with_x509_token() {
         client_x509_token().unwrap(),
     )
     .await;
+}
+
+#[tokio::test]
+async fn x509_identity_rejected_when_endpoint_does_not_support_x509() {
+    let server = default_server().add_endpoint(
+        "anonymous_only",
+        (
+            "/anonymous-only",
+            SecurityPolicy::None,
+            MessageSecurityMode::None,
+            &[ANONYMOUS_USER_TOKEN_ID] as &[&str],
+        ),
+    );
+    let tester = Tester::new(server, true).await;
+    let cert = CertificateStore::read_cert(PathBuf::from("./tests/x509/user_cert.der").as_path())
+        .expect("fixture X.509 user cert should read");
+    let private_key =
+        CertificateStore::read_pkey(PathBuf::from("./tests/x509/user_private_key.pem").as_path())
+            .expect("fixture X.509 user private key should read");
+    let server_cert = tester
+        .handle
+        .info()
+        .server_certificate
+        .read()
+        .clone()
+        .expect("test server should have a certificate");
+    let nonce = ByteString::from(b"unsupported-x509-endpoint".as_slice());
+    let user_token_signature = create_signature_data(
+        &private_key,
+        SecurityPolicy::Basic256Sha256,
+        &server_cert.as_byte_string(),
+        &nonce,
+    )
+    .expect("fixture X.509 user-token signature should be created");
+    let request = ActivateSessionRequest {
+        request_header: Default::default(),
+        client_signature: SignatureData::null(),
+        client_software_certificates: None,
+        locale_ids: None,
+        user_identity_token: ExtensionObject::from_message(X509IdentityToken {
+            policy_id: "x509".into(),
+            certificate_data: cert.as_byte_string(),
+        }),
+        user_token_signature,
+    };
+
+    let err = tester
+        .handle
+        .info()
+        .authenticate_endpoint(
+            &request,
+            &format!("{}anonymous-only", tester.endpoint()),
+            SecurityPolicy::None,
+            MessageSecurityMode::None,
+            request.user_identity_token.clone(),
+            &nonce,
+        )
+        .await
+        .expect_err("X.509 identity must be rejected on an endpoint that does not support it");
+
+    assert_eq!(err.status(), StatusCode::BadUserAccessDenied);
 }
 
 #[tokio::test]

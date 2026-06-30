@@ -10,13 +10,56 @@
 use std::io::{Read, Write};
 
 use opcua_types::{
-    ByteString, DecodingOptions, EncodingResult, Error, SimpleBinaryDecodable,
-    SimpleBinaryEncodable, UAString,
+    process_decode_io_result, read_i32, ByteString, DecodingOptions, EncodingResult, Error,
+    SimpleBinaryDecodable, SimpleBinaryEncodable, UAString,
 };
 
 use opcua_types::{constants, status_code::StatusCode};
 
 use opcua_crypto::{SecurityPolicy, Thumbprint, X509};
+
+const SECURITY_POLICY_URI_MAX_LEN: usize = 255;
+
+fn decode_security_policy_uri<S: Read + ?Sized>(
+    stream: &mut S,
+    decoding_options: &DecodingOptions,
+) -> EncodingResult<UAString> {
+    let len = read_i32(stream)?;
+    if len == -1 {
+        return Ok(UAString::null());
+    }
+    if len < -1 {
+        return Err(Error::decoding(format!(
+            "SecurityPolicyUriLength is a negative number {len}"
+        )));
+    }
+
+    let len = len as usize;
+    if len > SECURITY_POLICY_URI_MAX_LEN {
+        return Err(Error::new(
+            StatusCode::BadEncodingLimitsExceeded,
+            format!(
+                "SecurityPolicyUriLength {} exceeds maximum size {}",
+                len, SECURITY_POLICY_URI_MAX_LEN
+            ),
+        ));
+    }
+    if len > decoding_options.max_string_length {
+        return Err(Error::decoding(format!(
+            "SecurityPolicyUriLength {} exceeds decoding limit {}",
+            len, decoding_options.max_string_length
+        )));
+    }
+
+    let mut buf = vec![0u8; len];
+    process_decode_io_result(stream.read_exact(&mut buf))?;
+    let value = String::from_utf8(buf).map_err(|err| {
+        Error::decoding(format!(
+            "Decoded SecurityPolicyUri was not valid UTF-8 - {err}"
+        ))
+    })?;
+    Ok(UAString::from(value))
+}
 
 /// Holds the security header associated with the chunk. Secure channel requests use an asymmetric
 /// security header, regular messages use a symmetric security header.
@@ -139,7 +182,7 @@ impl SimpleBinaryDecodable for AsymmetricSecurityHeader {
         stream: &mut S,
         decoding_options: &DecodingOptions,
     ) -> EncodingResult<Self> {
-        let security_policy_uri = UAString::decode(stream, decoding_options)?;
+        let security_policy_uri = decode_security_policy_uri(stream, decoding_options)?;
         let sender_certificate = ByteString::decode(stream, decoding_options)?;
         let receiver_certificate_thumbprint = ByteString::decode(stream, decoding_options)?;
 
@@ -241,5 +284,35 @@ impl SimpleBinaryDecodable for SequenceHeader {
             sequence_number,
             request_id,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
+
+    use super::*;
+
+    #[test]
+    fn asymmetric_header_decode_rejects_security_policy_uri_longer_than_255_bytes() {
+        let header = AsymmetricSecurityHeader {
+            security_policy_uri: UAString::from("A".repeat(SECURITY_POLICY_URI_MAX_LEN + 1)),
+            sender_certificate: ByteString::null(),
+            receiver_certificate_thumbprint: ByteString::null(),
+        };
+        let mut stream = Cursor::new(header.encode_to_vec());
+
+        let err = AsymmetricSecurityHeader::decode(&mut stream, &DecodingOptions::default())
+            .expect_err(
+                "OPC-10000-6 6.7.2.3 requires SecurityPolicyUriLength \
+                 to reject values longer than 255 bytes with BadEncodingLimitsExceeded",
+            );
+
+        assert_eq!(
+            err.status(),
+            StatusCode::BadEncodingLimitsExceeded,
+            "expected BadEncodingLimitsExceeded for an asymmetric SecurityPolicyUriLength \
+             greater than 255 bytes, got {err}",
+        );
     }
 }

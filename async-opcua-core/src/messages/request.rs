@@ -66,7 +66,12 @@ macro_rules! request_enum {
                         Ok($value::decode(stream, ctx)?.into())
                     }, )*
                     _ => {
-                        Err(Error::decoding(format!("decoding unsupported for object id {:?}", object_id)))
+                        let request_header = RequestHeader::decode(stream, ctx)?;
+                        Err(Error::new(
+                            StatusCode::BadServiceUnsupported,
+                            format!("unsupported service request object id {:?}", object_id),
+                        )
+                        .with_request_handle(request_header.request_handle))
                     }
                 }
             }
@@ -130,4 +135,46 @@ request_enum! {
     Write: WriteRequest; WriteRequest_Encoding_DefaultBinary,
     HistoryUpdate: HistoryUpdateRequest; HistoryUpdateRequest_Encoding_DefaultBinary,
     Call: CallRequest; CallRequest_Encoding_DefaultBinary,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RequestMessage;
+    use crate::messages::Message;
+    use opcua_types::{BinaryEncodable, ContextOwned, ObjectId, RequestHeader, StatusCode};
+
+    #[test]
+    fn unknown_service_id_reports_unsupported_fault_status_with_recoverable_context() {
+        let ctx_owner = ContextOwned::default();
+        let ctx = ctx_owner.context();
+        let request_id = 0x1020_3040;
+        let request_handle = 0x5566_7788;
+        let header = RequestHeader {
+            request_handle,
+            ..RequestHeader::default()
+        };
+        let mut request_body = Vec::with_capacity(header.byte_len(&ctx));
+        header
+            .encode(&mut request_body, &ctx)
+            .expect("test request header should encode");
+        let mut stream = request_body.as_slice();
+
+        let err = RequestMessage::decode_by_object_id(
+            &mut stream,
+            ObjectId::Node_Encoding_DefaultBinary,
+            &ctx,
+        )
+        .expect_err("unknown service ids must be rejected, not decoded as a request");
+
+        assert_eq!(
+            err.status(),
+            StatusCode::BadServiceUnsupported,
+            "OPC-10000-4 5.3 and 7.34 require an unsupported service request to be returned as a ServiceFault with Bad_ServiceUnsupported, not as a fatal decoding error"
+        );
+        assert_eq!(
+            err.with_request_id(request_id).full_context(),
+            Some((request_id, request_handle)),
+            "a reusable channel can send the unsupported-service ServiceFault only if the decode error preserves the request id and request handle"
+        );
+    }
 }

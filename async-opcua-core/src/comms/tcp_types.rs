@@ -6,6 +6,7 @@
 
 use std::io::{Cursor, Error, Read, Result, Write};
 
+use opcua_crypto::SecurityPolicy;
 use opcua_types::{
     process_decode_io_result, process_encode_io_result, read_u32, status_code::StatusCode,
     string::UAString, write_u32, write_u8, DecodingOptions, EncodingResult, EndpointDescription,
@@ -40,8 +41,23 @@ pub(crate) const CHUNK_FINAL_ERROR: u8 = b'A';
 /// Minimum size in bytes than any single message chunk can be
 pub const MIN_CHUNK_SIZE: usize = 8192;
 
+/// Minimum buffer size in bytes for ECC-intended UA TCP connections.
+const ECC_MIN_BUFFER_SIZE: usize = 1024;
+
 /// Size in bytes of an OPC UA message header
 pub const MESSAGE_HEADER_LEN: usize = 8;
+
+fn minimum_buffer_size_for_security_policy(security_policy: SecurityPolicy) -> u32 {
+    if security_policy.is_ecc() {
+        ECC_MIN_BUFFER_SIZE as u32
+    } else {
+        MIN_CHUNK_SIZE as u32
+    }
+}
+
+fn buffers_meet_minimum(receive_buffer_size: u32, send_buffer_size: u32, minimum: u32) -> bool {
+    receive_buffer_size >= minimum && send_buffer_size >= minimum
+}
 
 #[derive(Debug, Clone, PartialEq)]
 /// Enum over possible message types.
@@ -339,9 +355,16 @@ impl HelloMessage {
 
     /// Check if the requested buffer sizes are valid.
     pub fn is_valid_buffer_sizes(&self) -> bool {
-        // Set in part 6 as minimum transport buffer size
-        self.receive_buffer_size >= MIN_CHUNK_SIZE as u32
-            && self.send_buffer_size >= MIN_CHUNK_SIZE as u32
+        self.is_valid_buffer_sizes_for_security_policy(SecurityPolicy::None)
+    }
+
+    /// Check if the requested buffer sizes are valid for the intended SecurityPolicy.
+    pub fn is_valid_buffer_sizes_for_security_policy(
+        &self,
+        security_policy: SecurityPolicy,
+    ) -> bool {
+        let minimum = minimum_buffer_size_for_security_policy(security_policy);
+        buffers_meet_minimum(self.receive_buffer_size, self.send_buffer_size, minimum)
     }
 }
 
@@ -417,6 +440,20 @@ impl AcknowledgeMessage {
         };
         ack.message_header.message_size = ack.byte_len() as u32;
         ack
+    }
+
+    /// Check if the negotiated buffer sizes are valid for the default non-ECC minimum.
+    pub fn is_valid_buffer_sizes(&self) -> bool {
+        self.is_valid_buffer_sizes_for_security_policy(SecurityPolicy::None)
+    }
+
+    /// Check if the negotiated buffer sizes are valid for the intended SecurityPolicy.
+    pub fn is_valid_buffer_sizes_for_security_policy(
+        &self,
+        security_policy: SecurityPolicy,
+    ) -> bool {
+        let minimum = minimum_buffer_size_for_security_policy(security_policy);
+        buffers_meet_minimum(self.receive_buffer_size, self.send_buffer_size, minimum)
     }
 }
 
@@ -532,10 +569,14 @@ impl ReverseHelloMessage {
 mod tests {
     use std::io::Cursor;
 
-    use crate::comms::tcp_types::{AcknowledgeMessage, HelloMessage, MessageHeader, MessageType};
+    use crate::comms::tcp_types::{
+        AcknowledgeMessage, HelloMessage, MessageHeader, MessageType, ECC_MIN_BUFFER_SIZE,
+        MIN_CHUNK_SIZE,
+    };
+    use opcua_crypto::SecurityPolicy;
     use opcua_types::{
-        ApplicationDescription, ByteString, DecodingOptions, EndpointDescription,
-        MessageSecurityMode, SimpleBinaryDecodable, UAString,
+        status_code::StatusCode, ApplicationDescription, ByteString, DecodingOptions,
+        EndpointDescription, MessageSecurityMode, SimpleBinaryDecodable, UAString,
     };
 
     fn hello_data() -> Vec<u8> {
@@ -610,6 +651,67 @@ mod tests {
         assert_eq!(ack.send_buffer_size, 524288);
         assert_eq!(ack.max_message_size, 16777216);
         assert_eq!(ack.max_chunk_count, 65535);
+    }
+
+    #[test]
+    fn ecc_policy_allows_1024_hello_ack_buffer_sizes_without_weakening_default_minimum() {
+        let expected_non_ecc_error = StatusCode::BadCommunicationError;
+        let default_hello = HelloMessage::new(
+            "opc.tcp://localhost:4840/",
+            ECC_MIN_BUFFER_SIZE,
+            ECC_MIN_BUFFER_SIZE,
+            0,
+            0,
+        );
+        let default_ack = AcknowledgeMessage::new(
+            0,
+            ECC_MIN_BUFFER_SIZE as u32,
+            ECC_MIN_BUFFER_SIZE as u32,
+            0,
+            0,
+        );
+
+        assert!(
+            !default_hello.is_valid_buffer_sizes_for_security_policy(SecurityPolicy::None),
+            "OPC-10000-6 7.1.2.3 reserves the 1024-byte HEL ReceiveBufferSize/SendBufferSize \
+             minimum for ECC SecurityPolicies; default/non-ECC negotiation should continue to \
+             reject this with {expected_non_ecc_error:?}"
+        );
+        assert!(
+            !default_ack.is_valid_buffer_sizes_for_security_policy(SecurityPolicy::None),
+            "OPC-10000-6 7.1.2.4 reserves the 1024-byte ACK ReceiveBufferSize/SendBufferSize \
+             minimum for a Hello request below 8192, i.e. the ECC-intended path; default/non-ECC \
+             negotiation should continue to reject this with {expected_non_ecc_error:?}"
+        );
+
+        let ecc_hello = HelloMessage::new(
+            "opc.tcp://localhost:4840/",
+            ECC_MIN_BUFFER_SIZE,
+            ECC_MIN_BUFFER_SIZE,
+            0,
+            0,
+        );
+        let ecc_ack = AcknowledgeMessage::new(
+            0,
+            ECC_MIN_BUFFER_SIZE as u32,
+            ECC_MIN_BUFFER_SIZE as u32,
+            0,
+            0,
+        );
+
+        assert!(
+            ecc_hello.is_valid_buffer_sizes_for_security_policy(SecurityPolicy::EccNistP256),
+            "OPC-10000-6 7.1.2.3 allows 1024-byte HEL ReceiveBufferSize/SendBufferSize when \
+             the sender intends to use an ECC SecurityPolicy; expected acceptance for {:?} \
+             without weakening the default/non-ECC {MIN_CHUNK_SIZE}-byte minimum",
+            SecurityPolicy::EccNistP256
+        );
+        assert!(
+            ecc_ack.is_valid_buffer_sizes_for_security_policy(SecurityPolicy::EccNistP256),
+            "OPC-10000-6 7.1.2.4 allows 1024-byte ACK ReceiveBufferSize/SendBufferSize for an \
+             ECC-intended Hello request below {MIN_CHUNK_SIZE}; expected acceptance for {:?}",
+            SecurityPolicy::EccNistP256
+        );
     }
 
     #[test]

@@ -376,6 +376,8 @@ impl Server {
 
         let type_tree = Arc::new(RwLock::new(DefaultTypeTree::new()));
 
+        let certificate_store = Arc::new(RwLock::new(certificate_store));
+
         let info = ServerInfo {
             authenticator: builder
                 .authenticator
@@ -393,6 +395,7 @@ impl Server {
             config: config.clone(),
             server_certificate: RwLock::new(server_certificate),
             server_pkey: RwLock::new(server_pkey),
+            certificate_store: certificate_store.clone(),
             operational_limits: config.limits.operational.clone(),
             state: ArcSwap::new(Arc::new(ServerState::Shutdown)),
             send_buffer_size,
@@ -419,8 +422,6 @@ impl Server {
             },
             metrics: Arc::new(crate::metrics::ServerMetrics::new()),
         };
-
-        let certificate_store = Arc::new(RwLock::new(certificate_store));
 
         let info = Arc::new(info);
         let node_managers_ref = NodeManagersRef::new_empty();

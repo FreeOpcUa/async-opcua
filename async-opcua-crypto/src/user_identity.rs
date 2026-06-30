@@ -374,4 +374,10 @@ pub fn verify_x509_identity_token(
         server_cert,
         server_nonce,
     )
+    .map_err(|err| {
+        Error::new(
+            StatusCode::BadUserSignatureInvalid,
+            format!("X509 user token signature is invalid: {err}"),
+        )
+    })
 }

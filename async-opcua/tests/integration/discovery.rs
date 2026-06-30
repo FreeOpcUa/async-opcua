@@ -1,9 +1,7 @@
 //! Feature 024 — RegisterServer (LDS registration) end-to-end via the existing client
 //! register_server() / find_servers(). Anchored to OPC UA Part 4 §5.5.5 / Part 12 §7.5.
 
-#[cfg(feature = "discovery-mdns")]
-use super::utils::default_server;
-use super::utils::Tester;
+use super::utils::{default_server, Tester};
 use opcua::types::{
     ApplicationType, EndpointDescription, ExtensionObject, LocalizedText,
     MdnsDiscoveryConfiguration, MessageSecurityMode, RegisteredServer, StatusCode, UAString,
@@ -40,6 +38,72 @@ async fn secured_endpoint(tester: &Tester) -> EndpointDescription {
         .into_iter()
         .find(|e| e.security_mode == MessageSecurityMode::SignAndEncrypt)
         .expect("the test server should offer a SignAndEncrypt endpoint")
+}
+
+#[tokio::test]
+async fn get_endpoints_endpoint_url_matches_client_connect_url() {
+    // OPC-10000-4 §5.5.4.2: GetEndpoints.endpointUrl is the network address the client used to
+    // access the DiscoveryEndpoint, and the server uses it to determine which URLs to return.
+    let tester = Tester::new(default_server().host("localhost"), true).await;
+    let connect_url = tester.endpoint();
+
+    let endpoints = tester
+        .client
+        .get_endpoints(connect_url.clone(), &[], &[])
+        .await
+        .unwrap();
+
+    assert!(
+        !endpoints.is_empty(),
+        "test server should return endpoints for {connect_url}"
+    );
+    assert!(
+        endpoints
+            .iter()
+            .all(|endpoint| endpoint.endpoint_url.as_ref() == connect_url),
+        "GetEndpoints should return endpoint URLs consistent with the client's connect URL \
+         {connect_url}; got {:?}",
+        endpoints
+            .iter()
+            .map(|endpoint| endpoint.endpoint_url.as_ref())
+            .collect::<Vec<_>>()
+    );
+}
+
+#[tokio::test]
+async fn find_servers_endpoint_url_matches_client_connect_url() {
+    // OPC-10000-4 §5.5.2.2: FindServers.endpointUrl is the network address the client used to
+    // access the DiscoveryEndpoint, and the server uses it to determine which URLs to return.
+    let tester = Tester::new(default_server().host("localhost"), true).await;
+    let connect_url = tester.endpoint();
+
+    let servers = tester
+        .client
+        .find_servers(connect_url.clone(), None, None)
+        .await
+        .unwrap();
+
+    let server = servers
+        .iter()
+        .find(|server| server.application_uri.as_ref() == REGISTERING_URI)
+        .expect("FindServers should return the test server ApplicationDescription");
+    let discovery_urls = server.discovery_urls.as_ref().unwrap_or_else(|| {
+        panic!("FindServers should return discovery URLs for {connect_url}: {server:?}")
+    });
+
+    assert!(
+        !discovery_urls.is_empty(),
+        "FindServers should return at least one discovery URL for {connect_url}: {server:?}"
+    );
+    assert!(
+        discovery_urls.iter().all(|url| url.as_ref() == connect_url),
+        "FindServers should return discovery URLs consistent with the client's connect URL \
+         {connect_url}; got {:?}",
+        discovery_urls
+            .iter()
+            .map(|url| url.as_ref())
+            .collect::<Vec<_>>()
+    );
 }
 
 #[tokio::test]

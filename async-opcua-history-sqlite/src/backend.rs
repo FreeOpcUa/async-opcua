@@ -197,9 +197,18 @@ fn row_to_history_event_field_list(
     let ctx_owned = ContextOwned::default();
     let ctx = ctx_owned.context();
     let mut cursor = std::io::Cursor::new(blob);
-    HistoryEventFieldList::decode(&mut cursor, &ctx).map_err(|err| {
-        SqliteError::FromSqlConversionFailure(0, rusqlite::types::Type::Blob, Box::new(err))
-    })
+    HistoryEventFieldList::decode(&mut cursor, &ctx)
+        .map_err(|err| query::history_blob_decode_error(0, err))
+}
+
+fn map_history_read_sqlite_error(operation: &str, err: SqliteError) -> StatusCode {
+    let status = if query::is_history_blob_decode_error(&err) {
+        StatusCode::BadDataLost
+    } else {
+        StatusCode::BadInternalError
+    };
+    tracing::error!("SQLite error in {}: {:?}", operation, err);
+    status
 }
 
 impl SqliteHistoryBackend {
@@ -295,10 +304,8 @@ impl SqliteHistoryBackend {
                 .await
                 .map_err(|_| StatusCode::BadInternalError)?;
 
-        let (mut values, interval_has_more) = result.map_err(|err| {
-            tracing::error!("SQLite error in read_raw_modified: {:?}", err);
-            StatusCode::BadInternalError
-        })?;
+        let (mut values, interval_has_more) =
+            result.map_err(|err| map_history_read_sqlite_error("read_raw_modified", err))?;
 
         let has_trimmed_values = Self::sort_dedup_and_trim_page(
             &mut values,
@@ -323,13 +330,8 @@ impl SqliteHistoryBackend {
                 .await
                 .map_err(|_| StatusCode::BadInternalError)?;
 
-        result.map_err(|err| {
-            tracing::error!(
-                "SQLite error in read_raw_modified modified branch: {:?}",
-                err
-            );
-            StatusCode::BadInternalError
-        })
+        result
+            .map_err(|err| map_history_read_sqlite_error("read_raw_modified modified branch", err))
     }
 
     fn raw_modified_page_request(
@@ -750,10 +752,9 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
             .await
             .map_err(|_| StatusCode::BadInternalError)?;
 
-        events.map(|events| (events, None)).map_err(|err| {
-            tracing::error!("SQLite error in read_events: {:?}", err);
-            StatusCode::BadInternalError
-        })
+        events
+            .map(|events| (events, None))
+            .map_err(|err| map_history_read_sqlite_error("read_events", err))
     }
 
     async fn read_annotations(
@@ -806,10 +807,9 @@ impl HistoryStorageBackend for SqliteHistoryBackend {
         .await
         .map_err(|_| StatusCode::BadInternalError)?;
 
-        values.map(|values| (values, None)).map_err(|err| {
-            tracing::error!("SQLite error in read_annotations: {:?}", err);
-            StatusCode::BadInternalError
-        })
+        values
+            .map(|values| (values, None))
+            .map_err(|err| map_history_read_sqlite_error("read_annotations", err))
     }
 
     async fn update_data(

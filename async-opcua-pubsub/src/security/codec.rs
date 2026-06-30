@@ -214,8 +214,14 @@ impl UadpSecurityCodec {
             body.to_vec()
         };
 
+        let mut payload_reader = &plaintext[..];
         let dataset_messages =
-            UadpNetworkMessage::decode_payload_region(&header_region, &mut &plaintext[..], ctx)?;
+            UadpNetworkMessage::decode_payload_region(&header_region, &mut payload_reader, ctx)?;
+        if !payload_reader.is_empty() {
+            return Err(security_error(
+                "secured UADP payload contains trailing bytes",
+            ));
+        }
         Ok(rebuild_message(header_region, dataset_messages))
     }
 

@@ -144,7 +144,7 @@ fn add_nodes_impl(
             if address_space
                 .find_node_by_browse_name(
                     &parent_id,
-                    None::<(NodeId, bool)>,
+                    Some((item.reference_type_id().clone(), false)),
                     &*type_tree,
                     BrowseDirection::Forward,
                     item.browse_name().clone(),
@@ -156,10 +156,12 @@ fn add_nodes_impl(
             }
             drop(type_tree);
 
-            if let Err(status) = validate_type_definition(&address_space, item) {
+            let type_tree = context.type_tree.read();
+            if let Err(status) = validate_type_definition(&address_space, &*type_tree, item) {
                 item.set_result(NodeId::null(), status);
                 continue;
             }
+            drop(type_tree);
 
             let assigned_id = if item.requested_new_node_id().is_null() {
                 next_unused_node_id(&address_space, parent_id.namespace)
@@ -360,19 +362,38 @@ fn add_references_impl(
                 continue;
             }
 
-            if item.is_forward() {
-                address_space.insert_reference(
-                    item.source_node_id(),
-                    &item.target_node_id().node_id,
-                    item.reference_type_id(),
-                );
+            let (source_node, target_node) = if item.is_forward() {
+                (item.source_node_id(), &item.target_node_id().node_id)
             } else {
-                address_space.insert_reference(
-                    &item.target_node_id().node_id,
-                    item.source_node_id(),
-                    item.reference_type_id(),
-                );
+                (&item.target_node_id().node_id, item.source_node_id())
+            };
+
+            if !reference_is_structurally_allowed(
+                &address_space,
+                &*type_tree,
+                item.reference_type_id(),
+                target_node,
+            ) {
+                if source_ready {
+                    item.set_source_result(StatusCode::BadReferenceNotAllowed);
+                }
+                if target_ready {
+                    item.set_target_result(StatusCode::BadReferenceNotAllowed);
+                }
+                continue;
             }
+
+            if address_space.has_reference(source_node, target_node, item.reference_type_id()) {
+                if source_ready {
+                    item.set_source_result(StatusCode::BadDuplicateReferenceNotAllowed);
+                }
+                if target_ready {
+                    item.set_target_result(StatusCode::BadDuplicateReferenceNotAllowed);
+                }
+                continue;
+            }
+
+            address_space.insert_reference(source_node, target_node, item.reference_type_id());
 
             if source_ready {
                 item.set_source_result(StatusCode::Good);
@@ -497,45 +518,92 @@ fn delete_references_impl(
     notify_model_changes(context, changes);
 }
 
+fn reference_is_structurally_allowed(
+    address_space: &AddressSpace,
+    type_tree: &dyn TypeTree,
+    reference_type_id: &NodeId,
+    target_node_id: &NodeId,
+) -> bool {
+    if !type_tree.is_subtype_of(
+        reference_type_id,
+        &NodeId::from(ReferenceTypeId::HasProperty),
+    ) {
+        return true;
+    }
+
+    match address_space.find(target_node_id) {
+        Some(target_node) => matches!(&*target_node, NodeType::Variable(_)),
+        None => true,
+    }
+}
+
 fn reference_type_is_abstract(address_space: &AddressSpace, reference_type_id: &NodeId) -> bool {
-    address_space
-        .find(reference_type_id)
-        .is_some_and(|reference_type| match &*reference_type {
+    if let Some(reference_type) = address_space.find(reference_type_id) {
+        return match &*reference_type {
             NodeType::ReferenceType(reference_type) => reference_type.is_abstract(),
             _ => false,
+        };
+    }
+
+    standard_reference_type_is_abstract(reference_type_id)
+}
+
+fn standard_reference_type_is_abstract(reference_type_id: &NodeId) -> bool {
+    reference_type_id
+        .as_reference_type_id()
+        .is_ok_and(|reference_type_id| {
+            matches!(
+                reference_type_id,
+                ReferenceTypeId::References
+                    | ReferenceTypeId::NonHierarchicalReferences
+                    | ReferenceTypeId::HierarchicalReferences
+                    | ReferenceTypeId::HasChild
+                    | ReferenceTypeId::Aggregates
+            )
         })
 }
 
 fn validate_type_definition(
     address_space: &AddressSpace,
+    type_tree: &dyn TypeTree,
     item: &AddNodeItem,
 ) -> Result<(), StatusCode> {
     let type_definition_id = &item.type_definition_id().node_id;
-    if type_definition_id.is_null()
-        || !address_space
-            .namespaces()
-            .contains_key(&type_definition_id.namespace)
-    {
+    if type_definition_id.is_null() {
         return Ok(());
     }
 
-    let Some(type_definition) = address_space.find(type_definition_id) else {
-        return Err(StatusCode::BadTypeDefinitionInvalid);
+    let expected_type_class = match item.node_class() {
+        NodeClass::Object => NodeClass::ObjectType,
+        NodeClass::Variable => NodeClass::VariableType,
+        _ => return Ok(()),
     };
 
-    match (item.node_class(), &*type_definition) {
-        (NodeClass::Object, NodeType::ObjectType(object_type)) if object_type.is_abstract() => {
-            Err(StatusCode::BadTypeDefinitionInvalid)
-        }
-        (NodeClass::Variable, NodeType::VariableType(variable_type))
-            if variable_type.is_abstract() =>
-        {
-            Err(StatusCode::BadTypeDefinitionInvalid)
-        }
-        (NodeClass::Object, NodeType::ObjectType(_))
-        | (NodeClass::Variable, NodeType::VariableType(_)) => Ok(()),
-        (NodeClass::Object | NodeClass::Variable, _) => Err(StatusCode::BadTypeDefinitionInvalid),
-        _ => Ok(()),
+    if let Some(type_definition) = address_space.find(type_definition_id) {
+        return match (expected_type_class, &*type_definition) {
+            (NodeClass::ObjectType, NodeType::ObjectType(object_type))
+                if object_type.is_abstract() =>
+            {
+                Err(StatusCode::BadTypeDefinitionInvalid)
+            }
+            (NodeClass::VariableType, NodeType::VariableType(variable_type))
+                if variable_type.is_abstract() =>
+            {
+                Err(StatusCode::BadTypeDefinitionInvalid)
+            }
+            (NodeClass::ObjectType, NodeType::ObjectType(_))
+            | (NodeClass::VariableType, NodeType::VariableType(_)) => Ok(()),
+            _ => Err(StatusCode::BadTypeDefinitionInvalid),
+        };
+    }
+
+    if type_tree
+        .get(type_definition_id)
+        .is_some_and(|node_class| node_class == expected_type_class)
+    {
+        Ok(())
+    } else {
+        Err(StatusCode::BadTypeDefinitionInvalid)
     }
 }
 
@@ -596,7 +664,7 @@ fn build_object(
     attributes: &opcua_types::ObjectAttributes,
 ) -> Result<Object, StatusCode> {
     let browse_name = browse_name.into();
-    let mask = attributes_mask(attributes.specified_attributes)?;
+    let mask = attributes_mask(attributes.specified_attributes, object_attributes_mask())?;
     let display_name =
         display_name_or_browse_name(&mask, attributes.display_name.clone(), &browse_name);
     let event_notifier = if mask.contains(AttributesMask::EVENT_NOTIFIER) {
@@ -622,7 +690,7 @@ fn build_variable(
     attributes: &opcua_types::VariableAttributes,
 ) -> Result<Variable, StatusCode> {
     let browse_name = browse_name.into();
-    let mask = attributes_mask(attributes.specified_attributes)?;
+    let mask = attributes_mask(attributes.specified_attributes, variable_attributes_mask())?;
     let display_name =
         display_name_or_browse_name(&mask, attributes.display_name.clone(), &browse_name);
     let data_type = if mask.contains(AttributesMask::DATA_TYPE) {
@@ -688,7 +756,7 @@ fn build_method(
     attributes: &opcua_types::MethodAttributes,
 ) -> Result<Method, StatusCode> {
     let browse_name = browse_name.into();
-    let mask = attributes_mask(attributes.specified_attributes)?;
+    let mask = attributes_mask(attributes.specified_attributes, method_attributes_mask())?;
     let display_name =
         display_name_or_browse_name(&mask, attributes.display_name.clone(), &browse_name);
 
@@ -716,7 +784,10 @@ fn build_object_type(
     attributes: &opcua_types::ObjectTypeAttributes,
 ) -> Result<ObjectType, StatusCode> {
     let browse_name = browse_name.into();
-    let mask = attributes_mask(attributes.specified_attributes)?;
+    let mask = attributes_mask(
+        attributes.specified_attributes,
+        object_type_attributes_mask(),
+    )?;
     let display_name =
         display_name_or_browse_name(&mask, attributes.display_name.clone(), &browse_name);
 
@@ -741,7 +812,10 @@ fn build_variable_type(
     attributes: &opcua_types::VariableTypeAttributes,
 ) -> Result<VariableType, StatusCode> {
     let browse_name = browse_name.into();
-    let mask = attributes_mask(attributes.specified_attributes)?;
+    let mask = attributes_mask(
+        attributes.specified_attributes,
+        variable_type_attributes_mask(),
+    )?;
     let display_name =
         display_name_or_browse_name(&mask, attributes.display_name.clone(), &browse_name);
     let data_type = if mask.contains(AttributesMask::DATA_TYPE) {
@@ -799,7 +873,10 @@ fn build_reference_type(
     attributes: &opcua_types::ReferenceTypeAttributes,
 ) -> Result<ReferenceType, StatusCode> {
     let browse_name = browse_name.into();
-    let mask = attributes_mask(attributes.specified_attributes)?;
+    let mask = attributes_mask(
+        attributes.specified_attributes,
+        reference_type_attributes_mask(),
+    )?;
     let display_name =
         display_name_or_browse_name(&mask, attributes.display_name.clone(), &browse_name);
     if mask.contains(AttributesMask::SYMMETRIC)
@@ -836,7 +913,7 @@ fn build_data_type(
     attributes: &opcua_types::DataTypeAttributes,
 ) -> Result<DataType, StatusCode> {
     let browse_name = browse_name.into();
-    let mask = attributes_mask(attributes.specified_attributes)?;
+    let mask = attributes_mask(attributes.specified_attributes, data_type_attributes_mask())?;
     let display_name =
         display_name_or_browse_name(&mask, attributes.display_name.clone(), &browse_name);
 
@@ -861,7 +938,7 @@ fn build_view(
     attributes: &opcua_types::ViewAttributes,
 ) -> Result<View, StatusCode> {
     let browse_name = browse_name.into();
-    let mask = attributes_mask(attributes.specified_attributes)?;
+    let mask = attributes_mask(attributes.specified_attributes, view_attributes_mask())?;
     let display_name =
         display_name_or_browse_name(&mask, attributes.display_name.clone(), &browse_name);
     let event_notifier = if mask.contains(AttributesMask::EVENT_NOTIFIER) {
@@ -885,8 +962,71 @@ fn build_view(
     Ok(node)
 }
 
-fn attributes_mask(specified_attributes: u32) -> Result<AttributesMask, StatusCode> {
-    AttributesMask::from_bits(specified_attributes).ok_or(StatusCode::BadNodeAttributesInvalid)
+fn attributes_mask(
+    specified_attributes: u32,
+    allowed_attributes: AttributesMask,
+) -> Result<AttributesMask, StatusCode> {
+    let mask = AttributesMask::from_bits(specified_attributes)
+        .ok_or(StatusCode::BadNodeAttributesInvalid)?;
+    if mask.bits() & !allowed_attributes.bits() != 0 {
+        return Err(StatusCode::BadNodeAttributesInvalid);
+    }
+    Ok(mask)
+}
+
+fn base_attributes_mask() -> AttributesMask {
+    AttributesMask::DESCRIPTION
+        | AttributesMask::DISPLAY_NAME
+        | AttributesMask::WRITE_MASK
+        | AttributesMask::USER_WRITE_MASK
+}
+
+fn object_attributes_mask() -> AttributesMask {
+    base_attributes_mask() | AttributesMask::EVENT_NOTIFIER
+}
+
+fn variable_attributes_mask() -> AttributesMask {
+    base_attributes_mask()
+        | AttributesMask::ACCESS_LEVEL
+        | AttributesMask::ARRAY_DIMENSIONS
+        | AttributesMask::DATA_TYPE
+        | AttributesMask::HISTORIZING
+        | AttributesMask::MINIMUM_SAMPLING_INTERVAL
+        | AttributesMask::USER_ACCESS_LEVEL
+        | AttributesMask::VALUE
+        | AttributesMask::VALUE_RANK
+}
+
+fn method_attributes_mask() -> AttributesMask {
+    base_attributes_mask() | AttributesMask::EXECUTABLE | AttributesMask::USER_EXECUTABLE
+}
+
+fn object_type_attributes_mask() -> AttributesMask {
+    base_attributes_mask() | AttributesMask::IS_ABSTRACT
+}
+
+fn variable_type_attributes_mask() -> AttributesMask {
+    base_attributes_mask()
+        | AttributesMask::ARRAY_DIMENSIONS
+        | AttributesMask::DATA_TYPE
+        | AttributesMask::IS_ABSTRACT
+        | AttributesMask::VALUE
+        | AttributesMask::VALUE_RANK
+}
+
+fn reference_type_attributes_mask() -> AttributesMask {
+    base_attributes_mask()
+        | AttributesMask::INVERSE_NAME
+        | AttributesMask::IS_ABSTRACT
+        | AttributesMask::SYMMETRIC
+}
+
+fn data_type_attributes_mask() -> AttributesMask {
+    base_attributes_mask() | AttributesMask::IS_ABSTRACT
+}
+
+fn view_attributes_mask() -> AttributesMask {
+    base_attributes_mask() | AttributesMask::CONTAINS_NO_LOOPS | AttributesMask::EVENT_NOTIFIER
 }
 
 fn display_name_or_browse_name(
@@ -1267,10 +1407,17 @@ pub trait InMemoryNodeManagerImpl: Send + Sync + 'static {
     /// nodes with immutable references.
     async fn delete_node_references(
         &self,
-        context: &RequestContext,
+        _context: &RequestContext,
         address_space: &RwLock<AddressSpace>,
         to_delete: &[&DeleteNodeItem],
     ) {
+        let mut address_space = address_space.write();
+        for item in to_delete {
+            if item.status().is_good() {
+                address_space
+                    .delete_node_references(item.node_id(), item.delete_target_references());
+            }
+        }
     }
 
     /// Delete a list of references.
@@ -1292,5 +1439,544 @@ pub trait InMemoryNodeManagerImpl: Send + Sync + 'static {
     ) -> Result<(), StatusCode> {
         delete_references_impl(context, address_space, references_to_delete);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        authenticator::UserToken,
+        builder::ServerBuilder,
+        identity_token::IdentityToken,
+        node_manager::{NodeMutator, RequestContextInner},
+        session::instance::Session,
+    };
+    use async_trait::async_trait;
+    use opcua_types::{
+        AddNodesItem, AddReferencesItem, AnonymousIdentityToken, ApplicationDescription,
+        ByteString, DeleteNodesItem, DiagnosticBits, MessageSecurityMode, ObjectAttributes,
+        ObjectTypeId, QualifiedName, UAString,
+    };
+
+    struct TestImpl;
+
+    #[async_trait]
+    impl InMemoryNodeManagerImpl for TestImpl {
+        async fn init(&self, _address_space: &mut AddressSpace, _context: ServerContext) {}
+
+        fn name(&self) -> &str {
+            "test"
+        }
+
+        fn namespaces(&self) -> Vec<NamespaceMetadata> {
+            vec![NamespaceMetadata {
+                namespace_uri: "urn:test".to_string(),
+                namespace_index: 1,
+                ..Default::default()
+            }]
+        }
+    }
+
+    fn request_context() -> RequestContext {
+        let mut builder = ServerBuilder::new_anonymous("add nodes duplicate browse name test");
+        builder.config_mut().limits.clients_can_modify_address_space = true;
+        let (_server, handle) = builder.build().expect("test server should build");
+        let info = handle.info().clone();
+        let session = Session::create(
+            &info,
+            NodeId::new(0, 1),
+            1,
+            60_000,
+            0,
+            0,
+            UAString::from("opc.tcp://localhost"),
+            opcua_crypto::SecurityPolicy::None.to_str().to_string(),
+            IdentityToken::Anonymous(AnonymousIdentityToken {
+                policy_id: UAString::from("anonymous"),
+            }),
+            None,
+            ByteString::null(),
+            UAString::from("test"),
+            ApplicationDescription::default(),
+            MessageSecurityMode::None,
+        );
+
+        RequestContext {
+            current_node_manager_index: 0,
+            inner: Arc::new(RequestContextInner {
+                session: Arc::new(RwLock::new(session)),
+                session_id: 1,
+                authenticator: info.authenticator.clone(),
+                token: UserToken("anonymous".to_string()),
+                user_roles: Arc::new(Vec::new()),
+                type_tree: info.type_tree.clone(),
+                type_tree_getter: info.type_tree_getter.clone(),
+                subscriptions: handle.subscriptions().clone(),
+                info,
+            }),
+        }
+    }
+
+    fn object_attributes() -> ObjectAttributes {
+        ObjectAttributes {
+            specified_attributes: 0,
+            display_name: LocalizedText::null(),
+            description: LocalizedText::null(),
+            write_mask: 0,
+            user_write_mask: 0,
+            event_notifier: 0,
+        }
+    }
+
+    fn object_node(node_id: &NodeId, browse_name: &'static str) -> Object {
+        Object::new(node_id, browse_name, browse_name, EventNotifier::empty())
+    }
+
+    fn add_object_node_item(
+        parent_id: &NodeId,
+        new_node_id: &NodeId,
+        browse_name: QualifiedName,
+    ) -> AddNodeItem {
+        add_object_node_item_with_type_definition(
+            parent_id,
+            new_node_id,
+            browse_name,
+            ExpandedNodeId::from(NodeId::from(ObjectTypeId::BaseObjectType)),
+        )
+    }
+
+    fn add_object_node_item_with_type_definition(
+        parent_id: &NodeId,
+        new_node_id: &NodeId,
+        browse_name: QualifiedName,
+        type_definition: ExpandedNodeId,
+    ) -> AddNodeItem {
+        AddNodeItem::new(
+            AddNodesItem {
+                parent_node_id: ExpandedNodeId::from(parent_id),
+                reference_type_id: NodeId::from(ReferenceTypeId::HasComponent),
+                requested_new_node_id: ExpandedNodeId::from(new_node_id),
+                browse_name,
+                node_class: NodeClass::Object,
+                node_attributes: AddNodeAttributes::Object(object_attributes())
+                    .as_extension_object(),
+                type_definition,
+            },
+            DiagnosticBits::empty(),
+        )
+    }
+
+    fn add_object_node_item_with_attributes(
+        parent_id: &NodeId,
+        new_node_id: &NodeId,
+        browse_name: QualifiedName,
+        attributes: ObjectAttributes,
+    ) -> AddNodeItem {
+        AddNodeItem::new(
+            AddNodesItem {
+                parent_node_id: ExpandedNodeId::from(parent_id),
+                reference_type_id: NodeId::from(ReferenceTypeId::HasComponent),
+                requested_new_node_id: ExpandedNodeId::from(new_node_id),
+                browse_name,
+                node_class: NodeClass::Object,
+                node_attributes: AddNodeAttributes::Object(attributes).as_extension_object(),
+                type_definition: ExpandedNodeId::from(NodeId::from(ObjectTypeId::BaseObjectType)),
+            },
+            DiagnosticBits::empty(),
+        )
+    }
+
+    fn add_reference_item_with_type(
+        source_id: &NodeId,
+        target_id: &NodeId,
+        reference_type_id: &NodeId,
+    ) -> AddReferenceItem {
+        AddReferenceItem::new(
+            AddReferencesItem {
+                source_node_id: source_id.clone(),
+                reference_type_id: reference_type_id.clone(),
+                is_forward: true,
+                target_server_uri: UAString::null(),
+                target_node_id: ExpandedNodeId::from(target_id),
+                target_node_class: NodeClass::Object,
+            },
+            DiagnosticBits::empty(),
+        )
+    }
+
+    fn deleted_node_item(node_id: &NodeId, delete_target_references: bool) -> DeleteNodeItem {
+        let mut item = DeleteNodeItem::new(
+            DeleteNodesItem {
+                node_id: node_id.clone(),
+                delete_target_references,
+            },
+            DiagnosticBits::empty(),
+        );
+        item.set_result(StatusCode::Good);
+        item
+    }
+
+    #[tokio::test]
+    async fn duplicate_browse_name_returns_operation_level_bad_browse_name_duplicated() {
+        let context = request_context();
+        let parent_id = NodeId::new(1, "parent");
+        let existing_child_id = NodeId::new(1, "existing-child");
+        let duplicate_child_id = NodeId::new(1, "duplicate-child");
+        let duplicate_browse_name = QualifiedName::new(1, "DuplicateName");
+        let mut address_space = AddressSpace::new();
+        address_space.add_namespace("urn:test", 1);
+        address_space.insert::<_, NodeId>(object_node(&parent_id, "parent"), None);
+        address_space.insert(
+            Object::new(
+                &existing_child_id,
+                duplicate_browse_name.clone(),
+                "DuplicateName",
+                EventNotifier::empty(),
+            ),
+            Some(&[(
+                &parent_id,
+                &NodeId::from(ReferenceTypeId::HasComponent),
+                ReferenceDirection::Inverse,
+            )]),
+        );
+        let manager = super::super::InMemoryNodeManager::new(TestImpl, address_space);
+        let mut item = add_object_node_item(&parent_id, &duplicate_child_id, duplicate_browse_name);
+
+        {
+            let mut nodes = vec![&mut item];
+            manager
+                .add_nodes(&context, nodes.as_mut_slice())
+                .await
+                .unwrap();
+        }
+
+        assert_eq!(item.status(), StatusCode::BadBrowseNameDuplicated);
+        assert!(item.added_node_id().is_null());
+        assert!(!manager
+            .address_space()
+            .read()
+            .node_exists(&duplicate_child_id));
+    }
+
+    #[tokio::test]
+    async fn invalid_type_definition_returns_operation_level_bad_type_definition_invalid() {
+        let context = request_context();
+        let parent_id = NodeId::new(1, "parent");
+        let new_node_id = NodeId::new(1, "child-with-invalid-type");
+        let invalid_type_definition = NodeId::new(2, "missing-object-type");
+        let mut address_space = AddressSpace::new();
+        address_space.add_namespace("urn:test", 1);
+        address_space.insert::<_, NodeId>(object_node(&parent_id, "parent"), None);
+        let manager = super::super::InMemoryNodeManager::new(TestImpl, address_space);
+        let mut item = add_object_node_item_with_type_definition(
+            &parent_id,
+            &new_node_id,
+            QualifiedName::new(1, "ChildWithInvalidType"),
+            ExpandedNodeId::from(invalid_type_definition),
+        );
+
+        {
+            let mut nodes = vec![&mut item];
+            manager
+                .add_nodes(&context, nodes.as_mut_slice())
+                .await
+                .unwrap();
+        }
+
+        assert_eq!(item.status(), StatusCode::BadTypeDefinitionInvalid);
+        assert!(item.added_node_id().is_null());
+        assert!(!manager.address_space().read().node_exists(&new_node_id));
+    }
+
+    #[tokio::test]
+    async fn node_attributes_invalid_returns_operation_level_bad_node_attributes_invalid() {
+        let context = request_context();
+        let parent_id = NodeId::new(1, "parent");
+        let new_node_id = NodeId::new(1, "object-with-variable-value-attribute");
+        let mut address_space = AddressSpace::new();
+        address_space.add_namespace("http://opcfoundation.org/UA/", 0);
+        address_space.add_namespace("urn:test", 1);
+        address_space.insert::<_, NodeId>(
+            ObjectType::new(
+                &NodeId::from(ObjectTypeId::BaseObjectType),
+                "BaseObjectType",
+                "BaseObjectType",
+                false,
+            ),
+            None,
+        );
+        address_space.insert::<_, NodeId>(object_node(&parent_id, "parent"), None);
+        let manager = super::super::InMemoryNodeManager::new(TestImpl, address_space);
+        let mut attributes = object_attributes();
+        attributes.specified_attributes = AttributesMask::VALUE.bits();
+        let mut item = add_object_node_item_with_attributes(
+            &parent_id,
+            &new_node_id,
+            QualifiedName::new(1, "ObjectWithVariableValueAttribute"),
+            attributes,
+        );
+
+        {
+            let mut nodes = vec![&mut item];
+            manager
+                .add_nodes(&context, nodes.as_mut_slice())
+                .await
+                .unwrap();
+        }
+
+        assert_eq!(item.status(), StatusCode::BadNodeAttributesInvalid);
+        assert!(item.added_node_id().is_null());
+        assert!(!manager.address_space().read().node_exists(&new_node_id));
+    }
+
+    #[tokio::test]
+    async fn abstract_reference_type_returns_operation_level_bad_reference_type_id_invalid() {
+        let context = request_context();
+        let source_id = NodeId::new(1, "source");
+        let target_id = NodeId::new(1, "target");
+        let abstract_reference_type = NodeId::from(ReferenceTypeId::References);
+        let mut address_space = AddressSpace::new();
+        address_space.add_namespace("http://opcfoundation.org/UA/", 0);
+        address_space.add_namespace("urn:test", 1);
+        address_space.insert::<_, NodeId>(object_node(&source_id, "source"), None);
+        address_space.insert::<_, NodeId>(object_node(&target_id, "target"), None);
+        address_space.insert::<_, NodeId>(
+            ReferenceType::new(
+                &abstract_reference_type,
+                "References",
+                "References",
+                None,
+                true,
+                true,
+            ),
+            None,
+        );
+        assert_eq!(
+            context.type_tree.read().get(&abstract_reference_type),
+            Some(NodeClass::ReferenceType)
+        );
+        assert!(reference_type_is_abstract(
+            &address_space,
+            &abstract_reference_type
+        ));
+        let manager = super::super::InMemoryNodeManager::new(TestImpl, address_space);
+        let mut item =
+            add_reference_item_with_type(&source_id, &target_id, &abstract_reference_type);
+
+        {
+            let mut references = vec![&mut item];
+            manager
+                .add_references(&context, references.as_mut_slice())
+                .await
+                .unwrap();
+        }
+
+        assert_eq!(item.result_status(), StatusCode::BadReferenceTypeIdInvalid);
+        assert_eq!(item.source_status(), StatusCode::BadReferenceTypeIdInvalid);
+        assert_eq!(item.target_status(), StatusCode::BadReferenceTypeIdInvalid);
+        assert!(!manager.address_space().read().has_reference(
+            &source_id,
+            &target_id,
+            &abstract_reference_type
+        ));
+    }
+
+    #[tokio::test]
+    async fn standard_abstract_reference_type_returns_operation_level_bad_reference_type_id_invalid(
+    ) {
+        let context = request_context();
+        let source_id = NodeId::new(1, "source");
+        let target_id = NodeId::new(1, "target");
+        let abstract_reference_type = NodeId::from(ReferenceTypeId::References);
+        let mut address_space = AddressSpace::new();
+        address_space.add_namespace("urn:test", 1);
+        address_space.insert::<_, NodeId>(object_node(&source_id, "source"), None);
+        address_space.insert::<_, NodeId>(object_node(&target_id, "target"), None);
+        assert_eq!(
+            context.type_tree.read().get(&abstract_reference_type),
+            Some(NodeClass::ReferenceType)
+        );
+        let manager = super::super::InMemoryNodeManager::new(TestImpl, address_space);
+        let mut item =
+            add_reference_item_with_type(&source_id, &target_id, &abstract_reference_type);
+
+        {
+            let mut references = vec![&mut item];
+            manager
+                .add_references(&context, references.as_mut_slice())
+                .await
+                .unwrap();
+        }
+
+        assert_eq!(item.result_status(), StatusCode::BadReferenceTypeIdInvalid);
+        assert_eq!(item.source_status(), StatusCode::BadReferenceTypeIdInvalid);
+        assert_eq!(item.target_status(), StatusCode::BadReferenceTypeIdInvalid);
+        assert!(!manager.address_space().read().has_reference(
+            &source_id,
+            &target_id,
+            &abstract_reference_type
+        ));
+    }
+
+    #[tokio::test]
+    async fn duplicate_reference_returns_operation_level_bad_duplicate_reference_not_allowed() {
+        let context = request_context();
+        let source_id = NodeId::new(1, "source");
+        let target_id = NodeId::new(1, "target");
+        let reference_type = NodeId::from(ReferenceTypeId::HasComponent);
+        let mut address_space = AddressSpace::new();
+        address_space.add_namespace("http://opcfoundation.org/UA/", 0);
+        address_space.add_namespace("urn:test", 1);
+        address_space.insert::<_, NodeId>(
+            ReferenceType::new(
+                &reference_type,
+                "HasComponent",
+                "HasComponent",
+                None,
+                false,
+                false,
+            ),
+            None,
+        );
+        address_space.insert::<_, NodeId>(object_node(&source_id, "source"), None);
+        address_space.insert::<_, NodeId>(
+            object_node(&target_id, "target"),
+            Some(&[(&source_id, &reference_type, ReferenceDirection::Inverse)]),
+        );
+        context.type_tree.write().add_type_node(
+            &reference_type,
+            &NodeId::from(ReferenceTypeId::References),
+            NodeClass::ReferenceType,
+        );
+        assert!(address_space.has_reference(&source_id, &target_id, &reference_type));
+        let manager = super::super::InMemoryNodeManager::new(TestImpl, address_space);
+        let mut item = add_reference_item_with_type(&source_id, &target_id, &reference_type);
+
+        {
+            let mut references = vec![&mut item];
+            manager
+                .add_references(&context, references.as_mut_slice())
+                .await
+                .unwrap();
+        }
+
+        assert_eq!(
+            item.result_status(),
+            StatusCode::BadDuplicateReferenceNotAllowed
+        );
+        assert_eq!(
+            item.source_status(),
+            StatusCode::BadDuplicateReferenceNotAllowed
+        );
+        assert_eq!(
+            item.target_status(),
+            StatusCode::BadDuplicateReferenceNotAllowed
+        );
+        assert!(manager.address_space().read().has_reference(
+            &source_id,
+            &target_id,
+            &reference_type
+        ));
+    }
+
+    #[tokio::test]
+    async fn structural_reference_returns_operation_level_bad_reference_not_allowed() {
+        let context = request_context();
+        let source_id = NodeId::new(1, "source");
+        let target_id = NodeId::new(1, "object-target");
+        let reference_type = NodeId::from(ReferenceTypeId::HasProperty);
+        let mut address_space = AddressSpace::new();
+        address_space.add_namespace("http://opcfoundation.org/UA/", 0);
+        address_space.add_namespace("urn:test", 1);
+        address_space.insert::<_, NodeId>(
+            ReferenceType::new(
+                &reference_type,
+                "HasProperty",
+                "HasProperty",
+                None,
+                false,
+                false,
+            ),
+            None,
+        );
+        address_space.insert::<_, NodeId>(object_node(&source_id, "source"), None);
+        address_space.insert::<_, NodeId>(object_node(&target_id, "object-target"), None);
+        context.type_tree.write().add_type_node(
+            &reference_type,
+            &NodeId::from(ReferenceTypeId::References),
+            NodeClass::ReferenceType,
+        );
+        let manager = super::super::InMemoryNodeManager::new(TestImpl, address_space);
+        let mut item = add_reference_item_with_type(&source_id, &target_id, &reference_type);
+
+        {
+            let mut references = vec![&mut item];
+            manager
+                .add_references(&context, references.as_mut_slice())
+                .await
+                .unwrap();
+        }
+
+        // OPC-10000-3 7.8 requires HasProperty targets to be Variables; an Object
+        // target therefore violates the data model and OPC-10000-4 5.8.3.4 maps
+        // that operation-level failure to Bad_ReferenceNotAllowed.
+        assert_eq!(item.result_status(), StatusCode::BadReferenceNotAllowed);
+        assert_eq!(item.source_status(), StatusCode::BadReferenceNotAllowed);
+        assert_eq!(item.target_status(), StatusCode::BadReferenceNotAllowed);
+        assert!(!manager.address_space().read().has_reference(
+            &source_id,
+            &target_id,
+            &reference_type
+        ));
+    }
+
+    #[tokio::test]
+    async fn delete_node_references_cleans_cross_manager_references_without_unrelated_deletes() {
+        let context = request_context();
+        let local_source_id = NodeId::new(1, "local-source");
+        let local_target_id = NodeId::new(1, "local-target");
+        let deleted_source_id = NodeId::new(2, "deleted-source");
+        let kept_target_id = NodeId::new(2, "kept-target");
+        let deleted_target_id = NodeId::new(2, "deleted-target");
+        let unrelated_target_id = NodeId::new(2, "unrelated-target");
+        let reference_type = NodeId::from(ReferenceTypeId::HasComponent);
+        let mut address_space = AddressSpace::new();
+        address_space.add_namespace("urn:test", 1);
+        address_space.insert::<_, NodeId>(object_node(&local_source_id, "local-source"), None);
+        address_space.insert::<_, NodeId>(object_node(&local_target_id, "local-target"), None);
+        address_space.insert_reference(&deleted_source_id, &local_target_id, &reference_type);
+        address_space.insert_reference(&local_source_id, &kept_target_id, &reference_type);
+        address_space.insert_reference(&local_source_id, &deleted_target_id, &reference_type);
+        address_space.insert_reference(&local_source_id, &unrelated_target_id, &reference_type);
+        let manager = super::super::InMemoryNodeManager::new(TestImpl, address_space);
+        let remove_source_refs = deleted_node_item(&deleted_source_id, false);
+        let keep_target_refs = deleted_node_item(&kept_target_id, false);
+        let remove_target_refs = deleted_node_item(&deleted_target_id, true);
+
+        manager
+            .delete_node_references(
+                &context,
+                &[&remove_source_refs, &keep_target_refs, &remove_target_refs],
+            )
+            .await;
+
+        let address_space = manager.address_space().read();
+        assert!(!address_space.has_reference(
+            &deleted_source_id,
+            &local_target_id,
+            &reference_type
+        ));
+        assert!(address_space.has_reference(&local_source_id, &kept_target_id, &reference_type));
+        assert!(!address_space.has_reference(
+            &local_source_id,
+            &deleted_target_id,
+            &reference_type
+        ));
+        assert!(address_space.has_reference(
+            &local_source_id,
+            &unrelated_target_id,
+            &reference_type
+        ));
     }
 }

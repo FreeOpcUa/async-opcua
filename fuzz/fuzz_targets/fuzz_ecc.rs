@@ -1,6 +1,6 @@
-#![cfg_attr(feature = "nightly", no_main)]
+#![cfg_attr(all(feature = "nightly", not(test)), no_main)]
 
-#[cfg(not(feature = "nightly"))]
+#[cfg(all(not(feature = "nightly"), not(test)))]
 fn main() {
     panic!("Fuzzing requires the nightly feature to be enabled.");
 }
@@ -9,7 +9,7 @@ fn main() {
 // (feature 012, T024). These parse bytes that arrive on the wire — the ephemeral
 // public key carried in the nonce and the ECDSA signature — and must NEVER panic,
 // only return an error, on malformed input.
-#[cfg(feature = "nightly")]
+#[cfg(all(feature = "nightly", not(test)))]
 libfuzzer_sys::fuzz_target!(|data: &[u8]| {
     use opcua::crypto::ecc::{
         decode_public_key, ecdsa_verify, EccCurve, EccPrivateKey, EccPublicKey,

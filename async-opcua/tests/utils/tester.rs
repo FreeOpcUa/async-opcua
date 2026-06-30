@@ -265,8 +265,12 @@ pub fn copy_shared_certs(test_id: u16, desc: &ApplicationDescription) {
         .unwrap();
     }
 
+    let _ = fs::remove_dir_all(format!("pki-server/{test_id}"));
+    let _ = fs::remove_dir_all(format!("pki-client/{test_id}"));
+
     std::fs::create_dir_all(format!("pki-server/{test_id}/own")).unwrap();
     std::fs::create_dir_all(format!("pki-server/{test_id}/private")).unwrap();
+    std::fs::create_dir_all(format!("pki-server/{test_id}/trusted")).unwrap();
     std::fs::create_dir_all(format!("pki-client/{test_id}/own")).unwrap();
     std::fs::create_dir_all(format!("pki-client/{test_id}/private")).unwrap();
 
@@ -281,6 +285,11 @@ pub fn copy_shared_certs(test_id: u16, desc: &ApplicationDescription) {
     )
     .unwrap();
     fs::copy(
+        USER_X509_CERTIFICATE_PATH,
+        format!("pki-server/{test_id}/trusted/user_cert.der"),
+    )
+    .unwrap();
+    fs::copy(
         "certs/client/cert.der",
         format!("pki-client/{test_id}/own/cert.der"),
     )
@@ -290,6 +299,21 @@ pub fn copy_shared_certs(test_id: u16, desc: &ApplicationDescription) {
         format!("pki-client/{test_id}/private/private.pem"),
     )
     .unwrap();
+}
+
+fn trust_configured_x509_user_certs(test_id: u16, server: &ServerBuilder) {
+    let trusted_dir = PathBuf::from(format!("pki-server/{test_id}/trusted"));
+    std::fs::create_dir_all(&trusted_dir).unwrap();
+    for token in server.config().user_tokens.values() {
+        let Some(path) = token.x509.as_ref() else {
+            continue;
+        };
+        let source = PathBuf::from(path);
+        let Some(file_name) = source.file_name() else {
+            continue;
+        };
+        let _ = fs::copy(&source, trusted_dir.join(file_name));
+    }
 }
 
 impl Tester {
@@ -312,6 +336,7 @@ impl Tester {
             .pki_dir(format!("./pki-server/{test_id}"));
 
         copy_shared_certs(test_id, &server.config().application_description());
+        trust_configured_x509_user_certs(test_id, &server);
 
         let (server, handle) = server.build().unwrap();
         let token = CancellationToken::new();
@@ -342,6 +367,7 @@ impl Tester {
             .discovery_urls(vec![format!("opc.tcp://{}:{}", hostname(), addr.port())]);
 
         copy_shared_certs(test_id, &server.config().application_description());
+        trust_configured_x509_user_certs(test_id, &server);
 
         let (server, handle) = server.build().unwrap();
 
@@ -372,6 +398,7 @@ impl Tester {
             .discovery_urls(vec![format!("opc.tcp://{}:{}", hostname(), addr.port())]);
 
         copy_shared_certs(test_id, &server.config().application_description());
+        trust_configured_x509_user_certs(test_id, &server);
 
         let client = client.pki_dir(format!("./pki-client/{test_id}"));
 

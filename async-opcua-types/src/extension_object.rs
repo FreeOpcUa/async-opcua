@@ -320,6 +320,7 @@ mod json {
             let mut encoding: Option<u32> = None;
             let mut raw_body = None;
             let mut raw_string_body: Option<String> = None;
+            let mut null_body = false;
             let mut body = None;
 
             stream.begin_object()?;
@@ -329,6 +330,10 @@ mod json {
                     "UaTypeId" => type_id = Some(JsonDecodable::decode(stream, ctx)?),
                     "UaEncoding" => encoding = Some(JsonDecodable::decode(stream, ctx)?),
                     "UaBody" => match stream.peek()? {
+                        ValueType::Null => {
+                            stream.next_null()?;
+                            null_body = true;
+                        }
                         ValueType::Object => {
                             if encoding.is_some_and(|e| e != 0) {
                                 return Err(Error::decoding(format!(
@@ -400,6 +405,8 @@ mod json {
                 } else {
                     Err(Error::decoding(format!("Unsupported extension object encoding, expected 1 or 2 for string, got {encoding}")))
                 }
+            } else if null_body {
+                Ok(ExtensionObject::null())
             } else {
                 Err(Error::decoding("Missing extension object body"))
             }

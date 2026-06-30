@@ -1,14 +1,18 @@
 //! Feature 026 / US2 (T010, T011): Part-14 SecurityHeader framing assertions and the fail-closed
 //! decode corpus. Wire layout per OPC UA Part 14 1.05.06 §7.2.2.2.3 / Figure A.3.
 
+use std::sync::Arc;
 use std::time::Duration;
 
-use opcua_crypto::SecurityPolicy;
+use opcua_core::sync::RwLock;
+use opcua_crypto::{AesDerivedKeys, AesKey, SecurityPolicy};
 use opcua_pubsub::{
+    engine::PubSubEngine,
     security::{SecurityGroup, SecurityKeySet, UadpSecurityCodec},
     PublisherId, UadpDataSetMessage, UadpNetworkMessage,
 };
-use opcua_types::{ContextOwned, MessageSecurityMode, StatusCode};
+use opcua_server::address_space::AddressSpace;
+use opcua_types::{ContextOwned, DecodingOptions, MessageSecurityMode, NamespaceMap, StatusCode};
 
 const POLICY: SecurityPolicy = SecurityPolicy::PubSubAes256Ctr;
 
@@ -25,6 +29,7 @@ const SECURITY_FLAGS_OFFSET: usize = 16;
 const NONCE_LENGTH_OFFSET: usize = 21;
 const MESSAGE_NONCE_OFFSET: usize = 22; // 8-byte MessageNonce: [22..26]=Random, [26..30]=SeqNumber
 const SIGNATURE_LEN: usize = 32;
+const ENCRYPTED_HEADER_LEN: usize = MESSAGE_NONCE_OFFSET + 8;
 
 fn sample_message() -> UadpNetworkMessage {
     UadpNetworkMessage {
@@ -105,6 +110,51 @@ fn decode_with(secured: &[u8], candidate: SecurityKeySet, mode: MessageSecurityM
     }
 }
 
+fn address_space() -> Arc<RwLock<AddressSpace>> {
+    Arc::new(RwLock::new(AddressSpace::new()))
+}
+
+fn encryption_keys(key_set: &SecurityKeySet, message_nonce: &[u8]) -> AesDerivedKeys {
+    let mut counter_block = Vec::with_capacity(16);
+    counter_block.extend_from_slice(&key_set.key_nonce()[..4]);
+    counter_block.extend_from_slice(message_nonce);
+    counter_block.extend_from_slice(&1u32.to_be_bytes());
+    AesDerivedKeys::from_parts(
+        key_set.signing_key().to_vec(),
+        AesKey::new(key_set.encryption_key().value().to_vec()),
+        counter_block,
+    )
+}
+
+fn append_encrypted_trailing_payload(mut secured: Vec<u8>, key_set: &SecurityKeySet) -> Vec<u8> {
+    let message_nonce = &secured[MESSAGE_NONCE_OFFSET..ENCRYPTED_HEADER_LEN];
+    let keys = encryption_keys(key_set, message_nonce);
+    let signature_start = secured.len() - SIGNATURE_LEN;
+    let ciphertext = &secured[ENCRYPTED_HEADER_LEN..signature_start];
+
+    let mut plaintext = vec![0u8; ciphertext.len()];
+    let plaintext_len = POLICY
+        .symmetric_decrypt(&keys, ciphertext, &mut plaintext)
+        .unwrap();
+    plaintext.truncate(plaintext_len);
+    plaintext.extend_from_slice(&[0xAA, 0xBB, 0xCC]);
+
+    let mut expanded_ciphertext = vec![0u8; plaintext.len()];
+    let ciphertext_len = POLICY
+        .symmetric_encrypt(&keys, &plaintext, &mut expanded_ciphertext)
+        .unwrap();
+    expanded_ciphertext.truncate(ciphertext_len);
+
+    secured.truncate(ENCRYPTED_HEADER_LEN);
+    secured.extend_from_slice(&expanded_ciphertext);
+    let mut signature = vec![0u8; POLICY.symmetric_signature_size()];
+    POLICY
+        .symmetric_sign(&keys, &secured, &mut signature)
+        .unwrap();
+    secured.extend_from_slice(&signature);
+    secured
+}
+
 #[test]
 fn decode_rejects_tampered_ciphertext() {
     let (mut secured, ks) = encode(MessageSecurityMode::SignAndEncrypt);
@@ -175,6 +225,113 @@ fn decode_rejects_truncation_without_panicking() {
             "truncation to {len} must not decode"
         );
     }
+}
+
+#[test]
+fn trailing_secured_payload_is_rejected_before_replay_advances() {
+    // OPC-10000-14 7.2.4.4.2 defines the UADP NetworkMessage layout as the complete encoded
+    // payload shape; 7.2.4.4.3 defines the secured UADP header/signature processing around it.
+    // Authenticated extra plaintext after the declared DataSetMessage must therefore fail closed,
+    // and a rejection must not consume the NetworkMessage sequence number in replay state.
+    let ctx_owned = ContextOwned::default();
+    let ctx = ctx_owned.context();
+    let mut engine = PubSubEngine::new(address_space());
+    let current_key = key_set(5);
+    let group = SecurityGroup::with_key_sets(
+        "line-a",
+        current_key.clone(),
+        key_set(6),
+        Duration::from_secs(3600),
+    )
+    .unwrap();
+    engine.register_security_group(group);
+
+    let valid = UadpSecurityCodec::new(
+        MessageSecurityMode::SignAndEncrypt,
+        POLICY,
+        current_key.clone(),
+    )
+    .encode_network_message(&sample_message(), &ctx)
+    .unwrap();
+    let trailing = append_encrypted_trailing_payload(valid.clone(), &current_key);
+
+    let rejected = engine
+        .decode_subscriber_uadp_message(
+            "line-a",
+            MessageSecurityMode::SignAndEncrypt,
+            POLICY,
+            &trailing,
+            &ctx,
+        )
+        .unwrap_err();
+    assert_eq!(rejected, StatusCode::BadSecurityChecksFailed);
+
+    let accepted = engine
+        .decode_subscriber_uadp_message(
+            "line-a",
+            MessageSecurityMode::SignAndEncrypt,
+            POLICY,
+            &valid,
+            &ctx,
+        )
+        .expect("rejected trailing payload must not advance replay state");
+    assert_eq!(accepted, sample_message());
+}
+
+#[test]
+fn oversized_secured_payload_is_rejected_before_replay_advances() {
+    // MCP citation: OPC-10000-14 7.2.4.4.3.2 defines AES-CTR secured-message processing via the
+    // MessageNonce; 7.2.4.4.2 defines NetworkMessage SequenceNumber and nonce fields. A subscriber
+    // must reject an over-limit secured payload before accepting the sequence in replay state.
+    let ctx_owned = ContextOwned::default();
+    let ctx = ctx_owned.context();
+    let mut engine = PubSubEngine::new(address_space());
+    let current_key = key_set(5);
+    let group = SecurityGroup::with_key_sets(
+        "line-a",
+        current_key.clone(),
+        key_set(6),
+        Duration::from_secs(3600),
+    )
+    .unwrap();
+    engine.register_security_group(group);
+
+    let secured = UadpSecurityCodec::new(
+        MessageSecurityMode::SignAndEncrypt,
+        POLICY,
+        current_key.clone(),
+    )
+    .encode_network_message(&sample_message(), &ctx)
+    .unwrap();
+
+    let limited_options = DecodingOptions {
+        max_secured_payload_len: secured.len() - 1,
+        ..DecodingOptions::test()
+    };
+    let limited_ctx_owned = ContextOwned::new_default(NamespaceMap::new(), limited_options);
+    let limited_ctx = limited_ctx_owned.context();
+
+    let rejected = engine
+        .decode_subscriber_uadp_message(
+            "line-a",
+            MessageSecurityMode::SignAndEncrypt,
+            POLICY,
+            &secured,
+            &limited_ctx,
+        )
+        .unwrap_err();
+    assert_eq!(rejected, StatusCode::BadSecurityChecksFailed);
+
+    let accepted = engine
+        .decode_subscriber_uadp_message(
+            "line-a",
+            MessageSecurityMode::SignAndEncrypt,
+            POLICY,
+            &secured,
+            &ctx,
+        )
+        .expect("rejected oversized payload must not advance replay state");
+    assert_eq!(accepted, sample_message());
 }
 
 #[test]

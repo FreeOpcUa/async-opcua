@@ -437,6 +437,10 @@ pub(crate) async fn set_monitoring_mode(
         request.info.operational_limits.max_monitored_items_per_call
     );
 
+    if matches!(request.request.monitoring_mode, MonitoringMode::Invalid(_)) {
+        return service_fault!(request, StatusCode::BadMonitoringModeInvalid);
+    }
+
     let results = match request
         .subscriptions
         .set_monitoring_mode(

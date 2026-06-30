@@ -42,40 +42,94 @@ impl UaNullable for ExpandedNodeId {
 
 #[cfg(feature = "json")]
 mod json {
-    // JSON serialization schema as per spec:
-    //
-    // "Type"
-    //      The IdentifierType encoded as a JSON number.
-    //      Allowed values are:
-    //            0 - UInt32 Identifier encoded as a JSON number.
-    //            1 - A String Identifier encoded as a JSON string.
-    //            2 - A Guid Identifier encoded as described in 5.4.2.7.
-    //            3 - A ByteString Identifier encoded as described in 5.4.2.8.
-    //      This field is omitted for UInt32 identifiers.
-    // "Id"
-    //      The Identifier.
-    //      The value of the id field specifies the encoding of this field.
-    // "Namespace"
-    //      The NamespaceIndex for the NodeId.
-    //      The field is encoded as a JSON number for the reversible encoding.
-    //      The field is omitted if the NamespaceIndex equals 0.
-    //      For the non-reversible encoding, the field is the NamespaceUri associated with the NamespaceIndex, encoded as a JSON string.
-    //      A NamespaceIndex of 1 is always encoded as a JSON number.
-    // "ServerUri"
-    //      The ServerIndex for the ExpandedNodeId.
-    //      This field is encoded as a JSON number for the reversible encoding.
-    //      This field is omitted if the ServerIndex equals 0.
-    //      For the non-reversible encoding, this field is the ServerUri associated with the ServerIndex portion of the ExpandedNodeId, encoded as a JSON string.
-
     use std::io::{Read, Write};
     use std::str::FromStr;
 
-    use crate::{json::*, ByteString, Error, Guid};
+    use crate::{json::*, Error, StatusCode};
 
-    use super::{ExpandedNodeId, Identifier, NodeId, UAString};
-    enum RawIdentifier {
-        String(String),
-        Integer(u32),
+    use super::{ExpandedNodeId, NodeId, UAString};
+
+    const OPC_UA_NAMESPACE_URI: &str = "http://opcfoundation.org/UA/";
+
+    fn namespace_uri_for_index<'a>(ctx: &'a Context<'_>, namespace: u16) -> Option<&'a str> {
+        ctx.namespaces()
+            .known_namespaces()
+            .iter()
+            .find_map(|(uri, index)| (*index == namespace).then_some(uri.as_str()))
+    }
+
+    fn escape_namespace_uri(namespace_uri: &str) -> String {
+        namespace_uri.replace('%', "%25").replace(';', "%3b")
+    }
+
+    fn invalid_expanded_node_id(value: &str) -> Error {
+        Error::new(
+            StatusCode::BadNodeIdInvalid,
+            format!("invalid ExpandedNodeId JSON string {value:?}"),
+        )
+    }
+
+    fn json_node_id_string(node_id: &NodeId, ctx: &Context<'_>) -> String {
+        if node_id.namespace == 0 {
+            node_id.identifier.to_string()
+        } else if let Some(namespace_uri) = namespace_uri_for_index(ctx, node_id.namespace) {
+            if namespace_uri == OPC_UA_NAMESPACE_URI {
+                node_id.identifier.to_string()
+            } else {
+                format!(
+                    "nsu={};{}",
+                    escape_namespace_uri(namespace_uri),
+                    node_id.identifier
+                )
+            }
+        } else {
+            node_id.to_string()
+        }
+    }
+
+    fn json_expanded_node_id_string(value: &ExpandedNodeId, ctx: &Context<'_>) -> String {
+        let node_id = if value.namespace_uri.is_empty() {
+            json_node_id_string(&value.node_id, ctx)
+        } else {
+            format!(
+                "nsu={};{}",
+                escape_namespace_uri(value.namespace_uri.as_ref()),
+                value.node_id.identifier
+            )
+        };
+
+        if value.server_index == 0 {
+            node_id
+        } else {
+            format!("svr={};{node_id}", value.server_index)
+        }
+    }
+
+    fn decode_expanded_node_id_string(
+        value: &str,
+        ctx: &Context<'_>,
+    ) -> super::EncodingResult<ExpandedNodeId> {
+        if value.starts_with("svu=") {
+            return Ok(ExpandedNodeId {
+                node_id: NodeId::new(0, value),
+                namespace_uri: UAString::null(),
+                server_index: 0,
+            });
+        }
+
+        let mut expanded_node_id =
+            ExpandedNodeId::from_str(value).map_err(|_| invalid_expanded_node_id(value))?;
+
+        if expanded_node_id.server_index == 0 {
+            if let Some(namespace_uri) = expanded_node_id.namespace_uri.value().as_deref() {
+                if let Some(namespace) = ctx.namespaces().get_index(namespace_uri) {
+                    expanded_node_id.node_id.namespace = namespace;
+                    expanded_node_id.namespace_uri = UAString::null();
+                }
+            }
+        }
+
+        Ok(expanded_node_id)
     }
 
     impl JsonEncodable for ExpandedNodeId {
@@ -84,43 +138,8 @@ mod json {
             stream: &mut JsonStreamWriter<&mut dyn Write>,
             ctx: &crate::json::Context<'_>,
         ) -> super::EncodingResult<()> {
-            stream.begin_object()?;
-            match &self.node_id.identifier {
-                super::Identifier::Numeric(n) => {
-                    stream.name("Id")?;
-                    stream.number_value(*n)?;
-                }
-                super::Identifier::String(uastring) => {
-                    stream.name("IdType")?;
-                    stream.number_value(1)?;
-                    stream.name("Id")?;
-                    JsonEncodable::encode(uastring, stream, ctx)?;
-                }
-                super::Identifier::Guid(guid) => {
-                    stream.name("IdType")?;
-                    stream.number_value(2)?;
-                    stream.name("Id")?;
-                    JsonEncodable::encode(guid, stream, ctx)?;
-                }
-                super::Identifier::ByteString(byte_string) => {
-                    stream.name("IdType")?;
-                    stream.number_value(3)?;
-                    stream.name("Id")?;
-                    JsonEncodable::encode(byte_string, stream, ctx)?;
-                }
-            }
-            if !self.namespace_uri.is_null() {
-                stream.name("Namespace")?;
-                stream.string_value(self.namespace_uri.as_ref())?;
-            } else if self.node_id.namespace != 0 {
-                stream.name("Namespace")?;
-                stream.number_value(self.node_id.namespace)?;
-            }
-            if self.server_index != 0 {
-                stream.name("ServerUri")?;
-                stream.number_value(self.server_index)?;
-            }
-            stream.end_object()?;
+            let value = json_expanded_node_id_string(self, ctx);
+            stream.string_value(&value)?;
             Ok(())
         }
     }
@@ -128,112 +147,21 @@ mod json {
     impl JsonDecodable for ExpandedNodeId {
         fn decode(
             stream: &mut JsonStreamReader<&mut dyn Read>,
-            _ctx: &Context<'_>,
+            ctx: &Context<'_>,
         ) -> super::EncodingResult<Self> {
             match stream.peek()? {
                 ValueType::Null => {
                     stream.next_null()?;
-                    return Ok(Self::null());
+                    Ok(Self::null())
                 }
-                _ => stream.begin_object()?,
+                ValueType::String => {
+                    let value = stream.next_str()?;
+                    decode_expanded_node_id_string(value, ctx)
+                }
+                _ => Err(Error::decoding(
+                    "invalid ExpandedNodeId JSON value, expected string",
+                )),
             }
-
-            let mut id_type: Option<u16> = None;
-            let mut namespace: Option<RawIdentifier> = None;
-            let mut value: Option<RawIdentifier> = None;
-            let mut server_uri: Option<u32> = None;
-
-            while stream.has_next()? {
-                match stream.next_name()? {
-                    "IdType" => {
-                        id_type = Some(stream.next_number()??);
-                    }
-                    "Namespace" => match stream.peek()? {
-                        ValueType::Null => {
-                            stream.next_null()?;
-                            namespace = Some(RawIdentifier::Integer(0));
-                        }
-                        ValueType::Number => {
-                            namespace = Some(RawIdentifier::Integer(stream.next_number()??));
-                        }
-                        _ => {
-                            namespace = Some(RawIdentifier::String(stream.next_string()?));
-                        }
-                    },
-                    "ServerUri" => {
-                        server_uri = Some(stream.next_number()??);
-                    }
-                    "Id" => match stream.peek()? {
-                        ValueType::Null => {
-                            stream.next_null()?;
-                            value = Some(RawIdentifier::Integer(0));
-                        }
-                        ValueType::Number => {
-                            value = Some(RawIdentifier::Integer(stream.next_number()??));
-                        }
-                        _ => {
-                            value = Some(RawIdentifier::String(stream.next_string()?));
-                        }
-                    },
-                    _ => stream.skip_value()?,
-                }
-            }
-
-            let identifier = match id_type {
-                Some(1) => {
-                    let Some(RawIdentifier::String(s)) = value else {
-                        return Err(Error::decoding("Invalid NodeId, empty identifier"));
-                    };
-                    let s = UAString::from(s);
-                    if s.is_null() || s.is_empty() {
-                        return Err(Error::decoding("Invalid NodeId, empty identifier"));
-                    }
-                    Identifier::String(s)
-                }
-                Some(2) => {
-                    let Some(RawIdentifier::String(s)) = value else {
-                        return Err(Error::decoding("Invalid NodeId, empty identifier"));
-                    };
-                    let s = Guid::from_str(&s)
-                        .map_err(|_| Error::decoding("Unable to decode GUID identifier"))?;
-                    Identifier::Guid(s)
-                }
-                Some(3) => {
-                    let Some(RawIdentifier::String(s)) = value else {
-                        return Err(Error::decoding("Invalid NodeId, empty identifier"));
-                    };
-                    let s: ByteString = ByteString::from_base64(&s)
-                        .ok_or_else(|| Error::decoding("Unable to decode bytestring identifier"))?;
-                    Identifier::ByteString(s)
-                }
-                None | Some(0) => {
-                    let Some(RawIdentifier::Integer(s)) = value else {
-                        return Err(Error::decoding("Invalid NodeId, empty identifier"));
-                    };
-                    Identifier::Numeric(s)
-                }
-                Some(r) => {
-                    return Err(Error::decoding(format!(
-                        "Failed to deserialize NodeId, got unexpected IdType {r}"
-                    )));
-                }
-            };
-
-            let (namespace_uri, namespace) = match namespace {
-                Some(RawIdentifier::String(s)) => (Some(s), 0u16),
-                Some(RawIdentifier::Integer(s)) => (None, s.try_into().map_err(Error::decoding)?),
-                None => (None, 0),
-            };
-
-            stream.end_object()?;
-            Ok(ExpandedNodeId {
-                node_id: NodeId {
-                    namespace,
-                    identifier,
-                },
-                namespace_uri: namespace_uri.into(),
-                server_index: server_uri.unwrap_or_default(),
-            })
         }
     }
 }

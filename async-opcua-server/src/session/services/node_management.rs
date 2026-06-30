@@ -246,19 +246,22 @@ pub(crate) async fn delete_nodes(
         }
     }
 
-    // Then delete references where necessary. This is not done in parallel at the moment,
-    // because our parallel implementation relies on each item bing owned by a single node manager,
-    // and here each deleted node is attempted deleted from every other node manager.
-    // If necessary we can improve on this later, it would require copying the references.
+    // Then delete cross-manager references where necessary. This is not done in parallel at the
+    // moment because our parallel implementation relies on each item being owned by a single node
+    // manager, and here each deleted node is attempted deleted from every other node manager. The
+    // node manager hook mirrors local DeleteNodes behavior and respects deleteTargetReferences.
     for (idx, node_manager) in node_managers.iter().enumerate() {
         context.current_node_manager_index = idx;
-        let targets: Vec<_> = to_delete
+        let deleted_nodes: Vec<_> = to_delete
             .iter()
             .filter(|it| it.status().is_good() && !node_manager.owns_node(it.node_id()))
             .collect();
+        if deleted_nodes.is_empty() {
+            continue;
+        }
 
         node_manager
-            .delete_node_references(&context, &targets)
+            .delete_node_references(&context, &deleted_nodes)
             .instrument(debug_span!("delete node references", node_manager = %node_manager.name()))
             .await;
     }
@@ -343,5 +346,190 @@ pub(crate) async fn delete_references(
         }
         .into(),
         request_id: request.request_id,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
+    use opcua_core::{sync::RwLock, ResponseMessage};
+    use opcua_nodes::Object;
+    use opcua_types::{
+        AnonymousIdentityToken, ApplicationDescription, ByteString, DeleteNodesItem,
+        MessageSecurityMode, NodeClass, NodeId, QualifiedName, ReferenceTypeId, RequestHeader,
+        UAString,
+    };
+
+    use super::*;
+    use crate::{
+        address_space::{AddressSpace, EventNotifier},
+        authenticator::UserToken,
+        diagnostics::NamespaceMetadata,
+        identity_token::IdentityToken,
+        node_manager::{
+            memory::{InMemoryNodeManager, InMemoryNodeManagerImpl},
+            ServerContext,
+        },
+        session::instance::Session,
+        ServerBuilder,
+    };
+
+    struct TestNodeManagerImpl {
+        name: &'static str,
+        namespace_index: u16,
+        namespace_uri: &'static str,
+    }
+
+    #[async_trait]
+    impl InMemoryNodeManagerImpl for TestNodeManagerImpl {
+        async fn init(&self, _address_space: &mut AddressSpace, _context: ServerContext) {}
+
+        fn name(&self) -> &str {
+            self.name
+        }
+
+        fn namespaces(&self) -> Vec<NamespaceMetadata> {
+            vec![NamespaceMetadata {
+                namespace_uri: self.namespace_uri.to_string(),
+                namespace_index: self.namespace_index,
+                ..Default::default()
+            }]
+        }
+    }
+
+    fn object(node_id: NodeId, browse_name: &str) -> Object {
+        Object::new(
+            &node_id,
+            QualifiedName::new(1, browse_name),
+            browse_name,
+            EventNotifier::empty(),
+        )
+    }
+
+    fn manager(
+        name: &'static str,
+        namespace_index: u16,
+        namespace_uri: &'static str,
+        nodes: Vec<Object>,
+    ) -> Arc<InMemoryNodeManager<TestNodeManagerImpl>> {
+        let mut address_space = AddressSpace::new();
+        address_space.add_namespace(namespace_uri, namespace_index);
+        for node in nodes {
+            address_space.insert::<_, NodeId>(node, None);
+        }
+
+        Arc::new(InMemoryNodeManager::new(
+            TestNodeManagerImpl {
+                name,
+                namespace_index,
+                namespace_uri,
+            },
+            address_space,
+        ))
+    }
+
+    fn delete_nodes_request(
+        info: Arc<crate::ServerInfo>,
+        subscriptions: Arc<crate::SubscriptionCache>,
+        node_id: NodeId,
+    ) -> Request<DeleteNodesRequest> {
+        let session = Session::create(
+            &info,
+            NodeId::new(0, 1),
+            1,
+            60_000,
+            0,
+            0,
+            UAString::from("opc.tcp://localhost"),
+            opcua_crypto::SecurityPolicy::None.to_str().to_string(),
+            IdentityToken::Anonymous(AnonymousIdentityToken {
+                policy_id: UAString::from("anonymous"),
+            }),
+            None,
+            ByteString::null(),
+            UAString::from("cross-manager-delete-nodes-test"),
+            ApplicationDescription::default(),
+            MessageSecurityMode::None,
+        );
+
+        Request {
+            request: Box::new(DeleteNodesRequest {
+                request_header: RequestHeader::default(),
+                nodes_to_delete: Some(vec![DeleteNodesItem {
+                    node_id,
+                    delete_target_references: true,
+                }]),
+            }),
+            request_id: 1,
+            request_handle: 1,
+            info: info.clone(),
+            session: Arc::new(RwLock::new(session)),
+            token: UserToken("anonymous".to_string()),
+            subscriptions,
+            session_id: 1,
+        }
+    }
+
+    #[tokio::test]
+    async fn cross_manager_delete_nodes_delete_target_references_removes_source_manager_reference()
+    {
+        let mut builder =
+            ServerBuilder::new_anonymous("cross manager delete nodes test").without_node_managers();
+        builder.config_mut().limits.clients_can_modify_address_space = true;
+        let (_server, handle) = builder.build().expect("test server should build");
+        let info = handle.info().clone();
+        {
+            let mut type_tree = info.type_tree.write();
+            type_tree.add_type_node(
+                &NodeId::from(ReferenceTypeId::HasComponent),
+                &NodeId::from(ReferenceTypeId::References),
+                NodeClass::ReferenceType,
+            );
+        }
+
+        let source_id = NodeId::new(2, "source-owned-by-manager-a");
+        let target_id = NodeId::new(3, "target-owned-by-manager-b");
+        let source_manager = manager(
+            "manager-a",
+            2,
+            "urn:cross-manager-delete-nodes:a",
+            vec![object(source_id.clone(), "Source")],
+        );
+        let target_manager = manager(
+            "manager-b",
+            3,
+            "urn:cross-manager-delete-nodes:b",
+            vec![object(target_id.clone(), "Target")],
+        );
+
+        source_manager.address_space().write().insert_reference(
+            &source_id,
+            &target_id,
+            NodeId::from(ReferenceTypeId::HasComponent),
+        );
+
+        let node_managers = NodeManagers::new(vec![source_manager.clone(), target_manager]);
+        let response = delete_nodes(
+            node_managers,
+            delete_nodes_request(info, handle.subscriptions().clone(), target_id.clone()),
+        )
+        .await;
+
+        let ResponseMessage::DeleteNodes(response) = response.message else {
+            panic!("expected DeleteNodes response");
+        };
+        assert_eq!(response.results.as_deref(), Some(&[StatusCode::Good][..]));
+        assert!(
+            !source_manager.address_space().read().has_reference(
+                &source_id,
+                &target_id,
+                &NodeId::from(ReferenceTypeId::HasComponent)
+            ),
+            "OPC-10000-4 5.8.4.2 deleteTargetReferences=TRUE requires deleting references to \
+             the deleted target node even when the referencing source node is owned by another \
+             node manager"
+        );
     }
 }

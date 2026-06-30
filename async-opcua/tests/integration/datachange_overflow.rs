@@ -14,13 +14,16 @@ use std::time::Duration;
 use opcua::{
     server::address_space::{AccessLevel, VariableBuilder},
     types::{
-        AttributeId, DataTypeId, DataValue, MonitoredItemCreateRequest, MonitoringMode,
-        MonitoringParameters, ObjectId, ReadValueId, ReferenceTypeId, StatusCode,
+        AttributeId, DataChangeFilter, DataChangeTrigger, DataTypeId, DataValue, DeadbandType,
+        ExtensionObject, MonitoredItemCreateRequest, MonitoredItemModifyRequest, MonitoringMode,
+        MonitoringParameters, ObjectId, Range, ReadValueId, ReferenceTypeId, StatusCode,
         TimestampsToReturn, VariableTypeId, Variant,
     },
 };
 use opcua_client::{
-    services::{CreateMonitoredItems, CreateSubscription, Publish, SetPublishingMode},
+    services::{
+        CreateMonitoredItems, CreateSubscription, ModifyMonitoredItems, Publish, SetPublishingMode,
+    },
     UARequest,
 };
 
@@ -141,4 +144,136 @@ async fn datachange_queue_overflow_sets_single_overflow_bit_at_publish_boundary(
         vec![(2, true), (3, false)],
         "discardOldest overflow should retain the last two values and flag only the oldest retained value"
     );
+}
+
+#[tokio::test]
+async fn percent_deadband_modify_fetches_eurange_added_after_create() {
+    // OPC-10000-8 7.2: PercentDeadband is a percentage of EURange and applies only to
+    // AnalogItems with an EURange Property. EURange is added only after CreateMonitoredItems,
+    // so success here requires ModifyMonitoredItems to fetch and validate it at modify time.
+    let (tester, nm, session) = setup().await;
+
+    let id = nm.inner().next_node_id();
+    nm.inner().add_node(
+        nm.address_space(),
+        tester.handle.type_tree(),
+        VariableBuilder::new(
+            &id,
+            "ModifyPercentDeadbandValue",
+            "ModifyPercentDeadbandValue",
+        )
+        .value(10.0f64)
+        .data_type(DataTypeId::Double)
+        .access_level(AccessLevel::CURRENT_READ)
+        .user_access_level(AccessLevel::CURRENT_READ)
+        .build()
+        .into(),
+        &ObjectId::ObjectsFolder.into(),
+        &ReferenceTypeId::Organizes.into(),
+        Some(&VariableTypeId::AnalogItemType.into()),
+        Vec::new(),
+    );
+
+    let sub = CreateSubscription::new(&session)
+        .publishing_interval(Duration::from_millis(50))
+        .max_lifetime_count(1000)
+        .max_keep_alive_count(10)
+        .max_notifications_per_publish(1000)
+        .priority(0)
+        .publishing_enabled(true)
+        .send(session.channel())
+        .await
+        .unwrap();
+
+    let created = CreateMonitoredItems::new(sub.subscription_id, &session)
+        .item(MonitoredItemCreateRequest {
+            item_to_monitor: ReadValueId {
+                node_id: id.clone(),
+                attribute_id: AttributeId::Value as u32,
+                ..Default::default()
+            },
+            monitoring_mode: MonitoringMode::Reporting,
+            requested_parameters: MonitoringParameters {
+                client_handle: 77,
+                sampling_interval: 100.0,
+                queue_size: 10,
+                discard_oldest: true,
+                ..Default::default()
+            },
+        })
+        .timestamps_to_return(TimestampsToReturn::Both)
+        .send(session.channel())
+        .await
+        .unwrap();
+    assert_eq!(created.results.len(), 1);
+    assert_eq!(created.results[0].result.status_code, StatusCode::Good);
+
+    let percent_filter = || {
+        ExtensionObject::from_message(DataChangeFilter {
+            trigger: DataChangeTrigger::StatusValue,
+            deadband_type: DeadbandType::Percent as u32,
+            deadband_value: 10.0,
+        })
+    };
+
+    let rejected_without_eurange = ModifyMonitoredItems::new(sub.subscription_id, &session)
+        .item(MonitoredItemModifyRequest {
+            monitored_item_id: created.results[0].result.monitored_item_id,
+            requested_parameters: MonitoringParameters {
+                client_handle: 77,
+                sampling_interval: 100.0,
+                queue_size: 10,
+                discard_oldest: true,
+                filter: percent_filter(),
+            },
+        })
+        .timestamps_to_return(TimestampsToReturn::Both)
+        .send(session.channel())
+        .await
+        .unwrap();
+    let rejected_results = rejected_without_eurange.results.unwrap();
+    assert_eq!(rejected_results.len(), 1);
+    assert_eq!(
+        rejected_results[0].status_code,
+        StatusCode::BadDeadbandFilterInvalid
+    );
+
+    let eurange_id = nm.inner().next_node_id();
+    nm.inner().add_node(
+        nm.address_space(),
+        tester.handle.type_tree(),
+        VariableBuilder::new(&eurange_id, "EURange", "EURange")
+            .value(Range {
+                low: 0.0,
+                high: 100.0,
+            })
+            .data_type(DataTypeId::Range)
+            .access_level(AccessLevel::CURRENT_READ)
+            .user_access_level(AccessLevel::CURRENT_READ)
+            .build()
+            .into(),
+        &id,
+        &ReferenceTypeId::HasProperty.into(),
+        Some(&VariableTypeId::PropertyType.into()),
+        Vec::new(),
+    );
+
+    let accepted_with_eurange = ModifyMonitoredItems::new(sub.subscription_id, &session)
+        .item(MonitoredItemModifyRequest {
+            monitored_item_id: created.results[0].result.monitored_item_id,
+            requested_parameters: MonitoringParameters {
+                client_handle: 77,
+                sampling_interval: 100.0,
+                queue_size: 10,
+                discard_oldest: true,
+                filter: percent_filter(),
+            },
+        })
+        .timestamps_to_return(TimestampsToReturn::Both)
+        .send(session.channel())
+        .await
+        .unwrap();
+    let accepted_results = accepted_with_eurange.results.unwrap();
+    assert_eq!(accepted_results.len(), 1);
+    assert_eq!(accepted_results[0].status_code, StatusCode::Good);
 }

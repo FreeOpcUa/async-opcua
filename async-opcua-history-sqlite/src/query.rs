@@ -1,7 +1,18 @@
 //! Query helpers for SQLite historical data reads.
 
 use opcua_types::{BinaryDecodable, ContextOwned, DataValue, DateTime, StatusCode};
-use rusqlite::{params, Connection, Error, OptionalExtension, Row};
+use rusqlite::{params, types::Type, Connection, Error, OptionalExtension, Row};
+
+pub(crate) fn history_blob_decode_error<E>(column: usize, err: E) -> Error
+where
+    E: std::error::Error + Send + Sync + 'static,
+{
+    Error::FromSqlConversionFailure(column, Type::Blob, Box::new(err))
+}
+
+pub(crate) fn is_history_blob_decode_error(err: &Error) -> bool {
+    matches!(err, Error::FromSqlConversionFailure(_, Type::Blob, _))
+}
 
 /// Fetches the nearest historical value at or before/after `timestamp`.
 pub fn fetch_bounds(
@@ -75,9 +86,8 @@ pub(crate) fn row_to_datavalue(row: &Row<'_>) -> Result<DataValue, Error> {
     let ctx_owned = ContextOwned::default();
     let ctx = ctx_owned.context();
     let mut cursor = std::io::Cursor::new(blob);
-    let mut value = DataValue::decode(&mut cursor, &ctx).map_err(|err| {
-        Error::FromSqlConversionFailure(0, rusqlite::types::Type::Blob, Box::new(err))
-    })?;
+    let mut value =
+        DataValue::decode(&mut cursor, &ctx).map_err(|err| history_blob_decode_error(2, err))?;
 
     value.source_timestamp = Some(DateTime::from(source_ticks));
     value.server_timestamp = Some(DateTime::from(server_ticks));

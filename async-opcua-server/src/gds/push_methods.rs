@@ -9,9 +9,12 @@ use std::{
 };
 
 use opcua_core::sync::RwLock;
-use opcua_types::{ByteString, NodeId, StatusCode, Variant};
+use opcua_types::{ByteString, MessageSecurityMode, NodeId, StatusCode, Variant};
 
-use crate::node_manager::memory::SimpleNodeManager;
+use crate::{
+    node_manager::{memory::SimpleNodeManager, RequestContext},
+    rbac::WellKnownRole,
+};
 
 use super::GDS_REGISTRY_CAPACITY;
 
@@ -134,11 +137,34 @@ impl GdsPushMethodHandler {
         Ok(vec![Variant::from(request_id)])
     }
 
-    /// Handles `CreateSigningRequest` and returns a mock DER CSR `ByteString`.
+    /// Handles `CreateSigningRequest` without request context.
+    ///
+    /// This entry point fails closed because the standard method requires an encrypted
+    /// SecureChannel and SecurityAdmin role.
     pub fn handle_create_signing_request(
         &self,
         args: &[Variant],
     ) -> Result<Vec<Variant>, StatusCode> {
+        self.handle_create_signing_request_with_context(None, args)
+    }
+
+    /// Handles `CreateSigningRequest` for a request context that can prove the caller's channel
+    /// and roles.
+    pub fn handle_create_signing_request_for_request(
+        &self,
+        context: &RequestContext,
+        args: &[Variant],
+    ) -> Result<Vec<Variant>, StatusCode> {
+        self.handle_create_signing_request_with_context(Some(context), args)
+    }
+
+    fn handle_create_signing_request_with_context(
+        &self,
+        context: Option<&RequestContext>,
+        args: &[Variant],
+    ) -> Result<Vec<Variant>, StatusCode> {
+        authorize_create_signing_request(context)?;
+
         if args.len() < 5 {
             return Err(StatusCode::BadArgumentsMissing);
         }
@@ -203,8 +229,8 @@ pub fn register_gds_push_methods_with_registry(
     let create_handler = handler.clone();
     node_manager
         .inner()
-        .add_method_callback_with_context(create_signing_request_method_id(), move |_ctx, args| {
-            create_handler.handle_create_signing_request(args)
+        .add_method_callback_with_context(create_signing_request_method_id(), move |ctx, args| {
+            create_handler.handle_create_signing_request_for_request(ctx, args)
         });
 
     let start_handler = handler;
@@ -213,6 +239,25 @@ pub fn register_gds_push_methods_with_registry(
         .add_method_callback_with_context(start_signing_request_method_id(), move |_ctx, args| {
             start_handler.handle_start_signing_request(args)
         });
+}
+
+fn authorize_create_signing_request(context: Option<&RequestContext>) -> Result<(), StatusCode> {
+    let Some(context) = context else {
+        return Err(StatusCode::BadSecurityModeInsufficient);
+    };
+
+    if context.security_mode() != MessageSecurityMode::SignAndEncrypt {
+        return Err(StatusCode::BadSecurityModeInsufficient);
+    }
+
+    if !context
+        .user_roles()
+        .contains(&WellKnownRole::SecurityAdmin.node_id())
+    {
+        return Err(StatusCode::BadUserAccessDenied);
+    }
+
+    Ok(())
 }
 
 fn node_id_arg(args: &[Variant], index: usize) -> Result<NodeId, StatusCode> {
@@ -280,9 +325,21 @@ fn mock_csr_der(
 mod tests {
     use std::sync::Arc;
 
-    use opcua_types::{ByteString, NodeId, StatusCode, Variant};
+    use opcua_core::sync::RwLock;
+    use opcua_crypto::SecurityPolicy;
+    use opcua_types::{
+        AnonymousIdentityToken, ApplicationDescription, ByteString, MessageSecurityMode, NodeId,
+        StatusCode, UAString, Variant,
+    };
 
-    use crate::gds::GDS_REGISTRY_CAPACITY;
+    use crate::{
+        authenticator::UserToken,
+        gds::GDS_REGISTRY_CAPACITY,
+        identity_token::IdentityToken,
+        node_manager::{RequestContext, RequestContextInner},
+        session::instance::Session,
+        ServerBuilder,
+    };
 
     use super::*;
 
@@ -317,6 +374,62 @@ mod tests {
         ]
     }
 
+    fn create_args() -> Vec<Variant> {
+        vec![
+            Variant::from(NodeId::new(0, 6001)),
+            Variant::from(NodeId::new(0, 6002)),
+            Variant::from("CN=async-opcua"),
+            Variant::from(false),
+            Variant::from(ByteString::from(b"nonce")),
+        ]
+    }
+
+    fn request_context(
+        security_mode: MessageSecurityMode,
+        user_roles: Vec<NodeId>,
+    ) -> RequestContext {
+        let (_server, handle) = ServerBuilder::new_anonymous("gds push method test")
+            .without_node_managers()
+            .build()
+            .expect("test server should build");
+        let info = Arc::clone(handle.info());
+        let user_roles = Arc::new(user_roles);
+        let session = Arc::new(RwLock::new(Session::create(
+            &info,
+            NodeId::new(0, 1),
+            1,
+            60_000,
+            0,
+            0,
+            UAString::from("opc.tcp://localhost"),
+            SecurityPolicy::Basic256Sha256.to_uri().to_string(),
+            IdentityToken::Anonymous(AnonymousIdentityToken {
+                policy_id: UAString::from("anonymous"),
+            }),
+            None,
+            ByteString::null(),
+            UAString::from("gds-push-method-test"),
+            ApplicationDescription::default(),
+            security_mode,
+        )));
+
+        RequestContext::new_test(Arc::new(RequestContextInner {
+            session,
+            session_id: 1,
+            authenticator: info.authenticator.clone(),
+            token: UserToken("gds-push-method-test".to_string()),
+            user_roles,
+            type_tree: info.type_tree.clone(),
+            type_tree_getter: info.type_tree_getter.clone(),
+            subscriptions: handle.subscriptions().clone(),
+            info,
+        }))
+    }
+
+    fn security_admin_request_context(security_mode: MessageSecurityMode) -> RequestContext {
+        request_context(security_mode, vec![WellKnownRole::SecurityAdmin.node_id()])
+    }
+
     #[test]
     fn start_signing_request_returns_request_node_id_and_records_csr() {
         let registry = Arc::new(GdsSigningRequestRegistry::default());
@@ -340,19 +453,14 @@ mod tests {
         assert!(!request.regenerate_private_key);
     }
 
-    #[test]
-    fn create_signing_request_returns_csr_bytes() {
+    #[tokio::test]
+    async fn create_signing_request_returns_csr_bytes() {
         let registry = Arc::new(GdsSigningRequestRegistry::default());
-        let handler = GdsPushMethodHandler::new(registry);
+        let handler = GdsPushMethodHandler::new(registry.clone());
+        let context = security_admin_request_context(MessageSecurityMode::SignAndEncrypt);
 
         let outputs = handler
-            .handle_create_signing_request(&[
-                Variant::from(NodeId::new(0, 6001)),
-                Variant::from(NodeId::new(0, 6002)),
-                Variant::from("CN=async-opcua"),
-                Variant::from(false),
-                Variant::from(ByteString::from(b"nonce")),
-            ])
+            .handle_create_signing_request_for_request(&context, &create_args())
             .expect("valid create request should succeed");
 
         assert_eq!(outputs.len(), 1);
@@ -360,19 +468,81 @@ mod tests {
             Variant::ByteString(csr) => assert!(!csr.is_null_or_empty()),
             value => panic!("expected ByteString output, got {value:?}"),
         }
+        assert_eq!(registry.created_signing_requests().len(), 1);
     }
 
     #[test]
-    fn signing_request_methods_reject_missing_arguments() {
+    fn create_signing_request_requires_encrypted_secure_channel_and_security_admin_before_recording_request_state(
+    ) {
+        let registry = Arc::new(GdsSigningRequestRegistry::default());
+        registry.record_created_signing_request(created_signing_request(0));
+        let handler = GdsPushMethodHandler::new(registry.clone());
+        let before_failure = registry.created_signing_requests();
+
+        let result = handler.handle_create_signing_request(&create_args());
+        let after_failure = registry.created_signing_requests();
+
+        assert_eq!(
+            (result, after_failure),
+            (Err(StatusCode::BadSecurityModeInsufficient), before_failure),
+            "CreateSigningRequest must reject callers without an encrypted SecureChannel and \
+             SecurityAdmin authorization before generating request state"
+        );
+    }
+
+    #[tokio::test]
+    async fn create_signing_request_rejects_signed_secure_channel_before_recording_request_state() {
+        let registry = Arc::new(GdsSigningRequestRegistry::default());
+        registry.record_created_signing_request(created_signing_request(0));
+        let handler = GdsPushMethodHandler::new(registry.clone());
+        let context = security_admin_request_context(MessageSecurityMode::Sign);
+        let before_failure = registry.created_signing_requests();
+
+        let result = handler.handle_create_signing_request_for_request(&context, &create_args());
+        let after_failure = registry.created_signing_requests();
+
+        assert_eq!(
+            (result, after_failure),
+            (Err(StatusCode::BadSecurityModeInsufficient), before_failure),
+            "CreateSigningRequest must reject signed-only SecureChannels before generating \
+             request state"
+        );
+    }
+
+    #[tokio::test]
+    async fn create_signing_request_rejects_non_security_admin_before_recording_request_state() {
+        let registry = Arc::new(GdsSigningRequestRegistry::default());
+        registry.record_created_signing_request(created_signing_request(0));
+        let handler = GdsPushMethodHandler::new(registry.clone());
+        let context = request_context(
+            MessageSecurityMode::SignAndEncrypt,
+            vec![WellKnownRole::AuthenticatedUser.node_id()],
+        );
+        let before_failure = registry.created_signing_requests();
+
+        let result = handler.handle_create_signing_request_for_request(&context, &create_args());
+        let after_failure = registry.created_signing_requests();
+
+        assert_eq!(
+            (result, after_failure),
+            (Err(StatusCode::BadUserAccessDenied), before_failure),
+            "CreateSigningRequest must reject callers without SecurityAdmin before generating \
+             request state"
+        );
+    }
+
+    #[tokio::test]
+    async fn signing_request_methods_reject_missing_arguments() {
         let registry = Arc::new(GdsSigningRequestRegistry::default());
         let handler = GdsPushMethodHandler::new(registry);
+        let context = security_admin_request_context(MessageSecurityMode::SignAndEncrypt);
 
         assert_eq!(
             handler.handle_start_signing_request(&[]),
             Err(StatusCode::BadArgumentsMissing)
         );
         assert_eq!(
-            handler.handle_create_signing_request(&[]),
+            handler.handle_create_signing_request_for_request(&context, &[]),
             Err(StatusCode::BadArgumentsMissing)
         );
     }

@@ -10,6 +10,8 @@ const UADP_FLAG_GROUP_HEADER: u8 = 0x20;
 const UADP_FLAG_PAYLOAD_HEADER: u8 = 0x40;
 const UADP_FLAG_EXTENDED_FLAGS1: u8 = 0x80;
 const UADP_EXTENDED_FLAGS1_SECURITY_HEADER: u8 = 0x10;
+const UADP_EXTENDED_FLAGS1_TIMESTAMP: u8 = 0x20;
+const UADP_EXTENDED_FLAGS1_PICOSECONDS: u8 = 0x40;
 const UADP_EXTENDED_FLAGS1_PUBLISHER_ID_TYPE: u8 = 0x07; // bits 0-2: PublisherId DataType
 const SECURITY_FLAG_ENCRYPTED: u8 = 0x02;
 const SECURITY_FLAG_FOOTER: u8 = 0x04;
@@ -427,6 +429,13 @@ impl UadpNetworkMessage {
         } else {
             0
         };
+        if (extended_flags1 & UADP_EXTENDED_FLAGS1_PICOSECONDS) != 0
+            && (extended_flags1 & UADP_EXTENDED_FLAGS1_TIMESTAMP) == 0
+        {
+            return Err(Error::decoding(
+                "UADP ExtendedFlags1 PicoSeconds bit must be false when Timestamp bit is false",
+            ));
+        }
         let security_header_present = (extended_flags1 & UADP_EXTENDED_FLAGS1_SECURITY_HEADER) != 0;
 
         let publisher_id = if (flags & UADP_FLAG_PUBLISHER_ID) != 0 {

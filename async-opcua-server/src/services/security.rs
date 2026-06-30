@@ -17,32 +17,55 @@ pub const CURRENT_SECURITY_TOKEN_ID: IntegerId = 0;
 pub struct SecurityGroupKeys {
     security_policy_uri: UAString,
     first_token_id: IntegerId,
+    current_token_id: IntegerId,
     keys: Vec<ByteString>,
     key_lifetime: StdDuration,
     current_key_started_at: Instant,
 }
 
 impl SecurityGroupKeys {
-    /// Creates security group key material beginning at the current instant.
+    /// Creates current and future key material beginning at the current instant.
     pub fn new(
         security_policy_uri: impl Into<UAString>,
-        first_token_id: IntegerId,
+        current_token_id: IntegerId,
         keys: Vec<ByteString>,
         key_lifetime: StdDuration,
     ) -> Result<Self, StatusCode> {
         Self::with_current_key_started_at(
             security_policy_uri,
-            first_token_id,
+            current_token_id,
             keys,
             key_lifetime,
             Instant::now(),
         )
     }
 
-    /// Creates security group key material with an explicit current-key start instant.
+    /// Creates current and future key material with an explicit current-key start instant.
     pub fn with_current_key_started_at(
         security_policy_uri: impl Into<UAString>,
+        current_token_id: IntegerId,
+        keys: Vec<ByteString>,
+        key_lifetime: StdDuration,
+        current_key_started_at: Instant,
+    ) -> Result<Self, StatusCode> {
+        Self::with_retained_keys_current_key_started_at(
+            security_policy_uri,
+            current_token_id,
+            current_token_id,
+            keys,
+            key_lifetime,
+            current_key_started_at,
+        )
+    }
+
+    /// Creates key material that includes retained historical keys.
+    ///
+    /// The `keys` vector is ordered from `first_token_id`; `current_token_id`
+    /// must identify one of those retained keys.
+    pub fn with_retained_keys_current_key_started_at(
+        security_policy_uri: impl Into<UAString>,
         first_token_id: IntegerId,
+        current_token_id: IntegerId,
         keys: Vec<ByteString>,
         key_lifetime: StdDuration,
         current_key_started_at: Instant,
@@ -54,10 +77,12 @@ impl SecurityGroupKeys {
         {
             return Err(StatusCode::BadInvalidArgument);
         }
+        token_offset(first_token_id, keys.len(), current_token_id)?;
 
         Ok(Self {
             security_policy_uri,
             first_token_id,
+            current_token_id,
             keys,
             key_lifetime,
             current_key_started_at,
@@ -73,17 +98,11 @@ impl SecurityGroupKeys {
         }
 
         let first_token_id = if request.starting_token_id == CURRENT_SECURITY_TOKEN_ID {
-            self.first_token_id
+            self.current_token_id
         } else {
             request.starting_token_id
         };
-        let offset = first_token_id
-            .checked_sub(self.first_token_id)
-            .ok_or(StatusCode::BadNotFound)? as usize;
-
-        if offset >= self.keys.len() {
-            return Err(StatusCode::BadNotFound);
-        }
+        let offset = token_offset(self.first_token_id, self.keys.len(), first_token_id)?;
 
         let available_key_count = self.keys.len() - offset;
         let requested_key_count = request.requested_key_count as usize;
@@ -195,6 +214,22 @@ fn duration_from_ms(duration_ms: Duration) -> Result<StdDuration, StatusCode> {
         Ok(StdDuration::from_secs_f64(duration_ms / 1_000.0))
     } else {
         Err(StatusCode::BadInvalidArgument)
+    }
+}
+
+fn token_offset(
+    first_token_id: IntegerId,
+    key_count: usize,
+    token_id: IntegerId,
+) -> Result<usize, StatusCode> {
+    let offset = token_id
+        .checked_sub(first_token_id)
+        .ok_or(StatusCode::BadNotFound)? as usize;
+
+    if offset < key_count {
+        Ok(offset)
+    } else {
+        Err(StatusCode::BadNotFound)
     }
 }
 

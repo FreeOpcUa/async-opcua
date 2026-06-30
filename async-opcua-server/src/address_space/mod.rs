@@ -1094,7 +1094,7 @@ mod tests {
         let v = VariableBuilder::new(&NodeId::new(1, "Hello"), "BrowseName", "DisplayName")
             .description("Desc")
             .data_type(DataTypeId::UInt32)
-            .value_rank(10)
+            .value_rank(3)
             .array_dimensions(&[1, 2, 3])
             .historizing(true)
             .value(Variant::from(999))
@@ -1106,7 +1106,7 @@ mod tests {
         assert_eq!(v.display_name(), &"DisplayName".into());
         assert_eq!(v.data_type(), DataTypeId::UInt32);
         assert_eq!(v.description().unwrap(), &"Desc".into());
-        assert_eq!(v.value_rank(), 10);
+        assert_eq!(v.value_rank(), 3);
         assert_eq!(v.array_dimensions().unwrap(), vec![1, 2, 3]);
         assert!(v.historizing());
         assert_eq!(
@@ -1128,7 +1128,7 @@ mod tests {
         let node_id = NodeId::new(1, "Hello");
         let _v = VariableBuilder::new(&node_id, "BrowseName", "DisplayName")
             .description("Desc")
-            .value_rank(10)
+            .value_rank(3)
             .data_type(DataTypeId::UInt32)
             .array_dimensions(&[1, 2, 3])
             .historizing(true)

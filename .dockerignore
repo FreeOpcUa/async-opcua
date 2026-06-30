@@ -5,3 +5,9 @@ target/
 .vscode/
 3rd-party/
 *.md
+Dockerfile*
+.dockerignore
+*.log*
+.env*
+coverage/
+node_modules/

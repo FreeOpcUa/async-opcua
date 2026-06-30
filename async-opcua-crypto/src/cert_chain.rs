@@ -143,7 +143,7 @@ pub fn validate_certificate_chain<'a>(
     verify_chain_signatures(&chain)?;
 
     let mut findings = Vec::new();
-    validate_leaf_security_policy(&chain, context, &mut findings)?;
+    validate_chain_security_policy(&chain, context, &mut findings)?;
 
     if !chain_contains_trusted_cert(&chain, context.trusted_certs)? {
         return Err(validation_error(
@@ -360,7 +360,7 @@ fn chain_contains_trusted_cert(chain: &[&X509], trusted_certs: &[X509]) -> Resul
     Ok(false)
 }
 
-fn validate_leaf_security_policy(
+fn validate_chain_security_policy(
     chain: &[&X509],
     context: &ChainValidationContext<'_>,
     findings: &mut Vec<SuppressedFinding>,
@@ -369,29 +369,14 @@ fn validate_leaf_security_policy(
         return Ok(());
     }
 
+    validate_chain_signature_algorithms(chain, context, findings)?;
+
     let Some(leaf) = chain.first().copied() else {
         return Err(validation_error(
             StatusCode::BadCertificateChainIncomplete,
             "certificate chain is empty",
         ));
     };
-
-    match leaf.signature_and_algorithm() {
-        Ok(signature)
-            if context
-                .security_policy
-                .is_valid_certificate_signature_algorithm(&signature.algorithm_oid) => {}
-        Ok(_) => handle_security_policy_failure(
-            context,
-            findings,
-            "leaf certificate signature algorithm is not allowed by the security policy",
-        )?,
-        Err(_) => handle_security_policy_failure(
-            context,
-            findings,
-            "cannot read leaf certificate signature algorithm",
-        )?,
-    }
 
     match leaf.key_length() {
         Ok(key_length) if context.security_policy.is_valid_keylength(key_length) => {}
@@ -404,6 +389,49 @@ fn validate_leaf_security_policy(
     }
 
     Ok(())
+}
+
+fn validate_chain_signature_algorithms(
+    chain: &[&X509],
+    context: &ChainValidationContext<'_>,
+    findings: &mut Vec<SuppressedFinding>,
+) -> Result<(), Error> {
+    for (index, cert) in chain.iter().enumerate() {
+        match cert.signature_and_algorithm() {
+            Ok(signature)
+                if context
+                    .security_policy
+                    .is_valid_certificate_signature_algorithm(&signature.algorithm_oid) => {}
+            Ok(_) => handle_security_policy_failure(
+                context,
+                findings,
+                signature_algorithm_policy_failure_message(index),
+            )?,
+            Err(_) => handle_security_policy_failure(
+                context,
+                findings,
+                signature_algorithm_policy_read_failure_message(index),
+            )?,
+        }
+    }
+
+    Ok(())
+}
+
+fn signature_algorithm_policy_failure_message(index: usize) -> &'static str {
+    if index == 0 {
+        "leaf certificate signature algorithm is not allowed by the security policy"
+    } else {
+        "issuer certificate signature algorithm is not allowed by the security policy"
+    }
+}
+
+fn signature_algorithm_policy_read_failure_message(index: usize) -> &'static str {
+    if index == 0 {
+        "cannot read leaf certificate signature algorithm"
+    } else {
+        "cannot read issuer certificate signature algorithm"
+    }
 }
 
 fn handle_security_policy_failure(
@@ -478,7 +506,7 @@ fn validate_certificate_usage(
         if index == 0 {
             validate_leaf_certificate_usage(cert, context, findings)?;
         } else {
-            validate_issuer_certificate_usage(cert, context, findings)?;
+            validate_issuer_certificate_usage(chain, index, cert, context, findings)?;
         }
     }
 
@@ -523,14 +551,17 @@ fn validate_leaf_certificate_usage(
 }
 
 fn validate_issuer_certificate_usage(
+    chain: &[&X509],
+    index: usize,
     cert: &X509,
     context: &ChainValidationContext<'_>,
     findings: &mut Vec<SuppressedFinding>,
 ) -> Result<(), Error> {
     let status = StatusCode::BadCertificateIssuerUseNotAllowed;
 
-    if !cert
-        .basic_constraints()
+    let basic_constraints = cert.basic_constraints();
+    if !basic_constraints
+        .as_ref()
         .is_some_and(|basic_constraints| basic_constraints.ca)
     {
         handle_certificate_usage_failure(
@@ -539,6 +570,20 @@ fn validate_issuer_certificate_usage(
             status,
             "issuer certificate basic constraints do not identify it as a CA",
         )?;
+    }
+
+    if let Some(path_len_constraint) =
+        basic_constraints.and_then(|basic_constraints| basic_constraints.path_len_constraint)
+    {
+        let subordinate_ca_count = subordinate_ca_count_below(chain, index);
+        if subordinate_ca_count > usize::from(path_len_constraint) {
+            handle_certificate_usage_failure(
+                context,
+                findings,
+                status,
+                "issuer certificate path length constraint is exceeded",
+            )?;
+        }
     }
 
     if let Some(key_usage) = cert.key_usage() {
@@ -553,6 +598,20 @@ fn validate_issuer_certificate_usage(
     }
 
     Ok(())
+}
+
+fn subordinate_ca_count_below(chain: &[&X509], issuer_index: usize) -> usize {
+    let Some(subordinate_chain) = chain.get(1..issuer_index) else {
+        return 0;
+    };
+
+    subordinate_chain
+        .iter()
+        .filter(|cert| {
+            cert.basic_constraints()
+                .is_some_and(|basic_constraints| basic_constraints.ca)
+        })
+        .count()
 }
 
 fn handle_certificate_usage_failure(
@@ -605,7 +664,7 @@ fn validate_chain_revocation(
 
         // A valid OCSP response (signed by the issuer, covering this serial) is a definitive source:
         // revoked -> fail; good -> revocation is known, no CRL needed. Otherwise fall back to CRL.
-        match ocsp_status(context.ocsp_responses, cert, issuer_ca, context.now) {
+        match ocsp_status(context, cert, issuer_ca, findings)? {
             Some(OcspVerdict::Revoked) => {
                 return Err(validation_error(
                     revoked_status,
@@ -616,7 +675,7 @@ fn validate_chain_revocation(
             None => {}
         }
 
-        let Some(crl) = find_valid_crl(context.crls, issuer_ca, context.now) else {
+        let Some(crl) = find_valid_crl(context.crls, issuer_ca, context, findings)? else {
             handle_revocation_unknown(context, findings, index)?;
             continue;
         };
@@ -643,15 +702,17 @@ enum OcspVerdict {
 /// Only responses signed directly by `issuer_ca` are accepted (delegated responders are not
 /// supported); `Unknown` status is treated as non-definitive.
 fn ocsp_status(
-    ocsp_responses: &[Vec<u8>],
+    context: &ChainValidationContext<'_>,
     cert: &X509,
     issuer_ca: &X509,
-    now: &DateTime<Utc>,
-) -> Option<OcspVerdict> {
-    let ca_public_key = issuer_ca.public_key().ok()?;
+    findings: &mut Vec<SuppressedFinding>,
+) -> Result<Option<OcspVerdict>, Error> {
+    let Some(ca_public_key) = issuer_ca.public_key().ok() else {
+        return Ok(None);
+    };
     let serial = cert.serial_number();
 
-    for der in ocsp_responses {
+    for der in context.ocsp_responses {
         let Ok(response) = OcspResponse::from_der(der) else {
             continue;
         };
@@ -667,23 +728,43 @@ fn ocsp_status(
         let Ok(basic) = BasicOcspResponse::from_der(bytes.response.as_bytes()) else {
             continue;
         };
+
+        let Some(verdict) = ocsp_verdict_for_serial(&basic, &serial, context.now) else {
+            continue;
+        };
         if !ocsp_signature_verifies(&basic, &ca_public_key) {
             continue;
         }
 
-        for single in &basic.tbs_response_data.responses {
-            if single.cert_id.serial_number.as_bytes() != serial.as_slice() {
-                continue;
-            }
-            if !ocsp_single_is_fresh(single, now) {
-                continue;
-            }
-            match single.cert_status {
-                CertStatus::Revoked(_) => return Some(OcspVerdict::Revoked),
-                CertStatus::Good(_) => return Some(OcspVerdict::Good),
-                // Unknown is not a definitive answer; keep scanning for a usable response.
-                CertStatus::Unknown(_) => continue,
-            }
+        validate_revocation_signature_algorithm(
+            &basic.signature_algorithm.oid,
+            context,
+            findings,
+            "OCSP response signature algorithm is not allowed by the security policy",
+        )?;
+        return Ok(Some(verdict));
+    }
+
+    Ok(None)
+}
+
+fn ocsp_verdict_for_serial(
+    basic: &BasicOcspResponse,
+    serial: &[u8],
+    now: &DateTime<Utc>,
+) -> Option<OcspVerdict> {
+    for single in &basic.tbs_response_data.responses {
+        if single.cert_id.serial_number.as_bytes() != serial {
+            continue;
+        }
+        if !ocsp_single_is_fresh(single, now) {
+            continue;
+        }
+        match single.cert_status {
+            CertStatus::Revoked(_) => return Some(OcspVerdict::Revoked),
+            CertStatus::Good(_) => return Some(OcspVerdict::Good),
+            // Unknown is not a definitive answer; keep scanning for a usable response.
+            CertStatus::Unknown(_) => continue,
         }
     }
 
@@ -718,15 +799,31 @@ fn ocsp_single_is_fresh(single: &x509_ocsp::SingleResponse, now: &DateTime<Utc>)
 fn find_valid_crl<'a>(
     crls: &'a [CertificateList],
     issuer_ca: &X509,
-    now: &DateTime<Utc>,
-) -> Option<&'a CertificateList> {
-    let ca_public_key = issuer_ca.public_key().ok()?;
+    context: &ChainValidationContext<'_>,
+    findings: &mut Vec<SuppressedFinding>,
+) -> Result<Option<&'a CertificateList>, Error> {
+    let Some(ca_public_key) = issuer_ca.public_key().ok() else {
+        return Ok(None);
+    };
 
-    crls.iter().find(|crl| {
-        crl_issuer_matches_ca(crl, issuer_ca)
-            && crl_is_current(crl, now)
-            && crl_signature_verifies(crl, &ca_public_key)
-    })
+    for crl in crls {
+        if !crl_issuer_matches_ca(crl, issuer_ca) || !crl_is_current(crl, context.now) {
+            continue;
+        }
+        if !crl_signature_verifies(crl, &ca_public_key) {
+            continue;
+        }
+
+        validate_revocation_signature_algorithm(
+            &crl.signature_algorithm.oid,
+            context,
+            findings,
+            "CRL signature algorithm is not allowed by the security policy",
+        )?;
+        return Ok(Some(crl));
+    }
+
+    Ok(None)
 }
 
 fn crl_issuer_matches_ca(crl: &CertificateList, issuer_ca: &X509) -> bool {
@@ -781,6 +878,23 @@ fn der_signature_verifies(
     }
 
     crl_ec_signature_verifies(issuer_public_key, tbs, signature, algorithm_oid)
+}
+
+fn validate_revocation_signature_algorithm(
+    algorithm_oid: &const_oid::ObjectIdentifier,
+    context: &ChainValidationContext<'_>,
+    findings: &mut Vec<SuppressedFinding>,
+    message: &str,
+) -> Result<(), Error> {
+    if context.security_policy == SecurityPolicy::None
+        || context
+            .security_policy
+            .is_valid_certificate_signature_algorithm(algorithm_oid)
+    {
+        return Ok(());
+    }
+
+    handle_security_policy_failure(context, findings, message)
 }
 
 #[cfg(feature = "ecc")]

@@ -3,8 +3,8 @@ use std::collections::{HashMap, HashSet};
 use convert_case::{Case, Casing};
 use proc_macro2::Span;
 use syn::{
-    parse_quote, parse_str, punctuated::Punctuated, FieldsNamed, File, Generics, Item, ItemEnum,
-    ItemMacro, ItemStruct, Lit, LitByte, Path, Token, Type, Visibility,
+    parse_quote, parse_str, punctuated::Punctuated, Attribute, FieldsNamed, File, Generics, Item,
+    ItemEnum, ItemMacro, ItemStruct, Lit, LitByte, Path, Token, Type, Visibility,
 };
 use tracing::warn;
 
@@ -70,6 +70,31 @@ impl GeneratedOutput for GeneratedItem {
     fn name(&self) -> &str {
         &self.name
     }
+}
+
+fn monitoring_mode_value(item: &EnumType, variant_name: &str) -> Result<i32, CodeGenError> {
+    if !matches!(item.typ, EnumReprType::i32) {
+        return Err(CodeGenError::other(format!(
+            "MonitoringMode must use i32 representation, got {}",
+            item.typ
+        )));
+    }
+
+    item.values
+        .iter()
+        .find(|value| value.name == variant_name)
+        .ok_or_else(|| {
+            CodeGenError::other(format!(
+                "MonitoringMode is missing expected variant {variant_name}"
+            ))
+        })?
+        .value
+        .try_into()
+        .map_err(|_| {
+            CodeGenError::other(format!(
+                "MonitoringMode variant {variant_name} value is out of i32 range"
+            ))
+        })
 }
 
 /// Local configuration for the type code generator.
@@ -453,8 +478,11 @@ impl CodeGenerator {
         if item.option {
             return self.generate_bitfield(item);
         }
+        if item.name == "MonitoringMode" {
+            return self.generate_monitoring_mode_enum(item);
+        }
 
-        let mut attrs = Vec::new();
+        let mut attrs: Vec<Attribute> = Vec::new();
         let mut variants = Punctuated::new();
 
         attrs.push(parse_quote! {
@@ -562,6 +590,263 @@ impl CodeGenerator {
                 item.name.to_case(Case::Snake)
             },
             name: item.name.clone(),
+            encoding_ids: None,
+        })
+    }
+
+    fn generate_monitoring_mode_enum(&self, item: EnumType) -> Result<GeneratedItem, CodeGenError> {
+        let disabled_value = monitoring_mode_value(&item, "Disabled")?;
+        let sampling_value = monitoring_mode_value(&item, "Sampling")?;
+        let reporting_value = monitoring_mode_value(&item, "Reporting")?;
+        if (disabled_value, sampling_value, reporting_value) != (0, 1, 2) {
+            return Err(CodeGenError::other(format!(
+                "MonitoringMode values changed: expected Disabled=0, Sampling=1, Reporting=2; \
+                 got Disabled={disabled_value}, Sampling={sampling_value}, \
+                 Reporting={reporting_value}"
+            )));
+        }
+
+        let (enum_ident, renamed) = safe_ident(&item.name);
+        let mut attrs: Vec<Attribute> = Vec::new();
+        if let Some(doc) = item.documentation {
+            attrs.push(parse_quote! {
+                #[doc = #doc]
+            });
+        }
+        if renamed {
+            let name = &item.name;
+            attrs.push(parse_quote! {
+                #[opcua(rename = #name)]
+            });
+        }
+
+        let item: ItemEnum = parse_quote! {
+            #(#attrs)*
+            #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
+            pub enum #enum_ident {
+                #[default]
+                Disabled,
+                Sampling,
+                Reporting,
+                Invalid(i32),
+            }
+        };
+
+        let impls = vec![
+            parse_quote! {
+                impl #enum_ident {
+                    const DISABLED_REPR: i32 = #disabled_value;
+                    const SAMPLING_REPR: i32 = #sampling_value;
+                    const REPORTING_REPR: i32 = #reporting_value;
+
+                    fn from_raw(value: i32) -> Self {
+                        match value {
+                            Self::DISABLED_REPR => Self::Disabled,
+                            Self::SAMPLING_REPR => Self::Sampling,
+                            Self::REPORTING_REPR => Self::Reporting,
+                            invalid => Self::Invalid(invalid),
+                        }
+                    }
+
+                    pub fn into_repr(self) -> i32 {
+                        match self {
+                            Self::Disabled => Self::DISABLED_REPR,
+                            Self::Sampling => Self::SAMPLING_REPR,
+                            Self::Reporting => Self::REPORTING_REPR,
+                            Self::Invalid(value) => value,
+                        }
+                    }
+                }
+            },
+            parse_quote! {
+                impl From<#enum_ident> for i32 {
+                    fn from(value: #enum_ident) -> i32 {
+                        value.into_repr()
+                    }
+                }
+            },
+            parse_quote! {
+                impl opcua::types::IntoVariant for #enum_ident {
+                    fn into_variant(self) -> opcua::types::Variant {
+                        self.into_repr().into()
+                    }
+                }
+            },
+            parse_quote! {
+                impl TryFrom<i32> for #enum_ident {
+                    type Error = opcua::types::Error;
+
+                    fn try_from(value: i32) -> Result<Self, opcua::types::Error> {
+                        Ok(Self::from_raw(value))
+                    }
+                }
+            },
+            parse_quote! {
+                impl opcua::types::UaEnum for #enum_ident {
+                    type Repr = i32;
+
+                    fn from_repr(repr: Self::Repr) -> Result<Self, opcua::types::Error> {
+                        Ok(Self::from_raw(repr))
+                    }
+
+                    fn into_repr(self) -> Self::Repr {
+                        self.into_repr()
+                    }
+
+                    fn as_str(&self) -> &'static str {
+                        match self {
+                            Self::Disabled => "Disabled_0",
+                            Self::Sampling => "Sampling_1",
+                            Self::Reporting => "Reporting_2",
+                            Self::Invalid(_) => "Invalid",
+                        }
+                    }
+
+                    fn from_str(val: &str) -> Result<Self, opcua::types::Error> {
+                        Ok(match val {
+                            "Disabled_0" => Self::Disabled,
+                            "Sampling_1" => Self::Sampling,
+                            "Reporting_2" => Self::Reporting,
+                            raw => {
+                                if let Some(value) = raw
+                                    .strip_prefix("Invalid_")
+                                    .and_then(|value| value.parse::<i32>().ok())
+                                {
+                                    return Ok(Self::from_raw(value));
+                                }
+                                return Err(opcua::types::Error::decoding(format!(
+                                    "Got unexpected value for enum MonitoringMode: {}",
+                                    raw
+                                )));
+                            }
+                        })
+                    }
+                }
+            },
+            parse_quote! {
+                impl opcua::types::UaNullable for #enum_ident {
+                    fn is_ua_null(&self) -> bool {
+                        matches!(self, Self::Disabled)
+                    }
+                }
+            },
+            parse_quote! {
+                impl opcua::types::BinaryEncodable for #enum_ident {
+                    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+                        opcua::types::BinaryEncodable::byte_len(&self.into_repr(), ctx)
+                    }
+
+                    fn encode<S: std::io::Write + ?Sized>(
+                        &self,
+                        stream: &mut S,
+                        ctx: &opcua::types::Context<'_>,
+                    ) -> opcua::types::EncodingResult<()> {
+                        opcua::types::BinaryEncodable::encode(&self.into_repr(), stream, ctx)
+                    }
+                }
+            },
+            parse_quote! {
+                impl opcua::types::BinaryDecodable for #enum_ident {
+                    fn decode<S: std::io::Read + ?Sized>(
+                        stream: &mut S,
+                        ctx: &opcua::types::Context<'_>,
+                    ) -> opcua::types::EncodingResult<Self> {
+                        let value = <i32 as opcua::types::BinaryDecodable>::decode(stream, ctx)?;
+                        Ok(Self::from_raw(value))
+                    }
+                }
+            },
+            parse_quote! {
+                #[cfg(feature = "json")]
+                impl opcua::types::json::JsonEncodable for #enum_ident {
+                    fn encode(
+                        &self,
+                        stream: &mut opcua::types::json::JsonStreamWriter<&mut dyn std::io::Write>,
+                        ctx: &opcua::types::Context<'_>,
+                    ) -> opcua::types::EncodingResult<()> {
+                        opcua::types::json::JsonEncodable::encode(&self.into_repr(), stream, ctx)
+                    }
+                }
+            },
+            parse_quote! {
+                #[cfg(feature = "json")]
+                impl opcua::types::json::JsonDecodable for #enum_ident {
+                    fn decode(
+                        stream: &mut opcua::types::json::JsonStreamReader<&mut dyn std::io::Read>,
+                        ctx: &opcua::types::Context<'_>,
+                    ) -> opcua::types::EncodingResult<Self> {
+                        let value = <i32 as opcua::types::json::JsonDecodable>::decode(stream, ctx)?;
+                        Ok(Self::from_raw(value))
+                    }
+                }
+            },
+            parse_quote! {
+                #[cfg(feature = "xml")]
+                impl opcua::types::xml::XmlType for #enum_ident {
+                    const TAG: &'static str = "MonitoringMode";
+                }
+            },
+            parse_quote! {
+                #[cfg(feature = "xml")]
+                impl opcua::types::xml::XmlEncodable for #enum_ident {
+                    fn encode(
+                        &self,
+                        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
+                        _ctx: &opcua::types::Context<'_>,
+                    ) -> opcua::types::EncodingResult<()> {
+                        match self {
+                            Self::Invalid(value) => stream.write_text(&format!("Invalid_{}", value))?,
+                            _ => stream.write_text(opcua::types::UaEnum::as_str(self))?,
+                        }
+                        Ok(())
+                    }
+                }
+            },
+            parse_quote! {
+                #[cfg(feature = "xml")]
+                impl opcua::types::xml::XmlDecodable for #enum_ident {
+                    fn decode(
+                        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
+                        _ctx: &opcua::types::Context<'_>,
+                    ) -> Result<Self, opcua::types::Error> {
+                        let value = stream.consume_as_text()?;
+                        opcua::types::UaEnum::from_str(&value)
+                    }
+                }
+            },
+            parse_quote! {
+                #[cfg(test)]
+                mod monitoring_mode_tests {
+                    use super::#enum_ident;
+                    use crate::{BinaryDecodable, ContextOwned};
+
+                    #[test]
+                    fn monitoring_mode_raw_decode_preserves_invalid_value_for_service_status() {
+                        let invalid_monitoring_mode = 3i32;
+                        let bytes = invalid_monitoring_mode.to_le_bytes();
+                        let mut stream = bytes.as_slice();
+                        let ctx = ContextOwned::default();
+
+                        let decoded = #enum_ident::decode(&mut stream, &ctx.context()).expect(
+                            "OPC-10000-4 5.13.4.3 Table 70 requires service code to see invalid \
+                             MonitoringMode values so it can return Bad_MonitoringModeInvalid",
+                        );
+
+                        assert_eq!(decoded.into_repr(), invalid_monitoring_mode);
+                    }
+                }
+            },
+        ];
+
+        Ok(GeneratedItem {
+            item: ItemDefinition::Enum(item),
+            impls,
+            module: if self.config.enums_single_file {
+                "enums".to_owned()
+            } else {
+                "monitoring_mode".to_owned()
+            },
+            name: "MonitoringMode".to_owned(),
             encoding_ids: None,
         })
     }

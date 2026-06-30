@@ -1,6 +1,6 @@
-#![cfg_attr(feature = "nightly", no_main)]
+#![cfg_attr(all(feature = "nightly", not(test)), no_main)]
 
-#[cfg(not(feature = "nightly"))]
+#[cfg(all(not(feature = "nightly"), not(test)))]
 fn main() {
     panic!("Fuzzing requires the nightly feature to be enabled.");
 }
@@ -10,7 +10,7 @@ fn main() {
 // wire bytes and apply directly-constructed NumericRanges (including hostile shapes the parser would
 // normally reject: min>max, huge bounds, wrong rank) — these MUST return an error, never panic, and
 // never allocate unboundedly.
-#[cfg(feature = "nightly")]
+#[cfg(all(feature = "nightly", not(test)))]
 libfuzzer_sys::fuzz_target!(|data: &[u8]| {
     use opcua::types::{BinaryDecodable, ContextOwned, NumericRange, Variant};
     use std::io::Cursor;

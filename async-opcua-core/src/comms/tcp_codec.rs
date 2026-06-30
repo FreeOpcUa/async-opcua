@@ -22,6 +22,7 @@ use tokio_util::codec::{Decoder, Encoder};
 use tracing::error;
 
 use opcua_types::{
+    constants,
     encoding::{DecodingOptions, SimpleBinaryDecodable, SimpleBinaryEncodable},
     status_code::StatusCode,
 };
@@ -107,6 +108,7 @@ impl Decoder for TcpCodec {
             // the message. The buffer needs to have at least that amount of bytes in it for the
             // whole message to be extracted.
             let message_size = message_header.message_size as usize;
+            Self::validate_declared_message_size(message_size, &self.decoding_options)?;
             if buf.len() >= message_size {
                 // Extract the message bytes from the buffer & decode them into a message
                 let mut buf = buf.split_to(message_size);
@@ -213,6 +215,39 @@ impl TcpCodec {
         [IoSlice::new(header), IoSlice::new(body)]
     }
 
+    fn validate_declared_message_size(
+        message_size: usize,
+        decoding_options: &DecodingOptions,
+    ) -> Result<(), io::Error> {
+        // 0 means "unlimited" for negotiated message assembly, but the TCP frame decoder still
+        // needs a finite guard before waiting for or splitting an attacker-declared frame.
+        let max_message_size = if decoding_options.max_message_size == 0 {
+            constants::MAX_MESSAGE_SIZE
+        } else {
+            decoding_options.max_message_size
+        };
+
+        if message_size < MESSAGE_HEADER_LEN {
+            return Err(io::Error::other(opcua_types::Error::new(
+                StatusCode::BadTcpMessageTooLarge,
+                format!(
+                    "Message size {message_size} is smaller than TCP header size {MESSAGE_HEADER_LEN}"
+                ),
+            )));
+        }
+
+        if message_size > max_message_size {
+            return Err(io::Error::other(opcua_types::Error::new(
+                StatusCode::BadTcpMessageTooLarge,
+                format!(
+                    "Message size {message_size} exceeds maximum message size {max_message_size}"
+                ),
+            )));
+        }
+
+        Ok(())
+    }
+
     // Writes the encodable thing into the buffer.
     fn write<T>(msg: T, max_message_size: usize, buf: &mut BytesMut) -> Result<(), io::Error>
     where
@@ -280,7 +315,7 @@ mod tests {
     };
     use tokio_util::codec::Decoder;
 
-    use super::{ErrorMessage, Message, TcpCodec};
+    use super::{ErrorMessage, Message, TcpCodec, MESSAGE_HEADER_LEN};
 
     fn error_frame(reason: &str) -> BytesMut {
         let message = ErrorMessage::new(StatusCode::BadUnexpectedError, reason);
@@ -289,10 +324,14 @@ mod tests {
         frame
     }
 
-    fn oversized_header_frame(message_size: u32) -> BytesMut {
-        let mut frame = BytesMut::from(&b"ERRF"[..]);
+    fn connection_header_frame(message_type: &[u8], message_size: u32) -> BytesMut {
+        let mut frame = BytesMut::from(message_type);
         frame.extend_from_slice(&message_size.to_le_bytes());
         frame
+    }
+
+    fn oversized_header_frame(message_size: u32) -> BytesMut {
+        connection_header_frame(&b"ERRF"[..], message_size)
     }
 
     #[test]
@@ -306,6 +345,91 @@ mod tests {
         let err = codec.decode(&mut frame).unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::Other);
         assert!(err.to_string().contains("BadTcpMessageTooLarge"));
+    }
+
+    #[test]
+    fn decode_rejects_oversized_declared_message_size_before_payload_allocation() {
+        let mut codec = TcpCodec::new(DecodingOptions {
+            max_message_size: 0,
+            ..DecodingOptions::default()
+        });
+        let mut frame = oversized_header_frame(u32::MAX);
+        let initial_capacity = frame.capacity();
+
+        let err = codec.decode(&mut frame).expect_err(
+            "OPC-10000-6 7.1.2.2 and 7.1.5 require BadTcpMessageTooLarge \
+             for an impossible declared MessageSize before waiting for the payload",
+        );
+
+        assert!(
+            err.to_string().contains("BadTcpMessageTooLarge"),
+            "expected BadTcpMessageTooLarge for oversized declared MessageSize {}, got {err}",
+            u32::MAX
+        );
+        assert_eq!(
+            frame.capacity(),
+            initial_capacity,
+            "decoder must reject from the header without reserving the declared payload"
+        );
+    }
+
+    #[test]
+    fn pre_hello_ack_and_err_declared_message_sizes_are_bounded_before_negotiation() {
+        for message_type in [&b"ACKF"[..], &b"ERRF"[..]] {
+            let mut codec = TcpCodec::new(DecodingOptions {
+                max_message_size: 0,
+                ..DecodingOptions::default()
+            });
+            let mut frame = connection_header_frame(message_type, u32::MAX);
+            let initial_capacity = frame.capacity();
+            let label = std::str::from_utf8(message_type).unwrap();
+
+            let err = codec.decode(&mut frame).expect_err(
+                "OPC-10000-6 7.1.2.2 requires pre-Hello ACK/ERR MessageSize \
+                 to be bounded before negotiation; expected BadTcpMessageTooLarge \
+                 instead of waiting for the declared payload",
+            );
+
+            assert!(
+                err.to_string().contains("BadTcpMessageTooLarge"),
+                "expected BadTcpMessageTooLarge for pre-Hello {label} declared MessageSize {}, got {err}",
+                u32::MAX
+            );
+            assert_eq!(
+                frame.capacity(),
+                initial_capacity,
+                "pre-Hello {label} decoder path must reject from the header without reserving the declared payload"
+            );
+        }
+    }
+
+    #[test]
+    fn pre_hello_ack_and_err_declared_message_sizes_below_header_are_rejected_before_splitting() {
+        for message_type in [&b"ACKF"[..], &b"ERRF"[..]] {
+            let mut codec = TcpCodec::new(DecodingOptions {
+                max_message_size: 0,
+                ..DecodingOptions::default()
+            });
+            let mut frame = connection_header_frame(message_type, (MESSAGE_HEADER_LEN - 1) as u32);
+            let initial_len = frame.len();
+            let label = std::str::from_utf8(message_type).unwrap();
+
+            let err = codec.decode(&mut frame).expect_err(
+                "OPC-10000-6 7.1.2.2 requires MessageSize to include the 8-byte \
+                 header; expected BadTcpMessageTooLarge before splitting the buffer",
+            );
+
+            assert!(
+                err.to_string().contains("BadTcpMessageTooLarge"),
+                "expected BadTcpMessageTooLarge for pre-Hello {label} declared MessageSize {}, got {err}",
+                MESSAGE_HEADER_LEN - 1
+            );
+            assert_eq!(
+                frame.len(),
+                initial_len,
+                "pre-Hello {label} decoder path must reject a below-header MessageSize without consuming bytes"
+            );
+        }
     }
 
     #[test]

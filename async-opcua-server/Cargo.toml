@@ -108,8 +108,14 @@ async-opcua-server = { path = ".", features = [
   "json",
   "test-utils",
 ] }
+const-oid = { workspace = true }
 criterion = { workspace = true }
+rsa = { workspace = true }
 serde_norway = { workspace = true }
+sha1 = { workspace = true }
+sha2 = { workspace = true }
+tempfile = "3"
+x509-cert = { workspace = true }
 
 [[bench]]
 name = "session_lookup"

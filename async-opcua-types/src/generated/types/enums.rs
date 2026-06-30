@@ -689,15 +689,178 @@ pub enum ModelChangeStructureVerbMask {
     ReferenceDeleted = 8i32,
     DataTypeChanged = 16i32,
 }
-#[opcua::types::ua_encodable]
 ///https://reference.opcfoundation.org/v105/Core/docs/Part4/7.23
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[repr(i32)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub enum MonitoringMode {
-    #[opcua(default)]
-    Disabled = 0i32,
-    Sampling = 1i32,
-    Reporting = 2i32,
+    #[default]
+    Disabled,
+    Sampling,
+    Reporting,
+    Invalid(i32),
+}
+impl MonitoringMode {
+    const DISABLED_REPR: i32 = 0i32;
+    const SAMPLING_REPR: i32 = 1i32;
+    const REPORTING_REPR: i32 = 2i32;
+    fn from_raw(value: i32) -> Self {
+        match value {
+            Self::DISABLED_REPR => Self::Disabled,
+            Self::SAMPLING_REPR => Self::Sampling,
+            Self::REPORTING_REPR => Self::Reporting,
+            invalid => Self::Invalid(invalid),
+        }
+    }
+    pub fn into_repr(self) -> i32 {
+        match self {
+            Self::Disabled => Self::DISABLED_REPR,
+            Self::Sampling => Self::SAMPLING_REPR,
+            Self::Reporting => Self::REPORTING_REPR,
+            Self::Invalid(value) => value,
+        }
+    }
+}
+impl From<MonitoringMode> for i32 {
+    fn from(value: MonitoringMode) -> i32 {
+        value.into_repr()
+    }
+}
+impl opcua::types::IntoVariant for MonitoringMode {
+    fn into_variant(self) -> opcua::types::Variant {
+        self.into_repr().into()
+    }
+}
+impl TryFrom<i32> for MonitoringMode {
+    type Error = opcua::types::Error;
+    fn try_from(value: i32) -> Result<Self, opcua::types::Error> {
+        Ok(Self::from_raw(value))
+    }
+}
+impl opcua::types::UaEnum for MonitoringMode {
+    type Repr = i32;
+    fn from_repr(repr: Self::Repr) -> Result<Self, opcua::types::Error> {
+        Ok(Self::from_raw(repr))
+    }
+    fn into_repr(self) -> Self::Repr {
+        self.into_repr()
+    }
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Disabled => "Disabled_0",
+            Self::Sampling => "Sampling_1",
+            Self::Reporting => "Reporting_2",
+            Self::Invalid(_) => "Invalid",
+        }
+    }
+    fn from_str(val: &str) -> Result<Self, opcua::types::Error> {
+        Ok(match val {
+            "Disabled_0" => Self::Disabled,
+            "Sampling_1" => Self::Sampling,
+            "Reporting_2" => Self::Reporting,
+            raw => {
+                if let Some(value) = raw
+                    .strip_prefix("Invalid_")
+                    .and_then(|value| value.parse::<i32>().ok())
+                {
+                    return Ok(Self::from_raw(value));
+                }
+                return Err(opcua::types::Error::decoding(format!(
+                    "Got unexpected value for enum MonitoringMode: {}",
+                    raw
+                )));
+            }
+        })
+    }
+}
+impl opcua::types::UaNullable for MonitoringMode {
+    fn is_ua_null(&self) -> bool {
+        matches!(self, Self::Disabled)
+    }
+}
+impl opcua::types::BinaryEncodable for MonitoringMode {
+    fn byte_len(&self, ctx: &opcua::types::Context<'_>) -> usize {
+        opcua::types::BinaryEncodable::byte_len(&self.into_repr(), ctx)
+    }
+    fn encode<S: std::io::Write + ?Sized>(
+        &self,
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::BinaryEncodable::encode(&self.into_repr(), stream, ctx)
+    }
+}
+impl opcua::types::BinaryDecodable for MonitoringMode {
+    fn decode<S: std::io::Read + ?Sized>(
+        stream: &mut S,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        let value = <i32 as opcua::types::BinaryDecodable>::decode(stream, ctx)?;
+        Ok(Self::from_raw(value))
+    }
+}
+#[cfg(feature = "json")]
+impl opcua::types::json::JsonEncodable for MonitoringMode {
+    fn encode(
+        &self,
+        stream: &mut opcua::types::json::JsonStreamWriter<&mut dyn std::io::Write>,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        opcua::types::json::JsonEncodable::encode(&self.into_repr(), stream, ctx)
+    }
+}
+#[cfg(feature = "json")]
+impl opcua::types::json::JsonDecodable for MonitoringMode {
+    fn decode(
+        stream: &mut opcua::types::json::JsonStreamReader<&mut dyn std::io::Read>,
+        ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<Self> {
+        let value = <i32 as opcua::types::json::JsonDecodable>::decode(stream, ctx)?;
+        Ok(Self::from_raw(value))
+    }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlType for MonitoringMode {
+    const TAG: &'static str = "MonitoringMode";
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlEncodable for MonitoringMode {
+    fn encode(
+        &self,
+        stream: &mut opcua::types::xml::XmlStreamWriter<&mut dyn std::io::Write>,
+        _ctx: &opcua::types::Context<'_>,
+    ) -> opcua::types::EncodingResult<()> {
+        match self {
+            Self::Invalid(value) => stream.write_text(&format!("Invalid_{}", value))?,
+            _ => stream.write_text(opcua::types::UaEnum::as_str(self))?,
+        }
+        Ok(())
+    }
+}
+#[cfg(feature = "xml")]
+impl opcua::types::xml::XmlDecodable for MonitoringMode {
+    fn decode(
+        stream: &mut opcua::types::xml::XmlStreamReader<&mut dyn std::io::Read>,
+        _ctx: &opcua::types::Context<'_>,
+    ) -> Result<Self, opcua::types::Error> {
+        let value = stream.consume_as_text()?;
+        opcua::types::UaEnum::from_str(&value)
+    }
+}
+#[cfg(test)]
+mod monitoring_mode_tests {
+    use super::MonitoringMode;
+    use crate::{BinaryDecodable, ContextOwned};
+    #[test]
+    fn monitoring_mode_raw_decode_preserves_invalid_value_for_service_status() {
+        let invalid_monitoring_mode = 3i32;
+        let bytes = invalid_monitoring_mode.to_le_bytes();
+        let mut stream = bytes.as_slice();
+        let ctx = ContextOwned::default();
+        let decoded = MonitoringMode::decode(&mut stream, &ctx.context()).expect(
+            "OPC-10000-4 5.13.4.3 Table 70 requires service code to see invalid \
+                             MonitoringMode values so it can return Bad_MonitoringModeInvalid",
+        );
+        assert_eq!(decoded.into_repr(), invalid_monitoring_mode);
+    }
 }
 #[opcua::types::ua_encodable]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]

@@ -2,6 +2,11 @@
 .vscode/
 .cargo/
 target/
+debug/
+release/
+*.rs.bk
+*.rlib
+*.prof*
 pki/
 log/
 /curl-ca-bundle.crt

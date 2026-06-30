@@ -102,8 +102,8 @@ async fn write_variable() {
                 LocalizedText::from("Description"),
                 &id,
             ),
-            write_value(AttributeId::ArrayDimensions, vec![2u32], &id),
             write_value(AttributeId::ValueRank, 1, &id),
+            write_value(AttributeId::ArrayDimensions, vec![2u32], &id),
             write_value(
                 AttributeId::DataType,
                 Variant::NodeId(Box::new(DataTypeId::Int32.into())),
@@ -372,8 +372,8 @@ async fn write_variable_type() {
                 &id,
             ),
             write_value(AttributeId::IsAbstract, true, &id),
-            write_value(AttributeId::ArrayDimensions, vec![2u32], &id),
             write_value(AttributeId::ValueRank, 1, &id),
+            write_value(AttributeId::ArrayDimensions, vec![2u32], &id),
             write_value(
                 AttributeId::DataType,
                 Variant::NodeId(Box::new(DataTypeId::Int32.into())),

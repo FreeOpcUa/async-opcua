@@ -6,10 +6,10 @@ use argon2::{
     password_hash::{PasswordHash, PasswordVerifier},
     Argon2,
 };
-use opcua_crypto::{SecurityPolicy, Thumbprint};
+use opcua_crypto::{verify_signature_data, SecurityPolicy, Thumbprint, X509};
 use opcua_types::{
-    ByteString, Error, MessageSecurityMode, NodeId, StatusCode, UAString, UserTokenPolicy,
-    UserTokenType,
+    ByteString, Error, MessageSecurityMode, NodeId, SignatureData, StatusCode, UAString,
+    UserTokenPolicy, UserTokenType,
 };
 use tracing::{debug, error, warn};
 
@@ -421,11 +421,60 @@ pub fn issued_token_security_policy(endpoint: &ServerEndpoint) -> UAString {
     .into()
 }
 
-/// Get the username and password policy URI for the given endpioint.
-pub fn user_pass_security_policy_uri(_endpoint: &ServerEndpoint) -> UAString {
-    // TODO we could force the security policy uri for passwords to be something other than the default
-    //  here to ensure they're secure even when the endpoint's security policy is None.
-    UAString::null()
+/// Get the username and password policy URI for the given endpoint.
+pub fn user_pass_security_policy_uri(endpoint: &ServerEndpoint) -> UAString {
+    let user_token_security_policy = endpoint.password_security_policy();
+    if user_token_security_policy == endpoint.security_policy() {
+        UAString::null()
+    } else {
+        UAString::from(user_token_security_policy.to_uri())
+    }
+}
+
+/// Verify the X.509 identity-token proof-of-possession using the signature
+/// calculation selected by the user-token SecurityPolicy.
+pub(crate) fn verify_x509_user_token_signature(
+    signing_cert: &X509,
+    user_token_signature: &SignatureData,
+    security_policy: SecurityPolicy,
+    server_certificate: &X509,
+    server_nonce: &[u8],
+) -> Result<(), Error> {
+    if user_token_signature.signature.is_null_or_empty() {
+        return Err(x509_user_signature_invalid());
+    }
+
+    if x509_user_token_requires_channel_bound_signature(security_policy) {
+        return Err(x509_user_signature_invalid());
+    }
+
+    verify_signature_data(
+        user_token_signature,
+        security_policy,
+        signing_cert,
+        server_certificate,
+        server_nonce,
+    )
+    .map_err(|_| x509_user_signature_invalid())
+}
+
+pub(crate) fn x509_user_token_requires_channel_bound_signature(
+    security_policy: SecurityPolicy,
+) -> bool {
+    matches!(
+        security_policy,
+        SecurityPolicy::Aes128Sha256RsaOaep
+            | SecurityPolicy::Aes256Sha256RsaPss
+            | SecurityPolicy::EccNistP256
+            | SecurityPolicy::EccNistP384
+    )
+}
+
+fn x509_user_signature_invalid() -> Error {
+    Error::new(
+        StatusCode::BadUserSignatureInvalid,
+        "X509 user token signature is missing or invalid",
+    )
 }
 
 #[cfg(test)]

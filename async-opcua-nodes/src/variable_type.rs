@@ -134,7 +134,14 @@ impl Node for VariableType {
             }
             AttributeId::ValueRank => {
                 if let Variant::Int32(v) = value {
-                    self.set_value_rank(v);
+                    let value_rank = normalized_value_rank(v);
+                    if !value_rank_matches_array_dimensions(
+                        value_rank,
+                        self.array_dimensions.as_deref(),
+                    ) {
+                        return Err(StatusCode::BadNodeAttributesInvalid);
+                    }
+                    self.value_rank = value_rank;
                     Ok(())
                 } else {
                     Err(StatusCode::BadTypeMismatch)
@@ -147,6 +154,12 @@ impl Node for VariableType {
             AttributeId::ArrayDimensions => {
                 let array_dimensions = <Vec<u32>>::try_from_variant(value);
                 if let Ok(array_dimensions) = array_dimensions {
+                    if !value_rank_matches_array_dimensions(
+                        self.value_rank,
+                        Some(&array_dimensions),
+                    ) {
+                        return Err(StatusCode::BadNodeAttributesInvalid);
+                    }
                     self.set_array_dimensions(&array_dimensions);
                     Ok(())
                 } else {
@@ -244,6 +257,10 @@ impl VariableType {
     /// Get whether this type is valid.
     pub fn is_valid(&self) -> bool {
         self.base.is_valid()
+            && value_rank_matches_array_dimensions(
+                self.value_rank,
+                self.array_dimensions.as_deref(),
+            )
     }
 
     /// Get the data type of this variable type.
@@ -276,7 +293,7 @@ impl VariableType {
     /// Part 3 §5.6: the valid ValueRank values are -3, -2, -1, 0, or n >= 1. Values below
     /// -3 are invalid and are normalised to ANY (-2) rather than stored verbatim.
     pub fn set_value_rank(&mut self, value_rank: i32) {
-        self.value_rank = if value_rank < -3 { -2 } else { value_rank };
+        self.value_rank = normalized_value_rank(value_rank);
     }
 
     /// Get the array dimensions of this type.
@@ -303,5 +320,82 @@ impl VariableType {
     /// a full data value.
     pub fn set_data_value(&mut self, value: DataValue) {
         self.value = Some(value);
+    }
+}
+
+fn normalized_value_rank(value_rank: i32) -> i32 {
+    if value_rank < -3 {
+        -2
+    } else {
+        value_rank
+    }
+}
+
+fn value_rank_matches_array_dimensions(value_rank: i32, array_dimensions: Option<&[u32]>) -> bool {
+    match array_dimensions {
+        Some(_) if value_rank <= 0 => false,
+        Some(array_dimensions) => array_dimensions.len() == value_rank as usize,
+        None => true,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use opcua_types::DataTypeId;
+
+    use super::*;
+
+    #[test]
+    fn positive_value_rank_requires_matching_array_dimension_count() {
+        let mut variable_type = VariableType::new(
+            &NodeId::new(1, "variable-type-rank-mismatch"),
+            "VariableTypeRankMismatch",
+            "VariableTypeRankMismatch",
+            DataTypeId::UInt32.into(),
+            false,
+            2,
+        );
+
+        assert_eq!(
+            variable_type.set_attribute(AttributeId::ArrayDimensions, vec![4u32].into()),
+            Err(StatusCode::BadNodeAttributesInvalid)
+        );
+
+        let builder = VariableTypeBuilder::new(
+            &NodeId::new(1, "variable-type-rank-mismatch-builder"),
+            "VariableTypeRankMismatchBuilder",
+            "VariableTypeRankMismatchBuilder",
+        )
+        .data_type(DataTypeId::UInt32)
+        .value_rank(2)
+        .array_dimensions(&[4]);
+        assert!(!builder.is_valid());
+    }
+
+    #[test]
+    fn array_dimensions_are_rejected_for_scalar_value_rank() {
+        let mut variable_type = VariableType::new(
+            &NodeId::new(1, "variable-type-scalar-array-dimensions"),
+            "VariableTypeScalarArrayDimensions",
+            "VariableTypeScalarArrayDimensions",
+            DataTypeId::UInt32.into(),
+            false,
+            -1,
+        );
+
+        assert_eq!(
+            variable_type.set_attribute(AttributeId::ArrayDimensions, vec![1u32].into()),
+            Err(StatusCode::BadNodeAttributesInvalid)
+        );
+
+        let builder = VariableTypeBuilder::new(
+            &NodeId::new(1, "variable-type-scalar-array-dimensions-builder"),
+            "VariableTypeScalarArrayDimensionsBuilder",
+            "VariableTypeScalarArrayDimensionsBuilder",
+        )
+        .data_type(DataTypeId::UInt32)
+        .value_rank(-1)
+        .array_dimensions(&[1]);
+        assert!(!builder.is_valid());
     }
 }

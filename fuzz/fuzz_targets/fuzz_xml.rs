@@ -1,11 +1,11 @@
-#![cfg_attr(feature = "nightly", no_main)]
+#![cfg_attr(all(feature = "nightly", not(test)), no_main)]
 
-#[cfg(not(feature = "nightly"))]
+#[cfg(all(not(feature = "nightly"), not(test)))]
 fn main() {
     panic!("Fuzzing requires the nightly feature to be enabled.");
 }
 
-#[cfg(feature = "nightly")]
+#[cfg(all(feature = "nightly", not(test)))]
 libfuzzer_sys::fuzz_target!(|data: &[u8]| {
     use opcua::types::xml::{XmlDecodable, XmlStreamReader};
     use opcua::types::{ContextOwned, DataValue, Variant};

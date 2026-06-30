@@ -252,6 +252,25 @@ Pure-Rust only (no OpenSSL/C): chain, CRL, and supplied/stapled OCSP handling ar
 fetching; it validates OCSP responses only when supplied to the chain-validation context. Certificate
 validation failures emit the matching `AuditCertificate*` event subtype where the server has audit context.
 
+### X.509 user identity tokens
+
+`X509IdentityToken` activation is certificate-backed user authentication, not just a thumbprint lookup.
+The server parses the certificate carried in the token, validates it through the `CertificateStore` user
+identity path, and only then verifies the user-token signature and maps the certificate thumbprint to a
+configured user. A configured X.509 user thumbprint identifies the validated user; it does not bypass
+trust-chain, validity, certificate-usage, security-policy, or revocation checks.
+
+The ordering intentionally distinguishes certificate acceptability from proof-of-possession:
+
+* Malformed or hard-failing user certificates fail before user identity assignment and preserve the
+  certificate validation status where the ActivateSession tarpit allows it.
+* A trusted and valid user certificate with a missing or invalid `user_token_signature` fails with
+  `BadUserSignatureInvalid`.
+* Suppressed user-certificate validation findings do not block activation, but each finding is returned
+  to the server session layer and emitted as the matching `AuditCertificate*` event when audit monitoring
+  is active. Audit events include the public certificate bytes but not private keys, decrypted secrets, or
+  raw user-token signatures.
+
 ### X509 Fields
 
 X509 Certs are generated subject to the requirements of OPC UA which requires a serial number and the first alt subject name to be an application URI. Subsequent alt subjects can be IP or DNS entries of the host.

@@ -459,7 +459,7 @@ impl DiagnosticsNodeManager {
             )
             .unwrap()
             .into(),
-            AttributeId::NodeClass => (NodeClass::Object as i32).into(),
+            AttributeId::NodeClass => (NodeClass::Variable as i32).into(),
             AttributeId::BrowseName => QualifiedName::new(0, prop).into(),
             AttributeId::DisplayName => LocalizedText::new("", prop).into(),
             AttributeId::Value => match prop {

@@ -22,8 +22,9 @@ use opcua::{
     crypto::SecurityPolicy,
     types::{
         AttributeId, BrowseDescription, BrowseDirection, MessageSecurityMode,
-        MonitoredItemCreateRequest, MonitoringMode, MonitoringParameters, NodeId, ObjectId,
-        ReadValueId, ReferenceTypeId, TimestampsToReturn, VariableId,
+        MonitoredItemCreateRequest, MonitoringMode, MonitoringParameters, NodeClass, NodeId,
+        ObjectId, ReadValueId, ReferenceTypeId, StatusCode, TimestampsToReturn, VariableId,
+        Variant,
     },
 };
 use tokio::time::timeout;
@@ -106,6 +107,25 @@ fn tokens(include_x509: bool) -> Vec<(&'static str, IdentityToken)> {
         v.push(("x509", client_x509_token().expect("x509 token")));
     }
     v
+}
+
+#[tokio::test]
+async fn trusted_x509_user_token_activates() {
+    let mut tester = Tester::new(crate::utils::test_server(), false).await;
+    let (session, handle) = tester
+        .connect(
+            SecurityPolicy::None,
+            MessageSecurityMode::None,
+            client_x509_token().expect("x509 token"),
+        )
+        .await
+        .expect("trusted configured X.509 user token should connect");
+    let _h = handle.spawn();
+    timeout(Duration::from_secs(20), session.wait_for_connection())
+        .await
+        .expect("trusted X.509 user token should activate before timeout");
+    exercise_core_services(&session).await;
+    let _ = session.disconnect().await;
 }
 
 /// Run + exercise every valid (policy, mode) × token cell against `tester`, then disconnect.
@@ -205,6 +225,109 @@ async fn conformance_smoke_rejects_bad_password() {
                 "a wrong password must not yield a connected session"
             );
         }
+    }
+}
+
+#[tokio::test]
+async fn namespace_metadata_property_nodes_are_variables() {
+    let mut tester = Tester::new(crate::utils::test_server(), false).await;
+    let (session, handle) = tester.connect_default().await.unwrap();
+    let _h = handle.spawn();
+    timeout(Duration::from_secs(20), session.wait_for_connection())
+        .await
+        .expect("anonymous session should activate before timeout");
+
+    let metadata_refs = session
+        .browse(
+            &[BrowseDescription {
+                node_id: ObjectId::Server_Namespaces.into(),
+                browse_direction: BrowseDirection::Forward,
+                reference_type_id: ReferenceTypeId::HasComponent.into(),
+                include_subtypes: false,
+                node_class_mask: NodeClass::Object as u32,
+                result_mask: 0x3f,
+            }],
+            1000,
+            None,
+        )
+        .await
+        .expect("Server.Namespaces should be browsable");
+    let metadata_node = metadata_refs[0]
+        .references
+        .as_ref()
+        .and_then(|refs| {
+            refs.iter()
+                .find(|reference| reference.browse_name.name.as_ref() == "urn:rustopcuatestserver")
+        })
+        .expect("test namespace metadata should be browsable")
+        .node_id
+        .node_id
+        .clone();
+
+    let property_refs = session
+        .browse(
+            &[BrowseDescription {
+                node_id: metadata_node,
+                browse_direction: BrowseDirection::Forward,
+                reference_type_id: ReferenceTypeId::HasProperty.into(),
+                include_subtypes: false,
+                node_class_mask: 0,
+                result_mask: 0x3f,
+            }],
+            1000,
+            None,
+        )
+        .await
+        .expect("NamespaceMetadata properties should be browsable");
+    let refs = property_refs[0]
+        .references
+        .as_ref()
+        .expect("NamespaceMetadata should expose property references");
+    let mandatory_properties = [
+        "NamespaceUri",
+        "NamespaceVersion",
+        "NamespacePublicationDate",
+        "IsNamespaceSubset",
+        "StaticNodeIdTypes",
+    ];
+    let property_nodes = mandatory_properties
+        .iter()
+        .map(|property| {
+            refs.iter()
+                .find(|reference| reference.browse_name.name.as_ref() == *property)
+                .unwrap_or_else(|| panic!("{property} metadata property should be browsable"))
+                .node_id
+                .node_id
+                .clone()
+        })
+        .collect::<Vec<_>>();
+
+    // OPC-10000-5 6.3.13 Table 22 defines NamespaceMetadata metadata properties as
+    // HasProperty Variable nodes with PropertyType.
+    let reads = property_nodes
+        .into_iter()
+        .map(|node_id| ReadValueId {
+            node_id,
+            attribute_id: AttributeId::NodeClass as u32,
+            ..Default::default()
+        })
+        .collect::<Vec<_>>();
+    let values = session
+        .read(&reads, TimestampsToReturn::Neither, 0.0)
+        .await
+        .expect("NamespaceMetadata property NodeClass reads should succeed");
+
+    for (property, value) in mandatory_properties.iter().zip(values.iter()) {
+        assert_eq!(
+            value.status(),
+            StatusCode::Good,
+            "{property} NodeClass read should succeed"
+        );
+        assert_eq!(
+            value.value,
+            Some(Variant::Int32(NodeClass::Variable as i32)),
+            "{property} should expose NodeClass Variable"
+        );
     }
 }
 

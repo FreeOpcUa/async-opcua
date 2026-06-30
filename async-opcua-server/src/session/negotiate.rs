@@ -5,13 +5,13 @@
     clippy::panic
 )]
 
-use std::time::Duration;
+use std::{error::Error as StdError, fmt, time::Duration};
 
 use opcua_crypto::{
     identity::decrypt_rsa_oaep_secret, legacy_decrypt_secret, LegacySecret, PrivateKey,
     SecurityPolicy,
 };
-use opcua_types::{ByteString, Error, StatusCode};
+use opcua_types::{ByteString, Error, IssuedIdentityToken, StatusCode, UserNameIdentityToken};
 
 const IDENTITY_TOKEN_VALIDATION_TARPIT: Duration = Duration::from_millis(100);
 
@@ -26,10 +26,59 @@ pub(crate) struct EccSecretContext {
 
 /// Delays failed identity-token validation without blocking Tokio workers.
 pub(crate) async fn tarpit_identity_token_validation_failure(error: Error) -> Error {
+    let status = error.status();
+    let preserve_status = preserves_identity_token_failure_status(status)
+        || is_identity_token_policy_protection_failure(&error);
     tokio::time::sleep(IDENTITY_TOKEN_VALIDATION_TARPIT).await;
+    if preserve_status {
+        return error;
+    }
     Error::new(
         StatusCode::BadUserAccessDenied,
         format!("Identity token validation failed: {error}"),
+    )
+}
+
+fn preserves_identity_token_failure_status(status: StatusCode) -> bool {
+    matches!(
+        status,
+        StatusCode::BadUserSignatureInvalid
+            | StatusCode::BadCertificateInvalid
+            | StatusCode::BadCertificateTimeInvalid
+            | StatusCode::BadCertificateIssuerTimeInvalid
+            | StatusCode::BadCertificateHostNameInvalid
+            | StatusCode::BadCertificateUriInvalid
+            | StatusCode::BadCertificateUseNotAllowed
+            | StatusCode::BadCertificateIssuerUseNotAllowed
+            | StatusCode::BadCertificateUntrusted
+            | StatusCode::BadCertificateRevocationUnknown
+            | StatusCode::BadCertificateIssuerRevocationUnknown
+            | StatusCode::BadCertificateRevoked
+            | StatusCode::BadCertificateIssuerRevoked
+            | StatusCode::BadCertificateChainIncomplete
+            | StatusCode::BadCertificatePolicyCheckFailed
+    )
+}
+
+fn is_identity_token_policy_protection_failure(error: &Error) -> bool {
+    StdError::source(error).is_some_and(|source| source.is::<IdentityTokenPolicyProtectionError>())
+}
+
+#[derive(Debug)]
+struct IdentityTokenPolicyProtectionError(&'static str);
+
+impl fmt::Display for IdentityTokenPolicyProtectionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.0)
+    }
+}
+
+impl StdError for IdentityTokenPolicyProtectionError {}
+
+fn identity_token_policy_protection_error(message: &'static str) -> Error {
+    Error::new(
+        StatusCode::BadIdentityTokenInvalid,
+        IdentityTokenPolicyProtectionError(message),
     )
 }
 
@@ -39,6 +88,56 @@ pub(crate) async fn tarpit_authentication_failure<T>(result: Result<T, Error>) -
         Ok(value) => Ok(value),
         Err(error) => Err(tarpit_identity_token_validation_failure(error).await),
     }
+}
+
+/// Validate that a username/password identity token is protected as required by its policy.
+pub(crate) fn validate_username_password_token_protection(
+    token: &UserNameIdentityToken,
+    token_security_policy: SecurityPolicy,
+) -> Result<(), Error> {
+    if token_security_policy != SecurityPolicy::None
+        && token.encryption_algorithm.is_empty()
+        && !is_ecc_user_token_policy(token_security_policy)
+    {
+        return Err(identity_token_policy_protection_error(
+            "Username/password identity token is not encrypted as required by UserTokenPolicy",
+        ));
+    }
+
+    Ok(())
+}
+
+/// Returns whether the username/password token secret must be decrypted before authentication.
+pub(crate) fn username_password_secret_needs_decrypt(
+    token: &UserNameIdentityToken,
+    token_security_policy: SecurityPolicy,
+) -> bool {
+    !token.encryption_algorithm.is_empty() || is_ecc_user_token_policy(token_security_policy)
+}
+
+/// Validate that an issued identity token is protected as required by its policy.
+pub(crate) fn validate_issued_token_protection(
+    token: &IssuedIdentityToken,
+    token_security_policy: SecurityPolicy,
+) -> Result<(), Error> {
+    if token_security_policy != SecurityPolicy::None
+        && token.encryption_algorithm.is_empty()
+        && !is_ecc_user_token_policy(token_security_policy)
+    {
+        return Err(identity_token_policy_protection_error(
+            "Issued identity token is not encrypted as required by UserTokenPolicy",
+        ));
+    }
+
+    Ok(())
+}
+
+/// Returns whether the issued token secret must be decrypted before validation.
+pub(crate) fn issued_token_secret_needs_decrypt(
+    token: &IssuedIdentityToken,
+    token_security_policy: SecurityPolicy,
+) -> bool {
+    !token.encryption_algorithm.is_empty() || is_ecc_user_token_policy(token_security_policy)
 }
 
 /// Decrypts an ActivateSession identity-token secret.
@@ -107,6 +206,13 @@ fn is_rsa_oaep_encrypted_secret_algorithm(encryption_algorithm: &str) -> bool {
     .into_iter()
     .filter_map(|policy| policy.asymmetric_encryption_algorithm())
     .any(|algorithm| algorithm == encryption_algorithm)
+}
+
+fn is_ecc_user_token_policy(security_policy: SecurityPolicy) -> bool {
+    matches!(
+        security_policy,
+        SecurityPolicy::EccNistP256 | SecurityPolicy::EccNistP384
+    )
 }
 
 #[cfg(all(test, feature = "ecc"))]

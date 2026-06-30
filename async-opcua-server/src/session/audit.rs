@@ -17,6 +17,7 @@ use crate::{
 const AUDIT_FAILURE_SEVERITY: u16 = 900;
 const AUDIT_SUCCESS_SEVERITY: u16 = 100;
 const AUDIT_SOURCE_NAME: &str = "Server";
+const AUDIT_CERTIFICATE_SOURCE_NAME: &str = "Security/Certificate";
 
 #[derive(Clone)]
 pub(crate) struct AuditEventContext {
@@ -281,6 +282,14 @@ impl ServerAuditEvent {
         self
     }
 
+    /// AuditCertificateEventType subtypes require this source name (OPC UA Part 5 §§6.4.12-6.4.18).
+    fn with_certificate_source_name(mut self) -> Self {
+        self.base = self
+            .base
+            .set_source_name(UAString::from(AUDIT_CERTIFICATE_SOURCE_NAME));
+        self
+    }
+
     /// Records the cancelled request handle for an AuditCancelEventType.
     fn with_request_handle(mut self, request_handle: u32) -> Self {
         self.request_handle = Some(request_handle);
@@ -501,19 +510,152 @@ pub(crate) fn dispatch_certificate_audit(
     session_id: Option<NodeId>,
     status: StatusCode,
 ) {
+    dispatch_certificate_audit_with_action(
+        subscriptions,
+        info,
+        request_header,
+        certificate,
+        session_id,
+        status,
+        "Validate ClientCertificate",
+    );
+}
+
+/// Emits the matching AuditCertificateEventType subtype for a suppressed finding.
+///
+/// The certificate validation finding selects the certificate event subtype, while the emitted
+/// audit outcome is successful because the enclosing operation was allowed to continue.
+pub(crate) fn dispatch_suppressed_certificate_audit_success(
+    subscriptions: &Arc<SubscriptionCache>,
+    info: &ServerInfo,
+    request_header: &RequestHeader,
+    certificate: ByteString,
+    session_id: Option<NodeId>,
+    finding_status: StatusCode,
+) {
+    let Some(event_type) = certificate_event_type(finding_status) else {
+        return;
+    };
+    dispatch_certificate_audit_event(
+        subscriptions,
+        info,
+        request_header,
+        CertificateAuditDetails {
+            event_type,
+            certificate,
+            session_id,
+            status: StatusCode::Good,
+            action: "Validate ClientCertificate",
+        },
+    );
+}
+
+/// Emits the matching AuditCertificateEventType subtype for an OpenSecureChannel client certificate.
+///
+/// A no-op for status codes that are not certificate-validation failures.
+pub(crate) fn dispatch_open_secure_channel_certificate_audit(
+    subscriptions: &Arc<SubscriptionCache>,
+    info: &ServerInfo,
+    request_header: &RequestHeader,
+    certificate: ByteString,
+    status: StatusCode,
+) {
+    let event_type = certificate_event_type(status).or_else(|| {
+        // OPC UA Part 4 §6.1.3 reports some application-certificate validation failures to the
+        // client as Bad_SecurityChecksFailed while still requiring AuditCertificateInvalidEventType.
+        (status == StatusCode::BadSecurityChecksFailed)
+            .then_some(ObjectTypeId::AuditCertificateInvalidEventType)
+    });
+    let Some(event_type) = event_type else {
+        return;
+    };
+    dispatch_certificate_audit_event(
+        subscriptions,
+        info,
+        request_header,
+        CertificateAuditDetails {
+            event_type,
+            certificate,
+            session_id: None,
+            status,
+            action: "Validate OpenSecureChannel ClientCertificate",
+        },
+    );
+}
+
+/// Emits the matching AuditCertificateEventType subtype for an X.509 user identity certificate.
+///
+/// A no-op for status codes that are not certificate-validation failures.
+pub(crate) fn dispatch_user_certificate_audit(
+    subscriptions: &Arc<SubscriptionCache>,
+    info: &ServerInfo,
+    request_header: &RequestHeader,
+    certificate: ByteString,
+    session_id: Option<NodeId>,
+    status: StatusCode,
+) {
+    dispatch_certificate_audit_with_action(
+        subscriptions,
+        info,
+        request_header,
+        certificate,
+        session_id,
+        status,
+        "Validate UserIdentityCertificate",
+    );
+}
+
+fn dispatch_certificate_audit_with_action(
+    subscriptions: &Arc<SubscriptionCache>,
+    info: &ServerInfo,
+    request_header: &RequestHeader,
+    certificate: ByteString,
+    session_id: Option<NodeId>,
+    status: StatusCode,
+    action: &'static str,
+) {
     let Some(event_type) = certificate_event_type(status) else {
         return;
     };
+    dispatch_certificate_audit_event(
+        subscriptions,
+        info,
+        request_header,
+        CertificateAuditDetails {
+            event_type,
+            certificate,
+            session_id,
+            status,
+            action,
+        },
+    );
+}
+
+struct CertificateAuditDetails {
+    event_type: ObjectTypeId,
+    certificate: ByteString,
+    session_id: Option<NodeId>,
+    status: StatusCode,
+    action: &'static str,
+}
+
+fn dispatch_certificate_audit_event(
+    subscriptions: &Arc<SubscriptionCache>,
+    info: &ServerInfo,
+    request_header: &RequestHeader,
+    details: CertificateAuditDetails,
+) {
     let event = ServerAuditEvent::outcome(
-        event_type,
+        details.event_type,
         info.application_uri.clone(),
-        "Validate ClientCertificate",
+        details.action,
         request_header.audit_entry_id.clone(),
         UAString::null(),
-        status,
-        session_id,
+        details.status,
+        details.session_id,
     )
-    .with_certificate(certificate);
+    .with_certificate(details.certificate)
+    .with_certificate_source_name();
     dispatch_audit_event(subscriptions, &event);
 }
 
@@ -809,6 +951,18 @@ mod tests {
                 StatusCode::BadCertificateInvalid,
                 ObjectTypeId::AuditCertificateInvalidEventType,
             ),
+            (
+                StatusCode::BadCertificateUseNotAllowed,
+                ObjectTypeId::AuditCertificateInvalidEventType,
+            ),
+            (
+                StatusCode::BadCertificateChainIncomplete,
+                ObjectTypeId::AuditCertificateUntrustedEventType,
+            ),
+            (
+                StatusCode::BadCertificatePolicyCheckFailed,
+                ObjectTypeId::AuditCertificateInvalidEventType,
+            ),
         ];
         for (status, expected) in cases {
             assert_eq!(certificate_event_type(status), Some(expected), "{status}");
@@ -922,7 +1076,8 @@ mod tests {
             StatusCode::BadCertificateUntrusted,
             None,
         )
-        .with_certificate(cert.clone());
+        .with_certificate(cert.clone())
+        .with_certificate_source_name();
 
         assert_eq!(
             event.get_value(AttributeId::Value, &NumericRange::None, &field("EventType")),
@@ -940,8 +1095,24 @@ mod tests {
             Variant::from(cert)
         );
         assert_eq!(
+            event.get_value(
+                AttributeId::Value,
+                &NumericRange::None,
+                &field("SourceName")
+            ),
+            Variant::from(UAString::from(AUDIT_CERTIFICATE_SOURCE_NAME))
+        );
+        assert_eq!(
             event.get_value(AttributeId::Value, &NumericRange::None, &field("Status")),
             Variant::Boolean(false)
+        );
+        assert_eq!(
+            event.get_value(
+                AttributeId::Value,
+                &NumericRange::None,
+                &field("StatusCodeId")
+            ),
+            Variant::from(StatusCode::BadCertificateUntrusted)
         );
     }
 }

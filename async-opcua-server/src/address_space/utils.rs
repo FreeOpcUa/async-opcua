@@ -1,16 +1,25 @@
+use std::sync::OnceLock;
+
 use crate::{
     node_manager::{ParsedReadValueId, ParsedWriteValue, RequestContext, ServerContext},
     rbac,
+    session::manager::{is_special_write_locale_id, locale_id_matches, normalized_locale_id},
 };
+use dashmap::DashMap;
 use opcua_nodes::TypeTree;
 use opcua_types::{
-    AttributeId, DataEncoding, DataTypeId, DataValue, DateTime, NodeId, NumericRange,
-    PermissionType, RolePermissionType, StatusCode, TimestampsToReturn, Variant,
+    AttributeId, DataEncoding, DataTypeId, DataValue, DateTime, LocalizedText, NodeId,
+    NumericRange, PermissionType, RolePermissionType, StatusCode, TimestampsToReturn, Variant,
     VariantScalarTypeId, VariantTypeId, WriteMask,
 };
 use tracing::debug;
 
 use super::{AccessLevel, AddressSpace, HasNodeId, NodeType, Variable};
+
+type LocalizedTextAttributeKey = (NodeId, AttributeId);
+type LocalizedTextAttributeValues = DashMap<LocalizedTextAttributeKey, Vec<LocalizedText>>;
+
+static LOCALIZED_TEXT_ATTRIBUTE_VALUES: OnceLock<LocalizedTextAttributeValues> = OnceLock::new();
 
 /// Validate that the user given by `context` can read the value
 /// of the given node.
@@ -366,6 +375,7 @@ pub fn validate_node_write(
     };
 
     validate_attribute_value_to_write(node_to_write.attribute_id, value)?;
+    validate_localized_text_attribute_write_locale(context, node_to_write.attribute_id, value)?;
 
     if node_to_write.attribute_id == AttributeId::Value {
         match node {
@@ -385,6 +395,8 @@ pub fn validate_node_write(
             _ => {}
         }
     }
+
+    remember_localized_text_attribute_value(node.node_id(), node_to_write.attribute_id, value);
 
     Ok(())
 }
@@ -423,6 +435,132 @@ pub(crate) fn compute_user_role_permissions(
     }
 
     merged
+}
+
+fn localized_text_attribute_values() -> &'static LocalizedTextAttributeValues {
+    LOCALIZED_TEXT_ATTRIBUTE_VALUES.get_or_init(DashMap::new)
+}
+
+fn is_localized_text_attribute(attribute_id: AttributeId) -> bool {
+    matches!(
+        attribute_id,
+        AttributeId::DisplayName | AttributeId::Description | AttributeId::InverseName
+    )
+}
+
+fn remember_localized_text_attribute_value(
+    node_id: &NodeId,
+    attribute_id: AttributeId,
+    value: &Variant,
+) {
+    if !is_localized_text_attribute(attribute_id) {
+        return;
+    }
+
+    let Variant::LocalizedText(text) = value else {
+        return;
+    };
+
+    let key = (node_id.clone(), attribute_id);
+    let values = localized_text_attribute_values();
+    if text.locale.is_empty() {
+        values.remove(&key);
+        return;
+    }
+
+    let text = text.as_ref().clone();
+    let locale = normalized_locale_id(text.locale.as_ref());
+    let mut variants = values.entry(key).or_default();
+    if let Some(existing) = variants
+        .iter_mut()
+        .find(|existing| normalized_locale_id(existing.locale.as_ref()) == locale)
+    {
+        *existing = text;
+    } else {
+        variants.push(text);
+    }
+}
+
+fn validate_localized_text_attribute_write_locale(
+    context: &RequestContext,
+    attribute_id: AttributeId,
+    value: &Variant,
+) -> Result<(), StatusCode> {
+    if !is_localized_text_attribute(attribute_id) {
+        return Ok(());
+    }
+
+    let Variant::LocalizedText(text) = value else {
+        return Ok(());
+    };
+
+    if text.locale.is_empty() {
+        return Ok(());
+    }
+
+    let locale = text.locale.as_ref();
+    if normalized_locale_id(locale).is_empty()
+        || is_special_write_locale_id(locale)
+        || !context
+            .info
+            .config
+            .locale_ids
+            .iter()
+            .any(|supported| locale_id_matches(supported, locale))
+    {
+        return Err(StatusCode::BadLocaleNotSupported);
+    }
+
+    Ok(())
+}
+
+fn localized_text_for_session(
+    context: &RequestContext,
+    node_id: &NodeId,
+    attribute_id: AttributeId,
+    fallback: &LocalizedText,
+) -> LocalizedText {
+    let Some(locale_ids) = crate::session::manager::locale_ids_for_session(context.session_id())
+    else {
+        return fallback.clone();
+    };
+
+    let key = (node_id.clone(), attribute_id);
+    let Some(variants) = localized_text_attribute_values().get(&key) else {
+        return fallback.clone();
+    };
+    if fallback.locale.is_empty() || !variants.iter().any(|text| text == fallback) {
+        return fallback.clone();
+    }
+
+    for requested in &locale_ids {
+        if let Some(text) = variants
+            .iter()
+            .find(|text| locale_id_matches(text.locale.as_ref(), requested.as_ref()))
+        {
+            return text.clone();
+        }
+    }
+
+    fallback.clone()
+}
+
+fn apply_session_locale_to_localized_text(
+    context: &RequestContext,
+    node_id: &NodeId,
+    attribute_id: AttributeId,
+    value: Option<Variant>,
+) -> Option<Variant> {
+    if !is_localized_text_attribute(attribute_id) {
+        return value;
+    }
+
+    match value {
+        Some(Variant::LocalizedText(text)) => Some(Variant::LocalizedText(Box::new(
+            localized_text_for_session(context, node_id, attribute_id, text.as_ref()),
+        ))),
+        other => other,
+    }
 }
 
 /// Invoke `Read` for the given `node_to_read` on `node`.
@@ -482,7 +620,12 @@ pub fn read_node_value(
         value
     };
 
-    result_value.value = value;
+    result_value.value = apply_session_locale_to_localized_text(
+        context,
+        node.node_id(),
+        node_to_read.attribute_id,
+        value,
+    );
     result_value.status = attribute.status;
     if matches!(node, NodeType::Variable(_)) && node_to_read.attribute_id == AttributeId::Value {
         match timestamps_to_return {
@@ -529,8 +672,11 @@ pub fn write_node_value(
     let value = node_to_write.value.value.clone().unwrap_or_default();
     validate_attribute_value_to_write(node_to_write.attribute_id, &value)?;
 
+    let node_id = node.node_id().clone();
     node.as_mut_node()
-        .set_attribute(node_to_write.attribute_id, value)
+        .set_attribute(node_to_write.attribute_id, value.clone())?;
+    remember_localized_text_attribute_value(&node_id, node_to_write.attribute_id, &value);
+    Ok(())
 }
 
 /// Add the given list of namespaces to the type tree in `context` and

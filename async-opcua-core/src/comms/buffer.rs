@@ -2,10 +2,12 @@
 //! encoding of data and the state of a communication channel.
 
 use std::{
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
     io::{BufRead, Cursor, Read, Write},
+    sync::{Arc, OnceLock},
 };
 
+use parking_lot::Mutex;
 use tracing::trace;
 
 use crate::{
@@ -24,6 +26,60 @@ use super::{
     sequence_number::SequenceNumberHandle,
     tcp_types::{AcknowledgeMessage, ErrorMessage},
 };
+
+#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq)]
+/// Opaque lookup key for a secure channel's client response body limit.
+pub struct ClientResponseBodyLimitKey {
+    secure_channel_id: u32,
+    encoding_context: usize,
+}
+
+/// Build the client response body-limit lookup key for a secure channel.
+pub fn client_response_body_limit_key(
+    secure_channel: &SecureChannel,
+) -> Option<ClientResponseBodyLimitKey> {
+    let secure_channel_id = secure_channel.secure_channel_id();
+    if secure_channel_id == 0 {
+        return None;
+    }
+
+    let context = secure_channel.context_arc();
+    Some(ClientResponseBodyLimitKey {
+        secure_channel_id,
+        encoding_context: Arc::as_ptr(&context) as usize,
+    })
+}
+
+fn client_response_body_limits() -> &'static Mutex<HashMap<ClientResponseBodyLimitKey, usize>> {
+    static LIMITS: OnceLock<Mutex<HashMap<ClientResponseBodyLimitKey, usize>>> = OnceLock::new();
+    LIMITS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Set the client-advertised response body limit for a secure channel.
+///
+/// OPC UA Part 4 §5.7.2.2 defines `maxResponseMessageSize` as a limit for the
+/// body of any response message. A value of zero means no client-side limit.
+pub fn set_client_response_body_limit(
+    key: ClientResponseBodyLimitKey,
+    max_response_message_size: u32,
+) {
+    let mut limits = client_response_body_limits().lock();
+    if max_response_message_size == 0 {
+        limits.remove(&key);
+    } else {
+        limits.insert(key, max_response_message_size as usize);
+    }
+}
+
+/// Clear any client-advertised response body limit for a secure channel.
+pub fn clear_client_response_body_limit(key: ClientResponseBodyLimitKey) {
+    client_response_body_limits().lock().remove(&key);
+}
+
+fn client_response_body_limit(secure_channel: &SecureChannel) -> Option<usize> {
+    let key = client_response_body_limit_key(secure_channel)?;
+    client_response_body_limits().lock().get(&key).copied()
+}
 
 #[derive(Copy, Clone, Debug)]
 enum SendBufferState {
@@ -225,6 +281,31 @@ impl SendBuffer {
         secure_channel: &SecureChannel,
     ) -> Result<u32, Error> {
         trace!("Writing request to buffer");
+
+        {
+            let ctx_r = secure_channel.context();
+            let ctx = ctx_r.context();
+            let message_size = message.byte_len(&ctx);
+            let message_type_id = message.type_id();
+            if !secure_channel.is_client_role()
+                && message_type_id != ObjectId::ServiceFault_Encoding_DefaultBinary
+            {
+                if let Some(max_response_body_size) = client_response_body_limit(secure_channel) {
+                    if message_size > max_response_body_size {
+                        return Err(Error::new(
+                            StatusCode::BadResponseTooLarge,
+                            format!(
+                                "Response body size {message_size} exceeds client maxResponseMessageSize {max_response_body_size}"
+                            ),
+                        )
+                        .with_context(
+                            Some(request_id),
+                            (message.request_handle() > 0).then(|| message.request_handle()),
+                        ));
+                    }
+                }
+            }
+        }
 
         // Turn message to chunk(s), reusing the connection-local chunk
         // storage and scratch so this does not allocate at steady state.

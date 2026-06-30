@@ -18,6 +18,8 @@ use crate::{XmlError, XmlErrorInner};
 /// Namespace URI for the OPC UA base namespace, which is implicit for `ns=0` NodeIds.
 pub const OPC_UA_NAMESPACE_URI: &str = "http://opcfoundation.org/UA/";
 
+const MAX_IMPORTED_XML_BYTES: u64 = 1024 * 1024;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Location of a node inside a [`NodeSetCollection`].
 pub struct NodeLocation {
@@ -445,7 +447,7 @@ impl OpcUaXmlParser {
     ) -> Result<TypeDictionaryCollection, XmlError> {
         let mut collection = TypeDictionaryCollection::default();
         let mut visited = HashSet::new();
-        Self::load_schema_file_with_imports(path.as_ref(), &mut collection, &mut visited)?;
+        Self::load_schema_file_with_imports(path.as_ref(), &mut collection, &mut visited, false)?;
         Ok(collection)
     }
 
@@ -467,7 +469,7 @@ impl OpcUaXmlParser {
     ) -> Result<XmlSchemaCollection, XmlError> {
         let mut collection = XmlSchemaCollection::default();
         let mut visited = HashSet::new();
-        Self::load_xsd_file_with_imports(path.as_ref(), &mut collection, &mut visited)?;
+        Self::load_xsd_file_with_imports(path.as_ref(), &mut collection, &mut visited, false)?;
         Ok(collection)
     }
 
@@ -475,13 +477,18 @@ impl OpcUaXmlParser {
         path: &Path,
         collection: &mut TypeDictionaryCollection,
         visited: &mut HashSet<PathBuf>,
+        enforce_import_limit: bool,
     ) -> Result<(), XmlError> {
         let key = visited_key(path);
         if !visited.insert(key) {
             return Ok(());
         }
 
-        let content = read_file(path, "reading imported schema")?;
+        let content = if enforce_import_limit {
+            read_import_file(path, "reading imported schema")?
+        } else {
+            read_file(path, "reading imported schema")?
+        };
         match root_element_name(&content)?.as_str() {
             "TypeDictionary" => {
                 let dictionary = Self::parse_bsd(&content)?;
@@ -520,13 +527,18 @@ impl OpcUaXmlParser {
         path: &Path,
         collection: &mut XmlSchemaCollection,
         visited: &mut HashSet<PathBuf>,
+        enforce_import_limit: bool,
     ) -> Result<(), XmlError> {
         let key = visited_key(path);
         if !visited.insert(key) {
             return Ok(());
         }
 
-        let content = read_file(path, "reading imported XSD")?;
+        let content = if enforce_import_limit {
+            read_import_file(path, "reading imported XSD")?
+        } else {
+            read_file(path, "reading imported XSD")?
+        };
         let root = root_element_name(&content)?;
         if root != "schema" {
             return Err(other_error(&format!(
@@ -547,7 +559,7 @@ impl OpcUaXmlParser {
                 continue;
             }
             let import_path = resolve_import_path(path, &location);
-            Self::load_xsd_file_with_imports(&import_path, collection, visited)?;
+            Self::load_xsd_file_with_imports(&import_path, collection, visited, true)?;
         }
         Ok(())
     }
@@ -562,12 +574,25 @@ impl OpcUaXmlParser {
             return Ok(());
         }
         let import_path = resolve_import_path(source_path, location);
-        Self::load_schema_file_with_imports(&import_path, collection, visited)
+        Self::load_schema_file_with_imports(&import_path, collection, visited, true)
     }
 }
 
 fn read_file(path: &Path, action: &str) -> Result<String, XmlError> {
     fs::read_to_string(path).map_err(|e| io_error(path, action, e))
+}
+
+fn read_import_file(path: &Path, action: &str) -> Result<String, XmlError> {
+    let size = fs::metadata(path)
+        .map_err(|e| io_error(path, "checking XML import size", e))?
+        .len();
+    if size > MAX_IMPORTED_XML_BYTES {
+        return Err(other_error(&format!(
+            "oversized XML import {}: {size} bytes exceeds {MAX_IMPORTED_XML_BYTES} byte limit",
+            path.display()
+        )));
+    }
+    read_file(path, action)
 }
 
 fn io_error(path: &Path, action: &str, error: io::Error) -> XmlError {
@@ -714,6 +739,91 @@ mod tests {
         assert!(option_set_definition.is_option_set);
         assert_eq!(option_set_definition.fields[1].value, 5);
 
+        Ok(())
+    }
+
+    #[test]
+    fn malformed_xml_import_exposes_parse_failure() -> Result<(), Box<dyn Error>> {
+        let dir = std::env::temp_dir().join(format!(
+            "async_opcua_xml_parser_malformed_import_{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir)?;
+
+        let root_bsd = dir.join("Root.Types.bsd");
+        let malformed_bsd = dir.join("Malformed.Types.bsd");
+
+        fs::write(
+            &root_bsd,
+            r#"<opc:TypeDictionary xmlns:opc="http://opcfoundation.org/BinarySchema/" TargetNamespace="urn:root">
+  <opc:Import Namespace="urn:malformed" Location="Malformed.Types.bsd" />
+</opc:TypeDictionary>"#,
+        )?;
+        fs::write(
+            &malformed_bsd,
+            r#"<opc:TypeDictionary xmlns:opc="http://opcfoundation.org/BinarySchema/" TargetNamespace="urn:malformed">
+  <opc:StructuredType Name="Broken">
+    <opc:Field Name="Value" TypeName="opc:Int32" />
+"#,
+        )?;
+
+        let error = OpcUaXmlParser::parse_bsd_file_with_imports(&root_bsd)
+            .expect_err("malformed local XML import must be exposed as a parse failure");
+        let _ = fs::remove_dir_all(&dir);
+
+        assert!(
+            matches!(error.error, crate::XmlErrorInner::Xml(_)),
+            "expected explicit XML parse error for malformed import, got {error:?}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn oversized_xml_import_is_rejected_before_parsing() -> Result<(), Box<dyn Error>> {
+        const OVERSIZED_IMPORT_BYTES: usize = 1024 * 1024 + 1;
+
+        let dir = std::env::temp_dir().join(format!(
+            "async_opcua_xml_parser_oversized_import_{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir)?;
+
+        let root_bsd = dir.join("Root.Types.bsd");
+        let oversized_bsd = dir.join("Oversized.Types.bsd");
+
+        fs::write(
+            &root_bsd,
+            r#"<opc:TypeDictionary xmlns:opc="http://opcfoundation.org/BinarySchema/" TargetNamespace="urn:root">
+  <opc:Import Namespace="urn:oversized" Location="Oversized.Types.bsd" />
+</opc:TypeDictionary>"#,
+        )?;
+
+        let padding_len = OVERSIZED_IMPORT_BYTES
+            - r#"<opc:TypeDictionary xmlns:opc="http://opcfoundation.org/BinarySchema/" TargetNamespace="urn:oversized"><opc:Documentation></opc:Documentation></opc:TypeDictionary>"#
+                .len();
+        let oversized_xml = format!(
+            r#"<opc:TypeDictionary xmlns:opc="http://opcfoundation.org/BinarySchema/" TargetNamespace="urn:oversized"><opc:Documentation>{}</opc:Documentation></opc:TypeDictionary>"#,
+            "x".repeat(padding_len)
+        );
+        fs::write(&oversized_bsd, oversized_xml)?;
+
+        let result = OpcUaXmlParser::parse_bsd_file_with_imports(&root_bsd);
+        let _ = fs::remove_dir_all(&dir);
+        let Err(error) = result else {
+            panic!("oversized local XML import was parsed without a size-bound error");
+        };
+
+        let crate::XmlErrorInner::Other(message) = &error.error else {
+            panic!("expected explicit oversized import error, got {error:?}");
+        };
+        assert!(
+            message.contains("oversized")
+                && message.contains("import")
+                && message.contains("1048577"),
+            "expected explicit oversized import error with byte count, got {error:?}"
+        );
         Ok(())
     }
 

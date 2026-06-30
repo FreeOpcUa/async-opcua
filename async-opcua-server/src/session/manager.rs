@@ -2,14 +2,23 @@ use std::{
     collections::HashMap,
     sync::{
         atomic::{AtomicU32, Ordering},
-        Arc,
+        Arc, OnceLock,
     },
     time::{Duration, Instant},
 };
 
 use dashmap::DashMap;
 use futures::FutureExt;
-use opcua_core::{comms::secure_channel::SecureChannel, trace_read_lock, trace_write_lock};
+use opcua_core::{
+    comms::{
+        buffer::{
+            clear_client_response_body_limit, client_response_body_limit_key,
+            set_client_response_body_limit, ClientResponseBodyLimitKey,
+        },
+        secure_channel::SecureChannel,
+    },
+    trace_read_lock, trace_write_lock,
+};
 use opcua_crypto::{random, CertificateStore, SecurityPolicy, X509};
 use parking_lot::RwLock;
 use tokio::sync::{mpsc, Notify};
@@ -27,8 +36,8 @@ use crate::{
 };
 use opcua_types::{
     ActivateSessionRequest, ActivateSessionResponse, ByteString, CloseSessionRequest,
-    CloseSessionResponse, CreateSessionRequest, CreateSessionResponse, Error, NodeId,
-    ResponseHeader, SignatureData, StatusCode,
+    CloseSessionResponse, CreateSessionRequest, CreateSessionResponse, Error, MessageSecurityMode,
+    NodeId, ResponseHeader, SignatureData, StatusCode, UAString,
 };
 
 use super::{
@@ -39,6 +48,7 @@ use super::{
 };
 
 static NEXT_SESSION_ID: AtomicU32 = AtomicU32::new(1);
+static SESSION_LOCALE_IDS: OnceLock<DashMap<u32, Vec<UAString>>> = OnceLock::new();
 const SESSION_ACTOR_QUEUE_CAPACITY: usize = 256;
 const CLOSED_SESSION_TOKEN_TOMBSTONE_SECS: u64 = 300;
 
@@ -46,6 +56,66 @@ pub(super) fn next_session_id() -> (NodeId, u32) {
     // Session id will be a string identifier
     let session_id = NEXT_SESSION_ID.fetch_add(1, Ordering::Relaxed);
     (NodeId::new(1, session_id), session_id)
+}
+
+fn session_locale_ids() -> &'static DashMap<u32, Vec<UAString>> {
+    SESSION_LOCALE_IDS.get_or_init(DashMap::new)
+}
+
+pub(crate) fn locale_ids_for_session(session_id: u32) -> Option<Vec<UAString>> {
+    session_locale_ids()
+        .get(&session_id)
+        .map(|entry| entry.value().clone())
+}
+
+fn set_session_locale_ids(session_id: u32, locale_ids: &Option<Vec<UAString>>) {
+    match locale_ids {
+        Some(locale_ids) if !locale_ids.is_empty() => {
+            session_locale_ids().insert(session_id, locale_ids.clone());
+        }
+        _ => {
+            clear_session_locale_ids(session_id);
+        }
+    }
+}
+
+fn clear_session_locale_ids(session_id: u32) {
+    session_locale_ids().remove(&session_id);
+}
+
+fn clear_session_locale_ids_for_node_id(session_id: &NodeId) {
+    if let opcua_types::Identifier::Numeric(id) = &session_id.identifier {
+        clear_session_locale_ids(*id);
+    }
+}
+
+pub(crate) fn normalized_locale_id(locale_id: &str) -> String {
+    locale_id.trim().replace('_', "-").to_ascii_lowercase()
+}
+
+pub(crate) fn locale_id_matches(supported: &str, requested: &str) -> bool {
+    let supported = normalized_locale_id(supported);
+    let requested = normalized_locale_id(requested);
+
+    if supported.is_empty() || requested.is_empty() {
+        return requested.is_empty();
+    }
+    if supported == requested {
+        return true;
+    }
+
+    let supported_is_neutral = !supported.contains('-');
+    let requested_is_neutral = !requested.contains('-');
+
+    (supported_is_neutral && requested.starts_with(&format!("{supported}-")))
+        || (requested_is_neutral && supported.starts_with(&format!("{requested}-")))
+}
+
+pub(crate) fn is_special_write_locale_id(locale_id: &str) -> bool {
+    matches!(
+        normalized_locale_id(locale_id).split('-').next(),
+        Some("mul" | "qst")
+    )
 }
 
 /// Returns true if activating a session on `request_channel_id` must be refused
@@ -139,6 +209,7 @@ pub struct SessionManager {
     /// Lock-free lookup from authentication token to the session actor's
     /// message queue.
     actor_senders: Arc<DashMap<NodeId, mpsc::Sender<SessionMessage>>>,
+    response_body_limit_keys: DashMap<u32, ClientResponseBodyLimitKey>,
     closed_auth_tokens: Arc<DashMap<NodeId, Instant>>,
     info: Arc<ServerInfo>,
     notify: Arc<Notify>,
@@ -151,6 +222,7 @@ impl SessionManager {
             sessions: Default::default(),
             auth_tokens: Default::default(),
             actor_senders: Default::default(),
+            response_body_limit_keys: Default::default(),
             closed_auth_tokens: Default::default(),
             info,
             notify,
@@ -226,6 +298,51 @@ impl SessionManager {
         self.actor_senders.insert(authentication_token, sender);
     }
 
+    fn refresh_client_response_body_limit_for_channel(
+        &self,
+        secure_channel_id: u32,
+        key: Option<ClientResponseBodyLimitKey>,
+    ) {
+        if secure_channel_id == 0 {
+            return;
+        }
+        if let Some(key) = key {
+            self.response_body_limit_keys.insert(secure_channel_id, key);
+        }
+        let Some(key) = self
+            .response_body_limit_keys
+            .get(&secure_channel_id)
+            .map(|entry| *entry.value())
+        else {
+            return;
+        };
+
+        let effective_limit = self
+            .sessions
+            .values()
+            .filter_map(|session| {
+                let session = trace_read_lock!(session);
+                let is_closed = matches!(
+                    session.validate_activated(),
+                    Err(StatusCode::BadSessionClosed)
+                );
+                if session.secure_channel_id() == secure_channel_id && !is_closed {
+                    let limit = session.max_response_message_size();
+                    (limit > 0).then_some(limit)
+                } else {
+                    None
+                }
+            })
+            .min();
+
+        if let Some(limit) = effective_limit {
+            set_client_response_body_limit(key, limit);
+        } else {
+            clear_client_response_body_limit(key);
+            self.response_body_limit_keys.remove(&secure_channel_id);
+        }
+    }
+
     fn spawn_session_actor(
         &self,
         authentication_token: NodeId,
@@ -261,6 +378,7 @@ impl SessionManager {
                 auth_tokens.remove(&terminated.authentication_token);
                 actor_senders.remove(&terminated.authentication_token);
                 closed_auth_tokens.insert(terminated.authentication_token.clone(), Instant::now());
+                clear_session_locale_ids_for_node_id(&terminated.session_id);
                 cleanup_session(&terminated.session_id);
             });
 
@@ -449,6 +567,10 @@ impl SessionManager {
             node_managers,
             subscriptions,
         );
+        self.refresh_client_response_body_limit_for_channel(
+            secure_channel_id,
+            client_response_body_limit_key(channel),
+        );
 
         // Increment metrics.
         self.info
@@ -523,11 +645,17 @@ impl SessionManager {
             "Session {id} has expired, removing it from the session map. Subscriptions will remain until they individually expire"
         );
 
-        let token = {
+        let (token, session_id_numeric, secure_channel_id) = {
             let session = trace_read_lock!(session);
-            session.authentication_token.clone()
+            (
+                session.authentication_token.clone(),
+                session.session_id_numeric(),
+                session.secure_channel_id(),
+            )
         };
         self.deregister_token(&token);
+        clear_session_locale_ids(session_id_numeric);
+        self.refresh_client_response_body_limit_for_channel(secure_channel_id, None);
 
         let mut session = trace_write_lock!(session);
         session.close();
@@ -547,6 +675,9 @@ impl SessionManager {
 
         for session_id in session_ids {
             cleanup_session(&session_id);
+        }
+        if let Some((_, key)) = self.response_body_limit_keys.remove(&secure_channel_id) {
+            clear_client_response_body_limit(key);
         }
     }
 
@@ -584,16 +715,17 @@ pub(crate) async fn close_session(
     handler: &mut MessageHandler,
     request: &CloseSessionRequest,
 ) -> Result<CloseSessionResponse, StatusCode> {
-    let (session, id, token, actor_sender) = {
+    let (session, id, token, session_secure_channel_id, actor_sender) = {
         let mgr = trace_read_lock!(mgr_lck);
         let Some(session) = mgr.find_by_token(&request.request_header.authentication_token) else {
             return Err(StatusCode::BadSessionIdInvalid);
         };
-        let (id, token, authentication_token) = {
+        let (id, token, authentication_token, session_secure_channel_id) = {
             let session = trace_read_lock!(session);
             let id = session.session_id_numeric();
             let token = session.user_token().cloned();
             let authentication_token = session.authentication_token.clone();
+            let session_secure_channel_id = session.secure_channel_id();
 
             let secure_channel_id = channel.secure_channel_id();
             if !session.is_activated() && session.secure_channel_id() != secure_channel_id {
@@ -604,14 +736,14 @@ pub(crate) async fn close_session(
                 );
                 return Err(StatusCode::BadSecureChannelIdInvalid);
             }
-            (id, token, authentication_token)
+            (id, token, authentication_token, session_secure_channel_id)
         };
 
         let Some(actor_sender) = mgr.actor_sender(&authentication_token) else {
             return Err(StatusCode::BadSessionClosed);
         };
 
-        (session, id, token, actor_sender)
+        (session, id, token, session_secure_channel_id, actor_sender)
     };
 
     let (acknowledge, acknowledged) = tokio::sync::oneshot::channel();
@@ -629,9 +761,14 @@ pub(crate) async fn close_session(
     {
         let mut mgr = trace_write_lock!(mgr_lck);
         mgr.sessions.remove(&terminated.session_id);
+        clear_session_locale_ids(id);
         mgr.info
             .diagnostics
             .set_current_session_count(mgr.sessions.len() as u32);
+        mgr.refresh_client_response_body_limit_for_channel(
+            session_secure_channel_id,
+            client_response_body_limit_key(channel),
+        );
     }
     info!("Closed session with ID {}", terminated.session_id);
 
@@ -683,6 +820,31 @@ pub(crate) async fn activate_session(
                 return Err(StatusCode::BadTcpEndpointUrlInvalid);
             }
 
+            let is_cross_channel_activation = session.secure_channel_id() != secure_channel_id;
+            if is_cross_channel_activation && session.message_security_mode() != security_mode {
+                error!(
+                    "activate_session, rejected secure channel id {} with SecurityMode {:?}; session channel {} was created with SecurityMode {:?}",
+                    secure_channel_id,
+                    security_mode,
+                    session.secure_channel_id(),
+                    session.message_security_mode()
+                );
+                return Err(StatusCode::BadSecureChannelIdInvalid);
+            }
+
+            if is_cross_channel_activation
+                && SecurityPolicy::from_uri(session.security_policy_uri()) != security_policy
+            {
+                error!(
+                    "activate_session, rejected secure channel id {} with SecurityPolicy {:?}; session channel {} was created with SecurityPolicy {}",
+                    secure_channel_id,
+                    security_policy,
+                    session.secure_channel_id(),
+                    session.security_policy_uri()
+                );
+                return Err(StatusCode::BadSecureChannelIdInvalid);
+            }
+
             if security_policy != SecurityPolicy::None {
                 SessionManager::verify_client_signature(
                     security_policy,
@@ -690,6 +852,24 @@ pub(crate) async fn activate_session(
                     &session,
                     &request.client_signature,
                 )?;
+            }
+
+            let requested_identity = IdentityToken::new(request.user_identity_token.clone());
+            let session_identity_is_non_anonymous = !matches!(
+                session.user_identity(),
+                IdentityToken::Anonymous(_) | IdentityToken::None
+            );
+            if is_cross_channel_activation
+                && security_mode == MessageSecurityMode::Sign
+                && matches!(requested_identity, IdentityToken::Anonymous(_))
+                && session_identity_is_non_anonymous
+            {
+                error!(
+                    "activate_session, rejected anonymous ActivateSession over new Sign-only secure channel {} for session channel {} with non-anonymous identity",
+                    secure_channel_id,
+                    session.secure_channel_id()
+                );
+                return Err(StatusCode::BadIdentityTokenRejected);
             }
             (endpoint_url, session.session_nonce().clone())
         };
@@ -718,7 +898,7 @@ pub(crate) async fn activate_session(
     #[cfg(not(feature = "ecc"))]
     let ecc_ctx = crate::session::negotiate::EccSecretContext::default();
 
-    let (user_token, claims) = info
+    let authentication = match info
         .authenticate_endpoint_with_ecc_ctx(
             request,
             &endpoint_url,
@@ -728,8 +908,45 @@ pub(crate) async fn activate_session(
             &session_nonce,
             ecc_ctx,
         )
-        .await?;
-
+        .await
+    {
+        Ok(authentication) => authentication,
+        Err(error) => {
+            if let Some(certificate) = x509_user_certificate_from_request(request) {
+                let session_id = {
+                    let session = trace_read_lock!(session_lck);
+                    Some(session.session_id().clone())
+                };
+                audit::dispatch_user_certificate_audit(
+                    handler.subscriptions(),
+                    &info,
+                    &request.request_header,
+                    certificate,
+                    session_id,
+                    error.status(),
+                );
+            }
+            return Err(error.status());
+        }
+    };
+    if let Some(validation) = authentication.x509_user_certificate_validation.as_ref() {
+        if !validation.suppressed_findings.is_empty() {
+            let session_id = {
+                let session = trace_read_lock!(session_lck);
+                Some(session.session_id().clone())
+            };
+            for finding in &validation.suppressed_findings {
+                audit::dispatch_user_certificate_audit(
+                    handler.subscriptions(),
+                    &info,
+                    &request.request_header,
+                    validation.certificate.clone(),
+                    session_id.clone(),
+                    finding.status,
+                );
+            }
+        }
+    }
     #[cfg(feature = "ecc")]
     let ecc_secret_consumed = matches!(
         security_policy,
@@ -739,11 +956,12 @@ pub(crate) async fn activate_session(
         IdentityToken::UserName(_) | IdentityToken::IssuedToken(_)
     );
 
-    let (server_nonce, session_id, user_changed) = {
+    let (server_nonce, session_id, user_changed, user_token, previous_secure_channel_id) = {
         let mut session = trace_write_lock!(session_lck);
+        let previous_secure_channel_id = session.secure_channel_id();
 
         if is_cross_channel_transfer_forbidden(
-            session.secure_channel_id(),
+            previous_secure_channel_id,
             secure_channel_id,
             session.is_activated(),
             security_policy,
@@ -751,7 +969,7 @@ pub(crate) async fn activate_session(
             error!(
                 "activate session, rejected secure channel id {} does not match session channel {} (transfer not permitted for SecurityPolicy::None)",
                 secure_channel_id,
-                session.secure_channel_id()
+                previous_secure_channel_id
             );
             return Err(StatusCode::BadSecureChannelIdInvalid);
         }
@@ -786,7 +1004,10 @@ pub(crate) async fn activate_session(
 
         let user_changed = session
             .user_token()
-            .is_some_and(|previous| previous != &user_token);
+            .is_some_and(|previous| previous != &authentication.user_token);
+        let crate::info::EndpointAuthentication {
+            user_token, claims, ..
+        } = authentication;
         let activated_identity = IdentityToken::new(request.user_identity_token.clone());
         let application_uri =
             non_empty_ua_string(&session.application_description().application_uri);
@@ -797,21 +1018,43 @@ pub(crate) async fn activate_session(
             Some(endpoint_url.clone()),
         )?;
         let roles = Arc::new(info.role_resolver.read().resolve(&resolved_identity));
+        let locale_ids = request.locale_ids.clone();
         session.activate(
             secure_channel_id,
             server_nonce,
             activated_identity,
-            request.locale_ids.clone(),
+            locale_ids.clone(),
             user_token.clone(),
             claims,
             roles,
         );
+        set_session_locale_ids(session.session_id_numeric(), &locale_ids);
         (
             session.session_nonce().clone(),
             session.session_id_numeric(),
             user_changed,
+            user_token,
+            previous_secure_channel_id,
         )
     };
+
+    {
+        let mgr = trace_read_lock!(mgr_lck);
+        mgr.refresh_client_response_body_limit_for_channel(
+            previous_secure_channel_id,
+            if previous_secure_channel_id == secure_channel_id {
+                client_response_body_limit_key(channel)
+            } else {
+                None
+            },
+        );
+        if previous_secure_channel_id != secure_channel_id {
+            mgr.refresh_client_response_body_limit_for_channel(
+                secure_channel_id,
+                client_response_body_limit_key(channel),
+            );
+        }
+    }
 
     #[cfg(feature = "ecc")]
     let ecdh_response_header = {
@@ -881,27 +1124,40 @@ pub(crate) async fn activate_session(
     Ok(response)
 }
 
+fn x509_user_certificate_from_request(request: &ActivateSessionRequest) -> Option<ByteString> {
+    match IdentityToken::new(request.user_identity_token.clone()) {
+        IdentityToken::X509(token) => Some(token.certificate_data),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use std::sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
+    use std::{
+        fs,
+        path::Path,
+        sync::{
+            atomic::{AtomicBool, Ordering},
+            Arc,
+        },
     };
 
     use async_trait::async_trait;
     use opcua_core::{comms::secure_channel::SecureChannel, sync::RwLock};
-    use opcua_crypto::{random, SecurityPolicy};
+    use opcua_crypto::{random, CertificateStore, PrivateKey, SecurityPolicy, Thumbprint};
     use opcua_types::{
         ActivateSessionRequest, AnonymousIdentityToken, ApplicationDescription, ByteString, Error,
         ExtensionObject, MessageSecurityMode, NodeId, RequestHeader, SignatureData, StatusCode,
-        UAString, UserNameIdentityToken, UserTokenPolicy, UserTokenType,
+        UAString, UserNameIdentityToken, UserTokenPolicy, UserTokenType, X509IdentityToken,
     };
     use tokio::sync::Notify;
 
     use crate::{
         authenticator::{AuthManager, UserToken},
         config::{ServerEndpoint, ServerUserToken},
-        identity_token::{IdentityToken, POLICY_ID_ANONYMOUS, POLICY_ID_USER_PASS_NONE},
+        identity_token::{
+            IdentityToken, POLICY_ID_ANONYMOUS, POLICY_ID_USER_PASS_NONE, POLICY_ID_X509,
+        },
         node_manager::NodeManagers,
         rbac::{rules::IdentityMappingRule, WellKnownRole},
         session::{instance::Session, manager::SessionManager, message_handler::MessageHandler},
@@ -913,8 +1169,28 @@ mod tests {
         is_cross_channel_transfer_forbidden,
     };
 
+    const X509_STATE_CLEANUP_USER_TOKEN: &str = "x509-state-cleanup-user";
+
+    struct TempPath {
+        dir: tempfile::TempDir,
+    }
+
+    impl TempPath {
+        fn new(name: &str) -> Self {
+            let dir = tempfile::Builder::new()
+                .prefix(&format!("async-opcua-manager-{name}-"))
+                .tempdir()
+                .expect("test temp directory should be created");
+            Self { dir }
+        }
+
+        fn path(&self) -> &Path {
+            self.dir.path()
+        }
+    }
+
     /// Mint a self-signed application certificate for binding tests.
-    fn make_cert(common_name: &str) -> opcua_crypto::X509 {
+    fn make_cert_and_key(common_name: &str) -> (opcua_crypto::X509, PrivateKey) {
         let data = opcua_crypto::X509Data {
             key_size: 2048,
             common_name: common_name.to_string(),
@@ -926,9 +1202,11 @@ mod tests {
                 .into(),
             certificate_duration_days: 60,
         };
-        opcua_crypto::X509::cert_and_pkey(&data)
-            .expect("generate self-signed test certificate")
-            .0
+        opcua_crypto::X509::cert_and_pkey(&data).expect("generate self-signed test certificate")
+    }
+
+    fn make_cert(common_name: &str) -> opcua_crypto::X509 {
+        make_cert_and_key(common_name).0
     }
 
     /// US1 (FR-001): the client application certificate bound at CreateSession must match the
@@ -1048,6 +1326,221 @@ mod tests {
             true,
             SecurityPolicy::Basic256Sha256
         ));
+    }
+
+    /// T007a / P4-SESS-07: OPC-10000-4 5.7.3.1 requires a cross-channel
+    /// ActivateSession to use the same SecurityMode as the original SecureChannel.
+    /// The secure-channel mismatch must be rejected before user authentication.
+    #[tokio::test]
+    async fn activate_session_rejects_cross_channel_security_mode_mismatch_before_authentication() {
+        let gate = Arc::new(AuthenticationGate::open());
+        let authenticator: Arc<dyn AuthManager> = gate.clone();
+        let (client_cert, client_key) = make_cert_and_key("security-mode-client");
+        let fixture = ActivationFixture::with_secured_session(authenticator, client_cert);
+        let original_identity = anonymous_identity_with_policy("already-authenticated");
+        let original_nonce = random::byte_string(fixture.info.config.session_nonce_length);
+
+        fixture.mutate_session_activation(
+            7,
+            original_nonce,
+            original_identity,
+            UserToken("already-authenticated-user".to_string()),
+        );
+        let previous_identity = fixture.user_identity();
+
+        let result = fixture
+            .activate_with_signed_client_proof(
+                SecurityPolicy::Basic256Sha256,
+                MessageSecurityMode::Sign,
+                8,
+                &client_key,
+            )
+            .await;
+
+        let error = result.expect_err(
+            "SecurityMode mismatch on a cross-channel ActivateSession must be rejected",
+        );
+        assert_eq!(
+            error,
+            StatusCode::BadSecureChannelIdInvalid,
+            "SecurityMode mismatch must use the secure-channel mismatch status"
+        );
+        assert!(
+            !gate.was_called(),
+            "SecurityMode mismatch must be rejected before user authentication"
+        );
+        assert_eq!(
+            fixture.secure_channel_id(),
+            7,
+            "failed cross-channel activation must not rebind the session"
+        );
+        assert_eq!(
+            fixture.user_identity(),
+            previous_identity,
+            "failed cross-channel activation must not change session identity"
+        );
+    }
+
+    /// T007b / P4-SESS-07: OPC-10000-4 5.7.3.1 requires a cross-channel
+    /// ActivateSession to use the same SecurityPolicy as the original SecureChannel.
+    /// The secure-channel mismatch must be rejected before user authentication.
+    #[tokio::test]
+    async fn activate_session_rejects_cross_channel_security_policy_mismatch_before_authentication()
+    {
+        let gate = Arc::new(AuthenticationGate::open());
+        let authenticator: Arc<dyn AuthManager> = gate.clone();
+        let (client_cert, client_key) = make_cert_and_key("security-policy-client");
+        let fixture = ActivationFixture::with_secured_session(authenticator, client_cert);
+        let original_identity = anonymous_identity_with_policy("already-authenticated");
+        let original_nonce = random::byte_string(fixture.info.config.session_nonce_length);
+
+        fixture.mutate_session_activation(
+            7,
+            original_nonce,
+            original_identity,
+            UserToken("already-authenticated-user".to_string()),
+        );
+        let previous_identity = fixture.user_identity();
+
+        let result = fixture
+            .activate_with_signed_client_proof(
+                SecurityPolicy::Aes128Sha256RsaOaep,
+                MessageSecurityMode::SignAndEncrypt,
+                8,
+                &client_key,
+            )
+            .await;
+
+        let error = result.expect_err(
+            "SecurityPolicy mismatch on a cross-channel ActivateSession must be rejected",
+        );
+        assert_eq!(
+            error,
+            StatusCode::BadSecureChannelIdInvalid,
+            "SecurityPolicy mismatch must use the secure-channel mismatch status"
+        );
+        assert!(
+            !gate.was_called(),
+            "SecurityPolicy mismatch must be rejected before user authentication"
+        );
+        assert_eq!(
+            fixture.secure_channel_id(),
+            7,
+            "failed cross-channel activation must not rebind the session"
+        );
+        assert_eq!(
+            fixture.user_identity(),
+            previous_identity,
+            "failed cross-channel activation must not change session identity"
+        );
+    }
+
+    /// T008 / P4-SESS-08: OPC-10000-4 5.7.3.1 requires anonymous
+    /// ActivateSession over a new Sign-only SecureChannel to fail because a
+    /// non-anonymous user is required. The rejection must happen before user
+    /// authentication or session rebinding.
+    #[tokio::test]
+    async fn activate_session_rejects_anonymous_transfer_to_new_sign_channel_before_authentication()
+    {
+        let gate = Arc::new(AuthenticationGate::open());
+        let authenticator: Arc<dyn AuthManager> = gate.clone();
+        let (client_cert, client_key) = make_cert_and_key("sign-only-anonymous-transfer-client");
+        let fixture = ActivationFixture::with_secured_session_created_with_mode(
+            authenticator,
+            client_cert,
+            MessageSecurityMode::Sign,
+        );
+        let original_identity = IdentityToken::UserName(UserNameIdentityToken {
+            policy_id: UAString::from("already-authenticated"),
+            user_name: UAString::from("already-authenticated-user"),
+            password: ByteString::null(),
+            encryption_algorithm: UAString::null(),
+        });
+        let original_nonce = random::byte_string(fixture.info.config.session_nonce_length);
+
+        fixture.mutate_session_activation(
+            7,
+            original_nonce,
+            original_identity,
+            UserToken("already-authenticated-user".to_string()),
+        );
+        let previous_identity = fixture.user_identity();
+
+        let result = fixture
+            .activate_with_signed_client_proof(
+                SecurityPolicy::Basic256Sha256,
+                MessageSecurityMode::Sign,
+                8,
+                &client_key,
+            )
+            .await;
+
+        let error = result.expect_err(
+            "anonymous ActivateSession over a new Sign-only SecureChannel must be rejected",
+        );
+        assert_eq!(
+            error,
+            StatusCode::BadIdentityTokenRejected,
+            "anonymous transfer to a new Sign-only channel must reject the identity token"
+        );
+        assert!(
+            !gate.was_called(),
+            "anonymous Sign-only transfer must be rejected before user authentication"
+        );
+        assert_eq!(
+            fixture.secure_channel_id(),
+            7,
+            "failed anonymous Sign-only transfer must not rebind the session"
+        );
+        assert_eq!(
+            fixture.user_identity(),
+            previous_identity,
+            "failed anonymous Sign-only transfer must not change session identity"
+        );
+    }
+
+    /// T013 / P4-SESS-09: OPC-10000-4 5.7.3.2 defines the X.509
+    /// `userIdentityToken` and `userTokenSignature` carried by ActivateSession,
+    /// and 5.7.3.3 defines rejection results for invalid or rejected identity
+    /// tokens. A failed X.509 activation must not store the rejected identity on
+    /// the session before a later valid X.509 activation succeeds.
+    #[tokio::test]
+    async fn activate_session_failed_x509_activation_does_not_leave_rejected_identity_state() {
+        let (rejected_cert, _) = make_cert_and_key("rejected-x509-state-user");
+        let (accepted_cert, accepted_key) = make_cert_and_key("accepted-x509-state-user");
+        let accepted_identity =
+            IdentityTokenSnapshot::X509(accepted_cert.thumbprint().as_hex_string());
+        let authenticator = Arc::new(X509AuthenticationGate::new(accepted_cert.thumbprint()));
+        let fixture = ActivationFixture::with_x509_session(authenticator);
+        fixture.trust_x509_user_certificate(&rejected_cert);
+        fixture.trust_x509_user_certificate(&accepted_cert);
+        let original_identity = fixture.user_identity();
+
+        let rejected = fixture
+            .activate_x509_with(&rejected_cert, &accepted_key)
+            .await;
+
+        assert_eq!(
+            rejected.expect_err("bad X.509 user-token signature must be rejected"),
+            StatusCode::BadUserSignatureInvalid,
+            "failed X.509 activation must surface the user-token signature rejection"
+        );
+        assert_eq!(
+            fixture.user_identity(),
+            original_identity,
+            "failed X.509 activation must not store the rejected identity"
+        );
+
+        fixture
+            .activate_x509_with(&accepted_cert, &accepted_key)
+            .await
+            .expect("accepted X.509 identity should activate the session");
+
+        assert_eq!(
+            fixture.user_identity(),
+            accepted_identity,
+            "later valid activation must store only the accepted X.509 identity"
+        );
     }
 
     #[tokio::test]
@@ -1176,6 +1669,7 @@ mod tests {
         node_managers: NodeManagers,
         subscriptions: Arc<crate::SubscriptionCache>,
         certificate_store: Arc<RwLock<opcua_crypto::CertificateStore>>,
+        _temp_path: Option<Arc<TempPath>>,
     }
 
     impl ActivationFixture {
@@ -1210,6 +1704,112 @@ mod tests {
         }
 
         fn from_handle(handle: crate::ServerHandle) -> Self {
+            Self::from_handle_with_session_binding(
+                handle,
+                SecurityPolicy::None,
+                MessageSecurityMode::None,
+                None,
+            )
+        }
+
+        fn with_x509_session(authenticator: Arc<dyn AuthManager>) -> Self {
+            let pki = Arc::new(TempPath::new("x509-state-cleanup-pki"));
+            let no_configured_user_tokens: [&str; 0] = [];
+            let (_server, handle) = ServerBuilder::new()
+                .without_node_managers()
+                .application_name("activation x509 state cleanup test")
+                .pki_dir(pki.path())
+                .with_authenticator(authenticator)
+                .add_endpoint(
+                    "x509_state_cleanup",
+                    (
+                        "/",
+                        SecurityPolicy::None,
+                        MessageSecurityMode::None,
+                        &no_configured_user_tokens as &[&str],
+                    ),
+                )
+                .discovery_urls(vec!["/".to_owned()])
+                .build()
+                .expect("test server should build");
+            let (server_cert, server_key) = make_cert_and_key("x509-state-cleanup-server");
+            *handle.info().server_certificate.write() = Some(server_cert);
+            *handle.info().server_pkey.write() = Some(server_key);
+
+            let mut fixture = Self::from_handle(handle);
+            fixture._temp_path = Some(pki);
+            fixture
+        }
+
+        fn with_secured_session(
+            authenticator: Arc<dyn AuthManager>,
+            client_certificate: opcua_crypto::X509,
+        ) -> Self {
+            Self::with_secured_session_created_with_mode(
+                authenticator,
+                client_certificate,
+                MessageSecurityMode::SignAndEncrypt,
+            )
+        }
+
+        fn with_secured_session_created_with_mode(
+            authenticator: Arc<dyn AuthManager>,
+            client_certificate: opcua_crypto::X509,
+            original_mode: MessageSecurityMode,
+        ) -> Self {
+            let anonymous_tokens = [crate::config::ANONYMOUS_USER_TOKEN_ID];
+            let (_server, handle) = ServerBuilder::new()
+                .without_node_managers()
+                .application_name("activation security mode binding test")
+                .with_authenticator(authenticator)
+                .add_endpoint(
+                    "basic256sha256_sign",
+                    (
+                        "/",
+                        SecurityPolicy::Basic256Sha256,
+                        MessageSecurityMode::Sign,
+                        &anonymous_tokens as &[&str],
+                    ),
+                )
+                .add_endpoint(
+                    "basic256sha256_sign_encrypt",
+                    (
+                        "/",
+                        SecurityPolicy::Basic256Sha256,
+                        MessageSecurityMode::SignAndEncrypt,
+                        &anonymous_tokens as &[&str],
+                    ),
+                )
+                .add_endpoint(
+                    "aes128sha256rsa_oaep_sign_encrypt",
+                    (
+                        "/",
+                        SecurityPolicy::Aes128Sha256RsaOaep,
+                        MessageSecurityMode::SignAndEncrypt,
+                        &anonymous_tokens as &[&str],
+                    ),
+                )
+                .discovery_urls(vec!["/".to_owned()])
+                .build()
+                .expect("test server should build");
+            let (server_cert, server_key) = make_cert_and_key("security-mode-server");
+            *handle.info().server_certificate.write() = Some(server_cert);
+            *handle.info().server_pkey.write() = Some(server_key);
+
+            Self::from_handle_with_session_binding(
+                handle,
+                SecurityPolicy::Basic256Sha256,
+                original_mode,
+                Some(client_certificate),
+            )
+        }
+
+        fn from_handle_with_session_binding(
+            handle: crate::ServerHandle,
+            security_policy: SecurityPolicy,
+            message_security_mode: MessageSecurityMode,
+            client_certificate: Option<opcua_crypto::X509>,
+        ) -> Self {
             let info = Arc::clone(handle.info());
             let token = NodeId::new(1, 42);
             let endpoint_url = UAString::from(handle.info().base_endpoint());
@@ -1221,13 +1821,13 @@ mod tests {
                 0,
                 0,
                 endpoint_url.clone(),
-                SecurityPolicy::None.to_uri().to_string(),
+                security_policy.to_uri().to_string(),
                 anonymous_identity(),
-                None,
+                client_certificate,
                 random::byte_string(info.config.session_nonce_length),
                 UAString::from("activation-nonce-replay-test"),
                 ApplicationDescription::default(),
-                MessageSecurityMode::None,
+                message_security_mode,
             )));
             let manager = Arc::new(RwLock::new(SessionManager::new(
                 Arc::clone(&info),
@@ -1249,6 +1849,7 @@ mod tests {
                 node_managers: handle.node_managers().clone(),
                 subscriptions: Arc::clone(handle.subscriptions()),
                 certificate_store: Arc::clone(handle.certificate_store()),
+                _temp_path: None,
             }
         }
 
@@ -1273,6 +1874,102 @@ mod tests {
                 Arc::clone(&self.subscriptions),
             );
             activate_session(&self.manager, &mut channel, &request, &mut handler).await
+        }
+
+        async fn activate_x509_with(
+            &self,
+            cert: &opcua_crypto::X509,
+            private_key: &PrivateKey,
+        ) -> Result<super::ActivateSessionResponse, StatusCode> {
+            let mut channel = SecureChannel::new(
+                Arc::clone(&self.certificate_store),
+                opcua_core::comms::secure_channel::Role::Server,
+                Arc::new(RwLock::new(Default::default())),
+            );
+            channel.set_security_policy(SecurityPolicy::None);
+            channel.set_security_mode(MessageSecurityMode::None);
+            channel.set_secure_channel_id(7);
+
+            let server_certificate = self
+                .info
+                .server_certificate
+                .read()
+                .as_ref()
+                .expect("X.509 activation test must configure a server certificate")
+                .clone();
+            let request = x509_activate_request(
+                &self.token,
+                cert,
+                private_key,
+                &server_certificate,
+                &self.session_nonce(),
+            );
+            let mut handler = MessageHandler::new(
+                Arc::clone(&self.info),
+                self.node_managers.clone(),
+                Arc::clone(&self.subscriptions),
+            );
+            activate_session(&self.manager, &mut channel, &request, &mut handler).await
+        }
+
+        fn trust_x509_user_certificate(&self, cert: &opcua_crypto::X509) {
+            let store = self.certificate_store.write();
+            store
+                .ensure_pki_path()
+                .expect("X.509 test PKI directories should exist");
+            let path = store
+                .trusted_certs_dir()
+                .join(CertificateStore::cert_file_name(cert));
+            fs::write(path, cert.to_der().expect("test certificate should encode"))
+                .expect("trusted X.509 user certificate should be written");
+        }
+
+        async fn activate_with_signed_client_proof(
+            &self,
+            security_policy: SecurityPolicy,
+            security_mode: MessageSecurityMode,
+            secure_channel_id: u32,
+            client_key: &PrivateKey,
+        ) -> Result<super::ActivateSessionResponse, StatusCode> {
+            let mut channel = SecureChannel::new(
+                Arc::clone(&self.certificate_store),
+                opcua_core::comms::secure_channel::Role::Server,
+                Arc::new(RwLock::new(Default::default())),
+            );
+            channel.set_security_policy(security_policy);
+            channel.set_security_mode(security_mode);
+            channel.set_secure_channel_id(secure_channel_id);
+            channel.set_remote_cert(self.session.read().client_certificate().cloned());
+
+            let mut request = activate_request(&self.token);
+            request.client_signature = self.client_signature(client_key, security_policy);
+            let mut handler = MessageHandler::new(
+                Arc::clone(&self.info),
+                self.node_managers.clone(),
+                Arc::clone(&self.subscriptions),
+            );
+            activate_session(&self.manager, &mut channel, &request, &mut handler).await
+        }
+
+        fn client_signature(
+            &self,
+            client_key: &PrivateKey,
+            security_policy: SecurityPolicy,
+        ) -> SignatureData {
+            let server_certificate = self
+                .info
+                .server_certificate
+                .read()
+                .as_ref()
+                .expect("secured activation test must configure a server certificate")
+                .as_byte_string();
+            opcua_crypto::create_signature_data(
+                client_key,
+                security_policy,
+                &server_certificate,
+                &self.session_nonce(),
+            )
+            .expect("test client signature should be valid")
         }
 
         async fn activate_username_with(
@@ -1331,7 +2028,48 @@ mod tests {
         }
     }
 
+    struct X509AuthenticationGate {
+        accepted_thumbprint: Thumbprint,
+    }
+
+    impl X509AuthenticationGate {
+        fn new(accepted_thumbprint: Thumbprint) -> Self {
+            Self {
+                accepted_thumbprint,
+            }
+        }
+    }
+
+    #[async_trait]
+    impl AuthManager for X509AuthenticationGate {
+        async fn authenticate_x509_identity_token(
+            &self,
+            _endpoint: &ServerEndpoint,
+            signing_thumbprint: &Thumbprint,
+        ) -> Result<UserToken, Error> {
+            if signing_thumbprint == &self.accepted_thumbprint {
+                Ok(UserToken(X509_STATE_CLEANUP_USER_TOKEN.to_string()))
+            } else {
+                Err(Error::new(
+                    StatusCode::BadIdentityTokenRejected,
+                    "X.509 state-cleanup test rejected certificate thumbprint",
+                ))
+            }
+        }
+
+        fn user_token_policies(&self, _endpoint: &ServerEndpoint) -> Vec<UserTokenPolicy> {
+            vec![UserTokenPolicy {
+                policy_id: UAString::from(POLICY_ID_X509),
+                token_type: UserTokenType::Certificate,
+                issued_token_type: UAString::null(),
+                issuer_endpoint_url: UAString::null(),
+                security_policy_uri: UAString::from(SecurityPolicy::Basic256Sha256.to_uri()),
+            }]
+        }
+    }
+
     struct AuthenticationGate {
+        called: AtomicBool,
         pause_once: AtomicBool,
         entered: Notify,
         release: Notify,
@@ -1340,6 +2078,7 @@ mod tests {
     impl AuthenticationGate {
         fn open() -> Self {
             Self {
+                called: AtomicBool::new(false),
                 pause_once: AtomicBool::new(false),
                 entered: Notify::new(),
                 release: Notify::new(),
@@ -1366,6 +2105,10 @@ mod tests {
         fn release(&self) {
             self.release.notify_waiters();
         }
+
+        fn was_called(&self) -> bool {
+            self.called.load(Ordering::Acquire)
+        }
     }
 
     #[async_trait]
@@ -1374,6 +2117,7 @@ mod tests {
             &self,
             _endpoint: &ServerEndpoint,
         ) -> Result<(), Error> {
+            self.called.store(true, Ordering::Release);
             self.maybe_pause().await;
             Ok(())
         }
@@ -1392,6 +2136,7 @@ mod tests {
     #[derive(Debug, PartialEq, Eq)]
     enum IdentityTokenSnapshot {
         Anonymous(UAString),
+        X509(String),
         Other,
     }
 
@@ -1399,6 +2144,11 @@ mod tests {
         fn from(value: &IdentityToken) -> Self {
             match value {
                 IdentityToken::Anonymous(token) => Self::Anonymous(token.policy_id.clone()),
+                IdentityToken::X509(token) => {
+                    opcua_crypto::X509::from_byte_string(&token.certificate_data)
+                        .map(|cert| Self::X509(cert.thumbprint().as_hex_string()))
+                        .unwrap_or(Self::Other)
+                }
                 _ => Self::Other,
             }
         }
@@ -1440,6 +2190,37 @@ mod tests {
                 encryption_algorithm: UAString::null(),
             }),
             user_token_signature: SignatureData::null(),
+        }
+    }
+
+    fn x509_activate_request(
+        authentication_token: &NodeId,
+        cert: &opcua_crypto::X509,
+        private_key: &PrivateKey,
+        server_certificate: &opcua_crypto::X509,
+        server_nonce: &ByteString,
+    ) -> ActivateSessionRequest {
+        let signature = opcua_crypto::create_signature_data(
+            private_key,
+            SecurityPolicy::Basic256Sha256,
+            &server_certificate.as_byte_string(),
+            server_nonce,
+        )
+        .expect("X.509 user-token signature should be created");
+
+        ActivateSessionRequest {
+            request_header: RequestHeader {
+                authentication_token: authentication_token.clone(),
+                ..Default::default()
+            },
+            client_signature: SignatureData::null(),
+            client_software_certificates: None,
+            locale_ids: None,
+            user_identity_token: ExtensionObject::from_message(X509IdentityToken {
+                policy_id: UAString::from(POLICY_ID_X509),
+                certificate_data: cert.as_byte_string(),
+            }),
+            user_token_signature: signature,
         }
     }
 

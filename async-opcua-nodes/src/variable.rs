@@ -236,7 +236,15 @@ impl Node for Variable {
             }
             AttributeId::ValueRank => {
                 if let Variant::Int32(v) = value {
-                    self.set_value_rank(v);
+                    let value_rank = normalized_value_rank(v);
+                    if !value_rank_matches_array_dimensions(
+                        value_rank,
+                        self.array_dimensions.as_deref(),
+                        &self.value,
+                    ) {
+                        return Err(StatusCode::BadNodeAttributesInvalid);
+                    }
+                    self.value_rank = value_rank;
                     Ok(())
                 } else {
                     Err(StatusCode::BadTypeMismatch)
@@ -265,6 +273,13 @@ impl Node for Variable {
             AttributeId::ArrayDimensions => {
                 let array_dimensions = <Vec<u32>>::try_from_variant(value);
                 if let Ok(array_dimensions) = array_dimensions {
+                    if !value_rank_matches_array_dimensions(
+                        self.value_rank,
+                        Some(&array_dimensions),
+                        &self.value,
+                    ) {
+                        return Err(StatusCode::BadNodeAttributesInvalid);
+                    }
                     self.set_array_dimensions(&array_dimensions);
                     Ok(())
                 } else {
@@ -585,7 +600,13 @@ impl Variable {
 
     /// Get whether this is a valid instance of a variable.
     pub fn is_valid(&self) -> bool {
-        !self.data_type.is_null() && self.base.is_valid()
+        !self.data_type.is_null()
+            && self.base.is_valid()
+            && value_rank_matches_array_dimensions(
+                self.value_rank,
+                self.array_dimensions.as_deref(),
+                &self.value,
+            )
     }
 
     /// Read the value of the variable.
@@ -807,7 +828,7 @@ impl Variable {
     /// Part 3 §5.6: the valid ValueRank values are -3, -2, -1, 0, or n >= 1. Values below
     /// -3 are invalid and are normalised to ANY (-2) rather than stored verbatim.
     pub fn set_value_rank(&mut self, value_rank: i32) {
-        self.value_rank = if value_rank < -3 { -2 } else { value_rank };
+        self.value_rank = normalized_value_rank(value_rank);
     }
 
     /// Get the `Historizing` attribute of the variable,
@@ -840,6 +861,35 @@ impl Variable {
     /// Set the data type of this variable.
     pub fn set_data_type(&mut self, data_type: impl Into<NodeId>) {
         self.data_type = data_type.into();
+    }
+}
+
+fn normalized_value_rank(value_rank: i32) -> i32 {
+    if value_rank < -3 {
+        -2
+    } else {
+        value_rank
+    }
+}
+
+fn value_rank_matches_array_dimensions(
+    value_rank: i32,
+    array_dimensions: Option<&[u32]>,
+    value: &DataValue,
+) -> bool {
+    match array_dimensions {
+        Some(array_dimensions) if value_rank >= 1 => array_dimensions.len() == value_rank as usize,
+        Some(_) if value_rank == -1 => false,
+        Some(array_dimensions) => value_array_dimension_count(value)
+            .is_some_and(|dimension_count| array_dimensions.len() == dimension_count),
+        None => true,
+    }
+}
+
+fn value_array_dimension_count(value: &DataValue) -> Option<usize> {
+    match value.value.as_ref()? {
+        Variant::Array(array) => Some(array.dimensions.as_ref().map_or(1, Vec::len)),
+        _ => None,
     }
 }
 
@@ -917,6 +967,63 @@ mod tests {
             v.set_value_rank(rank);
             assert_eq!(v.value_rank(), rank);
         }
+    }
+
+    #[test]
+    fn positive_value_rank_requires_matching_array_dimension_count() {
+        let mut variable = Variable::new_data_value(
+            &NodeId::new(1, "variable-rank-mismatch"),
+            "VariableRankMismatch",
+            "VariableRankMismatch",
+            DataTypeId::UInt32,
+            Some(2),
+            None,
+            42u32,
+        );
+
+        assert_eq!(
+            variable.set_attribute(AttributeId::ArrayDimensions, vec![4u32].into()),
+            Err(StatusCode::BadNodeAttributesInvalid)
+        );
+
+        let builder = VariableBuilder::new(
+            &NodeId::new(1, "variable-rank-mismatch-builder"),
+            "VariableRankMismatchBuilder",
+            "VariableRankMismatchBuilder",
+        )
+        .data_type(DataTypeId::UInt32)
+        .value_rank(2)
+        .array_dimensions(&[4]);
+        assert!(!builder.is_valid());
+    }
+
+    #[test]
+    fn array_dimensions_are_rejected_for_scalar_value_rank() {
+        let mut variable = Variable::new_data_value(
+            &NodeId::new(1, "variable-scalar-array-dimensions"),
+            "VariableScalarArrayDimensions",
+            "VariableScalarArrayDimensions",
+            DataTypeId::UInt32,
+            Some(-1),
+            None,
+            42u32,
+        );
+
+        assert_eq!(
+            variable.set_attribute(AttributeId::ArrayDimensions, vec![1u32].into()),
+            Err(StatusCode::BadNodeAttributesInvalid)
+        );
+
+        let builder = VariableBuilder::new(
+            &NodeId::new(1, "variable-scalar-array-dimensions-builder"),
+            "VariableScalarArrayDimensionsBuilder",
+            "VariableScalarArrayDimensionsBuilder",
+        )
+        .data_type(DataTypeId::UInt32)
+        .value_rank(-1)
+        .value(42u32)
+        .array_dimensions(&[1]);
+        assert!(!builder.is_valid());
     }
 
     #[test]

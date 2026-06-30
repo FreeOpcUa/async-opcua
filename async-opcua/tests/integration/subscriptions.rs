@@ -10,9 +10,10 @@ use chrono::DateTime;
 use opcua::{
     server::address_space::{AccessLevel, VariableBuilder},
     types::{
-        AttributeId, DataTypeId, DataValue, MonitoredItemCreateRequest, MonitoredItemModifyRequest,
-        MonitoringMode, MonitoringParameters, NodeId, ObjectId, ReadValueId, ReferenceTypeId,
-        StatusCode, TimestampsToReturn, VariableTypeId, Variant,
+        AttributeId, BinaryDecodable, ContextOwned, DataTypeId, DataValue,
+        MonitoredItemCreateRequest, MonitoredItemModifyRequest, MonitoringMode,
+        MonitoringParameters, NodeId, ObjectId, ReadValueId, ReferenceTypeId, StatusCode,
+        TimestampsToReturn, VariableTypeId, Variant,
     },
 };
 use opcua_client::{
@@ -1947,6 +1948,31 @@ async fn set_monitoring_mode_unknown_item_is_rejected() {
     let results = r.results.unwrap();
     assert_eq!(1, results.len());
     assert_eq!(StatusCode::BadMonitoredItemIdInvalid, results[0]);
+}
+
+#[tokio::test]
+async fn invalid_monitoring_mode_is_rejected_with_monitoring_mode_invalid() {
+    // OPC-10000-4 5.13.4.3 Table 70: invalid SetMonitoringMode.monitoringMode
+    // is Bad_MonitoringModeInvalid, not a generic decode or service error.
+    let (tester, nm, session) = setup().await;
+    let (sub_id, item_id) = sub_with_one_item(&session, &nm, &tester).await;
+
+    let invalid_monitoring_mode = 3i32;
+    let invalid_monitoring_mode_bytes = invalid_monitoring_mode.to_le_bytes();
+    let mut bytes = invalid_monitoring_mode_bytes.as_slice();
+    let ctx = ContextOwned::default();
+    let mode = MonitoringMode::decode(&mut bytes, &ctx.context()).expect(
+        "invalid MonitoringMode must survive decode so SetMonitoringMode can return \
+         Bad_MonitoringModeInvalid",
+    );
+
+    let err = SetMonitoringMode::new(sub_id, mode, &session)
+        .item(item_id)
+        .send(session.channel())
+        .await
+        .unwrap_err();
+
+    assert_eq!(StatusCode::BadMonitoringModeInvalid, err.status());
 }
 
 #[tokio::test]

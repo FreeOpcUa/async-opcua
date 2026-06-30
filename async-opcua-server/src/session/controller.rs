@@ -11,6 +11,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use chrono::Utc;
 use futures::{future::Either, stream::FuturesUnordered, Future, StreamExt};
 use opcua_core::{trace_read_lock, trace_write_lock, Message, RequestMessage, ResponseMessage};
 use tracing::{debug, debug_span, error, trace, warn};
@@ -22,7 +23,6 @@ use opcua_core::{
         security_header::SecurityHeader,
         tcp_types::ErrorMessage,
     },
-    config::Config,
     handle::AtomicHandle,
     sync::RwLock,
 };
@@ -51,8 +51,9 @@ use crate::{
 use super::{
     audit::{
         dispatch_activate_session, dispatch_certificate_audit, dispatch_create_session,
-        dispatch_open_secure_channel, dispatch_response_failure, dispatch_service_failure,
-        AuditEventContext,
+        dispatch_open_secure_channel, dispatch_open_secure_channel_certificate_audit,
+        dispatch_response_failure, dispatch_service_failure,
+        dispatch_suppressed_certificate_audit_success, AuditEventContext,
     },
     instance::Session,
     manager::{activate_session, close_session, SessionManager},
@@ -343,13 +344,8 @@ impl<T: ConnectionTransport> SessionController<T> {
                                 self.transport.set_closing();
                             }
                         }
-                        TransportPollResult::RecoverableError(s, id, handle) => {
-                            warn!("Non-fatal transport error: {s}, with request id {id}, request handle {handle}");
-                            let msg = ServiceFault::new(handle, s).into();
-                            if let Err(e) = self.transport.enqueue_message_for_send(&mut self.channel, msg, id) {
-                                error!("Failed to send response: {e}");
-                                self.fatal_error(e, "Encoding error");
-                            }
+                        TransportPollResult::RecoverableError(status, request_id, request_handle) => {
+                            self.send_recoverable_service_fault(status, request_id, request_handle);
                         }
                         TransportPollResult::Error(s) => {
                             error!("Fatal transport error: {s}");
@@ -389,11 +385,63 @@ impl<T: ConnectionTransport> SessionController<T> {
         Some(session.session_id().clone())
     }
 
+    fn dispatch_suppressed_create_session_certificate_audits(
+        &self,
+        request: &opcua_types::CreateSessionRequest,
+        session_id: Option<NodeId>,
+    ) {
+        if self.channel.security_policy() == SecurityPolicy::None
+            || self.info.config.certificate_validation.check_time
+        {
+            return;
+        }
+
+        let Ok(cert) = opcua_crypto::X509::from_byte_string(&request.client_certificate) else {
+            return;
+        };
+        let now = Utc::now();
+        let validity_finding = match (cert.not_before(), cert.not_after()) {
+            (Ok(not_before), Ok(not_after)) => now < not_before || now > not_after,
+            _ => true,
+        };
+        if !validity_finding {
+            return;
+        }
+
+        dispatch_suppressed_certificate_audit_success(
+            &self.subscriptions,
+            &self.info,
+            &request.request_header,
+            request.client_certificate.clone(),
+            session_id,
+            StatusCode::BadCertificateTimeInvalid,
+        );
+    }
+
     fn fatal_error(&mut self, err: StatusCode, msg: &str) {
         if !self.transport.is_closing() {
             self.transport.enqueue_error(ErrorMessage::new(err, msg));
         }
         self.transport.set_closing();
+    }
+
+    fn send_recoverable_service_fault(
+        &mut self,
+        status: StatusCode,
+        request_id: u32,
+        request_handle: u32,
+    ) {
+        warn!(
+            "Non-fatal transport error: {status}, with request id {request_id}, request handle {request_handle}"
+        );
+        let msg = ServiceFault::new(request_handle, status).into();
+        if let Err(e) = self
+            .transport
+            .enqueue_message_for_send(&mut self.channel, msg, request_id)
+        {
+            error!("Failed to send response: {e}");
+            self.fatal_error(e, "Encoding error");
+        }
     }
 
     async fn process_request(&mut self, req: Request) -> RequestProcessResult {
@@ -443,24 +491,28 @@ impl<T: ConnectionTransport> SessionController<T> {
                     self.info.diagnostics.inc_security_rejected_requests();
                 }
                 match res {
-                    Ok(r) => match self.transport.enqueue_message_for_send_with_message_type(
-                        &mut self.channel,
-                        r,
-                        id,
-                        MessageChunkType::OpenSecureChannel,
-                    ) {
-                        Ok(_) => RequestProcessResult::Ok,
-                        Err(e) => {
-                            error!("Failed to send open secure channel response: {e}");
-                            RequestProcessResult::Close
-                        }
-                    },
-                    Err(e) => {
-                        let _ = self.transport.enqueue_message_for_send(
+                    Ok(mut response) => {
+                        response.apply_return_diagnostics(r.request_header.return_diagnostics);
+                        match self.transport.enqueue_message_for_send_with_message_type(
                             &mut self.channel,
-                            ServiceFault::new(&r.request_header, e).into(),
+                            response,
                             id,
-                        );
+                            MessageChunkType::OpenSecureChannel,
+                        ) {
+                            Ok(_) => RequestProcessResult::Ok,
+                            Err(e) => {
+                                error!("Failed to send open secure channel response: {e}");
+                                RequestProcessResult::Close
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let mut fault: ResponseMessage =
+                            ServiceFault::new(&r.request_header, e).into();
+                        fault.apply_return_diagnostics(r.request_header.return_diagnostics);
+                        let _ =
+                            self.transport
+                                .enqueue_message_for_send(&mut self.channel, fault, id);
                         RequestProcessResult::Close
                     }
                 }
@@ -491,7 +543,7 @@ impl<T: ConnectionTransport> SessionController<T> {
                     &self.subscriptions,
                     &self.info,
                     &request,
-                    session_id,
+                    session_id.clone(),
                     self.channel.secure_channel_id(),
                     revised_timeout,
                     status,
@@ -507,8 +559,17 @@ impl<T: ConnectionTransport> SessionController<T> {
                         None,
                         status,
                     );
+                } else {
+                    self.dispatch_suppressed_create_session_certificate_audits(
+                        &request, session_id,
+                    );
                 }
-                self.process_service_result(res, request.request_header.request_handle, id)
+                self.process_service_result(
+                    res,
+                    request.request_header.request_handle,
+                    request.request_header.return_diagnostics,
+                    id,
+                )
             }
 
             RequestMessage::ActivateSession(request) => {
@@ -535,7 +596,12 @@ impl<T: ConnectionTransport> SessionController<T> {
                     status,
                 );
                 let _h = span.enter();
-                self.process_service_result(res, request.request_header.request_handle, id)
+                self.process_service_result(
+                    res,
+                    request.request_header.request_handle,
+                    request.request_header.return_diagnostics,
+                    id,
+                )
             }
 
             RequestMessage::CloseSession(request) => {
@@ -548,13 +614,18 @@ impl<T: ConnectionTransport> SessionController<T> {
                 .instrument(span.clone())
                 .await;
                 let _h = span.enter();
-                self.process_service_result(res, request.request_header.request_handle, id)
+                self.process_service_result(
+                    res,
+                    request.request_header.request_handle,
+                    request.request_header.return_diagnostics,
+                    id,
+                )
             }
             RequestMessage::GetEndpoints(request) => {
                 // GetEndpoints is a pre-session discovery service that cannot fail here (it always
                 // returns the filtered endpoint list), so there is no failure to audit.
                 let _h = span.enter();
-                let endpoints = self.info.endpoints_with_filters(
+                let endpoints = self.info.get_endpoints_with_filters(
                     &request.endpoint_url,
                     &request.profile_uris,
                     &request.locale_ids,
@@ -565,17 +636,19 @@ impl<T: ConnectionTransport> SessionController<T> {
                         endpoints,
                     }),
                     request.request_header.request_handle,
+                    request.request_header.return_diagnostics,
                     id,
                 )
             }
             RequestMessage::FindServers(request) => {
                 let _h = span.enter();
-                let desc = self.info.config.application_description();
                 let mut servers = if self
                     .info
                     .matches_find_servers_filters(&request.endpoint_url, &request.locale_ids)
                 {
-                    vec![desc]
+                    vec![self
+                        .info
+                        .find_servers_application_description(&request.endpoint_url)]
                 } else {
                     Vec::new()
                 };
@@ -600,6 +673,7 @@ impl<T: ConnectionTransport> SessionController<T> {
                         servers,
                     }),
                     request.request_header.request_handle,
+                    request.request_header.return_diagnostics,
                     id,
                 )
             }
@@ -619,6 +693,7 @@ impl<T: ConnectionTransport> SessionController<T> {
                         servers: Some(servers),
                     }),
                     request.request_header.request_handle,
+                    request.request_header.return_diagnostics,
                     id,
                 )
             }
@@ -632,17 +707,18 @@ impl<T: ConnectionTransport> SessionController<T> {
                 if status == StatusCode::Good && !request.server.is_online {
                     self.info.remove_registered_mdns(&request.server.server_uri);
                 }
-                if let Err(e) = self.transport.enqueue_message_for_send(
-                    &mut self.channel,
-                    RegisterServerResponse {
-                        response_header: ResponseHeader::new_service_result(
-                            &request.request_header,
-                            status,
-                        ),
-                    }
-                    .into(),
-                    id,
-                ) {
+                let mut message: ResponseMessage = RegisterServerResponse {
+                    response_header: ResponseHeader::new_service_result(
+                        &request.request_header,
+                        status,
+                    ),
+                }
+                .into();
+                message.apply_return_diagnostics(request.request_header.return_diagnostics);
+                if let Err(e) =
+                    self.transport
+                        .enqueue_message_for_send(&mut self.channel, message, id)
+                {
                     error!("Failed to send request response: {e}");
                     RequestProcessResult::Close
                 } else {
@@ -676,19 +752,20 @@ impl<T: ConnectionTransport> SessionController<T> {
                 if status == StatusCode::Good && !request.server.is_online {
                     self.info.remove_registered_mdns(&request.server.server_uri);
                 }
-                if let Err(e) = self.transport.enqueue_message_for_send(
-                    &mut self.channel,
-                    RegisterServer2Response {
-                        response_header: ResponseHeader::new_service_result(
-                            &request.request_header,
-                            status,
-                        ),
-                        configuration_results,
-                        diagnostic_infos: None,
-                    }
-                    .into(),
-                    id,
-                ) {
+                let mut message: ResponseMessage = RegisterServer2Response {
+                    response_header: ResponseHeader::new_service_result(
+                        &request.request_header,
+                        status,
+                    ),
+                    configuration_results,
+                    diagnostic_infos: None,
+                }
+                .into();
+                message.apply_return_diagnostics(request.request_header.return_diagnostics);
+                if let Err(e) =
+                    self.transport
+                        .enqueue_message_for_send(&mut self.channel, message, id)
+                {
                     error!("Failed to send request response: {e}");
                     RequestProcessResult::Close
                 } else {
@@ -705,6 +782,7 @@ impl<T: ConnectionTransport> SessionController<T> {
                     None,
                     None,
                 );
+                let return_diagnostics = message.request_header().return_diagnostics;
                 let mgr = trace_read_lock!(self.session_manager);
                 let session = mgr.find_by_token(&message.request_header().authentication_token);
                 let actor_sender = mgr.actor_sender(&message.request_header().authentication_token);
@@ -718,7 +796,8 @@ impl<T: ConnectionTransport> SessionController<T> {
                     &self.channel,
                 ) {
                     Ok(s) => s,
-                    Err(e) => {
+                    Err(mut e) => {
+                        e.apply_return_diagnostics(return_diagnostics);
                         self.info.diagnostics.inc_rejected_requests();
                         self.info.diagnostics.inc_security_rejected_requests();
                         dispatch_service_failure(
@@ -773,7 +852,7 @@ impl<T: ConnectionTransport> SessionController<T> {
                                 // Select biased because if for some reason there's a long time between polls,
                                 // we want to return the response even if the timeout expired. We only want to send a timeout
                                 // if the call has not been finished yet.
-                                let response = tokio::select! {
+                                let mut response = tokio::select! {
                                     biased;
                                     r = &mut handle => {
                                         match r {
@@ -795,7 +874,8 @@ impl<T: ConnectionTransport> SessionController<T> {
                                                 Ok(Response { message: ServiceFault::new(request_handle, StatusCode::BadTimeout).into(), request_id: id })
                                     }
                                 };
-                                if let Ok(response) = &response {
+                                if let Ok(response) = &mut response {
+                                    response.message.apply_return_diagnostics(return_diagnostics);
                                     dispatch_response_failure(
                                         &subscriptions,
                                         &info,
@@ -807,7 +887,8 @@ impl<T: ConnectionTransport> SessionController<T> {
                             }.instrument(span.clone())));
                         RequestProcessResult::Ok
                     }
-                    super::message_handler::HandleMessageResult::SyncMessage(s) => {
+                    super::message_handler::HandleMessageResult::SyncMessage(mut s) => {
+                        s.message.apply_return_diagnostics(return_diagnostics);
                         debug!(
                             status_code = %s.message.response_header().service_result,
                             "Sending response of type {}", s.message.type_name()
@@ -858,9 +939,10 @@ impl<T: ConnectionTransport> SessionController<T> {
         &mut self,
         res: Result<impl Into<ResponseMessage>, StatusCode>,
         request_handle: u32,
+        return_diagnostics: opcua_types::DiagnosticBits,
         request_id: u32,
     ) -> RequestProcessResult {
-        let message = match res {
+        let mut message = match res {
             Ok(m) => m.into(),
             Err(e) => {
                 self.info.diagnostics.inc_rejected_requests();
@@ -876,6 +958,7 @@ impl<T: ConnectionTransport> SessionController<T> {
                 ServiceFault::new(request_handle, e).into()
             }
         };
+        message.apply_return_diagnostics(return_diagnostics);
         if let Err(e) =
             self.transport
                 .enqueue_message_for_send(&mut self.channel, message, request_id)
@@ -1019,14 +1102,25 @@ impl<T: ConnectionTransport> SessionController<T> {
         if self.channel.security_policy() != SecurityPolicy::None {
             if let Some(cert) = self.channel.remote_cert() {
                 let security_policy = self.channel.security_policy();
-                let store = trace_read_lock!(self.certificate_store);
-                if let Err(e) = store.validate_or_reject_application_instance_cert(
-                    &cert,
-                    security_policy,
-                    None,
-                    None,
-                ) {
+                let validation_result = {
+                    let store = trace_read_lock!(self.certificate_store);
+                    store.validate_or_reject_application_instance_cert(
+                        &cert,
+                        security_policy,
+                        None,
+                        None,
+                    )
+                };
+                if let Err(e) = validation_result {
+                    let validation_status = e.status();
                     error!("OpenSecureChannel rejected: client certificate failed validation: {e}");
+                    dispatch_open_secure_channel_certificate_audit(
+                        &self.subscriptions,
+                        &self.info,
+                        &request.request_header,
+                        security_header.sender_certificate.clone(),
+                        validation_status,
+                    );
                     return Ok(ServiceFault::new(
                         &request.request_header,
                         StatusCode::BadSecurityChecksFailed,

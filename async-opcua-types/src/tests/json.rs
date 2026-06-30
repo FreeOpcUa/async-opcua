@@ -39,6 +39,14 @@ fn from_str<T: JsonDecodable>(v: &str) -> EncodingResult<T> {
     crate::json::from_bytes(v.as_bytes(), &ContextOwned::default().context())
 }
 
+fn from_legacy_variant_value(v: Value) -> EncodingResult<Variant> {
+    let v = serde_json::to_string(&v).unwrap();
+    let mut cursor = Cursor::new(v.into_bytes());
+    let mut reader = JsonStreamReader::new(&mut cursor as &mut dyn Read);
+    let ctx = ContextOwned::default();
+    Variant::decode_legacy_type_body_json(&mut reader, &ctx.context())
+}
+
 fn to_string<T: JsonEncodable>(v: &T) -> EncodingResult<String> {
     crate::json::to_string(v, &ContextOwned::default().context())
 }
@@ -115,87 +123,103 @@ fn serialize_data_value() {
 fn serialize_node_id() {
     let n = NodeId::new(0, 1);
     let json = to_value(&n).unwrap();
-    assert_eq!(json, json!({"Id": 1}));
+    assert_eq!(json, json!("i=1"));
     let n2 = from_value::<NodeId>(json).unwrap();
     assert_eq!(n, n2);
-    let n3 = from_value::<NodeId>(json!({"Type": 0, "Id": 1})).unwrap();
-    assert_eq!(n, n3);
 
     let n = NodeId::new(10, 5);
     let json = to_value(&n).unwrap();
-    assert_eq!(json, json!({"Id": 5, "Namespace": 10}));
+    assert_eq!(json, json!("ns=10;i=5"));
     let n2 = from_value::<NodeId>(json).unwrap();
     assert_eq!(n, n2);
 
     let n = NodeId::new(1, "Hello");
     let json = to_value(&n).unwrap();
-    assert_eq!(json, json!({"IdType": 1, "Id": "Hello", "Namespace": 1}));
+    assert_eq!(json, json!("ns=1;s=Hello"));
     let n2 = from_value::<NodeId>(json).unwrap();
     assert_eq!(n, n2);
 
     let guid = "995a9546-cd91-4393-b1c8-a83851f88d6a";
     let n = NodeId::new(1, Guid::from_str(guid).unwrap());
     let json = to_value(&n).unwrap();
-    assert_eq!(json, json!({"IdType": 2, "Id": guid, "Namespace": 1}));
+    assert_eq!(json, json!("ns=1;g=995a9546-cd91-4393-b1c8-a83851f88d6a"));
     let n2 = from_value::<NodeId>(json).unwrap();
     assert_eq!(n, n2);
 
     let bytestring = "aGVsbG8gd29ybGQ=";
     let n = NodeId::new(1, ByteString::from_base64(bytestring).unwrap());
     let json = to_value(&n).unwrap();
-    assert_eq!(json, json!({"IdType": 3, "Id": bytestring, "Namespace": 1}));
+    assert_eq!(json, json!("ns=1;b=aGVsbG8gd29ybGQ="));
     let n2 = from_value::<NodeId>(json).unwrap();
     assert_eq!(n, n2);
 
-    // Missing namespace is treated as 0
-    let n2 = from_value::<NodeId>(json!({"IdType": 1, "Id": "XYZ"})).unwrap();
+    // Missing namespace is treated as 0.
+    let n2 = from_value::<NodeId>(json!("s=XYZ")).unwrap();
     assert_eq!(NodeId::new(0, "XYZ"), n2);
 
-    // Invalid Type
-    let n = from_value::<NodeId>(json!({"IdType": 5, "Id": "InvalidType", "Namespace": 1}));
+    // Legacy object form is not accepted on the standard JSON path.
+    let n = from_value::<NodeId>(json!({"Id": 1}));
     assert!(n.is_err());
 
-    // Missing id
-    let n = from_value::<NodeId>(json!({"IdType": 1, "Namespace": 1}));
+    // Invalid type.
+    let n = from_value::<NodeId>(json!("ns=1;x=InvalidType"));
     assert!(n.is_err());
 
-    // Invalid string ids
-    let n = from_value::<NodeId>(json!({"IdType": 1, "Id": null, "Namespace": 1}));
-    assert!(n.is_err());
-    let n = from_value::<NodeId>(json!({"IdType": 1, "Id": true, "Namespace": 1}));
-    assert!(n.is_err());
-    let n = from_value::<NodeId>(json!({"IdType": 1, "Id": "", "Namespace": 1}));
+    // Missing id.
+    let n = from_value::<NodeId>(json!("ns=1"));
     assert!(n.is_err());
 
-    // Invalid guid
-    let n = from_value::<NodeId>(json!({"IdType": 2, "Id": null, "Namespace": 1}));
-    assert!(n.is_err());
-    let n = from_value::<NodeId>(json!({"IdType": 2, "Id": "1234", "Namespace": 1}));
-    assert!(n.is_err());
-    let n = from_value::<NodeId>(json!({"IdType": 2, "Id": "", "Namespace": 1}));
+    // Invalid string id.
+    let n = from_value::<NodeId>(json!("ns=1;s="));
     assert!(n.is_err());
 
-    // Invalid bytestring
-    let n = from_value::<NodeId>(json!({"IdType": 3, "Id": null, "Namespace": 1}));
+    // Invalid guid.
+    let n = from_value::<NodeId>(json!("ns=1;g=1234"));
     assert!(n.is_err());
-    let n = from_value::<NodeId>(json!({"IdType": 3, "Id": "", "Namespace": 1}));
+
+    // Invalid bytestring.
+    let n = from_value::<NodeId>(json!("ns=1;b="));
     assert!(n.is_err());
+}
+
+#[test]
+fn json_nodeid_uses_opc_ua_1_05_string_form() {
+    // OPC-10000-6 5.4.2.10: NodeId JSON values are encoded as strings using the 5.1.12 format.
+    let node_id = NodeId::new(2, "Pump/Line1");
+    let value = to_value(&node_id).unwrap();
+
+    assert_eq!(value, json!("ns=2;s=Pump/Line1"));
+
+    let decoded = from_value::<NodeId>(json!("ns=2;s=Pump/Line1")).unwrap();
+    assert_eq!(decoded, node_id);
 }
 
 #[test]
 fn serialize_expanded_node_id() {
     let n = ExpandedNodeId::new(NodeId::new(0, 1));
     let json = to_value(&n).unwrap();
-    assert_eq!(json, json!({"Id": 1}));
+    assert_eq!(json, json!("i=1"));
 
     let mut n = ExpandedNodeId::new(NodeId::new(1, 1));
     n.server_index = 5;
     n.namespace_uri = "urn:SomeNamespace".into();
     let json = to_value(&n).unwrap();
-    assert_eq!(
-        json,
-        json!({"Id": 1, "Namespace": "urn:SomeNamespace", "ServerUri": 5})
-    );
+    assert_eq!(json, json!("svr=5;nsu=urn:SomeNamespace;i=1"));
+}
+
+#[test]
+fn json_expanded_nodeid_uses_opc_ua_1_05_string_form() {
+    // OPC-10000-6 5.4.2.11: ExpandedNodeId JSON values are encoded as strings using the 5.1.12 format.
+    let mut expanded_node_id = ExpandedNodeId::new(NodeId::new(0, 321));
+    expanded_node_id.namespace_uri = "urn:example:expanded".into();
+    expanded_node_id.server_index = 7;
+
+    let value = to_value(&expanded_node_id).unwrap();
+    assert_eq!(value, json!("svr=7;nsu=urn:example:expanded;i=321"));
+
+    let decoded =
+        from_value::<ExpandedNodeId>(json!("svr=7;nsu=urn:example:expanded;i=321")).unwrap();
+    assert_eq!(decoded, expanded_node_id);
 }
 
 #[test]
@@ -220,19 +244,31 @@ fn serialize_status_code() {
 }
 
 #[test]
-fn json_int64_encodes_as_decimal_string() {
+fn json_int64_encodes_and_decodes_decimal_string() {
     // OPC-10000-6 5.4.2.3: Int64 JSON values are encoded as decimal strings.
-    let value = to_value(&-9_007_199_254_740_993i64).unwrap();
+    let int64 = -9_007_199_254_740_993i64;
+    let value = to_value(&int64).unwrap();
 
     assert_eq!(value, json!("-9007199254740993"));
+
+    let decoded = from_value::<i64>(json!("-9007199254740993")).unwrap();
+    assert_eq!(decoded, int64);
+
+    assert!(from_value::<i64>(json!(-9_007_199_254_740_993i64)).is_err());
 }
 
 #[test]
-fn json_uint64_encodes_as_decimal_string() {
+fn json_uint64_encodes_and_decodes_decimal_string() {
     // OPC-10000-6 5.4.2.3: UInt64 JSON values are encoded as decimal strings.
-    let value = to_value(&18_446_744_073_709_551_615u64).unwrap();
+    let uint64 = u64::MAX;
+    let value = to_value(&uint64).unwrap();
 
     assert_eq!(value, json!("18446744073709551615"));
+
+    let decoded = from_value::<u64>(json!("18446744073709551615")).unwrap();
+    assert_eq!(decoded, uint64);
+
+    assert!(from_value::<u64>(json!(18_446_744_073_709_551_615u64)).is_err());
 }
 
 #[test]
@@ -255,14 +291,10 @@ fn serialize_extension_object() {
     assert_eq!(
         json,
         json!({
-            "UaTypeId": {
-                "Id": ObjectId::Argument_Encoding_DefaultJson as i32
-            },
+            "UaTypeId": format!("i={}", ObjectId::Argument_Encoding_DefaultJson as i32),
             "UaBody": {
                 "Name": "Arg",
-                "DataType": {
-                    "Id": 11
-                },
+                "DataType": "i=11",
                 "ValueRank": 1,
                 "ArrayDimensions": [3],
                 "Description": {
@@ -270,6 +302,53 @@ fn serialize_extension_object() {
                 }
             }
         })
+    );
+}
+
+#[test]
+fn extension_object_uabody_null_decodes_as_null_body() {
+    // OPC-10000-6 5.4.2.16: ExtensionObject JSON uses UaBody for the body field.
+    let legacy_body = json!({
+        "UaTypeId": format!("i={}", ObjectId::Argument_Encoding_DefaultJson as i32),
+        "Body": null
+    });
+    assert!(
+        from_value::<ExtensionObject>(legacy_body).is_err(),
+        "ExtensionObject JSON must not accept legacy Body as the body field"
+    );
+
+    let uabody_null = json!({
+        "UaTypeId": format!("i={}", ObjectId::Argument_Encoding_DefaultJson as i32),
+        "UaBody": null
+    });
+    let decoded = from_value::<ExtensionObject>(uabody_null)
+        .expect("valid TypeId with null UaBody should decode as a null ExtensionObject body");
+
+    assert!(
+        decoded.is_null(),
+        "null UaBody should produce a null ExtensionObject body, got {decoded:?}"
+    );
+}
+
+#[test]
+fn extension_object_duplicate_json_field_names_are_rejected() {
+    // OPC-10000-6 5.4.2.16: decoders shall report errors when a JSON object has
+    // multiple fields with the same name. Keep this as raw text so duplicate keys
+    // reach the streaming decoder instead of being collapsed by serde_json::Value.
+    let payload = format!(
+        r#"{{
+            "UaTypeId": {{"Id": {}}},
+            "UaTypeId": {{"Id": {}}},
+            "UaBody": null
+        }}"#,
+        ObjectId::EUInformation_Encoding_DefaultJson as i32,
+        ObjectId::Argument_Encoding_DefaultJson as i32
+    );
+
+    let res = from_str::<ExtensionObject>(&payload);
+    assert!(
+        res.is_err(),
+        "ExtensionObject JSON with duplicate field names must be rejected, got {res:?}"
     );
 }
 
@@ -330,56 +409,87 @@ fn serialize_variant_empty() {
     test_ser_de_variant(Variant::Empty, json!(null));
     test_json_to_variant(json!(null), Variant::Empty);
     test_json_to_variant(json!({"UaType": 0}), Variant::Empty);
-    test_json_to_variant(json!({"UaType": 0, "Body": null}), Variant::Empty);
+    test_json_to_variant(json!({"UaType": 0, "Value": null}), Variant::Empty);
 }
 
 #[test]
-fn json_variant_uses_uatype_and_body_fields() {
-    // OPC-10000-6 5.4.2.17: Variant JSON uses the UaType discriminator and Body payload fields.
-    let value = to_value(&Variant::Double(1.25)).unwrap();
+fn json_variant_legacy_type_body_requires_explicit_compatibility_decoder() {
+    let legacy = json!({"Type": 11, "Body": 1.25});
+    assert!(
+        from_value::<Variant>(legacy.clone()).is_err(),
+        "standard Variant JSON decode must reject legacy Type/Body payloads"
+    );
+    assert_eq!(
+        from_legacy_variant_value(legacy).unwrap(),
+        Variant::Double(1.25)
+    );
 
-    assert_eq!(value, json!({"UaType": 11, "Body": 1.25}));
+    let older_crate_body = json!({"UaType": 11, "Body": 1.25});
+    assert!(
+        from_value::<Variant>(older_crate_body.clone()).is_err(),
+        "standard Variant JSON decode must reject legacy Body payloads"
+    );
+    assert_eq!(
+        from_legacy_variant_value(older_crate_body).unwrap(),
+        Variant::Double(1.25)
+    );
+}
+
+#[test]
+fn json_variant_uses_uatype_and_value_fields() {
+    // OPC-10000-6 5.4.2.17: Variant JSON uses UaType and Value fields.
+    let variant = Variant::Double(1.25);
+    let value = to_value(&variant).unwrap();
+
+    assert_eq!(value, json!({"UaType": 11, "Value": 1.25}));
     assert!(value.get("Type").is_none());
+    assert!(value.get("Body").is_none());
+
+    let decoded = from_value::<Variant>(json!({"UaType": 11, "Value": 1.25})).unwrap();
+    assert_eq!(decoded, variant);
 }
 
 #[test]
 fn serialize_variant_boolean() {
     // Boolean
-    test_ser_de_variant(Variant::Boolean(true), json!({"UaType": 1, "Body": true}));
-    test_ser_de_variant(Variant::Boolean(false), json!({"UaType": 1, "Body": false}));
+    test_ser_de_variant(Variant::Boolean(true), json!({"UaType": 1, "Value": true}));
+    test_ser_de_variant(
+        Variant::Boolean(false),
+        json!({"UaType": 1, "Value": false}),
+    );
 }
 
 #[test]
 fn serialize_variant_numeric() {
-    // 8, 16 and 32-bit numerics. Missing body should be treated as the default
+    // 8, 16 and 32-bit numerics. Missing Value should be treated as the default
     // numeric value, i.e. 0
-    test_ser_de_variant(Variant::SByte(-1), json!({"UaType": 2, "Body": -1}));
+    test_ser_de_variant(Variant::SByte(-1), json!({"UaType": 2, "Value": -1}));
     test_json_to_variant(json!({"UaType": 2}), Variant::SByte(0));
-    test_ser_de_variant(Variant::Byte(1), json!({"UaType": 3, "Body": 1}));
+    test_ser_de_variant(Variant::Byte(1), json!({"UaType": 3, "Value": 1}));
     test_json_to_variant(json!({"UaType": 3}), Variant::Byte(0));
-    test_ser_de_variant(Variant::Int16(-2), json!({"UaType": 4, "Body": -2}));
+    test_ser_de_variant(Variant::Int16(-2), json!({"UaType": 4, "Value": -2}));
     test_json_to_variant(json!({"UaType": 4}), Variant::Int16(0));
-    test_ser_de_variant(Variant::UInt16(2), json!({"UaType": 5, "Body": 2}));
+    test_ser_de_variant(Variant::UInt16(2), json!({"UaType": 5, "Value": 2}));
     test_json_to_variant(json!({"UaType": 5}), Variant::UInt16(0));
-    test_ser_de_variant(Variant::Int32(-3), json!({"UaType": 6, "Body": -3}));
+    test_ser_de_variant(Variant::Int32(-3), json!({"UaType": 6, "Value": -3}));
     test_json_to_variant(json!({"UaType": 6}), Variant::Int32(0));
-    test_ser_de_variant(Variant::UInt32(3), json!({"UaType": 7, "Body": 3}));
+    test_ser_de_variant(Variant::UInt32(3), json!({"UaType": 7, "Value": 3}));
     test_json_to_variant(json!({"UaType": 7}), Variant::UInt32(0));
 
-    // Int64 & UInt64 are encoded as strings. Missing body should be treated as the default
+    // Int64 & UInt64 are encoded as strings. Missing Value should be treated as the default
     // numeric value, i.e. 0
-    test_ser_de_variant(Variant::Int64(-1i64), json!({"UaType": 8, "Body": "-1"}));
+    test_ser_de_variant(Variant::Int64(-1i64), json!({"UaType": 8, "Value": "-1"}));
     test_json_to_variant(json!({"UaType": 8}), Variant::Int64(0));
     test_ser_de_variant(
         Variant::UInt64(1000u64),
-        json!({"UaType": 9, "Body": "1000"}),
+        json!({"UaType": 9, "Value": "1000"}),
     );
     test_json_to_variant(json!({"UaType": 9}), Variant::UInt64(0));
 }
 
 #[test]
 fn serialize_variant_float() {
-    // Missing body should be treated as the default numeric value, i.e. 0.0
+    // Missing Value should be treated as the default numeric value, i.e. 0.0
 
     // This test doesn't call test_json_to_variant because the roundtrip
     // can lead to precision issues. Instead it pulls the values straight out
@@ -388,17 +498,17 @@ fn serialize_variant_float() {
     let variant = Variant::Float(f32_val);
     let value = to_value(&variant).unwrap();
     assert_eq!(*value.get("UaType").unwrap(), json!(10));
-    let body = value.get("Body").unwrap();
-    assert_eq!(body.as_f64().unwrap() as f32, f32_val);
+    let value = value.get("Value").unwrap();
+    assert_eq!(value.as_f64().unwrap() as f32, f32_val);
 
     // Test for NaN
     let v = to_value(&Variant::Float(f32::NAN)).unwrap();
-    let json = json!({"UaType": 10, "Body": "NaN"});
+    let json = json!({"UaType": 10, "Value": "NaN"});
     assert_eq!(v, json);
 
     // This test is a bit different because assert_eq won't work since comparing NaN to itself always yields
     // false so impossible to use assert_eq!().
-    let value = from_value::<Variant>(json!({"UaType": 10, "Body": "NaN"})).unwrap();
+    let value = from_value::<Variant>(json!({"UaType": 10, "Value": "NaN"})).unwrap();
     if let Variant::Float(v) = value {
         assert!(v.is_nan())
     } else {
@@ -408,11 +518,11 @@ fn serialize_variant_float() {
     // Tests for Infinity
     test_ser_de_variant(
         Variant::Float(f32::INFINITY),
-        json!({"UaType": 10, "Body": "Infinity"}),
+        json!({"UaType": 10, "Value": "Infinity"}),
     );
     test_ser_de_variant(
         Variant::Float(f32::NEG_INFINITY),
-        json!({"UaType": 10, "Body": "-Infinity"}),
+        json!({"UaType": 10, "Value": "-Infinity"}),
     );
 }
 
@@ -421,17 +531,17 @@ fn serialize_variant_double() {
     // Double
     test_ser_de_variant(
         Variant::Double(-451.001),
-        json!({"UaType": 11, "Body": -451.001}),
+        json!({"UaType": 11, "Value": -451.001}),
     );
     test_json_to_variant(json!({"UaType": 11}), Variant::Double(0.0));
 
     let v = to_value(&Variant::Double(f64::NAN)).unwrap();
-    let json = json!({"UaType": 11, "Body": "NaN"});
+    let json = json!({"UaType": 11, "Value": "NaN"});
     assert_eq!(v, json);
 
     // This test is a bit different because assert_eq won't work since comparing NaN to itself always yields
     // false so impossible to use assert_eq!().
-    let value = from_value::<Variant>(json!({"UaType": 11, "Body": "NaN"})).unwrap();
+    let value = from_value::<Variant>(json!({"UaType": 11, "Value": "NaN"})).unwrap();
     if let Variant::Double(v) = value {
         assert!(v.is_nan())
     } else {
@@ -441,11 +551,11 @@ fn serialize_variant_double() {
     // Tests for Infinity
     test_ser_de_variant(
         Variant::Double(f64::INFINITY),
-        json!({"UaType": 11, "Body": "Infinity"}),
+        json!({"UaType": 11, "Value": "Infinity"}),
     );
     test_ser_de_variant(
         Variant::Double(f64::NEG_INFINITY),
-        json!({"UaType": 11, "Body": "-Infinity"}),
+        json!({"UaType": 11, "Value": "-Infinity"}),
     );
 }
 
@@ -454,15 +564,15 @@ fn serialize_variant_string() {
     // String (12)
     test_ser_de_variant(
         Variant::String(UAString::from("Hello")),
-        json!({"UaType": 12, "Body": "Hello"}),
+        json!({"UaType": 12, "Value": "Hello"}),
     );
     test_ser_de_variant(
         Variant::String(UAString::null()),
-        json!({"UaType": 12, "Body": null}),
+        json!({"UaType": 12, "Value": null}),
     );
     test_json_to_variant(json!({"UaType": 12}), Variant::String(UAString::null()));
     test_json_to_variant(
-        json!({"UaType": 12, "Body": null}),
+        json!({"UaType": 12, "Value": null}),
         Variant::String(UAString::null()),
     );
 }
@@ -475,7 +585,7 @@ fn serialize_variant_datetime() {
         json!({
             // Feature 019: JSON DateTime now emits minimal lossless fractional digits (AutoSi),
             // so a whole-second value has no `.000` suffix (valid ISO 8601, §5.4.2.6).
-            "UaType": 13, "Body": "2000-01-01T00:00:00Z"
+            "UaType": 13, "Value": "2000-01-01T00:00:00Z"
         }),
     );
 }
@@ -486,11 +596,11 @@ fn serialize_variant_guid() {
     let guid = Guid::new();
     test_ser_de_variant(
         Variant::Guid(Box::new(guid.clone())),
-        json!({"UaType": 14, "Body": guid.to_string()}),
+        json!({"UaType": 14, "Value": guid.to_string()}),
     );
     test_ser_de_variant(
         Variant::Guid(Box::default()),
-        json!({"UaType": 14, "Body": "00000000-0000-0000-0000-000000000000"}),
+        json!({"UaType": 14, "Value": "00000000-0000-0000-0000-000000000000"}),
     );
 }
 
@@ -501,25 +611,25 @@ fn serialize_variant_bytestring() {
     let base64 = v.as_base64();
     test_ser_de_variant(
         Variant::ByteString(v),
-        json!({"UaType": 15, "Body": base64}),
+        json!({"UaType": 15, "Value": base64}),
     );
     test_ser_de_variant(
         Variant::ByteString(ByteString::null()),
-        json!({"UaType": 15, "Body": null}),
+        json!({"UaType": 15, "Value": null}),
     );
 }
 
 #[test]
 fn serialize_variant_xmlelement() {
     // XmlElement (16) — feature 018 US3: the JSON round-trip works (the backlog "untested" todo!()
-    // was a coverage gap, not a bug). Body is the XML string; null XmlElement → null body.
+    // was a coverage gap, not a bug). Value is the XML string; null XmlElement -> null Value.
     test_ser_de_variant(
         Variant::from(crate::XmlElement::from("<a>1</a>")),
-        json!({"UaType": 16, "Body": "<a>1</a>"}),
+        json!({"UaType": 16, "Value": "<a>1</a>"}),
     );
     test_ser_de_variant(
         Variant::from(crate::XmlElement::null()),
-        json!({"UaType": 16, "Body": null}),
+        json!({"UaType": 16, "Value": null}),
     );
 }
 
@@ -528,7 +638,7 @@ fn serialize_variant_node_id() {
     // NodeId (17)
     test_ser_de_variant(
         Variant::NodeId(Box::new(NodeId::new(5, "Hello World"))),
-        json!({"UaType": 17, "Body": { "IdType": 1, "Id": "Hello World", "Namespace": 5}}),
+        json!({"UaType": 17, "Value": "ns=5;s=Hello World"}),
     );
 }
 
@@ -540,7 +650,7 @@ fn serialize_variant_expanded_node_id() {
             NodeId::new(5, "Hello World"),
             20,
         )))),
-        json!({"UaType": 18, "Body": { "IdType": 1, "Id": "Hello World", "Namespace": 5, "ServerUri": 20}}),
+        json!({"UaType": 18, "Value": "svr=20;ns=5;s=Hello World"}),
     );
 }
 
@@ -549,12 +659,12 @@ fn serialize_variant_status_code() {
     // StatusCode (19)
     test_ser_de_variant(
         Variant::StatusCode(StatusCode::Good),
-        json!({"UaType": 19, "Body": 0}),
+        json!({"UaType": 19, "Value": 0}),
     );
 
     test_ser_de_variant(
         Variant::StatusCode(StatusCode::BadServerHalted),
-        json!({"UaType": 19, "Body": 0x800E0000u32}),
+        json!({"UaType": 19, "Value": 0x800E0000u32}),
     );
 }
 
@@ -563,7 +673,7 @@ fn serialize_variant_qualified_name() {
     // QualifiedName (20)
     test_ser_de_variant(
         Variant::QualifiedName(Box::default()),
-        json!({"UaType": 20, "Body": null}),
+        json!({"UaType": 20, "Value": null}),
     );
 }
 
@@ -572,7 +682,7 @@ fn serialize_variant_localized_text() {
     // LocalizedText (21)
     test_ser_de_variant(
         Variant::LocalizedText(Box::new(LocalizedText::null())),
-        json!({"UaType": 21, "Body": {}}),
+        json!({"UaType": 21, "Value": {}}),
     );
 }
 
@@ -581,7 +691,7 @@ fn serialize_variant_extension_object() {
     // ExtensionObject (22)
     test_ser_de_variant(
         Variant::ExtensionObject(ExtensionObject::null()),
-        json!({"UaType": 22, "Body": null}),
+        json!({"UaType": 22, "Value": null}),
     );
     let argument = Argument {
         name: "Arg".into(),
@@ -600,15 +710,11 @@ fn serialize_variant_extension_object() {
         Variant::ExtensionObject(ExtensionObject::from_message(argument)),
         json!({
             "UaType": 22,
-            "Body": {
-                "UaTypeId": {
-                    "Id": ObjectId::Argument_Encoding_DefaultJson as i32
-                },
+            "Value": {
+                "UaTypeId": format!("i={}", ObjectId::Argument_Encoding_DefaultJson as i32),
                 "UaBody": {
                     "Name": "Arg",
-                    "DataType": {
-                        "Id": 11
-                    },
+                    "DataType": "i=11",
                     "ValueRank": 1,
                     "ArrayDimensions": [3],
                     "Description": {
@@ -638,7 +744,7 @@ fn serialize_variant_data_value() {
 
     test_ser_de_variant(
         Variant::DataValue(Box::new(v)),
-        json!({"UaType": 23, "Body": { "ServerTimestamp": now_str.clone(), "SourceTimestamp": now_str }}),
+        json!({"UaType": 23, "Value": { "ServerTimestamp": now_str.clone(), "SourceTimestamp": now_str }}),
     );
 }
 
@@ -647,12 +753,12 @@ fn serialize_variant_variant() {
     // Variant (24)
     test_ser_de_variant(
         Variant::Variant(Box::new(Variant::Empty)),
-        json!({"UaType": 24, "Body": null}),
+        json!({"UaType": 24, "Value": null}),
     );
 
     test_ser_de_variant(
         Variant::Variant(Box::new(Variant::Double(1.2))),
-        json!({"UaType": 24, "Body": { "UaType": 11, "Body": 1.2 }}),
+        json!({"UaType": 24, "Value": { "UaType": 11, "Value": 1.2 }}),
     );
 }
 
@@ -661,7 +767,7 @@ fn serialize_variant_diagnostic_info() {
     // DiagnosticInfo (25)
     test_ser_de_variant(
         Variant::DiagnosticInfo(Box::default()),
-        json!({"UaType": 25, "Body": {}}),
+        json!({"UaType": 25, "Value": {}}),
     );
 
     test_ser_de_variant(
@@ -672,7 +778,7 @@ fn serialize_variant_diagnostic_info() {
             locale: Some(4),
             ..Default::default()
         })),
-        json!({"UaType": 25, "Body": {
+        json!({"UaType": 25, "Value": {
             "SymbolicId": 2,
             "NamespaceUri": 3,
             "AdditionalInfo": "info",
@@ -685,7 +791,7 @@ fn serialize_variant_diagnostic_info() {
 fn serialize_variant_single_dimension_array() {
     test_ser_de_variant(
         Variant::from(vec![1, 2, 3]),
-        json!({"UaType": 6, "Body": [1, 2, 3]}),
+        json!({"UaType": 6, "Value": [1, 2, 3]}),
     );
 
     test_ser_de_variant(
@@ -693,7 +799,7 @@ fn serialize_variant_single_dimension_array() {
             LocalizedText::new("en", "Test"),
             LocalizedText::new("en", "Test2"),
         ]),
-        json!({"UaType": 21, "Body": [{
+        json!({"UaType": 21, "Value": [{
             "Locale": "en",
             "Text": "Test"
         }, {
@@ -718,7 +824,7 @@ fn serialize_variant_multi_dimension_array() {
         v.into(),
         json!({
             "UaType": 6,
-            "Body": [1, 2, 3, 4, 5, 6],
+            "Value": [1, 2, 3, 4, 5, 6],
             "Dimensions": [2, 3]
         }),
     );
@@ -768,9 +874,7 @@ fn extension_object_round_trip() {
                     "Text": "Temperature in degrees Celsius"
                 }
             },
-            "UaTypeId": {
-                "Id": ObjectId::EUInformation_Encoding_DefaultJson as u32
-            }
+            "UaTypeId": format!("i={}", ObjectId::EUInformation_Encoding_DefaultJson as u32)
         })
     );
 
@@ -957,9 +1061,7 @@ fn test_custom_union_nullable() {
 #[test]
 fn test_xml_in_json() {
     let json = json!({
-        "UaTypeId": {
-            "Id": ObjectId::EUInformation_Encoding_DefaultXml as u32
-        },
+        "UaTypeId": format!("i={}", ObjectId::EUInformation_Encoding_DefaultXml as u32),
         "UaEncoding": 2,
         "UaBody": "
         <EUInformation>
@@ -990,9 +1092,7 @@ fn test_xml_in_json() {
 #[test]
 fn test_binary_in_json() {
     let json = json!({
-        "UaTypeId": {
-            "Id": ObjectId::EUInformation_Encoding_DefaultBinary as u32
-        },
+        "UaTypeId": format!("i={}", ObjectId::EUInformation_Encoding_DefaultBinary as u32),
         "UaEncoding": 1,
         "UaBody": "
         GAAAAGh0dHBzOi8vbXkubmFtZXNwYWNlLnVya
@@ -1035,7 +1135,7 @@ fn test_binary_in_json() {
 #[cfg(not(feature = "xml"))]
 #[test]
 fn xml_extension_object_in_json_fails_closed_without_xml() {
-    let v = json!({"UaTypeId": {"Id": 1}, "UaEncoding": 2, "UaBody": "<Foo></Foo>"});
+    let v = json!({"UaTypeId": "i=1", "UaEncoding": 2, "UaBody": "<Foo></Foo>"});
     let res = from_value::<ExtensionObject>(v);
     assert!(
         res.is_err(),
@@ -1058,7 +1158,7 @@ fn malformed_json_extension_object_no_panic() {
 #[cfg(feature = "xml")]
 #[test]
 fn xml_extension_object_in_json_preserved_with_xml() {
-    let v = json!({"UaTypeId": {"Id": 1}, "UaEncoding": 2, "UaBody": "<Foo></Foo>"});
+    let v = json!({"UaTypeId": "i=1", "UaEncoding": 2, "UaBody": "<Foo></Foo>"});
     let res = from_value::<ExtensionObject>(v).expect("xml-on decode should succeed");
     assert!(
         !res.is_null(),

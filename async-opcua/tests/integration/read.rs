@@ -2,7 +2,7 @@
 
 use std::{sync::atomic::Ordering, time::Duration};
 
-use crate::utils::{client_user_token, default_server, Tester};
+use crate::utils::{client_user_token, default_client, default_server, test_node_manager, Tester};
 
 use super::utils::{array_value, read_value_id, read_value_ids, setup};
 use chrono::TimeDelta;
@@ -13,13 +13,14 @@ use opcua::{
         ObjectTypeBuilder, ReferenceTypeBuilder, VariableBuilder, VariableTypeBuilder, ViewBuilder,
     },
     types::{
-        AttributeId, DataTypeId, DataValue, DateTime, HistoryData, HistoryReadValueId, NodeClass,
-        NodeId, ObjectId, ObjectTypeId, QualifiedName, ReadRawModifiedDetails, ReadValueId,
-        ReferenceTypeId, StatusCode, TimestampsToReturn, VariableId, VariableTypeId, Variant,
-        WriteMask,
+        AttributeId, DataTypeId, DataValue, DateTime, HistoryData, HistoryReadValueId,
+        LocalizedText, NodeClass, NodeId, ObjectId, ObjectTypeId, QualifiedName,
+        ReadRawModifiedDetails, ReadValueId, ReferenceTypeId, StatusCode, TimestampsToReturn,
+        VariableId, VariableTypeId, Variant, WriteMask, WriteValue,
     },
 };
 use opcua_client::{services::Read, DefaultRetryPolicy, ExponentialBackoff, UARequest};
+use opcua_types::NumericRange;
 
 #[tokio::test]
 async fn read() {
@@ -128,6 +129,138 @@ async fn read_variable() {
         Some(Variant::Int32(NodeClass::Variable as i32))
     );
     assert_eq!(r[11].value, Some(Variant::NodeId(Box::new(id))));
+}
+
+#[tokio::test]
+async fn localized_text_read_locale() {
+    // T072a — OPC UA Part 4 §5.4: ActivateSession localeIds apply to the Session and guide the
+    // language selected for LocalizedText returned by services such as Read.
+    let server = default_server()
+        .locale_ids(vec!["en-US".to_string(), "de-DE".to_string()])
+        .with_node_manager(test_node_manager());
+    let client =
+        default_client(0, false).preferred_locales(vec!["de-DE".to_string(), "en-US".to_string()]);
+    let mut tester = Tester::new_custom_client(server, client).await;
+    let nm = tester
+        .handle
+        .node_managers()
+        .get_of_type::<crate::utils::TestNodeManager>()
+        .unwrap();
+    let (session, lp) = tester.connect_default().await.unwrap();
+    lp.spawn();
+    tokio::time::timeout(Duration::from_secs(2), session.wait_for_connection())
+        .await
+        .unwrap();
+
+    let id = nm.inner().next_node_id();
+    nm.inner().add_node(
+        nm.address_space(),
+        tester.handle.type_tree(),
+        VariableBuilder::new(&id, "LocalizedReadLocale", "Initial")
+            .write_mask(WriteMask::DISPLAY_NAME)
+            .data_type(DataTypeId::String)
+            .value("value")
+            .access_level(AccessLevel::CURRENT_READ)
+            .user_access_level(AccessLevel::CURRENT_READ)
+            .build()
+            .into(),
+        &ObjectId::ObjectsFolder.into(),
+        &ReferenceTypeId::Organizes.into(),
+        Some(&VariableTypeId::BaseDataVariableType.into()),
+        Vec::new(),
+    );
+
+    let writes = [
+        localized_text_write_value(&id, LocalizedText::new("de-DE", "Deutsch")),
+        localized_text_write_value(&id, LocalizedText::new("en-US", "English")),
+    ];
+    let statuses = session.write(&writes).await.unwrap();
+    assert_eq!(statuses, vec![StatusCode::Good, StatusCode::Good]);
+
+    let values = session
+        .read(
+            &[read_value_id(AttributeId::DisplayName, &id)],
+            TimestampsToReturn::Both,
+            0.0,
+        )
+        .await
+        .unwrap();
+    assert!(
+        values[0].status.is_none() || values[0].status == Some(StatusCode::Good),
+        "DisplayName read should succeed, got {:?}",
+        values[0].status
+    );
+    assert_eq!(
+        values[0].value,
+        Some(Variant::LocalizedText(Box::new(LocalizedText::new(
+            "de-DE", "Deutsch"
+        )))),
+        "Read must select the German DisplayName because the session localeIds prefer de-DE"
+    );
+}
+
+#[tokio::test]
+async fn unsupported_special_locale_write_is_rejected() {
+    // T072b — OPC UA Part 4 §5.4 forbids special "mul" or "qst" locales in Write, and
+    // §5.11.4 requires Bad_LocaleNotSupported for unsupported write locales.
+    let (tester, nm, session) = setup().await;
+
+    let id = nm.inner().next_node_id();
+    nm.inner().add_node(
+        nm.address_space(),
+        tester.handle.type_tree(),
+        VariableBuilder::new(&id, "LocalizedWriteLocale", "English")
+            .write_mask(WriteMask::DISPLAY_NAME)
+            .data_type(DataTypeId::String)
+            .value("value")
+            .access_level(AccessLevel::CURRENT_READ)
+            .user_access_level(AccessLevel::CURRENT_READ)
+            .build()
+            .into(),
+        &ObjectId::ObjectsFolder.into(),
+        &ReferenceTypeId::Organizes.into(),
+        Some(&VariableTypeId::BaseDataVariableType.into()),
+        Vec::new(),
+    );
+
+    let statuses = session
+        .write(&[localized_text_write_value(
+            &id,
+            LocalizedText::new("mul", "Multiple languages"),
+        )])
+        .await
+        .unwrap();
+    assert_eq!(statuses, vec![StatusCode::BadLocaleNotSupported]);
+
+    let values = session
+        .read(
+            &[read_value_id(AttributeId::DisplayName, &id)],
+            TimestampsToReturn::Both,
+            0.0,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        values[0].value,
+        Some(Variant::LocalizedText(Box::new(LocalizedText::from(
+            "English"
+        )))),
+        "Rejected special-locale write must leave DisplayName unchanged"
+    );
+}
+
+fn localized_text_write_value(node_id: &NodeId, text: LocalizedText) -> WriteValue {
+    WriteValue {
+        value: DataValue {
+            value: Some(Variant::LocalizedText(Box::new(text))),
+            status: Some(StatusCode::Good),
+            source_timestamp: Some(DateTime::now()),
+            ..Default::default()
+        },
+        node_id: node_id.clone(),
+        attribute_id: AttributeId::DisplayName as u32,
+        index_range: NumericRange::None,
+    }
 }
 
 #[tokio::test]

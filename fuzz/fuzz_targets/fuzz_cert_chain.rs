@@ -1,6 +1,6 @@
-#![cfg_attr(feature = "nightly", no_main)]
+#![cfg_attr(all(feature = "nightly", not(test)), no_main)]
 
-#[cfg(not(feature = "nightly"))]
+#[cfg(all(not(feature = "nightly"), not(test)))]
 fn main() {
     panic!("Fuzzing requires the nightly feature to be enabled.");
 }
@@ -10,7 +10,7 @@ fn main() {
 // the Part 4 §6.1.3 (Table 100) pipeline. Parsing and the whole chain/CRL/usage/revocation
 // validation MUST NEVER panic on malformed input — only return an error. Also exercises the CRL
 // decoder on the same bytes.
-#[cfg(feature = "nightly")]
+#[cfg(all(feature = "nightly", not(test)))]
 libfuzzer_sys::fuzz_target!(|data: &[u8]| {
     use chrono::Utc;
     use opcua::crypto::{

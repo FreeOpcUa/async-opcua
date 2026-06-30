@@ -78,28 +78,80 @@ pub mod error;
 pub mod handle;
 
 pub mod messages;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicU8, Ordering};
 
 pub use messages::{
     Message, MessageType, PublishResponseShared, RepublishResponseShared, RequestMessage,
     ResponseMessage,
 };
 
-/// Check for the environment variable OPCUA_TRACE_LOCKS. If it is set to 1 or true, then
-/// tracing will be enabled for locks. This is useful for debugging deadlocks.
+const TRACE_LOCKS_UNKNOWN: u8 = 0;
+const TRACE_LOCKS_DISABLED: u8 = 1;
+const TRACE_LOCKS_ENABLED: u8 = 2;
+
+static TRACE_LOCKS_STATE: AtomicU8 = AtomicU8::new(TRACE_LOCKS_UNKNOWN);
+
+/// Check for the environment variable OPCUA_TRACE_LOCKS. If it is set to a value other than `0`,
+/// then tracing will be enabled for locks. This is useful for debugging deadlocks.
 pub fn trace_locks() -> bool {
-    static ENABLED: AtomicBool = AtomicBool::new(false);
-    if ENABLED.load(std::sync::atomic::Ordering::Relaxed) {
-        return true;
+    match TRACE_LOCKS_STATE.load(Ordering::Relaxed) {
+        TRACE_LOCKS_ENABLED => return true,
+        TRACE_LOCKS_DISABLED => return false,
+        _ => {}
     }
-    let enabled = match std::env::var("OPCUA_TRACE_LOCKS") {
-        Ok(s) => s != "0",
-        Err(_) => false,
+
+    let state = match std::env::var("OPCUA_TRACE_LOCKS") {
+        Ok(s) if s != "0" => TRACE_LOCKS_ENABLED,
+        _ => TRACE_LOCKS_DISABLED,
     };
 
-    ENABLED.store(enabled, std::sync::atomic::Ordering::Relaxed);
+    TRACE_LOCKS_STATE.store(state, Ordering::Relaxed);
 
-    enabled
+    state == TRACE_LOCKS_ENABLED
+}
+
+#[cfg(test)]
+fn reset_trace_locks_cache_for_test() {
+    TRACE_LOCKS_STATE.store(TRACE_LOCKS_UNKNOWN, Ordering::Relaxed);
+}
+
+#[cfg(test)]
+mod trace_locks_tests {
+    use std::sync::Mutex;
+
+    use super::{reset_trace_locks_cache_for_test, trace_locks};
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn trace_locks_caches_disabled_result() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        std::env::remove_var("OPCUA_TRACE_LOCKS");
+        reset_trace_locks_cache_for_test();
+
+        assert!(!trace_locks());
+
+        std::env::set_var("OPCUA_TRACE_LOCKS", "1");
+        assert!(!trace_locks());
+
+        std::env::remove_var("OPCUA_TRACE_LOCKS");
+        reset_trace_locks_cache_for_test();
+    }
+
+    #[test]
+    fn trace_locks_caches_enabled_result() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        std::env::set_var("OPCUA_TRACE_LOCKS", "1");
+        reset_trace_locks_cache_for_test();
+
+        assert!(trace_locks());
+
+        std::env::set_var("OPCUA_TRACE_LOCKS", "0");
+        assert!(trace_locks());
+
+        std::env::remove_var("OPCUA_TRACE_LOCKS");
+        reset_trace_locks_cache_for_test();
+    }
 }
 /// Re-export the tracing crate. This is used for logging and debugging.
 pub use tracing;

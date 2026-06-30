@@ -567,6 +567,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-opcua-localhost-bench"
+version = "0.1.0"
+dependencies = [
+ "async-opcua",
+ "async-trait",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "async-opcua-macros"
 version = "0.19.0"
 dependencies = [

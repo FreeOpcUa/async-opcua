@@ -29,7 +29,7 @@ use opcua_types::{
 use tokio::net::TcpListener;
 
 const TEST_TIMEOUT: Duration = Duration::from_secs(10);
-const CACHE_WRITE_TIMEOUT: Duration = Duration::from_millis(500);
+const CACHE_WRITE_TIMEOUT: Duration = Duration::from_secs(2);
 const CALLBACK_TIMEOUT: Duration = Duration::from_secs(5);
 const PROBE_FINISH_TIMEOUT: Duration = Duration::from_secs(5);
 

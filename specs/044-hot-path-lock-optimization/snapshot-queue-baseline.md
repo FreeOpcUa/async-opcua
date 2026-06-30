@@ -31,7 +31,7 @@ cargo test -p async-opcua-server subscription_route -- --nocapture
 Recorded on 2026-06-30 before any snapshot/SPSC follow-up implementation.
 
 - Result: PASS, exit code 0.
-- Build/test profile completed successfully in 0.08s.
+- Build and test profile completed successfully in 0.08s.
 - Matching focused tests passed:
   - `subscription_route_snapshot_releases_cache_guard_before_actor_enqueue`
   - `subscription_route_snapshot_no_match_path_is_allocation_light`

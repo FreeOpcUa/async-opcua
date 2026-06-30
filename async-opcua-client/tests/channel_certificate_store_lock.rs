@@ -24,19 +24,19 @@ fn certificate_store_connect_path_uses_read_access_for_cert_and_key_reads() {
     let key_read = create_transport
         .find("read_own_pkey")
         .unwrap_or_else(|| panic!("create_transport no longer reads the own private key"));
-    let first_material_read = cert_read.min(key_read);
-
-    let material_read_prefix = &create_transport[..first_material_read];
-    assert!(
-        !material_read_prefix.contains("trace_write_lock!(self.certificate_store)"),
-        "connect/create_transport still takes a certificate-store write lock before reading \
-         certificate material; use read access for read_own_cert/read_own_pkey"
-    );
-    assert!(
-        material_read_prefix.contains("trace_read_lock!(self.certificate_store)"),
-        "connect/create_transport should take a certificate-store read lock before reading \
-         certificate material"
-    );
+    for material_read in [cert_read, key_read] {
+        let material_read_prefix = &create_transport[..material_read];
+        assert!(
+            !material_read_prefix.contains("trace_write_lock!(self.certificate_store)"),
+            "connect/create_transport still takes a certificate-store write lock before reading \
+             certificate material; use read access for read_own_cert/read_own_pkey"
+        );
+        assert!(
+            material_read_prefix.contains("trace_read_lock!(self.certificate_store)"),
+            "connect/create_transport should take a certificate-store read lock before reading \
+             certificate material"
+        );
+    }
 }
 
 fn extract_function_body<'a>(source: &'a str, signature: &str) -> Option<&'a str> {

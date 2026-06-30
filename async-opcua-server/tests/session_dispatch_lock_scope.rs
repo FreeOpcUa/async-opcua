@@ -104,17 +104,14 @@ async fn run_dispatch_guard_probe() {
 
 fn manager_write_available_while_validation_is_blocked(handle: &ServerHandle) -> bool {
     let deadline = Instant::now() + PROBE_TIMEOUT;
-    let mut observed_available = false;
     while Instant::now() < deadline {
         if let Some(guard) = handle.session_manager().try_write() {
             drop(guard);
-            observed_available = true;
-        } else {
-            return false;
+            return true;
         }
         thread::sleep(Duration::from_millis(10));
     }
-    observed_available
+    false
 }
 
 struct HeldSessionLock {

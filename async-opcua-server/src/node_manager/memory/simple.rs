@@ -353,8 +353,7 @@ impl InMemoryNodeManagerImpl for SimpleNodeManagerImpl {
                 self.prepare_write_node_value(&cbs, context, &address_space, &type_tree, write)
             };
 
-            if let Some(notification) = Self::finish_prepared_write(address_space, prepared, write)
-            {
+            if let Some(notification) = Self::finish_prepared_write(prepared, write) {
                 Self::notify_write_data_change(context, notification);
             }
 
@@ -391,9 +390,12 @@ impl InMemoryNodeManagerImpl for SimpleNodeManagerImpl {
         methods_to_call: &mut [&mut &mut MethodCall],
     ) -> Result<(), StatusCode> {
         for method in methods_to_call {
-            let cbs = trace_read_lock!(self.method_cbs);
-            let ctx_cbs = trace_read_lock!(self.method_with_context_cbs);
-            if let Some(cb) = ctx_cbs.get(method.method_id()) {
+            let ctx_cb = {
+                let ctx_cbs = trace_read_lock!(self.method_with_context_cbs);
+                ctx_cbs.get(method.method_id()).cloned()
+            };
+
+            if let Some(cb) = ctx_cb {
                 match cb(context, method.arguments()) {
                     Ok(r) => {
                         method.set_outputs(r);
@@ -401,22 +403,24 @@ impl InMemoryNodeManagerImpl for SimpleNodeManagerImpl {
                     }
                     Err(e) => method.set_status(e),
                 }
-            } else {
-                let cb = cbs.get(method.method_id()).cloned();
-                drop(ctx_cbs);
-                drop(cbs);
+                continue;
+            }
 
-                let Some(cb) = cb else {
-                    continue;
-                };
+            let cb = {
+                let cbs = trace_read_lock!(self.method_cbs);
+                cbs.get(method.method_id()).cloned()
+            };
 
-                match cb(method.arguments()) {
-                    Ok(r) => {
-                        method.set_outputs(r);
-                        method.set_status(StatusCode::Good);
-                    }
-                    Err(e) => method.set_status(e),
+            let Some(cb) = cb else {
+                continue;
+            };
+
+            match cb(method.arguments()) {
+                Ok(r) => {
+                    method.set_outputs(r);
+                    method.set_status(StatusCode::Good);
                 }
+                Err(e) => method.set_status(e),
             }
         }
 
@@ -1117,7 +1121,6 @@ impl SimpleNodeManagerImpl {
     }
 
     fn finish_prepared_write(
-        address_space: &RwLock<AddressSpace>,
         prepared: PreparedWriteValue,
         write: &mut WriteNode,
     ) -> Option<WriteNotification> {
@@ -1129,14 +1132,11 @@ impl SimpleNodeManagerImpl {
                 index_range,
                 notification_target,
             } => {
+                let notification_value = value.clone();
                 write.set_status(cb(value, &index_range));
                 if write.status().is_good() {
                     let (node_id, attribute_id) = notification_target;
-                    Self::write_notification_from_address_space(
-                        address_space,
-                        &node_id,
-                        attribute_id,
-                    )
+                    Some((notification_value, node_id, attribute_id))
                 } else {
                     None
                 }
@@ -1168,16 +1168,6 @@ impl SimpleNodeManagerImpl {
                 &opcua_types::DataEncoding::Binary,
             )
             .map(|value| (value, node.node_id().clone(), attribute_id))
-    }
-
-    fn write_notification_from_address_space(
-        address_space: &RwLock<AddressSpace>,
-        node_id: &NodeId,
-        attribute_id: AttributeId,
-    ) -> Option<WriteNotification> {
-        let address_space = trace_read_lock!(address_space);
-        let node = address_space.find(node_id)?;
-        Self::write_notification_from_node(&node, attribute_id)
     }
 
     fn notify_write_data_change(context: &RequestContext, notification: WriteNotification) {

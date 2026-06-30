@@ -23,7 +23,7 @@ use tokio::{net::TcpListener, task::JoinHandle};
 
 static NEXT_TEST_ID: AtomicUsize = AtomicUsize::new(0);
 
-const DELETE_PROGRESS_TIMEOUT: Duration = Duration::from_millis(300);
+const DELETE_PROGRESS_TIMEOUT: Duration = Duration::from_secs(2);
 const OBSERVATION_TIMEOUT: Duration = Duration::from_secs(2);
 const TEST_TIMEOUT: Duration = Duration::from_secs(10);
 

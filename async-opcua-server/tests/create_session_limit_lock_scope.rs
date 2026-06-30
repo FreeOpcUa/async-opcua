@@ -19,7 +19,7 @@ use tokio::net::TcpListener;
 
 const TEST_TIMEOUT: Duration = Duration::from_secs(20);
 const OPEN_CHANNEL_TIMEOUT: Duration = Duration::from_secs(10);
-const FIRST_REQUEST_SETTLE: Duration = Duration::from_millis(250);
+const FIRST_REQUEST_PAUSE_TIMEOUT: Duration = Duration::from_secs(2);
 const SECOND_COMMIT_TIMEOUT: Duration = Duration::from_secs(2);
 const CHANNEL_CLOSE_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -202,7 +202,26 @@ async fn run_create_session_limit_recheck() {
         (result, first_channel)
     });
 
-    tokio::time::sleep(FIRST_REQUEST_SETTLE).await;
+    let pause_deadline = tokio::time::Instant::now() + FIRST_REQUEST_PAUSE_TIMEOUT;
+    let mut first_request_released_manager = false;
+    while tokio::time::Instant::now() < pause_deadline {
+        assert!(
+            !first_create_session.is_finished(),
+            "paused secured CreateSession completed before the certificate-store gate was released"
+        );
+
+        if let Some(guard) = handle.session_manager().try_write() {
+            drop(guard);
+            first_request_released_manager = true;
+            break;
+        }
+
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(
+        first_request_released_manager,
+        "paused secured CreateSession did not expose a writable SessionManager before commit"
+    );
 
     let second_create_session = tokio::time::timeout(
         SECOND_COMMIT_TIMEOUT,

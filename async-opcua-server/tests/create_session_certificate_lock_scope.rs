@@ -35,6 +35,53 @@ async fn create_session_preserves_certificate_error_after_preflight_split() {
         .expect("CreateSession certificate preflight probe should not hang");
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn secured_create_session_short_client_nonce_is_rejected_before_signing() {
+    tokio::time::timeout(TEST_TIMEOUT, run_short_client_nonce_probe())
+        .await
+        .expect("CreateSession short client nonce probe should not hang");
+}
+
+async fn run_short_client_nonce_probe() {
+    let fixture = CreateSessionCertificateFixture::start().await;
+
+    let create_session_result = CreateSession::new_manual(
+        fixture.client.certificate_store(),
+        &fixture.endpoint,
+        1,
+        Duration::from_secs(5),
+        NodeId::null(),
+        fixture.channel.request_handle(),
+    )
+    .endpoint_url(fixture.endpoint_url.as_str())
+    .client_description(ApplicationDescription {
+        application_uri: UAString::from(fixture.client_application_uri.as_str()),
+        product_uri: UAString::from("urn:async-opcua:create-session-certificate-lock-client"),
+        application_type: ApplicationType::Client,
+        ..Default::default()
+    })
+    .client_cert_from_store(fixture.client.certificate_store())
+    .nonce_length(1)
+    .session_name("create-session-short-client-nonce")
+    .session_timeout(5_000.0)
+    .send(&fixture.channel)
+    .await;
+
+    fixture.handle.cancel();
+    fixture.channel_poller.abort();
+    fixture.server_task.abort();
+
+    let create_session_status = create_session_result
+        .expect_err("secured CreateSession with a short client nonce should be rejected")
+        .status();
+
+    assert_eq!(
+        create_session_status,
+        StatusCode::BadNonceInvalid,
+        "secured CreateSession must reject a client nonce shorter than the server session nonce length before preparing the server signature"
+    );
+}
+
 async fn run_certificate_preflight_probe() {
     let fixture = CreateSessionCertificateFixture::start().await;
     let lock_hold = hold_session_manager_write_lock(fixture.handle.clone());
@@ -123,6 +170,7 @@ fn hold_session_manager_write_lock(handle: ServerHandle) -> LockHold {
 struct CreateSessionCertificateFixture {
     handle: ServerHandle,
     endpoint_url: String,
+    client_application_uri: String,
     endpoint: EndpointDescription,
     client: opcua_client::Client,
     channel: opcua_client::AsyncSecureChannel,
@@ -151,6 +199,8 @@ impl CreateSessionCertificateFixture {
             .expect("CreateSession certificate test listener should have an address")
             .port();
         let endpoint_url = format!("opc.tcp://127.0.0.1:{port}/");
+        let client_application_uri =
+            format!("urn:async-opcua:create-session-certificate-lock-client:{unique}");
 
         let (server, handle) = ServerBuilder::new()
             .application_name("CreateSession Certificate Lock Scope")
@@ -193,9 +243,7 @@ impl CreateSessionCertificateFixture {
             .expect("secured CreateSession certificate test endpoint should be advertised");
         let mut client = ClientBuilder::new()
             .application_name("CreateSession Certificate Lock Scope Client")
-            .application_uri(format!(
-                "urn:async-opcua:create-session-certificate-lock-client:{unique}"
-            ))
+            .application_uri(client_application_uri.clone())
             .product_uri("urn:async-opcua:create-session-certificate-lock-client")
             .pki_dir(client_pki)
             .create_sample_keypair(true)
@@ -219,6 +267,7 @@ impl CreateSessionCertificateFixture {
         Self {
             handle,
             endpoint_url,
+            client_application_uri,
             endpoint,
             client,
             channel,

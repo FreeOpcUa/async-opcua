@@ -653,7 +653,7 @@ impl InMemoryNodeManagerImpl for BenchNodeManager {
                 continue;
             }
 
-            match write_node_value(&mut node, write.value()) {
+            match write_node_value(&context.info, &mut node, write.value()) {
                 Ok(()) => write.set_status(StatusCode::Good),
                 Err(status) => write.set_status(status),
             }

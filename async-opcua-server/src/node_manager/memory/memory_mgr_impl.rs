@@ -969,12 +969,6 @@ fn build_reference_type(
     )?;
     let display_name =
         display_name_or_browse_name(&mask, attributes.display_name.clone(), &browse_name);
-    if mask.contains(AttributesMask::SYMMETRIC)
-        && attributes.symmetric
-        && mask.contains(AttributesMask::INVERSE_NAME)
-    {
-        return Err(StatusCode::BadNodeAttributesInvalid);
-    }
 
     let mut node = ReferenceType::new(node_id, browse_name, display_name, None, false, false);
     if mask.contains(AttributesMask::IS_ABSTRACT) {
@@ -985,6 +979,12 @@ fn build_reference_type(
     }
     if mask.contains(AttributesMask::INVERSE_NAME) {
         node.set_inverse_name(attributes.inverse_name.clone());
+    }
+    // OPC 10000-3 §5.3.2: a symmetric ReferenceType must not define an
+    // InverseName. Enforced via the node-level well-formedness invariant so the
+    // rule has a single source of truth.
+    if !node.symmetric_inverse_name_is_valid() {
+        return Err(StatusCode::BadNodeAttributesInvalid);
     }
     apply_base_attributes(
         &mut node,

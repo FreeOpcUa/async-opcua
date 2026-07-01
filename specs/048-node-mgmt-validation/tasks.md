@@ -49,8 +49,8 @@
 
 **Independent test**: symmetric ReferenceType + non-null InverseName rejected; symmetric-without-inverse and non-symmetric-with-inverse both valid.
 
-- [ ] T012 [US5] Red-first test in `async-opcua-nodes/src/reference_type.rs` (tests): defining a symmetric ReferenceType with a non-null InverseName is rejected/omitted; the two valid cases hold.
-- [ ] T013 [US5] Implement at the SINGLE ReferenceType node boundary in `async-opcua-nodes/src/reference_type.rs` (the build/attribute path AddNodes also routes through): reject a non-null InverseName when `symmetric == true` with `BadNodeAttributesInvalid`. This is a node-level invariant — always-on (NOT gated by `clients_can_modify_address_space`), per FR-007's exception; it must not reject any standard/generated node (they are InverseName-free — verify via the nodeset load in T016). _Standard: OPC 10000-3 §5.3.2 (ReferenceType Attributes — "If the ReferenceType is non-symmetric the InverseName Attribute shall be set"; symmetric ⇒ InverseName omitted). [verified exact]_
+- [x] T012 [US5] Red-first test in `async-opcua-nodes/src/reference_type.rs` (tests): defining a symmetric ReferenceType with a non-null InverseName is rejected/omitted; the two valid cases hold.
+- [x] T013 [US5] Implement at the SINGLE ReferenceType node boundary in `async-opcua-nodes/src/reference_type.rs` (the build/attribute path AddNodes also routes through): reject a non-null InverseName when `symmetric == true` with `BadNodeAttributesInvalid`. This is a node-level invariant — always-on (NOT gated by `clients_can_modify_address_space`), per FR-007's exception; it must not reject any standard/generated node (they are InverseName-free — verify via the nodeset load in T016). _Standard: OPC 10000-3 §5.3.2 (ReferenceType Attributes — "If the ReferenceType is non-symmetric the InverseName Attribute shall be set"; symmetric ⇒ InverseName omitted). [verified exact]_
 
 ## Phase 8: User Story 6 — subtype DataType/ValueRank refinement (P3, P3-07)
 

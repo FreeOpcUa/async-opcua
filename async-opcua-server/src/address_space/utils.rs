@@ -1,6 +1,5 @@
-use std::sync::OnceLock;
-
 use crate::{
+    info::ServerInfo,
     node_manager::{ParsedReadValueId, ParsedWriteValue, RequestContext, ServerContext},
     rbac,
     session::manager::{is_special_write_locale_id, locale_id_matches, normalized_locale_id},
@@ -16,10 +15,12 @@ use tracing::debug;
 
 use super::{AccessLevel, AddressSpace, HasNodeId, NodeType, Variable};
 
-type LocalizedTextAttributeKey = (NodeId, AttributeId);
-type LocalizedTextAttributeValues = DashMap<LocalizedTextAttributeKey, Vec<LocalizedText>>;
-
-static LOCALIZED_TEXT_ATTRIBUTE_VALUES: OnceLock<LocalizedTextAttributeValues> = OnceLock::new();
+pub(crate) type LocalizedTextAttributeKey = (NodeId, AttributeId);
+/// Per-server side-table of written LocalizedText variants, keyed by
+/// `(NodeId, AttributeId)`, used for locale negotiation on Read. Owned by
+/// `ServerInfo` (feature 049) so independent servers do not collide on `NodeId`s.
+pub(crate) type LocalizedTextAttributeValues =
+    DashMap<LocalizedTextAttributeKey, Vec<LocalizedText>>;
 
 /// Validate that the user given by `context` can read the value
 /// of the given node.
@@ -396,7 +397,12 @@ pub fn validate_node_write(
         }
     }
 
-    remember_localized_text_attribute_value(node.node_id(), node_to_write.attribute_id, value);
+    remember_localized_text_attribute_value(
+        &context.info,
+        node.node_id(),
+        node_to_write.attribute_id,
+        value,
+    );
 
     Ok(())
 }
@@ -437,10 +443,6 @@ pub(crate) fn compute_user_role_permissions(
     merged
 }
 
-fn localized_text_attribute_values() -> &'static LocalizedTextAttributeValues {
-    LOCALIZED_TEXT_ATTRIBUTE_VALUES.get_or_init(DashMap::new)
-}
-
 fn is_localized_text_attribute(attribute_id: AttributeId) -> bool {
     matches!(
         attribute_id,
@@ -449,6 +451,7 @@ fn is_localized_text_attribute(attribute_id: AttributeId) -> bool {
 }
 
 fn remember_localized_text_attribute_value(
+    info: &ServerInfo,
     node_id: &NodeId,
     attribute_id: AttributeId,
     value: &Variant,
@@ -462,7 +465,7 @@ fn remember_localized_text_attribute_value(
     };
 
     let key = (node_id.clone(), attribute_id);
-    let values = localized_text_attribute_values();
+    let values = &info.localized_text_variants;
     if text.locale.is_empty() {
         values.remove(&key);
         return;
@@ -520,13 +523,14 @@ fn localized_text_for_session(
     attribute_id: AttributeId,
     fallback: &LocalizedText,
 ) -> LocalizedText {
-    let Some(locale_ids) = crate::session::manager::locale_ids_for_session(context.session_id())
+    let Some(locale_ids) =
+        crate::session::manager::locale_ids_for_session(&context.info, context.session_id())
     else {
         return fallback.clone();
     };
 
     let key = (node_id.clone(), attribute_id);
-    let Some(variants) = localized_text_attribute_values().get(&key) else {
+    let Some(variants) = context.info.localized_text_variants.get(&key) else {
         return fallback.clone();
     };
     if fallback.locale.is_empty() || !variants.iter().any(|text| text == fallback) {
@@ -652,7 +656,11 @@ pub fn read_node_value(
 }
 
 /// Invoke `Write` for the given `node_to_write` on `node`.
+///
+/// Takes the owning `ServerInfo` so the per-server localized-text side-table is
+/// updated on the write path (feature 049).
 pub fn write_node_value(
+    info: &ServerInfo,
     node: &mut NodeType,
     node_to_write: &ParsedWriteValue,
 ) -> Result<(), StatusCode> {
@@ -675,7 +683,7 @@ pub fn write_node_value(
     let node_id = node.node_id().clone();
     node.as_mut_node()
         .set_attribute(node_to_write.attribute_id, value.clone())?;
-    remember_localized_text_attribute_value(&node_id, node_to_write.attribute_id, &value);
+    remember_localized_text_attribute_value(info, &node_id, node_to_write.attribute_id, &value);
     Ok(())
 }
 
@@ -717,6 +725,35 @@ mod tests {
     };
 
     use super::*;
+
+    // Feature 049: two servers must have isolated localized-text variant tables.
+    #[tokio::test]
+    async fn localized_text_variants_are_isolated_per_server_instance() {
+        let (_sa, ha) = ServerBuilder::new_anonymous("lt-iso-a")
+            .build()
+            .expect("server a");
+        let (_sb, hb) = ServerBuilder::new_anonymous("lt-iso-b")
+            .build()
+            .expect("server b");
+        let info_a = ha.info();
+        let info_b = hb.info();
+        let node_id = NodeId::new(1, 5);
+        let attr = AttributeId::DisplayName;
+        let key = (node_id.clone(), attr);
+        let value = Variant::LocalizedText(Box::new(LocalizedText::new("en", "hello")));
+
+        remember_localized_text_attribute_value(info_a, &node_id, attr, &value);
+        assert!(info_a.localized_text_variants.get(&key).is_some());
+        assert!(
+            info_b.localized_text_variants.get(&key).is_none(),
+            "server B must not see server A's remembered variant"
+        );
+
+        // Empty-locale write clears A's entry; B is unaffected.
+        let empty = Variant::LocalizedText(Box::new(LocalizedText::new("", "")));
+        remember_localized_text_attribute_value(info_a, &node_id, attr, &empty);
+        assert!(info_a.localized_text_variants.get(&key).is_none());
+    }
 
     fn request_context() -> RequestContext {
         request_context_with_roles(Vec::new())
@@ -993,7 +1030,7 @@ mod tests {
         let type_tree = context.get_type_tree_for_user();
         let validation = validate_node_write(&node, &context, &node_to_write, type_tree.get());
         if validation.is_ok() {
-            write_node_value(&mut node, &node_to_write)
+            write_node_value(&context.info, &mut node, &node_to_write)
                 .expect("write should apply before RBAC enforcement");
         }
 
@@ -1037,7 +1074,8 @@ mod tests {
             validate_node_write(&node, &context, &node_to_write, type_tree.get()),
             Ok(())
         );
-        write_node_value(&mut node, &node_to_write).expect("unconfigured write should apply");
+        write_node_value(&context.info, &mut node, &node_to_write)
+            .expect("unconfigured write should apply");
 
         let value = read_node_value(
             &node,

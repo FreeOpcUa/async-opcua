@@ -1103,7 +1103,7 @@ impl SimpleNodeManagerImpl {
             }
         } else if write.value().value.value.is_some() {
             // If not, write the value to the node hierarchy.
-            match write_node_value(&mut node, write.value()) {
+            match write_node_value(&context.info, &mut node, write.value()) {
                 Ok(_) => write.set_status(StatusCode::Good),
                 Err(e) => write.set_status(e),
             }

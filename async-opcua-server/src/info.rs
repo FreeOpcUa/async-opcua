@@ -223,6 +223,17 @@ pub struct ServerInfo {
     pub diagnostics: ServerDiagnostics,
     /// Performance metrics for this server instance.
     pub metrics: Arc<crate::metrics::ServerMetrics>,
+    /// Per-server FOTA session-file cleanup registry. Instance-owned (feature 049)
+    /// so independent servers do not collide on session `NodeId`s.
+    pub(crate) fota_cleanup: crate::fota::cleanup::FotaCleanupRegistry,
+    /// Per-server written-LocalizedText variant side-table for locale negotiation
+    /// on Read, keyed by `(NodeId, AttributeId)`. Instance-owned (feature 049).
+    pub(crate) localized_text_variants: crate::address_space::utils::LocalizedTextAttributeValues,
+    /// Per-server numeric session-id allocator (feature 049). Keeps session ids
+    /// unique within a server; starts at 1.
+    pub(crate) next_session_id: std::sync::atomic::AtomicU32,
+    /// Per-server map of numeric session id -> negotiated locale ids (feature 049).
+    pub(crate) session_locale_ids: dashmap::DashMap<u32, Vec<opcua_types::UAString>>,
 }
 
 pub(crate) struct X509UserCertificateValidation {

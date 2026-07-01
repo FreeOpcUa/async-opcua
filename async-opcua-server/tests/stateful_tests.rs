@@ -158,8 +158,12 @@ async fn program_control_methods_update_state_and_progress_variables() {
     assert_eq!(string_variable(&fixture, "CurrentState"), "Halted");
 }
 
-#[test]
-fn cleanup_session_deletes_temporary_file_nodes_and_backing_file() {
+#[tokio::test]
+async fn cleanup_session_deletes_temporary_file_nodes_and_backing_file() {
+    let (_server, handle) = opcua_server::ServerBuilder::new_anonymous("stateful-fota-test")
+        .build()
+        .expect("test server should build");
+    let info = handle.info();
     let address_space = Arc::new(RwLock::new(AddressSpace::new()));
     let session_id = NodeId::new(0, format!("stateful-cleanup-{}", std::process::id()));
     let backing_file = unique_temp_path("stateful-cleanup", "bin");
@@ -177,12 +181,13 @@ fn cleanup_session_deletes_temporary_file_nodes_and_backing_file() {
     let node_ids = file_node.node_ids();
 
     register_session_file(
+        info,
         session_id.clone(),
         &address_space,
         &file_node,
         Some(backing_file.clone()),
     );
-    let report = cleanup_session(&session_id);
+    let report = cleanup_session(info, &session_id);
 
     assert_eq!(report.resources, 1);
     assert_eq!(report.files, 1);

@@ -1074,6 +1074,7 @@ mod tests {
     };
 
     #[global_allocator]
+    // Feature 049: intentionally process-global - thread_local per-thread allocator, not shared.
     static COUNTING_ALLOCATOR: CountingAllocator = CountingAllocator::new();
 
     struct CountingAllocator {

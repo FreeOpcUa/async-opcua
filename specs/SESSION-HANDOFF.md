@@ -13,6 +13,17 @@ footprint → hot-path performance**, i.e. production-readiness of the surface a
 
 ## Delivered most recently
 
+### Instance-scoped server state — **COMPLETE** (feature 049, PR pending)
+Relocated 3 process-global mutable statics in `async-opcua-server` onto `ServerInfo` so multiple
+`Server` instances can run in one process without cross-instance collision (from the 2026-07-01 lock
+audit). **Correctness (P1):** FOTA cleanup registry + the localized-text variant side-table — both
+NodeId-keyed → genuinely collided across servers. **Hygiene (P2):** the session-id counter + locale map
+(no collision, but global coupling). Owner = `ServerInfo` (reached via `RequestContext.info` +
+`SessionManager.info`). Public FOTA cleanup + `write_node_value` signatures gained an `&ServerInfo` param
+(intentional 0.x breaking change). Deliberately-global statics documented (P3). Requests already run
+concurrently (spawned tokio tasks) — this is NOT a concurrency change. Per-instance isolation tests +
+await-holding lints clean.
+
 ### Node-management validation hardening — **COMPLETE** (feature 048, PR pending)
 Closed the reconciled node-management validation cluster on the opt-in writable address space
 (`clients_can_modify_address_space`, default OFF): P4-NODEMGMT-01 (targetNodeClass match + hierarchical

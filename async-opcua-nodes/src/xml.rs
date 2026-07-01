@@ -38,6 +38,8 @@ pub struct NodeSet2Import {
     file: UANodeSet,
 }
 
+// Feature 049: intentionally process-global - immutable init-once regex cache.
+
 static QUALIFIED_NAME_REGEX: OnceLock<Regex> = OnceLock::new();
 
 fn qualified_name_regex() -> &'static Regex {

@@ -39,8 +39,12 @@ fn rejects_invalid_oauth2_jwt_tokens() {
     assert_eq!(err.status(), StatusCode::BadIdentityTokenRejected);
 }
 
-#[test]
-fn cleanup_deletes_session_bound_temp_file_and_nodes() {
+#[tokio::test]
+async fn cleanup_deletes_session_bound_temp_file_and_nodes() {
+    let (_server, handle) = opcua_server::ServerBuilder::new_anonymous("fota-integration-test")
+        .build()
+        .expect("test server should build");
+    let info = handle.info();
     let address_space = Arc::new(RwLock::new(AddressSpace::new()));
     let session_id = NodeId::new(0, "fota-integration-session");
     let temp_path = std::env::temp_dir().join(format!(
@@ -59,12 +63,13 @@ fn cleanup_deletes_session_bound_temp_file_and_nodes() {
     };
 
     register_session_file(
+        info,
         session_id.clone(),
         &address_space,
         &file_node,
         Some(temp_path.clone()),
     );
-    let report = cleanup_session(&session_id);
+    let report = cleanup_session(info, &session_id);
 
     assert_eq!(report.resources, 1);
     assert_eq!(report.files, 1);

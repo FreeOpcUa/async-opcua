@@ -61,6 +61,7 @@ impl Default for SerializationMetrics {
 }
 
 /// Global outbound serialization metrics registry.
+// Feature 049: intentionally process-global - public metrics API; per-instance is a separate breaking observability decision.
 pub static SERIALIZATION_METRICS: SerializationMetrics = SerializationMetrics::new();
 
 #[derive(Debug)]

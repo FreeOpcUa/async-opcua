@@ -401,6 +401,7 @@ impl Server {
             send_buffer_size,
             receive_buffer_size,
             type_tree: type_tree.clone(),
+            type_tree_snapshot: ArcSwap::new(Arc::new(None)),
             subscription_id_handle: AtomicHandle::new(1),
             monitored_item_id_handle: AtomicHandle::new(1),
             secure_channel_id_handle: Arc::new(AtomicHandle::new(1)),
@@ -530,6 +531,8 @@ impl Server {
             for mgr in self.node_managers.iter() {
                 mgr.init(&mut type_tree, context.clone()).await;
             }
+
+            self.info.publish_type_tree_snapshot(&type_tree);
         }
         Ok(())
     }

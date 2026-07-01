@@ -46,6 +46,8 @@ pub(crate) async fn query_first(
     let mut parsing_results = Vec::with_capacity(node_types.len());
     let mut final_node_types = Vec::with_capacity(node_types.len());
     let (filter_result, filter) = {
+        // Query type metadata must flow through the request context getter so custom
+        // per-user TypeTrees are preserved and the default path reads the snapshot.
         let type_tree_ctx = context.get_type_tree_for_user();
         let type_tree = type_tree_ctx.get();
         for node_type in node_types {

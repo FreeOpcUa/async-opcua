@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
-use opcua_core::{trace_read_lock, trace_write_lock};
-use opcua_nodes::TypeTree;
+use opcua_core::trace_write_lock;
 use tracing::{debug_span, error, info};
 use tracing_futures::Instrument;
 
@@ -55,11 +54,11 @@ pub(crate) async fn browse(
     let mut nodes = Vec::with_capacity(nodes_to_browse.len());
     let mut results: Vec<Option<BrowseResult>> = Vec::with_capacity(nodes_to_browse.len());
     {
-        let type_tree = trace_read_lock!(context.type_tree);
+        let type_tree = context.get_type_tree_for_user();
         for (idx, r) in nodes_to_browse.into_iter().enumerate() {
             if !r.reference_type_id.is_null()
                 && !matches!(
-                    type_tree.get(&r.reference_type_id),
+                    type_tree.get().get(&r.reference_type_id),
                     Some(NodeClass::ReferenceType)
                 )
             {

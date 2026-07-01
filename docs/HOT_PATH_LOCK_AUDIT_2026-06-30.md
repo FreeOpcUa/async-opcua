@@ -40,50 +40,55 @@ threads without these fixes can increase contention by piling more tasks onto th
 
 ## Implementation Follow-Up Status
 
-The `044-hot-path-lock-optimization` implementation run completed the scoped guard-lifetime changes
-called out by this audit:
+The current follow-up feature is
+[`specs/046-lock-removal-snapshots/`](../specs/046-lock-removal-snapshots/).
+Its append-only evidence log is
+[`slice-notes.md`](../specs/046-lock-removal-snapshots/slice-notes.md), and the
+completed task ranges are tracked in
+[`tasks.md`](../specs/046-lock-removal-snapshots/tasks.md).
 
-- Server Read, Write, and Call callback paths now capture callback handles plus required immutable
-  metadata under the relevant internal guards, then invoke extension callbacks after those guards are
-  released.
-- Client Publish notification delivery now queues acknowledgements while holding
-  `subscription_state`, builds owned delivery packets, releases the mutex, and invokes user
-  callbacks after unlock.
-- `SyncSampler` now collects due sampler work and updates scheduling state under its mutex, then
-  runs sampler callbacks and subscription notification fanout after releasing the mutex.
-- Subscription route fanout now snapshots route metadata under the global subscription-cache guard,
-  then runs sampling closures and per-session actor queue pushes after that guard is released.
-- Normal request dispatch now narrows the `SessionManager` read guard to lookup-only state
-  collection, with validation, audit-context setup, and dispatch after release.
-- CreateSession now uses preflight preparation plus a short commit helper, with session limit,
-  unactivated-session, and channel-association rechecks at commit time.
-- SecureChannel renewal was measured/inspected and left unchanged. OPC-10000-6 ordering, token, and
-  sequence semantics make renewal a correctness-critical single-flight path, so it remains
-  measurement-gated rather than being refactored speculatively.
-- The client certificate-store connect path now uses read guards for certificate and private-key
-  reads.
-- PubSub subscriber target validation now uses address-space read access before the later write
-  mutation phase.
+Completed implementation slices:
 
-Subscription route index snapshot/SPSC remains deferred. The completed route fanout work is the
-immediate OPC-10000-4 5.13/5.14 guard-scope fix: monitored-item route metadata is snapped before
-sampling and notification fanout, while notification queueing, Publish acknowledgement, sequence, and
-retransmission semantics remain preserved. A full route-index snapshot or SPSC design would change
-the ownership model and must be accepted separately.
+- [Slice 1: TypeTree Snapshot MVP](../specs/046-lock-removal-snapshots/slice-notes.md#slice-1-typetree-snapshot-mvp)
+  moved TypeTree hot-path reads to immutable published snapshots. Focused
+  evidence includes `cargo test -p async-opcua-server type_tree_snapshot -- --nocapture`
+  plus Browse, Query, Read, Write, and subscription regression runs recorded in
+  the slice notes. The SC-004 throughput comparison remains inconclusive because
+  the required before-samples were not available; this is snapshot
+  implementation evidence, not a full performance claim.
+- [Slice 2: Response-Size Limit State](../specs/046-lock-removal-snapshots/slice-notes.md#slice-2-response-size-limit-state)
+  moved response-size enforcement from global state to per-`SecureChannel`
+  state. Focused evidence includes
+  `cargo test -p async-opcua-core --test response_limit_state -- --nocapture`,
+  `cargo test -p async-opcua-server max_response_message_size -- --nocapture`,
+  and the recorded clippy await-holding-lock check.
 
-`specs/044-hot-path-lock-optimization/snapshot-queue-baseline.md` records the focused baseline
-command:
+Completed P3 evidence gates, with implementation intentionally deferred:
 
-```bash
-cargo test -p async-opcua-server subscription_route -- --nocapture
-```
+- [Slice 3: Subscription Route Index Snapshot](../specs/046-lock-removal-snapshots/slice-notes.md#slice-3-subscription-route-index-snapshot)
+  passed for follow-up planning/evidence via
+  `cargo test -p async-opcua-server subscription_route_snapshot -- --nocapture`.
+  This does not claim a full route-index snapshot or SPSC ownership refactor.
+- [Slice 4: PubSub Configuration and Transport Cache](../specs/046-lock-removal-snapshots/slice-notes.md#slice-4-pubsub-configuration-and-transport-cache)
+  passed for follow-up planning/evidence via
+  `cargo test -p async-opcua-pubsub config_snapshot_consistency -- --nocapture`.
+  This does not claim a PubSub config/cache lock-removal refactor.
+- [Slice 5: SQLite History Scaling](../specs/046-lock-removal-snapshots/slice-notes.md#slice-5-sqlite-history-scaling)
+  passed for follow-up planning/evidence via
+  `cargo test -p async-opcua-history-sqlite history_lock_scaling -- --nocapture`.
+  This does not claim a DB actor or read-pool/write-owner implementation.
+- [Slice 6: SecureChannel Renewal](../specs/046-lock-removal-snapshots/slice-notes.md#slice-6-securechannel-renewal)
+  passed for follow-up planning/evidence via
+  `cargo test -p async-opcua-client secure_channel_renewal_singleflight -- --nocapture`.
+  This does not claim SecureChannel renewal mutex removal or a single-flight
+  renewal state-machine implementation.
 
-That baseline passed all three route proof tests. It is a focused proof-test gate for the current
-route-snapshot boundary, not throughput profiling. Future subscription route snapshot/SPSC work must
-add a benchmark or lock-tracing comparison, stale-snapshot tests around monitored-item
-create/modify/delete races, and bounded queue backpressure tests. Those tests must stay grounded in
-OPC-10000-4 5.13 monitored-item lifecycle and queue semantics, and OPC-10000-4 5.14 subscription
-NotificationMessage, retransmission, sequence, and Publish acknowledgement semantics.
+The earlier `044-hot-path-lock-optimization` guard-lifetime work remains the
+baseline for callback, sampler, subscription fanout, request-dispatch,
+CreateSession, certificate-store, and PubSub subscriber-target guard-scope
+changes. The 046 feature adds the two completed snapshot/state implementation
+slices above and records P3 gates for later, separately scoped implementation
+work.
 
 ---
 

@@ -240,6 +240,9 @@ impl SessionActor {
                 authenticator: self.context.authenticator.clone(),
                 token,
                 user_roles,
+                // Preserve the TypeTree access trio from the actor's active
+                // context so default snapshot reads and custom getters observe
+                // the same server state.
                 type_tree: self.context.type_tree.clone(),
                 type_tree_getter: self.context.type_tree_getter.clone(),
                 subscriptions: self.context.subscriptions.clone(),

@@ -18,7 +18,6 @@ use tracing::{debug, debug_span, error, trace, warn};
 
 use opcua_core::{
     comms::{
-        buffer::client_response_body_limit_key,
         message_chunk::MessageChunkType,
         secure_channel::{Role, SecureChannel},
         security_header::SecurityHeader,
@@ -537,17 +536,14 @@ impl<T: ConnectionTransport> SessionController<T> {
                     &request,
                 )
                 .and_then(|draft| {
-                    let current_secure_channel_id = self.channel.secure_channel_id();
-                    let body_limit_key = client_response_body_limit_key(&self.channel);
                     let node_managers = self.node_managers.clone();
                     let subscriptions = self.subscriptions.clone();
                     let mut mgr = trace_write_lock!(self.session_manager);
                     mgr.commit_create_session_draft(
                         draft,
-                        current_secure_channel_id,
+                        &mut self.channel,
                         node_managers,
                         subscriptions,
-                        body_limit_key,
                     )
                 });
                 let (session_id, revised_timeout, status) = match &res {

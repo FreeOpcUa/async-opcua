@@ -5,8 +5,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use opcua_core::trace_read_lock;
-use opcua_nodes::DefaultTypeTree;
+use opcua_nodes::{DefaultTypeTree, TypeTree};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -122,9 +121,11 @@ impl DiagnosticsNodeManager {
     pub(crate) fn new(context: ServerContext) -> Self {
         let namespace_index = {
             let mut type_tree = context.type_tree.write();
-            type_tree
+            let namespace_index = type_tree
                 .namespaces_mut()
-                .add_namespace(context.info.application_uri.as_ref())
+                .add_namespace(context.info.application_uri.as_ref());
+            context.info.publish_type_tree_snapshot(&type_tree);
+            namespace_index
         };
         Self {
             sampler: SyncSampler::new(),
@@ -200,7 +201,7 @@ impl DiagnosticsNodeManager {
     fn browse_namespaces(
         &self,
         node_to_browse: &mut BrowseNode,
-        type_tree: &DefaultTypeTree,
+        type_tree: &dyn TypeTree,
         namespaces: &BTreeMap<String, NamespaceMetadata>,
     ) {
         // Only hierarchical references in this case, so we can check for that first.
@@ -262,7 +263,7 @@ impl DiagnosticsNodeManager {
     fn browse_namespace_metadata_node(
         &self,
         node_to_browse: &mut BrowseNode,
-        type_tree: &DefaultTypeTree,
+        type_tree: &dyn TypeTree,
         meta: &NamespaceMetadata,
     ) {
         let mut cp = BrowseContinuationPoint::default();
@@ -339,7 +340,7 @@ impl DiagnosticsNodeManager {
     fn browse_namespace_property_node(
         &self,
         node_to_browse: &mut BrowseNode,
-        type_tree: &DefaultTypeTree,
+        type_tree: &dyn TypeTree,
         meta: &NamespaceMetadata,
     ) {
         let mut cp = BrowseContinuationPoint::default();
@@ -382,7 +383,7 @@ impl DiagnosticsNodeManager {
     fn browse_namespace_node(
         &self,
         node_to_browse: &mut BrowseNode,
-        type_tree: &DefaultTypeTree,
+        type_tree: &dyn TypeTree,
         namespaces: &BTreeMap<String, NamespaceMetadata>,
         ns_node: &NamespaceNode,
     ) {
@@ -661,42 +662,47 @@ impl ViewProvider for DiagnosticsNodeManager {
         nodes_to_browse: &mut [BrowseNode],
     ) -> Result<(), StatusCode> {
         let mut lazy_namespaces = None::<BTreeMap<String, NamespaceMetadata>>;
-        let type_tree = trace_read_lock!(context.type_tree);
+        {
+            let type_tree = context.get_type_tree_for_user();
+            let type_tree = type_tree.get();
 
-        for node in nodes_to_browse {
-            if let Some(mut point) = node.take_continuation_point::<BrowseContinuationPoint>() {
-                if node.remaining() == 0 {
-                    break;
-                }
-                let Some(ref_desc) = point.nodes.pop_back() else {
-                    break;
-                };
-                // Node is already filtered.
-                node.add_unchecked(ref_desc);
-                continue;
-            }
-
-            if node.node_id().namespace == 0 {
-                let namespaces = lazy_namespaces.get_or_insert_with(|| self.namespaces(context));
-                let Ok(obj_id) = node.node_id().as_object_id() else {
-                    continue;
-                };
-                match obj_id {
-                    ObjectId::Server_Namespaces => {
-                        self.browse_namespaces(node, &type_tree, namespaces);
+            for node in nodes_to_browse {
+                if let Some(mut point) = node.take_continuation_point::<BrowseContinuationPoint>() {
+                    if node.remaining() == 0 {
+                        break;
                     }
-                    _ => continue,
-                }
-            } else if node.node_id().namespace == self.namespace_index {
-                let Some(node_desc) = from_opaque_node_id::<DiagnosticsNode>(node.node_id()) else {
-                    node.set_status(StatusCode::BadNodeIdUnknown);
+                    let Some(ref_desc) = point.nodes.pop_back() else {
+                        break;
+                    };
+                    // Node is already filtered.
+                    node.add_unchecked(ref_desc);
                     continue;
-                };
-                match node_desc {
-                    DiagnosticsNode::Namespace(ns) => {
-                        let namespaces =
-                            lazy_namespaces.get_or_insert_with(|| self.namespaces(context));
-                        self.browse_namespace_node(node, &type_tree, namespaces, &ns);
+                }
+
+                if node.node_id().namespace == 0 {
+                    let namespaces =
+                        lazy_namespaces.get_or_insert_with(|| self.namespaces(context));
+                    let Ok(obj_id) = node.node_id().as_object_id() else {
+                        continue;
+                    };
+                    match obj_id {
+                        ObjectId::Server_Namespaces => {
+                            self.browse_namespaces(node, type_tree, namespaces);
+                        }
+                        _ => continue,
+                    }
+                } else if node.node_id().namespace == self.namespace_index {
+                    let Some(node_desc) = from_opaque_node_id::<DiagnosticsNode>(node.node_id())
+                    else {
+                        node.set_status(StatusCode::BadNodeIdUnknown);
+                        continue;
+                    };
+                    match node_desc {
+                        DiagnosticsNode::Namespace(ns) => {
+                            let namespaces =
+                                lazy_namespaces.get_or_insert_with(|| self.namespaces(context));
+                            self.browse_namespace_node(node, type_tree, namespaces, &ns);
+                        }
                     }
                 }
             }

@@ -566,6 +566,7 @@ async fn add_references_abstract_reference_type_returns_bad_reference_type_id_in
         &abstract_reference_type,
         &references_type,
         NodeClass::ReferenceType,
+        true,
     );
 
     // OPC UA Part 3 5.3.1: abstract ReferenceTypes are not valid instance references.

@@ -47,6 +47,11 @@ pub struct TypePropertyInverseRef {
 #[derive(Default, Clone)]
 pub struct DefaultTypeTree {
     nodes: HashMap<NodeId, NodeClass>,
+    /// Type node ids whose `IsAbstract` attribute is `true`. A type present in
+    /// `nodes` but absent here is concrete. Used to reject instantiating abstract
+    /// types (OPC 10000-3 §5.5.2 / §5.6.5) even when the type exists only as
+    /// metadata (no full node in the address space).
+    abstract_types: HashSet<NodeId>,
     subtypes_by_source: HashMap<NodeId, HashSet<NodeId>>,
     subtypes_by_target: HashMap<NodeId, NodeId>,
     property_to_type: HashMap<NodeId, TypePropertyInverseRef>,
@@ -76,6 +81,12 @@ pub trait TypeTree {
 
     /// Get the node class of a type in the type tree given by `node`.
     fn get(&self, node: &NodeId) -> Option<NodeClass>;
+
+    /// Return whether the type `node` is abstract: `Some(true)` if it is an
+    /// abstract type, `Some(false)` if it is a known concrete type, `None` if
+    /// `node` is not a known type. Abstract types cannot be instantiated
+    /// (OPC 10000-3 §5.5.2 ObjectType / §5.6.5 VariableType).
+    fn is_abstract(&self, node: &NodeId) -> Option<bool>;
 
     /// Find a property of a type from its browse path.
     fn find_type_prop_by_browse_path(
@@ -138,6 +149,13 @@ impl TypeTree for DefaultTypeTree {
         self.nodes.get(node).cloned()
     }
 
+    fn is_abstract(&self, node: &NodeId) -> Option<bool> {
+        if !self.nodes.contains_key(node) {
+            return None;
+        }
+        Some(self.abstract_types.contains(node))
+    }
+
     /// Find a property by browse and type ID.
     fn find_type_prop_by_browse_path(
         &self,
@@ -161,6 +179,7 @@ impl DefaultTypeTree {
     pub fn new() -> Self {
         let mut type_tree = Self {
             nodes: HashMap::new(),
+            abstract_types: HashSet::new(),
             subtypes_by_source: HashMap::new(),
             subtypes_by_target: HashMap::new(),
             type_properties: HashMap::new(),
@@ -186,9 +205,22 @@ impl DefaultTypeTree {
         type_tree
     }
 
-    /// Add a new type to the type tree.
-    pub fn add_type_node(&mut self, id: &NodeId, parent: &NodeId, node_class: NodeClass) {
+    /// Add a new type to the type tree. `is_abstract` records the type node's
+    /// `IsAbstract` attribute so abstract types can be rejected on instantiation
+    /// (OPC 10000-3 §5.5.2 / §5.6.5) even when they exist only as metadata.
+    pub fn add_type_node(
+        &mut self,
+        id: &NodeId,
+        parent: &NodeId,
+        node_class: NodeClass,
+        is_abstract: bool,
+    ) {
         self.nodes.insert(id.clone(), node_class);
+        if is_abstract {
+            self.abstract_types.insert(id.clone());
+        } else {
+            self.abstract_types.remove(id);
+        }
         self.subtypes_by_source
             .entry(parent.clone())
             .or_default()
@@ -281,5 +313,45 @@ impl DefaultTypeTree {
         }
 
         res
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DefaultTypeTree, TypeTree};
+    use opcua_types::{NodeClass, NodeId};
+
+    // OPC 10000-3 §5.5.2 (ObjectType) / §5.6.5 (VariableType): abstract types
+    // cannot be instantiated. The type tree must expose abstractness so an
+    // abstract typeDefinition can be rejected even when it exists only as
+    // metadata (no full node in the address space).
+    #[test]
+    fn type_tree_records_abstractness() {
+        let mut tree = DefaultTypeTree::new();
+        let parent = NodeId::new(0, 58); // BaseObjectType
+        let abstract_type = NodeId::new(1, "abstract-object-type");
+        let concrete_type = NodeId::new(1, "concrete-object-type");
+        let unknown = NodeId::new(1, "not-a-type");
+
+        tree.add_type_node(&abstract_type, &parent, NodeClass::ObjectType, true);
+        tree.add_type_node(&concrete_type, &parent, NodeClass::ObjectType, false);
+
+        assert_eq!(tree.is_abstract(&abstract_type), Some(true));
+        assert_eq!(tree.is_abstract(&concrete_type), Some(false));
+        assert_eq!(tree.is_abstract(&unknown), None);
+    }
+
+    // Re-registering a type flips its abstractness (types can be replaced during
+    // load); the abstract set must track the latest value, not accumulate.
+    #[test]
+    fn re_registering_type_updates_abstractness() {
+        let mut tree = DefaultTypeTree::new();
+        let parent = NodeId::new(0, 58);
+        let id = NodeId::new(1, "t");
+
+        tree.add_type_node(&id, &parent, NodeClass::ObjectType, true);
+        assert_eq!(tree.is_abstract(&id), Some(true));
+        tree.add_type_node(&id, &parent, NodeClass::ObjectType, false);
+        assert_eq!(tree.is_abstract(&id), Some(false));
     }
 }

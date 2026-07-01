@@ -486,6 +486,7 @@ mod tests {
                 &NodeId::from(ReferenceTypeId::HasComponent),
                 &NodeId::from(ReferenceTypeId::References),
                 NodeClass::ReferenceType,
+                false,
             );
         }
 

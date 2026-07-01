@@ -576,6 +576,7 @@ mod tests {
             &NodeId::new(1, "event"),
             &ObjectTypeId::BaseEventType.into(),
             NodeClass::ObjectType,
+            false,
         );
         type_tree.add_type_property(
             &NodeId::new(1, "prop"),

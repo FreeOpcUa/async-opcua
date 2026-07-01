@@ -238,4 +238,51 @@ impl ReferenceType {
     pub fn set_inverse_name(&mut self, inverse_name: LocalizedText) {
         self.inverse_name = Some(inverse_name);
     }
+
+    /// Return `false` if this ReferenceType violates the OPC 10000-3 §5.3.2
+    /// constraint that a symmetric ReferenceType must not define an
+    /// `InverseName` ("If the ReferenceType is non-symmetric the InverseName
+    /// Attribute shall be set"). A non-symmetric type may have one. This is a
+    /// well-formedness invariant of the node, independent of how it is created.
+    pub fn symmetric_inverse_name_is_valid(&self) -> bool {
+        !(self.symmetric && self.inverse_name.is_some())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ReferenceType;
+    use opcua_types::{LocalizedText, NodeId};
+
+    #[test]
+    fn symmetric_reference_type_must_not_have_inverse_name() {
+        // OPC 10000-3 §5.3.2: symmetric ⇒ InverseName omitted.
+        let id = NodeId::new(1, "ref-type");
+
+        // symmetric + InverseName -> invalid
+        let invalid = ReferenceType::new(
+            &id,
+            "Sym",
+            "Sym",
+            Some(LocalizedText::from("Inverse")),
+            true,
+            false,
+        );
+        assert!(!invalid.symmetric_inverse_name_is_valid());
+
+        // symmetric, no InverseName -> valid
+        let symmetric_ok = ReferenceType::new(&id, "Sym", "Sym", None, true, false);
+        assert!(symmetric_ok.symmetric_inverse_name_is_valid());
+
+        // non-symmetric + InverseName -> valid
+        let non_symmetric = ReferenceType::new(
+            &id,
+            "NonSym",
+            "NonSym",
+            Some(LocalizedText::from("Inverse")),
+            false,
+            false,
+        );
+        assert!(non_symmetric.symmetric_inverse_name_is_valid());
+    }
 }

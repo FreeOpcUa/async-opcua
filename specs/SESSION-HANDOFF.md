@@ -13,6 +13,16 @@ footprint → hot-path performance**, i.e. production-readiness of the surface a
 
 ## Delivered most recently
 
+### Node-management validation hardening — **COMPLETE** (feature 048, PR pending)
+Closed the reconciled node-management validation cluster on the opt-in writable address space
+(`clients_can_modify_address_space`, default OFF): P4-NODEMGMT-01 (targetNodeClass match + hierarchical
+HasProperty/HasSubtype rules), P3-03 (abstract type-metadata-only typeDefinition — required a new
+`TypeTree::is_abstract`/IsAbstract field threaded through `add_type_node`), P3-06 (HasTypeDefinition
+[1..1]), P3-05 (symmetric+InverseName node invariant — already enforced server-side, now a reusable
+`ReferenceType` invariant), P3-07 (VariableType subtype DataType/ValueRank refinement). 6 user stories,
+TDD red-first, all spec-cited (MCP-verified §s). Standard-nodeset load + full server/nodes/integration
+suites green; clippy clean.
+
 ### Facade exposure of PubSub + SQLite history — **COMPLETE** (feature 047, PR pending)
 Opt-in, default-OFF `pubsub` / `history` umbrella features re-export `async-opcua-pubsub` /
 `async-opcua-history-sqlite` as `opcua::pubsub` / `opcua::history`, mirroring client/server. Fixes a

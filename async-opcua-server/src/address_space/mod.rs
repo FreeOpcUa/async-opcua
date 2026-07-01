@@ -104,7 +104,7 @@ impl AddressSpace {
                 continue;
             };
 
-            type_tree.add_type_node(node_id, &parent_id, nc);
+            type_tree.add_type_node(node_id, &parent_id, nc, node.type_is_abstract());
             found_ids.push_back((node_id.clone(), node_id.clone(), Vec::new(), nc));
         }
 

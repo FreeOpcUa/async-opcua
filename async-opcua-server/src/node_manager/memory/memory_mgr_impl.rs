@@ -186,6 +186,16 @@ fn add_nodes_impl(
                 }
             };
 
+            {
+                let type_tree = context.type_tree.read();
+                if let Err(status) =
+                    validate_type_refinement(&address_space, &*type_tree, item, &node)
+                {
+                    item.set_result(NodeId::null(), status);
+                    continue;
+                }
+            }
+
             let type_definition_id = item.type_definition_id().node_id.clone();
             let has_type_definition_id = NodeId::from(ReferenceTypeId::HasTypeDefinition);
             let mut references = vec![(
@@ -362,6 +372,24 @@ fn add_references_impl(
                 continue;
             }
 
+            // OPC 10000-4 §5.8.3: the requested targetNodeClass must match the
+            // actual target node's NodeClass. `Unspecified` means the client
+            // makes no assertion. Only checkable when the target is local.
+            if target_exists && item.target_node_class() != NodeClass::Unspecified {
+                let actual_class = address_space
+                    .find(&item.target_node_id().node_id)
+                    .map(|n| n.node_class());
+                if actual_class.is_some_and(|c| c != item.target_node_class()) {
+                    if source_ready {
+                        item.set_source_result(StatusCode::BadNodeClassInvalid);
+                    }
+                    if target_ready {
+                        item.set_target_result(StatusCode::BadNodeClassInvalid);
+                    }
+                    continue;
+                }
+            }
+
             let (source_node, target_node) = if item.is_forward() {
                 (item.source_node_id(), &item.target_node_id().node_id)
             } else {
@@ -372,8 +400,32 @@ fn add_references_impl(
                 &address_space,
                 &*type_tree,
                 item.reference_type_id(),
+                source_node,
                 target_node,
             ) {
+                if source_ready {
+                    item.set_source_result(StatusCode::BadReferenceNotAllowed);
+                }
+                if target_ready {
+                    item.set_target_result(StatusCode::BadReferenceNotAllowed);
+                }
+                continue;
+            }
+
+            // OPC 10000-3 §5.5.1 / §5.6.2: an Object/Variable is the SourceNode of
+            // exactly one HasTypeDefinition Reference. Reject a second one (the
+            // duplicate-to-same-target case is handled below).
+            if item.reference_type_id() == &NodeId::from(ReferenceTypeId::HasTypeDefinition)
+                && address_space
+                    .find_references(
+                        source_node,
+                        Some((ReferenceTypeId::HasTypeDefinition, false)),
+                        &*type_tree,
+                        BrowseDirection::Forward,
+                    )
+                    .next()
+                    .is_some()
+            {
                 if source_ready {
                     item.set_source_result(StatusCode::BadReferenceNotAllowed);
                 }
@@ -518,22 +570,124 @@ fn delete_references_impl(
     notify_model_changes(context, changes);
 }
 
+/// Resolve a node's NodeClass, preferring a full node in the address space and
+/// falling back to type metadata for type-only nodes; `None` if unknown.
+fn resolve_node_class(
+    address_space: &AddressSpace,
+    type_tree: &dyn TypeTree,
+    node_id: &NodeId,
+) -> Option<NodeClass> {
+    if let Some(node) = address_space.find(node_id) {
+        return Some(node.node_class());
+    }
+    type_tree.get(node_id)
+}
+
+/// Enforce the NodeClass structural constraints of hierarchical reference types
+/// (OPC 10000-4 §5.8.3, OPC 10000-3 §5.3). Conservative: only rejects clearly
+/// forbidden combinations; unknown endpoints are permitted so legitimate models
+/// (including every combination in the standard nodeset) are never rejected.
 fn reference_is_structurally_allowed(
     address_space: &AddressSpace,
     type_tree: &dyn TypeTree,
     reference_type_id: &NodeId,
+    source_node_id: &NodeId,
     target_node_id: &NodeId,
 ) -> bool {
-    if !type_tree.is_subtype_of(
+    // HasProperty: the target of a Property reference must be a Variable.
+    if type_tree.is_subtype_of(
         reference_type_id,
         &NodeId::from(ReferenceTypeId::HasProperty),
     ) {
-        return true;
+        return match address_space.find(target_node_id) {
+            Some(target_node) => matches!(&*target_node, NodeType::Variable(_)),
+            None => true,
+        };
     }
 
-    match address_space.find(target_node_id) {
-        Some(target_node) => matches!(&*target_node, NodeType::Variable(_)),
-        None => true,
+    // HasSubtype: connects a type node to a subtype of the SAME type NodeClass.
+    if type_tree.is_subtype_of(
+        reference_type_id,
+        &NodeId::from(ReferenceTypeId::HasSubtype),
+    ) {
+        let source_class = resolve_node_class(address_space, type_tree, source_node_id);
+        let target_class = resolve_node_class(address_space, type_tree, target_node_id);
+        if let (Some(source_class), Some(target_class)) = (source_class, target_class) {
+            let is_type_class = |class: NodeClass| {
+                matches!(
+                    class,
+                    NodeClass::ObjectType
+                        | NodeClass::VariableType
+                        | NodeClass::ReferenceType
+                        | NodeClass::DataType
+                )
+            };
+            // A valid HasSubtype is type→type of the same class; anything else is forbidden.
+            if !is_type_class(source_class) || source_class != target_class {
+                return false;
+            }
+        }
+    }
+
+    true
+}
+
+/// A VariableType subtype may only further-restrict (never widen) its
+/// supertype's DataType and ValueRank (OPC 10000-3 §5.6.5 / §6.3 subtyping).
+/// Only applied when the node is a VariableType added as a HasSubtype of a
+/// resolvable VariableType supertype; unknown DataTypes are not judged.
+fn validate_type_refinement(
+    address_space: &AddressSpace,
+    type_tree: &dyn TypeTree,
+    item: &AddNodeItem,
+    node: &NodeType,
+) -> Result<(), StatusCode> {
+    let NodeType::VariableType(child) = node else {
+        return Ok(());
+    };
+    if !type_tree.is_subtype_of(
+        item.reference_type_id(),
+        &NodeId::from(ReferenceTypeId::HasSubtype),
+    ) {
+        return Ok(());
+    }
+    let Some(parent) = address_space.find(&item.parent_node_id().node_id) else {
+        return Ok(());
+    };
+    let NodeType::VariableType(parent) = &*parent else {
+        return Ok(());
+    };
+
+    // DataType: the subtype's DataType must be a subtype of the supertype's.
+    // Only judge a DataType the type tree knows; an unknown one can't be proven
+    // to widen, so it is allowed (conservative; equal DataTypes always pass).
+    if type_tree.get(child.data_type()).is_some()
+        && !type_tree.is_subtype_of(child.data_type(), parent.data_type())
+    {
+        return Err(StatusCode::BadNodeAttributesInvalid);
+    }
+    // ValueRank: the subtype must further-restrict (not widen) the supertype.
+    if !value_rank_is_restriction_of(parent.value_rank(), child.value_rank()) {
+        return Err(StatusCode::BadNodeAttributesInvalid);
+    }
+    Ok(())
+}
+
+/// Whether `child` ValueRank is a valid restriction of `parent` ValueRank
+/// (OPC 10000-3): Any (-2) accepts anything; ScalarOrOneDimension (-3) accepts
+/// scalar or a single dimension; OneOrMoreDimensions (0) accepts any array;
+/// Scalar (-1) and fixed ranks (>=1) require an exact match.
+fn value_rank_is_restriction_of(parent: i32, child: i32) -> bool {
+    const ANY: i32 = -2;
+    const SCALAR_OR_ONE_DIMENSION: i32 = -3;
+    const ONE_OR_MORE_DIMENSIONS: i32 = 0;
+    const SCALAR: i32 = -1;
+    match parent {
+        ANY => true,
+        SCALAR_OR_ONE_DIMENSION => matches!(child, SCALAR_OR_ONE_DIMENSION | SCALAR | 1),
+        ONE_OR_MORE_DIMENSIONS => child == ONE_OR_MORE_DIMENSIONS || child >= 1,
+        SCALAR => child == SCALAR,
+        n => child == n,
     }
 }
 
@@ -597,13 +751,18 @@ fn validate_type_definition(
         };
     }
 
-    if type_tree
-        .get(type_definition_id)
-        .is_some_and(|node_class| node_class == expected_type_class)
-    {
-        Ok(())
-    } else {
-        Err(StatusCode::BadTypeDefinitionInvalid)
+    // Type definition present only in the type metadata (no full node). Require
+    // the correct type NodeClass AND reject abstract types — OPC 10000-3 §5.5.2
+    // (ObjectType) / §5.6.5 (VariableType): abstract types cannot be instantiated.
+    match type_tree.get(type_definition_id) {
+        Some(node_class) if node_class == expected_type_class => {
+            if type_tree.is_abstract(type_definition_id) == Some(true) {
+                Err(StatusCode::BadTypeDefinitionInvalid)
+            } else {
+                Ok(())
+            }
+        }
+        _ => Err(StatusCode::BadTypeDefinitionInvalid),
     }
 }
 
@@ -879,12 +1038,6 @@ fn build_reference_type(
     )?;
     let display_name =
         display_name_or_browse_name(&mask, attributes.display_name.clone(), &browse_name);
-    if mask.contains(AttributesMask::SYMMETRIC)
-        && attributes.symmetric
-        && mask.contains(AttributesMask::INVERSE_NAME)
-    {
-        return Err(StatusCode::BadNodeAttributesInvalid);
-    }
 
     let mut node = ReferenceType::new(node_id, browse_name, display_name, None, false, false);
     if mask.contains(AttributesMask::IS_ABSTRACT) {
@@ -895,6 +1048,12 @@ fn build_reference_type(
     }
     if mask.contains(AttributesMask::INVERSE_NAME) {
         node.set_inverse_name(attributes.inverse_name.clone());
+    }
+    // OPC 10000-3 §5.3.2: a symmetric ReferenceType must not define an
+    // InverseName. Enforced via the node-level well-formedness invariant so the
+    // rule has a single source of truth.
+    if !node.symmetric_inverse_name_is_valid() {
+        return Err(StatusCode::BadNodeAttributesInvalid);
     }
     apply_base_attributes(
         &mut node,
@@ -1592,6 +1751,42 @@ mod tests {
         target_id: &NodeId,
         reference_type_id: &NodeId,
     ) -> AddReferenceItem {
+        add_reference_item_full(source_id, target_id, reference_type_id, NodeClass::Object)
+    }
+
+    fn add_variable_type_subtype_item(
+        parent_id: &NodeId,
+        new_node_id: &NodeId,
+        browse_name: QualifiedName,
+        data_type: NodeId,
+        value_rank: i32,
+    ) -> AddNodeItem {
+        let attributes = opcua_types::VariableTypeAttributes {
+            specified_attributes: (AttributesMask::DATA_TYPE | AttributesMask::VALUE_RANK).bits(),
+            data_type,
+            value_rank,
+            ..Default::default()
+        };
+        AddNodeItem::new(
+            AddNodesItem {
+                parent_node_id: ExpandedNodeId::from(parent_id),
+                reference_type_id: NodeId::from(ReferenceTypeId::HasSubtype),
+                requested_new_node_id: ExpandedNodeId::from(new_node_id),
+                browse_name,
+                node_class: NodeClass::VariableType,
+                node_attributes: AddNodeAttributes::VariableType(attributes).as_extension_object(),
+                type_definition: ExpandedNodeId::null(),
+            },
+            DiagnosticBits::empty(),
+        )
+    }
+
+    fn add_reference_item_full(
+        source_id: &NodeId,
+        target_id: &NodeId,
+        reference_type_id: &NodeId,
+        target_node_class: NodeClass,
+    ) -> AddReferenceItem {
         AddReferenceItem::new(
             AddReferencesItem {
                 source_node_id: source_id.clone(),
@@ -1599,7 +1794,7 @@ mod tests {
                 is_forward: true,
                 target_server_uri: UAString::null(),
                 target_node_id: ExpandedNodeId::from(target_id),
-                target_node_class: NodeClass::Object,
+                target_node_class,
             },
             DiagnosticBits::empty(),
         )
@@ -1820,6 +2015,418 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn add_nodes_abstract_type_definition_in_metadata_is_rejected() {
+        // OPC 10000-3 §5.5.2: an abstract ObjectType cannot be instantiated,
+        // even when it exists only in the type metadata (no full node in the
+        // address space) — the gap P3-03 closes.
+        let context = request_context();
+        let parent_id = NodeId::new(1, "parent");
+        let abstract_type = NodeId::new(2, "abstract-object-type");
+        let concrete_type = NodeId::new(2, "concrete-object-type");
+        context.type_tree.write().add_type_node(
+            &abstract_type,
+            &NodeId::from(ObjectTypeId::BaseObjectType),
+            NodeClass::ObjectType,
+            true,
+        );
+        context.type_tree.write().add_type_node(
+            &concrete_type,
+            &NodeId::from(ObjectTypeId::BaseObjectType),
+            NodeClass::ObjectType,
+            false,
+        );
+        let build_manager = || {
+            let mut address_space = AddressSpace::new();
+            address_space.add_namespace("http://opcfoundation.org/UA/", 0);
+            address_space.add_namespace("urn:test", 1);
+            address_space.insert::<_, NodeId>(object_node(&parent_id, "parent"), None);
+            super::super::InMemoryNodeManager::new(TestImpl, address_space)
+        };
+
+        // Abstract type definition (metadata-only) -> rejected, no node created.
+        let manager = build_manager();
+        let child_abstract = NodeId::new(1, "child-abstract");
+        let mut item = add_object_node_item_with_type_definition(
+            &parent_id,
+            &child_abstract,
+            QualifiedName::new(1, "ChildAbstract"),
+            ExpandedNodeId::from(abstract_type.clone()),
+        );
+        {
+            let mut nodes = vec![&mut item];
+            manager
+                .add_nodes(&context, nodes.as_mut_slice())
+                .await
+                .unwrap();
+        }
+        assert_eq!(item.status(), StatusCode::BadTypeDefinitionInvalid);
+        assert!(!manager.address_space().read().node_exists(&child_abstract));
+
+        // Concrete metadata-only type definition -> accepted.
+        let manager = build_manager();
+        let child_concrete = NodeId::new(1, "child-concrete");
+        let mut item = add_object_node_item_with_type_definition(
+            &parent_id,
+            &child_concrete,
+            QualifiedName::new(1, "ChildConcrete"),
+            ExpandedNodeId::from(concrete_type.clone()),
+        );
+        {
+            let mut nodes = vec![&mut item];
+            manager
+                .add_nodes(&context, nodes.as_mut_slice())
+                .await
+                .unwrap();
+        }
+        assert_ne!(item.status(), StatusCode::BadTypeDefinitionInvalid);
+    }
+
+    #[tokio::test]
+    async fn add_references_target_node_class_mismatch_is_bad_node_class_invalid() {
+        // OPC 10000-4 §5.8.3: the declared targetNodeClass must match the actual
+        // target node's NodeClass. Unspecified means the client asserts nothing.
+        let context = request_context();
+        let source_id = NodeId::new(1, "source");
+        let target_id = NodeId::new(1, "target"); // an Object
+        let reference_type = NodeId::from(ReferenceTypeId::HasComponent);
+        context.type_tree.write().add_type_node(
+            &reference_type,
+            &NodeId::from(ReferenceTypeId::References),
+            NodeClass::ReferenceType,
+            false,
+        );
+        let build_manager = || {
+            let mut address_space = AddressSpace::new();
+            address_space.add_namespace("http://opcfoundation.org/UA/", 0);
+            address_space.add_namespace("urn:test", 1);
+            address_space.insert::<_, NodeId>(
+                ReferenceType::new(
+                    &reference_type,
+                    "HasComponent",
+                    "HasComponent",
+                    None,
+                    false,
+                    false,
+                ),
+                None,
+            );
+            address_space.insert::<_, NodeId>(object_node(&source_id, "source"), None);
+            address_space.insert::<_, NodeId>(object_node(&target_id, "target"), None);
+            super::super::InMemoryNodeManager::new(TestImpl, address_space)
+        };
+
+        // Mismatch: target is an Object but Variable is declared -> rejected, no reference.
+        let manager = build_manager();
+        let mut item =
+            add_reference_item_full(&source_id, &target_id, &reference_type, NodeClass::Variable);
+        {
+            let mut refs = vec![&mut item];
+            manager
+                .add_references(&context, refs.as_mut_slice())
+                .await
+                .unwrap();
+        }
+        assert_eq!(item.source_status(), StatusCode::BadNodeClassInvalid);
+        assert!(!manager.address_space().read().has_reference(
+            &source_id,
+            &target_id,
+            &reference_type
+        ));
+
+        // Matching class -> accepted.
+        let manager = build_manager();
+        let mut item =
+            add_reference_item_full(&source_id, &target_id, &reference_type, NodeClass::Object);
+        {
+            let mut refs = vec![&mut item];
+            manager
+                .add_references(&context, refs.as_mut_slice())
+                .await
+                .unwrap();
+        }
+        assert_eq!(item.source_status(), StatusCode::Good);
+        assert!(manager.address_space().read().has_reference(
+            &source_id,
+            &target_id,
+            &reference_type
+        ));
+
+        // Unspecified -> no assertion, accepted.
+        let manager = build_manager();
+        let mut item = add_reference_item_full(
+            &source_id,
+            &target_id,
+            &reference_type,
+            NodeClass::Unspecified,
+        );
+        {
+            let mut refs = vec![&mut item];
+            manager
+                .add_references(&context, refs.as_mut_slice())
+                .await
+                .unwrap();
+        }
+        assert_eq!(item.source_status(), StatusCode::Good);
+        assert!(manager.address_space().read().has_reference(
+            &source_id,
+            &target_id,
+            &reference_type
+        ));
+    }
+
+    #[tokio::test]
+    async fn add_nodes_variable_type_subtype_refinement_is_enforced() {
+        // OPC 10000-3 §6.3: a VariableType subtype's DataType/ValueRank may only
+        // further-restrict the supertype's.
+        let context = request_context();
+        let super_type = NodeId::new(1, "super-var-type");
+        let int32 = NodeId::from(DataTypeId::Int32);
+        let string_dt = NodeId::from(DataTypeId::String);
+        {
+            let mut tt = context.type_tree.write();
+            // Register DataTypes so is_subtype_of can judge (String is NOT under Int32).
+            tt.add_type_node(
+                &int32,
+                &NodeId::from(DataTypeId::BaseDataType),
+                NodeClass::DataType,
+                false,
+            );
+            tt.add_type_node(
+                &string_dt,
+                &NodeId::from(DataTypeId::BaseDataType),
+                NodeClass::DataType,
+                false,
+            );
+            tt.add_type_node(
+                &NodeId::from(ReferenceTypeId::HasSubtype),
+                &NodeId::from(ReferenceTypeId::References),
+                NodeClass::ReferenceType,
+                false,
+            );
+        }
+        // Supertype: DataType Int32, ValueRank Scalar (-1).
+        let build_manager = || {
+            let mut address_space = AddressSpace::new();
+            address_space.add_namespace("http://opcfoundation.org/UA/", 0);
+            address_space.add_namespace("urn:test", 1);
+            address_space.insert::<_, NodeId>(
+                VariableType::new(
+                    &super_type,
+                    "SuperVarType",
+                    "SuperVarType",
+                    int32.clone(),
+                    false,
+                    -1,
+                ),
+                None,
+            );
+            super::super::InMemoryNodeManager::new(TestImpl, address_space)
+        };
+
+        // Widened DataType (String is not a subtype of Int32) -> rejected.
+        let manager = build_manager();
+        let mut item = add_variable_type_subtype_item(
+            &super_type,
+            &NodeId::new(1, "bad-dt"),
+            QualifiedName::new(1, "BadDt"),
+            string_dt.clone(),
+            -1,
+        );
+        {
+            let mut nodes = vec![&mut item];
+            manager
+                .add_nodes(&context, nodes.as_mut_slice())
+                .await
+                .unwrap();
+        }
+        assert_eq!(item.status(), StatusCode::BadNodeAttributesInvalid);
+
+        // Widened ValueRank (scalar supertype -> array subtype) -> rejected.
+        let manager = build_manager();
+        let mut item = add_variable_type_subtype_item(
+            &super_type,
+            &NodeId::new(1, "bad-vr"),
+            QualifiedName::new(1, "BadVr"),
+            int32.clone(),
+            1,
+        );
+        {
+            let mut nodes = vec![&mut item];
+            manager
+                .add_nodes(&context, nodes.as_mut_slice())
+                .await
+                .unwrap();
+        }
+        assert_eq!(item.status(), StatusCode::BadNodeAttributesInvalid);
+
+        // Valid restriction (same DataType, same ValueRank) -> accepted.
+        let manager = build_manager();
+        let mut item = add_variable_type_subtype_item(
+            &super_type,
+            &NodeId::new(1, "good"),
+            QualifiedName::new(1, "Good"),
+            int32.clone(),
+            -1,
+        );
+        {
+            let mut nodes = vec![&mut item];
+            manager
+                .add_nodes(&context, nodes.as_mut_slice())
+                .await
+                .unwrap();
+        }
+        assert_ne!(item.status(), StatusCode::BadNodeAttributesInvalid);
+    }
+
+    #[tokio::test]
+    async fn add_references_has_subtype_between_mismatched_classes_is_rejected() {
+        // OPC 10000-3 §5.3: HasSubtype connects a type node to a subtype of the
+        // SAME type NodeClass. ObjectType -> VariableType is forbidden;
+        // ObjectType -> ObjectType is allowed.
+        let context = request_context();
+        let src_type = NodeId::new(1, "src-object-type");
+        let var_type = NodeId::new(1, "a-variable-type");
+        let obj_type_2 = NodeId::new(1, "another-object-type");
+        let has_subtype = NodeId::from(ReferenceTypeId::HasSubtype);
+        context.type_tree.write().add_type_node(
+            &has_subtype,
+            &NodeId::from(ReferenceTypeId::References),
+            NodeClass::ReferenceType,
+            false,
+        );
+        let build_manager = || {
+            let mut address_space = AddressSpace::new();
+            address_space.add_namespace("http://opcfoundation.org/UA/", 0);
+            address_space.add_namespace("urn:test", 1);
+            address_space.insert::<_, NodeId>(
+                ReferenceType::new(&has_subtype, "HasSubtype", "HasSubtype", None, false, false),
+                None,
+            );
+            address_space.insert::<_, NodeId>(
+                ObjectType::new(&src_type, "SrcType", "SrcType", false),
+                None,
+            );
+            address_space.insert::<_, NodeId>(
+                ObjectType::new(&obj_type_2, "ObjType2", "ObjType2", false),
+                None,
+            );
+            address_space.insert::<_, NodeId>(
+                VariableType::new(
+                    &var_type,
+                    "VarType",
+                    "VarType",
+                    DataTypeId::BaseDataType.into(),
+                    false,
+                    -1,
+                ),
+                None,
+            );
+            super::super::InMemoryNodeManager::new(TestImpl, address_space)
+        };
+
+        // ObjectType -> VariableType: forbidden.
+        let manager = build_manager();
+        let mut item =
+            add_reference_item_full(&src_type, &var_type, &has_subtype, NodeClass::Unspecified);
+        {
+            let mut refs = vec![&mut item];
+            manager
+                .add_references(&context, refs.as_mut_slice())
+                .await
+                .unwrap();
+        }
+        assert_eq!(item.source_status(), StatusCode::BadReferenceNotAllowed);
+
+        // ObjectType -> ObjectType: allowed.
+        let manager = build_manager();
+        let mut item =
+            add_reference_item_full(&src_type, &obj_type_2, &has_subtype, NodeClass::Unspecified);
+        {
+            let mut refs = vec![&mut item];
+            manager
+                .add_references(&context, refs.as_mut_slice())
+                .await
+                .unwrap();
+        }
+        assert_eq!(item.source_status(), StatusCode::Good);
+    }
+
+    #[tokio::test]
+    async fn add_references_second_has_type_definition_is_rejected() {
+        // OPC 10000-3 §5.5.1: an Object is the SourceNode of exactly one
+        // HasTypeDefinition Reference. A second one (to a different target) is
+        // rejected even though the duplicate-same-target check wouldn't catch it.
+        let context = request_context();
+        let source_id = NodeId::new(1, "instance");
+        let type_a = NodeId::new(1, "type-a");
+        let type_b = NodeId::new(1, "type-b");
+        let has_type_def = NodeId::from(ReferenceTypeId::HasTypeDefinition);
+        context.type_tree.write().add_type_node(
+            &has_type_def,
+            &NodeId::from(ReferenceTypeId::References),
+            NodeClass::ReferenceType,
+            false,
+        );
+        let build_manager = |with_existing: bool| {
+            let mut address_space = AddressSpace::new();
+            address_space.add_namespace("http://opcfoundation.org/UA/", 0);
+            address_space.add_namespace("urn:test", 1);
+            address_space.insert::<_, NodeId>(
+                ReferenceType::new(
+                    &has_type_def,
+                    "HasTypeDefinition",
+                    "HasTypeDefinition",
+                    None,
+                    false,
+                    false,
+                ),
+                None,
+            );
+            address_space.insert::<_, NodeId>(object_node(&source_id, "instance"), None);
+            address_space.insert::<_, NodeId>(object_node(&type_a, "type-a"), None);
+            address_space.insert::<_, NodeId>(object_node(&type_b, "type-b"), None);
+            if with_existing {
+                address_space.insert_reference(&source_id, &type_a, &has_type_def);
+            }
+            super::super::InMemoryNodeManager::new(TestImpl, address_space)
+        };
+
+        // A second HasTypeDefinition to a different target -> rejected.
+        let manager = build_manager(true);
+        let mut item =
+            add_reference_item_full(&source_id, &type_b, &has_type_def, NodeClass::Unspecified);
+        {
+            let mut refs = vec![&mut item];
+            manager
+                .add_references(&context, refs.as_mut_slice())
+                .await
+                .unwrap();
+        }
+        assert_eq!(item.source_status(), StatusCode::BadReferenceNotAllowed);
+        assert!(!manager
+            .address_space()
+            .read()
+            .has_reference(&source_id, &type_b, &has_type_def));
+
+        // The first HasTypeDefinition on a node without one -> accepted.
+        let manager = build_manager(false);
+        let mut item =
+            add_reference_item_full(&source_id, &type_a, &has_type_def, NodeClass::Unspecified);
+        {
+            let mut refs = vec![&mut item];
+            manager
+                .add_references(&context, refs.as_mut_slice())
+                .await
+                .unwrap();
+        }
+        assert_eq!(item.source_status(), StatusCode::Good);
+        assert!(manager
+            .address_space()
+            .read()
+            .has_reference(&source_id, &type_a, &has_type_def));
+    }
+
+    #[tokio::test]
     async fn duplicate_reference_returns_operation_level_bad_duplicate_reference_not_allowed() {
         let context = request_context();
         let source_id = NodeId::new(1, "source");
@@ -1848,6 +2455,7 @@ mod tests {
             &reference_type,
             &NodeId::from(ReferenceTypeId::References),
             NodeClass::ReferenceType,
+            false,
         );
         assert!(address_space.has_reference(&source_id, &target_id, &reference_type));
         let manager = super::super::InMemoryNodeManager::new(TestImpl, address_space);
@@ -1906,6 +2514,7 @@ mod tests {
             &reference_type,
             &NodeId::from(ReferenceTypeId::References),
             NodeClass::ReferenceType,
+            false,
         );
         let manager = super::super::InMemoryNodeManager::new(TestImpl, address_space);
         let mut item = add_reference_item_with_type(&source_id, &target_id, &reference_type);

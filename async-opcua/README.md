@@ -39,12 +39,14 @@ There are also generated API docs on crates.io.
 * `server`, includes the server SDK and generated core OPC-UA namespace. This is the usual feature for standards-complete server applications.
 * `base-server`, includes the server SDK without the generated core OPC-UA namespace. It is exposed through `opcua::server` for smaller embedded builds, but the application must provide or load the address space it needs. Most users should use the `server` feature.
 * `client`, includes the client SDK.
+* `pubsub`, includes the OPC-UA Part 14 PubSub SDK, exposed through `opcua::pubsub`. Opt-in and not part of `all`, so PubSub (and its AMQP/MQTT/WebSocket transports) stays out of builds that do not need it.
+* `history`, includes the reference SQLite historical-storage backend, exposed through `opcua::history`, for wiring Historical Access into a server. Opt-in and not part of `all`, so SQLite stays out of minimal builds.
 * `json`, adds support for OPC-UA JSON to generated types.
 * `generated-address-space`, adds the core OPC-UA namespace. This is usually required for compliant OPC-UA servers and is included by `server`.
 * `discovery-server-registration`, allows the server to register itself with a local discovery server, by pulling in a client.
 * `xml`, adds support for loading generated types from XML, and for loading `NodeSet2.xml` files.
 
-By default, no features are enabled, so only core types and functionality is pulled in. You will typically want to enable either the `client` or `server` features.
+By default, no features are enabled, so only core types and functionality is pulled in. You will typically want to enable either the `client` or `server` features. The `pubsub` and `history` features are opt-in and are intentionally excluded from `all` so a default or `all` build keeps a minimal dependency footprint.
 
 # Crates
 
@@ -58,6 +60,8 @@ Note that this library is split into multiple different crates. OPC-UA is a comp
 * [async-opcua-crypto](https://crates.io/crates/async-opcua-crypto) contains common cryptographic tooling for the OPC-UA protocol using libraries from [Rust Crypto](https://github.com/rustcrypto).
 * [async-opcua-macros](https://crates.io/crates/async-opcua-macros) contains a few macros used to create custom extensions to the OPC-UA standard.
 * [async-opcua-nodes](https://crates.io/crates/async-opcua-nodes) contains an in-memory representation of OPC-UA nodes, used by the server.
+* [async-opcua-pubsub](https://crates.io/crates/async-opcua-pubsub) contains an implementation of OPC-UA Part 14 PubSub. Re-exported as `opcua::pubsub` when the `pubsub` feature is enabled.
+* [async-opcua-history-sqlite](https://crates.io/crates/async-opcua-history-sqlite) contains a reference SQLite backend for OPC-UA Historical Access. Re-exported as `opcua::history` when the `history` feature is enabled.
 * [async-opcua-types](https://crates.io/crates/async-opcua-types) contains the framework used by serialization and deserialization to OPC-UA Binary and JSON, and deserialization from OPC-UA XML. It also contains generated code defining types from the OPC-UA standard, and manual implementations of a number of core types.
 * [async-opcua-xml](https://crates.io/crates/async-opcua-xml) contains an implementation of XML decoding for certain XML schemas relevant to OPC-UA.
 

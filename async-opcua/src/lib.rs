@@ -23,9 +23,15 @@ pub use opcua_macros::{Event, EventField};
 #[cfg(feature = "client")]
 #[doc(inline)]
 pub use opcua_client as client;
+#[cfg(feature = "history")]
+#[doc(inline)]
+pub use opcua_history_sqlite as history;
 #[cfg(any(feature = "server", feature = "base-server"))]
 #[doc(inline)]
 pub use opcua_nodes as nodes;
+#[cfg(feature = "pubsub")]
+#[doc(inline)]
+pub use opcua_pubsub as pubsub;
 #[cfg(any(feature = "server", feature = "base-server"))]
 #[doc(inline)]
 pub use opcua_server as server;

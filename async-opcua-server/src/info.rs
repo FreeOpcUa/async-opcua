@@ -226,6 +226,9 @@ pub struct ServerInfo {
     /// Per-server FOTA session-file cleanup registry. Instance-owned (feature 049)
     /// so independent servers do not collide on session `NodeId`s.
     pub(crate) fota_cleanup: crate::fota::cleanup::FotaCleanupRegistry,
+    /// Per-server written-LocalizedText variant side-table for locale negotiation
+    /// on Read, keyed by `(NodeId, AttributeId)`. Instance-owned (feature 049).
+    pub(crate) localized_text_variants: crate::address_space::utils::LocalizedTextAttributeValues,
 }
 
 pub(crate) struct X509UserCertificateValidation {

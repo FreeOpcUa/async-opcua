@@ -423,6 +423,7 @@ impl Server {
             },
             metrics: Arc::new(crate::metrics::ServerMetrics::new()),
             fota_cleanup: Default::default(),
+            localized_text_variants: Default::default(),
         };
 
         let info = Arc::new(info);

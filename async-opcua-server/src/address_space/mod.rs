@@ -1,6 +1,6 @@
 //! Implementation of [AddressSpace], and in-memory OPC-UA address space.
 
-mod utils;
+pub(crate) mod utils;
 
 pub use opcua_nodes::*;
 pub use utils::*;
@@ -977,8 +977,12 @@ mod tests {
         assert_eq!(array_dimensions, vec![10u32, 10u32]);
     }
 
-    #[test]
-    fn write_node_value_rejects_scalar_array_dimensions_attribute() {
+    #[tokio::test]
+    async fn write_node_value_rejects_scalar_array_dimensions_attribute() {
+        let (_server, handle) = crate::ServerBuilder::new_anonymous("write-node-value-test")
+            .build()
+            .expect("test server should build");
+        let info = handle.info();
         let node_id = NodeId::new(1, "array-dimensions");
         let mut node = NodeType::Variable(Box::new(Variable::new(&node_id, "x", "x", 1i32)));
         let node_to_write = ParsedWriteValue {
@@ -989,7 +993,7 @@ mod tests {
         };
 
         assert_eq!(
-            write_node_value(&mut node, &node_to_write),
+            write_node_value(info, &mut node, &node_to_write),
             Err(StatusCode::BadTypeMismatch)
         );
     }

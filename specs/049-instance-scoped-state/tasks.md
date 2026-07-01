@@ -26,8 +26,8 @@
 **Goal**: two servers sharing a `(NodeId, AttributeId)` keep isolated written-LocalizedText variants.
 **Independent test**: two `ServerInfo`; remember a variant for `(X, DisplayName)` on A; B has none for that key; clear on A does not affect B.
 
-- [ ] T004 [US1] Red-first test (in `async-opcua-server/src/address_space/utils.rs` tests): two `ServerInfo`, same `(NodeId, AttributeId)` — remember on A, assert B has no variant; empty-locale remove on A does not touch B. (Fails: one global `DashMap`.)
-- [ ] T005 [US1] Implement in `info.rs` (+ `server.rs` init): add `localized_text_variants: DashMap<(NodeId, AttributeId), Vec<LocalizedText>>` to `ServerInfo`; reroute `address_space/utils.rs` `remember_localized_text_attribute_value` + `locale_ids_for_session`/`localized_text_for_session` read/write paths to use `ctx.info` (remove the `LOCALIZED_TEXT_ATTRIBUTE_VALUES` static). Preserve remember / locale-match-replace / clear-on-empty-locale behavior. Make T004 pass. _Standard: OPC 10000-4 §5.4 (locale negotiation) — behavior preserved._
+- [x] T004 [US1] Red-first test (in `async-opcua-server/src/address_space/utils.rs` tests): two `ServerInfo`, same `(NodeId, AttributeId)` — remember on A, assert B has no variant; empty-locale remove on A does not touch B. (Fails: one global `DashMap`.)
+- [x] T005 [US1] Implement in `info.rs` (+ `server.rs` init): add `localized_text_variants: DashMap<(NodeId, AttributeId), Vec<LocalizedText>>` to `ServerInfo`; reroute `address_space/utils.rs` `remember_localized_text_attribute_value` + `locale_ids_for_session`/`localized_text_for_session` read/write paths to use `ctx.info` (remove the `LOCALIZED_TEXT_ATTRIBUTE_VALUES` static). Preserve remember / locale-match-replace / clear-on-empty-locale behavior. Make T004 pass. _Standard: OPC 10000-4 §5.4 (locale negotiation) — behavior preserved._
 
 ## Phase 4: User Story 2 — Per-server session-id space + locale map (P2, hygiene)
 

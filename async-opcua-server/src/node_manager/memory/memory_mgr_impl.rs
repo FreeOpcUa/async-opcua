@@ -390,6 +390,7 @@ fn add_references_impl(
                 &address_space,
                 &*type_tree,
                 item.reference_type_id(),
+                source_node,
                 target_node,
             ) {
                 if source_ready {
@@ -559,23 +560,66 @@ fn delete_references_impl(
     notify_model_changes(context, changes);
 }
 
+/// Resolve a node's NodeClass, preferring a full node in the address space and
+/// falling back to type metadata for type-only nodes; `None` if unknown.
+fn resolve_node_class(
+    address_space: &AddressSpace,
+    type_tree: &dyn TypeTree,
+    node_id: &NodeId,
+) -> Option<NodeClass> {
+    if let Some(node) = address_space.find(node_id) {
+        return Some(node.node_class());
+    }
+    type_tree.get(node_id)
+}
+
+/// Enforce the NodeClass structural constraints of hierarchical reference types
+/// (OPC 10000-4 §5.8.3, OPC 10000-3 §5.3). Conservative: only rejects clearly
+/// forbidden combinations; unknown endpoints are permitted so legitimate models
+/// (including every combination in the standard nodeset) are never rejected.
 fn reference_is_structurally_allowed(
     address_space: &AddressSpace,
     type_tree: &dyn TypeTree,
     reference_type_id: &NodeId,
+    source_node_id: &NodeId,
     target_node_id: &NodeId,
 ) -> bool {
-    if !type_tree.is_subtype_of(
+    // HasProperty: the target of a Property reference must be a Variable.
+    if type_tree.is_subtype_of(
         reference_type_id,
         &NodeId::from(ReferenceTypeId::HasProperty),
     ) {
-        return true;
+        return match address_space.find(target_node_id) {
+            Some(target_node) => matches!(&*target_node, NodeType::Variable(_)),
+            None => true,
+        };
     }
 
-    match address_space.find(target_node_id) {
-        Some(target_node) => matches!(&*target_node, NodeType::Variable(_)),
-        None => true,
+    // HasSubtype: connects a type node to a subtype of the SAME type NodeClass.
+    if type_tree.is_subtype_of(
+        reference_type_id,
+        &NodeId::from(ReferenceTypeId::HasSubtype),
+    ) {
+        let source_class = resolve_node_class(address_space, type_tree, source_node_id);
+        let target_class = resolve_node_class(address_space, type_tree, target_node_id);
+        if let (Some(source_class), Some(target_class)) = (source_class, target_class) {
+            let is_type_class = |class: NodeClass| {
+                matches!(
+                    class,
+                    NodeClass::ObjectType
+                        | NodeClass::VariableType
+                        | NodeClass::ReferenceType
+                        | NodeClass::DataType
+                )
+            };
+            // A valid HasSubtype is type→type of the same class; anything else is forbidden.
+            if !is_type_class(source_class) || source_class != target_class {
+                return false;
+            }
+        }
     }
+
+    true
 }
 
 fn reference_type_is_abstract(address_space: &AddressSpace, reference_type_id: &NodeId) -> bool {
@@ -2028,6 +2072,77 @@ mod tests {
             &target_id,
             &reference_type
         ));
+    }
+
+    #[tokio::test]
+    async fn add_references_has_subtype_between_mismatched_classes_is_rejected() {
+        // OPC 10000-3 §5.3: HasSubtype connects a type node to a subtype of the
+        // SAME type NodeClass. ObjectType -> VariableType is forbidden;
+        // ObjectType -> ObjectType is allowed.
+        let context = request_context();
+        let src_type = NodeId::new(1, "src-object-type");
+        let var_type = NodeId::new(1, "a-variable-type");
+        let obj_type_2 = NodeId::new(1, "another-object-type");
+        let has_subtype = NodeId::from(ReferenceTypeId::HasSubtype);
+        context.type_tree.write().add_type_node(
+            &has_subtype,
+            &NodeId::from(ReferenceTypeId::References),
+            NodeClass::ReferenceType,
+            false,
+        );
+        let build_manager = || {
+            let mut address_space = AddressSpace::new();
+            address_space.add_namespace("http://opcfoundation.org/UA/", 0);
+            address_space.add_namespace("urn:test", 1);
+            address_space.insert::<_, NodeId>(
+                ReferenceType::new(&has_subtype, "HasSubtype", "HasSubtype", None, false, false),
+                None,
+            );
+            address_space
+                .insert::<_, NodeId>(ObjectType::new(&src_type, "SrcType", "SrcType", false), None);
+            address_space.insert::<_, NodeId>(
+                ObjectType::new(&obj_type_2, "ObjType2", "ObjType2", false),
+                None,
+            );
+            address_space.insert::<_, NodeId>(
+                VariableType::new(
+                    &var_type,
+                    "VarType",
+                    "VarType",
+                    DataTypeId::BaseDataType.into(),
+                    false,
+                    -1,
+                ),
+                None,
+            );
+            super::super::InMemoryNodeManager::new(TestImpl, address_space)
+        };
+
+        // ObjectType -> VariableType: forbidden.
+        let manager = build_manager();
+        let mut item =
+            add_reference_item_full(&src_type, &var_type, &has_subtype, NodeClass::Unspecified);
+        {
+            let mut refs = vec![&mut item];
+            manager
+                .add_references(&context, refs.as_mut_slice())
+                .await
+                .unwrap();
+        }
+        assert_eq!(item.source_status(), StatusCode::BadReferenceNotAllowed);
+
+        // ObjectType -> ObjectType: allowed.
+        let manager = build_manager();
+        let mut item =
+            add_reference_item_full(&src_type, &obj_type_2, &has_subtype, NodeClass::Unspecified);
+        {
+            let mut refs = vec![&mut item];
+            manager
+                .add_references(&context, refs.as_mut_slice())
+                .await
+                .unwrap();
+        }
+        assert_eq!(item.source_status(), StatusCode::Good);
     }
 
     #[tokio::test]

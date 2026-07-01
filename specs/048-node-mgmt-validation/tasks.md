@@ -35,8 +35,8 @@
 
 **Independent test**: invalid hierarchical NodeClass combinations rejected → `BadReferenceNotAllowed`; every combination the standard nodeset uses still accepted.
 
-- [ ] T008 [US3] Red-first test in `memory_mgr_impl.rs` (tests): a hierarchical reference connecting a forbidden NodeClass combination → `BadReferenceNotAllowed`; a representative set of standard-nodeset-valid combinations → good.
-- [ ] T009 [US3] Implement in `memory_mgr_impl.rs`: generalize `reference_is_structurally_allowed` from the single `HasProperty→Variable` case to a rule table (hierarchical reference type → allowed source/target NodeClasses), conservatively rejecting only clearly-forbidden combinations; verify against the standard nodeset (must not reject any). _Standard: OPC 10000-4 §5.8.3 (AddReferences) + OPC 10000-3 §5.3 (ReferenceTypes) / §7 (standard hierarchical ReferenceTypes)._
+- [x] T008 [US3] Red-first test in `memory_mgr_impl.rs` (tests): a hierarchical reference connecting a forbidden NodeClass combination → `BadReferenceNotAllowed`; a representative set of standard-nodeset-valid combinations → good.
+- [x] T009 [US3] Implement in `memory_mgr_impl.rs`: generalize `reference_is_structurally_allowed` from the single `HasProperty→Variable` case to a rule table (hierarchical reference type → allowed source/target NodeClasses), conservatively rejecting only clearly-forbidden combinations; verify against the standard nodeset (must not reject any). _Standard: OPC 10000-4 §5.8.3 (AddReferences) + OPC 10000-3 §5.3 (ReferenceTypes) / §7 (standard hierarchical ReferenceTypes)._
 
 ## Phase 6: User Story 4 — HasTypeDefinition [1..1] cardinality (P2, P3-06)
 

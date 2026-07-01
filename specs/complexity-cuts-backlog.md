@@ -130,11 +130,16 @@ references indexed `by_source`/`by_target`; node lookup is `HashMap` (O(1)).
 
 ### Repo-wide ponytail-audit (since fork f7ab8d72, 2026-06-22)
 
-- **`native`** — `async-opcua-pubsub` + `async-opcua-history-sqlite` are NON-optional deps of
-  `async-opcua` (`async-opcua/Cargo.toml:87-88`, no `optional = true`), unlike client/server/nodes/xml
-  which are feature-gated. They are always compiled, forcing AMQP/MQTT/WebSocket + libsqlite3-sys onto
-  every async-opcua user. **Fix:** `optional = true` + `pubsub`/`history` features. Cut = 2 always-on
-  subsystems + their transitive deps from default builds.
+- ~~**`native`**~~ — **MIS-FLAGGED (verify-before-fix, 2026-07-01): the premise was false.**
+  `async-opcua-pubsub` + `async-opcua-history-sqlite` are **dev-dependencies only** of the umbrella
+  crate (added under `[dev-dependencies]` in `521b59143`; the audit's cited `:87-88` lands on that
+  section header, not `[dependencies]`). `cargo tree -p async-opcua -e no-dev` confirms **zero**
+  pubsub/history/sqlite/AMQP/MQTT/WebSocket in a downstream consumer's build — nothing is forced on
+  users, so there is nothing to remove. The *opposite* gap is real but out of scope here: the facade
+  does **not** expose pubsub/history to consumers at all (they're not optional real deps + re-exports
+  like client/server/nodes), so a user wanting them through `async-opcua` can't — they must depend on
+  the sub-crates directly. Exposing them as optional (default-OFF) facade deps would be a genuine
+  *facade-completeness* feature, not a footprint cut. Decide separately.
 - **DONE — `delete`** — the dead `async-opcua-safety/src/cli.rs` library submodule and its sole-use
   `clap`/`hex` dependencies are gone; the live `Spdu`/`SafetyValidator` API remains.
 - **Scope (not a code cut)** — breadth question: PubSub (3 transports), GDS push+pull, FOTA, programs

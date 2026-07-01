@@ -28,6 +28,7 @@ const DEFAULT_NAMESPACE: u16 = 2;
 const DEFAULT_NODE: u32 = 1000;
 const DEFAULT_WARMUP_SECONDS: f64 = 1.0;
 const DEFAULT_MEASURE_SECONDS: f64 = 5.0;
+const DEFAULT_CLIENTS: usize = 1;
 const APP_URI: &str = "urn:localhost:async-opcua-localhost-bench";
 const BENCH_NAMESPACE_URI: &str = "urn:localhost:async-opcua-localhost-bench:bench";
 const READINESS_TIMEOUT: Duration = Duration::from_secs(5);
@@ -66,15 +67,20 @@ fn usage() -> String {
 async-opcua localhost benchmark
 
 Usage:
-  async-opcua-localhost-bench run --op <read|write> [--port {DEFAULT_PORT}] [--warmup {DEFAULT_WARMUP_SECONDS}] [--measure {DEFAULT_MEASURE_SECONDS}]
+  async-opcua-localhost-bench run --op <read|write> [--port {DEFAULT_PORT}] [--warmup {DEFAULT_WARMUP_SECONDS}] [--measure {DEFAULT_MEASURE_SECONDS}] [--clients {DEFAULT_CLIENTS}]
   async-opcua-localhost-bench server [--port {DEFAULT_PORT}]
-  async-opcua-localhost-bench client --op <read|write> --endpoint <url> [--namespace {DEFAULT_NAMESPACE}] [--node {DEFAULT_NODE}] [--warmup {DEFAULT_WARMUP_SECONDS}] [--measure {DEFAULT_MEASURE_SECONDS}]
+  async-opcua-localhost-bench client --op <read|write> --endpoint <url> [--namespace {DEFAULT_NAMESPACE}] [--node {DEFAULT_NODE}] [--warmup {DEFAULT_WARMUP_SECONDS}] [--measure {DEFAULT_MEASURE_SECONDS}] [--clients {DEFAULT_CLIENTS}]
   async-opcua-localhost-bench --help
+
+  --clients N runs N concurrent sessions (each its own task) and reports aggregate
+  throughput. Use it to measure multi-core scaling: a single client is serial
+  (one request in flight), so it will not exercise more than one core.
 
 Defaults:
   endpoint host: {DEFAULT_ENDPOINT_HOST}
   namespace: {DEFAULT_NAMESPACE}
   node: {DEFAULT_NODE}
+  clients: {DEFAULT_CLIENTS}
 "
     )
 }
@@ -104,6 +110,7 @@ impl Command {
                         "--node" => options.node_id = parser.parse_value("--node")?,
                         "--warmup" => options.warmup_seconds = parser.parse_value("--warmup")?,
                         "--measure" => options.measure_seconds = parser.parse_value("--measure")?,
+                        "--clients" => options.clients = parser.parse_value("--clients")?,
                         _ => return Err(format!("unknown run option `{arg}`\n\n{}", usage())),
                     }
                 }
@@ -113,6 +120,7 @@ impl Command {
                     operation: options.operation()?,
                     target,
                     timing: options.timing()?,
+                    clients: options.clients()?,
                 }))
             }
             "server" => {
@@ -139,6 +147,7 @@ impl Command {
                         "--node" => options.node_id = parser.parse_value("--node")?,
                         "--warmup" => options.warmup_seconds = parser.parse_value("--warmup")?,
                         "--measure" => options.measure_seconds = parser.parse_value("--measure")?,
+                        "--clients" => options.clients = parser.parse_value("--clients")?,
                         _ => return Err(format!("unknown client option `{arg}`\n\n{}", usage())),
                     }
                 }
@@ -146,6 +155,7 @@ impl Command {
                     operation: options.operation()?,
                     target: options.target()?,
                     timing: options.timing()?,
+                    clients: options.clients()?,
                 }))
             }
             _ => Err(format!("unknown mode `{mode}`\n\n{}", usage())),
@@ -159,6 +169,7 @@ struct RunConfig {
     operation: BenchmarkOperation,
     target: BenchmarkTarget,
     timing: BenchmarkTiming,
+    clients: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -171,6 +182,7 @@ struct ClientConfig {
     operation: BenchmarkOperation,
     target: BenchmarkTarget,
     timing: BenchmarkTiming,
+    clients: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -181,6 +193,7 @@ struct SharedOptions {
     node_id: u32,
     warmup_seconds: f64,
     measure_seconds: f64,
+    clients: usize,
 }
 
 impl Default for SharedOptions {
@@ -192,6 +205,7 @@ impl Default for SharedOptions {
             node_id: DEFAULT_NODE,
             warmup_seconds: DEFAULT_WARMUP_SECONDS,
             measure_seconds: DEFAULT_MEASURE_SECONDS,
+            clients: DEFAULT_CLIENTS,
         }
     }
 }
@@ -224,6 +238,13 @@ impl SharedOptions {
 
     fn timing(&self) -> Result<BenchmarkTiming, String> {
         BenchmarkTiming::new(self.warmup_seconds, self.measure_seconds)
+    }
+
+    fn clients(&self) -> Result<usize, String> {
+        if self.clients == 0 {
+            return Err("--clients must be at least 1".to_owned());
+        }
+        Ok(self.clients)
     }
 }
 
@@ -302,6 +323,7 @@ struct BenchmarkSample {
     endpoint: String,
     op: &'static str,
     node: String,
+    clients: usize,
     warmup_ok: u64,
     warmup_bad: u64,
     ok: u64,
@@ -315,11 +337,14 @@ impl BenchmarkSample {
     fn new(
         operation: BenchmarkOperation,
         target: &BenchmarkTarget,
+        clients: usize,
         warmup: OperationCounts,
         measured: OperationCounts,
         elapsed: Duration,
     ) -> Self {
         let seconds = elapsed.as_secs_f64();
+        // Aggregate throughput: total measured ops across all concurrent clients
+        // over the (concurrent) measurement window.
         let ops_per_sec = if seconds > 0.0 {
             measured.ok as f64 / seconds
         } else {
@@ -330,6 +355,7 @@ impl BenchmarkSample {
             endpoint: target.endpoint.clone(),
             op: operation.as_str(),
             node: target.node_label(),
+            clients,
             warmup_ok: warmup.ok,
             warmup_bad: warmup.bad,
             ok: measured.ok,
@@ -373,6 +399,14 @@ impl OperationCounts {
             self.first_bad = Some(status);
         }
     }
+
+    fn merge(&mut self, other: OperationCounts) {
+        self.ok += other.ok;
+        self.bad += other.bad;
+        if self.first_bad.is_none() {
+            self.first_bad = other.first_bad;
+        }
+    }
 }
 
 fn print_sample(sample: &BenchmarkSample) -> Result<(), String> {
@@ -398,7 +432,13 @@ async fn run_one_shot(config: RunConfig) -> Result<(), String> {
 
     let result = async {
         wait_for_port(config.port).await?;
-        let sample = run_client_sample(config.operation, &config.target, &config.timing).await?;
+        let sample = run_client_sample(
+            config.operation,
+            &config.target,
+            &config.timing,
+            config.clients,
+        )
+        .await?;
         print_sample(&sample)?;
         if sample.has_no_failures() {
             Ok(())
@@ -427,7 +467,13 @@ async fn run_standalone_server(config: ServerConfig) -> Result<(), String> {
 }
 
 async fn run_standalone_client(config: ClientConfig) -> Result<(), String> {
-    let sample = run_client_sample(config.operation, &config.target, &config.timing).await?;
+    let sample = run_client_sample(
+        config.operation,
+        &config.target,
+        &config.timing,
+        config.clients,
+    )
+    .await?;
     print_sample(&sample)?;
     if sample.has_no_failures() {
         Ok(())
@@ -488,18 +534,46 @@ async fn run_client_sample(
     operation: BenchmarkOperation,
     target: &BenchmarkTarget,
     timing: &BenchmarkTiming,
+    clients: usize,
 ) -> Result<BenchmarkSample, String> {
-    let (session, event_loop_task) = connect_client(&target.endpoint).await?;
-    let warmup = run_phase(&session, operation, target, timing.warmup).await;
-    let started = Instant::now();
-    let measured = run_phase(&session, operation, target, timing.measure).await;
-    let elapsed = started.elapsed();
+    // Spawn `clients` independent sessions, each on its own task so the tokio
+    // runtime can run them across worker threads. Aggregate their counts to
+    // measure server-side throughput under concurrency (single client = serial).
+    let mut tasks = Vec::with_capacity(clients);
+    for _ in 0..clients {
+        let target = target.clone();
+        let timing = timing.clone();
+        tasks.push(tokio::spawn(async move {
+            let (session, event_loop_task) = connect_client(&target.endpoint).await?;
+            let warmup = run_phase(&session, operation, &target, timing.warmup).await;
+            let started = Instant::now();
+            let measured = run_phase(&session, operation, &target, timing.measure).await;
+            let elapsed = started.elapsed();
 
-    let _ = session.disconnect().await;
-    event_loop_task.abort();
+            let _ = session.disconnect().await;
+            event_loop_task.abort();
+
+            Ok::<(OperationCounts, OperationCounts, Duration), String>((warmup, measured, elapsed))
+        }));
+    }
+
+    let mut agg_warmup = OperationCounts::default();
+    let mut agg_measured = OperationCounts::default();
+    let mut max_elapsed = Duration::ZERO;
+    for task in tasks {
+        let (warmup, measured, elapsed) = task.await.map_err(|err| err.to_string())??;
+        agg_warmup.merge(warmup);
+        agg_measured.merge(measured);
+        max_elapsed = max_elapsed.max(elapsed);
+    }
 
     Ok(BenchmarkSample::new(
-        operation, target, warmup, measured, elapsed,
+        operation,
+        target,
+        clients,
+        agg_warmup,
+        agg_measured,
+        max_elapsed,
     ))
 }
 

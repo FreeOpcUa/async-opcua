@@ -186,6 +186,16 @@ fn add_nodes_impl(
                 }
             };
 
+            {
+                let type_tree = context.type_tree.read();
+                if let Err(status) =
+                    validate_type_refinement(&address_space, &*type_tree, item, &node)
+                {
+                    item.set_result(NodeId::null(), status);
+                    continue;
+                }
+            }
+
             let type_definition_id = item.type_definition_id().node_id.clone();
             let has_type_definition_id = NodeId::from(ReferenceTypeId::HasTypeDefinition);
             let mut references = vec![(
@@ -620,6 +630,65 @@ fn reference_is_structurally_allowed(
     }
 
     true
+}
+
+/// A VariableType subtype may only further-restrict (never widen) its
+/// supertype's DataType and ValueRank (OPC 10000-3 §5.6.5 / §6.3 subtyping).
+/// Only applied when the node is a VariableType added as a HasSubtype of a
+/// resolvable VariableType supertype; unknown DataTypes are not judged.
+fn validate_type_refinement(
+    address_space: &AddressSpace,
+    type_tree: &dyn TypeTree,
+    item: &AddNodeItem,
+    node: &NodeType,
+) -> Result<(), StatusCode> {
+    let NodeType::VariableType(child) = node else {
+        return Ok(());
+    };
+    if !type_tree.is_subtype_of(
+        item.reference_type_id(),
+        &NodeId::from(ReferenceTypeId::HasSubtype),
+    ) {
+        return Ok(());
+    }
+    let Some(parent) = address_space.find(&item.parent_node_id().node_id) else {
+        return Ok(());
+    };
+    let NodeType::VariableType(parent) = &*parent else {
+        return Ok(());
+    };
+
+    // DataType: the subtype's DataType must be a subtype of the supertype's.
+    // Only judge a DataType the type tree knows; an unknown one can't be proven
+    // to widen, so it is allowed (conservative; equal DataTypes always pass).
+    if type_tree.get(child.data_type()).is_some()
+        && !type_tree.is_subtype_of(child.data_type(), parent.data_type())
+    {
+        return Err(StatusCode::BadNodeAttributesInvalid);
+    }
+    // ValueRank: the subtype must further-restrict (not widen) the supertype.
+    if !value_rank_is_restriction_of(parent.value_rank(), child.value_rank()) {
+        return Err(StatusCode::BadNodeAttributesInvalid);
+    }
+    Ok(())
+}
+
+/// Whether `child` ValueRank is a valid restriction of `parent` ValueRank
+/// (OPC 10000-3): Any (-2) accepts anything; ScalarOrOneDimension (-3) accepts
+/// scalar or a single dimension; OneOrMoreDimensions (0) accepts any array;
+/// Scalar (-1) and fixed ranks (>=1) require an exact match.
+fn value_rank_is_restriction_of(parent: i32, child: i32) -> bool {
+    const ANY: i32 = -2;
+    const SCALAR_OR_ONE_DIMENSION: i32 = -3;
+    const ONE_OR_MORE_DIMENSIONS: i32 = 0;
+    const SCALAR: i32 = -1;
+    match parent {
+        ANY => true,
+        SCALAR_OR_ONE_DIMENSION => matches!(child, SCALAR_OR_ONE_DIMENSION | SCALAR | 1),
+        ONE_OR_MORE_DIMENSIONS => child == ONE_OR_MORE_DIMENSIONS || child >= 1,
+        SCALAR => child == SCALAR,
+        n => child == n,
+    }
 }
 
 fn reference_type_is_abstract(address_space: &AddressSpace, reference_type_id: &NodeId) -> bool {
@@ -1685,6 +1754,33 @@ mod tests {
         add_reference_item_full(source_id, target_id, reference_type_id, NodeClass::Object)
     }
 
+    fn add_variable_type_subtype_item(
+        parent_id: &NodeId,
+        new_node_id: &NodeId,
+        browse_name: QualifiedName,
+        data_type: NodeId,
+        value_rank: i32,
+    ) -> AddNodeItem {
+        let attributes = opcua_types::VariableTypeAttributes {
+            specified_attributes: (AttributesMask::DATA_TYPE | AttributesMask::VALUE_RANK).bits(),
+            data_type,
+            value_rank,
+            ..Default::default()
+        };
+        AddNodeItem::new(
+            AddNodesItem {
+                parent_node_id: ExpandedNodeId::from(parent_id),
+                reference_type_id: NodeId::from(ReferenceTypeId::HasSubtype),
+                requested_new_node_id: ExpandedNodeId::from(new_node_id),
+                browse_name,
+                node_class: NodeClass::VariableType,
+                node_attributes: AddNodeAttributes::VariableType(attributes).as_extension_object(),
+                type_definition: ExpandedNodeId::null(),
+            },
+            DiagnosticBits::empty(),
+        )
+    }
+
     fn add_reference_item_full(
         source_id: &NodeId,
         target_id: &NodeId,
@@ -2072,6 +2168,110 @@ mod tests {
             &target_id,
             &reference_type
         ));
+    }
+
+    #[tokio::test]
+    async fn add_nodes_variable_type_subtype_refinement_is_enforced() {
+        // OPC 10000-3 §6.3: a VariableType subtype's DataType/ValueRank may only
+        // further-restrict the supertype's.
+        let context = request_context();
+        let super_type = NodeId::new(1, "super-var-type");
+        let int32 = NodeId::from(DataTypeId::Int32);
+        let string_dt = NodeId::from(DataTypeId::String);
+        {
+            let mut tt = context.type_tree.write();
+            // Register DataTypes so is_subtype_of can judge (String is NOT under Int32).
+            tt.add_type_node(
+                &int32,
+                &NodeId::from(DataTypeId::BaseDataType),
+                NodeClass::DataType,
+                false,
+            );
+            tt.add_type_node(
+                &string_dt,
+                &NodeId::from(DataTypeId::BaseDataType),
+                NodeClass::DataType,
+                false,
+            );
+            tt.add_type_node(
+                &NodeId::from(ReferenceTypeId::HasSubtype),
+                &NodeId::from(ReferenceTypeId::References),
+                NodeClass::ReferenceType,
+                false,
+            );
+        }
+        // Supertype: DataType Int32, ValueRank Scalar (-1).
+        let build_manager = || {
+            let mut address_space = AddressSpace::new();
+            address_space.add_namespace("http://opcfoundation.org/UA/", 0);
+            address_space.add_namespace("urn:test", 1);
+            address_space.insert::<_, NodeId>(
+                VariableType::new(
+                    &super_type,
+                    "SuperVarType",
+                    "SuperVarType",
+                    int32.clone(),
+                    false,
+                    -1,
+                ),
+                None,
+            );
+            super::super::InMemoryNodeManager::new(TestImpl, address_space)
+        };
+
+        // Widened DataType (String is not a subtype of Int32) -> rejected.
+        let manager = build_manager();
+        let mut item = add_variable_type_subtype_item(
+            &super_type,
+            &NodeId::new(1, "bad-dt"),
+            QualifiedName::new(1, "BadDt"),
+            string_dt.clone(),
+            -1,
+        );
+        {
+            let mut nodes = vec![&mut item];
+            manager
+                .add_nodes(&context, nodes.as_mut_slice())
+                .await
+                .unwrap();
+        }
+        assert_eq!(item.status(), StatusCode::BadNodeAttributesInvalid);
+
+        // Widened ValueRank (scalar supertype -> array subtype) -> rejected.
+        let manager = build_manager();
+        let mut item = add_variable_type_subtype_item(
+            &super_type,
+            &NodeId::new(1, "bad-vr"),
+            QualifiedName::new(1, "BadVr"),
+            int32.clone(),
+            1,
+        );
+        {
+            let mut nodes = vec![&mut item];
+            manager
+                .add_nodes(&context, nodes.as_mut_slice())
+                .await
+                .unwrap();
+        }
+        assert_eq!(item.status(), StatusCode::BadNodeAttributesInvalid);
+
+        // Valid restriction (same DataType, same ValueRank) -> accepted.
+        let manager = build_manager();
+        let mut item = add_variable_type_subtype_item(
+            &super_type,
+            &NodeId::new(1, "good"),
+            QualifiedName::new(1, "Good"),
+            int32.clone(),
+            -1,
+        );
+        {
+            let mut nodes = vec![&mut item];
+            manager
+                .add_nodes(&context, nodes.as_mut_slice())
+                .await
+                .unwrap();
+        }
+        assert_ne!(item.status(), StatusCode::BadNodeAttributesInvalid);
     }
 
     #[tokio::test]

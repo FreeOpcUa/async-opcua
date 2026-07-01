@@ -56,8 +56,8 @@
 
 **Independent test**: a VariableType subtype widening DataType or ValueRank rejected → `BadNodeAttributesInvalid`; a restricting/matching subtype accepted.
 
-- [ ] T014 [US6] Red-first test in `memory_mgr_impl.rs` (tests): AddNodes of a VariableType subtype whose `DataType` is not a subtype of the supertype's, or whose `ValueRank` widens it → `BadNodeAttributesInvalid`; a properly-restricting subtype → good.
-- [ ] T015 [US6] Implement in `memory_mgr_impl.rs` AddNodes (VariableType, and DataType where applicable): reject when subtype `DataType` is not `is_subtype_of` the supertype's, or subtype `ValueRank` is less restrictive; skip when the supertype constraint is Any/undefined. _Standard: OPC 10000-3 §5.6.5 (VariableType — subtypes inherit/restrict) → general subtyping rules Clause 6 (§6.3)._
+- [x] T014 [US6] Red-first test in `memory_mgr_impl.rs` (tests): AddNodes of a VariableType subtype whose `DataType` is not a subtype of the supertype's, or whose `ValueRank` widens it → `BadNodeAttributesInvalid`; a properly-restricting subtype → good.
+- [x] T015 [US6] Implement in `memory_mgr_impl.rs` AddNodes (VariableType, and DataType where applicable): reject when subtype `DataType` is not `is_subtype_of` the supertype's, or subtype `ValueRank` is less restrictive; skip when the supertype constraint is Any/undefined. _Standard: OPC 10000-3 §5.6.5 (VariableType — subtypes inherit/restrict) → general subtyping rules Clause 6 (§6.3)._
 
 ## Phase 9: Polish & Cross-Cutting
 

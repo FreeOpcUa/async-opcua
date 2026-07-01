@@ -11,7 +11,18 @@ The spec-*completeness* push (RBAC, HistoryUpdate, A&C, aggregates, mDNS — all
 essentially finished; this window pivoted to **conformance hardening → interop → deployment
 footprint → hot-path performance**, i.e. production-readiness of the surface already built.
 
-## Delivered most recently (PRs #233–#244, all merged + CI-green)
+## Delivered most recently
+
+### Facade exposure of PubSub + SQLite history — **COMPLETE** (feature 047, PR pending)
+Opt-in, default-OFF `pubsub` / `history` umbrella features re-export `async-opcua-pubsub` /
+`async-opcua-history-sqlite` as `opcua::pubsub` / `opcua::history`, mirroring client/server. Fixes a
+facade-completeness gap (the crates were dev-deps only, unreachable through the facade) surfaced when
+verifying the mis-flagged "native" backlog item — `cargo tree -e no-dev` proved they were NOT forced on
+users. Footprint invariant preserved (default build pulls zero pubsub/history/sqlite/AMQP/MQTT/WS deps).
+Packaging only — no PubSub/history behavior change. Committed per-story (US1 pubsub, US2 history), PR
+kept unsquashed to preserve the story commits (new commit convention, 2026-07-01).
+
+## Earlier this window (PRs #233–#244, all merged + CI-green)
 
 ### Hot-path lock removal — **COMPLETE** (features 044/045/046, PRs #242–#244)
 A rigorously measurement-gated three-step performance effort. See memory `feature-044-046-hot-path-locks`.

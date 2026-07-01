@@ -9,7 +9,7 @@
 
 ## Phase 1: Setup
 
-- [ ] T001 Capture the baseline default-build footprint: run `cargo tree -p async-opcua -e no-dev | grep -iE 'pubsub|history|sqlite|lapin|rumqtt|amqp|mqtt|tungstenite'` and confirm it prints nothing (records the pre-change invariant that must still hold after the feature). No file change.
+- [x] T001 Capture the baseline default-build footprint: run `cargo tree -p async-opcua -e no-dev | grep -iE 'pubsub|history|sqlite|lapin|rumqtt|amqp|mqtt|tungstenite'` and confirm it prints nothing (records the pre-change invariant that must still hold after the feature). No file change.
 
 ## Phase 2: Foundational
 
@@ -27,11 +27,11 @@ these tasks change only reachability, not conformance.
 
 **Independent test**: `cargo build -p async-opcua --features pubsub` compiles; `use opcua::pubsub::PubSubConfigManager;` resolves; the umbrella's `tests/integration/{pubsub,fx_spike}.rs` pass; default-build footprint grep still empty.
 
-- [ ] T002 [US1] In `async-opcua/Cargo.toml`, add `async-opcua-pubsub = { path = "../async-opcua-pubsub", version = "0.19.0", optional = true }` to `[dependencies]`, and add `pubsub = ["dep:async-opcua-pubsub"]` to `[features]`. Do NOT add `pubsub` to `default`.
-- [ ] T003 [US1] In `async-opcua/src/lib.rs`, add the gated re-export (place with the other `pub use` re-exports, alphabetically consistent): `#[cfg(feature = "pubsub")]` / `#[doc(inline)]` / `pub use opcua_pubsub as pubsub;`.
-- [ ] T004 [US1] In `async-opcua/Cargo.toml`, forward legacy policies: add `"async-opcua-pubsub?/legacy-crypto"` to the existing `legacy-crypto` feature array. (Do NOT add `aws-lc-rs`/`ecc` arms — those features don't exist on the sub-crate; they arrive via crypto-crate unification per research R2.) _Standard: OPC 10000-14 §5.3 (PubSub message security / security keys) + OPC 10000-7 legacy SecurityPolicy profiles (Basic128Rsa15, Basic256) — the `legacy-crypto` feature governs which deprecated policies the exposed subsystem may use; keeping the fail-closed default (policies off unless opted in) satisfies Constitution IV._
-- [ ] T005 [US1] In `async-opcua/Cargo.toml`, append `"pubsub"` to the self-referential `[dev-dependencies] async-opcua = { path = ".", features = [...] }` list, and remove the standalone `async-opcua-pubsub` line from `[dev-dependencies]`. Confirm `tests/integration/pubsub.rs` and `tests/integration/fx_spike.rs` still compile with their existing `use opcua_pubsub::…` imports; if the extern name is not visible to the test target, switch those two files to `opcua::pubsub::…` (research R3 fallback).
-- [ ] T006 [US1] Verify US1: `cargo build -p async-opcua --features pubsub`; `cargo test -p async-opcua` (pubsub + fx_spike integration tests green); re-run the T001 footprint grep on a default build and confirm still empty.
+- [x] T002 [US1] In `async-opcua/Cargo.toml`, add `async-opcua-pubsub = { path = "../async-opcua-pubsub", version = "0.19.0", optional = true }` to `[dependencies]`, and add `pubsub = ["dep:async-opcua-pubsub"]` to `[features]`. Do NOT add `pubsub` to `default`.
+- [x] T003 [US1] In `async-opcua/src/lib.rs`, add the gated re-export (place with the other `pub use` re-exports, alphabetically consistent): `#[cfg(feature = "pubsub")]` / `#[doc(inline)]` / `pub use opcua_pubsub as pubsub;`.
+- [x] T004 [US1] In `async-opcua/Cargo.toml`, forward legacy policies: add `"async-opcua-pubsub?/legacy-crypto"` to the existing `legacy-crypto` feature array. (Do NOT add `aws-lc-rs`/`ecc` arms — those features don't exist on the sub-crate; they arrive via crypto-crate unification per research R2.) _Standard: OPC 10000-14 §5.3 (PubSub message security / security keys) + OPC 10000-7 legacy SecurityPolicy profiles (Basic128Rsa15, Basic256) — the `legacy-crypto` feature governs which deprecated policies the exposed subsystem may use; keeping the fail-closed default (policies off unless opted in) satisfies Constitution IV._
+- [x] T005 [US1] In `async-opcua/Cargo.toml`, append `"pubsub"` to the self-referential `[dev-dependencies] async-opcua = { path = ".", features = [...] }` list, and remove the standalone `async-opcua-pubsub` line from `[dev-dependencies]`. Confirm `tests/integration/pubsub.rs` and `tests/integration/fx_spike.rs` still compile with their existing `use opcua_pubsub::…` imports; if the extern name is not visible to the test target, switch those two files to `opcua::pubsub::…` (research R3 fallback).
+- [x] T006 [US1] Verify US1: `cargo build -p async-opcua --features pubsub`; `cargo test -p async-opcua` (pubsub + fx_spike integration tests green); re-run the T001 footprint grep on a default build and confirm still empty.
 
 ## Phase 4: User Story 2 — Use SQLite Historical Storage Through the Umbrella Crate (P2)
 
@@ -46,10 +46,10 @@ reachability, not conformance.
 
 **Independent test**: `cargo build -p async-opcua --features history` compiles; `use opcua::history::SqliteHistoryBackend;` resolves; the umbrella's `tests/integration/hda.rs` passes; default-build footprint grep still empty.
 
-- [ ] T007 [US2] In `async-opcua/Cargo.toml`, add `async-opcua-history-sqlite = { path = "../async-opcua-history-sqlite", version = "0.19.0", optional = true }` to `[dependencies]`, and add `history = ["dep:async-opcua-history-sqlite"]` to `[features]`. Do NOT add `history` to `default`. (No feature-forwarding arm — the sub-crate defines no features.)
-- [ ] T008 [US2] In `async-opcua/src/lib.rs`, add the gated re-export: `#[cfg(feature = "history")]` / `#[doc(inline)]` / `pub use opcua_history_sqlite as history;`.
-- [ ] T009 [US2] In `async-opcua/Cargo.toml`, append `"history"` to the self-referential `[dev-dependencies] async-opcua` feature list, and remove the standalone `async-opcua-history-sqlite` line from `[dev-dependencies]`. Confirm `tests/integration/hda.rs` still compiles with `use opcua_history_sqlite::…`; fallback to `opcua::history::…` if needed (research R3).
-- [ ] T010 [US2] Verify US2: `cargo build -p async-opcua --features history`; `cargo test -p async-opcua` (hda integration test green); re-run the footprint grep on a default build and confirm still empty.
+- [x] T007 [US2] In `async-opcua/Cargo.toml`, add `async-opcua-history-sqlite = { path = "../async-opcua-history-sqlite", version = "0.19.0", optional = true }` to `[dependencies]`, and add `history = ["dep:async-opcua-history-sqlite"]` to `[features]`. Do NOT add `history` to `default`. (No feature-forwarding arm — the sub-crate defines no features.)
+- [x] T008 [US2] In `async-opcua/src/lib.rs`, add the gated re-export: `#[cfg(feature = "history")]` / `#[doc(inline)]` / `pub use opcua_history_sqlite as history;`.
+- [x] T009 [US2] In `async-opcua/Cargo.toml`, append `"history"` to the self-referential `[dev-dependencies] async-opcua` feature list, and remove the standalone `async-opcua-history-sqlite` line from `[dev-dependencies]`. Confirm `tests/integration/hda.rs` still compiles with `use opcua_history_sqlite::…`; fallback to `opcua::history::…` if needed (research R3).
+- [x] T010 [US2] Verify US2: `cargo build -p async-opcua --features history`; `cargo test -p async-opcua` (hda integration test green); re-run the footprint grep on a default build and confirm still empty.
 
 ## Phase 5: User Story 3 — Footprint and Existing Builds Are Unaffected (P3)
 
@@ -57,15 +57,15 @@ reachability, not conformance.
 
 **Independent test**: the full verification matrix in `quickstart.md` / `contracts/facade-contract.md` all succeeds; footprint grep empty.
 
-- [ ] T011 [US3] Footprint invariant (SC-003): `cargo tree -p async-opcua -e no-dev | grep -iE 'pubsub|history|sqlite|lapin|rumqtt|amqp|mqtt|tungstenite'` prints nothing on a default build.
-- [ ] T012 [US3] Compatibility + crypto-default matrix (SC-004, SC-005): `cargo build -p async-opcua --features pubsub,history`; `cargo build -p async-opcua --no-default-features --features pubsub,aws-lc-rs`; `cargo build -p async-opcua --no-default-features --features history,aws-lc-rs`; `cargo build -p async-opcua --all-features`. All succeed.
-- [ ] T013 [US3] Regression (SC-004): `cargo test -p async-opcua` full suite green (all previously-supported combos + the three subsystem integration tests).
+- [x] T011 [US3] Footprint invariant (SC-003): `cargo tree -p async-opcua -e no-dev | grep -iE 'pubsub|history|sqlite|lapin|rumqtt|amqp|mqtt|tungstenite'` prints nothing on a default build.
+- [x] T012 [US3] Compatibility + crypto-default matrix (SC-004, SC-005): `cargo build -p async-opcua --features pubsub,history`; `cargo build -p async-opcua --no-default-features --features pubsub,aws-lc-rs`; `cargo build -p async-opcua --no-default-features --features history,aws-lc-rs`; `cargo build -p async-opcua --all-features`. All succeed.
+- [x] T013 [US3] Regression (SC-004): `cargo test -p async-opcua` full suite green (all previously-supported combos + the three subsystem integration tests).
 
 ## Phase 6: Polish & Cross-Cutting
 
-- [ ] T014 [P] Docs (FR-009): document the `pubsub` and `history` opt-in features and the `opcua::pubsub` / `opcua::history` paths in the umbrella crate's feature docs — the `README`/`lib.rs` crate docs feature list and the feature-040 minimal-footprint / setup guidance under `docs/`.
-- [ ] T015 [P] Lint: `cargo clippy -p async-opcua --all-targets --features pubsub,history -- -D warnings`; also run the no-default-features clippy leg per the fork-CI note (`cargo clippy --no-default-features -p async-opcua --all-targets`).
-- [ ] T016 Update `specs/complexity-cuts-backlog.md` "native" entry (already corrected to reference this feature) and the session handoff to reflect 047 delivered; confirm no debris (Constitution V).
+- [x] T014 [P] Docs (FR-009): document the `pubsub` and `history` opt-in features and the `opcua::pubsub` / `opcua::history` paths in the umbrella crate's feature docs — the `README`/`lib.rs` crate docs feature list and the feature-040 minimal-footprint / setup guidance under `docs/`.
+- [x] T015 [P] Lint: `cargo clippy -p async-opcua --all-targets --features pubsub,history -- -D warnings`; also run the no-default-features clippy leg per the fork-CI note (`cargo clippy --no-default-features -p async-opcua --all-targets`).
+- [x] T016 Update `specs/complexity-cuts-backlog.md` "native" entry (already corrected to reference this feature) and the session handoff to reflect 047 delivered; confirm no debris (Constitution V).
 
 ## OPC UA Standard Grounding (per-task)
 

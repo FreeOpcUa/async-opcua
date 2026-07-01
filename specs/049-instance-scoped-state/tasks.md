@@ -11,15 +11,15 @@
 
 ## Phase 1: Setup
 
-- [ ] T001 Baseline: `cargo test -p async-opcua-server` green + `cargo clippy --workspace --all-features --lib -- -W clippy::await_holding_lock -W clippy::await_holding_refcell_ref` clean; record the pre-change state. No file change.
+- [x] T001 Baseline: `cargo test -p async-opcua-server` green + `cargo clippy --workspace --all-features --lib -- -W clippy::await_holding_lock -W clippy::await_holding_refcell_ref` clean; record the pre-change state. No file change.
 
 ## Phase 2: User Story 1a — FOTA cleanup registry per server (P1, correctness)
 
 **Goal**: two servers sharing a session `NodeId` never read/overwrite/evict each other's FOTA cleanup resources.
 **Independent test**: two `ServerInfo`; register a cleanup resource for `NodeId` X on A; B's `cleanup_session(X)` is empty; A's still returns its resource.
 
-- [ ] T002 [US1] Red-first test (in `async-opcua-server/src/fota/cleanup.rs` tests or a server test): two `ServerInfo` instances, same session `NodeId` — register on A, assert B sees nothing and A sees its resource. (Fails: currently one global registry → B sees A's data.)
-- [ ] T003 [US1] Implement in `info.rs` (+ `server.rs` init): add `fota_cleanup: RwLock<HashMap<NodeId, Vec<CleanupResource>>>` to `ServerInfo`; reroute `fota/cleanup.rs` `register_session_file`/`register_session_file_path`/`cleanup_session` to operate on a passed `&ServerInfo` (remove the `CLEANUP_REGISTRY` static + `registry()`); update the `session/manager.rs` teardown callers (`:667/:809/:823`) to pass `&self.info`. Make T002 pass. _Standard: OPC 10000-12 GDS/FOTA session-file cleanup — semantics preserved._
+- [x] T002 [US1] Red-first test (in `async-opcua-server/src/fota/cleanup.rs` tests or a server test): two `ServerInfo` instances, same session `NodeId` — register on A, assert B sees nothing and A sees its resource. (Fails: currently one global registry → B sees A's data.)
+- [x] T003 [US1] Implement in `info.rs` (+ `server.rs` init): add `fota_cleanup: RwLock<HashMap<NodeId, Vec<CleanupResource>>>` to `ServerInfo`; reroute `fota/cleanup.rs` `register_session_file`/`register_session_file_path`/`cleanup_session` to operate on a passed `&ServerInfo` (remove the `CLEANUP_REGISTRY` static + `registry()`); update the `session/manager.rs` teardown callers (`:667/:809/:823`) to pass `&self.info`. Make T002 pass. _Standard: OPC 10000-12 GDS/FOTA session-file cleanup — semantics preserved._
 
 ## Phase 3: User Story 1b — Localized-text variant side-table per server (P1, correctness)
 

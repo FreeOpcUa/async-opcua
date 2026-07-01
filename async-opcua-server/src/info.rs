@@ -223,6 +223,9 @@ pub struct ServerInfo {
     pub diagnostics: ServerDiagnostics,
     /// Performance metrics for this server instance.
     pub metrics: Arc<crate::metrics::ServerMetrics>,
+    /// Per-server FOTA session-file cleanup registry. Instance-owned (feature 049)
+    /// so independent servers do not collide on session `NodeId`s.
+    pub(crate) fota_cleanup: crate::fota::cleanup::FotaCleanupRegistry,
 }
 
 pub(crate) struct X509UserCertificateValidation {

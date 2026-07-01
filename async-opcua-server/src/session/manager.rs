@@ -658,13 +658,14 @@ impl SessionManager {
         let auth_tokens = Arc::clone(&self.auth_tokens);
         let actor_senders = Arc::clone(&self.actor_senders);
         let closed_auth_tokens = Arc::clone(&self.closed_auth_tokens);
+        let info = self.info.clone();
         let mut actor =
             SessionActor::new(context, receiver).with_termination_cleanup(move |terminated| {
                 auth_tokens.remove(&terminated.authentication_token);
                 actor_senders.remove(&terminated.authentication_token);
                 closed_auth_tokens.insert(terminated.authentication_token.clone(), Instant::now());
                 clear_session_locale_ids_for_node_id(&terminated.session_id);
-                cleanup_session(&terminated.session_id);
+                cleanup_session(&info, &terminated.session_id);
             });
 
         tokio::spawn(async move {
@@ -806,7 +807,7 @@ impl SessionManager {
         let mut session = trace_write_lock!(session);
         session.close();
         drop(session);
-        cleanup_session(id);
+        cleanup_session(&self.info, id);
     }
 
     pub(crate) fn cleanup_fota_for_secure_channel(&self, secure_channel_id: u32) {
@@ -820,7 +821,7 @@ impl SessionManager {
             .collect::<Vec<_>>();
 
         for session_id in session_ids {
-            cleanup_session(&session_id);
+            cleanup_session(&self.info, &session_id);
         }
     }
 

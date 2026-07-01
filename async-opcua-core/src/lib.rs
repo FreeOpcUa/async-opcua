@@ -89,6 +89,8 @@ const TRACE_LOCKS_UNKNOWN: u8 = 0;
 const TRACE_LOCKS_DISABLED: u8 = 1;
 const TRACE_LOCKS_ENABLED: u8 = 2;
 
+// Feature 049: intentionally process-global - process-wide OPCUA_TRACE_LOCKS config cache.
+
 static TRACE_LOCKS_STATE: AtomicU8 = AtomicU8::new(TRACE_LOCKS_UNKNOWN);
 
 /// Check for the environment variable OPCUA_TRACE_LOCKS. If it is set to a value other than `0`,
@@ -120,6 +122,8 @@ mod trace_locks_tests {
     use std::sync::Mutex;
 
     use super::{reset_trace_locks_cache_for_test, trace_locks};
+
+    // Feature 049: intentionally process-global - serializes process env mutation.
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 

@@ -13,6 +13,8 @@ const CERTIFICATE_FILE: &str = "certificate.der";
 const PRIVATE_KEY_FILE: &str = "private_key.der";
 const TRUST_LIST_FILE: &str = "trust_list.der";
 
+// Feature 049: intentionally process-global - global uniqueness of temp file names is desirable.
+
 static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// DER-encoded GDS credential material cached after renewal.

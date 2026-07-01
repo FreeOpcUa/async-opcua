@@ -54,6 +54,7 @@ pub fn redact_log_message(msg: &str) -> String {
 }
 
 fn private_key_block_regex() -> Option<&'static Regex> {
+    // Feature 049: intentionally process-global - immutable init-once regex cache (applies to all RE statics here).
     static RE: OnceLock<Option<Regex>> = OnceLock::new();
     RE.get_or_init(|| Regex::new(PRIVATE_KEY_BLOCK_PATTERN).ok())
         .as_ref()

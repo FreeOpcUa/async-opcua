@@ -176,6 +176,8 @@ pub(super) enum SessionState {
     Connecting,
 }
 
+// Feature 049: intentionally process-global - client-side id counter; server-side was relocated in feature 049.
+
 static NEXT_SESSION_ID: AtomicU32 = AtomicU32::new(1);
 
 /// An OPC-UA session. This session provides methods for all supported services that require an open session.

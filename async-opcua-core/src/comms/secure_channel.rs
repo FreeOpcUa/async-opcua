@@ -38,6 +38,8 @@ use super::{
 /// Reusable scratch storage for secured chunk decryption.
 pub type DecryptedChunkStorage = bytes::BytesMut;
 
+// Feature 049: intentionally process-global - per-thread reusable scratch buffers, not shared across instances.
+
 thread_local! {
     static PADDING_AND_SIGNATURE_SCRATCH: std::cell::RefCell<Vec<u8>> = const { std::cell::RefCell::new(Vec::new()) };
     static SYMMETRIC_DECRYPT_SCRATCH: std::cell::RefCell<Vec<u8>> = const { std::cell::RefCell::new(Vec::new()) };

@@ -39,7 +39,7 @@
 
 ## Phase 5: User Story 3 — Document deliberately-global statics (P3)
 
-- [ ] T008 [US3] Add a one-line rationale comment to each leave-global static per the contract table: `SERIALIZATION_METRICS` (`core/comms/tcp_codec.rs`), `TRACE_LOCKS_STATE`/`ENV_LOCK` (`core/lib.rs`), `TEMP_FILE_COUNTER` (`server/gds/cache.rs`), secure-channel thread-local scratch (`core/comms/secure_channel.rs`), `COUNTING_ALLOCATOR` (`server/subscriptions/subscription.rs`), regex caches (`core/logging/redact.rs`, `nodes/xml.rs`), client `NEXT_SESSION_ID` (`client/session/mod.rs`). No behavior change.
+- [x] T008 [US3] Add a one-line rationale comment to each leave-global static per the contract table: `SERIALIZATION_METRICS` (`core/comms/tcp_codec.rs`), `TRACE_LOCKS_STATE`/`ENV_LOCK` (`core/lib.rs`), `TEMP_FILE_COUNTER` (`server/gds/cache.rs`), secure-channel thread-local scratch (`core/comms/secure_channel.rs`), `COUNTING_ALLOCATOR` (`server/subscriptions/subscription.rs`), regex caches (`core/logging/redact.rs`, `nodes/xml.rs`), client `NEXT_SESSION_ID` (`client/session/mod.rs`). No behavior change.
 
 ## Phase 6: Polish & Cross-Cutting
 

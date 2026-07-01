@@ -109,8 +109,7 @@ review notes.
     run exited `1` with blocker `bench namespace was not registered`; the
     controller fixed stale generic in-memory builder TypeTree snapshot
     publication before the accepted run. This records measurement evidence
-    only; T063 owns the SC-004 comparison conclusion, and baseline
-    before-samples may be unavailable.
+    only; T063 owns the SC-004 comparison conclusion.
   - Controlled Write before/after samples: 2026-07-01 accepted TypeTree
     snapshot controlled Write measurement for SC-004 using the baseline
     T009/T019 command
@@ -120,31 +119,44 @@ review notes.
     Cargo printed `Blocking waiting for file lock on build directory` before
     the run, then completed successfully. This records measurement evidence
     only; T063 owns the SC-004 comparison conclusion.
-  - SC-004 comparison conclusion: Inconclusive for Slice 1. SC-004 is not
-    proven because baseline.md T019 requires at least three controlled
+  - Prior comparison samples from Feature 045: local scratch artifacts from
+    `../scratch/opcua-localhost-bench/` provide candidate before samples from
+    the previous controlled-benchmark work. Relevant async-opcua samples
+    include `perf-20260630-b92d983f-4e74d40-async-read.client.log`
+    (`50393.997` ops/sec), `perf-20260630-b92d983f-4e74d40-async-write.client.log`
+    (`46948.077` ops/sec), `perf-async-read-client.log` (`101017.898`
+    ops/sec), and `perf-async-write-client.log` (`96784.516` ops/sec). These
+    were release/standalone profiler-style samples, not the non-release
+    one-shot `cargo run` samples recorded above.
+  - SC-004 comparison conclusion: Inconclusive for Slice 1, and no performance
+    improvement is proven. Baseline.md T019 requires at least three controlled
     localhost before and at least three after samples for both Read and Write,
-    compared by median throughput, but baseline.md T008/T009 were placeholders
-    and explicitly did not run or record pre-implementation baseline
-    throughput. This slice also has fewer than three accepted after-change
-    samples: Read accepted `6456.699718413993` ops/sec with controller
-    corroboration at `6303.338064660845` ops/sec, and Write accepted
-    `6102.366609070389` ops/sec with controller corroboration at
-    `4643.703409111609` ops/sec. Follow-up needed to prove SC-004: capture at
-    least three controlled before samples from a pre-snapshot revision and at
-    least three controlled after samples for both Read and Write, compare
-    median throughput, and document any drop over 5% with accepted
+    compared by median throughput. The current committed evidence has fewer
+    than three accepted after-change samples, and the current after samples are
+    not apples-to-apples with the prior scratch samples because they were run
+    with a different build/mode shape. If compared anyway, the result is a
+    large throughput drop, not an improvement: the accepted Read sample
+    (`6456.699718413993` ops/sec) is about `87.19%` below the lower prior
+    scratch Read sample and about `93.61%` below the later scratch Read sample;
+    the accepted Write sample (`6102.366609070389` ops/sec) is about `87.00%`
+    below the lower prior scratch Write sample and about `93.69%` below the
+    later scratch Write sample. Follow-up needed to prove SC-004: capture at
+    least three before and three after samples with the same command, build
+    profile, run mode, warmup, measurement duration, node, and machine
+    conditions, compare medians, and document any drop over 5% with accepted
     noise/rationale.
 - **Gate decision**:
   - Decision: Pass for implemented TypeTree snapshot behavior; SC-004
-    throughput comparison remains inconclusive because before-samples were not
-    available.
+    throughput comparison remains inconclusive and does not show a measured
+    improvement.
   - Rationale: Focused TypeTree, Browse, Query, Read, Write, and subscription
     verification passed with the OPC-10000-4 clause coverage recorded above.
     Snapshot publication removes the global TypeTree read lock from hot-path
     metadata lookups without changing the service semantics covered by
     OPC-10000-4 5.9.2.2, 7.29, B.2.3, 5.11.2.2, 5.11.4.2, 5.13, and 5.14.
-    The performance acceptance claim is limited because pre-snapshot baseline
-    throughput samples were not captured.
+    The performance acceptance claim is limited because the prior scratch
+    samples and current after samples are not comparable as recorded, and raw
+    comparison would show a throughput drop rather than an improvement.
   - Reviewer/date: Codex, 2026-07-01
 - **Rollback scope**: Revert or inspect only the TypeTree snapshot changes in
   `async-opcua-server/src/info.rs`,

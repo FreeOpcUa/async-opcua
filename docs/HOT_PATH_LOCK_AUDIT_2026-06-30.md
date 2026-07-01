@@ -53,9 +53,11 @@ Completed implementation slices:
   moved TypeTree hot-path reads to immutable published snapshots. Focused
   evidence includes `cargo test -p async-opcua-server type_tree_snapshot -- --nocapture`
   plus Browse, Query, Read, Write, and subscription regression runs recorded in
-  the slice notes. The SC-004 throughput comparison remains inconclusive because
-  the required before-samples were not available; this is snapshot
-  implementation evidence, not a full performance claim.
+  the slice notes. The SC-004 throughput comparison remains inconclusive:
+  prior scratch samples from Feature 045 exist, but the current 046 after
+  samples were collected with a different build/mode shape and raw comparison
+  does not show an improvement. This is snapshot implementation evidence, not a
+  full performance claim.
 - [Slice 2: Response-Size Limit State](../specs/046-lock-removal-snapshots/slice-notes.md#slice-2-response-size-limit-state)
   moved response-size enforcement from global state to per-`SecureChannel`
   state. Focused evidence includes

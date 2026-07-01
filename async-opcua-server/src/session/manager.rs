@@ -56,7 +56,8 @@ pub(crate) fn locale_ids_for_session(info: &ServerInfo, session_id: u32) -> Opti
 fn set_session_locale_ids(info: &ServerInfo, session_id: u32, locale_ids: &Option<Vec<UAString>>) {
     match locale_ids {
         Some(locale_ids) if !locale_ids.is_empty() => {
-            info.session_locale_ids.insert(session_id, locale_ids.clone());
+            info.session_locale_ids
+                .insert(session_id, locale_ids.clone());
         }
         _ => {
             clear_session_locale_ids(info, session_id);

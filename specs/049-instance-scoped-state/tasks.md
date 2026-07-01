@@ -43,9 +43,9 @@
 
 ## Phase 6: Polish & Cross-Cutting
 
-- [ ] T009 Full verification: `cargo test -p async-opcua-server` (ALL binaries — single-server no-regression, SC-003) + the isolation tests green; `cargo build -p async-opcua` default features unchanged (SC-003).
-- [ ] T010 [P] Lints: `cargo clippy --workspace --all-features --lib -- -W clippy::await_holding_lock -W clippy::await_holding_refcell_ref` clean (SC-004); `cargo clippy -p async-opcua-server --all-targets -- -D warnings`; **`cargo fmt --all`** (verify-clean-codegen gate — run before pushing).
-- [ ] T011 [P] Update `specs/SESSION-HANDOFF.md` (record 049) and the `async-lock-discipline` memory note (global-static finding resolved).
+- [x] T009 Full verification: `cargo test -p async-opcua-server` (ALL binaries — single-server no-regression, SC-003) + the isolation tests green; `cargo build -p async-opcua` default features unchanged (SC-003).
+- [x] T010 [P] Lints: `cargo clippy --workspace --all-features --lib -- -W clippy::await_holding_lock -W clippy::await_holding_refcell_ref` clean (SC-004); `cargo clippy -p async-opcua-server --all-targets -- -D warnings`; **`cargo fmt --all`** (verify-clean-codegen gate — run before pushing).
+- [x] T011 [P] Update `specs/SESSION-HANDOFF.md` (record 049) and the `async-lock-discipline` memory note (global-static finding resolved).
 
 ## Dependencies & Execution Order
 

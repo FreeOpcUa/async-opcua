@@ -40,7 +40,10 @@ impl FotaCleanupRegistry {
     }
 
     fn take(&self, session_id: &NodeId) -> Vec<CleanupResource> {
-        self.resources.write().remove(session_id).unwrap_or_default()
+        self.resources
+            .write()
+            .remove(session_id)
+            .unwrap_or_default()
     }
 }
 
@@ -193,10 +196,8 @@ mod tests {
         let info_a = test_info();
         let info_b = test_info();
         let session_id = NodeId::new(0, "shared-session");
-        let path = std::env::temp_dir().join(format!(
-            "async_opcua_fota_iso_{}.bin",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("async_opcua_fota_iso_{}.bin", std::process::id()));
         std::fs::write(&path, b"fw").expect("temporary file should be written");
 
         register_session_file_path(&info_a, session_id.clone(), path.clone());

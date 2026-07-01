@@ -19,7 +19,8 @@ pub(crate) type LocalizedTextAttributeKey = (NodeId, AttributeId);
 /// Per-server side-table of written LocalizedText variants, keyed by
 /// `(NodeId, AttributeId)`, used for locale negotiation on Read. Owned by
 /// `ServerInfo` (feature 049) so independent servers do not collide on `NodeId`s.
-pub(crate) type LocalizedTextAttributeValues = DashMap<LocalizedTextAttributeKey, Vec<LocalizedText>>;
+pub(crate) type LocalizedTextAttributeValues =
+    DashMap<LocalizedTextAttributeKey, Vec<LocalizedText>>;
 
 /// Validate that the user given by `context` can read the value
 /// of the given node.
@@ -522,7 +523,8 @@ fn localized_text_for_session(
     attribute_id: AttributeId,
     fallback: &LocalizedText,
 ) -> LocalizedText {
-    let Some(locale_ids) = crate::session::manager::locale_ids_for_session(&context.info, context.session_id())
+    let Some(locale_ids) =
+        crate::session::manager::locale_ids_for_session(&context.info, context.session_id())
     else {
         return fallback.clone();
     };
@@ -1072,7 +1074,8 @@ mod tests {
             validate_node_write(&node, &context, &node_to_write, type_tree.get()),
             Ok(())
         );
-        write_node_value(&context.info, &mut node, &node_to_write).expect("unconfigured write should apply");
+        write_node_value(&context.info, &mut node, &node_to_write)
+            .expect("unconfigured write should apply");
 
         let value = read_node_value(
             &node,

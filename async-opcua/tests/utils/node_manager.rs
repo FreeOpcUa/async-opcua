@@ -1029,6 +1029,7 @@ impl TestNodeManagerImpl {
     ) {
         let node_id = node.node_id().clone();
         let node_class = node.node_class();
+        let is_abstract = node.type_is_abstract();
         let browse_name = node.as_node().browse_name().clone();
 
         address_space.insert(node, None::<&[(_, &NodeId, _)]>);
@@ -1050,7 +1051,7 @@ impl TestNodeManagerImpl {
 
         // If the node is a new node in the type hierarchy, add it there.
         if is_type {
-            type_tree.add_type_node(&node_id, parent_id, node_class);
+            type_tree.add_type_node(&node_id, parent_id, node_class, is_abstract);
         } else if let Some(type_node) = type_tree.get_node(parent_id) {
             let (browse_path, ty) = match type_node {
                 TypeTreeNode::Type(_) => (vec![browse_name.clone()], parent_id.clone()),

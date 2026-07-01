@@ -61,9 +61,9 @@
 
 ## Phase 9: Polish & Cross-Cutting
 
-- [ ] T016 Full verification: `cargo test -p async-opcua-server` (ALL binaries) + `cargo test -p async-opcua --test integration_tests -- node_management` + `cargo build -p async-opcua` (default features, SC-002/SC-003 — standard nodeset loads, default behavior unchanged).
-- [ ] T017 [P] Lint: `cargo clippy -p async-opcua-server -p async-opcua-nodes --all-targets -- -D warnings`.
-- [ ] T018 [P] Update `specs/conformance-audit/FINDINGS.md` rows P4-NODEMGMT-01, P3-03, P3-05, P3-06, P3-07 → FIXED (feature 048) with evidence; note in `specs/SESSION-HANDOFF.md`.
+- [x] T016 Full verification: `cargo test -p async-opcua-server` (ALL binaries) + `cargo test -p async-opcua --test integration_tests -- node_management` + `cargo build -p async-opcua` (default features, SC-002/SC-003 — standard nodeset loads, default behavior unchanged).
+- [x] T017 [P] Lint: `cargo clippy -p async-opcua-server -p async-opcua-nodes --all-targets -- -D warnings`.
+- [x] T018 [P] Update `specs/conformance-audit/FINDINGS.md` rows P4-NODEMGMT-01, P3-03, P3-05, P3-06, P3-07 → FIXED (feature 048) with evidence; note in `specs/SESSION-HANDOFF.md`.
 
 ## Dependencies & Execution Order
 

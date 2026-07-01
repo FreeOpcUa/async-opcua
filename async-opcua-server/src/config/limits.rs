@@ -301,7 +301,7 @@ mod defaults {
         constants::DEFAULT_KEEP_ALIVE_COUNT
     }
     pub(super) fn max_monitored_items_per_sub() -> usize {
-        10_000
+        constants::DEFAULT_MAX_MONITORED_ITEMS_PER_SUB
     }
     pub(super) fn max_monitored_item_queue_size() -> usize {
         constants::MAX_DATA_CHANGE_QUEUE_SIZE
@@ -312,7 +312,7 @@ mod defaults {
     pub(super) fn max_notifications_per_publish() -> u64 {
         // Bound the default publish response size; 0 remains available as an
         // explicit unlimited opt-out in configuration.
-        1_000
+        constants::MAX_NOTIFICATIONS_PER_PUBLISH
     }
     pub(super) fn max_queued_notifications() -> usize {
         constants::MAX_QUEUED_NOTIFICATIONS

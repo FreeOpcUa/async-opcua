@@ -107,7 +107,7 @@ pub mod constants {
     /// Default OPC UA server port for this implementation
     pub const DEFAULT_RUST_OPC_UA_SERVER_PORT: u16 = 4855;
     /// Default maximum number of monitored items per subscription
-    pub const DEFAULT_MAX_MONITORED_ITEMS_PER_SUB: usize = 1000;
+    pub const DEFAULT_MAX_MONITORED_ITEMS_PER_SUB: usize = 10_000;
     /// Default, well known address for TCP discovery server
     pub const DEFAULT_DISCOVERY_SERVER_URL: &str = "opc.tcp://localhost:4840/UADiscovery";
 
@@ -187,8 +187,10 @@ pub mod constants {
 
     /// Default publish timeout in milliseconds.
     pub const DEFAULT_PUBLISH_TIMEOUT_MS: u64 = 30000;
-    /// Maximum number of notifications per publish, can be set lower by the client.
-    pub const MAX_NOTIFICATIONS_PER_PUBLISH: u64 = 0;
+    /// Default maximum number of notifications per publish response. Bounds the default
+    /// response size; a configured value of 0 remains available as an explicit unlimited
+    /// opt-out. Clients may request a smaller value.
+    pub const MAX_NOTIFICATIONS_PER_PUBLISH: u64 = 1_000;
     /// Maximum number of queued notifications. Any notifications beyond this are dropped.
     pub const MAX_QUEUED_NOTIFICATIONS: usize = 20;
 

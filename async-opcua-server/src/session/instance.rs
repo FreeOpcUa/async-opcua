@@ -141,7 +141,7 @@ impl Session {
         application_description: ApplicationDescription,
         message_security_mode: MessageSecurityMode,
     ) -> Self {
-        let (session_id, session_id_numeric) = next_session_id();
+        let (session_id, session_id_numeric) = next_session_id(info);
         let now = Instant::now();
         let max_browse_continuation_points = bounded_continuation_point_limit(
             info.config.limits.max_browse_continuation_points,

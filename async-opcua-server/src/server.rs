@@ -424,6 +424,8 @@ impl Server {
             metrics: Arc::new(crate::metrics::ServerMetrics::new()),
             fota_cleanup: Default::default(),
             localized_text_variants: Default::default(),
+            next_session_id: std::sync::atomic::AtomicU32::new(1),
+            session_locale_ids: Default::default(),
         };
 
         let info = Arc::new(info);

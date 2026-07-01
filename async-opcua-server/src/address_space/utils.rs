@@ -522,7 +522,7 @@ fn localized_text_for_session(
     attribute_id: AttributeId,
     fallback: &LocalizedText,
 ) -> LocalizedText {
-    let Some(locale_ids) = crate::session::manager::locale_ids_for_session(context.session_id())
+    let Some(locale_ids) = crate::session::manager::locale_ids_for_session(&context.info, context.session_id())
     else {
         return fallback.clone();
     };

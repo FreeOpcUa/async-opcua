@@ -34,8 +34,8 @@
 **Goal**: each server allocates session ids from its own counter and keeps its own per-session locale map.
 **Independent test**: two `SessionManager` (over two `ServerInfo`); each allocates ids from its own `next_session_id`; setting locales on A is invisible to B; teardown on A does not affect B.
 
-- [ ] T006 [US2] Red-first test (in `async-opcua-server/src/session/manager.rs` tests): two `SessionManager`/`ServerInfo` — assert independent `next_session_id` allocation and isolated `session_locale_ids` (set on A ⇒ B's `locale_ids_for_session` unaffected). (Fails: shared global counter + map.)
-- [ ] T007 [US2] Implement in `info.rs` (+ `server.rs` init): add `next_session_id: AtomicU32` (init 1) + `session_locale_ids: DashMap<u32, Vec<UAString>>` to `ServerInfo`; reroute `session/manager.rs` (`NEXT_SESSION_ID.fetch_add` → `self.info.next_session_id`; `set_session_locale_ids`/`clear_session_locale_ids`/`locale_ids_for_session` → `info.session_locale_ids`) and the `utils.rs:523` read (via `ctx.info`). Move the counter + map together (R2). Preserve the 3 teardown clear paths. Make T006 pass. _Standard: OPC 10000-4 §5.4 (session locale) — behavior preserved._
+- [x] T006 [US2] Red-first test (in `async-opcua-server/src/session/manager.rs` tests): two `SessionManager`/`ServerInfo` — assert independent `next_session_id` allocation and isolated `session_locale_ids` (set on A ⇒ B's `locale_ids_for_session` unaffected). (Fails: shared global counter + map.)
+- [x] T007 [US2] Implement in `info.rs` (+ `server.rs` init): add `next_session_id: AtomicU32` (init 1) + `session_locale_ids: DashMap<u32, Vec<UAString>>` to `ServerInfo`; reroute `session/manager.rs` (`NEXT_SESSION_ID.fetch_add` → `self.info.next_session_id`; `set_session_locale_ids`/`clear_session_locale_ids`/`locale_ids_for_session` → `info.session_locale_ids`) and the `utils.rs:523` read (via `ctx.info`). Move the counter + map together (R2). Preserve the 3 teardown clear paths. Make T006 pass. _Standard: OPC 10000-4 §5.4 (session locale) — behavior preserved._
 
 ## Phase 5: User Story 3 — Document deliberately-global statics (P3)
 

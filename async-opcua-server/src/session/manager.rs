@@ -1,9 +1,6 @@
 use std::{
     collections::HashMap,
-    sync::{
-        atomic::{AtomicU32, Ordering},
-        Arc, OnceLock,
-    },
+    sync::{atomic::Ordering, Arc},
     time::{Duration, Instant},
 };
 
@@ -38,45 +35,42 @@ use super::{
     message_handler::MessageHandler,
 };
 
-static NEXT_SESSION_ID: AtomicU32 = AtomicU32::new(1);
-static SESSION_LOCALE_IDS: OnceLock<DashMap<u32, Vec<UAString>>> = OnceLock::new();
 const SESSION_ACTOR_QUEUE_CAPACITY: usize = 256;
 const CLOSED_SESSION_TOKEN_TOMBSTONE_SECS: u64 = 300;
 
-pub(super) fn next_session_id() -> (NodeId, u32) {
+// Per-server session-id allocation + per-session locale map live on `ServerInfo`
+// (feature 049) so independent servers have their own session-id space and locale
+// state. The counter keeps ids unique WITHIN a server, so the map does not collide.
+pub(super) fn next_session_id(info: &ServerInfo) -> (NodeId, u32) {
     // Session id will be a string identifier
-    let session_id = NEXT_SESSION_ID.fetch_add(1, Ordering::Relaxed);
+    let session_id = info.next_session_id.fetch_add(1, Ordering::Relaxed);
     (NodeId::new(1, session_id), session_id)
 }
 
-fn session_locale_ids() -> &'static DashMap<u32, Vec<UAString>> {
-    SESSION_LOCALE_IDS.get_or_init(DashMap::new)
-}
-
-pub(crate) fn locale_ids_for_session(session_id: u32) -> Option<Vec<UAString>> {
-    session_locale_ids()
+pub(crate) fn locale_ids_for_session(info: &ServerInfo, session_id: u32) -> Option<Vec<UAString>> {
+    info.session_locale_ids
         .get(&session_id)
         .map(|entry| entry.value().clone())
 }
 
-fn set_session_locale_ids(session_id: u32, locale_ids: &Option<Vec<UAString>>) {
+fn set_session_locale_ids(info: &ServerInfo, session_id: u32, locale_ids: &Option<Vec<UAString>>) {
     match locale_ids {
         Some(locale_ids) if !locale_ids.is_empty() => {
-            session_locale_ids().insert(session_id, locale_ids.clone());
+            info.session_locale_ids.insert(session_id, locale_ids.clone());
         }
         _ => {
-            clear_session_locale_ids(session_id);
+            clear_session_locale_ids(info, session_id);
         }
     }
 }
 
-fn clear_session_locale_ids(session_id: u32) {
-    session_locale_ids().remove(&session_id);
+fn clear_session_locale_ids(info: &ServerInfo, session_id: u32) {
+    info.session_locale_ids.remove(&session_id);
 }
 
-fn clear_session_locale_ids_for_node_id(session_id: &NodeId) {
+fn clear_session_locale_ids_for_node_id(info: &ServerInfo, session_id: &NodeId) {
     if let opcua_types::Identifier::Numeric(id) = &session_id.identifier {
-        clear_session_locale_ids(*id);
+        clear_session_locale_ids(info, *id);
     }
 }
 
@@ -664,7 +658,7 @@ impl SessionManager {
                 auth_tokens.remove(&terminated.authentication_token);
                 actor_senders.remove(&terminated.authentication_token);
                 closed_auth_tokens.insert(terminated.authentication_token.clone(), Instant::now());
-                clear_session_locale_ids_for_node_id(&terminated.session_id);
+                clear_session_locale_ids_for_node_id(&info, &terminated.session_id);
                 cleanup_session(&info, &terminated.session_id);
             });
 
@@ -802,7 +796,7 @@ impl SessionManager {
             )
         };
         self.deregister_token(&token);
-        clear_session_locale_ids(session_id_numeric);
+        clear_session_locale_ids(&self.info, session_id_numeric);
 
         let mut session = trace_write_lock!(session);
         session.close();
@@ -904,7 +898,7 @@ pub(crate) async fn close_session(
     {
         let mut mgr = trace_write_lock!(mgr_lck);
         mgr.sessions.remove(&terminated.session_id);
-        clear_session_locale_ids(id);
+        clear_session_locale_ids(&mgr.info, id);
         mgr.info
             .diagnostics
             .set_current_session_count(mgr.sessions.len() as u32);
@@ -1167,7 +1161,7 @@ pub(crate) async fn activate_session(
             claims,
             roles,
         );
-        set_session_locale_ids(session.session_id_numeric(), &locale_ids);
+        set_session_locale_ids(&info, session.session_id_numeric(), &locale_ids);
         (
             session.session_nonce().clone(),
             session.session_id_numeric(),
@@ -1298,6 +1292,37 @@ mod tests {
     };
 
     const X509_STATE_CLEANUP_USER_TOKEN: &str = "x509-state-cleanup-user";
+
+    // Feature 049: two servers must have independent session-id spaces + locale maps.
+    #[tokio::test]
+    async fn session_state_is_isolated_per_server_instance() {
+        let (_sa, ha) = ServerBuilder::new_anonymous("sess-iso-a")
+            .build()
+            .expect("server a");
+        let (_sb, hb) = ServerBuilder::new_anonymous("sess-iso-b")
+            .build()
+            .expect("server b");
+        let info_a = ha.info();
+        let info_b = hb.info();
+
+        // Independent session-id allocation: each server advances its own counter,
+        // and one server's allocations never perturb the other's.
+        let (_a1, na1) = super::next_session_id(info_a);
+        let (_a2, na2) = super::next_session_id(info_a);
+        assert_eq!(na2, na1 + 1);
+        let (_b1, nb1) = super::next_session_id(info_b);
+        let (_a3, na3) = super::next_session_id(info_a);
+        let (_b2, nb2) = super::next_session_id(info_b);
+        assert_eq!(na3, na2 + 1);
+        assert_eq!(nb2, nb1 + 1);
+
+        // Isolated per-session locale maps.
+        super::set_session_locale_ids(info_a, 4242, &Some(vec![UAString::from("en")]));
+        assert!(super::locale_ids_for_session(info_a, 4242).is_some());
+        assert!(super::locale_ids_for_session(info_b, 4242).is_none());
+        super::clear_session_locale_ids(info_a, 4242);
+        assert!(super::locale_ids_for_session(info_a, 4242).is_none());
+    }
 
     struct TempPath {
         dir: tempfile::TempDir,

@@ -21,8 +21,8 @@
 
 **Independent test**: writable AS; AddReferences with wrong `targetNodeClass` → `BadNodeClassInvalid`; matching/unspecified → good.
 
-- [ ] T004 [US1] Red-first test in `memory_mgr_impl.rs` (tests): AddReferences with `targetNodeClass` ≠ actual target NodeClass → `BadNodeClassInvalid`; matching value and the unspecified sentinel → good.
-- [ ] T005 [US1] Implement in `memory_mgr_impl.rs` AddReferences validation: compare `item.target_node_class()` to the resolved target node's NodeClass; reject mismatch with `BadNodeClassInvalid`, treat unspecified as no assertion. _Standard: OPC 10000-4 §5.8.3 (AddReferences; operation-level StatusCodes §5.8.3.4, Table 27)._
+- [x] T004 [US1] Red-first test in `memory_mgr_impl.rs` (tests): AddReferences with `targetNodeClass` ≠ actual target NodeClass → `BadNodeClassInvalid`; matching value and the unspecified sentinel → good.
+- [x] T005 [US1] Implement in `memory_mgr_impl.rs` AddReferences validation: compare `item.target_node_class()` to the resolved target node's NodeClass; reject mismatch with `BadNodeClassInvalid`, treat unspecified as no assertion. _Standard: OPC 10000-4 §5.8.3 (AddReferences; operation-level StatusCodes §5.8.3.4, Table 27)._
 
 ## Phase 4: User Story 2 — reject abstract typeDefinition (P1, P3-03) — depends on Phase 2
 

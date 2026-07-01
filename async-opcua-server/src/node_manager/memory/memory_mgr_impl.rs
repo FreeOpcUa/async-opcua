@@ -362,6 +362,24 @@ fn add_references_impl(
                 continue;
             }
 
+            // OPC 10000-4 §5.8.3: the requested targetNodeClass must match the
+            // actual target node's NodeClass. `Unspecified` means the client
+            // makes no assertion. Only checkable when the target is local.
+            if target_exists && item.target_node_class() != NodeClass::Unspecified {
+                let actual_class = address_space
+                    .find(&item.target_node_id().node_id)
+                    .map(|n| n.node_class());
+                if actual_class.is_some_and(|c| c != item.target_node_class()) {
+                    if source_ready {
+                        item.set_source_result(StatusCode::BadNodeClassInvalid);
+                    }
+                    if target_ready {
+                        item.set_target_result(StatusCode::BadNodeClassInvalid);
+                    }
+                    continue;
+                }
+            }
+
             let (source_node, target_node) = if item.is_forward() {
                 (item.source_node_id(), &item.target_node_id().node_id)
             } else {
@@ -1592,6 +1610,15 @@ mod tests {
         target_id: &NodeId,
         reference_type_id: &NodeId,
     ) -> AddReferenceItem {
+        add_reference_item_full(source_id, target_id, reference_type_id, NodeClass::Object)
+    }
+
+    fn add_reference_item_full(
+        source_id: &NodeId,
+        target_id: &NodeId,
+        reference_type_id: &NodeId,
+        target_node_class: NodeClass,
+    ) -> AddReferenceItem {
         AddReferenceItem::new(
             AddReferencesItem {
                 source_node_id: source_id.clone(),
@@ -1599,7 +1626,7 @@ mod tests {
                 is_forward: true,
                 target_server_uri: UAString::null(),
                 target_node_id: ExpandedNodeId::from(target_id),
-                target_node_class: NodeClass::Object,
+                target_node_class,
             },
             DiagnosticBits::empty(),
         )
@@ -1816,6 +1843,95 @@ mod tests {
             &source_id,
             &target_id,
             &abstract_reference_type
+        ));
+    }
+
+    #[tokio::test]
+    async fn add_references_target_node_class_mismatch_is_bad_node_class_invalid() {
+        // OPC 10000-4 §5.8.3: the declared targetNodeClass must match the actual
+        // target node's NodeClass. Unspecified means the client asserts nothing.
+        let context = request_context();
+        let source_id = NodeId::new(1, "source");
+        let target_id = NodeId::new(1, "target"); // an Object
+        let reference_type = NodeId::from(ReferenceTypeId::HasComponent);
+        context.type_tree.write().add_type_node(
+            &reference_type,
+            &NodeId::from(ReferenceTypeId::References),
+            NodeClass::ReferenceType,
+            false,
+        );
+        let build_manager = || {
+            let mut address_space = AddressSpace::new();
+            address_space.add_namespace("http://opcfoundation.org/UA/", 0);
+            address_space.add_namespace("urn:test", 1);
+            address_space.insert::<_, NodeId>(
+                ReferenceType::new(
+                    &reference_type,
+                    "HasComponent",
+                    "HasComponent",
+                    None,
+                    false,
+                    false,
+                ),
+                None,
+            );
+            address_space.insert::<_, NodeId>(object_node(&source_id, "source"), None);
+            address_space.insert::<_, NodeId>(object_node(&target_id, "target"), None);
+            super::super::InMemoryNodeManager::new(TestImpl, address_space)
+        };
+
+        // Mismatch: target is an Object but Variable is declared -> rejected, no reference.
+        let manager = build_manager();
+        let mut item =
+            add_reference_item_full(&source_id, &target_id, &reference_type, NodeClass::Variable);
+        {
+            let mut refs = vec![&mut item];
+            manager
+                .add_references(&context, refs.as_mut_slice())
+                .await
+                .unwrap();
+        }
+        assert_eq!(item.source_status(), StatusCode::BadNodeClassInvalid);
+        assert!(!manager.address_space().read().has_reference(
+            &source_id,
+            &target_id,
+            &reference_type
+        ));
+
+        // Matching class -> accepted.
+        let manager = build_manager();
+        let mut item =
+            add_reference_item_full(&source_id, &target_id, &reference_type, NodeClass::Object);
+        {
+            let mut refs = vec![&mut item];
+            manager
+                .add_references(&context, refs.as_mut_slice())
+                .await
+                .unwrap();
+        }
+        assert_eq!(item.source_status(), StatusCode::Good);
+        assert!(manager.address_space().read().has_reference(
+            &source_id,
+            &target_id,
+            &reference_type
+        ));
+
+        // Unspecified -> no assertion, accepted.
+        let manager = build_manager();
+        let mut item =
+            add_reference_item_full(&source_id, &target_id, &reference_type, NodeClass::Unspecified);
+        {
+            let mut refs = vec![&mut item];
+            manager
+                .add_references(&context, refs.as_mut_slice())
+                .await
+                .unwrap();
+        }
+        assert_eq!(item.source_status(), StatusCode::Good);
+        assert!(manager.address_space().read().has_reference(
+            &source_id,
+            &target_id,
+            &reference_type
         ));
     }
 

@@ -2153,8 +2153,12 @@ mod tests {
 
         // Unspecified -> no assertion, accepted.
         let manager = build_manager();
-        let mut item =
-            add_reference_item_full(&source_id, &target_id, &reference_type, NodeClass::Unspecified);
+        let mut item = add_reference_item_full(
+            &source_id,
+            &target_id,
+            &reference_type,
+            NodeClass::Unspecified,
+        );
         {
             let mut refs = vec![&mut item];
             manager
@@ -2298,8 +2302,10 @@ mod tests {
                 ReferenceType::new(&has_subtype, "HasSubtype", "HasSubtype", None, false, false),
                 None,
             );
-            address_space
-                .insert::<_, NodeId>(ObjectType::new(&src_type, "SrcType", "SrcType", false), None);
+            address_space.insert::<_, NodeId>(
+                ObjectType::new(&src_type, "SrcType", "SrcType", false),
+                None,
+            );
             address_space.insert::<_, NodeId>(
                 ObjectType::new(&obj_type_2, "ObjType2", "ObjType2", false),
                 None,
@@ -2397,11 +2403,10 @@ mod tests {
                 .unwrap();
         }
         assert_eq!(item.source_status(), StatusCode::BadReferenceNotAllowed);
-        assert!(!manager.address_space().read().has_reference(
-            &source_id,
-            &type_b,
-            &has_type_def
-        ));
+        assert!(!manager
+            .address_space()
+            .read()
+            .has_reference(&source_id, &type_b, &has_type_def));
 
         // The first HasTypeDefinition on a node without one -> accepted.
         let manager = build_manager(false);
@@ -2415,11 +2420,10 @@ mod tests {
                 .unwrap();
         }
         assert_eq!(item.source_status(), StatusCode::Good);
-        assert!(manager.address_space().read().has_reference(
-            &source_id,
-            &type_a,
-            &has_type_def
-        ));
+        assert!(manager
+            .address_space()
+            .read()
+            .has_reference(&source_id, &type_a, &has_type_def));
     }
 
     #[tokio::test]

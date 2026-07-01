@@ -73,6 +73,9 @@ xml = ["async-opcua-types/xml", "async-opcua-nodes/xml", "async-opcua-xml"]
 # OPC UA Part 14 PubSub subsystem (async-opcua-pubsub), re-exported as opcua::pubsub.
 # Opt-in; deliberately NOT in default to keep the minimal deployment footprint.
 pubsub = ["dep:async-opcua-pubsub"]
+# OPC UA Part 11 SQLite historical-storage backend (async-opcua-history-sqlite),
+# re-exported as opcua::history. Opt-in; NOT in default (keeps SQLite out of minimal builds).
+history = ["dep:async-opcua-history-sqlite"]
 
 
 [dependencies]
@@ -82,6 +85,7 @@ async-opcua-client = { path = "../async-opcua-client", optional = true, version 
 async-opcua-core = { path = "../async-opcua-core", version = "0.19.0", default-features = false }
 async-opcua-core-namespace = { path = "../async-opcua-core-namespace", optional = true, version = "0.19.0" }
 async-opcua-crypto = { path = "../async-opcua-crypto", version = "0.19.0", default-features = false }
+async-opcua-history-sqlite = { path = "../async-opcua-history-sqlite", optional = true, version = "0.19.0" }
 async-opcua-macros = { path = "../async-opcua-macros", version = "0.19.0" }
 async-opcua-nodes = { path = "../async-opcua-nodes", optional = true, version = "0.19.0" }
 async-opcua-pubsub = { path = "../async-opcua-pubsub", optional = true, version = "0.19.0" }
@@ -90,7 +94,6 @@ async-opcua-types = { path = "../async-opcua-types", version = "0.19.0" }
 async-opcua-xml = { path = "../async-opcua-xml", optional = true, version = "0.19.0" }
 
 [dev-dependencies]
-async-opcua-history-sqlite = { path = "../async-opcua-history-sqlite" }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 bytes = { workspace = true }
@@ -102,7 +105,7 @@ env_logger = { workspace = true }
 log = { workspace = true }
 
 # Include json when building tests
-async-opcua = { path = ".", features = ["all", "json", "xml", "legacy-crypto", "wss", "pubsub"] }
+async-opcua = { path = ".", features = ["all", "json", "xml", "legacy-crypto", "wss", "pubsub", "history"] }
 
 [package.metadata.docs.rs]
 all-features = true

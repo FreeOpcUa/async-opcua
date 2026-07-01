@@ -42,8 +42,8 @@
 
 **Independent test**: a 2nd HasTypeDefinition (different target) on a node that already has one → `BadReferenceNotAllowed`; the first → good.
 
-- [ ] T010 [US4] Red-first test in `memory_mgr_impl.rs` (tests): on an Object/Variable with an existing HasTypeDefinition, AddReferences a second HasTypeDefinition to a different target → `BadReferenceNotAllowed`; adding the first HasTypeDefinition → good.
-- [ ] T011 [US4] Implement in `memory_mgr_impl.rs` AddReferences: when `reference_type_id == HasTypeDefinition`, reject if the source already has any HasTypeDefinition reference (not just the same target). _Standard: OPC 10000-3 §5.5.1 (Object: "SourceNode of exactly one HasTypeDefinition Reference") / §5.6.2 (Variable equivalent)._
+- [x] T010 [US4] Red-first test in `memory_mgr_impl.rs` (tests): on an Object/Variable with an existing HasTypeDefinition, AddReferences a second HasTypeDefinition to a different target → `BadReferenceNotAllowed`; adding the first HasTypeDefinition → good.
+- [x] T011 [US4] Implement in `memory_mgr_impl.rs` AddReferences: when `reference_type_id == HasTypeDefinition`, reject if the source already has any HasTypeDefinition reference (not just the same target). _Standard: OPC 10000-3 §5.5.1 (Object: "SourceNode of exactly one HasTypeDefinition Reference") / §5.6.2 (Variable equivalent)._
 
 ## Phase 7: User Story 5 — symmetric ReferenceType prohibits InverseName (P3, P3-05)
 

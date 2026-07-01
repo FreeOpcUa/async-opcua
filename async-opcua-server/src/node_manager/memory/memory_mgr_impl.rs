@@ -401,6 +401,29 @@ fn add_references_impl(
                 continue;
             }
 
+            // OPC 10000-3 §5.5.1 / §5.6.2: an Object/Variable is the SourceNode of
+            // exactly one HasTypeDefinition Reference. Reject a second one (the
+            // duplicate-to-same-target case is handled below).
+            if item.reference_type_id() == &NodeId::from(ReferenceTypeId::HasTypeDefinition)
+                && address_space
+                    .find_references(
+                        source_node,
+                        Some((ReferenceTypeId::HasTypeDefinition, false)),
+                        &*type_tree,
+                        BrowseDirection::Forward,
+                    )
+                    .next()
+                    .is_some()
+            {
+                if source_ready {
+                    item.set_source_result(StatusCode::BadReferenceNotAllowed);
+                }
+                if target_ready {
+                    item.set_target_result(StatusCode::BadReferenceNotAllowed);
+                }
+                continue;
+            }
+
             if address_space.has_reference(source_node, target_node, item.reference_type_id()) {
                 if source_ready {
                     item.set_source_result(StatusCode::BadDuplicateReferenceNotAllowed);
@@ -2004,6 +2027,83 @@ mod tests {
             &source_id,
             &target_id,
             &reference_type
+        ));
+    }
+
+    #[tokio::test]
+    async fn add_references_second_has_type_definition_is_rejected() {
+        // OPC 10000-3 §5.5.1: an Object is the SourceNode of exactly one
+        // HasTypeDefinition Reference. A second one (to a different target) is
+        // rejected even though the duplicate-same-target check wouldn't catch it.
+        let context = request_context();
+        let source_id = NodeId::new(1, "instance");
+        let type_a = NodeId::new(1, "type-a");
+        let type_b = NodeId::new(1, "type-b");
+        let has_type_def = NodeId::from(ReferenceTypeId::HasTypeDefinition);
+        context.type_tree.write().add_type_node(
+            &has_type_def,
+            &NodeId::from(ReferenceTypeId::References),
+            NodeClass::ReferenceType,
+            false,
+        );
+        let build_manager = |with_existing: bool| {
+            let mut address_space = AddressSpace::new();
+            address_space.add_namespace("http://opcfoundation.org/UA/", 0);
+            address_space.add_namespace("urn:test", 1);
+            address_space.insert::<_, NodeId>(
+                ReferenceType::new(
+                    &has_type_def,
+                    "HasTypeDefinition",
+                    "HasTypeDefinition",
+                    None,
+                    false,
+                    false,
+                ),
+                None,
+            );
+            address_space.insert::<_, NodeId>(object_node(&source_id, "instance"), None);
+            address_space.insert::<_, NodeId>(object_node(&type_a, "type-a"), None);
+            address_space.insert::<_, NodeId>(object_node(&type_b, "type-b"), None);
+            if with_existing {
+                address_space.insert_reference(&source_id, &type_a, &has_type_def);
+            }
+            super::super::InMemoryNodeManager::new(TestImpl, address_space)
+        };
+
+        // A second HasTypeDefinition to a different target -> rejected.
+        let manager = build_manager(true);
+        let mut item =
+            add_reference_item_full(&source_id, &type_b, &has_type_def, NodeClass::Unspecified);
+        {
+            let mut refs = vec![&mut item];
+            manager
+                .add_references(&context, refs.as_mut_slice())
+                .await
+                .unwrap();
+        }
+        assert_eq!(item.source_status(), StatusCode::BadReferenceNotAllowed);
+        assert!(!manager.address_space().read().has_reference(
+            &source_id,
+            &type_b,
+            &has_type_def
+        ));
+
+        // The first HasTypeDefinition on a node without one -> accepted.
+        let manager = build_manager(false);
+        let mut item =
+            add_reference_item_full(&source_id, &type_a, &has_type_def, NodeClass::Unspecified);
+        {
+            let mut refs = vec![&mut item];
+            manager
+                .add_references(&context, refs.as_mut_slice())
+                .await
+                .unwrap();
+        }
+        assert_eq!(item.source_status(), StatusCode::Good);
+        assert!(manager.address_space().read().has_reference(
+            &source_id,
+            &type_a,
+            &has_type_def
         ));
     }
 

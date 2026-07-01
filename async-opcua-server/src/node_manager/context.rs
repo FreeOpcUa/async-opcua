@@ -2,7 +2,7 @@ use std::{ops::Deref, sync::Arc};
 
 use crate::{
     authenticator::{AuthManager, UserToken},
-    info::ServerInfo,
+    info::{ServerInfo, TypeTreeSnapshot},
     session::instance::Session,
     SubscriptionCache,
 };
@@ -61,12 +61,43 @@ impl TypeTreeForUser for DefaultTypeTreeGetter {
         &'a self,
         ctx: &'a RequestContext,
     ) -> Box<dyn TypeTreeReadContext + 'a> {
-        Box::new(trace_read_lock!(ctx.type_tree))
+        if let Some(snapshot) = ctx.info.type_tree_snapshot() {
+            return Box::new(snapshot);
+        }
+
+        Box::new(snapshot_type_tree_fallback(&ctx.type_tree))
     }
 
     fn get_type_tree_static(&self, ctx: &RequestContext) -> Arc<dyn TypeTreeForUserStatic> {
-        ctx.type_tree.clone()
+        Arc::new(DefaultTypeTreeForUserStatic {
+            info: Arc::clone(&ctx.info),
+            type_tree: Arc::clone(&ctx.type_tree),
+        })
     }
+}
+
+struct DefaultTypeTreeForUserStatic {
+    info: Arc<ServerInfo>,
+    type_tree: Arc<RwLock<DefaultTypeTree>>,
+}
+
+impl TypeTreeForUserStatic for DefaultTypeTreeForUserStatic {
+    fn get_type_tree<'a>(&'a self) -> Box<dyn TypeTreeReadContext + 'a> {
+        if let Some(snapshot) = self.info.type_tree_snapshot() {
+            return Box::new(snapshot);
+        }
+
+        Box::new(snapshot_type_tree_fallback(&self.type_tree))
+    }
+}
+
+fn snapshot_type_tree_fallback(type_tree: &RwLock<DefaultTypeTree>) -> TypeTreeSnapshot {
+    let type_tree = {
+        let guard = trace_read_lock!(type_tree);
+        guard.clone()
+    };
+
+    TypeTreeSnapshot::new(type_tree)
 }
 
 /// Type returned from [`TypeTreeForUser`], a trait for something that dereferences
@@ -79,6 +110,12 @@ pub trait TypeTreeReadContext {
 impl<R: RawRwLock, T: TypeTree> TypeTreeReadContext for RwLockReadGuard<'_, R, T> {
     fn get(&self) -> &dyn TypeTree {
         &**self
+    }
+}
+
+impl TypeTreeReadContext for TypeTreeSnapshot {
+    fn get(&self) -> &dyn TypeTree {
+        self.as_type_tree()
     }
 }
 

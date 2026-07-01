@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicU16, AtomicU8, Ordering};
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
-use opcua_nodes::DefaultTypeTree;
+use opcua_nodes::{DefaultTypeTree, TypeTree};
 use tracing::{debug, error, warn};
 
 use crate::auth::oauth2::validate_issued_jwt;
@@ -37,9 +37,9 @@ use opcua_crypto::{CertificateStore, PrivateKey, SecurityPolicy, SuppressedFindi
 use opcua_types::MdnsDiscoveryConfiguration;
 use opcua_types::{
     profiles, status_code::StatusCode, ActivateSessionRequest, AnonymousIdentityToken,
-    ApplicationDescription, ApplicationType, EndpointDescription, RegisteredServer,
-    ServerState as ServerStateType, SignatureData, UserNameIdentityToken, UserTokenType,
-    X509IdentityToken,
+    ApplicationDescription, ApplicationType, EndpointDescription, NodeClass, NodeId,
+    RegisteredServer, ServerState as ServerStateType, SignatureData, UserNameIdentityToken,
+    UserTokenType, X509IdentityToken,
 };
 use opcua_types::{
     ByteString, ContextOwned, DateTime, DecodingOptions, Error, ExtensionObject,
@@ -110,6 +110,47 @@ fn bounded_mdns_string(value: &str, max_len: usize) -> String {
     output
 }
 
+/// Immutable snapshot of the server type metadata.
+#[derive(Clone)]
+pub struct TypeTreeSnapshot {
+    type_tree: Arc<DefaultTypeTree>,
+}
+
+impl TypeTreeSnapshot {
+    /// Create a snapshot from a complete type tree.
+    pub fn new(type_tree: DefaultTypeTree) -> Self {
+        Self {
+            type_tree: Arc::new(type_tree),
+        }
+    }
+
+    /// Return the immutable type tree backing this snapshot.
+    pub fn as_type_tree(&self) -> &DefaultTypeTree {
+        &self.type_tree
+    }
+
+    /// Get the namespace map used by this type tree.
+    pub fn namespaces(&self) -> &NamespaceMap {
+        self.type_tree.namespaces()
+    }
+
+    /// Get the node class of a type in the type tree given by `node`.
+    pub fn get(&self, node: &NodeId) -> Option<NodeClass> {
+        self.type_tree.get(node)
+    }
+
+    /// Return `true` if `child` is a descendant of `ancestor`.
+    pub fn is_subtype_of(&self, child: &NodeId, ancestor: &NodeId) -> bool {
+        self.type_tree.is_subtype_of(child, ancestor)
+    }
+}
+
+impl AsRef<DefaultTypeTree> for TypeTreeSnapshot {
+    fn as_ref(&self) -> &DefaultTypeTree {
+        self.as_type_tree()
+    }
+}
+
 /// Server state is any configuration associated with the server as a whole that individual sessions might
 /// be interested in.
 pub struct ServerInfo {
@@ -151,6 +192,8 @@ pub struct ServerInfo {
     pub(crate) namespace_defaults: NamespaceDefaults,
     /// Structure containing type metadata shared by the entire server.
     pub type_tree: Arc<RwLock<DefaultTypeTree>>,
+    /// Currently published immutable type metadata snapshot, if any.
+    pub(crate) type_tree_snapshot: ArcSwap<Option<TypeTreeSnapshot>>,
     /// Wrapper to get a type tree for a specific user.
     pub type_tree_getter: Arc<dyn TypeTreeForUser>,
     /// Generator for subscription IDs.
@@ -212,6 +255,17 @@ impl EndpointAuthentication {
 }
 
 impl ServerInfo {
+    /// Return the currently published immutable type tree snapshot, if any.
+    pub fn type_tree_snapshot(&self) -> Option<TypeTreeSnapshot> {
+        self.type_tree_snapshot.load_full().as_ref().clone()
+    }
+
+    /// Publish a complete immutable type tree snapshot for hot-path readers.
+    pub(crate) fn publish_type_tree_snapshot(&self, type_tree: &DefaultTypeTree) {
+        let snapshot = TypeTreeSnapshot::new(type_tree.clone());
+        self.type_tree_snapshot.store(Arc::new(Some(snapshot)));
+    }
+
     /// Get the list of endpoints that match the provided filters.
     pub fn endpoints(
         &self,

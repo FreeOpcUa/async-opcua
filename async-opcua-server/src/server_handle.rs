@@ -106,7 +106,12 @@ impl ServerHandle {
         &self.session_manager
     }
 
-    /// Get a reference to the type tree, containing shared information about types in the server.
+    /// Get the mutable global type tree used by compatibility callers.
+    ///
+    /// This accessor intentionally returns the shared `RwLock<DefaultTypeTree>` rather than an
+    /// immutable snapshot. New service hot-path reads should use the published snapshot accessors
+    /// on [`ServerInfo`], but existing callers may still use this handle to inspect or mutate the
+    /// global type tree.
     pub fn type_tree(&self) -> &RwLock<DefaultTypeTree> {
         &self.type_tree
     }
@@ -141,8 +146,12 @@ impl ServerHandle {
         self.token.cancel();
     }
 
-    /// Shorthand for getting the index of a namespace defined in the global server type tree.
+    /// Shorthand for getting the index of a namespace defined in the server type metadata.
     pub fn get_namespace_index(&self, namespace: &str) -> Option<u16> {
+        if let Some(snapshot) = self.info.type_tree_snapshot() {
+            return snapshot.namespaces().get_index(namespace);
+        }
+
         self.type_tree.read().namespaces().get_index(namespace)
     }
 

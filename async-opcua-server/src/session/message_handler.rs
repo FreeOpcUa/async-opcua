@@ -136,21 +136,39 @@ impl<T> Request<T> {
 
     /// Get a request context object from this request.
     pub(super) fn context(&self) -> RequestContext {
-        let user_roles = self.session.read().roles();
-        RequestContext {
-            current_node_manager_index: 0,
-            inner: Arc::new(RequestContextInner {
-                session: self.session.clone(),
-                authenticator: self.info.authenticator.clone(),
-                token: self.token.clone(),
-                user_roles,
-                type_tree: self.info.type_tree.clone(),
-                type_tree_getter: self.info.type_tree_getter.clone(),
-                subscriptions: self.subscriptions.clone(),
-                session_id: self.session_id,
-                info: self.info.clone(),
-            }),
-        }
+        request_context_from_parts(
+            self.session.clone(),
+            self.info.clone(),
+            self.token.clone(),
+            self.subscriptions.clone(),
+            self.session_id,
+        )
+    }
+}
+
+fn request_context_from_parts(
+    session: Arc<RwLock<Session>>,
+    info: Arc<ServerInfo>,
+    token: UserToken,
+    subscriptions: Arc<SubscriptionCache>,
+    session_id: u32,
+) -> RequestContext {
+    // Keep context construction centralized so default TypeTree access can use
+    // ServerInfo snapshots while configured custom getters remain in effect.
+    let user_roles = session.read().roles();
+    RequestContext {
+        current_node_manager_index: 0,
+        inner: Arc::new(RequestContextInner {
+            session,
+            session_id,
+            authenticator: info.authenticator.clone(),
+            token,
+            user_roles,
+            type_tree: info.type_tree.clone(),
+            type_tree_getter: info.type_tree_getter.clone(),
+            subscriptions,
+            info,
+        }),
     }
 }
 
@@ -422,21 +440,13 @@ impl MessageHandler {
             return;
         }
 
-        let user_roles = session.read().roles();
-        let mut context = RequestContext {
-            current_node_manager_index: 0,
-            inner: Arc::new(RequestContextInner {
-                session,
-                session_id,
-                authenticator: self.info.authenticator.clone(),
-                token,
-                user_roles,
-                type_tree: self.info.type_tree.clone(),
-                subscriptions: self.subscriptions.clone(),
-                info: self.info.clone(),
-                type_tree_getter: self.info.type_tree_getter.clone(),
-            }),
-        };
+        let mut context = request_context_from_parts(
+            session,
+            self.info.clone(),
+            token,
+            self.subscriptions.clone(),
+            session_id,
+        );
 
         // Ignore the result
         if let Err(e) = services::delete_subscriptions_inner(
@@ -460,21 +470,13 @@ impl MessageHandler {
         session_id: u32,
         token: UserToken,
     ) {
-        let user_roles = session.read().roles();
-        let context = RequestContext {
-            current_node_manager_index: 0,
-            inner: Arc::new(RequestContextInner {
-                session,
-                session_id,
-                authenticator: self.info.authenticator.clone(),
-                token,
-                user_roles,
-                type_tree: self.info.type_tree.clone(),
-                subscriptions: self.subscriptions.clone(),
-                info: self.info.clone(),
-                type_tree_getter: self.info.type_tree_getter.clone(),
-            }),
-        };
+        let context = request_context_from_parts(
+            session,
+            self.info.clone(),
+            token,
+            self.subscriptions.clone(),
+            session_id,
+        );
 
         self.subscriptions
             .update_session_user(session_id, &context)
@@ -604,21 +606,13 @@ impl MessageHandler {
         session_id: u32,
         token: UserToken,
     ) -> NamespaceMap {
-        let user_roles = session.read().roles();
-        let ctx = RequestContext {
-            current_node_manager_index: 0,
-            inner: Arc::new(RequestContextInner {
-                session,
-                session_id,
-                authenticator: self.info.authenticator.clone(),
-                token,
-                user_roles,
-                type_tree: self.info.type_tree.clone(),
-                subscriptions: self.subscriptions.clone(),
-                info: self.info.clone(),
-                type_tree_getter: self.info.type_tree_getter.clone(),
-            }),
-        };
+        let ctx = request_context_from_parts(
+            session,
+            self.info.clone(),
+            token,
+            self.subscriptions.clone(),
+            session_id,
+        );
         get_namespaces_for_user(&ctx, &self.node_managers)
     }
 

@@ -134,6 +134,9 @@ pub struct SecureChannel {
     remote_keys: HashMap<u32, RemoteKeys>,
     /// Server (i.e. our end's set of keys) Symmetric Signing Key, Decrypt Key, IV
     local_keys: Option<AesDerivedKeys>,
+    /// Peer/client `maxResponseMessageSize` response body limit; `None` means no limit.
+    #[allow(dead_code)]
+    peer_max_response_body_size: Option<usize>,
     /// Decoding options
     encoding_context: Arc<RwLock<ContextOwned>>,
 }
@@ -163,6 +166,7 @@ impl SecureChannel {
             private_key: None,
             remote_cert: None,
             local_keys: None,
+            peer_max_response_body_size: None,
             encoding_context: Default::default(),
             remote_keys: HashMap::new(),
         }
@@ -214,6 +218,7 @@ impl SecureChannel {
             private_key,
             remote_cert: None,
             local_keys: None,
+            peer_max_response_body_size: None,
             encoding_context,
             remote_keys: HashMap::new(),
         }
@@ -280,6 +285,19 @@ impl SecureChannel {
     /// on this channel.
     pub fn set_allow_deprecated(&mut self, allow: bool) {
         self.allow_deprecated = allow;
+    }
+
+    /// Set the peer/client `maxResponseMessageSize` response body limit; zero clears it.
+    pub fn set_client_response_body_limit(&mut self, max_response_message_size: u32) {
+        self.peer_max_response_body_size = match max_response_message_size {
+            0 => None,
+            max_response_message_size => Some(max_response_message_size as usize),
+        };
+    }
+
+    /// Get the peer/client response body limit; `None` means no peer/client response body limit.
+    pub fn client_response_body_limit(&self) -> Option<usize> {
+        self.peer_max_response_body_size
     }
 
     /// Get the application security policy.

@@ -56,13 +56,13 @@ impl AmqpPublisher {
         push_cached_message(&self.cache, routing_key, payload);
     }
 
-    #[cfg(test)]
-    fn cached_message_count(&self) -> usize {
+    #[doc(hidden)]
+    pub fn cached_message_count(&self) -> usize {
         self.cache.lock().map_or(0, |cache| cache.len())
     }
 
-    #[cfg(test)]
-    fn pop_cached_message(&self) -> Option<(String, Vec<u8>)> {
+    #[doc(hidden)]
+    pub fn pop_cached_message(&self) -> Option<(String, Vec<u8>)> {
         self.cache
             .lock()
             .ok()

@@ -9,16 +9,7 @@ use std::{
 
 use dashmap::DashMap;
 use futures::FutureExt;
-use opcua_core::{
-    comms::{
-        buffer::{
-            clear_client_response_body_limit, client_response_body_limit_key,
-            set_client_response_body_limit, ClientResponseBodyLimitKey,
-        },
-        secure_channel::SecureChannel,
-    },
-    trace_read_lock, trace_write_lock,
-};
+use opcua_core::{comms::secure_channel::SecureChannel, trace_read_lock, trace_write_lock};
 use opcua_crypto::{random, CertificateStore, SecurityPolicy, X509};
 use parking_lot::RwLock;
 use tokio::sync::{mpsc, Notify};
@@ -524,7 +515,6 @@ pub struct SessionManager {
     /// Lock-free lookup from authentication token to the session actor's
     /// message queue.
     actor_senders: Arc<DashMap<NodeId, mpsc::Sender<SessionMessage>>>,
-    response_body_limit_keys: DashMap<u32, ClientResponseBodyLimitKey>,
     closed_auth_tokens: Arc<DashMap<NodeId, Instant>>,
     info: Arc<ServerInfo>,
     notify: Arc<Notify>,
@@ -537,7 +527,6 @@ impl SessionManager {
             sessions: Default::default(),
             auth_tokens: Default::default(),
             actor_senders: Default::default(),
-            response_body_limit_keys: Default::default(),
             closed_auth_tokens: Default::default(),
             info,
             notify,
@@ -612,24 +601,11 @@ impl SessionManager {
         self.actor_senders.insert(authentication_token, sender);
     }
 
-    fn refresh_client_response_body_limit_for_channel(
-        &self,
-        secure_channel_id: u32,
-        key: Option<ClientResponseBodyLimitKey>,
-    ) {
+    fn refresh_client_response_body_limit_for_channel(&self, channel: &mut SecureChannel) {
+        let secure_channel_id = channel.secure_channel_id();
         if secure_channel_id == 0 {
             return;
         }
-        if let Some(key) = key {
-            self.response_body_limit_keys.insert(secure_channel_id, key);
-        }
-        let Some(key) = self
-            .response_body_limit_keys
-            .get(&secure_channel_id)
-            .map(|entry| *entry.value())
-        else {
-            return;
-        };
 
         let effective_limit = self
             .sessions
@@ -649,12 +625,7 @@ impl SessionManager {
             })
             .min();
 
-        if let Some(limit) = effective_limit {
-            set_client_response_body_limit(key, limit);
-        } else {
-            clear_client_response_body_limit(key);
-            self.response_body_limit_keys.remove(&secure_channel_id);
-        }
+        channel.set_client_response_body_limit(effective_limit.unwrap_or(0));
     }
 
     fn spawn_session_actor(
@@ -713,10 +684,9 @@ impl SessionManager {
     pub(crate) fn commit_create_session_draft(
         &mut self,
         draft: CreateSessionDraft,
-        current_secure_channel_id: u32,
+        channel: &mut SecureChannel,
         node_managers: NodeManagers,
         subscriptions: Arc<SubscriptionCache>,
-        body_limit_key: Option<ClientResponseBodyLimitKey>,
     ) -> Result<CreateSessionResponse, StatusCode> {
         // OPC-10000-4 5.7.2: CreateSession publishes a Session and its
         // authentication token, so the global session limit must be checked
@@ -735,14 +705,13 @@ impl SessionManager {
         if unactivated_count >= self.info.config.limits.max_unactivated_sessions_per_channel {
             return Err(StatusCode::BadTooManySessions);
         }
-        if current_secure_channel_id != draft.secure_channel_id {
+        if channel.secure_channel_id() != draft.secure_channel_id {
             // CreateSession binds the new Session to the SecureChannel that
             // carried the request; a stale draft must not publish on another channel.
             return Err(StatusCode::BadSecureChannelIdInvalid);
         }
 
         let CreateSessionDraft {
-            secure_channel_id,
             actor_construction,
             session_allocation,
             ..
@@ -768,7 +737,7 @@ impl SessionManager {
             node_managers,
             subscriptions,
         );
-        self.refresh_client_response_body_limit_for_channel(secure_channel_id, body_limit_key);
+        self.refresh_client_response_body_limit_for_channel(channel);
 
         self.info
             .diagnostics
@@ -824,17 +793,15 @@ impl SessionManager {
             "Session {id} has expired, removing it from the session map. Subscriptions will remain until they individually expire"
         );
 
-        let (token, session_id_numeric, secure_channel_id) = {
+        let (token, session_id_numeric) = {
             let session = trace_read_lock!(session);
             (
                 session.authentication_token.clone(),
                 session.session_id_numeric(),
-                session.secure_channel_id(),
             )
         };
         self.deregister_token(&token);
         clear_session_locale_ids(session_id_numeric);
-        self.refresh_client_response_body_limit_for_channel(secure_channel_id, None);
 
         let mut session = trace_write_lock!(session);
         session.close();
@@ -854,9 +821,6 @@ impl SessionManager {
 
         for session_id in session_ids {
             cleanup_session(&session_id);
-        }
-        if let Some((_, key)) = self.response_body_limit_keys.remove(&secure_channel_id) {
-            clear_client_response_body_limit(key);
         }
     }
 
@@ -894,17 +858,16 @@ pub(crate) async fn close_session(
     handler: &mut MessageHandler,
     request: &CloseSessionRequest,
 ) -> Result<CloseSessionResponse, StatusCode> {
-    let (session, id, token, session_secure_channel_id, actor_sender) = {
+    let (session, id, token, actor_sender) = {
         let mgr = trace_read_lock!(mgr_lck);
         let Some(session) = mgr.find_by_token(&request.request_header.authentication_token) else {
             return Err(StatusCode::BadSessionIdInvalid);
         };
-        let (id, token, authentication_token, session_secure_channel_id) = {
+        let (id, token, authentication_token) = {
             let session = trace_read_lock!(session);
             let id = session.session_id_numeric();
             let token = session.user_token().cloned();
             let authentication_token = session.authentication_token.clone();
-            let session_secure_channel_id = session.secure_channel_id();
 
             let secure_channel_id = channel.secure_channel_id();
             if !session.is_activated() && session.secure_channel_id() != secure_channel_id {
@@ -915,14 +878,14 @@ pub(crate) async fn close_session(
                 );
                 return Err(StatusCode::BadSecureChannelIdInvalid);
             }
-            (id, token, authentication_token, session_secure_channel_id)
+            (id, token, authentication_token)
         };
 
         let Some(actor_sender) = mgr.actor_sender(&authentication_token) else {
             return Err(StatusCode::BadSessionClosed);
         };
 
-        (session, id, token, session_secure_channel_id, actor_sender)
+        (session, id, token, actor_sender)
     };
 
     let (acknowledge, acknowledged) = tokio::sync::oneshot::channel();
@@ -944,10 +907,7 @@ pub(crate) async fn close_session(
         mgr.info
             .diagnostics
             .set_current_session_count(mgr.sessions.len() as u32);
-        mgr.refresh_client_response_body_limit_for_channel(
-            session_secure_channel_id,
-            client_response_body_limit_key(channel),
-        );
+        mgr.refresh_client_response_body_limit_for_channel(channel);
     }
     info!("Closed session with ID {}", terminated.session_id);
 
@@ -1135,7 +1095,7 @@ pub(crate) async fn activate_session(
         IdentityToken::UserName(_) | IdentityToken::IssuedToken(_)
     );
 
-    let (server_nonce, session_id, user_changed, user_token, previous_secure_channel_id) = {
+    let (server_nonce, session_id, user_changed, user_token) = {
         let mut session = trace_write_lock!(session_lck);
         let previous_secure_channel_id = session.secure_channel_id();
 
@@ -1212,26 +1172,12 @@ pub(crate) async fn activate_session(
             session.session_id_numeric(),
             user_changed,
             user_token,
-            previous_secure_channel_id,
         )
     };
 
     {
         let mgr = trace_read_lock!(mgr_lck);
-        mgr.refresh_client_response_body_limit_for_channel(
-            previous_secure_channel_id,
-            if previous_secure_channel_id == secure_channel_id {
-                client_response_body_limit_key(channel)
-            } else {
-                None
-            },
-        );
-        if previous_secure_channel_id != secure_channel_id {
-            mgr.refresh_client_response_body_limit_for_channel(
-                secure_channel_id,
-                client_response_body_limit_key(channel),
-            );
-        }
+        mgr.refresh_client_response_body_limit_for_channel(channel);
     }
 
     #[cfg(feature = "ecc")]

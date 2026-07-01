@@ -195,6 +195,10 @@ pub(crate) async fn create_monitored_items(
     }
     let ranges = get_eu_range(&items_needing_deadband, &context, &node_managers).await;
 
+    // Type metadata for monitored item construction must come through the request context getter:
+    // custom per-user TypeTrees keep their existing behavior, and the default getter reads the
+    // published snapshot instead of the global TypeTree lock. Keep this context scoped away from
+    // node-manager and subscription awaits below.
     let mut items: Vec<_> = {
         let type_tree = context.get_type_tree_for_user();
         items_to_create

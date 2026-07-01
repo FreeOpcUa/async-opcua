@@ -119,6 +119,7 @@ impl InMemoryNodeManagerImplBuilder for SimpleNodeManagerBuilder {
             for ns in &mut self.namespaces {
                 ns.namespace_index = type_tree.namespaces_mut().add_namespace(&ns.namespace_uri);
             }
+            context.info.publish_type_tree_snapshot(&type_tree);
         }
         for ns in &self.namespaces {
             address_space.add_namespace(&ns.namespace_uri, ns.namespace_index);

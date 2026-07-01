@@ -88,7 +88,13 @@ impl<T: InMemoryNodeManagerImplBuilder> InMemoryNodeManagerBuilder<T> {
 impl<T: InMemoryNodeManagerImplBuilder> NodeManagerBuilder for InMemoryNodeManagerBuilder<T> {
     fn build(self: Box<Self>, context: ServerContext) -> Arc<DynNodeManager> {
         let mut address_space = AddressSpace::new();
+        let snapshot_info = Arc::clone(&context.info);
+        let snapshot_type_tree = Arc::clone(&context.type_tree);
         let inner = self.impl_builder.build(context, &mut address_space);
+        {
+            let type_tree = trace_read_lock!(snapshot_type_tree);
+            snapshot_info.publish_type_tree_snapshot(&type_tree);
+        }
         Arc::new(InMemoryNodeManager::new(inner, address_space))
     }
 }
@@ -748,12 +754,15 @@ impl<TImpl: InMemoryNodeManagerImpl> NodeManagerCore for InMemoryNodeManager<TIm
 
     #[allow(clippy::await_holding_lock)]
     async fn init(&self, type_tree: &mut DefaultTypeTree, context: ServerContext) {
+        let info = Arc::clone(&context.info);
+
         // During init we effectively own the address space, so this should be safe.
         let mut address_space = trace_write_lock!(self.address_space);
 
         self.inner.init(&mut address_space, context).await;
 
         address_space.load_into_type_tree(type_tree);
+        info.publish_type_tree_snapshot(type_tree);
     }
 
     fn namespaces_for_user(&self, _context: &RequestContext) -> Vec<NamespaceMetadata> {

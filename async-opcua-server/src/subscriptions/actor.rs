@@ -98,7 +98,9 @@ pub(crate) struct SubscriptionActor {
     notify: Arc<Notify>,
     commands_rx: mpsc::UnboundedReceiver<SubscriptionCommand>,
     cleanup_tx: mpsc::UnboundedSender<SubscriptionCleanup>,
-    type_tree: Arc<dyn TypeTreeForUserStatic>,
+    /// Per-user TypeTree provider. The actor stores the provider, not a live read context,
+    /// so default reads can use published snapshots and custom static getters stay in effect.
+    type_tree_for_user: Arc<dyn TypeTreeForUserStatic>,
     pending_refresh: Option<PendingRefreshDrain>,
 }
 
@@ -183,7 +185,8 @@ impl SubscriptionActor {
             }
 
             let drained = {
-                let type_tree = self.type_tree.get_type_tree();
+                // Keep the read context scoped to this synchronous drain chunk.
+                let type_tree = self.type_tree_for_user.get_type_tree();
                 self.subs.drain_ring_chunk(
                     self.ring.as_ref(),
                     type_tree.get(),
@@ -213,7 +216,7 @@ impl SubscriptionActor {
 pub(crate) fn spawn(
     session_id: u32,
     subs: SessionSubscriptions,
-    type_tree: Arc<dyn TypeTreeForUserStatic>,
+    type_tree_for_user: Arc<dyn TypeTreeForUserStatic>,
     cleanup_tx: mpsc::UnboundedSender<SubscriptionCleanup>,
 ) -> SubscriptionActorHandle {
     assert_actor_send_bounds();
@@ -231,7 +234,7 @@ pub(crate) fn spawn(
             notify: Arc::clone(&notify),
             commands_rx,
             cleanup_tx,
-            type_tree,
+            type_tree_for_user,
             pending_refresh: None,
         }
         .run(),

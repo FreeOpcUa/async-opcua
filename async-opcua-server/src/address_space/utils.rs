@@ -693,6 +693,7 @@ pub fn add_namespaces(
         address_space.add_namespace(ns, idx);
         res.push(idx);
     }
+    context.info.publish_type_tree_snapshot(&type_tree);
     res
 }
 

@@ -568,6 +568,7 @@ mod tests {
             &event_type_id,
             &ObjectTypeId::BaseEventType.into(),
             NodeClass::ObjectType,
+            false,
         );
         type_tree.add_type_property(
             &NodeId::new(1, "field"),

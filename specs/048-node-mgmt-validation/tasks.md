@@ -10,12 +10,12 @@
 
 ## Phase 1: Setup
 
-- [ ] T001 Baseline: run `cargo test -p async-opcua-server` and confirm green (standard nodeset loads in test setup); record the pre-change state. No file change.
+- [x] T001 Baseline: run `cargo test -p async-opcua-server` and confirm green (standard nodeset loads in test setup); record the pre-change state. No file change.
 
 ## Phase 2: Foundational — TypeTree abstractness (blocks US2)
 
-- [ ] T002 [P] Red-first test in `async-opcua-nodes/src/type_tree.rs`: assert `TypeTree::is_abstract(id)` returns `Some(true)` for an abstract type node, `Some(false)` for a concrete type, `None` for a non-type id. (Fails: method/field absent.)
-- [ ] T003 Implement TypeTree abstractness in `async-opcua-nodes/src/type_tree.rs`: store `is_abstract` alongside `NodeClass` in `DefaultTypeTree.nodes`; add `TypeTree::is_abstract(&NodeId) -> Option<bool>`; add an `is_abstract: bool` param to `add_type_node`; update ALL call sites (`async-opcua-server/src/address_space/mod.rs:107`, `session/services/node_management.rs:485`, `node_manager/memory/mod.rs:1405`, `memory_mgr_impl.rs:1847/1905` pass the node's real `is_abstract()`; `async-opcua-nodes/src/events/{validation,evaluate}.rs` + `async-opcua-server/src/services/subscription/filter.rs` pass `false`). Make T002 pass. `get()` semantics unchanged. _Standard: OPC 10000-3 §5.5.2 (ObjectType IsAbstract) + §5.6.5 (VariableType IsAbstract) — "the type cannot be directly instantiated"._
+- [x] T002 [P] Red-first test in `async-opcua-nodes/src/type_tree.rs`: assert `TypeTree::is_abstract(id)` returns `Some(true)` for an abstract type node, `Some(false)` for a concrete type, `None` for a non-type id. (Fails: method/field absent.)
+- [x] T003 Implement TypeTree abstractness in `async-opcua-nodes/src/type_tree.rs`: store `is_abstract` alongside `NodeClass` in `DefaultTypeTree.nodes`; add `TypeTree::is_abstract(&NodeId) -> Option<bool>`; add an `is_abstract: bool` param to `add_type_node`; update ALL call sites (`async-opcua-server/src/address_space/mod.rs:107`, `session/services/node_management.rs:485`, `node_manager/memory/mod.rs:1405`, `memory_mgr_impl.rs:1847/1905` pass the node's real `is_abstract()`; `async-opcua-nodes/src/events/{validation,evaluate}.rs` + `async-opcua-server/src/services/subscription/filter.rs` pass `false`). Make T002 pass. `get()` semantics unchanged. _Standard: OPC 10000-3 §5.5.2 (ObjectType IsAbstract) + §5.6.5 (VariableType IsAbstract) — "the type cannot be directly instantiated"._
 
 ## Phase 3: User Story 1 — targetNodeClass match (P1, P4-NODEMGMT-01b)
 

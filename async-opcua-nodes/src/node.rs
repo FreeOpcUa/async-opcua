@@ -44,6 +44,20 @@ impl HasNodeId for NodeType {
 }
 
 impl NodeType {
+    /// Return the `IsAbstract` attribute for the type node classes
+    /// (ObjectType/VariableType/ReferenceType/DataType), or `false` for any
+    /// non-type node class. Used when populating the type tree so abstract
+    /// types can be rejected on instantiation (OPC 10000-3 §5.5.2 / §5.6.5).
+    pub fn type_is_abstract(&self) -> bool {
+        match self {
+            NodeType::ObjectType(value) => value.is_abstract(),
+            NodeType::VariableType(value) => value.is_abstract(),
+            NodeType::ReferenceType(value) => value.is_abstract(),
+            NodeType::DataType(value) => value.is_abstract(),
+            _ => false,
+        }
+    }
+
     /// Get a reference to this as dyn [Node].
     pub fn as_node<'a>(&'a self) -> &'a (dyn Node + 'a) {
         match self {

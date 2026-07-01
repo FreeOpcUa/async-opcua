@@ -400,6 +400,7 @@ mod tests {
             &base_event_type,
             &NodeId::from(ObjectTypeId::BaseObjectType),
             NodeClass::ObjectType,
+            false,
         );
         for field in fields {
             let browse_name = QualifiedName::new(0, *field);

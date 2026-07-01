@@ -1848,6 +1848,7 @@ mod tests {
             &reference_type,
             &NodeId::from(ReferenceTypeId::References),
             NodeClass::ReferenceType,
+            false,
         );
         assert!(address_space.has_reference(&source_id, &target_id, &reference_type));
         let manager = super::super::InMemoryNodeManager::new(TestImpl, address_space);
@@ -1906,6 +1907,7 @@ mod tests {
             &reference_type,
             &NodeId::from(ReferenceTypeId::References),
             NodeClass::ReferenceType,
+            false,
         );
         let manager = super::super::InMemoryNodeManager::new(TestImpl, address_space);
         let mut item = add_reference_item_with_type(&source_id, &target_id, &reference_type);

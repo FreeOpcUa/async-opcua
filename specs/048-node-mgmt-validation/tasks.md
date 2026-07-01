@@ -28,8 +28,8 @@
 
 **Independent test**: AddNodes with an abstract type-metadata-only typeDefinition → `BadTypeDefinitionInvalid`; concrete → good; abstract full-node still rejected.
 
-- [ ] T006 [US2] Red-first test in `memory_mgr_impl.rs` (tests): AddNodes whose `typeDefinition` is an abstract standard type present only in the type metadata → `BadTypeDefinitionInvalid`; a concrete type → good; an abstract full node → still `BadTypeDefinitionInvalid` (no regression).
-- [ ] T007 [US2] Implement in `memory_mgr_impl.rs` `validate_type_definition`: in the type-metadata branch, reject when `type_tree.is_abstract(type_definition_id) == Some(true)`. _Standard: OPC 10000-3 §5.5.2 (ObjectType) / §5.6.5 (VariableType) — abstract types not instantiable._
+- [x] T006 [US2] Red-first test in `memory_mgr_impl.rs` (tests): AddNodes whose `typeDefinition` is an abstract standard type present only in the type metadata → `BadTypeDefinitionInvalid`; a concrete type → good; an abstract full node → still `BadTypeDefinitionInvalid` (no regression).
+- [x] T007 [US2] Implement in `memory_mgr_impl.rs` `validate_type_definition`: in the type-metadata branch, reject when `type_tree.is_abstract(type_definition_id) == Some(true)`. _Standard: OPC 10000-3 §5.5.2 (ObjectType) / §5.6.5 (VariableType) — abstract types not instantiable._
 
 ## Phase 5: User Story 3 — hierarchical structural rules (P2, P4-NODEMGMT-01a)
 

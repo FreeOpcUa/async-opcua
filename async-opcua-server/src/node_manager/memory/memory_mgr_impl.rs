@@ -615,13 +615,18 @@ fn validate_type_definition(
         };
     }
 
-    if type_tree
-        .get(type_definition_id)
-        .is_some_and(|node_class| node_class == expected_type_class)
-    {
-        Ok(())
-    } else {
-        Err(StatusCode::BadTypeDefinitionInvalid)
+    // Type definition present only in the type metadata (no full node). Require
+    // the correct type NodeClass AND reject abstract types — OPC 10000-3 §5.5.2
+    // (ObjectType) / §5.6.5 (VariableType): abstract types cannot be instantiated.
+    match type_tree.get(type_definition_id) {
+        Some(node_class) if node_class == expected_type_class => {
+            if type_tree.is_abstract(type_definition_id) == Some(true) {
+                Err(StatusCode::BadTypeDefinitionInvalid)
+            } else {
+                Ok(())
+            }
+        }
+        _ => Err(StatusCode::BadTypeDefinitionInvalid),
     }
 }
 
@@ -1844,6 +1849,73 @@ mod tests {
             &target_id,
             &abstract_reference_type
         ));
+    }
+
+    #[tokio::test]
+    async fn add_nodes_abstract_type_definition_in_metadata_is_rejected() {
+        // OPC 10000-3 §5.5.2: an abstract ObjectType cannot be instantiated,
+        // even when it exists only in the type metadata (no full node in the
+        // address space) — the gap P3-03 closes.
+        let context = request_context();
+        let parent_id = NodeId::new(1, "parent");
+        let abstract_type = NodeId::new(2, "abstract-object-type");
+        let concrete_type = NodeId::new(2, "concrete-object-type");
+        context.type_tree.write().add_type_node(
+            &abstract_type,
+            &NodeId::from(ObjectTypeId::BaseObjectType),
+            NodeClass::ObjectType,
+            true,
+        );
+        context.type_tree.write().add_type_node(
+            &concrete_type,
+            &NodeId::from(ObjectTypeId::BaseObjectType),
+            NodeClass::ObjectType,
+            false,
+        );
+        let build_manager = || {
+            let mut address_space = AddressSpace::new();
+            address_space.add_namespace("http://opcfoundation.org/UA/", 0);
+            address_space.add_namespace("urn:test", 1);
+            address_space.insert::<_, NodeId>(object_node(&parent_id, "parent"), None);
+            super::super::InMemoryNodeManager::new(TestImpl, address_space)
+        };
+
+        // Abstract type definition (metadata-only) -> rejected, no node created.
+        let manager = build_manager();
+        let child_abstract = NodeId::new(1, "child-abstract");
+        let mut item = add_object_node_item_with_type_definition(
+            &parent_id,
+            &child_abstract,
+            QualifiedName::new(1, "ChildAbstract"),
+            ExpandedNodeId::from(abstract_type.clone()),
+        );
+        {
+            let mut nodes = vec![&mut item];
+            manager
+                .add_nodes(&context, nodes.as_mut_slice())
+                .await
+                .unwrap();
+        }
+        assert_eq!(item.status(), StatusCode::BadTypeDefinitionInvalid);
+        assert!(!manager.address_space().read().node_exists(&child_abstract));
+
+        // Concrete metadata-only type definition -> accepted.
+        let manager = build_manager();
+        let child_concrete = NodeId::new(1, "child-concrete");
+        let mut item = add_object_node_item_with_type_definition(
+            &parent_id,
+            &child_concrete,
+            QualifiedName::new(1, "ChildConcrete"),
+            ExpandedNodeId::from(concrete_type.clone()),
+        );
+        {
+            let mut nodes = vec![&mut item];
+            manager
+                .add_nodes(&context, nodes.as_mut_slice())
+                .await
+                .unwrap();
+        }
+        assert_ne!(item.status(), StatusCode::BadTypeDefinitionInvalid);
     }
 
     #[tokio::test]

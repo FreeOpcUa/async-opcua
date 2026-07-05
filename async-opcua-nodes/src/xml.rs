@@ -581,8 +581,14 @@ impl NodeSetImport for NodeSet2Import {
                 offset = 0;
                 continue;
             }
-            println!("Adding new namespace: {idx} {ns}");
-            namespaces.add_namespace(ns, idx as u16 + offset);
+
+            let index_in_node_set = idx as u16 + offset;
+            namespaces.add_namespace(ns, index_in_node_set);
+            // this should alwas be the case we literally just added it
+            let resolved_ns_index = namespaces
+                .get_index(index_in_node_set)
+                .expect("index in nodeset not in mapper");
+            println!("Adding new namespace: {resolved_ns_index} {ns}");
         }
     }
 
@@ -603,6 +609,7 @@ impl NodeSetImport for NodeSet2Import {
             &self.type_loaders,
             DecodingOptions::default(),
         );
+        ctx.set_index_map(namespaces.index_map());
         ctx.set_aliases(&self.aliases);
         // Remap NodeSet-local namespace indexes to the registered address-space indexes.
         ctx.set_index_map(namespaces.index_map());
@@ -1039,6 +1046,27 @@ mod tests {
                 }
             )))
         );
+    }
+
+    #[test]
+    fn test_load_xml_nodeset_pre_existing_namespace() {
+        let import = NodeSet2Import::new_str("en", TEST_NODESET, vec![]).unwrap();
+        assert_eq!(
+            import.get_own_namespaces(),
+            vec!["http://test.com".to_owned()]
+        );
+        let mut ns = NamespaceMap::new();
+        // We already have some namespaces added beforehand. Like is the case in many import scenarios where e.g. the address space
+        // is already populated.
+        ns.add_namespace("http://pre-existing-namespace.com");
+        let mut map = NodeSetNamespaceMapper::new(&mut ns);
+        import.register_namespaces(&mut map);
+        let nodes: Vec<_> = import.load(&map).collect();
+        assert_eq!(nodes.len(), 2);
+        for node in nodes.iter() {
+            let node_namespace = node.node.as_node().node_id().namespace;
+            assert_eq!(node_namespace, 2);
+        }
     }
 
     /// Verifies that when a DataType has an inward HasSubtype reference and a

@@ -162,7 +162,7 @@ fn encode_guid_5226() {
         0x91, 0x2B, 0x96, 0x72, 0x75, 0xFA, 0xE6, 0x4A, 0x8D, 0x28, 0xB4, 0x04, 0xDC, 0x7D, 0xAF,
         0x63,
     ];
-    let guid = Guid::from_str("912b9672-75fa-e64a-8D28-B404DC7DAF63").unwrap();
+    let guid = Guid::from_str("72962B91-FA75-4AE6-8D28-B404DC7DAF63").unwrap();
     serialize_and_compare(guid, &expected_bytes);
 }
 

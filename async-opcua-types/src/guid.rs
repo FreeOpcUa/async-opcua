@@ -24,7 +24,7 @@ pub struct Guid {
 // when implementing Equivalent elsewhere.
 impl std::hash::Hash for Guid {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.as_bytes().hash(state);
+        self.to_bytes().hash(state);
     }
 }
 
@@ -131,7 +131,7 @@ impl BinaryEncodable for Guid {
         stream: &mut S,
         _ctx: &crate::Context<'_>,
     ) -> EncodingResult<()> {
-        process_encode_io_result(stream.write_all(self.uuid.as_bytes()))
+        process_encode_io_result(stream.write_all(&self.uuid.to_bytes_le()))
     }
 }
 
@@ -140,7 +140,7 @@ impl BinaryDecodable for Guid {
         let mut bytes = [0u8; 16];
         process_decode_io_result(stream.read_exact(&mut bytes))?;
         Ok(Guid {
-            uuid: Uuid::from_bytes(bytes),
+            uuid: Uuid::from_bytes_le(bytes),
         })
     }
 }
@@ -178,63 +178,30 @@ impl Guid {
         }
     }
 
-    /// Returns the bytes of the Guid
-    pub fn as_bytes(&self) -> &[u8; 16] {
-        self.uuid.as_bytes()
+    /// Returns the bytes of the Guid.
+    /// Note that this uses Microsoft's per-field little endian encoding,
+    /// i.e. [Uuid::to_bytes_le].
+    pub fn to_bytes(&self) -> [u8; 16] {
+        self.uuid.to_bytes_le()
     }
 
     /// Creates a guid from a byte array.
     pub fn from_bytes(bytes: [u8; 16]) -> Guid {
         Guid {
-            uuid: Uuid::from_bytes(bytes),
+            uuid: Uuid::from_bytes_le(bytes),
         }
     }
 
     /// Creates an UUID from a byte slice of exactly 16 bytes.
     pub fn from_slice(bytes: &[u8]) -> Result<Guid, uuid::Error> {
         Ok(Guid {
-            uuid: Uuid::from_slice(bytes)?,
+            uuid: Uuid::from_slice_le(bytes)?,
         })
-    }
-}
-
-impl AsRef<[u8; 16]> for Guid {
-    fn as_ref(&self) -> &[u8; 16] {
-        self.as_bytes()
     }
 }
 
 impl PartialEq<[u8; 16]> for Guid {
     fn eq(&self, other: &[u8; 16]) -> bool {
-        self.as_ref() == other
-    }
-}
-
-/// Reference to a Guid that can be created without allocating a
-/// Guid object. Used when comparing with NodeIds,
-/// to distinguish from the generic ByteString case.
-pub struct GuidRef<'a>(pub &'a [u8; 16]);
-
-impl PartialEq<Guid> for GuidRef<'_> {
-    fn eq(&self, other: &Guid) -> bool {
-        self.as_ref() == other.as_bytes()
-    }
-}
-
-impl PartialEq<GuidRef<'_>> for Guid {
-    fn eq(&self, other: &GuidRef<'_>) -> bool {
-        other == self
-    }
-}
-
-impl std::hash::Hash for GuidRef<'_> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.0.hash(state);
-    }
-}
-
-impl AsRef<[u8; 16]> for GuidRef<'_> {
-    fn as_ref(&self) -> &[u8; 16] {
-        self.0
+        self.to_bytes() == *other
     }
 }

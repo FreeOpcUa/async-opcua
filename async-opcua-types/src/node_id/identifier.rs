@@ -4,7 +4,7 @@ use std::{
     str::FromStr,
 };
 
-use crate::{node_id::id_ref::IdentifierRef, ByteString, Guid, GuidRef, UAString};
+use crate::{node_id::id_ref::IdentifierRef, ByteString, Guid, UAString};
 
 /// The kind of identifier, numeric, string, guid or byte
 #[derive(Eq, PartialEq, Clone, Debug)]
@@ -41,7 +41,7 @@ impl std::hash::Hash for Identifier {
             }
             Identifier::Guid(v) => {
                 IDENTIFIER_HASH_GUID.hash(state);
-                v.as_bytes().hash(state)
+                v.to_bytes().hash(state)
             }
             Identifier::ByteString(v) => {
                 IDENTIFIER_HASH_BYTE_STRING.hash(state);
@@ -206,7 +206,6 @@ impl_identifier_ref!(
     Identifier::ByteString(x),
     x
 );
-impl_identifier_ref!(x, GuidRef<'_>, IDENTIFIER_HASH_GUID, Identifier::Guid(x), x);
 
 impl IdentifierRef for Identifier {
     fn hash_as_identifier<H: Hasher>(&self, state: &mut H) {

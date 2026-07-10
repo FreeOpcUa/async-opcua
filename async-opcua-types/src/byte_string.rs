@@ -196,7 +196,7 @@ impl From<Vec<u8>> for ByteString {
 
 impl From<Guid> for ByteString {
     fn from(value: Guid) -> Self {
-        ByteString::from(value.as_bytes().to_vec())
+        ByteString::from(value.to_bytes().to_vec())
     }
 }
 

@@ -22,7 +22,7 @@ impl PartialEq<(u16, &[u8; 16])> for NodeId {
     fn eq(&self, other: &(u16, &[u8; 16])) -> bool {
         self.namespace == other.0
             && match &self.identifier {
-                Identifier::Guid(s) => s.as_bytes() == other.1,
+                Identifier::Guid(s) => &s.to_bytes() == other.1,
                 _ => false,
             }
     }

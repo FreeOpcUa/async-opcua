@@ -111,13 +111,13 @@ impl<'a> ValueBuilder<'a> {
             Variant::Guid(v) => {
                 // You can create a Guid directly from `&[u8; 16]` infallibly, since all
                 // 16 byte combinations are valid.
-                let bytes = v.as_bytes();
+                let bytes = v.to_bytes_le();
                 quote::quote! {
                     opcua::types::Guid::from_bytes(&[#(#bytes),*])
                 }
             }
             Variant::ListOfGuid(v) => {
-                let bytes = v.iter().map(|v| v.as_bytes());
+                let bytes = v.iter().map(|v| v.to_bytes_le());
                 let mut items = quote::quote! {};
                 for it in bytes {
                     items.extend(quote::quote! {
@@ -621,7 +621,7 @@ impl<'a> ValueBuilder<'a> {
                     let uuid = uuid::Uuid::parse_str(data).map_err(|e| {
                         CodeGenError::other(format!("Failed to parse uuid {data}: {e}"))
                     })?;
-                    let bytes = uuid.as_bytes();
+                    let bytes = uuid.to_bytes_le();
                     return Ok(quote! {
                         opcua::types::Guid::from_bytes([#(#bytes),*])
                     });

@@ -481,7 +481,7 @@ impl Session {
                 StatusCode::BadNoMatch,
                 format!(
                     "Url {} not found in namespace array. Namspace array is {:?}",
-                    url, &map
+                    url, map
                 ),
             )
         })?;

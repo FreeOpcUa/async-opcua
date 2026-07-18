@@ -4,14 +4,11 @@
 
 This implementation supports the `opc.tcp://` binary protocol. Binary over `https://` is not supported although it is conceivable that it could be supported.
 
-The implement will **never** implement OPC UA over XML. XML hasn't see much adoption so this is no great impediment.
+We support both the JSON and XML encodings on a type level, but we do not support it on the transport level, though this _could_ be supported. Generally, the XML support is mostly for loading the many XML files and values OPC-UA produces, and the JSON support is useful for exporting arbitrary OPC-UA data.
 
 ## Server
 
-The server shall implement the OPC UA capabilities:
-
-* http://opcfoundation.org/UA-Profile/Server/Behaviour - base server profile
-* http://opcfoundation.org/UA-Profile/Server/EmbeddedUA - embedded UA profile
+In general, we aim to support enough of the OPC-UA standard that any parts we _don't_ support can be implemented in extension crates. That means that the highest priority is features that cannot be implemented easily externally, such as encoding, encryption, services, etc.
 
 ### Services
 
@@ -88,9 +85,7 @@ The standard OPC UA address space is exposed through the `CoreNodeManager` imple
 
 The client API is asynchronous, but require you to "drive" the connection by polling an event loop. Convenience methods are provided for polling the event loop on a background thread.
 
-The client exposes functions that correspond to the current server supported profile, i.e. look above at the server services and there will be client-side functions that are analogous to those services.
-
-Primarily only services supported by the current server implementation are supported. The implementation aims to contain all services, tested against other servers where necessary.
+The client supports every OPC-UA service, though note that the ones that we don't have server support for are likely to not be as well tested.
 
 ## Configuration
 

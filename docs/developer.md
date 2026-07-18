@@ -33,17 +33,6 @@ Ensure you run `cargo fmt` on any changes you make. e.g.
 cargo fmt --all
 ```
 
-## CLion / RustRover
-
-Note: JetBrains is deprecating Rust support in CLion (a bad idea IMO) for a standalone RustRover IDE. So this information is only for older installations of CLion.
-
-CLion has very good Rust support. Install the `rust` and `toml` plugins and choose to use them with your existing Rust toolchain.
-
-1. Enable "Use rustfmt instead of built-in formatter"
-2. Enable "Run rustfmt on save"
-
-If you are using RustRover then you get Rust out of the box but you need to ensure you use Rustfmt as your formatter. Using RustRover also prevents you from using some of the 3rd party samples and might also impact on some debugging scenarios, e.g. into OpenSSL code.
-
 ## Visual Studio Code
 
 Visual Studio Code has pretty decent Rust support these days. You will need to install `rust-analyzer`, `Even Better TOML` extensions to make it work. You might also install `CodeLLDB` if you intend to debug.

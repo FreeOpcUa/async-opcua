@@ -76,16 +76,18 @@ These are not performed manually or automatically at present, however much of th
 
 ## 3rd party interoperability testing
 
+
 OPC UA for Rust contains a couple of samples built with 3rd party OPC UA open source implementations for
 interoperability testing.
 
 * Node OPC UA - a NodeJS based implementation
 * Open62541 - a C based implementation
+* UA.NETStandard - the .NET reference implementation.
 
 These can be used in place of the `simple-client` and `simple-server` samples as appropriate:
 
 ```bash
-cd opcua/node-opcua
+cd opcua/3rd-party/node-opcua
 npm install 
 node server.js 
 # OR 
@@ -98,10 +100,20 @@ test the Rust `simple-server` by connecting to it with the Node OPC UA client.
 The Open62541 only has a very basic client implementation so far. It requires a C compiler and CMake. Basic setup instructions:
 
 ```bash
-cd opcua/open62541
+cd opcua/3rd-party/open62541
 cmake -G "Unix Makefiles" -B ./cmake-build -S .
 cd cmake-build
 make
 ```
 
 In the future we will build tests that interface with some external library, to verify the correctness of the library.
+
+### .NET tests
+
+We have automated tests running against the .NET reference implementation. To use these, first build the .NET server with `dotnet build`. You will need a reasonably recent .NET SDK (8.0+).
+
+Then, just run the `external-tests` binary. It handles launching the external server, communicating with it, and shutting it down when its done:
+
+```
+cargo run --bin external-tests
+```

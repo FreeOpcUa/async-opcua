@@ -35,7 +35,7 @@ To use the server crate we need to add a dependency to the `Cargo.toml`.
 
 ```
 [dependencies]
-opcua = { "0.15", features = ["server"] }
+async-opcua = { "0.15", features = ["server"] }
 ```
 
 ## Create your server
@@ -311,7 +311,7 @@ OPC UA for Rust provides an extensive amount of logging at error, warn, info, de
 
 ### Console logging
 
-OPC-UA for rust uses `log` for logging. You should configure this using a crate like [env_logger](https://docs.rs/env_logger/0.6.2/env_logger/). e.g.
+OPC-UA for rust uses `tracing` for logging, but we forward log messages to `log` as well. You should configure this using a crate like [env_logger](https://docs.rs/env_logger/0.6.2/env_logger/). e.g.
 
 ```shell script
 export RUST_LOG="opcua=debug"

@@ -1,5 +1,50 @@
 # Changelog
 
+## [0.19.0] - 2026-07-18
+
+A number of smaller fixes, as well as some improvements to codegen, and the release of the `async-opcua-codegen` crate.
+
+### Client
+
+#### Added
+
+ - Improved structured tracing per request.
+ - Add `Session::close_on_drop()` which creates a way to have an owned guard that when dropped signals the session to close.
+
+#### Changed
+
+ - Most client methods now return `opcua_types::Error` instead of `StatusCode`. In some cases this will include more information about what caused the error, which might make debugging easier without relying on logging.
+
+#### Fixed
+
+ - Do not ack keep-alive messages.
+ - Discard acknowledgements when transfering subscriptions.
+ - Correctly verify certificate in CreateSession responses.
+ - Correctly avoid reusing nonces for `ActivateSession` calls.
+
+### Common
+
+#### Fixed
+
+ - Fixed a mismatch with the standard when decoding `Argument`.
+ - Fixed our binary encoding of Guids. Turns out OPC-UA uses microsofts pseudo-LE encoding, while we were using the UUID BE encoding.
+
+### Server
+
+#### Fixed
+
+ - Changed the default minimum refresh rate of the `SyncSampler` to a more reasonable value.
+ - Do not resend keep-alive messages, to comply with the standard.
+ - Make sure the server itself is added to its `ServerArray`.
+ - Fixed a bug causing nodeset imports to fail due to missing `index_map`.
+
+### Codegen
+
+#### Added
+
+ - Codegen is now released as `async-opcua-codegen` on crates.io.
+ - Properly derive data type definition and base data type when creating node hierarchies from NodeSet2 files.
+
 ## [0.18.0] - 2026-02-24
 
 Mostly bug fixes and refactoring, some of which is externally visible.

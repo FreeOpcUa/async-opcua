@@ -123,6 +123,6 @@ jobs:
           generate_release_notes: true
 
       - name: Publish
-        run: cargo release $(./tools/release-package-args.sh) --execute --no-push
+        run: cargo release $(./tools/release-package-args.sh) --execute --no-push --no-confirm
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

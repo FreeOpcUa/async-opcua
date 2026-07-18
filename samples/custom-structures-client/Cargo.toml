@@ -13,7 +13,6 @@ env_logger = { workspace = true }
 
 [dependencies.async-opcua]
 path = "../../async-opcua"
-version = "0.18.0"
 features = ["client"]
 default-features = false
 

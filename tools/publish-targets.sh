@@ -2,6 +2,7 @@
 
 # Get the list of publish targets, for use in other scripts.
 ITEMS=(
+    'async-opcua'
     'async-opcua-client'
     'async-opcua-core'
     'async-opcua-core-namespace'

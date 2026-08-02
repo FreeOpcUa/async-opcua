@@ -9,18 +9,20 @@ use std::{
     result::Result,
 };
 
-use rsa::pkcs1;
-use rsa::pkcs1v15;
-use rsa::pkcs8;
-use rsa::pss;
-use rsa::signature::{RandomizedSigner, SignatureEncoding, Verifier};
-use rsa::{RsaPrivateKey, RsaPublicKey};
+use openssl::{
+    encrypt::{Decrypter, Encrypter},
+    error::ErrorStack,
+    hash::MessageDigest,
+    pkey::{PKey as OpensslPKey, Private, Public},
+    rsa::Rsa,
+    sign::{Signer as OpensslSigner, Verifier as OpensslVerifier},
+};
 
 use x509_cert::spki::SubjectPublicKeyInfoOwned;
 
 use opcua_types::{status_code::StatusCode, Error};
 
-use crate::policy::aes::AesAsymmetricEncryptionAlgorithm;
+use crate::policy::aes::{AesAsymmetricEncryptionAlgorithm, RsaPadding};
 
 #[derive(Debug)]
 /// Error from working with a private key.
@@ -40,14 +42,8 @@ impl From<pkcs8::Error> for PKeyError {
     }
 }
 
-impl From<pkcs1::Error> for PKeyError {
-    fn from(_err: pkcs1::Error) -> Self {
-        PKeyError
-    }
-}
-
-impl From<rsa::Error> for PKeyError {
-    fn from(_err: rsa::Error) -> Self {
+impl From<ErrorStack> for PKeyError {
+    fn from(_err: ErrorStack) -> Self {
         PKeyError
     }
 }
@@ -60,9 +56,9 @@ pub struct PKey<T> {
 }
 
 /// A public key
-pub type PublicKey = PKey<RsaPublicKey>;
+pub type PublicKey = PKey<OpensslPKey<Public>>;
 /// A private key
-pub type PrivateKey = PKey<RsaPrivateKey>;
+pub type PrivateKey = PKey<OpensslPKey<Private>>;
 
 impl<T> Debug for PKey<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -103,125 +99,124 @@ pub(crate) fn calculate_cipher_text_size<T: AesAsymmetricEncryptionAlgorithm>(
     block_count * key_size
 }
 
+/// Translate a padding scheme into the (openssl padding, optional OAEP/MGF1 digest) pair
+/// needed to configure an `openssl::encrypt::{Encrypter, Decrypter}`.
+fn openssl_padding(padding: RsaPadding) -> (openssl::rsa::Padding, Option<MessageDigest>) {
+    match padding {
+        RsaPadding::Pkcs1v15 => (openssl::rsa::Padding::PKCS1, None),
+        RsaPadding::OaepSha1 => (openssl::rsa::Padding::PKCS1_OAEP, Some(MessageDigest::sha1())),
+        RsaPadding::OaepSha256 => (
+            openssl::rsa::Padding::PKCS1_OAEP,
+            Some(MessageDigest::sha256()),
+        ),
+    }
+}
+
 impl KeySize for PrivateKey {
     /// Length in bits
     fn size(&self) -> usize {
-        use rsa::traits::PublicKeyParts;
         self.value.size()
     }
 }
 
 impl PrivateKey {
     /// Generate a new private key with the given length in bits.
-    pub fn new(bit_length: u32) -> Result<PrivateKey, rsa::Error> {
-        let mut rng = rand::thread_rng();
-
-        let key = RsaPrivateKey::new(&mut rng, bit_length as usize)?;
+    pub fn new(bit_length: u32) -> Result<PrivateKey, PKeyError> {
+        let rsa = Rsa::generate(bit_length)?;
+        let key = OpensslPKey::from_rsa(rsa)?;
         Ok(PKey { value: key })
     }
 
     /// Read a private key from the given path.
     pub fn read_pem_file(path: &std::path::Path) -> Result<PrivateKey, PKeyError> {
-        use pkcs8::DecodePrivateKey;
-        use rsa::pkcs1::DecodeRsaPrivateKey;
-
-        let r = RsaPrivateKey::read_pkcs8_pem_file(path);
-        match r {
-            Err(_) => {
-                let val = RsaPrivateKey::read_pkcs1_pem_file(path)?;
-                Ok(PKey { value: val })
-            }
-            Ok(val) => Ok(PKey { value: val }),
-        }
+        let bytes = std::fs::read(path).map_err(|_| PKeyError)?;
+        Self::from_pem(&bytes)
     }
 
     /// Create a private key from a pem file loaded into a byte array.
     pub fn from_pem(bytes: &[u8]) -> Result<PrivateKey, PKeyError> {
-        use pkcs8::DecodePrivateKey;
-        use rsa::pkcs1::DecodeRsaPrivateKey;
-
-        let converted = std::str::from_utf8(bytes);
-        match converted {
-            Err(_) => Err(PKeyError),
-            Ok(pem) => {
-                let r = RsaPrivateKey::from_pkcs8_pem(pem);
-                match r {
-                    Err(_) => {
-                        let val = RsaPrivateKey::from_pkcs1_pem(pem)?;
-                        Ok(PKey { value: val })
-                    }
-                    Ok(val) => Ok(PKey { value: val }),
-                }
-            }
-        }
+        // OpenSSL's generic private key PEM reader transparently handles both
+        // PKCS#1 ("RSA PRIVATE KEY") and PKCS#8 ("PRIVATE KEY") encodings.
+        let key = OpensslPKey::private_key_from_pem(bytes)?;
+        Ok(PKey { value: key })
     }
 
     /// Serialize the private key to a der file.
     pub fn to_der(&self) -> pkcs8::Result<pkcs8::SecretDocument> {
-        use pkcs8::EncodePrivateKey;
-
-        self.value.to_pkcs8_der()
+        let pem = self
+            .value
+            .private_key_to_pem_pkcs8()
+            .map_err(|_| pkcs8::Error::KeyMalformed)?;
+        let pem = std::str::from_utf8(&pem).map_err(|_| pkcs8::Error::KeyMalformed)?;
+        let (_, doc) = pkcs8::Document::from_pem(pem)?;
+        Ok(doc.into())
     }
 
     /// Get the public key info for this private key.
     pub fn public_key_to_info(&self) -> x509_cert::spki::Result<SubjectPublicKeyInfoOwned> {
-        use rsa::pkcs8::EncodePublicKey;
-        SubjectPublicKeyInfoOwned::try_from(
-            self.value
-                .to_public_key()
-                .to_public_key_der()
-                .unwrap()
-                .as_bytes(),
-        )
+        let der = self
+            .value
+            .public_key_to_der()
+            .map_err(|_| x509_cert::spki::Error::KeyMalformed)?;
+        SubjectPublicKeyInfoOwned::try_from(der.as_slice())
     }
 
     /// Create a public key based on this private key.
     pub fn to_public_key(&self) -> PublicKey {
-        PublicKey {
-            value: self.value.to_public_key(),
-        }
+        let der = self
+            .value
+            .public_key_to_der()
+            .expect("failed to derive public key DER from private key");
+        let value = OpensslPKey::public_key_from_der(&der)
+            .expect("failed to parse derived public key DER");
+        PublicKey { value }
+    }
+
+    fn sign_pkcs1v15(
+        &self,
+        digest: MessageDigest,
+        data: &[u8],
+        signature: &mut [u8],
+    ) -> Result<usize, Error> {
+        let mut signer = OpensslSigner::new(digest, &self.value)
+            .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e))?;
+        signer
+            .set_rsa_padding(openssl::rsa::Padding::PKCS1)
+            .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e))?;
+        signer
+            .update(data)
+            .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e))?;
+        signer
+            .sign(signature)
+            .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e))
     }
 
     /// Signs the data using RSA-SHA1
     pub fn sign_sha1(&self, data: &[u8], signature: &mut [u8]) -> Result<usize, Error> {
-        let mut rng = rand::thread_rng();
-        let signing_key = pkcs1v15::SigningKey::<sha1::Sha1>::new(self.value.clone());
-        match signing_key.try_sign_with_rng(&mut rng, data) {
-            Err(e) => Err(Error::new(StatusCode::BadUnexpectedError, e)),
-            Ok(signed) => {
-                let val = signed.to_vec();
-                signature.copy_from_slice(&val);
-                Ok(val.len())
-            }
-        }
+        self.sign_pkcs1v15(MessageDigest::sha1(), data, signature)
     }
 
     /// Signs the data using RSA-SHA256
     pub fn sign_sha256(&self, data: &[u8], signature: &mut [u8]) -> Result<usize, Error> {
-        let mut rng = rand::thread_rng();
-        let signing_key = pkcs1v15::SigningKey::<sha2::Sha256>::new(self.value.clone());
-        match signing_key.try_sign_with_rng(&mut rng, data) {
-            Err(e) => Err(Error::new(StatusCode::BadUnexpectedError, e)),
-            Ok(signed) => {
-                let val = signed.to_vec();
-                signature.copy_from_slice(&val);
-                Ok(val.len())
-            }
-        }
+        self.sign_pkcs1v15(MessageDigest::sha256(), data, signature)
     }
 
     /// Signs the data using RSA-SHA256-PSS
     pub fn sign_sha256_pss(&self, data: &[u8], signature: &mut [u8]) -> Result<usize, Error> {
-        let mut rng = rand::thread_rng();
-        let signing_key = pss::BlindedSigningKey::<sha2::Sha256>::new(self.value.clone());
-        match signing_key.try_sign_with_rng(&mut rng, data) {
-            Err(e) => Err(Error::new(StatusCode::BadUnexpectedError, e)),
-            Ok(signed) => {
-                let val = signed.to_vec();
-                signature.copy_from_slice(&val);
-                Ok(val.len())
-            }
-        }
+        let mut signer = OpensslSigner::new(MessageDigest::sha256(), &self.value)
+            .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e))?;
+        signer
+            .set_rsa_padding(openssl::rsa::Padding::PKCS1_PSS)
+            .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e))?;
+        signer
+            .set_rsa_pss_saltlen(openssl::sign::RsaPssSaltlen::DIGEST_LENGTH)
+            .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e))?;
+        signer
+            .update(data)
+            .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e))?;
+        signer
+            .sign(signature)
+            .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e))
     }
 
     pub(crate) fn private_decrypt<T: AesAsymmetricEncryptionAlgorithm>(
@@ -230,6 +225,8 @@ impl PrivateKey {
         dst: &mut [u8],
     ) -> Result<usize, PKeyError> {
         let cipher_text_block_size = self.cipher_text_block_size();
+        let (padding, oaep_digest) = openssl_padding(T::get_padding());
+
         // Decrypt the data
         let mut src_idx = 0;
         let mut dst_idx = 0;
@@ -243,14 +240,20 @@ impl PrivateKey {
                 let src = &src[src_idx..src_end_index];
                 let dst = &mut dst[dst_idx..(dst_idx + cipher_text_block_size)];
 
-                let padding = T::get_padding();
-                let decrypted = self.value.decrypt(padding, src)?;
+                let mut decrypter = Decrypter::new(&self.value)?;
+                decrypter.set_rsa_padding(padding)?;
+                if let Some(digest) = oaep_digest {
+                    decrypter.set_rsa_oaep_md(digest)?;
+                    decrypter.set_rsa_mgf1_md(digest)?;
+                }
 
-                let size = decrypted.len();
+                let mut decrypted = vec![0u8; cipher_text_block_size];
+                let size = decrypter.decrypt(src, &mut decrypted)?;
+
                 if size == dst.len() {
-                    dst.copy_from_slice(&decrypted);
+                    dst.copy_from_slice(&decrypted[..size]);
                 } else {
-                    dst[0..size].copy_from_slice(&decrypted);
+                    dst[0..size].copy_from_slice(&decrypted[..size]);
                 }
                 size
             };
@@ -263,49 +266,52 @@ impl PrivateKey {
 impl KeySize for PublicKey {
     /// Length in bits
     fn size(&self) -> usize {
-        use rsa::traits::PublicKeyParts;
         self.value.size()
     }
 }
 
 impl PublicKey {
+    fn verify_pkcs1v15(
+        &self,
+        digest: MessageDigest,
+        data: &[u8],
+        signature: &[u8],
+    ) -> Result<bool, Error> {
+        let mut verifier = OpensslVerifier::new(digest, &self.value)
+            .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e))?;
+        verifier
+            .set_rsa_padding(openssl::rsa::Padding::PKCS1)
+            .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e))?;
+        verifier
+            .update(data)
+            .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e))?;
+        Ok(verifier.verify(signature).unwrap_or(false))
+    }
+
     /// Verifies the data using RSA-SHA1
     pub fn verify_sha1(&self, data: &[u8], signature: &[u8]) -> Result<bool, Error> {
-        let verifying_key = pkcs1v15::VerifyingKey::<sha1::Sha1>::new(self.value.clone());
-        let r = pkcs1v15::Signature::try_from(signature);
-        match r {
-            Err(e) => Err(Error::new(StatusCode::BadUnexpectedError, e)),
-            Ok(val) => match verifying_key.verify(data, &val) {
-                Err(_) => Ok(false),
-                _ => Ok(true),
-            },
-        }
+        self.verify_pkcs1v15(MessageDigest::sha1(), data, signature)
     }
 
     /// Verifies the data using RSA-SHA256
     pub fn verify_sha256(&self, data: &[u8], signature: &[u8]) -> Result<bool, Error> {
-        let verifying_key = pkcs1v15::VerifyingKey::<sha2::Sha256>::new(self.value.clone());
-        let r = pkcs1v15::Signature::try_from(signature);
-        match r {
-            Err(e) => Err(Error::new(StatusCode::BadUnexpectedError, e)),
-            Ok(val) => match verifying_key.verify(data, &val) {
-                Err(_) => Ok(false),
-                _ => Ok(true),
-            },
-        }
+        self.verify_pkcs1v15(MessageDigest::sha256(), data, signature)
     }
 
     /// Verifies the data using RSA-SHA256-PSS
     pub fn verify_sha256_pss(&self, data: &[u8], signature: &[u8]) -> Result<bool, Error> {
-        let verifying_key = pss::VerifyingKey::<sha2::Sha256>::new(self.value.clone());
-        let r = pss::Signature::try_from(signature);
-        match r {
-            Err(e) => Err(Error::new(StatusCode::BadUnexpectedError, e)),
-            Ok(val) => match verifying_key.verify(data, &val) {
-                Err(_) => Ok(false),
-                _ => Ok(true),
-            },
-        }
+        let mut verifier = OpensslVerifier::new(MessageDigest::sha256(), &self.value)
+            .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e))?;
+        verifier
+            .set_rsa_padding(openssl::rsa::Padding::PKCS1_PSS)
+            .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e))?;
+        verifier
+            .set_rsa_pss_saltlen(openssl::sign::RsaPssSaltlen::DIGEST_LENGTH)
+            .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e))?;
+        verifier
+            .update(data)
+            .map_err(|e| Error::new(StatusCode::BadUnexpectedError, e))?;
+        Ok(verifier.verify(signature).unwrap_or(false))
     }
 
     /// Encrypts data from src to dst using the specified padding and returns the size of encrypted
@@ -317,8 +323,7 @@ impl PublicKey {
     ) -> Result<usize, PKeyError> {
         let cipher_text_block_size = self.cipher_text_block_size();
         let plain_text_block_size = T::get_plaintext_block_size(self.size());
-
-        let mut rng = rand::thread_rng();
+        let (padding, oaep_digest) = openssl_padding(T::get_padding());
 
         let mut src_idx = 0;
         let mut dst_idx = 0;
@@ -339,10 +344,18 @@ impl PublicKey {
             dst_idx += {
                 let src = &src[src_idx..src_end_index];
 
-                let padding = T::get_padding();
-                let encrypted = self.value.encrypt(&mut rng, padding, src)?;
+                let mut encrypter = Encrypter::new(&self.value)?;
+                encrypter.set_rsa_padding(padding)?;
+                if let Some(digest) = oaep_digest {
+                    encrypter.set_rsa_oaep_md(digest)?;
+                    encrypter.set_rsa_mgf1_md(digest)?;
+                }
+
+                let encrypted_len = dst[dst_idx..(dst_idx + cipher_text_block_size)].len();
+                let mut encrypted = vec![0u8; encrypted_len];
+                let size = encrypter.encrypt(src, &mut encrypted)?;
                 dst[dst_idx..(dst_idx + cipher_text_block_size)].copy_from_slice(&encrypted);
-                encrypted.len()
+                size
             };
 
             // Src advances by bytes to encrypt

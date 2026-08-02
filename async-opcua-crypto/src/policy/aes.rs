@@ -1,7 +1,6 @@
 use std::marker::PhantomData;
 
 use opcua_types::{Error, StatusCode};
-use rsa::{Oaep, Pkcs1v15Encrypt};
 
 use crate::{
     aes::calculate_cipher_text_size,
@@ -220,11 +219,20 @@ impl AesSymmetricEncryptionAlgorithm for Aes256Cbc {
     }
 }
 
+/// Describes an RSA padding scheme independently of any particular crypto
+/// backend, so that the openssl-backed `PrivateKey`/`PublicKey` can configure
+/// an `openssl::encrypt::{Encrypter, Decrypter}` from it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RsaPadding {
+    Pkcs1v15,
+    OaepSha1,
+    OaepSha256,
+}
+
 pub(crate) trait AesAsymmetricEncryptionAlgorithm {
     const URI: &'static str;
-    type Padding: rsa::traits::PaddingScheme;
 
-    fn get_padding() -> Self::Padding;
+    fn get_padding() -> RsaPadding;
 
     fn get_plaintext_block_size(key_size: usize) -> usize;
 }
@@ -233,10 +241,9 @@ pub(crate) trait AesAsymmetricEncryptionAlgorithm {
 pub(crate) struct Pkcs1v15;
 impl AesAsymmetricEncryptionAlgorithm for Pkcs1v15 {
     const URI: &'static str = crate::algorithms::ENC_RSA_15;
-    type Padding = Pkcs1v15Encrypt;
 
-    fn get_padding() -> Self::Padding {
-        Pkcs1v15Encrypt
+    fn get_padding() -> RsaPadding {
+        RsaPadding::Pkcs1v15
     }
 
     fn get_plaintext_block_size(key_size: usize) -> usize {
@@ -248,10 +255,9 @@ impl AesAsymmetricEncryptionAlgorithm for Pkcs1v15 {
 pub(crate) struct OaepSha1;
 impl AesAsymmetricEncryptionAlgorithm for OaepSha1 {
     const URI: &'static str = crate::algorithms::ENC_RSA_OAEP;
-    type Padding = Oaep;
 
-    fn get_padding() -> Self::Padding {
-        Oaep::new::<sha1::Sha1>()
+    fn get_padding() -> RsaPadding {
+        RsaPadding::OaepSha1
     }
 
     fn get_plaintext_block_size(key_size: usize) -> usize {
@@ -263,10 +269,9 @@ impl AesAsymmetricEncryptionAlgorithm for OaepSha1 {
 pub(crate) struct OaepSha256;
 impl AesAsymmetricEncryptionAlgorithm for OaepSha256 {
     const URI: &'static str = crate::algorithms::ENC_RSA_OAEP_SHA256;
-    type Padding = Oaep;
 
-    fn get_padding() -> Self::Padding {
-        Oaep::new::<sha2::Sha256>()
+    fn get_padding() -> RsaPadding {
+        RsaPadding::OaepSha256
     }
 
     fn get_plaintext_block_size(key_size: usize) -> usize {

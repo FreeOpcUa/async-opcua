@@ -16,12 +16,12 @@ use chrono::{DateTime, Utc};
 use tracing::{error, info, trace, warn};
 type ChronoUtc = DateTime<Utc>;
 
-use rsa::pkcs1v15;
-use rsa::RsaPublicKey;
+use openssl::pkey::PKey as OpensslPKey;
 use x509_cert::{
     self as x509,
     der::asn1::{Ia5String, OctetString},
     ext::pkix::name::GeneralName,
+    spki::SubjectPublicKeyInfoOwned,
 };
 
 use x509::builder::Error as BuilderError;
@@ -389,6 +389,101 @@ impl From<x509::der::Error> for X509Error {
     }
 }
 
+/// Raw RSASSA-PKCS1-v1_5 signature bytes, adapted to the `signature`/`spki`
+/// traits that `x509_cert::builder::CertificateBuilder` requires of a signer.
+#[derive(Clone)]
+struct RawPkcs1v15Signature(Vec<u8>);
+
+impl signature::SignatureEncoding for RawPkcs1v15Signature {
+    type Repr = Vec<u8>;
+}
+
+impl From<RawPkcs1v15Signature> for Vec<u8> {
+    fn from(sig: RawPkcs1v15Signature) -> Vec<u8> {
+        sig.0
+    }
+}
+
+impl TryFrom<&[u8]> for RawPkcs1v15Signature {
+    type Error = signature::Error;
+
+    fn try_from(bytes: &[u8]) -> signature::Result<Self> {
+        Ok(RawPkcs1v15Signature(bytes.to_vec()))
+    }
+}
+
+impl x509::spki::SignatureBitStringEncoding for RawPkcs1v15Signature {
+    fn to_bitstring(&self) -> x509::der::Result<x509::der::asn1::BitString> {
+        x509::der::asn1::BitString::new(0, self.0.clone())
+    }
+}
+
+/// Verifying key half of [`RsaPkcs1v15Sha256Signer`], carrying nothing but
+/// the already-encoded `SubjectPublicKeyInfo` so it can implement
+/// `spki::EncodePublicKey`.
+#[derive(Clone)]
+struct Pkcs1v15Sha256VerifyingKey(SubjectPublicKeyInfoOwned);
+
+impl x509::spki::EncodePublicKey for Pkcs1v15Sha256VerifyingKey {
+    fn to_public_key_der(&self) -> x509::spki::Result<x509::der::Document> {
+        use x509::der::Encode;
+        let der = self.0.to_der()?;
+        Ok(x509::der::Document::try_from(der)?)
+    }
+}
+
+/// Adapts [`PrivateKey`]'s RSA-SHA256-PKCS1v15 signing to the `signature`
+/// and `spki` traits required by `x509_cert::builder::CertificateBuilder`.
+///
+/// The `rsa` crate's `pkcs1v15::SigningKey` implemented these traits
+/// directly; since the private key is now openssl-backed there is no
+/// RustCrypto type left to lean on, so this crate provides its own thin
+/// adapter instead.
+struct RsaPkcs1v15Sha256Signer<'a> {
+    key: &'a PrivateKey,
+    public_key_info: SubjectPublicKeyInfoOwned,
+}
+
+impl<'a> RsaPkcs1v15Sha256Signer<'a> {
+    fn new(key: &'a PrivateKey, public_key_info: SubjectPublicKeyInfoOwned) -> Self {
+        Self {
+            key,
+            public_key_info,
+        }
+    }
+}
+
+impl signature::Keypair for RsaPkcs1v15Sha256Signer<'_> {
+    type VerifyingKey = Pkcs1v15Sha256VerifyingKey;
+
+    fn verifying_key(&self) -> Self::VerifyingKey {
+        Pkcs1v15Sha256VerifyingKey(self.public_key_info.clone())
+    }
+}
+
+impl x509::spki::DynSignatureAlgorithmIdentifier for RsaPkcs1v15Sha256Signer<'_> {
+    fn signature_algorithm_identifier(&self) -> x509::spki::Result<x509::spki::AlgorithmIdentifierOwned> {
+        // sha256WithRSAEncryption, RFC 4055 / RFC 3447.
+        let oid = const_oid::ObjectIdentifier::new_unwrap("1.2.840.113549.1.1.11");
+        Ok(x509::spki::AlgorithmIdentifierOwned {
+            oid,
+            parameters: Some(x509::der::asn1::Any::null()),
+        })
+    }
+}
+
+impl signature::Signer<RawPkcs1v15Signature> for RsaPkcs1v15Sha256Signer<'_> {
+    fn try_sign(&self, msg: &[u8]) -> signature::Result<RawPkcs1v15Signature> {
+        let mut buf = vec![0u8; self.key.size()];
+        let len = self
+            .key
+            .sign_sha256(msg, &mut buf)
+            .map_err(|_| signature::Error::new())?;
+        buf.truncate(len);
+        Ok(RawPkcs1v15Signature(buf))
+    }
+}
+
 #[derive(Clone)]
 /// Wrapper around an X509 certificate.
 pub struct X509 {
@@ -514,7 +609,7 @@ impl X509 {
         ))
         .unwrap();
 
-        let signing_key = pkcs1v15::SigningKey::<sha2::Sha256>::new(pkey.value.clone());
+        let signing_key = RsaPkcs1v15Sha256Signer::new(pkey, pub_key.clone());
 
         let serial_number = SerialNumber::from(42u32);
 
@@ -628,18 +723,17 @@ impl X509 {
 
     /// Try to get the public key from this certificate.
     pub fn public_key(&self) -> Result<PublicKey, Error> {
-        use x509_cert::der::referenced::OwnedToRef;
+        use x509_cert::der::Encode;
 
-        let r = RsaPublicKey::try_from(
-            self.value
-                .tbs_certificate
-                .subject_public_key_info
-                .owned_to_ref(),
-        );
-        match r {
-            Err(e) => Err(Error::new(StatusCode::BadCertificateInvalid, e)),
-            Ok(v) => Ok(PublicKey { value: v }),
-        }
+        let der = self
+            .value
+            .tbs_certificate
+            .subject_public_key_info
+            .to_der()
+            .map_err(|e| Error::new(StatusCode::BadCertificateInvalid, e))?;
+        let value = OpensslPKey::public_key_from_der(&der)
+            .map_err(|e| Error::new(StatusCode::BadCertificateInvalid, e))?;
+        Ok(PublicKey { value })
     }
 
     /// Returns the key length in bits (if possible)

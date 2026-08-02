@@ -32,10 +32,12 @@ aes = { workspace = true }
 cbc = { workspace = true }
 const-oid = { workspace = true }
 hmac = { workspace = true }
+openssl = "0.10"
+pkcs8 = { version = "0.10", features = ["alloc", "pem"] }
 rand = { workspace = true }
-rsa = { workspace = true }
 sha1 = { workspace = true }
 sha2 = { workspace = true }
+signature = "2"
 x509-cert = { workspace = true }
 
 [dev-dependencies]

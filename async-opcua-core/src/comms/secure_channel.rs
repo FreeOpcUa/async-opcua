@@ -346,7 +346,15 @@ impl SecureChannel {
         &mut self,
         remote_cert: &ByteString,
     ) -> Result<(), Error> {
-        self.remote_cert = if remote_cert.is_null_or_empty() {
+        // For SecurityPolicy::None the remote certificate is never used (no
+        // signing or encryption), yet some servers — notably certain PLCs — send
+        // a non-standard certificate that strict DER parsing (x509-cert) rejects,
+        // failing the session with BadCertificateInvalid even though the cert is
+        // irrelevant. Skip parsing it in that case; this mirrors the empty-cert
+        // skip from #131 and fixes #197.
+        self.remote_cert = if self.security_policy == SecurityPolicy::None
+            || remote_cert.is_null_or_empty()
+        {
             None
         } else {
             Some(X509::from_byte_string(remote_cert)?)

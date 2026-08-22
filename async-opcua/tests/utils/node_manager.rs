@@ -149,7 +149,7 @@ impl InMemoryNodeManagerImpl for TestNodeManagerImpl {
         if self
             .issues
             .fatal_read
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |f| {
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |f| {
                 if f > 0 {
                     Some(f - 1)
                 } else {

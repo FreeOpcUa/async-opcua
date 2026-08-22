@@ -624,7 +624,7 @@ impl DataValue {
 
     /// Returns the status code or Good if there is no code on the value
     pub fn status(&self) -> StatusCode {
-        self.status.map_or(StatusCode::Good, |s| s)
+        self.status.unwrap_or(StatusCode::Good)
     }
 
     /// Test if the value held by this data value is known to be good

@@ -180,7 +180,7 @@ pub trait BrowserPolicy {
 
 impl<T> BrowserPolicy for T
 where
-    T: for<'a> Fn(&BrowseResultItem) -> Vec<BrowseDescription> + Send + Sync,
+    T: for<'a> Fn(&'a BrowseResultItem) -> Vec<BrowseDescription> + Send + Sync,
 {
     fn get_next(&self, results: &BrowseResultItem) -> Vec<BrowseDescription> {
         self(results)

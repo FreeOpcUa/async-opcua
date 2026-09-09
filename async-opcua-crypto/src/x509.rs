@@ -419,11 +419,22 @@ impl X509 {
         //let r = x509::certificate::Certificate::load_pem_chain(data);
     }
 
-    /// Load an X509 certificate from a der file.
+    /// Load an X509 certificate from a der file, or from the head of a certificate chain.
+    ///
+    /// OPC UA Part 6 lets an `ApplicationInstanceCertificate` carry a chain: the certificate
+    /// itself, followed by the ones that issued it. A server whose certificate is signed by a CA
+    /// rather than by itself normally sends the whole chain, so demanding that the byte string hold
+    /// exactly one certificate rejects it. Siemens WinCC Unified sends two, its server certificate
+    /// and the project CA behind it, and every endpoint it advertises is unusable without this.
+    ///
+    /// `Certificate::from_der` treats anything after the first certificate as trailing garbage and
+    /// fails. The certificate the protocol is about is the first one, so decode that and leave the
+    /// rest, which is what the .NET and Java stacks do.
     pub fn from_der(data: &[u8]) -> Result<Self, X509Error> {
-        use x509::der::Decode;
+        use x509::der::{Decode, SliceReader};
 
-        let val = x509::certificate::Certificate::from_der(data)?;
+        let mut reader = SliceReader::new(data)?;
+        let val = x509::certificate::Certificate::decode(&mut reader)?;
         Ok(X509 { value: val })
     }
 

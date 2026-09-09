@@ -456,3 +456,20 @@ fn encrypt_decrypt_password() {
         String::from_utf8(password2.value.unwrap()).unwrap()
     );
 }
+
+/// A server whose certificate is signed by a CA sends the chain that issued it, which OPC UA Part 6
+/// allows in an ApplicationInstanceCertificate. Decoding must yield the leading certificate rather
+/// than fail on the ones behind it — Siemens WinCC Unified sends two, and no endpoint it advertises
+/// can be used otherwise.
+#[test]
+fn from_der_reads_the_first_certificate_of_a_chain() {
+    let (leaf, _) = make_test_cert_2048();
+    let (issuer, _) = make_test_cert_2048();
+    let mut chain = leaf.to_der().unwrap();
+    chain.extend_from_slice(&issuer.to_der().unwrap());
+
+    let read = X509::from_der(&chain).unwrap();
+
+    assert_eq!(read.subject_name(), leaf.subject_name());
+    assert_eq!(read.to_der().unwrap(), leaf.to_der().unwrap());
+}

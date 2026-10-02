@@ -77,6 +77,7 @@ pub struct CoreServerPermissions {
 }
 
 #[allow(unused)]
+#[allow(clippy::double_must_use)]
 #[async_trait]
 /// The AuthManager trait is used to let servers control access to the server.
 /// It serves two main purposes:
@@ -210,6 +211,7 @@ impl DefaultAuthenticator {
     }
 }
 
+#[allow(clippy::double_must_use)]
 #[async_trait]
 impl AuthManager for DefaultAuthenticator {
     async fn authenticate_anonymous_token(&self, endpoint: &ServerEndpoint) -> Result<(), Error> {

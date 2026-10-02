@@ -280,6 +280,7 @@ impl<T: Send + Sync + 'static> IntoAnyArc for T {
 ///
 /// For a simpler interface see InMemoryNodeManager, use this trait directly
 /// if you need to control how all node information is stored.
+#[allow(clippy::double_must_use)]
 #[allow(unused_variables)]
 #[async_trait]
 pub trait NodeManager: IntoAnyArc + Any {

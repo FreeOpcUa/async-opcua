@@ -7,6 +7,8 @@ authors = ["Einar Omang <einar@omang.com>"]
 license = "MPL-2.0"
 publish = false
 
+[lints]
+
 [dependencies]
 tokio = { workspace = true }
 tokio-util = { workspace = true }

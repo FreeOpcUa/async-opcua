@@ -1,3 +1,5 @@
+//! CLI tool to generate rust types from OPC-UA schemas.
+
 use std::process::ExitCode;
 
 use env_logger::Env;

@@ -4,8 +4,10 @@ version = "0.0.0"
 publish = false
 edition = "2021"
 
+[lints]
+
 [features]
-nightly = ["libfuzzer-sys", "bytes", "tokio", "tokio-util"]
+nightly = ["libfuzzer-sys", "bytes", "tokio", "tokio-util", "async-opcua"]
 
 [package.metadata]
 cargo-fuzz = true
@@ -18,6 +20,7 @@ tokio-util = { workspace = true, optional = true }
 
 [dependencies.async-opcua]
 path = "../async-opcua"
+optional = true
 
 [[bin]]
 name = "fuzz_comms"

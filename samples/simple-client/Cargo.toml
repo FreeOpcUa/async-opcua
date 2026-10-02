@@ -4,6 +4,8 @@ authors = ["Adam Lock <locka99@gmail.com>"]
 edition = "2021"
 publish = false
 
+[lints]
+
 [dependencies]
 log = { workspace = true }
 pico-args = "0.5"

@@ -4,13 +4,15 @@ version = "0.19.0"
 edition = "2021"
 description = "OPC UA code generation library"
 authors = ["Einar Omang <einar@omang.com>"]
-homepage = "https://github.com/freeopcua/async-opcua"
 repository = "https://github.com/freeopcua/async-opcua"
 license = "MPL-2.0"
 keywords = ["opcua", "opc", "ua"]
 readme = "README.md"
 documentation = "https://docs.rs/async-opcua/"
 publish = true
+
+[lints]
+cargo.unused_dependencies = "allow"
 
 [lib]
 name = "opcua_codegen"

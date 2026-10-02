@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use opcua_crypto::{CertificateStore, PrivateKey, X509};
 use opcua_types::{ByteString, Error, StatusCode};
 
+#[allow(clippy::double_must_use)]
 #[async_trait]
 /// Source for an issued token. Since each re-authentication when using
 /// issued tokens may require a new token.

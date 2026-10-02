@@ -22,7 +22,7 @@ mod utils;
 use std::path::PathBuf;
 use std::{collections::HashSet, io::Write, path::Path};
 
-use config::load_schemas;
+pub use config::load_schemas;
 pub use error::CodeGenError;
 use ids::generate_node_ids;
 use nodeset::{generate_target, make_root_module};

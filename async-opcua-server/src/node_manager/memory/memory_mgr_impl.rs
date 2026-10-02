@@ -40,6 +40,7 @@ where
     }
 }
 
+#[allow(clippy::double_must_use)]
 #[async_trait]
 #[allow(unused)]
 /// Trait for user-provided implementation of the [InMemoryNodeManager](crate::node_manager::memory::InMemoryNodeManager)

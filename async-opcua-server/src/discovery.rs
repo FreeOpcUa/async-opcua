@@ -101,7 +101,7 @@ pub(crate) async fn periodic_discovery_server_registration(
 
     let Ok(mut client) = client else {
         error!("Failed to create a valid client for discovery server registration");
-        return futures::future::pending().await;
+        futures::future::pending().await
     };
 
     loop {

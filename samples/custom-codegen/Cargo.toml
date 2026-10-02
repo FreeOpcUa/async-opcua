@@ -4,8 +4,10 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 
+[lints]
+
 [features]
-json = ["serde_json", "serde", "serde_with", "async-opcua/json"]
+json = ["serde", "async-opcua/json"]
 xml = ["async-opcua/xml"]
 
 default = ["json", "xml"]
@@ -13,8 +15,6 @@ default = ["json", "xml"]
 [dependencies]
 log = { workspace = true }
 serde = { workspace = true, optional = true }
-serde_json = { workspace = true, optional = true }
-serde_with = { workspace = true, optional = true }
 tokio = { workspace = true }
 env_logger = { workspace = true }
 

@@ -5,6 +5,8 @@ authors = ["Einar Omang <einar@omang.com>"]
 edition = "2021"
 publish = false
 
+[lints]
+
 [dependencies]
 async-trait = { workspace = true }
 env_logger = { workspace = true }

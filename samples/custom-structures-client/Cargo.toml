@@ -5,6 +5,8 @@ authors = ["Rust-OpcUa contributors"]
 edition = "2021"
 publish = false
 
+[lints]
+
 [dependencies]
 pico-args = "0.5"
 tokio = { workspace = true }

@@ -5,9 +5,10 @@ authors = ["Adam Lock <locka99@gmail.com>"]
 edition = "2021"
 publish = false
 
+[lints]
+
 [dependencies]
 tokio = { workspace = true }
-env_logger = { workspace = true }
 uci = "0.1.1"
 
 [dependencies.async-opcua]

@@ -689,6 +689,19 @@ impl MonitoredItem {
         !self.notification_queue.is_empty()
     }
 
+    /// Whether this monitored item holds a value that was delayed by the sampling interval
+    /// and has not been enqueued yet.
+    pub(super) fn has_skipped_value(&self) -> bool {
+        self.sample_skipped_data_value.is_some()
+    }
+
+    /// Whether the value delayed by the sampling interval is due to be enqueued at `now`.
+    pub(super) fn skipped_value_is_due(&self, now: &DateTime) -> bool {
+        self.sample_skipped_data_value
+            .as_ref()
+            .is_some_and(|v| v.source_timestamp.is_some_and(|ts| ts <= *now))
+    }
+
     /// Monitored item ID.
     pub fn id(&self) -> u32 {
         self.id

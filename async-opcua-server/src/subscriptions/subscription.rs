@@ -99,6 +99,9 @@ pub struct Subscription {
     monitored_items: HashMap<u32, MonitoredItem>,
     /// Monitored items that have seen notifications.
     notified_monitored_items: HashSet<u32>,
+    /// Monitored items holding a value delayed by the sampling interval that is not due yet.
+    /// They are moved to `notified_monitored_items` once the value is due.
+    skipped_value_monitored_items: HashSet<u32>,
     /// State of the subscription
     state: SubscriptionState,
     /// A value that contains the number of consecutive publishing timer expirations without Client
@@ -155,6 +158,7 @@ impl Subscription {
             priority,
             monitored_items: HashMap::new(),
             notified_monitored_items: HashSet::new(),
+            skipped_value_monitored_items: HashSet::new(),
             // State variables
             state: SubscriptionState::Creating,
             lifetime_counter,
@@ -453,6 +457,28 @@ impl Subscription {
         }
     }
 
+    /// Move monitored items whose skipped value is due to the set of notified items.
+    /// Items are only moved once due, so that a value that is not due yet does not
+    /// count as an available notification, which would suppress keep-alive messages.
+    fn notify_due_skipped_values(&mut self, now: &DateTimeUtc) {
+        if self.skipped_value_monitored_items.is_empty() {
+            return;
+        }
+        let now = DateTime::from(*now);
+        let monitored_items = &self.monitored_items;
+        let notified = &mut self.notified_monitored_items;
+        self.skipped_value_monitored_items.retain(|id| {
+            let Some(item) = monitored_items.get(id) else {
+                return false;
+            };
+            if item.skipped_value_is_due(&now) {
+                notified.insert(*id);
+                return false;
+            }
+            item.has_skipped_value()
+        });
+    }
+
     fn notifications_available(&self, resend_data: bool) -> bool {
         if !self.notified_monitored_items.is_empty() {
             true
@@ -485,6 +511,8 @@ impl Subscription {
         if matches!(tick_reason, TickReason::TickTimerFired) && !publishing_interval_elapsed {
             return TickResult::None;
         }
+        self.notify_due_skipped_values(now);
+
         // First, get the actual state transition we're in.
         let transition = self.get_state_transition(
             tick_reason,
@@ -688,6 +716,11 @@ impl Subscription {
                     &mut messages,
                     &mut self.sequence_number,
                 );
+                // A skipped value that is not due yet must be enqueued by a later tick,
+                // even if no new value is notified for the item before then.
+                if monitored_item.has_skipped_value() {
+                    self.skipped_value_monitored_items.insert(item_id);
+                }
             }
         }
 
@@ -1024,5 +1057,122 @@ mod tests {
                 panic!("Wrong notification type");
             };
         }
+    }
+
+    #[test]
+    fn skipped_value_sent_without_further_notification() {
+        let mut sub = Subscription::new(1, true, Duration::from_millis(100), 100, 20, 1, 100, 1000);
+        let start = Instant::now();
+        let start_dt = Utc::now();
+
+        sub.last_time_publishing_interval_elapsed = start;
+        sub.tick(&start_dt, start, TickReason::TickTimerFired, true);
+        assert_eq!(sub.state, SubscriptionState::Normal);
+
+        // The item is created 50ms after the subscription, so its first value is
+        // stamped later than the subscription's publishing ticks.
+        let (created, _) = offset(start_dt, start, 50);
+        sub.insert(
+            1,
+            new_monitored_item(
+                1,
+                ReadValueId {
+                    node_id: NodeId::null(),
+                    attribute_id: AttributeId::Value as u32,
+                    ..Default::default()
+                },
+                MonitoringMode::Reporting,
+                FilterType::None,
+                SamplingInterval::NonZero(TimeDelta::milliseconds(100)),
+                false,
+                Some(DataValue::new_at(1, created.into())),
+            ),
+        );
+
+        // A value with an older source timestamp is held back by the sampling interval,
+        // until 100ms after the first value.
+        sub.notify_data_value(
+            &1,
+            DataValue::new_at(2, (start_dt - TimeDelta::days(1)).into()),
+            &created.into(),
+        );
+
+        // This tick is before the held value is due, so only the first value is sent.
+        let (time, time_inst) = offset(start_dt, start, 100);
+        sub.tick(&time, time_inst, TickReason::TickTimerFired, true);
+        let notif = sub.take_notification().unwrap();
+        let its = get_notifications(&notif);
+        assert_eq!(its.len(), 1);
+        let Notification::MonitoredItemNotification(m) = &its[0] else {
+            panic!("Wrong notification type");
+        };
+        assert_eq!(m.value.value, Some(Variant::Int32(1)));
+
+        // No new value is notified, but the next tick is after the held value is due.
+        let (time, time_inst) = offset(start_dt, start, 200);
+        sub.tick(&time, time_inst, TickReason::TickTimerFired, true);
+        let notif = sub.take_notification().unwrap();
+        let its = get_notifications(&notif);
+        assert_eq!(its.len(), 1);
+        let Notification::MonitoredItemNotification(m) = &its[0] else {
+            panic!("Wrong notification type");
+        };
+        assert_eq!(m.value.value, Some(Variant::Int32(2)));
+        assert_eq!(
+            m.value.source_timestamp,
+            Some(DateTime::from(offset(start_dt, start, 150).0))
+        );
+    }
+
+    #[test]
+    fn skipped_value_not_due_does_not_suppress_keep_alive() {
+        let mut sub = Subscription::new(1, true, Duration::from_millis(100), 100, 5, 1, 100, 1000);
+        let start = Instant::now();
+        let start_dt = Utc::now();
+
+        sub.last_time_publishing_interval_elapsed = start;
+        sub.tick(&start_dt, start, TickReason::TickTimerFired, true);
+        assert_eq!(sub.state, SubscriptionState::Normal);
+
+        // The first value has a source timestamp an hour ahead, so the next value
+        // is held back until an hour from now.
+        sub.insert(
+            1,
+            new_monitored_item(
+                1,
+                ReadValueId {
+                    node_id: NodeId::null(),
+                    attribute_id: AttributeId::Value as u32,
+                    ..Default::default()
+                },
+                MonitoringMode::Reporting,
+                FilterType::None,
+                SamplingInterval::NonZero(TimeDelta::milliseconds(100)),
+                false,
+                Some(DataValue::new_at(
+                    1,
+                    (start_dt + TimeDelta::hours(1)).into(),
+                )),
+            ),
+        );
+        sub.notify_data_value(&1, DataValue::new_at(2, start_dt.into()), &start_dt.into());
+
+        let mut data_messages = 0;
+        let mut keep_alives = 0;
+        for i in 1..=30 {
+            let (time, time_inst) = offset(start_dt, start, 100 * i);
+            sub.tick(&time, time_inst, TickReason::TickTimerFired, true);
+            while let Some(notif) = sub.take_notification() {
+                if get_notifications(&notif).is_empty() {
+                    keep_alives += 1;
+                } else {
+                    data_messages += 1;
+                }
+            }
+        }
+        // The first value is sent, then the subscription sends a keep-alive
+        // every 5 publishing intervals while the held value is not due.
+        assert_eq!(data_messages, 1);
+        assert_eq!(keep_alives, 5);
     }
 }

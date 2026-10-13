@@ -31,7 +31,7 @@ hashbrown = "^0.15"
 log = "^0.4"
 num-bigint-dig = "^0.8.6"
 parking_lot = { version = "^0.12", features = ["send_guard"] }
-postcard = { version = "^1", features = ["use-std"] }
+postcard = { version = "^1", default-features = false, features = ["use-std"] }
 proc-macro2 = "^1"
 quick-xml = "^0.40"
 quote = "^1"

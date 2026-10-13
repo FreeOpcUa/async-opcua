@@ -20,7 +20,7 @@ bytes = { workspace = true }
 chrono = { workspace = true }
 parking_lot = { workspace = true }
 serde = { workspace = true }
-serde_yaml = { workspace = true }
+yaml_serde = { workspace = true }
 shellexpand = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

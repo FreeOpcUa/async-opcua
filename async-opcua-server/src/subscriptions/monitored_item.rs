@@ -7,10 +7,10 @@ use tracing::{error, warn};
 use super::MonitoredItemHandle;
 use crate::{info::ServerInfo, node_manager::ParsedReadValueId};
 use opcua_types::{
-    match_extension_object_owned, DataChangeFilter, DataValue, DateTime, EventFieldList,
-    EventFilter, EventFilterResult, ExtensionObject, MonitoredItemCreateRequest,
-    MonitoredItemModifyRequest, MonitoredItemNotification, MonitoringMode, NumericRange,
-    ParsedDataChangeFilter, StatusCode, TimestampsToReturn, Variant,
+    match_extension_object_owned, DataChangeFilter, DataChangeTrigger, DataValue, DateTime,
+    Deadband, EventFieldList, EventFilter, EventFilterResult, ExtensionObject,
+    MonitoredItemCreateRequest, MonitoredItemModifyRequest, MonitoredItemNotification,
+    MonitoringMode, NumericRange, ParsedDataChangeFilter, StatusCode, TimestampsToReturn, Variant,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -511,8 +511,14 @@ impl MonitoredItem {
                     filter.is_changed(&value, last_dv),
                     self.filter_by_sampling_interval(last_dv, &value, from_subscription_tick),
                 ),
+                // No filter means the default DataChangeFilter (OPC UA Part 4,
+                // 7.22.2): trigger StatusValue, no deadband.
                 (Some(last_dv), FilterType::None) => (
-                    value.value != last_dv.value,
+                    ParsedDataChangeFilter {
+                        trigger: DataChangeTrigger::StatusValue,
+                        deadband: Deadband::None,
+                    }
+                    .is_changed(&value, last_dv),
                     self.filter_by_sampling_interval(last_dv, &value, from_subscription_tick),
                 ),
                 (None, _) => (true, true),
@@ -1008,6 +1014,32 @@ pub(super) mod tests {
             false
         ));
         assert_eq!(item.notification_queue.len(), 3);
+    }
+
+    #[test]
+    fn status_change_without_filter_is_reported() {
+        // OPC UA Part 4, 7.22.2: without a DataChangeFilter, STATUS_VALUE_1 is
+        // the default trigger, so a change of the StatusCode alone is reported.
+        let start = Utc::now();
+        let mut item = new_monitored_item(
+            1,
+            ReadValueId {
+                node_id: NodeId::null(),
+                attribute_id: AttributeId::Value as u32,
+                ..Default::default()
+            },
+            MonitoringMode::Reporting,
+            FilterType::None,
+            SamplingInterval::Zero,
+            true,
+            Some(DataValue::new_at(1.0, start.into())),
+        );
+        let mut uncertain = DataValue::new_at(
+            1.0,
+            (start + Duration::try_milliseconds(100).unwrap()).into(),
+        );
+        uncertain.status = Some(StatusCode::UncertainLastUsableValue);
+        assert!(item.notify_data_value(uncertain, &start.into(), false));
     }
 
     #[test]

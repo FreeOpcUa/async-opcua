@@ -72,15 +72,21 @@ impl<T: Future<Output = Result<bool, Error>>, R: Fn() -> T, S: SubscriptionCache
         trigger_publish_recv: tokio::sync::watch::Receiver<Instant>,
         publish_limits_rx: Receiver<PublishLimits>,
         publish_source: R,
-        subscription_cache: S,
+        mut subscription_cache: S,
     ) -> Self {
         let last_external_trigger = *trigger_publish_recv.borrow();
+        // If the subscription cache already has active subscriptions, initialize the state
+        // to assume there are subscriptions on the server. Worst case this will
+        // fail once with BadNoSubscription then wait for an external trigger.
+        // Without this, when the event loop starts after reconnect, the loop
+        // will be idle until triggered externally.
+        let no_active_subscription = subscription_cache.next_publish_time(false).is_none();
         Self {
             last_external_trigger,
             trigger_publish_recv,
             futures: FuturesUnordered::new(),
             waiting_for_response: false,
-            no_active_subscription: true,
+            no_active_subscription,
             publish_limits_rx,
             publish_source,
             subscription_cache,
@@ -563,5 +569,104 @@ mod latch_tests {
             server.publishes_sent() > 2,
             "the session never published again"
         );
+    }
+
+    #[derive(Clone)]
+    struct MaybeIdleState(Arc<AtomicUsize>);
+
+    impl SubscriptionCache for MaybeIdleState {
+        fn next_publish_time(&mut self, _set_last_publish: bool) -> Option<Instant> {
+            if self.0.load(Ordering::Relaxed) > 0 {
+                Some(Instant::now() + Duration::from_millis(100))
+            } else {
+                None
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn state_created_with_live_subscriptions_is_not_idle() {
+        let publishes_sent = Arc::new(AtomicUsize::new(0));
+        let counter = Arc::clone(&publishes_sent);
+        let publish_source = move || -> PublishFuture {
+            let n = counter.fetch_add(1, Ordering::SeqCst);
+            Box::pin(async move {
+                if n == 0 {
+                    Err(Error::new(StatusCode::BadTooManyPublishRequests, "refused"))
+                } else {
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                    Ok(false)
+                }
+            })
+        };
+
+        let mut limits = PublishLimits::new();
+        limits.update_subscriptions(1, Duration::from_millis(100));
+        let (_limits_tx, limits_rx) = tokio::sync::watch::channel(limits);
+        let (_trigger_tx, trigger_rx) = tokio::sync::watch::channel(Instant::now());
+
+        let mut cache = MaybeIdleState(Arc::default());
+        let mut next = cache.next_publish_time(false);
+        let mut state = SubscriptionEventLoopState::new(
+            1,
+            trigger_rx,
+            limits_rx,
+            publish_source.clone(),
+            cache.clone(),
+        );
+        let mut recv = state.trigger_publish_recv.clone();
+
+        let deadline = tokio::time::Instant::now() + Duration::from_millis(200);
+        let mut ticks = 0usize;
+        let mut accepted = 0usize;
+        while let Ok(outcome) = tokio::time::timeout_at(deadline, state.tick(next, &mut recv)).await
+        {
+            ticks += 1;
+            match outcome {
+                ActivityOrNext::Activity(SubscriptionActivity::Publish) => accepted += 1,
+                ActivityOrNext::Activity(_) => {}
+                ActivityOrNext::Next(n) => next = n,
+            }
+            if ticks > 1_000_000 {
+                break;
+            }
+        }
+        assert_eq!(accepted, 0);
+
+        // Now re-initialize, and we should get a publish out within the deadline.
+        let mut limits = PublishLimits::new();
+        limits.update_subscriptions(1, Duration::from_millis(100));
+        let (_limits_tx, limits_rx) = tokio::sync::watch::channel(limits);
+        let (_trigger_tx, trigger_rx) = tokio::sync::watch::channel(Instant::now());
+
+        let mut cache = MaybeIdleState(Arc::default());
+        cache.0.store(1, Ordering::Relaxed);
+        let mut next = cache.next_publish_time(false);
+
+        let mut state = SubscriptionEventLoopState::new(
+            1,
+            trigger_rx,
+            limits_rx,
+            publish_source,
+            cache.clone(),
+        );
+        let mut recv = state.trigger_publish_recv.clone();
+
+        let deadline = tokio::time::Instant::now() + Duration::from_millis(500);
+        let mut ticks = 0usize;
+        let mut accepted = 0usize;
+        while let Ok(outcome) = tokio::time::timeout_at(deadline, state.tick(next, &mut recv)).await
+        {
+            ticks += 1;
+            match outcome {
+                ActivityOrNext::Activity(SubscriptionActivity::Publish) => accepted += 1,
+                ActivityOrNext::Activity(_) => {}
+                ActivityOrNext::Next(n) => next = n,
+            }
+            if ticks > 1_000_000 {
+                break;
+            }
+        }
+        assert!(accepted > 0);
     }
 }

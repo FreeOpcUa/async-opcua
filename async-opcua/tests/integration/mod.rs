@@ -5,6 +5,7 @@ mod methods;
 mod node_management;
 mod read;
 mod reverse_connect;
+mod session_lifecycle;
 mod subscriptions;
 mod write;
 

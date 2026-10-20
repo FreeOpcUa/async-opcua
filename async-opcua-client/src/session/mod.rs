@@ -172,6 +172,8 @@ pub(super) enum SessionState {
     Disconnected,
     Connected,
     Connecting,
+    /// The event loop has ended, so the state will never change again.
+    Terminated,
 }
 
 static NEXT_SESSION_ID: AtomicU32 = AtomicU32::new(1);
@@ -283,16 +285,22 @@ impl Session {
     }
 
     /// Wait for the session to be in either a connected or disconnected state.
+    ///
+    /// Also stops waiting if the event loop ends, since the state can't change after that. That
+    /// counts as disconnected: waiting for a connection gives `false`, waiting for a
+    /// disconnect gives `true`.
     async fn wait_for_state(&self, connected: bool) -> bool {
         let mut rx = self.state_watch_rx.clone();
 
         let res = rx
             .wait_for(|s| {
-                connected && matches!(*s, SessionState::Connected)
+                matches!(*s, SessionState::Terminated)
+                    || connected && matches!(*s, SessionState::Connected)
                     || !connected && matches!(*s, SessionState::Disconnected)
             })
             .await
-            .is_ok();
+            .map(|s| !matches!(*s, SessionState::Terminated) || !connected)
+            .unwrap_or(false);
 
         // Compiler limitation
         res
@@ -311,7 +319,10 @@ impl Session {
 
     /// Convenience method to wait for a connection to the server.
     ///
-    /// You should also monitor the session event loop. If it ends, this method will never return.
+    /// Returns `true` once the session is connected, or `false` if the event loop ends first, for
+    /// example when it runs out of retries or the session is closed. The reason is in the status
+    /// returned by [`SessionEventLoop::run`], or in the error from the [`SessionEventLoop::enter`]
+    /// stream.
     pub async fn wait_for_connection(&self) -> bool {
         self.wait_for_state(true).await
     }

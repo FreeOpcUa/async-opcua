@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use opcua::types::{AttributeId, NodeId, ReadValueId, StatusCode, TimestampsToReturn, VariableId};
-use opcua_client::{services::Read, DefaultRetryPolicy, ExponentialBackoff, UARequest};
+use opcua_client::{services::Read, DefaultRetryPolicy, ExponentialBackoff};
 
 use crate::utils::{default_client, test_server, Tester};
 

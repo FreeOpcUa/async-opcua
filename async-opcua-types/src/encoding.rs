@@ -84,6 +84,19 @@ impl StdError for Error {
     }
 }
 
+impl Clone for Error {
+    /// The cause is a `Box<dyn StdError>` and can't be cloned, so the copy keeps its message
+    /// rather than the original error type.
+    fn clone(&self) -> Self {
+        Self {
+            status: self.status,
+            request_id: self.request_id,
+            request_handle: self.request_handle,
+            context: self.context.to_string().into(),
+        }
+    }
+}
+
 impl Error {
     /// Create a new error with the specified `status` code and
     /// `context` as a dynamic error source.
@@ -841,8 +854,20 @@ pub use impl_encoded_as;
 mod tests {
     use std::sync::Arc;
 
-    use super::{constants, DepthGauge, DepthLock};
+    use super::{constants, DepthGauge, DepthLock, Error};
     use crate::StatusCode;
+
+    #[test]
+    fn cloned_error_keeps_status_ids_and_message() {
+        let error = Error::new(StatusCode::BadDecodingError, "array too long")
+            .with_request_id(7)
+            .with_request_handle(9);
+        let copy = error.clone();
+
+        assert_eq!(copy.status(), StatusCode::BadDecodingError);
+        assert_eq!(copy.full_context(), error.full_context());
+        assert_eq!(copy.to_string(), error.to_string());
+    }
 
     #[test]
     fn depth_gauge() {

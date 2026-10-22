@@ -18,15 +18,6 @@ use opcua_types::{Error, StatusCode, UAString};
 use crate::transport::state::SecureChannelState;
 use crate::transport::RequestRecv;
 
-/// `Error` isn't `Clone`, so this makes a copy with the same status and cause, to hand to the
-/// request that was waiting.
-fn copy_error(error: &Error, request_id: u32) -> Error {
-    let cause = std::error::Error::source(error)
-        .map(ToString::to_string)
-        .unwrap_or_default();
-    Error::new(error.status(), cause).with_request_id(request_id)
-}
-
 #[derive(Debug)]
 struct MessageChunkWithChunkInfo {
     header: ChunkInfo,
@@ -316,14 +307,14 @@ impl TransportState {
                 let message_state = self.message_states.remove(&req_id).unwrap();
                 let _h = message_state.span.enter();
                 // The request is already out of `message_states`. If we can't read the message the
-                // transport closes and nobody else will answer it, so tell the caller what went
-                // wrong first. Before, its reply channel was just dropped and all it saw was a
-                // generic "connection closed", with the real reason only in the log.
+                // transport closes and nobody else will answer it, so tell the caller what went wrong.
                 let in_chunks = match Self::merge_chunks(message_state.chunks) {
                     Ok(chunks) => chunks,
                     Err(e) => {
                         error!("Failed to merge chunks for message, request_id = {req_id}: {e}");
-                        let _ = message_state.callback.send(Err(copy_error(&e, req_id)));
+                        let _ = message_state
+                            .callback
+                            .send(Err(e.clone().with_request_id(req_id)));
                         return Err(e);
                     }
                 };
@@ -331,7 +322,9 @@ impl TransportState {
                     Ok(message) => message,
                     Err(e) => {
                         error!("Failed to decode incoming message, request_id = {req_id}: {e}");
-                        let _ = message_state.callback.send(Err(copy_error(&e, req_id)));
+                        let _ = message_state
+                            .callback
+                            .send(Err(e.clone().with_request_id(req_id)));
                         return Err(e);
                     }
                 };

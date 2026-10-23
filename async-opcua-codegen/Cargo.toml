@@ -12,7 +12,6 @@ documentation = "https://docs.rs/async-opcua/"
 publish = true
 
 [lints]
-cargo.unused_dependencies = "allow"
 
 [lib]
 name = "opcua_codegen"

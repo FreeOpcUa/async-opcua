@@ -803,7 +803,9 @@ impl X509 {
             );
             Err(Error::new(
                 StatusCode::BadCertificateUriInvalid,
-                format!("Application uri {application_uri} does not match any uri alt name {uris:?}"),
+                format!(
+                    "Application uri {application_uri} does not match any uri alt name {uris:?}"
+                ),
             ))
         } else {
             error!("Cert has no subject alt names at all");
@@ -970,7 +972,7 @@ mod tests {
         x509.is_application_uri_valid("urn:other:app").unwrap();
     }
 
-    /// Ensures that certificates lacking a dedicated UniformResourceIdentifier entry 
+    /// Ensures that certificates lacking a dedicated UniformResourceIdentifier entry
     /// are strictly rejected under OPC UA Part 6 compliance.
     #[test]
     fn reject_application_uri_stored_as_dns_name() {
@@ -983,7 +985,7 @@ mod tests {
         assert!(x509.is_application_uri_valid("urn:my:app").is_err());
     }
 
-    /// Tests that UniformResourceIdentifier SAN entries are strictly ignored 
+    /// Tests that UniformResourceIdentifier SAN entries are strictly ignored
     /// when validating network hostnames.
     #[test]
     fn uri_entries_are_not_valid_hostnames() {

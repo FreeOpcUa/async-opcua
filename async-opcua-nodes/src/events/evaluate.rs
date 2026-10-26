@@ -34,7 +34,7 @@ impl ParsedEventFilter {
         let fields: Vec<_> = self
             .select_clauses
             .iter()
-            .map(|c| get_field(event, c))
+            .map(|c| c.as_ref().map_or(Variant::Empty, |c| get_field(event, c)))
             .collect();
         Some(EventFieldList {
             client_handle,
@@ -447,11 +447,13 @@ mod tests {
     use regex::Regex;
 
     use crate::{
-        events::evaluate::like_to_regex, BaseEventType, DefaultTypeTree, Event, ParsedContentFilter,
+        events::evaluate::like_to_regex, BaseEventType, DefaultTypeTree, Event,
+        ParsedContentFilter, ParsedEventFilter,
     };
     use opcua_types::{
-        AttributeId, ByteString, ContentFilter, ContentFilterElement, DateTime, FilterOperator,
-        LocalizedText, NodeClass, NodeId, NumericRange, ObjectTypeId, Operand,
+        AttributeId, ByteString, ContentFilter, ContentFilterElement, DateTime, EventFilter,
+        FilterOperator, LocalizedText, NodeClass, NodeId, NumericRange, ObjectTypeId, Operand,
+        SimpleAttributeOperand, StatusCode, Variant,
     };
 
     fn compare_regex(r1: Regex, r2: Regex) {
@@ -1050,5 +1052,47 @@ mod tests {
         );
         let evt = event(2);
         assert!(f.evaluate(&evt as &dyn Event, &type_tree));
+    }
+
+    #[test]
+    fn test_invalid_select_clause_keeps_its_place() {
+        let type_tree = type_tree();
+        let clause = |type_id: NodeId, path: &str| {
+            SimpleAttributeOperand::new(type_id, path, AttributeId::Value, NumericRange::None)
+        };
+        let (result, f) = ParsedEventFilter::new(
+            EventFilter {
+                where_clause: ContentFilter { elements: None },
+                select_clauses: Some(vec![
+                    clause(ObjectTypeId::BaseEventType.into(), "Message"),
+                    clause(NodeId::new(1, 123), "NoSuchField"),
+                    clause(NodeId::new(1, 123), "Field"),
+                ]),
+            },
+            &type_tree,
+        );
+        assert_eq!(
+            result.select_clause_results,
+            Some(vec![
+                StatusCode::Good,
+                StatusCode::BadNodeIdUnknown,
+                StatusCode::Good
+            ])
+        );
+
+        let fields = f
+            .unwrap()
+            .evaluate(&event(2) as &dyn Event, 1, &type_tree)
+            .unwrap()
+            .event_fields
+            .unwrap();
+        assert_eq!(
+            fields,
+            vec![
+                Variant::from(LocalizedText::from("message")),
+                Variant::Empty,
+                Variant::from(2i32),
+            ]
+        );
     }
 }

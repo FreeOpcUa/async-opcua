@@ -93,7 +93,7 @@ impl ParsedOperand {
 /// Parsed version of the raw [EventFilter].
 pub struct ParsedEventFilter {
     pub(super) content_filter: ParsedContentFilter,
-    pub(super) select_clauses: Vec<ParsedSimpleAttributeOperand>,
+    pub(super) select_clauses: Vec<Option<ParsedSimpleAttributeOperand>>,
 }
 
 impl ParsedEventFilter {
@@ -168,9 +168,12 @@ fn validate(
         match validate_select_clause(clause, type_tree) {
             Ok(result) => {
                 select_clause_results.push(StatusCode::Good);
-                final_select_clauses.push(result);
+                final_select_clauses.push(Some(result));
             }
-            Err(e) => select_clause_results.push(e),
+            Err(e) => {
+                select_clause_results.push(e);
+                final_select_clauses.push(None);
+            }
         }
     }
     let (where_clause_result, parsed_where_clause) = validate_where_clause(

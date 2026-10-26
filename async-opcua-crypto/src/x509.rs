@@ -758,17 +758,10 @@ impl X509 {
                 "Certificate hostname is empty",
             ))
         } else if let Some(subject_alt_names) = self.get_alternate_names() {
-            // Only dns names and ip addresses are host names, in any order.
-            //
-            // Certs made with `AlternateNames::from(vec![uri, host, ..])` have no uri entry, the uri
-            // is stored as a dns name in first place. Those keep working: skip that first entry.
-            let has_uri_entry = subject_alt_names
-                .iter()
-                .any(|n| matches!(n, GeneralName::UniformResourceIdentifier(_)));
+            // Only dns names and ip addresses are valid host names.
             let found = subject_alt_names
                 .iter()
                 .filter(|n| matches!(n, GeneralName::DnsName(_) | GeneralName::IpAddress(_)))
-                .skip(if has_uri_entry { 0 } else { 1 })
                 .any(|n| {
                     let name = AlternateNames::convert_name(n);
                     match name {
@@ -804,40 +797,14 @@ impl X509 {
             if uris.iter().any(|uri| uri == application_uri) {
                 return Ok(());
             }
-            if !uris.is_empty() {
-                error!(
-                    "Application uri {} does not match any uri alt name {:?}",
-                    application_uri, uris
-                );
-                return Err(Error::new(
-                    StatusCode::BadCertificateUriInvalid,
-                    format!("Application uri {application_uri} does not match any uri alt name {uris:?}"),
-                ));
-            }
-
-            // No uri entry at all: the uri is stored as a dns name in first place (see above).
-            match alt_names.first().and_then(AlternateNames::convert_name) {
-                Some(val) if val == application_uri => Ok(()),
-                Some(val) => {
-                    error!(
-                        "Application uri {} does not match first alt name {}",
-                        application_uri, val
-                    );
-                    Err(Error::new(
-                        StatusCode::BadCertificateUriInvalid,
-                        format!(
-                            "Application uri {application_uri} does not match first alt name {val}"
-                        ),
-                    ))
-                }
-                None => {
-                    error!("Cert has no subject alt names that can be compared");
-                    Err(Error::new(
-                        StatusCode::BadCertificateUriInvalid,
-                        "Certificate has no usable subject alt names",
-                    ))
-                }
-            }
+            error!(
+                "Application uri {} does not match any uri alt name {:?}",
+                application_uri, uris
+            );
+            Err(Error::new(
+                StatusCode::BadCertificateUriInvalid,
+                format!("Application uri {application_uri} does not match any uri alt name {uris:?}"),
+            ))
         } else {
             error!("Cert has no subject alt names at all");
             // No alt names
@@ -925,7 +892,6 @@ mod tests {
     #[test]
     fn alt_hostnames() {
         let mut alt_host_names = AlternateNames::new();
-        alt_host_names.add_dns("uri:foo"); //the application uri
         alt_host_names.add_address("host2");
         alt_host_names.add_address("www.google.com");
         alt_host_names.add_address("192.168.1.1");
@@ -946,12 +912,11 @@ mod tests {
         let (x509, _pkey) = X509::cert_and_pkey(&args).unwrap();
 
         assert!(x509.is_hostname_valid("").is_err());
-        assert!(x509.is_hostname_valid("uri:foo").is_err()); // The application uri should not be valid
         assert!(x509.is_hostname_valid("192.168.1.0").is_err());
         assert!(x509.is_hostname_valid("www.cnn.com").is_err());
         assert!(x509.is_hostname_valid("host1").is_err());
 
-        args.alt_host_names.iter().skip(1).for_each(|n| {
+        args.alt_host_names.iter().for_each(|n| {
             assert!(x509.is_hostname_valid(n.as_str()).is_ok());
         })
     }
@@ -1005,18 +970,31 @@ mod tests {
         x509.is_application_uri_valid("urn:other:app").unwrap();
     }
 
-    /// Certs made with `AlternateNames::from(vec![uri, host, ..])` have no uri entry; the uri is
-    /// stored as a dns name in first place. They have to keep working.
+    /// Ensures that certificates lacking a dedicated UniformResourceIdentifier entry 
+    /// are strictly rejected under OPC UA Part 6 compliance.
     #[test]
-    fn certs_with_the_uri_stored_as_a_dns_name_still_work() {
+    fn reject_application_uri_stored_as_dns_name() {
         let x509 = cert_with_names(AlternateNames::from(vec![
             "urn:my:app".to_string(),
             "myhost".to_string(),
         ]));
 
-        x509.is_application_uri_valid("urn:my:app").unwrap();
-        assert!(x509.is_application_uri_valid("urn:other:app").is_err());
-        x509.is_hostname_valid("myhost").unwrap();
+        // Must fail because the URI is stored as a DNS name instead of UniformResourceIdentifier
+        assert!(x509.is_application_uri_valid("urn:my:app").is_err());
+    }
+
+    /// Tests that UniformResourceIdentifier SAN entries are strictly ignored 
+    /// when validating network hostnames.
+    #[test]
+    fn uri_entries_are_not_valid_hostnames() {
+        let mut alt_host_names = AlternateNames::new();
+        alt_host_names.add_uri("urn:my:app");
+        alt_host_names.add_dns("192.168.1.100");
+
+        let x509 = cert_with_names(alt_host_names);
+
+        // The application URI should never be matched as a network hostname
         assert!(x509.is_hostname_valid("urn:my:app").is_err());
+        assert!(x509.is_hostname_valid("192.168.1.100").is_ok());
     }
 }

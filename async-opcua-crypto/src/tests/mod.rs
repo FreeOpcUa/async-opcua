@@ -3,7 +3,7 @@ use tempdir::TempDir;
 use crate::CertificateStore;
 
 use crate::{
-    x509::{X509Data, X509},
+    x509::{AlternateNames, X509Data, X509},
     PrivateKey,
 };
 
@@ -18,6 +18,12 @@ fn make_certificate_store() -> (TempDir, CertificateStore) {
 }
 
 fn make_test_cert(key_size: u32) -> (X509, PrivateKey) {
+    let mut alt_host_names = AlternateNames::new();
+    alt_host_names.add_uri(APPLICATION_URI);
+    alt_host_names.add_dns("foo");
+    alt_host_names.add_dns("foo2");
+    alt_host_names.add_dns(APPLICATION_HOSTNAME);
+    alt_host_names.add_dns("foo3");
     let args = X509Data {
         key_size,
         common_name: "x".to_string(),
@@ -25,14 +31,7 @@ fn make_test_cert(key_size: u32) -> (X509, PrivateKey) {
         organizational_unit: "x.org ops".to_string(),
         country: "EN".to_string(),
         state: "London".to_string(),
-        alt_host_names: vec![
-            APPLICATION_URI.to_string(),
-            "foo".to_string(),
-            "foo2".to_string(),
-            APPLICATION_HOSTNAME.to_string(),
-            "foo3".to_string(),
-        ]
-        .into(),
+        alt_host_names,
         certificate_duration_days: 60,
     };
     let cert = X509::cert_and_pkey(&args);

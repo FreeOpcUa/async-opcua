@@ -258,6 +258,43 @@ async fn connect_basic128rsa_15_with_invalid_token() {
     assert_eq!(res, StatusCode::BadIdentityTokenRejected);
 }
 
+/// A server may send its certificate followed by the certificates that issued it (Part 6, 6.2.6),
+/// and send the chain in one place but not in the other: in the endpoint description, but only its
+/// own certificate in the CreateSession response. Part 4, 5.7.2.2 asks the client to check that
+/// the CreateSession certificate is the one the channel was opened to, which it is.
+#[tokio::test]
+async fn connect_when_the_endpoint_certificate_carries_a_chain() {
+    let mut tester = Tester::new_default_server(true).await;
+    let mut endpoint = tester
+        .client
+        .get_server_endpoints_from_url(tester.endpoint())
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|e| {
+            e.security_policy_uri.as_ref() == SecurityPolicy::Basic256Sha256.to_uri()
+                && e.security_mode == MessageSecurityMode::SignAndEncrypt
+        })
+        .unwrap();
+    let mut chain = endpoint.server_certificate.as_ref().to_vec();
+    chain.extend_from_slice(&std::fs::read("certs/client/cert.der").unwrap());
+    endpoint.server_certificate = ByteString::from(chain);
+
+    let (session, handle) = tester
+        .client
+        .connect_to_endpoint_directly(endpoint, IdentityToken::Anonymous)
+        .unwrap();
+    let _h = handle.spawn();
+
+    let connected = tokio::time::timeout(Duration::from_secs(20), session.wait_for_connection())
+        .await
+        .unwrap();
+    assert!(
+        connected,
+        "the CreateSession certificate is the leading certificate of the endpoint's chain"
+    );
+}
+
 #[tokio::test]
 async fn find_servers() {
     let tester = Tester::new_default_server(true).await;

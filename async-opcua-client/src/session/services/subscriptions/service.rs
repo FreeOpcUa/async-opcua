@@ -2335,6 +2335,12 @@ impl Session {
                         }
                     }
                 }
+                let missed = trace_lock!(self.subscription_state).missed_before(
+                    r.subscription_id,
+                    &r.notification_message,
+                    r.available_sequence_numbers.as_deref().unwrap_or_default(),
+                );
+                self.republish_missed(r.subscription_id, missed).await;
                 let mut subscription_state = trace_lock!(self.subscription_state);
                 subscription_state.handle_notification(r.subscription_id, r.notification_message);
                 Ok(r.more_notifications)
@@ -2378,6 +2384,31 @@ impl Session {
         }
 
         Ok(res.notification_message)
+    }
+
+    /// Republish each of `missed`, oldest first, and hand it to the subscription as if it had come with its Publish
+    /// response; a number the server no longer holds (`BadMessageNotAvailable`) or a failed request is skipped.
+    async fn republish_missed(&self, subscription_id: u32, missed: Vec<u32>) {
+        for sequence_number in missed {
+            match Republish::new(subscription_id, sequence_number, self)
+                .send(&self.channel)
+                .await
+            {
+                Ok(res) => {
+                    let mut subscription_state = trace_lock!(self.subscription_state);
+                    subscription_state
+                        .handle_notification(subscription_id, res.notification_message);
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Republish of subscription {} seq {} failed: {}",
+                        subscription_id,
+                        sequence_number,
+                        e
+                    );
+                }
+            }
+        }
     }
 
     /// This code attempts to take the existing subscriptions created by a previous session and

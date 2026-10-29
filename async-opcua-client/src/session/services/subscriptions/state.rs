@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     time::{Duration, Instant},
 };
 
@@ -10,9 +10,20 @@ use crate::session::services::subscriptions::{MonitoredItemTempResult, TempMonit
 
 use super::{CreateMonitoredItem, ModifyMonitoredItem, PublishLimits, Subscription};
 
+/// How many sequence numbers of delivered notification messages are kept per subscription to recognise one
+/// delivered twice.
+const DELIVERED_SEQUENCE_NUMBERS_KEPT: usize = 64;
+
 /// State containing all known subscriptions in the session.
 pub struct SubscriptionState {
     acknowledgements: Vec<SubscriptionAcknowledgement>,
+    /// Per subscription, the highest sequence number this client has heard the server account for: the number of
+    /// the last notification message with data, or one below the number a keep-alive names as the next.
+    heard_sequence_numbers: HashMap<u32, u32>,
+    /// Per subscription, the sequence numbers of the latest notification messages with data handed to the
+    /// subscription. Publish responses are handled as they complete, so a later one can be handled first and the
+    /// earlier one republished as missed; when the earlier one is then handled itself, it is not handed over again.
+    delivered_sequence_numbers: HashMap<u32, VecDeque<u32>>,
     keep_alive_timeout: Option<Duration>,
     last_publish: Instant,
     min_publish_interval: Duration,
@@ -34,6 +45,8 @@ impl SubscriptionState {
     ) -> Self {
         Self {
             acknowledgements: Vec::new(),
+            heard_sequence_numbers: HashMap::new(),
+            delivered_sequence_numbers: HashMap::new(),
             keep_alive_timeout: None,
             last_publish: Instant::now() - min_publish_interval,
             min_publish_interval,
@@ -143,6 +156,8 @@ impl SubscriptionState {
 
     pub(crate) fn delete_subscription(&mut self, subscription_id: u32) -> Option<Subscription> {
         let subscription = self.subscriptions.remove(&subscription_id);
+        self.heard_sequence_numbers.remove(&subscription_id);
+        self.delivered_sequence_numbers.remove(&subscription_id);
         self.set_keep_alive_timeout();
         self.update_publish_limits();
         subscription
@@ -216,6 +231,49 @@ impl SubscriptionState {
         }
     }
 
+    /// The messages the server sent before `notification` that never reached this client, oldest first, among the
+    /// `available` sequence numbers the server still holds for retransmission; records `notification` as heard.
+    ///
+    /// OPC UA Part 4, 5.13.1.1 and 5.13.6: a message with data carries its own sequence number, a keep-alive the
+    /// number the next message will carry, and the client recovers the messages in between with Republish. A
+    /// Publish response lost with its transport (the request was answered on a connection that died) is the case:
+    /// the session reactivates, the server keeps the message in its retransmission queue, and without Republish its
+    /// value never arrives. The first message of a subscription only sets the mark.
+    pub(crate) fn missed_before(
+        &mut self,
+        subscription_id: u32,
+        notification: &NotificationMessage,
+        available: &[u32],
+    ) -> Vec<u32> {
+        let has_data = notification
+            .notification_data
+            .as_ref()
+            .is_some_and(|v| !v.is_empty());
+        let next = notification.sequence_number;
+        let heard = if has_data {
+            next
+        } else {
+            next.saturating_sub(1)
+        };
+        let previous = self.heard_sequence_numbers.get(&subscription_id).copied();
+        if previous.is_none_or(|previous| heard > previous) {
+            self.heard_sequence_numbers.insert(subscription_id, heard);
+        }
+        let Some(previous) = previous else {
+            return Vec::new();
+        };
+        let delivered = self.delivered_sequence_numbers.get(&subscription_id);
+        let mut missed: Vec<u32> = available
+            .iter()
+            .copied()
+            .filter(|&number| number > previous && number < next)
+            .filter(|number| delivered.is_none_or(|delivered| !delivered.contains(number)))
+            .collect();
+        missed.sort_unstable();
+        missed.dedup();
+        missed
+    }
+
     pub(crate) fn handle_notification(
         &mut self,
         subscription_id: u32,
@@ -226,6 +284,22 @@ impl SubscriptionState {
             .as_ref()
             .is_some_and(|v| !v.is_empty());
         if has_data {
+            let delivered = self
+                .delivered_sequence_numbers
+                .entry(subscription_id)
+                .or_default();
+            if delivered.contains(&notification.sequence_number) {
+                tracing::debug!(
+                    "Notification {} of subscription {} was already delivered",
+                    notification.sequence_number,
+                    subscription_id
+                );
+                return;
+            }
+            if delivered.len() == DELIVERED_SEQUENCE_NUMBERS_KEPT {
+                delivered.pop_front();
+            }
+            delivered.push_back(notification.sequence_number);
             self.add_acknowledgement(subscription_id, notification.sequence_number);
         }
         if let Some(sub) = self.subscriptions.get_mut(&subscription_id) {
@@ -290,5 +364,114 @@ impl SubscriptionState {
 
     pub(super) fn next_temp_id(&mut self) -> u32 {
         self.temp_id_handle.next()
+    }
+}
+
+#[cfg(test)]
+mod sequence_tests {
+    use std::time::Duration;
+
+    use opcua_types::{
+        DataChangeNotification, ExtensionObject, NotificationMessage, SubscriptionAcknowledgement,
+    };
+
+    use super::SubscriptionState;
+    use crate::session::services::subscriptions::PublishLimits;
+
+    const SUBSCRIPTION: u32 = 1;
+
+    fn state() -> SubscriptionState {
+        let (limits_tx, _) = tokio::sync::watch::channel(PublishLimits::new());
+        SubscriptionState::new(Duration::from_millis(100), limits_tx)
+    }
+
+    fn data(sequence_number: u32) -> NotificationMessage {
+        NotificationMessage {
+            sequence_number,
+            notification_data: Some(vec![ExtensionObject::from_message(
+                DataChangeNotification::default(),
+            )]),
+            ..Default::default()
+        }
+    }
+
+    fn keep_alive(next_sequence_number: u32) -> NotificationMessage {
+        NotificationMessage {
+            sequence_number: next_sequence_number,
+            notification_data: None,
+            ..Default::default()
+        }
+    }
+
+    fn acknowledged(state: &mut SubscriptionState) -> Vec<u32> {
+        state
+            .take_acknowledgements()
+            .into_iter()
+            .map(
+                |SubscriptionAcknowledgement {
+                     sequence_number, ..
+                 }| sequence_number,
+            )
+            .collect()
+    }
+
+    #[test]
+    fn the_first_message_of_a_subscription_only_sets_the_mark() {
+        let mut state = state();
+        assert!(state
+            .missed_before(SUBSCRIPTION, &data(5), &[3, 4, 5])
+            .is_empty());
+    }
+
+    #[test]
+    fn messages_between_two_data_messages_are_missed_oldest_first() {
+        let mut state = state();
+        state.missed_before(SUBSCRIPTION, &data(1), &[1]);
+        assert_eq!(
+            state.missed_before(SUBSCRIPTION, &data(4), &[3, 2, 4]),
+            vec![2, 3]
+        );
+    }
+
+    #[test]
+    fn a_keep_alive_names_the_messages_before_the_next_one_as_missed() {
+        let mut state = state();
+        state.missed_before(SUBSCRIPTION, &data(1), &[1]);
+        assert_eq!(
+            state.missed_before(SUBSCRIPTION, &keep_alive(3), &[2]),
+            vec![2]
+        );
+        assert!(state
+            .missed_before(SUBSCRIPTION, &keep_alive(3), &[2])
+            .is_empty());
+    }
+
+    #[test]
+    fn a_message_the_server_no_longer_holds_is_not_requested() {
+        let mut state = state();
+        state.missed_before(SUBSCRIPTION, &data(1), &[1]);
+        assert_eq!(
+            state.missed_before(SUBSCRIPTION, &data(4), &[3, 4]),
+            vec![3]
+        );
+    }
+
+    #[test]
+    fn a_message_handled_after_the_one_that_overtook_it_is_delivered_once() {
+        let mut state = state();
+        state.missed_before(SUBSCRIPTION, &data(1), &[1]);
+        state.handle_notification(SUBSCRIPTION, data(1));
+
+        assert_eq!(
+            state.missed_before(SUBSCRIPTION, &data(3), &[2, 3]),
+            vec![2]
+        );
+        state.handle_notification(SUBSCRIPTION, data(2));
+        state.handle_notification(SUBSCRIPTION, data(3));
+
+        assert!(state.missed_before(SUBSCRIPTION, &data(2), &[]).is_empty());
+        state.handle_notification(SUBSCRIPTION, data(2));
+
+        assert_eq!(acknowledged(&mut state), vec![1, 2, 3]);
     }
 }

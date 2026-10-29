@@ -205,13 +205,19 @@ impl UARequest for CreateSession<'_> {
             process_service_result(&response.response_header)?;
 
             let server_certificate = if security_policy != SecurityPolicy::None {
-                if self.endpoint.server_certificate != response.server_certificate {
-                    error!("Server certificate in CreateSession response does not match channel certificate");
-                    return Err(Error::new(StatusCode::BadCertificateInvalid, "Server certificate in CreateSession response does not match channel certificate"));
-                }
+                // OPC UA Part 4 5.7.2.2: the certificate must be the one the channel was opened to. Either
+                // byte string may carry the issuer chain after it (Part 6 6.2.6), so compare the leading
+                // certificates, not the byte strings.
                 let server_certificate =
                     opcua_crypto::X509::from_byte_string(&response.server_certificate)
                         .inspect_err(|e| error!("Failed to parse server certificate: {e}"))?;
+                let channel_certificate =
+                    opcua_crypto::X509::from_byte_string(&self.endpoint.server_certificate)
+                        .inspect_err(|e| error!("Failed to parse channel certificate: {e}"))?;
+                if server_certificate.as_byte_string() != channel_certificate.as_byte_string() {
+                    error!("Server certificate in CreateSession response does not match channel certificate");
+                    return Err(Error::new(StatusCode::BadCertificateInvalid, "Server certificate in CreateSession response does not match channel certificate"));
+                }
                 // Validate server certificate against hostname and application_uri
                 let hostname =
                     hostname_from_url(self.endpoint.endpoint_url.as_ref()).map_err(|e| {

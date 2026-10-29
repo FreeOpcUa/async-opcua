@@ -12,6 +12,6 @@ log/
 async-opcua/pki*
 async-opcua/certs
 
-**/bin
-**/obj
+dotnet-tests/**/bin
+dotnet-tests/**/obj
 **/pki-ext-client

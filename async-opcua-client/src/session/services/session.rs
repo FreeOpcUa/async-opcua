@@ -303,6 +303,12 @@ impl<'a> CreateSession<'a> {
                 "Server certificate in CreateSession response does not match channel certificate",
             ));
         }
+
+        // Don't validate against the certificate store, to avoid side-effects.
+        if security_policy == SecurityPolicy::None {
+            return Ok(Some(server_certificate));
+        }
+
         // Validate server certificate against hostname and application_uri
         let hostname = hostname_from_url(endpoint.endpoint_url.as_ref()).map_err(|e| {
             Error::new(

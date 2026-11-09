@@ -4,7 +4,6 @@
 
 //! The secure channel handles security on an OPC-UA connection.
 
-use core::panic;
 use std::{
     collections::HashMap,
     io::{Cursor, Write},
@@ -87,11 +86,17 @@ pub struct SecureChannel {
 }
 
 impl SecureChannel {
-    /// For testing purposes only
+    /// For testing purposes only. Creates a client role secure channel.
     #[cfg(test)]
     pub fn new_no_certificate_store() -> SecureChannel {
+        Self::new_no_certificate_store_with_role(SecureChannelRole::Client)
+    }
+
+    /// For testing purposes only
+    #[cfg(test)]
+    pub fn new_no_certificate_store_with_role(role: SecureChannelRole) -> SecureChannel {
         SecureChannel {
-            role: SecureChannelRole::Client,
+            role,
             security_policy: SecurityPolicy::None,
             security_mode: MessageSecurityMode::None,
             secure_channel_id: 0,
@@ -462,13 +467,6 @@ impl SecureChannel {
 
         self.insert_remote_keys(key_pair.remote);
         self.local_keys = Some(key_pair.local);
-        /* trace!("Remote nonce = {:?}", self.remote_nonce);
-        trace!("Local nonce = {:?}", self.local_nonce);
-        trace!(
-            "Derived remote keys = {:?}",
-            self.get_remote_keys(self.token_id)
-        );
-        trace!("Derived local keys = {:?}", self.local_keys); */
 
         Ok(())
     }

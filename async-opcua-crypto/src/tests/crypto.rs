@@ -31,6 +31,45 @@ fn create_cert() {
 }
 
 #[test]
+fn cert_common_name_and_file_name() {
+    // The common name format is used for file names in the certificate store,
+    // so it must not change, or existing trusted certificates will not be found.
+    let (x509, _) = make_test_cert_1024();
+    assert_eq!(x509.common_name().unwrap(), "CN=x");
+    let file_name = CertificateStore::cert_file_name(&x509);
+    assert_eq!(
+        file_name,
+        format!("CN=x [{}].der", x509.thumbprint().as_hex_string())
+    );
+}
+
+#[test]
+fn created_cert_is_self_signed() {
+    use x509_cert::der::Decode;
+
+    let (x509, _) = make_test_cert_1024();
+    let cert = x509_cert::Certificate::from_der(&x509.to_der().unwrap()).unwrap();
+    let tbs = cert.tbs_certificate();
+    assert_eq!(tbs.issuer(), tbs.subject());
+
+    // Each extension must only appear once, or the certificate is invalid.
+    let mut oids: Vec<_> = tbs
+        .extensions()
+        .unwrap()
+        .iter()
+        .map(|e| e.extn_id)
+        .collect();
+    let count = oids.len();
+    oids.sort();
+    oids.dedup();
+    assert_eq!(
+        count,
+        oids.len(),
+        "Certificate contains duplicate extensions"
+    );
+}
+
+#[test]
 fn ensure_pki_path() {
     let (tmp_dir, cert_store) = make_certificate_store();
     let pki = cert_store.pki_path.clone();

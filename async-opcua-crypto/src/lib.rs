@@ -15,7 +15,7 @@ use tracing::{error, trace};
 
 pub use crate::aes::{AesKey, KeySize, PKey, PrivateKey, PublicKey};
 pub use crate::x509::{X509Data, X509Error, X509};
-pub use aes::diffie_hellman::DiffieHellmanExchange;
+pub use aes::diffie_hellman::{AesKeyPair, DiffieHellmanExchange};
 pub use certificate_store::CertificateStore;
 pub use policy::{AesDerivedKeys, PaddingInfo, SecureChannelRole};
 pub use security_policy::SecurityPolicy;

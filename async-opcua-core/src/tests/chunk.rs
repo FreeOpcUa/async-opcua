@@ -1,5 +1,6 @@
 use std::io::{Cursor, Write};
 
+use opcua_crypto::SecureChannelRole;
 use opcua_types::{
     BinaryDecodable, ByteString, DataValue, DateTime, DecodingOptions, DiagnosticBits,
     ExtensionObject, MessageSecurityMode, NodeId, OpenSecureChannelRequest, ReadResponse,
@@ -188,7 +189,13 @@ fn chunk_multi_chunk_intermediate_final() {
 fn max_message_size() {
     let _ = Test::setup();
 
-    let secure_channel = SecureChannel::new_no_certificate_store();
+    // Client stack should report BadRequestTooLarge, server BadResponseTooLarge
+    max_message_size_inner(SecureChannelRole::Client, StatusCode::BadRequestTooLarge);
+    max_message_size_inner(SecureChannelRole::Server, StatusCode::BadResponseTooLarge);
+}
+
+fn max_message_size_inner(role: SecureChannelRole, expected_status: StatusCode) {
+    let secure_channel = SecureChannel::new_no_certificate_store_with_role(role);
 
     let response = make_large_read_response();
 
@@ -219,7 +226,7 @@ fn max_message_size() {
         &response,
     )
     .unwrap_err();
-    assert_eq!(err.status(), StatusCode::BadRequestTooLarge);
+    assert_eq!(err.status(), expected_status);
 }
 
 fn validate_chunk_sequence_numbers(

@@ -8,10 +8,15 @@
 
 use opcua_types::{Error, StatusCode};
 
-use crate::{random, AesDerivedKeys};
+use crate::AesDerivedKeys;
 
-pub struct AesKeypair {
+/// A pair of keys for use in symmetric encryption,
+/// returned from a Diffie-Hellman exchange,
+/// see [DiffieHellmanExchange].
+pub struct AesKeyPair {
+    /// The local keys, used for encrypting outgoing messages.
     pub local: AesDerivedKeys,
+    /// The remote keys, used for decrypting incomming messages.
     pub remote: AesDerivedKeys,
 }
 
@@ -25,7 +30,7 @@ pub trait DiffieHellmanExchange: Send + Sync {
     fn set_local_nonce(&mut self, local_nonce: &[u8]);
 
     /// Derive the AES keypair from the remote nonce (public key or random bytes).
-    fn derive_keypair(&self, remote_nonce: &[u8]) -> Result<AesKeypair, Error>;
+    fn derive_keypair(&self, remote_nonce: &[u8]) -> Result<AesKeyPair, Error>;
 }
 
 mod rsa {
@@ -83,10 +88,10 @@ mod rsa {
             self.local_nonce = local_nonce.to_vec();
         }
 
-        fn derive_keypair(&self, remote_nonce: &[u8]) -> Result<super::AesKeypair, Error> {
+        fn derive_keypair(&self, remote_nonce: &[u8]) -> Result<super::AesKeyPair, Error> {
             let local_keys = self.derive_channel_keys(remote_nonce, &self.local_nonce);
             let remote_keys = self.derive_channel_keys(&self.local_nonce, remote_nonce);
-            Ok(super::AesKeypair {
+            Ok(super::AesKeyPair {
                 local: local_keys,
                 remote: remote_keys,
             })
@@ -234,28 +239,22 @@ pub(crate) use rsa::RsaDiffieHellman;
 /// Diffie-Hellman exchange wrapper for the "None" security mode.
 /// This is effectively a no-op, and will fail if the caller attempts
 /// to derive keys.
-pub(crate) struct NoneDiffieHellman {
-    local_nonce: Vec<u8>,
-}
+pub(crate) struct NoneDiffieHellman;
 
 impl NoneDiffieHellman {
     pub(crate) fn new() -> Self {
-        let mut nonce = vec![0u8; 32];
-        random::bytes(&mut nonce);
-        Self { local_nonce: nonce }
+        Self
     }
 }
 
 impl DiffieHellmanExchange for NoneDiffieHellman {
     fn get_local_nonce(&self) -> Vec<u8> {
-        self.local_nonce.clone()
+        Vec::new()
     }
 
-    fn set_local_nonce(&mut self, local_nonce: &[u8]) {
-        self.local_nonce = local_nonce.to_vec();
-    }
+    fn set_local_nonce(&mut self, _local_nonce: &[u8]) {}
 
-    fn derive_keypair(&self, _remote_nonce: &[u8]) -> Result<AesKeypair, Error> {
+    fn derive_keypair(&self, _remote_nonce: &[u8]) -> Result<AesKeyPair, Error> {
         Err(Error::new(
             StatusCode::BadSecurityChecksFailed,
             "Diffie-Hellman exchange not supported for None security policy",

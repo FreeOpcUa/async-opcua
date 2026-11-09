@@ -1,4 +1,3 @@
-use aes::cipher::BlockSizeUser;
 use opcua_types::{Error, StatusCode};
 
 use crate::{hash, AesKey, SHA1_SIZE, SHA256_SIZE};
@@ -60,8 +59,6 @@ pub(crate) trait AesSymmetricEncryptionAlgorithm {
     const BLOCK_SIZE: usize;
     const IV_LENGTH: usize = Self::BLOCK_SIZE;
 
-    type DigestMethod: BlockSizeUser + Clone + digest::Digest;
-
     /// Encrypt the data in `src` using `key`, writing the result to `dst`.
     fn encrypt(key: &AesKey, src: &[u8], iv: &[u8], dst: &mut [u8]) -> Result<usize, Error>;
 
@@ -111,8 +108,6 @@ impl AesSymmetricEncryptionAlgorithm for Aes128Cbc {
     const KEY_LENGTH: usize = 16;
     const BLOCK_SIZE: usize = 16;
 
-    type DigestMethod = sha1::Sha1;
-
     fn encrypt(key: &AesKey, src: &[u8], iv: &[u8], dst: &mut [u8]) -> Result<usize, Error> {
         key.encrypt_aes128_cbc(src, iv, dst)
     }
@@ -128,8 +123,6 @@ impl AesSymmetricEncryptionAlgorithm for Aes256Cbc {
     const URI: &'static str = crate::algorithms::ENC_AES256_CBC;
     const KEY_LENGTH: usize = 32;
     const BLOCK_SIZE: usize = 16;
-
-    type DigestMethod = sha2::Sha256;
 
     fn encrypt(key: &AesKey, src: &[u8], iv: &[u8], dst: &mut [u8]) -> Result<usize, Error> {
         key.encrypt_aes256_cbc(src, iv, dst)

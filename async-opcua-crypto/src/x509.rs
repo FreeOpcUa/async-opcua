@@ -20,7 +20,7 @@ use rsa::pkcs1v15;
 use rsa::PublicKey as RsaPublicKey;
 use x509_cert::{
     self as x509,
-    der::asn1::{Ia5String, OctetString, Utf8StringRef},
+    der::asn1::{Ia5String, OctetString},
     ext::pkix::name::GeneralName,
 };
 
@@ -685,16 +685,15 @@ impl X509 {
         }
     }
 
+    /// Returns the first subject entry with the given OID, formatted as e.g. "CN=foo".
     fn get_subject_entry(&self, nid: const_oid::ObjectIdentifier) -> Result<String, X509Error> {
-        match self
-            .value
+        self.value
             .tbs_certificate()
             .subject()
-            .by_oid::<Utf8StringRef>(nid)
-        {
-            Ok(Some(tv)) => Ok(tv.to_string()),
-            _ => Err(X509Error),
-        }
+            .iter()
+            .find(|tv| tv.oid == nid)
+            .map(|tv| tv.to_string())
+            .ok_or(X509Error)
     }
 
     /// Produces a subject name string such as "CN=foo/C=IE"

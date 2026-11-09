@@ -20,10 +20,37 @@ use rsa::pkcs1v15;
 use rsa::PublicKey as RsaPublicKey;
 use x509_cert::{
     self as x509,
-    builder::profile::cabf::tls::{CertificateType, Subscriber, Tls12Options},
     der::asn1::{Ia5String, OctetString, Utf8StringRef},
     ext::pkix::name::GeneralName,
 };
+
+/// Certificate builder profile for self-signed application instance certificates.
+///
+/// The issuer is the same as the subject, and the profile adds no extensions of
+/// its own. All extensions are added explicitly in `X509::create_from_pkey`, as
+/// required by OPC UA Part 6, 6.2.2.
+struct SelfSignedProfile {
+    subject: x509::name::Name,
+}
+
+impl x509::builder::profile::BuilderProfile for SelfSignedProfile {
+    fn get_issuer(&self, subject: &x509::name::Name) -> x509::name::Name {
+        subject.clone()
+    }
+
+    fn get_subject(&self) -> x509::name::Name {
+        self.subject.clone()
+    }
+
+    fn build_extensions(
+        &self,
+        _spk: spki::SubjectPublicKeyInfoRef<'_>,
+        _issuer_spk: spki::SubjectPublicKeyInfoRef<'_>,
+        _tbs: &x509::certificate::TbsCertificate,
+    ) -> x509::builder::Result<Vec<x509::ext::Extension>> {
+        Ok(Vec::new())
+    }
+}
 
 use x509::builder::Error as BuilderError;
 use x509::ext::pkix::name as xname;
@@ -557,19 +584,12 @@ impl X509 {
         let ski = hasher.finalize();
 
         let mut builder = CertificateBuilder::new(
-            Subscriber {
-                issuer: subject.clone(),
-                certificate_type: CertificateType::domain_validated(subject.clone(), Vec::new())?,
-                client_auth: false,
-                enable_data_encipherment: true,
-                tls12_options: Tls12Options::default(),
+            SelfSignedProfile {
+                subject: subject.clone(),
             },
             serial_number.clone(),
             validity,
             pub_key,
-            // subject.clone(),
-            //pub_key,
-            //&signing_key,
         )?;
 
         builder.add_extension(&x509::ext::pkix::SubjectKeyIdentifier(

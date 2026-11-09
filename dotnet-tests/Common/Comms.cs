@@ -21,12 +21,20 @@ public static class Comms
 
     private static readonly JsonSerializerOptions options = MakeOptions();
 
+    private static readonly object sendLock = new();
+
     public static void Send(IOutMessage message)
     {
-        using var stdout = Console.OpenStandardOutput();
-        stdout.Write(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(message, options)));
-        stdout.WriteByte(0);
-        stdout.Flush();
+        var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(message, options));
+        // Messages may be sent from multiple threads (e.g. server trace logs),
+        // so writes must be serialized or messages will interleave on stdout.
+        lock (sendLock)
+        {
+            using var stdout = Console.OpenStandardOutput();
+            stdout.Write(bytes);
+            stdout.WriteByte(0);
+            stdout.Flush();
+        }
     }
 
     public static async IAsyncEnumerable<IInMessage> ListenToInput([EnumeratorCancellation] CancellationToken token)

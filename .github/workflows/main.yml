@@ -2,9 +2,9 @@ name: OPC UA for Rust
 
 on:
   push:
-    branches: [ master, rewrite-master ]
+    branches: [master, rewrite-master]
   pull_request:
-    branches: [ master, rewrite-master ]
+    branches: [master, rewrite-master]
 
 env:
   CARGO_TERM_COLOR: always
@@ -30,6 +30,8 @@ jobs:
 
   test-external-server:
     runs-on: ubuntu-latest
+    env:
+      RUST_LOG: "debug"
     steps:
       - uses: actions/checkout@v4
       - name: Provision toolchain

@@ -187,12 +187,14 @@ pub fn legacy_encrypt_secret(
             })
         }
         EncryptionMode::AsymmetricFor(security_policy) => {
-            let password = legacy_secret_encrypt(
-                secret_to_encrypt,
-                nonce,
-                cert.as_ref().unwrap(),
-                security_policy,
-            )?;
+            let Some(cert) = cert.as_ref() else {
+                return Err(Error::new(
+                    StatusCode::BadSecurityPolicyRejected,
+                    "Missing server certificate for encrypting user token",
+                ));
+            };
+
+            let password = legacy_secret_encrypt(secret_to_encrypt, nonce, cert, security_policy)?;
 
             Ok(LegacyEncryptedSecret {
                 secret: password,

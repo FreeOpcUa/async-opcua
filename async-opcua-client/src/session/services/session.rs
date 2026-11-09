@@ -15,7 +15,7 @@ use opcua_types::{
     X509IdentityToken,
 };
 use rsa::PrivateKey as RsaPrivateKey;
-use tracing::{debug_span, error, info_span, Instrument};
+use tracing::{debug_span, error, info_span, warn, Instrument};
 
 use crate::{
     session::{
@@ -204,64 +204,51 @@ impl UARequest for CreateSession<'_> {
             builder_debug!(self, "create_session, success");
             process_service_result(&response.response_header)?;
 
-            let server_certificate = if security_policy != SecurityPolicy::None {
-                // OPC UA Part 4 5.7.2.2: the certificate must be the one the channel was opened to. Either
-                // byte string may carry the issuer chain after it (Part 6 6.2.6), so compare the leading
-                // certificates, not the byte strings.
-                let server_certificate =
-                    opcua_crypto::X509::from_byte_string(&response.server_certificate)
-                        .inspect_err(|e| error!("Failed to parse server certificate: {e}"))?;
-                let channel_certificate =
-                    opcua_crypto::X509::from_byte_string(&self.endpoint.server_certificate)
-                        .inspect_err(|e| error!("Failed to parse channel certificate: {e}"))?;
-                if server_certificate.as_byte_string() != channel_certificate.as_byte_string() {
-                    error!("Server certificate in CreateSession response does not match channel certificate");
-                    return Err(Error::new(StatusCode::BadCertificateInvalid, "Server certificate in CreateSession response does not match channel certificate"));
-                }
-                // Validate server certificate against hostname and application_uri
-                let hostname =
-                    hostname_from_url(self.endpoint.endpoint_url.as_ref()).map_err(|e| {
-                        Error::new(
-                            StatusCode::BadUnexpectedError,
-                            format!(
-                                "Failed to extract hostname from endpoint URL ({}): {e}",
-                                self.endpoint.endpoint_url
-                            ),
-                        )
-                    })?;
-                let application_uri = self.endpoint.server.application_uri.as_ref();
-
-                let certificate_store = trace_write_lock!(self.certificate_store);
-                certificate_store
-                    .validate_or_reject_application_instance_cert(
-                        &server_certificate,
-                        security_policy,
-                        Some(&hostname),
-                        Some(application_uri),
-                    )
-                    .inspect_err(|e| {
-                        error!("Rejected server certificate in create session response: {e}");
-                    })?;
-
-                opcua_crypto::verify_signature_data(
-                    &response.server_signature,
+            let server_certificate = {
+                let check_result = Self::check_server_certificate(
+                    self.endpoint,
+                    &response,
                     security_policy,
-                    &server_certificate,
-                    self.client_certificate.as_ref().ok_or_else(|| {
-                        Error::new(
-                            StatusCode::BadCertificateInvalid,
-                            "Missing client certificate in request",
-                        )
-                    })?,
-                    client_nonce.as_ref(),
-                )
-                .inspect_err(|e| {
-                    error!("Failed to verify server signature in create session response: {e}");
-                })?;
+                    self.certificate_store,
+                );
 
-                Some(server_certificate)
-            } else {
-                None
+                match (check_result, security_policy) {
+                    (Ok(Some(cert)), SecurityPolicy::None) => Some(cert),
+                    (Ok(Some(cert)), _) => {
+                        opcua_crypto::verify_signature_data(
+                            &response.server_signature,
+                            security_policy,
+                            &cert,
+                            self.client_certificate.as_ref().ok_or_else(|| {
+                                Error::new(
+                                    StatusCode::BadCertificateInvalid,
+                                    "Missing client certificate in request",
+                                )
+                            })?,
+                            client_nonce.as_ref(),
+                        )
+                        .inspect_err(|e| {
+                            error!(
+                                "Failed to verify server signature in create session response: {e}"
+                            );
+                        })?;
+                        Some(cert)
+                    }
+                    (Err(e), SecurityPolicy::None) => {
+                        warn!("Failed to decode and validate server certificate: {e}, proceeding without a valid server certificate");
+                        None
+                    }
+                    (Err(e), _) => {
+                        return Err(e);
+                    }
+                    (Ok(None), SecurityPolicy::None) => None,
+                    (Ok(None), _) => {
+                        return Err(Error::new(
+                            StatusCode::BadCertificateInvalid,
+                            "Server returned no certificate for non-None security policy",
+                        ));
+                    }
+                }
             };
 
             tracing::debug!(
@@ -286,6 +273,61 @@ impl UARequest for CreateSession<'_> {
             tracing::error!("create_session failed");
             Err(process_unexpected_response(response))
         }
+    }
+}
+
+impl<'a> CreateSession<'a> {
+    fn check_server_certificate(
+        endpoint: &EndpointDescription,
+        response: &CreateSessionResponse,
+        security_policy: SecurityPolicy,
+        certificate_store: &RwLock<CertificateStore>,
+    ) -> Result<Option<X509>, Error> {
+        if response.server_certificate.is_null_or_empty() {
+            return Ok(None);
+        }
+        // OPC UA Part 4 5.7.2.2: the certificate must be the one the channel was opened to. Either
+        // byte string may carry the issuer chain after it (Part 6 6.2.6), so compare the leading
+        // certificates, not the byte strings.
+        let server_certificate = opcua_crypto::X509::from_byte_string(&response.server_certificate)
+            .inspect_err(|e| error!("Failed to parse server certificate: {e}"))?;
+        let channel_certificate =
+            opcua_crypto::X509::from_byte_string(&endpoint.server_certificate)
+                .inspect_err(|e| error!("Failed to parse channel certificate: {e}"))?;
+        if server_certificate.as_byte_string() != channel_certificate.as_byte_string() {
+            error!(
+                "Server certificate in CreateSession response does not match channel certificate"
+            );
+            return Err(Error::new(
+                StatusCode::BadCertificateInvalid,
+                "Server certificate in CreateSession response does not match channel certificate",
+            ));
+        }
+        // Validate server certificate against hostname and application_uri
+        let hostname = hostname_from_url(endpoint.endpoint_url.as_ref()).map_err(|e| {
+            Error::new(
+                StatusCode::BadUnexpectedError,
+                format!(
+                    "Failed to extract hostname from endpoint URL ({}): {e}",
+                    endpoint.endpoint_url
+                ),
+            )
+        })?;
+        let application_uri = endpoint.server.application_uri.as_ref();
+
+        let certificate_store = trace_write_lock!(certificate_store);
+        certificate_store
+            .validate_or_reject_application_instance_cert(
+                &server_certificate,
+                security_policy,
+                Some(&hostname),
+                Some(application_uri),
+            )
+            .inspect_err(|e| {
+                error!("Rejected server certificate in create session response: {e}");
+            })?;
+
+        Ok(Some(server_certificate))
     }
 }
 

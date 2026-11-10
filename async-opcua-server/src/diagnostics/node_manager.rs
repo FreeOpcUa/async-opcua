@@ -455,7 +455,8 @@ impl DiagnosticsNodeManager {
                 "StaticNodeIdTypes" => namespace
                     .static_node_id_types
                     .as_ref()
-                    .map(|r| r.iter().map(|v| (*v) as u8).collect::<Vec<_>>())
+                    .map(|r| r.iter().map(|v| (*v) as i32).collect::<Vec<_>>())
+                    .unwrap_or_default()
                     .into(),
                 "StaticNumericNodeIdRange" => namespace
                     .static_numeric_node_id_range
@@ -508,7 +509,7 @@ impl DiagnosticsNodeManager {
             AttributeId::AccessLevel | AttributeId::UserAccessLevel => {
                 AccessLevel::CURRENT_READ.bits().into()
             }
-            AttributeId::AccessLevelEx => (AccessLevelExType::CurrentRead.bits() as u32).into(),
+            AttributeId::AccessLevelEx => AccessLevelExType::CurrentRead.bits().into(),
             AttributeId::MinimumSamplingInterval => 0.0.into(),
             AttributeId::Historizing => false.into(),
             AttributeId::WriteMask | AttributeId::UserWriteMask => 0u32.into(),

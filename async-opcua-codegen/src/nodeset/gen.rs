@@ -3,14 +3,15 @@ use std::collections::HashMap;
 use opcua_xml::schema::ua_node_set::{
     ArrayDimensions, DataTypeDefinition, LocalizedText, NodeId, Reference, UADataType, UAMethod,
     UANode, UANodeBase, UAObject, UAObjectType, UAReferenceType, UAVariable, UAVariableType,
-    UAView,
+    UAView, Value,
 };
 use proc_macro2::{Span, TokenStream};
 use syn::{parse_quote, parse_str, Expr, Ident, ItemFn};
 
 use crate::{
     input::TypeInfo,
-    utils::{ParsedNodeId, RenderExpr},
+    nodeset::value::NonNullableVariantType,
+    utils::{NodeIdVariant, ParsedNodeId, RenderExpr},
     CodeGenError,
 };
 
@@ -31,6 +32,7 @@ pub struct NodeSetCodeGenerator<'a> {
     node_counter: usize,
     types: &'a HashMap<String, XsdTypeWithPath>,
     type_info: &'a HashMap<ParsedNodeId, TypeInfo>,
+    parent_type_ids: &'a HashMap<ParsedNodeId, ParsedNodeId>,
 }
 
 impl<'a> NodeSetCodeGenerator<'a> {
@@ -39,6 +41,7 @@ impl<'a> NodeSetCodeGenerator<'a> {
         aliases: &'a HashMap<String, String>,
         types: &'a HashMap<String, XsdTypeWithPath>,
         type_info: &'a HashMap<ParsedNodeId, TypeInfo>,
+        parent_type_ids: &'a HashMap<ParsedNodeId, ParsedNodeId>,
     ) -> Result<Self, CodeGenError> {
         Ok(Self {
             preferred_locale: preferred_locale.to_owned(),
@@ -47,14 +50,69 @@ impl<'a> NodeSetCodeGenerator<'a> {
             node_counter: 0,
             types,
             type_info,
+            parent_type_ids,
         })
     }
 
-    fn resolve_node_id(&self, node_id: &NodeId) -> Result<TokenStream, CodeGenError> {
+    fn render_node_id(&self, node_id: &NodeId) -> Result<TokenStream, CodeGenError> {
         if let Some(aliased) = self.aliases.get(node_id.0.as_str()) {
             NodeId(aliased.to_owned()).render()
         } else {
             node_id.render()
+        }
+    }
+
+    fn resolve_node_id(&self, node_id: &NodeId) -> Result<ParsedNodeId, CodeGenError> {
+        ParsedNodeId::parse(
+            if let Some(aliased) = self.aliases.get(node_id.0.as_str()) {
+                aliased
+            } else {
+                node_id.0.as_str()
+            },
+        )
+    }
+
+    fn check_non_nullable<'b>(
+        &'b self,
+        mut type_id: &'b ParsedNodeId,
+    ) -> Option<NonNullableVariantType> {
+        let root = type_id;
+
+        // Iterate through parent IDs to find the built-in type.
+        loop {
+            if let NodeIdVariant::Numeric(n) = &type_id.value {
+                match n {
+                    1 => return Some(NonNullableVariantType::Boolean),
+                    2 => return Some(NonNullableVariantType::SByte),
+                    3 => return Some(NonNullableVariantType::Byte),
+                    4 => return Some(NonNullableVariantType::Int16),
+                    5 => return Some(NonNullableVariantType::UInt16),
+                    6 => return Some(NonNullableVariantType::Int32),
+                    7 => return Some(NonNullableVariantType::UInt32),
+                    8 => return Some(NonNullableVariantType::Int64),
+                    9 => return Some(NonNullableVariantType::UInt64),
+                    10 => return Some(NonNullableVariantType::Float),
+                    11 => return Some(NonNullableVariantType::Double),
+                    19 => return Some(NonNullableVariantType::StatusCode),
+                    29 => {
+                        // This is an enum, so check the type definition.
+                        // Assume the first field is the default value. Really, if that isn't
+                        // the case uses of the data type in a NodeSet2 file should really specify
+                        // a value.
+                        if let Some(field) = self
+                            .type_info
+                            .get(root)
+                            .and_then(|r| r.definition.as_ref())
+                            .and_then(|f| f.fields.first())
+                        {
+                            return Some(NonNullableVariantType::Enumeration(field.value as i32));
+                        }
+                    }
+                    _ => (),
+                }
+            }
+            let parent = self.parent_type_ids.get(type_id)?;
+            type_id = parent;
         }
     }
 
@@ -158,7 +216,7 @@ impl<'a> NodeSetCodeGenerator<'a> {
                     ))
                 })?;
             let name = &f.name;
-            let data_type = self.resolve_node_id(&f.data_type).map_err(|e| {
+            let data_type = self.render_node_id(&f.data_type).map_err(|e| {
                 e.with_context(format!(
                     "rendering field {} in structure definition {}",
                     f.name, def.name.0
@@ -242,7 +300,7 @@ impl<'a> NodeSetCodeGenerator<'a> {
         let node_class: Expr = syn::parse_str(&format!("opcua::types::NodeClass::{node_class}"))?;
         let write_mask = node.write_mask.0;
         let user_write_mask = node.user_write_mask.0;
-        let node_id = self.resolve_node_id(&node.node_id)?;
+        let node_id = self.render_node_id(&node.node_id)?;
 
         Ok(parse_quote! {
             opcua::nodes::Base::new_full(
@@ -266,9 +324,20 @@ impl<'a> NodeSetCodeGenerator<'a> {
     fn generate_variable(&self, node: &UAVariable) -> Result<Expr, CodeGenError> {
         let base = self.generate_base(&node.base.base, "Variable")?;
         let data_type = self.resolve_node_id(&node.data_type)?;
+        let value = match &node.value {
+            Some(v) => render_value(Some(v), self.types)?,
+            None => {
+                if let Some(dt) = self.check_non_nullable(&data_type) {
+                    render_value(Some(&Value(dt.default_variant())), self.types)?
+                } else {
+                    render_value(None, self.types)?
+                }
+            }
+        };
+
+        let data_type = data_type.render()?;
         let historizing = node.historizing;
         let value_rank = node.value_rank.0;
-        let value = render_value(node.value.as_ref(), self.types)?;
         let access_level = node.access_level.0;
         let user_access_level = node.user_access_level.0;
         let array_dimensions = self
@@ -335,9 +404,20 @@ impl<'a> NodeSetCodeGenerator<'a> {
     fn generate_variable_type(&self, node: &UAVariableType) -> Result<Expr, CodeGenError> {
         let base = self.generate_base(&node.base.base, "VariableType")?;
         let data_type = self.resolve_node_id(&node.data_type)?;
+        let value = match &node.value {
+            Some(v) => render_value(Some(v), self.types)?,
+            None => {
+                if let Some(dt) = self.check_non_nullable(&data_type) {
+                    render_value(Some(&Value(dt.default_variant())), self.types)?
+                } else {
+                    render_value(None, self.types)?
+                }
+            }
+        };
+
+        let data_type = data_type.render()?;
         let is_abstract = node.base.is_abstract;
         let value_rank = node.value_rank.0;
-        let value = render_value(node.value.as_ref(), self.types)?;
         let array_dimensions = self
             .parse_array_dimensions(&node.array_dimensions)?
             .as_ref()
@@ -390,8 +470,8 @@ impl<'a> NodeSetCodeGenerator<'a> {
     }
 
     fn generate_reference(&self, reference: &Reference) -> Result<Expr, CodeGenError> {
-        let target_id = self.resolve_node_id(&reference.node_id)?;
-        let type_id = self.resolve_node_id(&reference.reference_type)?;
+        let target_id = self.render_node_id(&reference.node_id)?;
+        let type_id = self.render_node_id(&reference.reference_type)?;
         let is_forward = reference.is_forward;
 
         Ok(parse_quote! {

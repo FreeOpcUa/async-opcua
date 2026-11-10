@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use convert_case::{Case, Casing};
 use opcua_xml::schema::{
-    opc_ua_types::{ExtensionObject, Variant, XmlElement},
+    opc_ua_types::{ExtensionObject, StatusCode, Variant, XmlElement},
     ua_node_set::Value,
     xml_schema::{
         ComplexContent, ComplexTypeContents, Element, Facet, FacetValue, MaxOccurs, NestedParticle,
@@ -855,4 +855,40 @@ struct StructRef<'a> {
 enum TypeRef<'a> {
     Enum(EnumRef<'a>),
     Struct(StructRef<'a>),
+}
+
+pub(super) enum NonNullableVariantType {
+    Boolean,
+    SByte,
+    Byte,
+    Int16,
+    UInt16,
+    Int32,
+    UInt32,
+    Int64,
+    UInt64,
+    Float,
+    Double,
+    StatusCode,
+    Enumeration(i32),
+}
+
+impl NonNullableVariantType {
+    pub fn default_variant(&self) -> Variant {
+        match self {
+            NonNullableVariantType::Boolean => Variant::Boolean(Default::default()),
+            NonNullableVariantType::SByte => Variant::SByte(Default::default()),
+            NonNullableVariantType::Byte => Variant::Byte(Default::default()),
+            NonNullableVariantType::Int16 => Variant::Int16(Default::default()),
+            NonNullableVariantType::UInt16 => Variant::UInt16(Default::default()),
+            NonNullableVariantType::Int32 => Variant::Int32(Default::default()),
+            NonNullableVariantType::UInt32 => Variant::UInt32(Default::default()),
+            NonNullableVariantType::Int64 => Variant::Int64(Default::default()),
+            NonNullableVariantType::UInt64 => Variant::UInt64(Default::default()),
+            NonNullableVariantType::Float => Variant::Float(Default::default()),
+            NonNullableVariantType::Double => Variant::Double(Default::default()),
+            NonNullableVariantType::StatusCode => Variant::StatusCode(StatusCode { code: 0 }),
+            NonNullableVariantType::Enumeration(i) => Variant::Int32(*i),
+        }
+    }
 }

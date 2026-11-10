@@ -502,11 +502,7 @@ impl TagNodeManager {
                     opcua::types::AttributeId::MinimumSamplingInterval => 0f64.into(),
                     opcua::types::AttributeId::Historizing => false.into(),
                     opcua::types::AttributeId::AccessLevelEx => {
-                        // TODO: The type here is wrong, bug in the codegen?
-                        // Looks like we generate bitfields as i32, even if they inherit from UInt32.
-                        // I think it's because BSD files don't distinguish between the two.
-                        // Fixable now that we use NodeSet2 files.
-                        (AccessLevelExType::CurrentRead.bits() as u32).into()
+                        AccessLevelExType::CurrentRead.bits().into()
                     }
                     _ => return Err(StatusCode::BadAttributeIdInvalid),
                 };
@@ -544,7 +540,7 @@ impl TagNodeManager {
                     opcua::types::AttributeId::MinimumSamplingInterval => 0f64.into(),
                     opcua::types::AttributeId::Historizing => false.into(),
                     opcua::types::AttributeId::AccessLevelEx => {
-                        (AccessLevelExType::CurrentRead.bits() as u32).into()
+                        AccessLevelExType::CurrentRead.bits().into()
                     }
                     _ => return Err(StatusCode::BadAttributeIdInvalid),
                 };

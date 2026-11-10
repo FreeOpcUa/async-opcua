@@ -29,9 +29,13 @@ pub struct NodeSetTypeLoader<'a> {
 /// Any other type is not currently allowed, as it's not clear what that would even mean.
 enum BuiltInTypeVariant {
     Enumeration,
+    SByte,
     Byte,
+    Int16,
     UInt16,
+    Int32,
     UInt32,
+    Int64,
     UInt64,
     Structure,
 }
@@ -109,9 +113,13 @@ impl<'a> NodeSetTypeLoader<'a> {
         let fields = self.collect_fields(&id, cache)?;
 
         match variant {
-            BuiltInTypeVariant::Byte
+            BuiltInTypeVariant::SByte
+            | BuiltInTypeVariant::Byte
+            | BuiltInTypeVariant::Int16
             | BuiltInTypeVariant::UInt16
+            | BuiltInTypeVariant::Int32
             | BuiltInTypeVariant::UInt32
+            | BuiltInTypeVariant::Int64
             | BuiltInTypeVariant::UInt64
             | BuiltInTypeVariant::Enumeration => {
                 let ty = EnumType {
@@ -131,19 +139,22 @@ impl<'a> NodeSetTypeLoader<'a> {
                         .collect(),
                     documentation: node.base.base.documentation.clone(),
                     typ: match variant {
+                        BuiltInTypeVariant::SByte => EnumReprType::i8,
                         BuiltInTypeVariant::Byte => EnumReprType::u8,
-                        // This is weird, we may want to look into why we're using signed types here.
-                        BuiltInTypeVariant::UInt16 => EnumReprType::i16,
-                        BuiltInTypeVariant::UInt32 => EnumReprType::i32,
-                        BuiltInTypeVariant::UInt64 => EnumReprType::i64,
+                        BuiltInTypeVariant::Int16 => EnumReprType::i16,
+                        BuiltInTypeVariant::UInt16 => EnumReprType::u16,
+                        BuiltInTypeVariant::Int32 => EnumReprType::i32,
+                        BuiltInTypeVariant::UInt32 => EnumReprType::u32,
+                        BuiltInTypeVariant::Int64 => EnumReprType::i64,
+                        BuiltInTypeVariant::UInt64 => EnumReprType::u64,
                         BuiltInTypeVariant::Enumeration => EnumReprType::i32,
                         _ => unreachable!(),
                     },
                     size: match variant {
-                        BuiltInTypeVariant::Byte => 1,
-                        BuiltInTypeVariant::UInt16 => 2,
-                        BuiltInTypeVariant::UInt32 => 4,
-                        BuiltInTypeVariant::UInt64 => 8,
+                        BuiltInTypeVariant::Byte | BuiltInTypeVariant::SByte => 1,
+                        BuiltInTypeVariant::UInt16 | BuiltInTypeVariant::Int16 => 2,
+                        BuiltInTypeVariant::UInt32 | BuiltInTypeVariant::Int32 => 4,
+                        BuiltInTypeVariant::UInt64 | BuiltInTypeVariant::Int64 => 8,
                         // Enums are integers.
                         BuiltInTypeVariant::Enumeration => 4,
                         _ => unreachable!(),
@@ -309,9 +320,13 @@ impl<'a> NodeSetTypeLoader<'a> {
     ) -> Result<BuiltInTypeVariant, CodeGenError> {
         if id.namespace == 0 {
             match id.value {
+                NodeIdVariant::Numeric(2) => return Ok(BuiltInTypeVariant::SByte),
                 NodeIdVariant::Numeric(3) => return Ok(BuiltInTypeVariant::Byte),
+                NodeIdVariant::Numeric(4) => return Ok(BuiltInTypeVariant::Int16),
                 NodeIdVariant::Numeric(5) => return Ok(BuiltInTypeVariant::UInt16),
+                NodeIdVariant::Numeric(6) => return Ok(BuiltInTypeVariant::Int32),
                 NodeIdVariant::Numeric(7) => return Ok(BuiltInTypeVariant::UInt32),
+                NodeIdVariant::Numeric(8) => return Ok(BuiltInTypeVariant::Int64),
                 NodeIdVariant::Numeric(9) => return Ok(BuiltInTypeVariant::UInt64),
                 NodeIdVariant::Numeric(29) => return Ok(BuiltInTypeVariant::Enumeration),
                 NodeIdVariant::Numeric(22) => return Ok(BuiltInTypeVariant::Structure),

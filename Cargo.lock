@@ -126,6 +126,7 @@ dependencies = [
  "bytes",
  "chrono",
  "env_logger",
+ "futures",
  "log",
  "serde_json",
  "tempdir",

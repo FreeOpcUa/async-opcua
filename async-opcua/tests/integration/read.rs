@@ -1,9 +1,10 @@
-use std::{sync::atomic::Ordering, time::Duration};
+use std::{collections::HashMap, sync::atomic::Ordering, time::Duration};
 
 use crate::utils::{client_user_token, default_server, Tester};
 
 use super::utils::{array_value, read_value_id, read_value_ids, setup};
 use chrono::TimeDelta;
+use futures::TryStreamExt;
 use opcua::{
     client::HistoryReadAction,
     server::address_space::{
@@ -17,7 +18,11 @@ use opcua::{
         WriteMask,
     },
 };
-use opcua_client::{services::Read, DefaultRetryPolicy, ExponentialBackoff, UARequest};
+use opcua_client::{
+    browser::BrowseFilter, custom_types::DataTypeTreeBuilder, services::Read, DefaultRetryPolicy,
+    ExponentialBackoff, UARequest,
+};
+use opcua_types::{custom::DataTypeTree, BrowseResultMaskFlags, TryFromVariant};
 
 #[tokio::test]
 async fn read() {
@@ -1257,4 +1262,107 @@ async fn test_read_timeout() {
         )
         .await
         .unwrap();
+}
+
+fn is_data_type_nullable(dt: &NodeId, type_tree: &DataTypeTree) -> bool {
+    // Should be unreachable. Just assume any we don't hit are structures of some sort.
+    let Some(dt) = type_tree.parent_ids().get_builtin_type(dt) else {
+        return true;
+    };
+    dt.is_nullable()
+}
+
+#[tokio::test]
+async fn check_server_data_types() {
+    let (_tester, _, session) = setup().await;
+
+    // List all variables under the server node.
+    // The filter needs to contain other node classes as well, as we want to traverse the entire hierarchy.
+    let filter = BrowseFilter::new_hierarchical()
+        .result_mask(BrowseResultMaskFlags::NodeClass | BrowseResultMaskFlags::DisplayName);
+    let initial = vec![filter.new_description_from_node(ObjectId::Server.into())];
+    let browser = session.browser().handler(filter).run(initial);
+    let results: Vec<_> = browser.try_collect().await.unwrap();
+
+    let type_tree = DataTypeTreeBuilder::new(|f| f.namespace <= 2)
+        .build(&session)
+        .await
+        .unwrap();
+
+    // For each resulting node, get the data type and value, in chunks of 1000 read value IDs at a time.
+    let mut variable_requests = Vec::new();
+    for n in results.into_iter().flat_map(|r| r.into_results().1) {
+        if n.node_class == NodeClass::Variable {
+            variable_requests.push(ReadValueId::new(
+                n.node_id.node_id.clone(),
+                AttributeId::DataType,
+            ));
+            variable_requests.push(ReadValueId::new_value(n.node_id.node_id));
+        }
+    }
+    let mut var_info = HashMap::new();
+
+    for chunk in variable_requests.chunks(1000) {
+        let values = session
+            .read(chunk, TimestampsToReturn::Neither, 0.0)
+            .await
+            .unwrap();
+        for (req, res) in chunk.chunks(2).zip(values.chunks(2)) {
+            var_info.insert(
+                req[0].node_id.clone(),
+                (
+                    NodeId::try_from_variant(res[0].value.clone().unwrap()).unwrap(),
+                    res[1].clone(),
+                ),
+            );
+        }
+    }
+
+    // Check that each variable has the correct results.
+    let mut errors = Vec::new();
+    for (id, (dt, dv)) in var_info {
+        let nullable = is_data_type_nullable(&dt, &type_tree);
+        let status = dv.status.unwrap_or_default();
+        let Some(val) = &dv.value else {
+            if !nullable && status.is_good() {
+                errors.push(format!(
+                    "{id} is null, but has a non-nullable data type {dt}"
+                ));
+            }
+            continue;
+        };
+        if val.is_empty() {
+            if !nullable && status.is_good() {
+                errors.push(format!(
+                    "{id} is null, but has a non-nullable data type {dt}"
+                ));
+            }
+            continue;
+        }
+
+        // If it's an empty array then technically anything is valid.
+        if let Variant::Array(a) = val {
+            if a.values.is_empty() {
+                continue;
+            }
+        }
+
+        if val
+            .data_type()
+            .is_none_or(|v| !type_tree.parent_ids().is_descendant_of(&dt, &v.node_id)
+                // Special case enumerations, they are returned as integers, but types descend from Enumeration
+                && (v.node_id != DataTypeId::Int32 || !type_tree.parent_ids().is_descendant_of(&dt, &DataTypeId::Enumeration.into()))
+            )
+        {
+            errors.push(format!(
+                "{id} does not have the expected data type {dt}, but is instead {} ({})",
+                val.data_type()
+                    .map_or_else(|| "None".to_owned(), |n| n.node_id.to_string()),
+                val
+            ));
+        }
+    }
+    if !errors.is_empty() {
+        panic!("One or more errors: {}", errors.join("\n"));
+    }
 }

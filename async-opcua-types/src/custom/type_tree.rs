@@ -1,5 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
+use hashbrown::HashSet;
+
 use crate::{
     DataTypeDefinition, EnumField, Error, NodeId, StatusCode, StructureField, StructureType,
     Variant, VariantScalarTypeId, VariantTypeId,
@@ -225,6 +227,26 @@ impl ParentIds {
     /// Add a child, parent type pair.
     pub fn add_type(&mut self, node_id: NodeId, parent_id: NodeId) {
         self.parent_ids.insert(node_id, parent_id);
+    }
+
+    /// Check if `child` is a descendant of `ancestor`.
+    pub fn is_descendant_of<'a>(&'a self, mut child: &'a NodeId, ancestor: &NodeId) -> bool {
+        if child == ancestor {
+            return true;
+        }
+        let mut visited = HashSet::new();
+        visited.insert(child);
+        while let Some(parent) = self.parent_ids.get(child) {
+            if parent == ancestor {
+                return true;
+            }
+            child = parent;
+
+            if !visited.insert(parent) {
+                return false;
+            }
+        }
+        false
     }
 
     /// Get the data type variant, essentially checking if it needs special treatment,

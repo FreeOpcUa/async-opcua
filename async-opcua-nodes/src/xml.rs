@@ -420,6 +420,14 @@ impl NodeSet2Import {
                 self.make_node_id(&node.data_type, ctx)?,
                 node.historizing,
                 node.value_rank.0,
+                // TODO: If the data type is non-nullable, this should use the default value
+                // of the type instead. Unfortunately that requires the full type hierarchy,
+                // which isn't known here. We would need to allow users to pass
+                // dependent nodeset files directly to the import, and also ideally to
+                // hard-code the built-in type of core namespace types, so we can
+                // resolve those from here without users needing the base
+                // namespace XML at runtime. Perhaps a static extension to the
+                // type generation pipeline?
                 node.value
                     .as_ref()
                     .map(|v| {

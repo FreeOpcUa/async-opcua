@@ -165,9 +165,15 @@ pub fn generate_target(
     types: &HashMap<String, XsdTypeWithPath>,
 ) -> Result<Vec<NodeSetChunk>, CodeGenError> {
     let type_info = input.get_type_info()?;
+    let parent_type_ids = input.get_parent_type_ids()?;
 
-    let mut generator =
-        NodeSetCodeGenerator::new(preferred_locale, &input.aliases, types, type_info)?;
+    let mut generator = NodeSetCodeGenerator::new(
+        preferred_locale,
+        &input.aliases,
+        types,
+        type_info,
+        parent_type_ids,
+    )?;
 
     let mut fns = Vec::with_capacity(input.xml().nodes.len());
     for node in &input.xml().nodes {

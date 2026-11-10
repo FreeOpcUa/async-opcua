@@ -280,6 +280,16 @@ impl VariantScalarTypeId {
         )
     }
 
+    /// Check if data types represented using this variant type
+    /// are allowed to be null according to the standard.
+    pub fn is_nullable(&self) -> bool {
+        !self.is_numeric()
+            && !matches!(
+                self,
+                VariantScalarTypeId::Boolean | VariantScalarTypeId::StatusCode,
+            )
+    }
+
     /// Returns a data precedence rank for scalar types, OPC UA part 4 table 119. This is used
     /// when operators are comparing values of differing types. The type with
     /// the highest precedence dictates how values are converted in order to be compared.

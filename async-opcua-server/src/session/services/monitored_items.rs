@@ -291,6 +291,43 @@ pub(crate) async fn create_monitored_items(
         }
     };
 
+    let registered: Vec<_> = items
+        .iter()
+        .zip(res.iter())
+        .filter(|(_, r)| r.status_code.is_good())
+        .map(|(i, _)| {
+            MonitoredItemRef::new(
+                i.handle(),
+                i.item_to_monitor().node_id.clone(),
+                i.item_to_monitor().attribute_id,
+            )
+        })
+        .collect();
+    struct RegisteredCb;
+    impl ServiceCbRef<MonitoredItemRef> for RegisteredCb {
+        async fn call(
+            &self,
+            items: &[&MonitoredItemRef],
+            node_manager: &Arc<DynNodeManager>,
+            context: RequestContext,
+        ) {
+            node_manager
+                .monitored_items_registered(&context, items)
+                .instrument(
+                    debug_span!("MonitoredItemsRegistered", node_manager = %node_manager.name()),
+                )
+                .await;
+        }
+    }
+    invoke_service_concurrently(
+        context,
+        &registered,
+        &node_managers,
+        RegisteredCb,
+        |node, node_manager| node_manager.owns_node(node.node_id()),
+    )
+    .await;
+
     Response {
         message: CreateMonitoredItemsResponse {
             response_header: ResponseHeader::new_good(request.request_handle),

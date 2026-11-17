@@ -1,5 +1,8 @@
 use std::{
-    sync::{atomic::Ordering, Arc},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
     time::Duration,
 };
 
@@ -11,7 +14,7 @@ use opcua::{
     client::IdentityToken,
     core::comms::tcp_codec::{Message, TcpCodec},
     core::config::Config,
-    crypto::SecurityPolicy,
+    crypto::{CertificateStore, SecurityPolicy, X509},
     types::{
         ApplicationType, DecodingOptions, MessageSecurityMode, NodeId, ReadValueId, StatusCode,
         TimestampsToReturn, VariableId, Variant,
@@ -19,13 +22,17 @@ use opcua::{
 };
 use opcua_client::IssuedTokenWrapper;
 use opcua_server::{
-    authenticator::{issued_token_security_policy, AuthManager, UserToken},
-    ServerEndpoint,
+    authenticator::{
+        issued_token_security_policy, user_pass_security_policy_id, AuthManager, Password,
+        UserToken,
+    },
+    ServerBuilder, ServerEndpoint,
 };
 use opcua_types::{ByteString, Error, UAString, UserTokenPolicy, UserTokenType};
 use tokio::{
     io::AsyncReadExt,
     net::{TcpListener, TcpStream},
+    sync::Notify,
 };
 use tokio_util::codec::Decoder;
 
@@ -231,6 +238,159 @@ async fn connect_basic256sha256_with_username_password() {
         client_user_token(),
     )
     .await;
+}
+
+struct EncryptingUserAuthenticator {
+    authentication_count: Arc<AtomicUsize>,
+    authentication_received: Arc<Notify>,
+}
+
+#[async_trait]
+impl AuthManager for EncryptingUserAuthenticator {
+    async fn authenticate_username_identity_token(
+        &self,
+        _endpoint: &ServerEndpoint,
+        username: &str,
+        password: &Password,
+    ) -> Result<UserToken, Error> {
+        self.authentication_count.fetch_add(1, Ordering::SeqCst);
+        self.authentication_received.notify_one();
+        if username == "test-user" && password.get() == "test-password" {
+            Ok(UserToken(username.to_owned()))
+        } else {
+            Err(Error::new(
+                StatusCode::BadIdentityTokenRejected,
+                "Invalid test credentials",
+            ))
+        }
+    }
+
+    fn user_token_policies(&self, endpoint: &ServerEndpoint) -> Vec<UserTokenPolicy> {
+        if endpoint.path != "/encrypted_user" {
+            return vec![];
+        }
+
+        vec![UserTokenPolicy {
+            policy_id: user_pass_security_policy_id(endpoint),
+            token_type: UserTokenType::UserName,
+            issued_token_type: UAString::null(),
+            issuer_endpoint_url: UAString::null(),
+            security_policy_uri: SecurityPolicy::Basic256Sha256.to_uri().into(),
+        }]
+    }
+}
+
+fn encrypted_user_token_server(authenticator: Arc<EncryptingUserAuthenticator>) -> ServerBuilder {
+    let user_token_ids = [CLIENT_USERPASS_ID];
+    let mut server = test_server().add_endpoint(
+        "encrypted_user",
+        (
+            "/encrypted_user",
+            SecurityPolicy::None,
+            MessageSecurityMode::None,
+            &user_token_ids as &[&str],
+        ),
+    );
+    server
+        .config_mut()
+        .endpoints
+        .get_mut("encrypted_user")
+        .unwrap()
+        .password_security_policy = Some(SecurityPolicy::Basic256Sha256.to_string());
+    server.with_authenticator(authenticator)
+}
+
+fn reset_client_certificate_store(tester: &Tester) -> (std::path::PathBuf, std::path::PathBuf) {
+    let pki_directory = std::path::PathBuf::from(format!("pki-client/{}", tester.test_id));
+    let trusted_directory = pki_directory.join("trusted");
+    let rejected_directory = pki_directory.join("rejected");
+    for directory in [&trusted_directory, &rejected_directory] {
+        if directory.exists() {
+            std::fs::remove_dir_all(directory).unwrap();
+        }
+        std::fs::create_dir_all(directory).unwrap();
+    }
+    (trusted_directory, rejected_directory)
+}
+
+#[tokio::test]
+async fn encrypted_username_token_over_none_validates_server_certificate() {
+    let authentication_count = Arc::new(AtomicUsize::new(0));
+    let authentication_received = Arc::new(Notify::new());
+    let authenticator = Arc::new(EncryptingUserAuthenticator {
+        authentication_count: authentication_count.clone(),
+        authentication_received: authentication_received.clone(),
+    });
+    let server = encrypted_user_token_server(authenticator);
+    let client = crate::utils::default_client(0, true)
+        .trust_server_certs(false)
+        .session_retry_limit(0);
+    let mut tester = Tester::new_custom_client(server, client).await;
+    reset_client_certificate_store(&tester);
+    let (_session, event_loop) = tester
+        .connect_path(
+            SecurityPolicy::None,
+            MessageSecurityMode::None,
+            IdentityToken::UserName("test-user".into(), "test-password".into()),
+            "encrypted_user",
+        )
+        .await
+        .unwrap();
+
+    let event_loop = event_loop.spawn();
+    tokio::select! {
+        result = event_loop => {
+            assert_eq!(result.unwrap(), StatusCode::BadCertificateUntrusted);
+            assert_eq!(authentication_count.load(Ordering::SeqCst), 0);
+        }
+        _ = authentication_received.notified() => {
+            panic!("server received the username token before its certificate was validated");
+        }
+        _ = tokio::time::sleep(Duration::from_secs(10)) => {
+            panic!("session did not fail for an untrusted server certificate");
+        }
+    }
+
+    let authentication_count = Arc::new(AtomicUsize::new(0));
+    let authentication_received = Arc::new(Notify::new());
+    let authenticator = Arc::new(EncryptingUserAuthenticator {
+        authentication_count: authentication_count.clone(),
+        authentication_received,
+    });
+    let server = encrypted_user_token_server(authenticator);
+    let client = crate::utils::default_client(0, true).trust_server_certs(false);
+    let mut tester = Tester::new_custom_client(server, client).await;
+    let (trusted_directory, _) = reset_client_certificate_store(&tester);
+    let server_certificate = X509::from_der(&std::fs::read("certs/server/cert.der").unwrap())
+        .expect("test server certificate should be valid DER");
+    std::fs::copy(
+        "certs/server/cert.der",
+        trusted_directory.join(CertificateStore::cert_file_name(&server_certificate)),
+    )
+    .unwrap();
+
+    let (session, event_loop) = tester
+        .connect_path(
+            SecurityPolicy::None,
+            MessageSecurityMode::None,
+            IdentityToken::UserName("test-user".into(), "test-password".into()),
+            "encrypted_user",
+        )
+        .await
+        .unwrap();
+    let event_loop = event_loop.spawn();
+    assert!(
+        tokio::time::timeout(Duration::from_secs(10), session.wait_for_connection())
+            .await
+            .unwrap(),
+        "trusted server certificate should allow the session to connect"
+    );
+    assert_eq!(authentication_count.load(Ordering::SeqCst), 1);
+    session.disconnect().await.unwrap();
+    tokio::time::timeout(Duration::from_secs(5), event_loop)
+        .await
+        .unwrap()
+        .unwrap();
 }
 
 #[tokio::test]

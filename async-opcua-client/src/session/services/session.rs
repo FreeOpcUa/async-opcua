@@ -440,6 +440,7 @@ impl ActivateSession {
         remote_cert: &Option<X509>,
         security_mode: MessageSecurityMode,
         channel_security_policy: SecurityPolicy,
+        certificate_store: &RwLock<CertificateStore>,
     ) -> Result<(ExtensionObject, SignatureData), Error> {
         let user_token_type = match &self.identity_token {
             IdentityToken::Anonymous => UserTokenType::Anonymous,
@@ -473,6 +474,44 @@ impl ActivateSession {
                 StatusCode::BadSecurityPolicyRejected,
                 format!("Unknown security policy {}", policy.security_policy_uri),
             ));
+        }
+
+        // A None secure channel does not authenticate the certificate returned by the peer.
+        // If that certificate will encrypt a username or issued token, validate it before using
+        // its public key so an on-path attacker cannot decrypt the credentials.
+        if channel_security_policy == SecurityPolicy::None
+            && security_policy != SecurityPolicy::None
+            && matches!(
+                self.identity_token,
+                IdentityToken::UserName(_, _) | IdentityToken::IssuedToken(_)
+            )
+        {
+            let server_certificate = remote_cert.as_ref().ok_or_else(|| {
+                Error::new(
+                    StatusCode::BadCertificateInvalid,
+                    "Missing server certificate for encrypting user token",
+                )
+            })?;
+            let hostname = hostname_from_url(self.endpoint.endpoint_url.as_ref()).map_err(|e| {
+                Error::new(
+                    StatusCode::BadUnexpectedError,
+                    format!(
+                        "Failed to extract hostname from endpoint URL ({}): {e}",
+                        self.endpoint.endpoint_url
+                    ),
+                )
+            })?;
+            let certificate_store = trace_write_lock!(certificate_store);
+            certificate_store
+                .validate_or_reject_application_instance_cert(
+                    server_certificate,
+                    security_policy,
+                    Some(&hostname),
+                    Some(self.endpoint.server.application_uri.as_ref()),
+                )
+                .inspect_err(|e| {
+                    error!("Rejected server certificate used to encrypt user token: {e}");
+                })?;
         }
 
         match &self.identity_token {
@@ -575,6 +614,7 @@ impl ActivateSession {
                 &remote_cert,
                 message_security_mode,
                 security_policy,
+                channel.certificate_store(),
             )
             .in_current_span()
             .await?;

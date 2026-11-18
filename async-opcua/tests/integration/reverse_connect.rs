@@ -5,7 +5,7 @@ use opcua_client::{
     transport::ReverseTcpConnector,
 };
 use opcua_crypto::SecurityPolicy;
-use opcua_server::ReverseConnectTargetConfig;
+use opcua_server::{ReverseConnectStatus, ReverseConnectTargetConfig};
 use opcua_types::{
     EndpointDescription, MessageSecurityMode, NodeId, ReadValueId, TimestampsToReturn, VariableId,
 };
@@ -84,5 +84,49 @@ async fn test_reverse_connect() {
         .await
         .unwrap();
 
+    assert_eq!(
+        tester.handle.reverse_connect_status("test_target"),
+        Some(ReverseConnectStatus::Connected)
+    );
+
     tester.handle.remove_reverse_connect_target("test_target");
+    assert_eq!(tester.handle.reverse_connect_status("test_target"), None);
+}
+
+#[tokio::test]
+async fn test_reverse_connect_failure() {
+    let tester = Tester::new_default_server(false).await;
+
+    // An address with no listener: each connection attempt is refused.
+    let addr = TcpListener::bind("127.0.0.1:0")
+        .await
+        .unwrap()
+        .local_addr()
+        .unwrap();
+    tester
+        .handle
+        .add_reverse_connect_target(ReverseConnectTargetConfig {
+            address: addr,
+            endpoint_url: tester.endpoint(),
+            id: "test_target".to_string(),
+        });
+
+    let status = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            match tester.handle.reverse_connect_status("test_target") {
+                Some(ReverseConnectStatus::Failed(status)) => break status,
+                _ => tokio::time::sleep(Duration::from_millis(10)).await,
+            }
+        }
+    })
+    .await
+    .unwrap();
+    assert!(status.is_bad(), "{status}");
+
+    // The server waits for the failure delay before the next attempt, and the status stays.
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert_eq!(
+        tester.handle.reverse_connect_status("test_target"),
+        Some(ReverseConnectStatus::Failed(status))
+    );
 }

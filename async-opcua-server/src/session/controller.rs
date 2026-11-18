@@ -141,7 +141,10 @@ impl<T: Connector> SessionStarter<T> {
             }
             r = &mut fut => {
                 match r {
-                    Ok(t) => t,
+                    Ok(t) => {
+                        on_connect(StatusCode::Good);
+                        t
+                    }
                     Err(e) => {
                         on_connect(e);
                         span.in_scope(|| {

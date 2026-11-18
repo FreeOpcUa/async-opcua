@@ -25,8 +25,8 @@ pub struct ReverseConnectTargetConfig {
 }
 
 enum ReverseConnectStateType {
-    /// Failed at time, will retry at time.
-    Failed(Instant),
+    /// Failed at time with status, will retry at time.
+    Failed(Instant, StatusCode),
     /// Successfully connected at time.
     Connected,
     /// Currently trying to connect.
@@ -60,7 +60,7 @@ impl ReverseConnectionInstanceHandle {
         state.state = if status.is_good() {
             ReverseConnectStateType::Connected
         } else {
-            ReverseConnectStateType::Failed(Instant::now())
+            ReverseConnectStateType::Failed(Instant::now(), status)
         };
         self.notify.notify_waiters();
     }
@@ -69,8 +69,11 @@ impl ReverseConnectionInstanceHandle {
 impl Drop for ReverseConnectionInstanceHandle {
     fn drop(&mut self) {
         let mut state = trace_lock!(self.state);
-        // Once the handle is dropped we're no longer connected.
-        state.state = ReverseConnectStateType::Waiting;
+        // Once the handle is dropped we're no longer connected. A failed attempt keeps its
+        // state, so that the next attempt waits for the failure delay.
+        if !matches!(state.state, ReverseConnectStateType::Failed(..)) {
+            state.state = ReverseConnectStateType::Waiting;
+        }
         self.notify.notify_waiters();
     }
 }
@@ -79,6 +82,20 @@ pub(crate) struct ReverseConnectionManager {
     active_targets: Arc<RwLock<HashMap<String, ReverseConnectTarget>>>,
     notify: Arc<tokio::sync::Notify>,
     failure_retry: Duration,
+}
+
+/// The state of a reverse connect target, as [`crate::ServerHandle::reverse_connect_status`]
+/// gives it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReverseConnectStatus {
+    /// Not trying to connect now. The server tries again soon.
+    Waiting,
+    /// A connection attempt is in progress.
+    Connecting,
+    /// The channel to the client is open.
+    Connected,
+    /// The last attempt failed with this status. The server tries again after the failure delay.
+    Failed(StatusCode),
 }
 
 #[derive(Clone)]
@@ -104,6 +121,18 @@ impl ReverseConnectHandle {
     pub(crate) fn remove_target(&self, id: &str) {
         let mut targets = trace_write_lock!(self.active_targets);
         targets.remove(id);
+    }
+
+    pub(crate) fn status(&self, id: &str) -> Option<ReverseConnectStatus> {
+        let targets = trace_read_lock!(self.active_targets);
+        let target = targets.get(id)?;
+        let state = trace_lock!(target.state);
+        Some(match state.state {
+            ReverseConnectStateType::Waiting => ReverseConnectStatus::Waiting,
+            ReverseConnectStateType::Connecting => ReverseConnectStatus::Connecting,
+            ReverseConnectStateType::Connected => ReverseConnectStatus::Connected,
+            ReverseConnectStateType::Failed(_, status) => ReverseConnectStatus::Failed(status),
+        })
     }
 }
 
@@ -146,7 +175,7 @@ impl ReverseConnectionManager {
                         let state = trace_lock!(target.state);
                         // Check if we should connect, and store the next time we should wake up if we have any rejected connections.
                         match &state.state {
-                            ReverseConnectStateType::Failed(time) => {
+                            ReverseConnectStateType::Failed(time, _) => {
                                 let next_time = *time + self.failure_retry;
                                 if Instant::now() < next_time {
                                     match next_wait_for {

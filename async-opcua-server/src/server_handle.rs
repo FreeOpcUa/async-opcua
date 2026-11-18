@@ -149,4 +149,13 @@ impl ServerHandle {
     pub fn remove_reverse_connect_target(&self, id: &str) {
         self.reverse_connect.remove_target(id);
     }
+
+    /// Get the state of the reverse connect target with this ID, or `None` if the server has
+    /// no target with this ID.
+    pub fn reverse_connect_status(
+        &self,
+        id: &str,
+    ) -> Option<crate::reverse_connect::ReverseConnectStatus> {
+        self.reverse_connect.status(id)
+    }
 }

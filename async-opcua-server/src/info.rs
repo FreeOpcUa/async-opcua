@@ -542,11 +542,8 @@ impl ServerInfo {
             }?;
 
             // Check the endpoint to see if this token is supported
-            let signing_cert = X509::from_byte_string(&token.certificate_data)?;
-            let signing_thumbprint = signing_cert.thumbprint();
-
             self.authenticator
-                .authenticate_x509_identity_token(endpoint, &signing_thumbprint)
+                .authenticate_x509_identity_certificate(endpoint, &token.certificate_data)
                 .await
         }
     }

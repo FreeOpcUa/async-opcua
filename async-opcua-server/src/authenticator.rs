@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 
-use opcua_crypto::{SecurityPolicy, Thumbprint};
+use opcua_crypto::{SecurityPolicy, Thumbprint, X509};
 use opcua_types::{
     ByteString, Error, MessageSecurityMode, NodeId, StatusCode, UAString, UserTokenPolicy,
     UserTokenType,
@@ -128,6 +128,24 @@ pub trait AuthManager: Send + Sync + 'static {
             StatusCode::BadIdentityTokenRejected,
             "X509 identity token unsupported",
         ))
+    }
+
+    /// Validate the user certificate of an X509 identity token for `endpoint`.
+    /// `certificate_data` is the `certificateData` of the token: the DER of the user
+    /// certificate, which a chain of issuer certificates can follow. The server has already
+    /// checked the token signature with the user certificate.
+    /// Override this method to check the chain of the certificate, for example to a trusted CA.
+    /// The default implementation calls `authenticate_x509_identity_token` with the thumbprint
+    /// of the user certificate.
+    /// This should return a user token associated with the user.
+    async fn authenticate_x509_identity_certificate(
+        &self,
+        endpoint: &ServerEndpoint,
+        certificate_data: &ByteString,
+    ) -> Result<UserToken, Error> {
+        let signing_cert = X509::from_byte_string(certificate_data)?;
+        self.authenticate_x509_identity_token(endpoint, &signing_cert.thumbprint())
+            .await
     }
 
     /// Validate the given issued identity token for `endpoint`.

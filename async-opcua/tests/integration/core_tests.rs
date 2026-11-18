@@ -527,3 +527,73 @@ async fn issued_token_test() {
         .await
         .unwrap();
 }
+
+/// An authenticator that checks the certificate data of an X509 identity token, and does not
+/// implement the thumbprint method.
+struct X509CertificateAuthenticator;
+
+#[async_trait]
+impl AuthManager for X509CertificateAuthenticator {
+    fn user_token_policies(&self, endpoint: &ServerEndpoint) -> Vec<UserTokenPolicy> {
+        if endpoint.path == "/x509_certificate" {
+            vec![UserTokenPolicy {
+                policy_id: "x509".into(),
+                token_type: UserTokenType::Certificate,
+                issued_token_type: UAString::null(),
+                issuer_endpoint_url: UAString::null(),
+                security_policy_uri: SecurityPolicy::Basic256Sha256.to_uri().into(),
+            }]
+        } else {
+            vec![]
+        }
+    }
+
+    async fn authenticate_x509_identity_certificate(
+        &self,
+        _endpoint: &ServerEndpoint,
+        certificate_data: &ByteString,
+    ) -> Result<UserToken, Error> {
+        let expected = std::fs::read("./tests/x509/user_cert.der").unwrap();
+        if certificate_data.as_ref() == expected.as_slice() {
+            Ok(UserToken("x509_certificate".into()))
+        } else {
+            Err(Error::new(
+                StatusCode::BadIdentityTokenRejected,
+                "Unknown user certificate",
+            ))
+        }
+    }
+}
+
+#[tokio::test]
+async fn x509_token_certificate_data_reaches_the_authenticator() {
+    let server = test_server()
+        .add_endpoint(
+            "x509_certificate",
+            (
+                "/x509_certificate",
+                SecurityPolicy::Basic256Sha256,
+                MessageSecurityMode::SignAndEncrypt,
+                &[] as &[&str],
+            ),
+        )
+        .with_authenticator(Arc::new(X509CertificateAuthenticator));
+    let mut tester = Tester::new(server, false).await;
+    let (session, lp) = tester
+        .connect_path(
+            SecurityPolicy::Basic256Sha256,
+            MessageSecurityMode::SignAndEncrypt,
+            client_x509_token().unwrap(),
+            "x509_certificate",
+        )
+        .await
+        .unwrap();
+    lp.spawn();
+    let connected = tokio::time::timeout(Duration::from_secs(5), session.wait_for_connection())
+        .await
+        .unwrap();
+    assert!(
+        connected,
+        "the authenticator should accept the user certificate"
+    );
+}

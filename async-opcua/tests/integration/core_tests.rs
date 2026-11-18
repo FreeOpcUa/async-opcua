@@ -314,6 +314,45 @@ async fn find_servers() {
     assert_eq!(s.product_uri.as_ref(), "urn:integration_server Testkit");
 }
 
+/// The server is configured with a host name. A client that dials the server by its IP address
+/// gets endpoint URLs and discovery URLs that name that IP address (OPC UA Part 4, 5.4.2 and
+/// 5.4.4).
+#[tokio::test]
+async fn discovery_urls_name_the_host_the_client_dialled() {
+    let tester = Tester::new_default_server(true).await;
+    let dialled = format!("opc.tcp://{}", tester.addr);
+    assert_ne!(tester.addr.ip().to_string(), hostname());
+
+    let endpoints = tester
+        .client
+        .get_server_endpoints_from_url(format!("{dialled}/"))
+        .await
+        .unwrap();
+    assert!(!endpoints.is_empty());
+    for e in &endpoints {
+        assert!(
+            e.endpoint_url.as_ref().starts_with(&dialled),
+            "{}",
+            e.endpoint_url
+        );
+        for u in e.server.discovery_urls.as_ref().unwrap() {
+            assert!(u.as_ref().starts_with(&dialled), "{u}");
+        }
+    }
+
+    let servers = tester
+        .client
+        .find_servers(format!("{dialled}/"), None, None)
+        .await
+        .unwrap();
+    assert_eq!(servers.len(), 1);
+    let discovery_urls = servers[0].discovery_urls.as_ref().unwrap();
+    assert!(!discovery_urls.is_empty());
+    for u in discovery_urls {
+        assert!(u.as_ref().starts_with(&dialled), "{u}");
+    }
+}
+
 #[tokio::test]
 async fn discovery_test() {
     let tester = Tester::new_default_server(true).await;

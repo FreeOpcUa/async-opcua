@@ -130,7 +130,15 @@ impl ServerInfo {
                 .config
                 .endpoints
                 .values()
-                .map(|e| self.new_endpoint_description(e, true))
+                .map(|e| {
+                    let mut d = self.new_endpoint_description(e, true);
+                    d.endpoint_url = with_host(&d.endpoint_url, &hostname);
+                    d.server.discovery_urls = d
+                        .server
+                        .discovery_urls
+                        .map(|urls| urls.iter().map(|u| with_host(u, &hostname)).collect());
+                    d
+                })
                 .collect();
             Some(endpoints)
         } else {
@@ -623,4 +631,45 @@ impl ServerInfo {
         let audit_log = trace_write_lock!(self.audit_log);
         audit_log.raise_and_log(event)
     } */
+}
+
+/// Returns `url` with the host that the client dialled. OPC UA Part 4 5.4.4: the server uses the
+/// endpoint URL of the request to decide which URLs to return. A server that listens on
+/// `0.0.0.0` must not return that address. Only the host changes; the other characters of `url`
+/// stay as they are. If `url` has no host, it is returned unchanged.
+pub(crate) fn with_host(url: &UAString, hostname: &str) -> UAString {
+    let text = url.as_ref();
+    let Ok(old) = hostname_from_url(text) else {
+        return url.clone();
+    };
+    let Some(start) = text.find("://").map(|i| i + 3) else {
+        return url.clone();
+    };
+    match text.get(start..start + old.len()) {
+        Some(h) if h.eq_ignore_ascii_case(&old) => UAString::from(format!(
+            "{}{}{}",
+            &text[..start],
+            hostname,
+            &text[start + old.len()..]
+        )),
+        _ => url.clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::with_host;
+    use opcua_types::UAString;
+
+    #[test]
+    fn with_host_changes_only_the_host() {
+        let h = |u: &str, host: &str| with_host(&UAString::from(u), host).to_string();
+        assert_eq!(
+            h("opc.tcp://0.0.0.0:4840", "10.0.0.5"),
+            "opc.tcp://10.0.0.5:4840"
+        );
+        assert_eq!(h("opc.tcp://0.0.0.0:4840/", "plc"), "opc.tcp://plc:4840/");
+        assert_eq!(h("opc.tcp://Host:4840/a/b", "x"), "opc.tcp://x:4840/a/b");
+        assert_eq!(h("not a url", "x"), "not a url");
+    }
 }

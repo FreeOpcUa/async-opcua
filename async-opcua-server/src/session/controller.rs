@@ -11,6 +11,7 @@ use tracing::{debug, debug_span, error, trace, warn};
 use opcua_core::{
     comms::{
         secure_channel::SecureChannel, security_header::SecurityHeader, tcp_types::ErrorMessage,
+        url::hostname_from_url,
     },
     config::Config,
     handle::AtomicHandle,
@@ -27,7 +28,7 @@ use tracing_futures::Instrument;
 
 use crate::{
     authenticator::UserToken,
-    info::ServerInfo,
+    info::{with_host, ServerInfo},
     node_manager::NodeManagers,
     subscriptions::SubscriptionCache,
     transport::tcp::{Request, TcpTransport, TransportPollResult},
@@ -387,10 +388,14 @@ impl SessionController {
             }
             RequestMessage::FindServers(request) => {
                 let _h = span.enter();
-                let desc = self.info.config.application_description();
+                let mut desc = self.info.config.application_description();
+                // Name the host that the client dialled, as GetEndpoints does.
+                if let Ok(hostname) = hostname_from_url(request.endpoint_url.as_ref()) {
+                    desc.discovery_urls = desc
+                        .discovery_urls
+                        .map(|urls| urls.iter().map(|u| with_host(u, &hostname)).collect());
+                }
                 let mut servers = vec![desc];
-
-                // TODO endpoint URL
 
                 // TODO localeids, filter out servers that do not support locale ids
 

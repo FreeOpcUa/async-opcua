@@ -143,6 +143,11 @@ impl SubscriptionCache {
                     sub_lck.session().clone(),
                     sub_lck.tick(&now, now_instant, TickReason::TickTimerFired),
                 ));
+                // A closed session sends no Publish request, so the last notification of an
+                // expired subscription never goes out. Remove the subscription.
+                if trace_read_lock!(sub_lck.session()).is_closed() {
+                    sub_lck.remove_closed_subscriptions();
+                }
                 if sub_lck.is_ready_to_delete() {
                     to_delete.push(*session_id);
                 }

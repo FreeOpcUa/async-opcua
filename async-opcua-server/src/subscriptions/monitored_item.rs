@@ -1098,6 +1098,71 @@ pub(super) mod tests {
         }
     }
 
+    // OPC UA Part 4, 5.13.1.5: enqueue one Good value into a full data change
+    // queue and inspect what a subscriber would receive, in delivery order.
+    fn queue_after_overflow(initial: &[i32], discard_oldest: bool) -> Vec<(i32, bool)> {
+        let (&first, rest) = initial.split_first().expect("nonempty queue");
+        let now = DateTime::now();
+        let mut item = new_monitored_item(
+            1,
+            ReadValueId {
+                node_id: NodeId::null(),
+                attribute_id: AttributeId::Value as u32,
+                ..Default::default()
+            },
+            MonitoringMode::Reporting,
+            FilterType::None,
+            SamplingInterval::Zero,
+            discard_oldest,
+            Some(DataValue::new_at(first, now)),
+        );
+        item.queue_size = initial.len();
+        for &value in rest {
+            assert!(item.notify_data_value(DataValue::new_at(value, now), &now, false));
+        }
+        assert_eq!(item.notification_queue.len(), item.queue_size);
+        assert!(item.notify_data_value(DataValue::new_at(40, now), &now, false));
+
+        let mut received = Vec::new();
+        while let Some(notification) = item.pop_notification() {
+            let Notification::MonitoredItemNotification(n) = notification else {
+                panic!("Expected a data change");
+            };
+            let overflow = n.value.status().overflow();
+            let Some(Variant::Int32(value)) = n.value.value else {
+                panic!("Expected an Int32 value");
+            };
+            received.push((value, overflow));
+        }
+        received
+    }
+
+    #[test]
+    fn queue_overflow_single_slot_discard_oldest() {
+        assert_eq!(queue_after_overflow(&[30], true), [(40, false)]);
+    }
+
+    #[test]
+    fn queue_overflow_single_slot_replace_last() {
+        assert_eq!(queue_after_overflow(&[30], false), [(40, false)]);
+    }
+
+    #[test]
+    fn queue_overflow_discard_oldest_marks_next_value() {
+        assert_eq!(
+            queue_after_overflow(&[10, 20, 30], true),
+            [(20, true), (30, false), (40, false)]
+        );
+    }
+
+    #[test]
+    fn queue_overflow_replace_last_marks_new_value() {
+        assert_eq!(
+            queue_after_overflow(&[10, 20, 30], false),
+            [(10, false), (20, false), (40, true)]
+        );
+    }
+
     #[test]
     fn monitored_item_delayed_sample() {
         let start = Utc::now();

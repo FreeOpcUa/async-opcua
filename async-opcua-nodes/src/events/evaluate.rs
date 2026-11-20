@@ -349,6 +349,7 @@ impl ParsedContentFilter {
             (Variant::Double(lhs), Variant::Double(rhs)) => Some(lhs.total_cmp(&rhs)),
             (Variant::Float(lhs), Variant::Float(rhs)) => Some(lhs.total_cmp(&rhs)),
             (Variant::Boolean(lhs), Variant::Boolean(rhs)) => Some(lhs.cmp(&rhs)),
+            (Variant::DateTime(lhs), Variant::DateTime(rhs)) => Some(lhs.cmp(&rhs)),
             _ => None,
         }
     }
@@ -891,6 +892,79 @@ mod tests {
         assert!(f.evaluate(&evt as &dyn Event, &type_tree));
         let evt = event(11);
         assert!(!f.evaluate(&evt as &dyn Event, &type_tree));
+    }
+
+    #[test]
+    fn test_ordering_filters_date_time() {
+        let type_tree = type_tree();
+        let evaluate = |operands: &[Operand], op: FilterOperator| {
+            let f = filter(vec![filter_elem(operands, op)], &type_tree);
+            f.evaluate(&event(2) as &dyn Event, &type_tree)
+        };
+        let literal = |v: DateTime| Operand::literal(Variant::from(v));
+        let compare = |lhs: DateTime, rhs: DateTime, op: FilterOperator| {
+            evaluate(&[literal(lhs), literal(rhs)], op)
+        };
+        let early = DateTime::ymd(2020, 1, 1);
+        let middle = DateTime::ymd(2021, 1, 1);
+        let late = DateTime::ymd(2022, 1, 1);
+
+        assert!(compare(late, early, FilterOperator::GreaterThan));
+        assert!(!compare(early, late, FilterOperator::GreaterThan));
+        assert!(!compare(early, early, FilterOperator::GreaterThan));
+
+        assert!(compare(late, early, FilterOperator::GreaterThanOrEqual));
+        assert!(compare(early, early, FilterOperator::GreaterThanOrEqual));
+        assert!(!compare(early, late, FilterOperator::GreaterThanOrEqual));
+
+        assert!(compare(early, late, FilterOperator::LessThan));
+        assert!(!compare(late, early, FilterOperator::LessThan));
+        assert!(!compare(early, early, FilterOperator::LessThan));
+
+        assert!(compare(early, late, FilterOperator::LessThanOrEqual));
+        assert!(compare(early, early, FilterOperator::LessThanOrEqual));
+        assert!(!compare(late, early, FilterOperator::LessThanOrEqual));
+
+        // Against a field of the event, which was raised just now.
+        let time = || {
+            Operand::simple_attribute(
+                ObjectTypeId::BaseEventType,
+                "Time",
+                AttributeId::Value,
+                NumericRange::None,
+            )
+        };
+        assert!(evaluate(
+            &[time(), literal(late)],
+            FilterOperator::GreaterThan
+        ));
+        assert!(!evaluate(
+            &[time(), literal(late)],
+            FilterOperator::LessThan
+        ));
+
+        let between = |it: DateTime, low: DateTime, high: DateTime| {
+            evaluate(
+                &[literal(it), literal(low), literal(high)],
+                FilterOperator::Between,
+            )
+        };
+        assert!(between(middle, early, late));
+        assert!(between(early, early, late));
+        assert!(between(late, early, late));
+        assert!(!between(early, middle, late));
+        assert!(!between(late, early, middle));
+
+        // There is no implicit conversion to or from DateTime, so it has no
+        // order relative to a value of any other type.
+        assert!(!evaluate(
+            &[literal(late), Operand::literal(1)],
+            FilterOperator::GreaterThan
+        ));
+        assert!(!evaluate(
+            &[Operand::literal(1), literal(late)],
+            FilterOperator::LessThan
+        ));
     }
 
     #[test]

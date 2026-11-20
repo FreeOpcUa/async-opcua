@@ -47,6 +47,90 @@ async fn read() {
 }
 
 #[tokio::test]
+async fn read_configured_server_capabilities() {
+    use opcua_client::browser::BrowseFilter;
+    use VariableId::*;
+
+    for (max_items, diagnostics) in [(11, true), (0, false)] {
+        let mut server = default_server()
+            .max_sessions(7)
+            .locale_ids(vec!["ko-KR".into(), "en".into()])
+            .diagnostics_enabled(diagnostics);
+        let limits = &mut server.limits_mut().subscriptions;
+        limits.max_subscriptions_per_session = 3;
+        limits.max_monitored_items_per_sub = max_items;
+        limits.max_monitored_item_queue_size = 9;
+        let mut tester = Tester::new(server, false).await;
+        let session = tester
+            .connect_and_wait(
+                opcua_crypto::SecurityPolicy::None,
+                opcua_types::MessageSecurityMode::None,
+                opcua_client::IdentityToken::Anonymous,
+            )
+            .await
+            .unwrap();
+
+        let properties = [
+            (
+                Server_ServerCapabilities_LocaleIdArray,
+                Some(vec!["ko-KR".to_owned(), "en".to_owned()].into()),
+            ),
+            (Server_ServerCapabilities_MaxSessions, Some(7u32.into())),
+            (
+                Server_ServerCapabilities_MaxSubscriptionsPerSession,
+                Some(3u32.into()),
+            ),
+            (
+                Server_ServerCapabilities_MaxMonitoredItemsPerSubscription,
+                (max_items > 0).then_some(11u32.into()),
+            ),
+            (
+                Server_ServerCapabilities_MaxMonitoredItemsQueueSize,
+                Some(9u32.into()),
+            ),
+            (Server_ServerCapabilities_MaxSubscriptions, None),
+            (Server_ServerCapabilities_MaxMonitoredItems, None),
+            (Server_ServerCapabilities_MaxSelectClauseParameters, None),
+            (Server_ServerCapabilities_MaxWhereClauseParameters, None),
+        ];
+        let cap = BrowseFilter::new_hierarchical()
+            .new_description_from_node(ObjectId::Server_ServerCapabilities.into());
+        let browse = session.browse(&[cap], 1000, None).await.unwrap();
+        let references = browse[0].references.as_ref().unwrap();
+        for (id, value) in &properties {
+            assert_eq!(
+                references.iter().any(|r| r.node_id.node_id == *id),
+                value.is_some(),
+                "{id:?}"
+            );
+        }
+
+        let mut expected = Vec::from(properties);
+        expected.push((
+            Server_ServerDiagnostics_EnabledFlag,
+            Some(diagnostics.into()),
+        ));
+        let nodes: Vec<_> = expected
+            .iter()
+            .map(|(id, _)| ReadValueId::new_value((*id).into()))
+            .collect();
+        let results = session
+            .read(&nodes, TimestampsToReturn::Both, 0.0)
+            .await
+            .unwrap();
+        assert_eq!(results.len(), nodes.len());
+        for (dv, (id, value)) in results.into_iter().zip(expected) {
+            if let Some(value) = value {
+                assert_eq!(dv.status(), StatusCode::Good, "{id:?}");
+                assert_eq!(dv.value, Some(value), "{id:?}");
+            } else {
+                assert_eq!(dv.status(), StatusCode::BadNodeIdUnknown, "{id:?}");
+            }
+        }
+    }
+}
+
+#[tokio::test]
 async fn read_variable() {
     let (tester, nm, session) = setup().await;
 

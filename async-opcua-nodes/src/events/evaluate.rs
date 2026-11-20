@@ -43,12 +43,26 @@ impl ParsedEventFilter {
     }
 }
 
+/// Evaluate an operand of a filter element.
+///
+/// An element with a null operand evaluates to null, so if the operand is
+/// null this returns null from the function evaluating the element.
+macro_rules! operand {
+    ($slf:ident, $evt:ident, $tt:ident, $op:ident, $idx:expr) => {{
+        let v = $slf.evaluate_operand($evt, $tt, &$op.operands[$idx]);
+        if v.is_empty() {
+            return Variant::Empty;
+        }
+        v
+    }};
+}
+
 macro_rules! cmp_op {
     ($slf:ident, $evt:ident, $tt:ident, $op:ident, $pt:pat) => {
         matches!(
             ParsedContentFilter::compare_op(
-                $slf.evaluate_operand($evt, $tt, &$op.operands[0]),
-                $slf.evaluate_operand($evt, $tt, &$op.operands[1]),
+                operand!($slf, $evt, $tt, $op, 0),
+                operand!($slf, $evt, $tt, $op, 1),
             ),
             $pt
         )
@@ -139,8 +153,8 @@ impl ParsedContentFilter {
 
         match op.operator {
             FilterOperator::Equals => Self::equals(
-                self.evaluate_operand(item, type_tree, &op.operands[0]),
-                self.evaluate_operand(item, type_tree, &op.operands[1]),
+                operand!(self, item, type_tree, op, 0),
+                operand!(self, item, type_tree, op, 1),
             )
             .into(),
             FilterOperator::IsNull => {
@@ -169,27 +183,26 @@ impl ParsedContentFilter {
                 )
             }
             FilterOperator::Like => Self::like(
-                self.evaluate_operand(item, type_tree, &op.operands[0]),
-                self.evaluate_operand(item, type_tree, &op.operands[1]),
+                operand!(self, item, type_tree, op, 0),
+                operand!(self, item, type_tree, op, 1),
             )
             .into(),
             FilterOperator::Not => {
                 Self::not(self.evaluate_operand(item, type_tree, &op.operands[0]))
             }
             FilterOperator::Between => Self::between(
-                self.evaluate_operand(item, type_tree, &op.operands[0]),
-                self.evaluate_operand(item, type_tree, &op.operands[1]),
-                self.evaluate_operand(item, type_tree, &op.operands[2]),
+                operand!(self, item, type_tree, op, 0),
+                operand!(self, item, type_tree, op, 1),
+                operand!(self, item, type_tree, op, 2),
             )
             .into(),
             FilterOperator::InList => Self::in_list(
-                self.evaluate_operand(item, type_tree, &op.operands[0]),
+                operand!(self, item, type_tree, op, 0),
                 op.operands
                     .iter()
                     .skip(1)
                     .map(|o| self.evaluate_operand(item, type_tree, o)),
-            )
-            .into(),
+            ),
             FilterOperator::And => Self::and(
                 self.evaluate_operand(item, type_tree, &op.operands[0]),
                 self.evaluate_operand(item, type_tree, &op.operands[1]),
@@ -254,9 +267,9 @@ impl ParsedContentFilter {
     fn equals(lhs: Variant, rhs: Variant) -> bool {
         let (lhs, rhs) = Self::convert(lhs, rhs);
         match (&lhs, &rhs) {
-            // A null operand is not equal to anything, not even to another
-            // null. That is what `IsNull` is for, and it also covers a failed
-            // conversion, which leaves a null behind.
+            // A failed conversion leaves a null behind, and the operands are
+            // then not equal. Nothing is equal to a null, not even another
+            // null, that is what `IsNull` is for.
             (Variant::Empty, _) | (_, Variant::Empty) => false,
             // Floating point values are equal when the ordering operators
             // say they are.
@@ -267,13 +280,23 @@ impl ParsedContentFilter {
         }
     }
 
-    fn in_list(lhs: Variant, rhs: impl Iterator<Item = Variant>) -> bool {
+    /// `lhs` must not be null. A null in the list does not hide a match, but
+    /// without a match it makes the result null: the value might have been
+    /// equal to whatever is missing.
+    fn in_list(lhs: Variant, rhs: impl Iterator<Item = Variant>) -> Variant {
+        let mut any_null = false;
         for it in rhs {
-            if Self::equals(lhs.clone(), it) {
-                return true;
+            if it.is_empty() {
+                any_null = true;
+            } else if Self::equals(lhs.clone(), it) {
+                return true.into();
             }
         }
-        false
+        if any_null {
+            Variant::Empty
+        } else {
+            false.into()
+        }
     }
 
     fn between(it: Variant, gte: Variant, lte: Variant) -> bool {
@@ -291,18 +314,33 @@ impl ParsedContentFilter {
         (!rhs).into()
     }
 
-    fn and(lhs: Variant, rhs: Variant) -> Variant {
-        let lhs = as_type!(lhs, Boolean, Variant::Empty);
-        let rhs = as_type!(rhs, Boolean, Variant::Empty);
-
-        (lhs && rhs).into()
+    /// Resolve an operand of `And` or `Or` to a Boolean. An operand that
+    /// cannot be resolved to one is considered null.
+    fn as_boolean(v: Variant) -> Option<bool> {
+        match v.convert(VariantTypeId::Scalar(VariantScalarTypeId::Boolean)) {
+            Variant::Boolean(v) => Some(v),
+            _ => None,
+        }
     }
 
-    fn or(lhs: Variant, rhs: Variant) -> Variant {
-        let lhs = as_type!(lhs, Boolean, Variant::Empty);
-        let rhs = as_type!(rhs, Boolean, Variant::Empty);
+    /// Logical AND with null operands, OPC UA Part 4 table 123: false if
+    /// either operand is false, even if the other one is null.
+    fn and(lhs: Variant, rhs: Variant) -> Variant {
+        match (Self::as_boolean(lhs), Self::as_boolean(rhs)) {
+            (Some(false), _) | (_, Some(false)) => false.into(),
+            (Some(true), Some(true)) => true.into(),
+            _ => Variant::Empty,
+        }
+    }
 
-        (lhs || rhs).into()
+    /// Logical OR with null operands, OPC UA Part 4 table 124: true if
+    /// either operand is true, even if the other one is null.
+    fn or(lhs: Variant, rhs: Variant) -> Variant {
+        match (Self::as_boolean(lhs), Self::as_boolean(rhs)) {
+            (Some(true), _) | (_, Some(true)) => true.into(),
+            (Some(false), Some(false)) => false.into(),
+            _ => Variant::Empty,
+        }
     }
 
     fn like(lhs: Variant, rhs: Variant) -> bool {
@@ -1254,5 +1292,174 @@ mod tests {
                 Variant::from(2i32),
             ]
         );
+    }
+
+    /// The result of the first element of a filter: `Variant::Empty` is null.
+    fn evaluate_elements(elements: Vec<ContentFilterElement>) -> Variant {
+        let type_tree = type_tree();
+        let f = filter(elements, &type_tree);
+        f.evulate_element(&event(2) as &dyn Event, &type_tree, 0)
+    }
+
+    fn null() -> Operand {
+        Operand::literal(Variant::Empty)
+    }
+
+    #[test]
+    fn test_null_operand() {
+        // A field the event does not have is null as well.
+        let missing = || {
+            Operand::simple_attribute(
+                ObjectTypeId::BaseEventType,
+                "NoSuchField",
+                AttributeId::Value,
+                NumericRange::None,
+            )
+        };
+
+        // An element with a null operand is null, not false.
+        for op in [
+            FilterOperator::Equals,
+            FilterOperator::GreaterThan,
+            FilterOperator::LessThan,
+            FilterOperator::GreaterThanOrEqual,
+            FilterOperator::LessThanOrEqual,
+        ] {
+            for operands in [
+                [null(), Operand::literal(1)],
+                [Operand::literal(1), null()],
+                [null(), null()],
+                [missing(), Operand::literal(1)],
+            ] {
+                assert_eq!(
+                    evaluate_elements(vec![filter_elem(&operands, op)]),
+                    Variant::Empty,
+                    "{op:?}"
+                );
+            }
+        }
+        assert_eq!(
+            evaluate_elements(vec![filter_elem(
+                &[null(), Operand::literal("%")],
+                FilterOperator::Like
+            )]),
+            Variant::Empty
+        );
+        assert_eq!(
+            evaluate_elements(vec![filter_elem(
+                &[Operand::literal("a"), null()],
+                FilterOperator::Like
+            )]),
+            Variant::Empty
+        );
+        for operands in [
+            [null(), Operand::literal(1), Operand::literal(3)],
+            [Operand::literal(2), null(), Operand::literal(3)],
+            [Operand::literal(2), Operand::literal(1), null()],
+        ] {
+            assert_eq!(
+                evaluate_elements(vec![filter_elem(&operands, FilterOperator::Between)]),
+                Variant::Empty
+            );
+        }
+
+        // IsNull is the one operator that is true for a null operand.
+        assert_eq!(
+            evaluate_elements(vec![filter_elem(&[null()], FilterOperator::IsNull)]),
+            Variant::Boolean(true)
+        );
+        assert_eq!(
+            evaluate_elements(vec![filter_elem(&[missing()], FilterOperator::IsNull)]),
+            Variant::Boolean(true)
+        );
+
+        // Operands that are not null, but cannot be compared, are still false.
+        assert_eq!(
+            evaluate_elements(vec![filter_elem(
+                &[Operand::literal(NodeId::new(1, 123)), Operand::literal(1)],
+                FilterOperator::Equals
+            )]),
+            Variant::Boolean(false)
+        );
+
+        // Null survives a FilterOperator::Not, so neither the element nor its negation
+        // accepts the event.
+        let type_tree = type_tree();
+        let evt = event(2);
+        let equals = filter_elem(&[missing(), Operand::literal(1)], FilterOperator::Equals);
+        let f = filter(vec![equals.clone()], &type_tree);
+        assert!(!f.evaluate(&evt as &dyn Event, &type_tree));
+        let f = filter(
+            vec![
+                filter_elem(&[Operand::element(1)], FilterOperator::Not),
+                equals,
+            ],
+            &type_tree,
+        );
+        assert!(!f.evaluate(&evt as &dyn Event, &type_tree));
+    }
+
+    #[test]
+    fn test_in_list_null_operand() {
+        let in_list = |operands: &[Operand]| {
+            evaluate_elements(vec![filter_elem(operands, FilterOperator::InList)])
+        };
+        let literal = |v: i32| Operand::literal(v);
+
+        // Nothing is equal to a null.
+        assert_eq!(in_list(&[null(), literal(1)]), Variant::Empty);
+        assert_eq!(in_list(&[null(), null()]), Variant::Empty);
+        // A null in the list does not hide a match...
+        assert_eq!(
+            in_list(&[literal(1), null(), literal(1)]),
+            Variant::Boolean(true)
+        );
+        assert_eq!(
+            in_list(&[literal(1), literal(1), null()]),
+            Variant::Boolean(true)
+        );
+        // ...but without a match it is unknown whether the value is in the list.
+        assert_eq!(in_list(&[literal(1), null(), literal(2)]), Variant::Empty);
+        assert_eq!(
+            in_list(&[literal(1), literal(2), literal(3)]),
+            Variant::Boolean(false)
+        );
+    }
+
+    #[test]
+    fn test_and_or_null_operand() {
+        // OPC UA Part 4, tables 123 and 124.
+        let yes = || Operand::literal(true);
+        let no = || Operand::literal(false);
+        let and = |lhs: Operand, rhs: Operand| {
+            evaluate_elements(vec![filter_elem(&[lhs, rhs], FilterOperator::And)])
+        };
+        let or = |lhs: Operand, rhs: Operand| {
+            evaluate_elements(vec![filter_elem(&[lhs, rhs], FilterOperator::Or)])
+        };
+
+        assert_eq!(and(yes(), yes()), Variant::Boolean(true));
+        assert_eq!(and(yes(), no()), Variant::Boolean(false));
+        assert_eq!(and(no(), yes()), Variant::Boolean(false));
+        assert_eq!(and(no(), no()), Variant::Boolean(false));
+        assert_eq!(and(yes(), null()), Variant::Empty);
+        assert_eq!(and(null(), yes()), Variant::Empty);
+        assert_eq!(and(no(), null()), Variant::Boolean(false));
+        assert_eq!(and(null(), no()), Variant::Boolean(false));
+        assert_eq!(and(null(), null()), Variant::Empty);
+
+        assert_eq!(or(yes(), yes()), Variant::Boolean(true));
+        assert_eq!(or(yes(), no()), Variant::Boolean(true));
+        assert_eq!(or(no(), yes()), Variant::Boolean(true));
+        assert_eq!(or(no(), no()), Variant::Boolean(false));
+        assert_eq!(or(yes(), null()), Variant::Boolean(true));
+        assert_eq!(or(null(), yes()), Variant::Boolean(true));
+        assert_eq!(or(no(), null()), Variant::Empty);
+        assert_eq!(or(null(), no()), Variant::Empty);
+        assert_eq!(or(null(), null()), Variant::Empty);
+
+        // An operand that is not a Boolean counts as null.
+        assert_eq!(and(yes(), Operand::literal("text")), Variant::Empty);
+        assert_eq!(or(Operand::literal("text"), yes()), Variant::Boolean(true));
     }
 }

@@ -285,6 +285,12 @@ impl CreateMonitoredItem {
 }
 
 #[derive(Debug)]
+struct DeferredSample {
+    value: DataValue,
+    due_at: DateTime,
+}
+
+#[derive(Debug)]
 /// State of an active monitored item on the server.
 pub struct MonitoredItem {
     id: u32,
@@ -302,9 +308,9 @@ pub struct MonitoredItem {
     queue_overflow: bool,
     timestamps_to_return: TimestampsToReturn,
     last_data_value: Option<DataValue>,
-    /// Value skipped due to sampling interval, we keep these
-    /// so that we can generate a new notification later.
-    sample_skipped_data_value: Option<DataValue>,
+    /// Logical sampling time, kept separate from the data source's observation time.
+    last_sample_at: Option<DateTime>,
+    sample_skipped_data_value: Option<DeferredSample>,
     any_new_notification: bool,
     eu_range: Option<(f64, f64)>,
 }
@@ -329,6 +335,7 @@ impl MonitoredItem {
             discard_oldest: request.discard_oldest,
             timestamps_to_return: request.timestamps_to_return,
             last_data_value: None,
+            last_sample_at: None,
             sample_skipped_data_value: None,
             queue_size: request.queue_size,
             notification_queue: VecDeque::new(),
@@ -402,11 +409,10 @@ impl MonitoredItem {
 
     fn filter_by_sampling_interval(
         &self,
-        old: &DataValue,
-        new: &DataValue,
+        sample_at: Option<DateTime>,
         from_subscription_tick: bool,
     ) -> bool {
-        let (Some(old), Some(new)) = (&old.source_timestamp, &new.source_timestamp) else {
+        let (Some(old), Some(new)) = (self.last_sample_at, sample_at) else {
             // Always include measurements without source timestamp, we don't know enough about these,
             // assume the server implementation did filtering elsewhere.
             return true;
@@ -432,34 +438,13 @@ impl MonitoredItem {
         }
     }
 
-    /// Enqueue a value skipped due to sampling interval,
-    /// if its new timestamp is in the past.
-    ///
-    /// Effectively what this mechanism does is to delay a notification
-    /// if it arrives too early. I.e. with a sampling interval of 100ms, we get
-    /// a notification at 0ms, and at 50ms. The second one is skipped, but if we don't
-    /// get any new notifications until after 100ms, we will send the 50ms notification with
-    /// timestamp equal to 100ms.
-    ///
-    /// This specifically avoids situations where two value changes arrive quickly,
-    /// and then we get no new value changes for a long time. In this case,
-    /// for the client it would appear as if the value changed at 0ms, and then
-    /// was held constant for a long time.
-    ///
-    /// Instead, we want it to appear as if we actually sampled the value at 0ms and
-    /// at 100ms, even if we actually don't sample at all.
-    ///
-    /// A corner case occurs if a new value arrives at exactly 100ms, in which case
-    /// we discard the previous value after all. If a new value arrives at 101ms, it
-    /// would be delayed to 200ms, giving the appearance of regular samples at 100ms intervals,
-    /// even at the cost of delaying the actual update by a little bit.
-    ///
-    /// Users that want to avoid this should just set the sampling interval to 0.
+    /// Deliver the latest deferred value when its sampling slot is due,
+    /// preserving the source and server timestamps carried by that value.
     pub(super) fn maybe_enqueue_skipped_value(&mut self, now: &DateTime) -> bool {
         match self.sample_skipped_data_value.take() {
-            Some(value) if value.source_timestamp.is_some_and(|v| v <= *now) => {
-                self.notify_data_value(value, now, true);
-                true
+            Some(sample) if sample.due_at <= *now => {
+                self.monitoring_mode != MonitoringMode::Disabled
+                    && self.sample_value(sample.value, Some(sample.due_at), true)
             }
             Some(value) => {
                 // If there is no new sample, we can keep the last skipped value.
@@ -484,13 +469,15 @@ impl MonitoredItem {
         if let Some(skipped_value) = self.sample_skipped_data_value.take() {
             // We may use the skipped value if it is in the past,
             // and if it is earlier than the value we are currently reporting.
-            if skipped_value
-                .source_timestamp
-                .is_some_and(|v| v <= *now && value.source_timestamp.is_none_or(|v2| v2 >= v))
+            if skipped_value.due_at <= *now
+                && value
+                    .source_timestamp
+                    .is_none_or(|ts| ts >= skipped_value.due_at)
             {
                 // We still pass it through regular filtering, so it's not guaranteed to be enqueued,
                 // for example if the sampling interval is `Subscription`.
-                extra_enqueued = self.notify_data_value(skipped_value, now, false);
+                extra_enqueued =
+                    self.sample_value(skipped_value.value, Some(skipped_value.due_at), false);
             }
         }
 
@@ -506,11 +493,21 @@ impl MonitoredItem {
             }
         }
 
+        let sample_at = value.source_timestamp;
+        self.sample_value(value, sample_at, from_subscription_tick) || extra_enqueued
+    }
+
+    fn sample_value(
+        &mut self,
+        mut value: DataValue,
+        sample_at: Option<DateTime>,
+        from_subscription_tick: bool,
+    ) -> bool {
         let (matches_filter, matches_sampling_interval) =
             match (&self.last_data_value, &self.filter) {
                 (Some(last_dv), FilterType::DataChangeFilter(filter)) => (
                     filter.is_changed(&value, last_dv),
-                    self.filter_by_sampling_interval(last_dv, &value, from_subscription_tick),
+                    self.filter_by_sampling_interval(sample_at, from_subscription_tick),
                 ),
                 // No filter means the default DataChangeFilter (OPC UA Part 4,
                 // 7.22.2): trigger StatusValue, no deadband.
@@ -520,34 +517,31 @@ impl MonitoredItem {
                         deadband: Deadband::None,
                     }
                     .is_changed(&value, last_dv),
-                    self.filter_by_sampling_interval(last_dv, &value, from_subscription_tick),
+                    self.filter_by_sampling_interval(sample_at, from_subscription_tick),
                 ),
                 (None, _) => (true, true),
                 _ => (false, false),
             };
 
         if !matches_filter {
-            return extra_enqueued;
+            return false;
         }
 
-        // If we're outside the sampling interval, keep the value for now,
-        // but shift it to the next sample.
         if !matches_sampling_interval {
-            value.source_timestamp = self
-                .last_data_value
-                .as_ref()
-                .and_then(|dv| dv.source_timestamp)
-                .unwrap_or(*now)
-                .as_chrono()
-                .checked_add_signed(self.sampling_interval_as_time_delta())
-                .map(|v| v.into());
-
-            self.sample_skipped_data_value = Some(value);
-            // We need to return true here, so that the subscription knows it needs to tick this
-            // monitored item later.
-            return true;
+            self.sample_skipped_data_value = self
+                .last_sample_at
+                .and_then(|last| {
+                    last.as_chrono()
+                        .checked_add_signed(self.sampling_interval_as_time_delta())
+                })
+                .map(|due| DeferredSample {
+                    value,
+                    due_at: due.into(),
+                });
+            return self.sample_skipped_data_value.is_some();
         }
 
+        self.last_sample_at = sample_at;
         self.last_data_value = Some(value.clone());
 
         match self.timestamps_to_return {
@@ -715,7 +709,7 @@ impl MonitoredItem {
     pub(super) fn skipped_value_is_due(&self, now: &DateTime) -> bool {
         self.sample_skipped_data_value
             .as_ref()
-            .is_some_and(|v| v.source_timestamp.is_some_and(|ts| ts <= *now))
+            .is_some_and(|sample| sample.due_at <= *now)
     }
 
     /// Monitored item ID.
@@ -814,6 +808,7 @@ pub(super) mod tests {
             queue_overflow: false,
             timestamps_to_return: opcua_types::TimestampsToReturn::Both,
             last_data_value: None,
+            last_sample_at: None,
             sample_skipped_data_value: None,
             any_new_notification: false,
             eu_range: None,
@@ -1225,12 +1220,21 @@ pub(super) mod tests {
         let t = start + TimeDelta::milliseconds(300);
         assert!(item.notify_data_value(DataValue::new_at(4, t.into()), &t.into(), false));
         assert!(item.sample_skipped_data_value.is_none());
-        assert_eq!(item.notification_queue.len(), 2);
+        let Some(Notification::MonitoredItemNotification(deferred)) = item.pop_notification()
+        else {
+            panic!("Expected the deferred value before the new observation");
+        };
+        assert_eq!(deferred.value.value, Some(Variant::Int32(3)));
+        assert_eq!(
+            deferred.value.source_timestamp,
+            Some((start + TimeDelta::milliseconds(150)).into())
+        );
+        assert_eq!(item.notification_queue.len(), 1);
 
         item.notification_queue.drain(..);
         // A skipped value should also be enqueued on tick.
-        let t = start + TimeDelta::milliseconds(350);
-        assert!(item.notify_data_value(DataValue::new_at(5, t.into()), &t.into(), false));
+        let observed: DateTime = (start + TimeDelta::milliseconds(350)).into();
+        assert!(item.notify_data_value(DataValue::new_at(5, observed), &observed, false));
         assert!(item.sample_skipped_data_value.is_some());
         assert_eq!(item.notification_queue.len(), 0);
 
@@ -1239,5 +1243,11 @@ pub(super) mod tests {
         assert!(item.maybe_enqueue_skipped_value(&t.into()));
         assert_eq!(item.notification_queue.len(), 1);
         assert!(item.sample_skipped_data_value.is_none());
+        let Some(Notification::MonitoredItemNotification(notification)) = item.pop_notification()
+        else {
+            panic!("Expected a data change");
+        };
+        assert_eq!(notification.value.source_timestamp, Some(observed));
+        assert_eq!(item.last_sample_at, Some(t.into()));
     }
 }

@@ -138,7 +138,11 @@ impl ParsedContentFilter {
         };
 
         match op.operator {
-            FilterOperator::Equals => cmp_op!(self, item, type_tree, op, Some(Ordering::Equal)),
+            FilterOperator::Equals => Self::equals(
+                self.evaluate_operand(item, type_tree, &op.operands[0]),
+                self.evaluate_operand(item, type_tree, &op.operands[1]),
+            )
+            .into(),
             FilterOperator::IsNull => {
                 (self.evaluate_operand(item, type_tree, &op.operands[0]) == Variant::Empty).into()
             }
@@ -241,9 +245,31 @@ impl ParsedContentFilter {
         }
     }
 
+    /// Equality as used by `Equals` and `InList`, after implicitly converting
+    /// the operands to a common type.
+    ///
+    /// Unlike the ordering operators this is defined for every type, so a
+    /// `NodeId`, `String` or `Guid` can be equal to another of the same kind
+    /// even though it cannot be greater or less than it.
+    fn equals(lhs: Variant, rhs: Variant) -> bool {
+        let (lhs, rhs) = Self::convert(lhs, rhs);
+        match (&lhs, &rhs) {
+            // A null operand is not equal to anything, not even to another
+            // null. That is what `IsNull` is for, and it also covers a failed
+            // conversion, which leaves a null behind.
+            (Variant::Empty, _) | (_, Variant::Empty) => false,
+            // Floating point values are equal when the ordering operators
+            // say they are.
+            (Variant::Float(_), Variant::Float(_)) | (Variant::Double(_), Variant::Double(_)) => {
+                matches!(Self::compare_op(lhs, rhs), Some(Ordering::Equal))
+            }
+            _ => lhs == rhs,
+        }
+    }
+
     fn in_list(lhs: Variant, rhs: impl Iterator<Item = Variant>) -> bool {
         for it in rhs {
-            if matches!(Self::compare_op(lhs.clone(), it), Some(Ordering::Equal)) {
+            if Self::equals(lhs.clone(), it) {
                 return true;
             }
         }
@@ -453,8 +479,8 @@ mod tests {
     };
     use opcua_types::{
         AttributeId, ByteString, ContentFilter, ContentFilterElement, DateTime, EventFilter,
-        FilterOperator, LocalizedText, NodeClass, NodeId, NumericRange, ObjectTypeId, Operand,
-        SimpleAttributeOperand, StatusCode, Variant,
+        ExpandedNodeId, FilterOperator, Guid, LocalizedText, NodeClass, NodeId, NumericRange,
+        ObjectTypeId, Operand, SimpleAttributeOperand, StatusCode, Variant,
     };
 
     fn compare_regex(r1: Regex, r2: Regex) {
@@ -632,6 +658,116 @@ mod tests {
             &type_tree,
         );
         assert!(f.evaluate(&event as &dyn Event, &type_tree));
+    }
+
+    fn event_type_operand() -> Operand {
+        Operand::simple_attribute(
+            ObjectTypeId::BaseEventType,
+            "EventType",
+            AttributeId::Value,
+            NumericRange::None,
+        )
+    }
+
+    /// Evaluate a filter with a single binary operator against a test event.
+    fn evaluate_binary(lhs: Operand, rhs: Operand, op: FilterOperator) -> bool {
+        let type_tree = type_tree();
+        let f = filter(vec![filter_elem(&[lhs, rhs], op)], &type_tree);
+        f.evaluate(&event(2) as &dyn Event, &type_tree)
+    }
+
+    #[test]
+    fn test_equality_filter_non_numeric_types() {
+        let literal = |v: Variant| Operand::literal(v);
+        let equals = |lhs: Variant, rhs: Variant| {
+            evaluate_binary(literal(lhs), literal(rhs), FilterOperator::Equals)
+        };
+
+        // NodeId, against a field of the event and against a literal.
+        assert!(evaluate_binary(
+            event_type_operand(),
+            literal(NodeId::new(1, 123).into()),
+            FilterOperator::Equals
+        ));
+        assert!(!evaluate_binary(
+            event_type_operand(),
+            literal(NodeId::new(1, 456).into()),
+            FilterOperator::Equals
+        ));
+        assert!(equals(
+            NodeId::new(1, "a").into(),
+            NodeId::new(1, "a").into()
+        ));
+        assert!(!equals(
+            NodeId::new(1, "a").into(),
+            NodeId::new(2, "a").into()
+        ));
+
+        // String
+        assert!(equals("source".into(), "source".into()));
+        assert!(!equals("source".into(), "other".into()));
+
+        // DateTime
+        let time = DateTime::now();
+        assert!(equals(time.into(), time.into()));
+        assert!(!equals(time.into(), DateTime::null().into()));
+
+        // Guid
+        let guid = Guid::new();
+        assert!(equals(guid.clone().into(), guid.clone().into()));
+        assert!(!equals(guid.into(), Guid::new().into()));
+
+        // ByteString
+        assert!(equals(
+            ByteString::from(vec![1u8, 2, 3]).into(),
+            ByteString::from(vec![1u8, 2, 3]).into()
+        ));
+        assert!(!equals(
+            ByteString::from(vec![1u8, 2, 3]).into(),
+            ByteString::from(vec![1u8, 2, 4]).into()
+        ));
+
+        // Operands of different types are converted to a common type first.
+        assert!(equals(
+            NodeId::new(1, 123).into(),
+            ExpandedNodeId::from(NodeId::new(1, 123)).into()
+        ));
+        assert!(!equals(
+            NodeId::new(1, 123).into(),
+            ExpandedNodeId::from(NodeId::new(1, 456)).into()
+        ));
+
+        // No conversion between the two, so they are not equal.
+        assert!(!equals(NodeId::new(1, 123).into(), 123.into()));
+        assert!(!equals(time.into(), "source".into()));
+
+        // Numeric operands are still converted to a common type and compared.
+        assert!(equals(2i32.into(), 2i64.into()));
+        assert!(equals(2u8.into(), 2.0f64.into()));
+        assert!(equals(1.5f32.into(), 1.5f64.into()));
+        assert!(!equals(2i32.into(), 3i64.into()));
+        assert!(!equals(1.5f32.into(), 2.5f64.into()));
+
+        // A null is not equal to anything, including another null.
+        assert!(!equals(Variant::Empty, Variant::Empty));
+        assert!(!equals(Variant::Empty, NodeId::new(1, 123).into()));
+    }
+
+    #[test]
+    fn test_ordering_filters_reject_unordered_types() {
+        // Two equal NodeIds are equal, but neither is greater or less than the other.
+        for op in [
+            FilterOperator::GreaterThan,
+            FilterOperator::GreaterThanOrEqual,
+            FilterOperator::LessThan,
+            FilterOperator::LessThanOrEqual,
+        ] {
+            assert!(!evaluate_binary(
+                event_type_operand(),
+                Operand::literal(Variant::from(NodeId::new(1, 123))),
+                op
+            ));
+        }
     }
 
     #[test]
@@ -1090,6 +1226,30 @@ mod tests {
         assert!(f.evaluate(&evt as &dyn Event, &type_tree));
         let evt = event(4);
         assert!(!f.evaluate(&evt as &dyn Event, &type_tree));
+    }
+
+    #[test]
+    fn test_in_list_node_id() {
+        // This is the where clause clients such as Python asyncua build to
+        // subscribe to events of a given type: EventType InList [type, subtypes...]
+        let in_list = |types: &[NodeId]| {
+            let type_tree = type_tree();
+            let mut operands = vec![event_type_operand()];
+            operands.extend(
+                types
+                    .iter()
+                    .map(|t| Operand::literal(Variant::from(t.clone()))),
+            );
+            let f = filter(
+                vec![filter_elem(&operands, FilterOperator::InList)],
+                &type_tree,
+            );
+            f.evaluate(&event(2) as &dyn Event, &type_tree)
+        };
+
+        assert!(in_list(&[NodeId::new(1, 123)]));
+        assert!(in_list(&[NodeId::new(1, 456), NodeId::new(1, 123)]));
+        assert!(!in_list(&[NodeId::new(1, 456), NodeId::new(1, 789)]));
     }
 
     #[test]

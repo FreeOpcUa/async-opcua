@@ -4,7 +4,7 @@ use convert_case::{Case, Casing};
 use proc_macro2::Span;
 use syn::{
     parse::Parser, parse_quote, parse_str, punctuated::Punctuated, Attribute, FieldsNamed, File,
-    Generics, Item, ItemEnum, ItemMacro, ItemStruct, Lit, LitByte, Path, Token, Type, Visibility,
+    Generics, Item, ItemEnum, ItemMacro, ItemStruct, Lit, Path, Token, Type, Visibility,
 };
 use tracing::warn;
 
@@ -16,7 +16,7 @@ use crate::{
 
 use super::{
     encoding_ids::EncodingIds,
-    loaders::{EnumReprType, EnumType, FieldType, StructureFieldType, StructuredType},
+    loaders::{EnumType, FieldType, StructureFieldType, StructuredType},
     ExternalType, LoadedType,
 };
 use quote::quote;
@@ -340,36 +340,7 @@ impl CodeGenerator {
 
         for field in &item.values {
             let (name, _) = safe_ident(&field.name);
-            let value = field.value;
-            let value_token: Lit = match item.typ {
-                EnumReprType::u8 => {
-                    let value: u8 = value.try_into().map_err(|_| {
-                        CodeGenError::other(format!(
-                            "Unexpected error converting to u8, {value} is out of range"
-                        ))
-                    })?;
-                    parse_quote! { #value }
-                }
-                EnumReprType::i16 => {
-                    let value: i16 = value.try_into().map_err(|_| {
-                        CodeGenError::other(format!(
-                            "Unexpected error converting to i16, {value} is out of range"
-                        ))
-                    })?;
-                    parse_quote! { #value }
-                }
-                EnumReprType::i32 => {
-                    let value: i32 = value.try_into().map_err(|_| {
-                        CodeGenError::other(format!(
-                            "Unexpected error converting to i32, {value} is out of range"
-                        ))
-                    })?;
-                    parse_quote! { #value }
-                }
-                EnumReprType::i64 => {
-                    parse_quote! { #value }
-                }
-            };
+            let value_token: Lit = item.typ.render(field.value)?;
             let mut attrs = quote! {};
             if let Some(doc) = &field.documentation {
                 attrs.extend(quote! {
@@ -486,35 +457,7 @@ impl CodeGenerator {
                 value == 0
             };
 
-            let value_token = match item.typ {
-                EnumReprType::u8 => {
-                    let value: u8 = value.try_into().map_err(|_| {
-                        CodeGenError::other(format!(
-                            "Unexpected error converting to u8, {value} is out of range"
-                        ))
-                    })?;
-                    Lit::Byte(LitByte::new(value, Span::call_site()))
-                }
-                EnumReprType::i16 => {
-                    let value: i16 = value.try_into().map_err(|_| {
-                        CodeGenError::other(format!(
-                            "Unexpected error converting to i16, {value} is out of range"
-                        ))
-                    })?;
-                    parse_quote! { #value }
-                }
-                EnumReprType::i32 => {
-                    let value: i32 = value.try_into().map_err(|_| {
-                        CodeGenError::other(format!(
-                            "Unexpected error converting to i32, {value} is out of range"
-                        ))
-                    })?;
-                    parse_quote! { #value }
-                }
-                EnumReprType::i64 => {
-                    parse_quote! { #value }
-                }
-            };
+            let value_token = item.typ.render(field.value)?;
 
             let mut attrs = quote! {};
             if is_default {

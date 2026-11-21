@@ -327,7 +327,7 @@ impl CoreNodeManagerImpl {
                 (limits.max_string_length as u32).into()
             }
             VariableId::Server_ServerCapabilities_MinSupportedSampleRate => {
-                (limits.subscriptions.min_sampling_interval_ms as u32).into()
+                limits.subscriptions.min_sampling_interval_ms.into()
             }
             VariableId::Server_ServerCapabilities_OperationLimits_MaxMonitoredItemsPerCall => {
                 (limits.operational.max_monitored_items_per_call as u32).into()
@@ -461,7 +461,7 @@ impl CoreNodeManagerImpl {
             VariableId::Server_ServerStatus_SecondsTillShutdown => {
                 match self.status.seconds_till_shutdown() {
                     Some(x) => x.into(),
-                    None => Variant::Empty
+                    None => 0u32.into()
                 }
             }
             VariableId::Server_ServerStatus_ShutdownReason => {

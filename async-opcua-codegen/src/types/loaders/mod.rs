@@ -9,7 +9,7 @@ mod types;
 
 pub use binary_schema::BsdTypeLoader;
 pub use nodeset::NodeSetTypeLoader;
-pub use types::{EnumReprType, EnumType, FieldType, StructureFieldType, StructuredType};
+pub use types::{EnumType, FieldType, StructureFieldType, StructuredType};
 
 #[derive(Debug)]
 pub enum LoadedType {

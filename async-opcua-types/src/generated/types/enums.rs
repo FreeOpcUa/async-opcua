@@ -12,11 +12,11 @@ mod opcua {
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] #[doc =
     "https://reference.opcfoundation.org/v105/Core/docs/Part3/8.58"] pub struct
-    AccessLevelExType : i32 { const CurrentRead = 1i32; const CurrentWrite = 2i32; const
-    HistoryRead = 4i32; const HistoryWrite = 8i32; const SemanticChange = 16i32; const
-    StatusWrite = 32i32; const TimestampWrite = 64i32; const NonatomicRead = 256i32;
-    const NonatomicWrite = 512i32; const WriteFullArrayOnly = 1024i32; const
-    NoSubDataTypes = 2048i32; const NonVolatile = 4096i32; const Constant = 8192i32; }
+    AccessLevelExType : u32 { const CurrentRead = 1u32; const CurrentWrite = 2u32; const
+    HistoryRead = 4u32; const HistoryWrite = 8u32; const SemanticChange = 16u32; const
+    StatusWrite = 32u32; const TimestampWrite = 64u32; const NonatomicRead = 256u32;
+    const NonatomicWrite = 512u32; const WriteFullArrayOnly = 1024u32; const
+    NoSubDataTypes = 2048u32; const NonVolatile = 4096u32; const Constant = 8192u32; }
 }
 impl opcua::types::UaNullable for AccessLevelExType {
     fn is_ua_null(&self) -> bool {
@@ -78,9 +78,9 @@ impl opcua::types::xml::XmlType for AccessLevelType {
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] #[doc =
     "https://reference.opcfoundation.org/v105/Core/docs/Part5/12.2.9/#12.2.9.13"] pub
-    struct AccessRestrictionType : i16 { const SigningRequired = 1i16; const
-    EncryptionRequired = 2i16; const SessionRequired = 4i16; const
-    ApplyRestrictionsToBrowse = 8i16; }
+    struct AccessRestrictionType : u16 { const SigningRequired = 1u16; const
+    EncryptionRequired = 2u16; const SessionRequired = 4u16; const
+    ApplyRestrictionsToBrowse = 8u16; }
 }
 impl opcua::types::UaNullable for AccessRestrictionType {
     fn is_ua_null(&self) -> bool {
@@ -120,7 +120,7 @@ pub enum ActionState {
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] #[doc =
     "https://reference.opcfoundation.org/v105/Core/docs/Part9/8.3"] pub struct AlarmMask
-    : i16 { const Active = 1i16; const Unacknowledged = 2i16; const Unconfirmed = 4i16; }
+    : u16 { const Active = 1u16; const Unacknowledged = 2u16; const Unconfirmed = 4u16; }
 }
 impl opcua::types::UaNullable for AlarmMask {
     fn is_ua_null(&self) -> bool {
@@ -161,17 +161,17 @@ pub enum ApplicationType {
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] #[doc =
     "https://reference.opcfoundation.org/v105/Core/docs/Part3/8.60"] pub struct
-    AttributeWriteMask : i32 { const AccessLevel = 1i32; const ArrayDimensions = 2i32;
-    const BrowseName = 4i32; const ContainsNoLoops = 8i32; const DataType = 16i32; const
-    Description = 32i32; const DisplayName = 64i32; const EventNotifier = 128i32; const
-    Executable = 256i32; const Historizing = 512i32; const InverseName = 1024i32; const
-    IsAbstract = 2048i32; const MinimumSamplingInterval = 4096i32; const NodeClass =
-    8192i32; const NodeId = 16384i32; const Symmetric = 32768i32; const UserAccessLevel =
-    65536i32; const UserExecutable = 131072i32; const UserWriteMask = 262144i32; const
-    ValueRank = 524288i32; const WriteMask = 1048576i32; const ValueForVariableType =
-    2097152i32; const DataTypeDefinition = 4194304i32; const RolePermissions =
-    8388608i32; const AccessRestrictions = 16777216i32; const AccessLevelEx =
-    33554432i32; }
+    AttributeWriteMask : u32 { const AccessLevel = 1u32; const ArrayDimensions = 2u32;
+    const BrowseName = 4u32; const ContainsNoLoops = 8u32; const DataType = 16u32; const
+    Description = 32u32; const DisplayName = 64u32; const EventNotifier = 128u32; const
+    Executable = 256u32; const Historizing = 512u32; const InverseName = 1024u32; const
+    IsAbstract = 2048u32; const MinimumSamplingInterval = 4096u32; const NodeClass =
+    8192u32; const NodeId = 16384u32; const Symmetric = 32768u32; const UserAccessLevel =
+    65536u32; const UserExecutable = 131072u32; const UserWriteMask = 262144u32; const
+    ValueRank = 524288u32; const WriteMask = 1048576u32; const ValueForVariableType =
+    2097152u32; const DataTypeDefinition = 4194304u32; const RolePermissions =
+    8388608u32; const AccessRestrictions = 16777216u32; const AccessLevelEx =
+    33554432u32; }
 }
 impl opcua::types::UaNullable for AttributeWriteMask {
     fn is_ua_null(&self) -> bool {
@@ -290,9 +290,9 @@ pub enum DataChangeTrigger {
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] #[doc =
     "https://reference.opcfoundation.org/v105/Core/docs/Part14/6.2.4/#6.2.4.2"] pub
-    struct DataSetFieldContentMask : i32 { const StatusCode = 1i32; const SourceTimestamp
-    = 2i32; const ServerTimestamp = 4i32; const SourcePicoSeconds = 8i32; const
-    ServerPicoSeconds = 16i32; const RawData = 32i32; }
+    struct DataSetFieldContentMask : u32 { const StatusCode = 1u32; const SourceTimestamp
+    = 2u32; const ServerTimestamp = 4u32; const SourcePicoSeconds = 8u32; const
+    ServerPicoSeconds = 16u32; const RawData = 32u32; }
 }
 impl opcua::types::UaNullable for DataSetFieldContentMask {
     fn is_ua_null(&self) -> bool {
@@ -322,7 +322,7 @@ impl opcua::types::xml::XmlType for DataSetFieldContentMask {
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] #[doc =
     "https://reference.opcfoundation.org/v105/Core/docs/Part14/6.2.3/#6.2.3.2.5"] pub
-    struct DataSetFieldFlags : i16 { const PromotedField = 1i16; }
+    struct DataSetFieldFlags : u16 { const PromotedField = 1u16; }
 }
 impl opcua::types::UaNullable for DataSetFieldFlags {
     fn is_ua_null(&self) -> bool {
@@ -547,11 +547,11 @@ pub enum InterfaceOperStatus {
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] #[doc =
     "https://reference.opcfoundation.org/v105/Core/docs/Part14/6.3.2/#6.3.2.3.1"] pub
-    struct JsonDataSetMessageContentMask : i32 { const DataSetWriterId = 1i32; const
-    MetaDataVersion = 2i32; const SequenceNumber = 4i32; const Timestamp = 8i32; const
-    Status = 16i32; const MessageType = 32i32; const DataSetWriterName = 64i32; const
-    FieldEncoding1 = 128i32; const PublisherId = 256i32; const WriterGroupName = 512i32;
-    const MinorVersion = 1024i32; const FieldEncoding2 = 2048i32; }
+    struct JsonDataSetMessageContentMask : u32 { const DataSetWriterId = 1u32; const
+    MetaDataVersion = 2u32; const SequenceNumber = 4u32; const Timestamp = 8u32; const
+    Status = 16u32; const MessageType = 32u32; const DataSetWriterName = 64u32; const
+    FieldEncoding1 = 128u32; const PublisherId = 256u32; const WriterGroupName = 512u32;
+    const MinorVersion = 1024u32; const FieldEncoding2 = 2048u32; }
 }
 impl opcua::types::UaNullable for JsonDataSetMessageContentMask {
     fn is_ua_null(&self) -> bool {
@@ -581,10 +581,10 @@ impl opcua::types::xml::XmlType for JsonDataSetMessageContentMask {
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] #[doc =
     "https://reference.opcfoundation.org/v105/Core/docs/Part14/6.3.2/#6.3.2.1.1"] pub
-    struct JsonNetworkMessageContentMask : i32 { const NetworkMessageHeader = 1i32; const
-    DataSetMessageHeader = 2i32; const SingleDataSetMessage = 4i32; const PublisherId =
-    8i32; const DataSetClassId = 16i32; const ReplyTo = 32i32; const WriterGroupName =
-    64i32; }
+    struct JsonNetworkMessageContentMask : u32 { const NetworkMessageHeader = 1u32; const
+    DataSetMessageHeader = 2u32; const SingleDataSetMessage = 4u32; const PublisherId =
+    8u32; const DataSetClassId = 16u32; const ReplyTo = 32u32; const WriterGroupName =
+    64u32; }
 }
 impl opcua::types::UaNullable for JsonNetworkMessageContentMask {
     fn is_ua_null(&self) -> bool {
@@ -614,19 +614,19 @@ impl opcua::types::xml::XmlType for JsonNetworkMessageContentMask {
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] #[doc =
     "https://reference.opcfoundation.org/v105/Core/docs/Part22/5.3.3/#5.3.3.1"] pub
-    struct LldpSystemCapabilitiesMap : i32 { #[doc =
-    "System has capabilities other than those listed below"] const Other = 1i32; #[doc =
-    "System has repeater capability"] const Repeater = 2i32; #[doc =
-    "System has bridge capability"] const Bridge = 4i32; #[doc =
-    "System has WLAN access point capability"] const WlanAccessPoint = 8i32; #[doc =
-    "System has router capability"] const Router = 16i32; #[doc =
-    "System has telephone capability"] const Telephone = 32i32; #[doc =
+    struct LldpSystemCapabilitiesMap : u32 { #[doc =
+    "System has capabilities other than those listed below"] const Other = 1u32; #[doc =
+    "System has repeater capability"] const Repeater = 2u32; #[doc =
+    "System has bridge capability"] const Bridge = 4u32; #[doc =
+    "System has WLAN access point capability"] const WlanAccessPoint = 8u32; #[doc =
+    "System has router capability"] const Router = 16u32; #[doc =
+    "System has telephone capability"] const Telephone = 32u32; #[doc =
     "System has DOCSIS cable device capability (IETF RFC 4639)"] const DocsisCableDevice
-    = 64i32; #[doc = "System has only station capability"] const StationOnly = 128i32;
-    #[doc = "System has C-VLAN component functionality"] const CvlanComponent = 256i32;
-    #[doc = "System has S-VLAN component functionality"] const SvlanComponent = 512i32;
+    = 64u32; #[doc = "System has only station capability"] const StationOnly = 128u32;
+    #[doc = "System has C-VLAN component functionality"] const CvlanComponent = 256u32;
+    #[doc = "System has S-VLAN component functionality"] const SvlanComponent = 512u32;
     #[doc = "System has Two-port MAC Relay (TPMR) functionality."] const TwoPortMacRelay
-    = 1024i32; }
+    = 1024u32; }
 }
 impl opcua::types::UaNullable for LldpSystemCapabilitiesMap {
     fn is_ua_null(&self) -> bool {
@@ -815,25 +815,25 @@ pub enum OverrideValueHandling {
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] #[doc =
     "https://reference.opcfoundation.org/v105/Core/docs/Part18/5.2.2"] pub struct
-    PasswordOptionsMask : i32 { #[doc =
+    PasswordOptionsMask : u32 { #[doc =
     "Indicates if the server supports the feature to require a password change after the creation of the user."]
-    const SupportInitialPasswordChange = 1i32; #[doc =
+    const SupportInitialPasswordChange = 1u32; #[doc =
     "Indicates if the server supports to disable a user."] const SupportDisableUser =
-    2i32; #[doc =
+    2u32; #[doc =
     "Indicates if the server supports the configuration NoDelete for a user."] const
-    SupportDisableDeleteForUser = 4i32; #[doc =
+    SupportDisableDeleteForUser = 4u32; #[doc =
     "Indicates if the server supports the configuration NoChangeByUser for a user."]
-    const SupportNoChangeForUser = 8i32; #[doc =
+    const SupportNoChangeForUser = 8u32; #[doc =
     "Indicates if the server supports to management of a description for the user."]
-    const SupportDescriptionForUser = 16i32; #[doc =
+    const SupportDescriptionForUser = 16u32; #[doc =
     "Indicates if a upper case ASCII character is required in a password."] const
-    RequiresUpperCaseCharacters = 32i32; #[doc =
+    RequiresUpperCaseCharacters = 32u32; #[doc =
     "Indicates if a lower case ASCII character is required in a password."] const
-    RequiresLowerCaseCharacters = 64i32; #[doc =
+    RequiresLowerCaseCharacters = 64u32; #[doc =
     "Indicates if a digit ASCII character is required in a password."] const
-    RequiresDigitCharacters = 128i32; #[doc =
+    RequiresDigitCharacters = 128u32; #[doc =
     "Indicates if a special character is required in a password."] const
-    RequiresSpecialCharacters = 256i32; }
+    RequiresSpecialCharacters = 256u32; }
 }
 impl opcua::types::UaNullable for PasswordOptionsMask {
     fn is_ua_null(&self) -> bool {
@@ -877,13 +877,13 @@ pub enum PerformUpdateType {
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] #[doc =
     "https://reference.opcfoundation.org/v105/Core/docs/Part3/8.55"] pub struct
-    PermissionType : i32 { const Browse = 1i32; const ReadRolePermissions = 2i32; const
-    WriteAttribute = 4i32; const WriteRolePermissions = 8i32; const WriteHistorizing =
-    16i32; const Read = 32i32; const Write = 64i32; const ReadHistory = 128i32; const
-    InsertHistory = 256i32; const ModifyHistory = 512i32; const DeleteHistory = 1024i32;
-    const ReceiveEvents = 2048i32; const Call = 4096i32; const AddReference = 8192i32;
-    const RemoveReference = 16384i32; const DeleteNode = 32768i32; const AddNode =
-    65536i32; }
+    PermissionType : u32 { const Browse = 1u32; const ReadRolePermissions = 2u32; const
+    WriteAttribute = 4u32; const WriteRolePermissions = 8u32; const WriteHistorizing =
+    16u32; const Read = 32u32; const Write = 64u32; const ReadHistory = 128u32; const
+    InsertHistory = 256u32; const ModifyHistory = 512u32; const DeleteHistory = 1024u32;
+    const ReceiveEvents = 2048u32; const Call = 4096u32; const AddReference = 8192u32;
+    const RemoveReference = 16384u32; const DeleteNode = 32768u32; const AddNode =
+    65536u32; }
 }
 impl opcua::types::UaNullable for PermissionType {
     fn is_ua_null(&self) -> bool {
@@ -933,12 +933,12 @@ pub enum PortIdSubtype {
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] #[doc =
     "https://reference.opcfoundation.org/v105/Core/docs/Part14/9.1.3/#9.1.3.7.2"] pub
-    struct PubSubConfigurationRefMask : i32 { const ElementAdd = 1i32; const ElementMatch
-    = 2i32; const ElementModify = 4i32; const ElementRemove = 8i32; const ReferenceWriter
-    = 16i32; const ReferenceReader = 32i32; const ReferenceWriterGroup = 64i32; const
-    ReferenceReaderGroup = 128i32; const ReferenceConnection = 256i32; const
-    ReferencePubDataset = 512i32; const ReferenceSubDataset = 1024i32; const
-    ReferenceSecurityGroup = 2048i32; const ReferencePushTarget = 4096i32; }
+    struct PubSubConfigurationRefMask : u32 { const ElementAdd = 1u32; const ElementMatch
+    = 2u32; const ElementModify = 4u32; const ElementRemove = 8u32; const ReferenceWriter
+    = 16u32; const ReferenceReader = 32u32; const ReferenceWriterGroup = 64u32; const
+    ReferenceReaderGroup = 128u32; const ReferenceConnection = 256u32; const
+    ReferencePubDataset = 512u32; const ReferenceSubDataset = 1024u32; const
+    ReferenceSecurityGroup = 2048u32; const ReferencePushTarget = 4096u32; }
 }
 impl opcua::types::UaNullable for PubSubConfigurationRefMask {
     fn is_ua_null(&self) -> bool {
@@ -1089,20 +1089,20 @@ pub enum TrustListMasks {
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] #[doc =
     "https://reference.opcfoundation.org/v105/Core/docs/Part12/7.8.2/#7.8.2.8"] pub
-    struct TrustListValidationOptions : i32 { #[doc =
+    struct TrustListValidationOptions : u32 { #[doc =
     "Ignore errors related to the validity time of the Certificate."] const
-    SuppressCertificateExpired = 1i32; #[doc =
+    SuppressCertificateExpired = 1u32; #[doc =
     "Ignore mismatches between the host name or ApplicationUri."] const
-    SuppressHostNameInvalid = 2i32; #[doc =
+    SuppressHostNameInvalid = 2u32; #[doc =
     "Ignore errors if the revocation list cannot be found for the issuer of the Certificate."]
-    const SuppressRevocationStatusUnknown = 4i32; #[doc =
+    const SuppressRevocationStatusUnknown = 4u32; #[doc =
     "Ignore errors if an issuer has an expired Certificate."] const
-    SuppressIssuerCertificateExpired = 8i32; #[doc =
+    SuppressIssuerCertificateExpired = 8u32; #[doc =
     "Ignore errors if the revocation list cannot be found for any issuer of issuer Certificates."]
-    const SuppressIssuerRevocationStatusUnknown = 16i32; #[doc =
-    "Check the revocation status online."] const CheckRevocationStatusOnline = 32i32;
+    const SuppressIssuerRevocationStatusUnknown = 16u32; #[doc =
+    "Check the revocation status online."] const CheckRevocationStatusOnline = 32u32;
     #[doc = "Check the revocation status offline."] const CheckRevocationStatusOffline =
-    64i32; }
+    64u32; }
 }
 impl opcua::types::UaNullable for TrustListValidationOptions {
     fn is_ua_null(&self) -> bool {
@@ -1236,9 +1236,9 @@ pub enum TsnTalkerStatus {
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] #[doc =
     "https://reference.opcfoundation.org/v105/Core/docs/Part14/6.3.1/#6.3.1.3.2"] pub
-    struct UadpDataSetMessageContentMask : i32 { const Timestamp = 1i32; const
-    PicoSeconds = 2i32; const Status = 4i32; const MajorVersion = 8i32; const
-    MinorVersion = 16i32; const SequenceNumber = 32i32; }
+    struct UadpDataSetMessageContentMask : u32 { const Timestamp = 1u32; const
+    PicoSeconds = 2u32; const Status = 4u32; const MajorVersion = 8u32; const
+    MinorVersion = 16u32; const SequenceNumber = 32u32; }
 }
 impl opcua::types::UaNullable for UadpDataSetMessageContentMask {
     fn is_ua_null(&self) -> bool {
@@ -1268,11 +1268,11 @@ impl opcua::types::xml::XmlType for UadpDataSetMessageContentMask {
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] #[doc =
     "https://reference.opcfoundation.org/v105/Core/docs/Part14/6.3.1/#6.3.1.1.4"] pub
-    struct UadpNetworkMessageContentMask : i32 { const PublisherId = 1i32; const
-    GroupHeader = 2i32; const WriterGroupId = 4i32; const GroupVersion = 8i32; const
-    NetworkMessageNumber = 16i32; const SequenceNumber = 32i32; const PayloadHeader =
-    64i32; const Timestamp = 128i32; const PicoSeconds = 256i32; const DataSetClassId =
-    512i32; const PromotedFields = 1024i32; }
+    struct UadpNetworkMessageContentMask : u32 { const PublisherId = 1u32; const
+    GroupHeader = 2u32; const WriterGroupId = 4u32; const GroupVersion = 8u32; const
+    NetworkMessageNumber = 16u32; const SequenceNumber = 32u32; const PayloadHeader =
+    64u32; const Timestamp = 128u32; const PicoSeconds = 256u32; const DataSetClassId =
+    512u32; const PromotedFields = 1024u32; }
 }
 impl opcua::types::UaNullable for UadpNetworkMessageContentMask {
     fn is_ua_null(&self) -> bool {
@@ -1302,11 +1302,11 @@ impl opcua::types::xml::XmlType for UadpNetworkMessageContentMask {
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq)] #[doc =
     "https://reference.opcfoundation.org/v105/Core/docs/Part18/5.2.3"] pub struct
-    UserConfigurationMask : i32 { #[doc = "The user cannot be deleted."] const NoDelete =
-    1i32; #[doc = "The user is disabled."] const Disabled = 2i32; #[doc =
-    "The user cannot change the password."] const NoChangeByUser = 4i32; #[doc =
+    UserConfigurationMask : u32 { #[doc = "The user cannot be deleted."] const NoDelete =
+    1u32; #[doc = "The user is disabled."] const Disabled = 2u32; #[doc =
+    "The user cannot change the password."] const NoChangeByUser = 4u32; #[doc =
     "The user must change the password to get the assigned roles. If the password is not changed, the user has only the Role Anonymous."]
-    const MustChangePassword = 8i32; }
+    const MustChangePassword = 8u32; }
 }
 impl opcua::types::UaNullable for UserConfigurationMask {
     fn is_ua_null(&self) -> bool {

@@ -1091,11 +1091,8 @@ mod tests {
 
         // A value with an older source timestamp is held back by the sampling interval,
         // until 100ms after the first value.
-        sub.notify_data_value(
-            &1,
-            DataValue::new_at(2, (start_dt - TimeDelta::days(1)).into()),
-            &created.into(),
-        );
+        let observed = (start_dt - TimeDelta::days(1)).into();
+        sub.notify_data_value(&1, DataValue::new_at(2, observed), &created.into());
 
         // This tick is before the held value is due, so only the first value is sent.
         let (time, time_inst) = offset(start_dt, start, 100);
@@ -1118,10 +1115,7 @@ mod tests {
             panic!("Wrong notification type");
         };
         assert_eq!(m.value.value, Some(Variant::Int32(2)));
-        assert_eq!(
-            m.value.source_timestamp,
-            Some(DateTime::from(offset(start_dt, start, 150).0))
-        );
+        assert_eq!(m.value.source_timestamp, Some(observed));
     }
 
     #[test]

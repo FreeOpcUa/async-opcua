@@ -10,7 +10,8 @@ use opcua_types::{
     match_extension_object_owned, DataChangeFilter, DataChangeTrigger, DataValue, DateTime,
     Deadband, EventFieldList, EventFilter, EventFilterResult, ExtensionObject,
     MonitoredItemCreateRequest, MonitoredItemModifyRequest, MonitoredItemNotification,
-    MonitoringMode, NumericRange, ParsedDataChangeFilter, StatusCode, TimestampsToReturn, Variant,
+    MonitoringMode, NumericRange, ParsedDataChangeFilter, StatusCode, StatusCodeInfoType,
+    TimestampsToReturn, Variant,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -598,24 +599,33 @@ impl MonitoredItem {
 
     fn enqueue_notification(&mut self, notification: impl Into<Notification>) {
         self.any_new_notification = true;
-        let overflow = self.notification_queue.len() == self.queue_size;
-        if overflow {
+        let full = self.notification_queue.len() == self.queue_size;
+        if full {
             if self.discard_oldest {
                 self.notification_queue.pop_front();
             } else {
                 self.notification_queue.pop_back();
             }
-        }
-
-        let mut notification = notification.into();
-        if overflow {
-            if let Notification::MonitoredItemNotification(n) = &mut notification {
-                n.value.status = Some(n.value.status().set_overflow(true));
-            }
             self.queue_overflow = true;
         }
+        self.notification_queue.push_back(notification.into());
 
-        self.notification_queue.push_back(notification);
+        // Part 4, 5.13.1.5: mark the first value after the gap in delivery order.
+        if full && self.queue_size > 1 {
+            let after_gap = if self.discard_oldest {
+                self.notification_queue.front_mut()
+            } else {
+                self.notification_queue.back_mut()
+            };
+            if let Some(Notification::MonitoredItemNotification(n)) = after_gap {
+                n.value.status = Some(
+                    n.value
+                        .status()
+                        .set_info_type(StatusCodeInfoType::DataValue)
+                        .set_overflow(true),
+                );
+            }
+        }
     }
 
     pub(super) fn add_current_value_to_queue(&mut self) {
@@ -776,7 +786,7 @@ pub(super) mod tests {
     use opcua_types::{
         AttributeId, DataChangeFilter, DataChangeTrigger, DataValue, DateTime, Deadband,
         DeadbandType, MonitoringMode, NodeId, ParsedDataChangeFilter, ReadValueId, StatusCode,
-        Variant,
+        StatusCodeInfoType, Variant,
     };
 
     use super::{FilterType, MonitoredItem};
@@ -1061,10 +1071,16 @@ pub(super) mod tests {
         let now = start.into();
         item.queue_size = 5;
         for i in 0..4 {
+            let status = if i == 0 {
+                StatusCode::UncertainLastUsableValue
+            } else {
+                StatusCode::Good
+            };
             assert!(item.notify_data_value(
-                DataValue::new_at(
+                DataValue::new_at_status(
                     i as i32 + 1,
                     (start + Duration::try_milliseconds(100 * i + 100).unwrap()).into(),
+                    status,
                 ),
                 &now,
                 false
@@ -1089,13 +1105,83 @@ pub(super) mod tests {
             };
             // Values should be 1, 2, 3, 4, 5, since the first value 0 was dropped.
             assert_eq!(*v, idx as i32 + 1);
-            // Last status code should have the overflow flag set.
-            if idx == 4 {
-                assert_eq!(n.value.status, Some(StatusCode::Good.set_overflow(true)));
+            // The first surviving value keeps its original quality and gains the overflow flag.
+            if idx == 0 {
+                let expected = StatusCode::UncertainLastUsableValue
+                    .set_info_type(StatusCodeInfoType::DataValue)
+                    .set_overflow(true);
+                assert_eq!(n.value.status, Some(expected));
             } else {
                 assert_eq!(n.value.status, Some(StatusCode::Good));
             }
         }
+    }
+
+    // OPC UA Part 4, 5.13.1.5: enqueue one Good value into a full data change
+    // queue and inspect what a subscriber would receive, in delivery order.
+    fn queue_after_overflow(initial: &[i32], discard_oldest: bool) -> Vec<(i32, bool)> {
+        let (&first, rest) = initial.split_first().expect("nonempty queue");
+        let now = DateTime::now();
+        let mut item = new_monitored_item(
+            1,
+            ReadValueId {
+                node_id: NodeId::null(),
+                attribute_id: AttributeId::Value as u32,
+                ..Default::default()
+            },
+            MonitoringMode::Reporting,
+            FilterType::None,
+            SamplingInterval::Zero,
+            discard_oldest,
+            Some(DataValue::new_at(first, now)),
+        );
+        item.queue_size = initial.len();
+        for &value in rest {
+            assert!(item.notify_data_value(DataValue::new_at(value, now), &now, false));
+        }
+        assert_eq!(item.notification_queue.len(), item.queue_size);
+        assert!(item.notify_data_value(DataValue::new_at(40, now), &now, false));
+
+        let mut received = Vec::new();
+        while let Some(notification) = item.pop_notification() {
+            let Notification::MonitoredItemNotification(n) = notification else {
+                panic!("Expected a data change");
+            };
+            let status = n.value.status();
+            status.validate().unwrap();
+            let overflow = status.overflow();
+            let Some(Variant::Int32(value)) = n.value.value else {
+                panic!("Expected an Int32 value");
+            };
+            received.push((value, overflow));
+        }
+        received
+    }
+
+    #[test]
+    fn queue_overflow_single_slot_discard_oldest() {
+        assert_eq!(queue_after_overflow(&[30], true), [(40, false)]);
+    }
+
+    #[test]
+    fn queue_overflow_single_slot_replace_last() {
+        assert_eq!(queue_after_overflow(&[30], false), [(40, false)]);
+    }
+
+    #[test]
+    fn queue_overflow_discard_oldest_marks_next_value() {
+        assert_eq!(
+            queue_after_overflow(&[10, 20, 30], true),
+            [(20, true), (30, false), (40, false)]
+        );
+    }
+
+    #[test]
+    fn queue_overflow_replace_last_marks_new_value() {
+        assert_eq!(
+            queue_after_overflow(&[10, 20, 30], false),
+            [(10, false), (20, false), (40, true)]
+        );
     }
 
     #[test]

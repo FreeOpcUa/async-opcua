@@ -180,6 +180,20 @@ impl DynamicStructure {
                     None => 0,
                 }
             }
+            Variant::Array(a) => {
+                // This must match `encode_field`: the dimensions if the field has
+                // more than one, else the array length, and then each element
+                // as a field of its own.
+                let mut size = if field.value_rank > 1 {
+                    4 + a.dimensions.as_ref().map_or(0, |d| d.len() * 4)
+                } else {
+                    4
+                };
+                for value in a.values.iter() {
+                    size += self.field_variant_len(value, field, ctx);
+                }
+                size
+            }
             r => r.value_byte_len(ctx),
         }
     }
@@ -919,6 +933,198 @@ pub(crate) mod tests {
         cursor.seek(std::io::SeekFrom::Start(0)).unwrap();
         let obj2: ExtensionObject = BinaryDecodable::decode(&mut cursor, &ctx.context()).unwrap();
 
+        assert_eq!(obj, obj2);
+    }
+
+    /// Add a concrete structure type with the given fields to the type tree.
+    fn add_struct_type(
+        type_tree: &mut DataTypeTree,
+        id: u32,
+        name: &str,
+        fields: Vec<StructureField>,
+    ) -> NodeId {
+        let type_node_id = NodeId::new(1, id);
+        type_tree
+            .parent_ids_mut()
+            .add_type(type_node_id.clone(), DataTypeId::Structure.into());
+        type_tree.add_type(
+            type_node_id.clone(),
+            TypeInfo::from_type_definition(
+                DataTypeDefinition::Structure(StructureDefinition {
+                    default_encoding_id: NodeId::null(),
+                    base_data_type: DataTypeId::Structure.into(),
+                    structure_type: crate::StructureType::Structure,
+                    fields: Some(fields),
+                }),
+                name.to_owned(),
+                Some(EncodingIds {
+                    binary_id: NodeId::new(1, id + 1),
+                    json_id: NodeId::new(1, id + 2),
+                    xml_id: NodeId::new(1, id + 3),
+                }),
+                false,
+                &type_node_id,
+                type_tree.parent_ids(),
+            )
+            .unwrap(),
+        );
+        type_node_id
+    }
+
+    fn eu_information(unit_id: i32) -> ExtensionObject {
+        ExtensionObject::from_message(EUInformation {
+            namespace_uri: "my.namespace.uri".into(),
+            unit_id,
+            display_name: "Degrees Celsius".into(),
+            description: "Description".into(),
+        })
+    }
+
+    #[test]
+    fn dynamic_struct_array_byte_len() {
+        let mut type_tree = make_type_tree();
+        add_eu_information(&mut type_tree);
+        let field = |name: &str, data_type: NodeId, value_rank: i32| StructureField {
+            name: name.into(),
+            data_type,
+            value_rank,
+            ..Default::default()
+        };
+        let inner_id = add_struct_type(
+            &mut type_tree,
+            5,
+            "Inner",
+            vec![
+                field("Infos", DataTypeId::EUInformation.into(), 1),
+                field("InfoMatrix", DataTypeId::EUInformation.into(), 2),
+                field("Numbers", DataTypeId::Int32.into(), 1),
+                field("NumberMatrix", DataTypeId::Int32.into(), 2),
+            ],
+        );
+        let outer_id = add_struct_type(
+            &mut type_tree,
+            10,
+            "Outer",
+            vec![field("Inners", inner_id.clone(), 1)],
+        );
+        let type_tree = Arc::new(type_tree);
+        let loader = DynamicTypeLoader::new(type_tree.clone());
+        let mut loaders = TypeLoaderCollection::new();
+        loaders.add_type_loader(loader);
+        let ctx = ContextOwned::new(NamespaceMap::new(), loaders, DecodingOptions::test());
+
+        // The length a structure reports must be the number of bytes it writes.
+        // It ends up as the length of the extension object body.
+        let assert_byte_len = |value: &DynamicStructure| {
+            let mut buf = Vec::<u8>::new();
+            BinaryEncodable::encode(value, &mut buf, &ctx.context()).unwrap();
+            assert_eq!(value.byte_len(&ctx.context()), buf.len());
+        };
+        let inner = |infos: Variant, info_matrix: Variant, numbers: Variant, matrix: Variant| {
+            DynamicStructure::new_struct(
+                type_tree.get_struct_type(&inner_id).unwrap().clone(),
+                type_tree.clone(),
+                vec![infos, info_matrix, numbers, matrix],
+            )
+            .unwrap()
+        };
+        let no_infos = || Variant::from(Vec::<ExtensionObject>::new());
+        let no_numbers = || Variant::from(Vec::<i32>::new());
+        let info_matrix = |infos: Vec<ExtensionObject>, dims: Vec<u32>| {
+            Variant::from(
+                Array::new_multi(
+                    VariantScalarTypeId::ExtensionObject,
+                    infos.into_iter().map(Variant::from).collect::<Vec<_>>(),
+                    dims,
+                )
+                .unwrap(),
+            )
+        };
+        let matrix = |values: &[i32], dims: Vec<u32>| {
+            Variant::from(
+                Array::new_multi(
+                    VariantScalarTypeId::Int32,
+                    values
+                        .iter()
+                        .copied()
+                        .map(Variant::from)
+                        .collect::<Vec<_>>(),
+                    dims,
+                )
+                .unwrap(),
+            )
+        };
+        // The smallest matrices the decoder accepts, for the fields a case is not about.
+        let one_info = || info_matrix(vec![eu_information(1)], vec![1, 1]);
+        let one_number = || matrix(&[1], vec![1, 1]);
+
+        // An array of structures. Each element is written as its body.
+        assert_byte_len(&inner(
+            Variant::from(vec![eu_information(5), eu_information(6)]),
+            one_info(),
+            no_numbers(),
+            one_number(),
+        ));
+
+        // A multidimensional array is written with its dimensions, and without
+        // a separate length.
+        assert_byte_len(&inner(
+            no_infos(),
+            one_info(),
+            no_numbers(),
+            matrix(&[1, 2, 3, 4, 5, 6], vec![2, 3]),
+        ));
+        assert_byte_len(&inner(
+            no_infos(),
+            info_matrix(vec![eu_information(5), eu_information(6)], vec![1, 2]),
+            no_numbers(),
+            one_number(),
+        ));
+
+        // A one dimensional array is written without its dimensions, even if
+        // it has them.
+        assert_byte_len(&inner(
+            no_infos(),
+            one_info(),
+            matrix(&[1, 2, 3], vec![3]),
+            one_number(),
+        ));
+
+        // An array of structures that each hold an array of structures.
+        let outer = DynamicStructure::new_struct(
+            type_tree.get_struct_type(&outer_id).unwrap().clone(),
+            type_tree.clone(),
+            vec![Variant::from(vec![
+                ExtensionObject::from_message(inner(
+                    Variant::from(vec![eu_information(5), eu_information(6)]),
+                    one_info(),
+                    Variant::from(vec![1i32, 2, 3]),
+                    one_number(),
+                )),
+                ExtensionObject::from_message(inner(
+                    Variant::from(vec![eu_information(7)]),
+                    one_info(),
+                    no_numbers(),
+                    one_number(),
+                )),
+            ])],
+        )
+        .unwrap();
+        assert_byte_len(&outer);
+
+        // In an extension object, the length written in front of the body is
+        // the length of the body, so whatever follows it is found in its place.
+        let obj = ExtensionObject::from_message(outer);
+        let mut buf = Vec::<u8>::new();
+        BinaryEncodable::encode(&obj, &mut buf, &ctx.context()).unwrap();
+        let mut stream = Cursor::new(&buf);
+        let _type_id: NodeId = BinaryDecodable::decode(&mut stream, &ctx.context()).unwrap();
+        let _encoding: u8 = BinaryDecodable::decode(&mut stream, &ctx.context()).unwrap();
+        let body_len: i32 = BinaryDecodable::decode(&mut stream, &ctx.context()).unwrap();
+        assert_eq!(body_len as usize, buf.len() - stream.position() as usize);
+
+        let obj2: ExtensionObject =
+            BinaryDecodable::decode(&mut Cursor::new(&buf), &ctx.context()).unwrap();
         assert_eq!(obj, obj2);
     }
 

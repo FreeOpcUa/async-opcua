@@ -6,7 +6,7 @@ use std::{
 
 use super::{
     monitored_item::MonitoredItem,
-    subscription::{MonitoredItemHandle, Subscription, TickReason, TickResult},
+    subscription::{MonitoredItemHandle, Subscription, SubscriptionState, TickReason, TickResult},
     CreateMonitoredItem, NonAckedPublish, PendingPublish, PersistentSessionKey,
 };
 use hashbrown::{HashMap, HashSet};
@@ -75,6 +75,22 @@ impl SessionSubscriptions {
 
     pub(super) fn is_ready_to_delete(&self) -> bool {
         self.subscriptions.is_empty() && self.publish_request_queue.is_empty()
+    }
+
+    /// Remove each subscription that is closed. Call this only when the session is closed: no
+    /// Publish request can then take the last notifications of these subscriptions.
+    pub(super) fn remove_closed_subscriptions(&mut self) {
+        let closed: Vec<u32> = self
+            .subscriptions
+            .values()
+            .filter(|s| s.state() == SubscriptionState::Closed)
+            .map(|s| s.id())
+            .collect();
+        for id in closed {
+            self.subscriptions.remove(&id);
+            self.retransmission_queue
+                .retain(|f| f.subscription_id != id);
+        }
     }
 
     #[allow(clippy::result_large_err)]

@@ -191,6 +191,11 @@ impl Session {
         self.is_closed = true;
     }
 
+    /// Whether the session is closed: the client closed it, or it expired.
+    pub fn is_closed(&self) -> bool {
+        self.is_closed
+    }
+
     /// Get the session ID of this session, this is known to the client, and is what they
     /// use to refer to this session.
     ///

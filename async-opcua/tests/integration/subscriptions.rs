@@ -1,6 +1,6 @@
 use std::{collections::HashMap, time::Duration};
 
-use crate::utils::{test_server, ChannelNotifications, TestNodeManager, Tester};
+use crate::utils::{default_client, test_server, ChannelNotifications, TestNodeManager, Tester};
 
 use super::utils::setup;
 use chrono::DateTime;
@@ -1111,3 +1111,50 @@ async fn test_event_subscriptions() {
 }
 
 // TODO: Add more detailed high level tests on subscriptions.
+
+/// A client that goes away without CloseSession leaves its session to expire. No Publish request
+/// then comes for its subscriptions, and the server must still remove them when they expire.
+#[tokio::test]
+async fn subscriptions_of_an_expired_session_are_removed() {
+    let mut tester = Tester::new_custom_client(
+        test_server(),
+        default_client(0, false).session_timeout(1_000),
+    )
+    .await;
+    let (session, event_loop) = tester.connect_default().await.unwrap();
+    let task = event_loop.spawn();
+    timeout(Duration::from_secs(2), session.wait_for_connection())
+        .await
+        .unwrap();
+
+    let (notifs, _data, _) = ChannelNotifications::new();
+    // The subscription expires after 3 * 2 publishing intervals with no Publish request.
+    session
+        .create_subscription(Duration::from_millis(100), 6, 2, 1000, 0, true, notifs)
+        .await
+        .unwrap();
+
+    let opcua::types::Identifier::Numeric(session_id) = session.server_session_id().identifier
+    else {
+        panic!("Expected numeric session ID");
+    };
+    let subscriptions = tester.handle.subscriptions().clone();
+    assert!(subscriptions
+        .get_session_subscriptions(session_id)
+        .is_some());
+
+    // Drop the connection without CloseSession.
+    task.abort();
+    let _ = task.await;
+
+    timeout(Duration::from_secs(10), async {
+        while subscriptions
+            .get_session_subscriptions(session_id)
+            .is_some()
+        {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    .expect("the subscriptions of the expired session were not removed");
+}

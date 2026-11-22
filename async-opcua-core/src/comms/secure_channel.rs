@@ -222,7 +222,9 @@ impl SecureChannel {
     pub fn set_security_token(&mut self, channel_token: ChannelSecurityToken) {
         self.secure_channel_id = channel_token.channel_id;
         self.token_id = channel_token.token_id;
-        self.token_created_at = channel_token.created_at;
+        // Use the local time for token creation instead of the time in the message,
+        // as that is server time, and we want to renew based on _client_ time.
+        self.token_created_at = DateTime::now();
         self.token_lifetime = channel_token.revised_lifetime;
     }
 

@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 
-use opcua_crypto::{SecurityPolicy, Thumbprint};
+use opcua_crypto::{SecurityPolicy, Thumbprint, X509};
 use opcua_types::{
     ByteString, Error, MessageSecurityMode, NodeId, StatusCode, UAString, UserTokenPolicy,
     UserTokenType,
@@ -128,6 +128,24 @@ pub trait AuthManager: Send + Sync + 'static {
             StatusCode::BadIdentityTokenRejected,
             "X509 identity token unsupported",
         ))
+    }
+
+    /// Validate the user certificate of an X509 identity token for `endpoint`.
+    /// `certificate_data` is the `certificateData` of the token: the DER of the user
+    /// certificate, which a chain of issuer certificates can follow. The server has already
+    /// checked the token signature with the user certificate.
+    /// Override this method to check the chain of the certificate, for example to a trusted CA.
+    /// The default implementation calls `authenticate_x509_identity_token` with the thumbprint
+    /// of the user certificate.
+    /// This should return a user token associated with the user.
+    async fn authenticate_x509_identity_certificate(
+        &self,
+        endpoint: &ServerEndpoint,
+        certificate_data: &ByteString,
+    ) -> Result<UserToken, Error> {
+        let signing_cert = X509::from_byte_string(certificate_data)?;
+        self.authenticate_x509_identity_token(endpoint, &signing_cert.thumbprint())
+            .await
     }
 
     /// Validate the given issued identity token for `endpoint`.
@@ -388,4 +406,59 @@ pub fn user_pass_security_policy_uri(_endpoint: &ServerEndpoint) -> UAString {
     // TODO we could force the security policy uri for passwords to be something other than the default
     //  here to ensure they're secure even when the endpoint's security policy is None.
     UAString::null()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Mutex;
+
+    use async_trait::async_trait;
+    use opcua_crypto::{Thumbprint, X509Data, X509};
+    use opcua_types::{ApplicationDescription, Error, UserTokenPolicy};
+
+    use super::{AuthManager, UserToken};
+    use crate::ServerEndpoint;
+
+    /// An authenticator that implements only the thumbprint method, as before
+    /// `authenticate_x509_identity_certificate` existed.
+    #[derive(Default)]
+    struct ThumbprintAuthenticator {
+        thumbprint: Mutex<Option<Thumbprint>>,
+    }
+
+    #[async_trait]
+    impl AuthManager for ThumbprintAuthenticator {
+        async fn authenticate_x509_identity_token(
+            &self,
+            _endpoint: &ServerEndpoint,
+            signing_thumbprint: &Thumbprint,
+        ) -> Result<UserToken, Error> {
+            *self.thumbprint.lock().unwrap() = Some(signing_thumbprint.clone());
+            Ok(UserToken("x509".into()))
+        }
+
+        fn user_token_policies(&self, _endpoint: &ServerEndpoint) -> Vec<UserTokenPolicy> {
+            Vec::new()
+        }
+    }
+
+    #[tokio::test]
+    async fn x509_certificate_default_calls_the_thumbprint_method() {
+        let (cert, _) = X509::cert_and_pkey(&X509Data::from(ApplicationDescription {
+            application_uri: "urn:user".into(),
+            application_name: "user".into(),
+            ..Default::default()
+        }))
+        .unwrap();
+        let auth = ThumbprintAuthenticator::default();
+        let endpoint = ServerEndpoint::new_none("/", &[]);
+
+        let token = auth
+            .authenticate_x509_identity_certificate(&endpoint, &cert.as_byte_string())
+            .await
+            .unwrap();
+
+        assert_eq!(token, UserToken("x509".into()));
+        assert_eq!(*auth.thumbprint.lock().unwrap(), Some(cert.thumbprint()));
+    }
 }

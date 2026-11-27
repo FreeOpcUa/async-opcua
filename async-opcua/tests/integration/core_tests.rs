@@ -14,7 +14,7 @@ use opcua::{
     client::IdentityToken,
     core::comms::tcp_codec::{Message, TcpCodec},
     core::config::Config,
-    crypto::{CertificateStore, SecurityPolicy, X509},
+    crypto::{CertificateStore, SecurityPolicy, Thumbprint, X509},
     types::{
         ApplicationType, DecodingOptions, MessageSecurityMode, NodeId, ReadValueId, StatusCode,
         TimestampsToReturn, VariableId, Variant,
@@ -416,6 +416,116 @@ async fn connect_basic128rsa_15_with_invalid_token() {
         .unwrap();
     let res = handle.spawn().await.unwrap();
     assert_eq!(res, StatusCode::BadIdentityTokenRejected);
+}
+
+/// Offers X509 user tokens on `/x509_token_policy` with the given `securityPolicyUri`.
+struct X509TokenPolicyAuthenticator {
+    security_policy_uri: UAString,
+}
+
+#[async_trait]
+impl AuthManager for X509TokenPolicyAuthenticator {
+    async fn authenticate_x509_identity_token(
+        &self,
+        _endpoint: &ServerEndpoint,
+        _signing_thumbprint: &Thumbprint,
+    ) -> Result<UserToken, Error> {
+        Ok(UserToken("x509".into()))
+    }
+
+    fn user_token_policies(&self, endpoint: &ServerEndpoint) -> Vec<UserTokenPolicy> {
+        if endpoint.path != "/x509_token_policy" {
+            return vec![];
+        }
+
+        vec![UserTokenPolicy {
+            policy_id: "x509".into(),
+            token_type: UserTokenType::Certificate,
+            issued_token_type: UAString::null(),
+            issuer_endpoint_url: UAString::null(),
+            security_policy_uri: self.security_policy_uri.clone(),
+        }]
+    }
+}
+
+/// Activates a session on a Basic256Sha256 endpoint whose X509 user token policy has
+/// `advertised_policy_uri`, with a user token signature created with `signing_policy`.
+async fn x509_token_policy_test(
+    advertised_policy_uri: UAString,
+    signing_policy: SecurityPolicy,
+) -> Result<(), StatusCode> {
+    let server = test_server()
+        .add_endpoint(
+            "x509_token_policy",
+            (
+                "/x509_token_policy",
+                SecurityPolicy::Basic256Sha256,
+                MessageSecurityMode::SignAndEncrypt,
+                &[] as &[&str],
+            ),
+        )
+        .with_authenticator(Arc::new(X509TokenPolicyAuthenticator {
+            security_policy_uri: advertised_policy_uri,
+        }));
+    let mut tester = Tester::new(server, true).await;
+    let mut endpoint = tester
+        .client
+        .get_server_endpoints_from_url(tester.endpoint())
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|e| e.endpoint_url.as_ref().ends_with("/x509_token_policy"))
+        .unwrap();
+    // The client signs the token with the security policy of its copy of the user token policy.
+    // It would sign with no security policy for a null or empty uri, where a client that
+    // follows Part 4, 7.41 signs with the endpoint security policy.
+    for policy in endpoint.user_identity_tokens.iter_mut().flatten() {
+        policy.security_policy_uri = signing_policy.to_uri().into();
+    }
+
+    let (session, event_loop) = tester
+        .client
+        .connect_to_endpoint_directly(endpoint, client_x509_token().unwrap())
+        .unwrap();
+    let event_loop = event_loop.spawn();
+    tokio::time::timeout(Duration::from_secs(20), async {
+        tokio::select! {
+            true = session.wait_for_connection() => Ok(()),
+            status = event_loop => Err(status.unwrap()),
+        }
+    })
+    .await
+    .expect("session was neither activated nor rejected")
+}
+
+/// The security policy of the SecureChannel is used if the `securityPolicyUri` of the
+/// user token policy is null or empty (Part 4, 7.41).
+#[tokio::test]
+async fn x509_token_with_null_policy_uri_uses_the_endpoint_policy() {
+    x509_token_policy_test(UAString::null(), SecurityPolicy::Basic256Sha256)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn x509_token_with_empty_policy_uri_uses_the_endpoint_policy() {
+    x509_token_policy_test(UAString::from(""), SecurityPolicy::Basic256Sha256)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn x509_token_with_null_policy_uri_rejects_another_policy() {
+    let res = x509_token_policy_test(UAString::null(), SecurityPolicy::Aes256Sha256RsaPss).await;
+    assert_eq!(res, Err(StatusCode::BadSecurityChecksFailed));
+}
+
+#[tokio::test]
+async fn x509_token_with_explicit_policy_uri_uses_that_policy() {
+    let policy_uri = SecurityPolicy::Aes256Sha256RsaPss.to_uri();
+    x509_token_policy_test(policy_uri.into(), SecurityPolicy::Aes256Sha256RsaPss)
+        .await
+        .unwrap();
 }
 
 /// A server may send its certificate followed by the certificates that issued it (Part 6, 6.2.6),

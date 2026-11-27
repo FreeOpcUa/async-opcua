@@ -522,6 +522,8 @@ impl ServerInfo {
                     let security_policy = user_identity_tokens
                         .iter()
                         .find(|t| t.token_type == UserTokenType::Certificate)
+                        // A null or empty uri means the security policy of the endpoint
+                        .filter(|t| !t.security_policy_uri.is_empty())
                         .map(|t| SecurityPolicy::from_uri(t.security_policy_uri.as_ref()))
                         .unwrap_or_else(|| endpoint.security_policy());
 

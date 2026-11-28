@@ -526,6 +526,25 @@ pub trait NodeManager: IntoAnyArc + Any {
     /// that does not exist is handled elsewhere and should be a no-op here.
     async fn delete_monitored_items(&self, context: &RequestContext, items: &[&MonitoredItemRef]) {}
 
+    /// Called once the server has registered monitored items that this node
+    /// manager accepted in `create_monitored_items`, before the CreateMonitoredItems
+    /// response is sent. `items` holds only the items whose registration succeeded.
+    ///
+    /// A value notified through the `SubscriptionCache` for a node before any
+    /// monitored item on that node is registered reaches no item. A node manager
+    /// that starts delivering values from `create_monitored_items` can use this
+    /// method to notify the newest such value again, now that the items are
+    /// registered and receive it.
+    ///
+    /// Node managers are not required to take any action here, and this method is not
+    /// allowed to fail.
+    async fn monitored_items_registered(
+        &self,
+        context: &RequestContext,
+        items: &[&MonitoredItemRef],
+    ) {
+    }
+
     /// Perform a query on the address space.
     ///
     /// All node managers must be able to query in order for the

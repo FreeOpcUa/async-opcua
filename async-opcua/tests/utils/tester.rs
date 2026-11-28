@@ -206,7 +206,6 @@ pub fn default_server() -> ServerBuilder {
     limits.max_message_size = 1024 * 1024 * 64;
     limits.max_array_length = 100_000;
     limits.max_chunk_count = 64;
-    limits.subscriptions.max_queued_notifications = 200;
 
     builder
 }
@@ -287,9 +286,20 @@ pub fn copy_shared_certs(test_id: u16, desc: &ApplicationDescription) {
 
 impl Tester {
     async fn listener() -> TcpListener {
-        TcpListener::bind(format!("{}:0", hostname()))
+        // The host name may resolve to an IPv6 link-local address first. That address
+        // needs a zone ID, which can't be written in a URL, so tests could not dial the
+        // server by its address. Prefer the first address that can be.
+        let addrs: Vec<SocketAddr> = tokio::net::lookup_host(format!("{}:0", hostname()))
             .await
             .unwrap()
+            .collect();
+        let addr = addrs
+            .iter()
+            .find(|a| !matches!(a, SocketAddr::V6(v6) if v6.scope_id() != 0))
+            .or(addrs.first())
+            .copied()
+            .expect("host name does not resolve to any address");
+        TcpListener::bind(addr).await.unwrap()
     }
 
     #[allow(unused)]

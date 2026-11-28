@@ -16,6 +16,7 @@ use crate::{
     info::ServerInfo,
     node_manager::{MonitoredItemRef, MonitoredItemUpdateRef, TypeTreeForUserStatic},
     session::instance::Session,
+    subscriptions::queue::PublishRequestSlots,
     SubscriptionLimits,
 };
 use opcua_core::sync::RwLock;
@@ -156,7 +157,6 @@ impl SessionSubscriptions {
             revised_lifetime_count,
             revised_max_keep_alive_count,
             request.priority,
-            self.limits.max_queued_notifications,
             self.revise_max_notifications_per_publish(request.max_notifications_per_publish),
         );
         self.subscriptions.insert(subscription.id(), subscription);
@@ -609,7 +609,7 @@ impl SessionSubscriptions {
                 .values()
                 .map(|v| (v.id(), v.priority()))
                 .collect();
-            subscription_priority.sort_by_key(|s1| s1.1);
+            subscription_priority.sort_by_key(|s1| std::cmp::Reverse(s1.1));
             subscription_priority.into_iter().map(|s| s.0)
         };
 
@@ -618,22 +618,14 @@ impl SessionSubscriptions {
 
         for sub_id in subscription_ids {
             let subscription = self.subscriptions.get_mut(&sub_id).unwrap();
-            let res = subscription.tick(
-                now,
-                now_instant,
-                tick_reason,
-                !self.publish_request_queue.is_empty(),
+            let mut slots = PublishRequestSlots::new(
+                subscription.max_notifications_per_publish(),
+                &mut self.publish_request_queue,
+                &mut responses,
+                sub_id,
             );
-            // Get notifications and publish request pairs while there are any of either left.
-            while !self.publish_request_queue.is_empty() {
-                if let Some(notification_message) = subscription.take_notification() {
-                    tracing::trace!("Sending notification message {:?}", notification_message);
-                    let publish_request = self.publish_request_queue.pop_front().unwrap();
-                    responses.push((publish_request, notification_message, sub_id));
-                } else {
-                    break;
-                }
-            }
+            let res = subscription.tick(now, now_instant, tick_reason, &mut slots);
+
             // Make sure to note if there are more notifications in any subscription.
             more_notifications |= subscription.more_notifications();
 
@@ -666,12 +658,16 @@ impl SessionSubscriptions {
             let is_last = idx == num_responses - 1;
             let max_retransmission_queue_len = self.max_publish_requests() * 2;
 
-            Self::enqueue_retransmission_notification(
-                &mut self.retransmission_queue,
-                max_retransmission_queue_len,
-                subscription_id,
-                &notification,
-            );
+            // The subscription may have been removed above, if it expired during this tick.
+            // Its final status change notification can't be republished, so don't keep it.
+            if self.subscriptions.contains_key(&subscription_id) {
+                Self::enqueue_retransmission_notification(
+                    &mut self.retransmission_queue,
+                    max_retransmission_queue_len,
+                    subscription_id,
+                    &notification,
+                );
+            }
 
             // Take note of the available sequence numbers after we have added the NonAckedPublish
             // to the list. This makes sure that the available sequence numbers list is not empty and contains

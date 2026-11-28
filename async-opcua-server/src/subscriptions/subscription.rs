@@ -1,14 +1,16 @@
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{BTreeSet, HashMap, HashSet},
     time::{Duration, Instant},
 };
 
 use opcua_core::handle::Handle;
 use opcua_nodes::{Event, TypeTree};
-use opcua_types::{DataValue, DateTime, DateTimeUtc, NotificationMessage, StatusCode};
-use tracing::{debug, trace, warn};
+use opcua_types::{DataValue, DateTime, DateTimeUtc, StatusCode};
+use tracing::{debug, trace};
 
-use super::monitored_item::{MonitoredItem, Notification};
+use crate::subscriptions::queue::PublishRequestSlots;
+
+use super::monitored_item::MonitoredItem;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 /// Current internal state of the subscription.
@@ -56,10 +58,10 @@ pub(crate) enum UpdateStateAction {
     SubscriptionExpired,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum TickResult {
     Expired,
-    Enqueued,
+    Triggered,
     None,
 }
 
@@ -98,7 +100,7 @@ pub struct Subscription {
     priority: u8,
     monitored_items: HashMap<u32, MonitoredItem>,
     /// Monitored items that have seen notifications.
-    notified_monitored_items: HashSet<u32>,
+    notified_monitored_items: BTreeSet<u32>,
     /// Monitored items holding a value delayed by the sampling interval that is not due yet.
     /// They are moved to `notified_monitored_items` once the value is due.
     skipped_value_monitored_items: HashSet<u32>,
@@ -124,12 +126,18 @@ pub struct Subscription {
     sequence_number: Handle,
     // The time that the subscription interval last fired
     last_time_publishing_interval_elapsed: Instant,
-    // Currently outstanding notifications to send
-    notifications: VecDeque<NotificationMessage>,
-    /// Maximum number of queued notifications.
-    max_queued_notifications: usize,
     /// Maximum number of notifications per publish.
     max_notifications_per_publish: usize,
+    /// Flag set to indicate whether there are more notifications available.
+    more_notifications: bool,
+    /// Flag set to indicate a pending keep-alive message, meaning that
+    /// a future publish request may trigger a keep-alive notification
+    /// once there's space.
+    pending_keep_alive: bool,
+    /// Monitored items that were triggered, but whose notifications did not all fit
+    /// in the available publish requests. These are sent on a later tick, ahead of
+    /// any new triggers.
+    pending_triggered_items: BTreeSet<u32>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -147,7 +155,6 @@ impl Subscription {
         lifetime_counter: u32,
         keep_alive_counter: u32,
         priority: u8,
-        max_queued_notifications: usize,
         max_notifications_per_publish: u64,
     ) -> Self {
         Self {
@@ -157,7 +164,7 @@ impl Subscription {
             max_keep_alive_counter: keep_alive_counter,
             priority,
             monitored_items: HashMap::new(),
-            notified_monitored_items: HashSet::new(),
+            notified_monitored_items: BTreeSet::new(),
             skipped_value_monitored_items: HashSet::new(),
             // State variables
             state: SubscriptionState::Creating,
@@ -169,9 +176,10 @@ impl Subscription {
             // Counters for new items
             sequence_number: Handle::new(1),
             last_time_publishing_interval_elapsed: Instant::now(),
-            notifications: VecDeque::new(),
-            max_queued_notifications,
             max_notifications_per_publish: max_notifications_per_publish as usize,
+            more_notifications: false,
+            pending_keep_alive: false,
+            pending_triggered_items: BTreeSet::new(),
         }
     }
 
@@ -268,7 +276,8 @@ impl Subscription {
         match (self.state, tick_reason) {
             (SubscriptionState::Creating, _) => HandledState::Create3,
             (SubscriptionState::Normal, TickReason::ReceivePublishRequest)
-                if self.publishing_enabled || !self.publishing_enabled && !p.more_notifications =>
+                if !self.publishing_enabled
+                    || (self.publishing_enabled && !p.more_notifications) =>
             {
                 HandledState::Normal4
             }
@@ -480,7 +489,7 @@ impl Subscription {
     }
 
     fn notifications_available(&self, resend_data: bool) -> bool {
-        if !self.notified_monitored_items.is_empty() {
+        if !self.notified_monitored_items.is_empty() || !self.pending_triggered_items.is_empty() {
             true
         } else if resend_data {
             self.monitored_items.iter().any(|it| it.1.has_last_value())
@@ -494,7 +503,7 @@ impl Subscription {
         now: &DateTimeUtc,
         now_instant: Instant,
         tick_reason: TickReason,
-        publishing_req_queued: bool,
+        slots: &mut PublishRequestSlots,
     ) -> TickResult {
         let publishing_interval_elapsed = match tick_reason {
             TickReason::ReceivePublishRequest => false,
@@ -513,167 +522,99 @@ impl Subscription {
         }
         self.notify_due_skipped_values(now);
 
+        if self.pending_keep_alive {
+            self.pending_keep_alive =
+                !slots.try_enqueue_keep_alive(self.sequence_number.peek_next(), now);
+        }
+
         // First, get the actual state transition we're in.
-        let transition = self.get_state_transition(
-            tick_reason,
-            SubscriptionStateParams {
-                notifications_available: self.notifications_available(self.resend_data),
-                more_notifications: !self.notifications.is_empty(),
-                publishing_req_queued,
-            },
-        );
+        let params = SubscriptionStateParams {
+            notifications_available: self.notifications_available(self.resend_data),
+            more_notifications: self.more_notifications,
+            publishing_req_queued: slots.any_available_publish_requests(),
+        };
+        let transition = self.get_state_transition(tick_reason, params);
         let action = self.handle_state_transition(transition);
 
-        match action {
+        let result = match action {
             UpdateStateAction::None => TickResult::None,
             UpdateStateAction::ReturnKeepAlive => {
-                let notification = NotificationMessage::keep_alive(
-                    // OPC-UA part 4 5.13.1.1
-                    // "Each keep-alive Message is a response to a Publish request in which the notificationMessage parameter does not
-                    // contain any Notifications and that contains the sequence number of the next NotificationMessage that is to be sent."
-                    // Very vague, but the correct interpretation appears to be to not increment the sequence number.
-                    self.sequence_number.peek_next(),
-                    DateTime::from(*now),
-                );
-                self.enqueue_notification(notification);
-                TickResult::Enqueued
+                self.pending_keep_alive =
+                    !slots.try_enqueue_keep_alive(self.sequence_number.peek_next(), now);
+
+                TickResult::Triggered
             }
             UpdateStateAction::ReturnNotifications => {
                 let resend_data = std::mem::take(&mut self.resend_data);
-                let messages = self.tick_monitored_items(now, resend_data);
-                for msg in messages {
-                    self.enqueue_notification(msg);
-                }
-                TickResult::Enqueued
+                // Reset more-notifications before we keep going, it'll be set again
+                // if the tick turns out to not get all available notifications.
+                self.more_notifications = false;
+                self.tick_monitored_items(now, resend_data, slots);
+                TickResult::Triggered
             }
             UpdateStateAction::SubscriptionCreated => TickResult::None,
             UpdateStateAction::SubscriptionExpired => {
                 debug!("Subscription status change to closed / timeout");
                 self.monitored_items.clear();
-                let notification = NotificationMessage::status_change(
-                    self.sequence_number.next(),
-                    DateTime::from(*now),
+                self.pending_triggered_items.clear();
+                // The standard states to send a status change notification here,
+                // but it seems mostly meaningless, because this only happens if there
+                // are no publish requests.
+                slots.try_enqueue_status_change(
                     StatusCode::BadTimeout,
+                    &mut self.sequence_number,
+                    now,
                 );
-                self.enqueue_notification(notification);
                 TickResult::Expired
             }
-        }
-    }
+        };
 
-    fn enqueue_notification(&mut self, notification: NotificationMessage) {
-        if self.notifications.len() >= self.max_queued_notifications {
-            warn!("Maximum number of queued notifications exceeded, dropping oldest. Subscription ID: {}", self.id);
-            self.notifications.pop_front();
-        }
+        slots.finalize(&mut self.sequence_number, now);
 
-        // debug!("Enqueuing notification {:?}", notification);
-        self.notifications.push_back(notification);
-    }
-
-    pub(super) fn take_notification(&mut self) -> Option<NotificationMessage> {
-        self.notifications.pop_front()
-    }
-
-    pub(super) fn more_notifications(&self) -> bool {
-        !self.notifications.is_empty()
+        result
     }
 
     pub(super) fn ready_to_remove(&self) -> bool {
-        self.state == SubscriptionState::Closed && self.notifications.is_empty()
+        self.state == SubscriptionState::Closed
     }
 
     fn handle_triggers(
         &mut self,
         now: &DateTimeUtc,
         triggers: Vec<(u32, u32)>,
-        notifications: &mut Vec<Notification>,
-        messages: &mut Vec<NotificationMessage>,
+        slots: &mut PublishRequestSlots,
     ) {
-        for (triggering_item, item_id) in triggers {
+        // Triggers that did not fit in an earlier tick go first. Note that these will
+        // also send any notifications the triggered item has received since it was triggered.
+        let pending = std::mem::take(&mut self.pending_triggered_items)
+            .into_iter()
+            .map(|item_id| (None, item_id));
+        let new = triggers
+            .into_iter()
+            .map(|(triggering_item, item_id)| (Some(triggering_item), item_id));
+
+        for (triggering_item, item_id) in pending.chain(new) {
             let Some(item) = self.monitored_items.get_mut(&item_id) else {
-                if let Some(item) = self.monitored_items.get_mut(&triggering_item) {
+                if let Some(item) = triggering_item.and_then(|t| self.monitored_items.get_mut(&t)) {
                     item.remove_dead_trigger(item_id);
                 }
                 continue;
             };
 
-            while let Some(notif) = item.pop_notification() {
-                notifications.push(notif);
-                if notifications.len() >= self.max_notifications_per_publish
-                    && self.max_notifications_per_publish > 0
-                {
-                    messages.push(Self::make_notification_message(
-                        self.sequence_number.next(),
-                        std::mem::take(notifications),
-                        now,
-                    ));
-                }
-            }
-        }
-    }
-
-    fn make_notification_message(
-        next_sequence_number: u32,
-        notifications: Vec<Notification>,
-        now: &DateTimeUtc,
-    ) -> NotificationMessage {
-        let mut data_change_notifications = Vec::new();
-        let mut event_notifications = Vec::new();
-
-        for notif in notifications {
-            match notif {
-                Notification::MonitoredItemNotification(n) => data_change_notifications.push(n),
-                Notification::Event(n) => event_notifications.push(n),
-            }
-        }
-
-        NotificationMessage::data_change(
-            next_sequence_number,
-            DateTime::from(*now),
-            data_change_notifications,
-            event_notifications,
-        )
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn tick_monitored_item(
-        monitored_item: &mut MonitoredItem,
-        now: &DateTimeUtc,
-        resend_data: bool,
-        max_notifications: usize,
-        triggers: &mut Vec<(u32, u32)>,
-        notifications: &mut Vec<Notification>,
-        messages: &mut Vec<NotificationMessage>,
-        sequence_numbers: &mut Handle,
-    ) {
-        monitored_item.maybe_enqueue_skipped_value(&(*now).into());
-
-        if monitored_item.is_sampling() && monitored_item.has_new_notifications() {
-            triggers.extend(
-                monitored_item
-                    .triggered_items()
-                    .iter()
-                    .copied()
-                    .map(|id| (monitored_item.id(), id)),
-            );
-        }
-
-        if monitored_item.is_reporting() {
-            if resend_data {
-                monitored_item.add_current_value_to_queue();
-            }
-            if monitored_item.has_notifications() {
-                while let Some(notif) = monitored_item.pop_notification() {
-                    notifications.push(notif);
-                    if notifications.len() >= max_notifications && max_notifications > 0 {
-                        messages.push(Self::make_notification_message(
-                            sequence_numbers.next(),
-                            std::mem::take(notifications),
-                            now,
-                        ));
-                    }
-                }
+            while item.has_notifications() {
+                let Some(slot) = slots.item_notif_slot() else {
+                    // No more space in the available publish requests, the trigger
+                    // is delayed until the next tick.
+                    self.pending_triggered_items.insert(item_id);
+                    self.more_notifications = true;
+                    break;
+                };
+                // Guaranteed non-empty here, by item.has_notifications()
+                slot.enqueue(
+                    item.pop_notification().unwrap(),
+                    &mut self.sequence_number,
+                    now,
+                );
             }
         }
     }
@@ -682,59 +623,49 @@ impl Subscription {
         &mut self,
         now: &DateTimeUtc,
         resend_data: bool,
-    ) -> Vec<NotificationMessage> {
-        let mut notifications = Vec::new();
-        let mut messages = Vec::new();
+        slots: &mut PublishRequestSlots<'_>,
+    ) {
         let mut triggers = Vec::new();
 
-        // If resend data is true, we must visit ever monitored item
-        if resend_data {
-            for monitored_item in self.monitored_items.values_mut() {
-                Self::tick_monitored_item(
-                    monitored_item,
-                    now,
-                    resend_data,
-                    self.max_notifications_per_publish,
-                    &mut triggers,
-                    &mut notifications,
-                    &mut messages,
-                    &mut self.sequence_number,
-                );
-            }
+        let item_ids: Vec<u32> = if resend_data {
+            // If resend data is true, we must visit every monitored item. This covers
+            // every notified item as well.
+            self.notified_monitored_items.clear();
+            self.monitored_items.keys().copied().collect()
         } else {
-            for item_id in self.notified_monitored_items.drain() {
-                let Some(monitored_item) = self.monitored_items.get_mut(&item_id) else {
-                    continue;
-                };
-                Self::tick_monitored_item(
-                    monitored_item,
-                    now,
-                    resend_data,
-                    self.max_notifications_per_publish,
-                    &mut triggers,
-                    &mut notifications,
-                    &mut messages,
-                    &mut self.sequence_number,
-                );
-                // A skipped value that is not due yet must be enqueued by a later tick,
-                // even if no new value is notified for the item before then.
-                if monitored_item.has_skipped_value() {
-                    self.skipped_value_monitored_items.insert(item_id);
-                }
+            std::mem::take(&mut self.notified_monitored_items)
+                .into_iter()
+                .collect()
+        };
+
+        for item_id in item_ids {
+            let Some(monitored_item) = self.monitored_items.get_mut(&item_id) else {
+                continue;
+            };
+            let more = slots.tick_monitored_item(
+                monitored_item,
+                now,
+                resend_data,
+                &mut triggers,
+                &mut self.sequence_number,
+            );
+            self.more_notifications |= more;
+            // A skipped value that is not due yet must be enqueued by a later tick,
+            // even if no new value is notified for the item before then.
+            if monitored_item.has_skipped_value() {
+                self.skipped_value_monitored_items.insert(item_id);
+            }
+
+            // If the notifications did not all fit, consider the item still notified,
+            // so that it is visited again in the next tick. This is fine, because
+            // triggers check if there are _new_ notifications, so ticking an item
+            // again is idempotent.
+            if more {
+                self.notified_monitored_items.insert(item_id);
             }
         }
 
-        self.handle_triggers(now, triggers, &mut notifications, &mut messages);
-
-        if !notifications.is_empty() {
-            messages.push(Self::make_notification_message(
-                self.sequence_number.next(),
-                notifications,
-                now,
-            ));
-        }
-
-        messages
+        self.handle_triggers(now, triggers, slots);
     }
 
     /// Reset the keep-alive counter to the maximum keep-alive count of the Subscription.
@@ -801,15 +732,15 @@ impl Subscription {
         self.publishing_enabled
     }
 
-    /// The maximum number of notification messages queued for this subscription.
-    pub fn max_queued_notifications(&self) -> usize {
-        self.max_queued_notifications
-    }
-
     /// The maximum number of notifications per notification message for this
     /// subscription.
     pub fn max_notifications_per_publish(&self) -> usize {
         self.max_notifications_per_publish
+    }
+
+    /// Get whether there are more notifications available on the subscription.
+    pub fn more_notifications(&self) -> bool {
+        self.more_notifications
     }
 
     /// The current state of the subscription.
@@ -820,23 +751,98 @@ impl Subscription {
 
 #[cfg(test)]
 mod tests {
-    use std::time::{Duration, Instant};
+    use std::{
+        collections::VecDeque,
+        time::{Duration, Instant},
+    };
 
     use chrono::{TimeDelta, Utc};
 
     use crate::{
-        subscriptions::monitored_item::{
-            tests::new_monitored_item, FilterType, Notification, SamplingInterval,
+        subscriptions::{
+            monitored_item::{
+                tests::new_monitored_item, FilterType, Notification, SamplingInterval,
+            },
+            queue::PublishRequestSlots,
+            PendingPublish,
         },
         SubscriptionState,
     };
     use opcua_types::{
         match_extension_object_owned, AttributeId, DataChangeNotification, DataValue, DateTime,
         DateTimeUtc, EventNotificationList, MonitoringMode, NodeId, NotificationMessage,
-        ReadValueId, StatusChangeNotification, StatusCode, Variant,
+        PublishRequest, ReadValueId, Variant,
     };
 
-    use super::{Subscription, TickReason};
+    use super::{Subscription, TickReason, TickResult};
+
+    fn pending_publish() -> PendingPublish {
+        let (response, _) = tokio::sync::oneshot::channel();
+        PendingPublish {
+            response,
+            request: Box::new(PublishRequest::default()),
+            ack_results: None,
+            deadline: Instant::now() + Duration::from_secs(3600),
+        }
+    }
+
+    /// Tick the subscription with `num_requests` publish requests available,
+    /// returning the tick result and the notification messages written to
+    /// publish requests, in order.
+    fn tick_with_result(
+        sub: &mut Subscription,
+        now: &DateTimeUtc,
+        now_instant: Instant,
+        tick_reason: TickReason,
+        num_requests: usize,
+    ) -> (TickResult, Vec<NotificationMessage>) {
+        let mut requests: VecDeque<_> = (0..num_requests).map(|_| pending_publish()).collect();
+        let mut responses = Vec::new();
+        let mut slots = PublishRequestSlots::new(
+            sub.max_notifications_per_publish(),
+            &mut requests,
+            &mut responses,
+            sub.id(),
+        );
+        let res = sub.tick(now, now_instant, tick_reason, &mut slots);
+        assert_eq!(requests.len() + responses.len(), num_requests);
+        (
+            res,
+            responses
+                .into_iter()
+                .map(|(_, msg, sub_id)| {
+                    assert_eq!(sub_id, sub.id());
+                    msg
+                })
+                .collect(),
+        )
+    }
+
+    fn do_tick(
+        sub: &mut Subscription,
+        now: &DateTimeUtc,
+        now_instant: Instant,
+        tick_reason: TickReason,
+        num_requests: usize,
+    ) -> Vec<NotificationMessage> {
+        tick_with_result(sub, now, now_instant, tick_reason, num_requests).1
+    }
+
+    fn new_value_item(id: u32, mode: MonitoringMode, value: DataValue) -> super::MonitoredItem {
+        new_monitored_item(
+            id,
+            ReadValueId {
+                node_id: NodeId::null(),
+                attribute_id: AttributeId::Value as u32,
+                ..Default::default()
+            },
+            mode,
+            FilterType::None,
+            SamplingInterval::NonZero(TimeDelta::milliseconds(100)),
+            false,
+            Some(value),
+        )
+    }
 
     fn get_notifications(message: &NotificationMessage) -> Vec<Notification> {
         let mut res = Vec::new();
@@ -868,7 +874,7 @@ mod tests {
 
     #[test]
     fn tick() {
-        let mut sub = Subscription::new(1, true, Duration::from_millis(100), 100, 20, 1, 100, 1000);
+        let mut sub = Subscription::new(1, true, Duration::from_millis(100), 100, 20, 1, 1000);
         let start = Instant::now();
         let start_dt = Utc::now();
 
@@ -876,41 +882,29 @@ mod tests {
 
         // Subscription is creating, handle the first tick.
         assert_eq!(sub.state, SubscriptionState::Creating);
-        sub.tick(&start_dt, start, TickReason::TickTimerFired, true);
+        assert!(do_tick(&mut sub, &start_dt, start, TickReason::TickTimerFired, 1).is_empty());
         assert_eq!(sub.state, SubscriptionState::Normal);
         assert!(!sub.first_message_sent);
 
         // Tick again before the publishing interval has elapsed, should change nothing.
-        sub.tick(&start_dt, start, TickReason::TickTimerFired, true);
+        assert!(do_tick(&mut sub, &start_dt, start, TickReason::TickTimerFired, 1).is_empty());
         assert_eq!(sub.state, SubscriptionState::Normal);
         assert!(!sub.first_message_sent);
 
         // Add a monitored item
         sub.insert(
             1,
-            new_monitored_item(
-                1,
-                ReadValueId {
-                    node_id: NodeId::null(),
-                    attribute_id: AttributeId::Value as u32,
-                    ..Default::default()
-                },
-                MonitoringMode::Reporting,
-                FilterType::None,
-                SamplingInterval::NonZero(TimeDelta::milliseconds(100)),
-                false,
-                Some(DataValue::new_now(123)),
-            ),
+            new_value_item(1, MonitoringMode::Reporting, DataValue::new_now(123)),
         );
         // New tick at next publishing interval should produce something
         let (time, time_inst) = offset(start_dt, start, 100);
-        sub.tick(&time, time_inst, TickReason::TickTimerFired, true);
+        let msgs = do_tick(&mut sub, &time, time_inst, TickReason::TickTimerFired, 1);
         assert_eq!(sub.state, SubscriptionState::Normal);
         assert!(sub.first_message_sent);
-        let notif = sub.take_notification().unwrap();
-        let its = get_notifications(&notif);
+        assert_eq!(msgs.len(), 1);
+        let its = get_notifications(&msgs[0]);
         assert_eq!(its.len(), 1);
-        assert_eq!(notif.sequence_number, 1);
+        assert_eq!(msgs[0].sequence_number, 1);
         let Notification::MonitoredItemNotification(m) = &its[0] else {
             panic!("Wrong notification type");
         };
@@ -918,13 +912,12 @@ mod tests {
 
         // Next tick produces nothing
         let (time, time_inst) = offset(start_dt, start, 200);
-
-        sub.tick(&time, time_inst, TickReason::TickTimerFired, true);
+        let msgs = do_tick(&mut sub, &time, time_inst, TickReason::TickTimerFired, 1);
         // State transitions to keep alive due to empty publish.
         assert_eq!(sub.state, SubscriptionState::KeepAlive);
         assert_eq!(sub.lifetime_counter, 98);
         assert!(sub.first_message_sent);
-        assert!(sub.take_notification().is_none());
+        assert!(msgs.is_empty());
 
         // Enqueue a new notification
         sub.notify_data_value(
@@ -936,14 +929,14 @@ mod tests {
             &DateTime::now(),
         );
         let (time, time_inst) = offset(start_dt, start, 300);
-        sub.tick(&time, time_inst, TickReason::TickTimerFired, true);
+        let msgs = do_tick(&mut sub, &time, time_inst, TickReason::TickTimerFired, 1);
         // State transitions back to normal.
         assert_eq!(sub.state, SubscriptionState::Normal);
         assert!(sub.first_message_sent);
         assert_eq!(sub.lifetime_counter, 99);
-        let notif = sub.take_notification().unwrap();
-        let its = get_notifications(&notif);
-        assert_eq!(notif.sequence_number, 2);
+        assert_eq!(msgs.len(), 1);
+        let its = get_notifications(&msgs[0]);
+        assert_eq!(msgs[0].sequence_number, 2);
         assert_eq!(its.len(), 1);
         let Notification::MonitoredItemNotification(m) = &its[0] else {
             panic!("Wrong notification type");
@@ -952,31 +945,30 @@ mod tests {
 
         for i in 0..20 {
             let (time, time_inst) = offset(start_dt, start, 1000 + i * 100);
-            sub.tick(&time, time_inst, TickReason::TickTimerFired, true);
+            let msgs = do_tick(&mut sub, &time, time_inst, TickReason::TickTimerFired, 1);
             assert_eq!(sub.state, SubscriptionState::KeepAlive);
             assert_eq!(sub.lifetime_counter, (99 - i - 1) as u32);
             assert_eq!(sub.keep_alive_counter, (20 - i) as u32);
-            assert!(sub.take_notification().is_none());
+            assert!(msgs.is_empty());
         }
         assert_eq!(sub.lifetime_counter, 79);
         assert_eq!(sub.keep_alive_counter, 1);
 
         // Tick one more time to get a keep alive
         let (time, time_inst) = offset(start_dt, start, 3000);
-        sub.tick(&time, time_inst, TickReason::TickTimerFired, true);
+        let msgs = do_tick(&mut sub, &time, time_inst, TickReason::TickTimerFired, 1);
         assert_eq!(sub.state, SubscriptionState::KeepAlive);
         assert_eq!(sub.lifetime_counter, 78);
         assert_eq!(sub.keep_alive_counter, 20);
-        let notif = sub.take_notification().unwrap();
-        let its = get_notifications(&notif);
-        assert!(its.is_empty());
+        assert_eq!(msgs.len(), 1);
+        assert!(get_notifications(&msgs[0]).is_empty());
         // The next sequence number...
-        assert_eq!(notif.sequence_number, 3);
+        assert_eq!(msgs[0].sequence_number, 3);
 
         // Tick another 20 times to become late
         for i in 0..19 {
             let (time, time_inst) = offset(start_dt, start, 3100 + i * 100);
-            sub.tick(&time, time_inst, TickReason::TickTimerFired, false);
+            assert!(do_tick(&mut sub, &time, time_inst, TickReason::TickTimerFired, 0).is_empty());
             assert_eq!(sub.state, SubscriptionState::KeepAlive);
             assert_eq!(sub.lifetime_counter, (78 - i - 1) as u32);
         }
@@ -984,27 +976,27 @@ mod tests {
         // Tick another 58 times to expire
         for i in 0..58 {
             let (time, time_inst) = offset(start_dt, start, 5100 + i * 100);
-            sub.tick(&time, time_inst, TickReason::TickTimerFired, false);
+            assert!(do_tick(&mut sub, &time, time_inst, TickReason::TickTimerFired, 0).is_empty());
             assert_eq!(sub.state, SubscriptionState::Late);
             assert_eq!(sub.lifetime_counter, (58 - i) as u32);
         }
         assert_eq!(sub.lifetime_counter, 1);
 
+        // The subscription expires. Nothing is sent, since there are no publish requests,
+        // and the subscription can be removed immediately.
         let (time, time_inst) = offset(start_dt, start, 20000);
-        sub.tick(&time, time_inst, TickReason::TickTimerFired, false);
+        let (res, msgs) =
+            tick_with_result(&mut sub, &time, time_inst, TickReason::TickTimerFired, 0);
+        assert_eq!(res, TickResult::Expired);
         assert_eq!(sub.state, SubscriptionState::Closed);
-        let notif = sub.take_notification().unwrap();
-        assert_eq!(notif.sequence_number, 3);
-        assert_eq!(1, notif.notification_data.as_ref().unwrap().len());
-        let status_change = notif.notification_data.as_ref().unwrap()[0]
-            .inner_as::<StatusChangeNotification>()
-            .unwrap();
-        assert_eq!(status_change.status, StatusCode::BadTimeout);
+        assert!(msgs.is_empty());
+        assert!(sub.is_empty());
+        assert!(sub.ready_to_remove());
     }
 
     #[test]
     fn monitored_item_triggers() {
-        let mut sub = Subscription::new(1, true, Duration::from_millis(100), 100, 20, 1, 100, 1000);
+        let mut sub = Subscription::new(1, true, Duration::from_millis(100), 100, 20, 1, 1000);
         let start = Instant::now();
         let start_dt = Utc::now();
 
@@ -1042,15 +1034,14 @@ mod tests {
         sub.notify_data_value(&4, DataValue::new_at(1, time), &time);
 
         // Should not cause a notification
-        sub.tick(&otime, time_inst, TickReason::TickTimerFired, true);
-        assert!(sub.take_notification().is_none());
+        assert!(do_tick(&mut sub, &otime, time_inst, TickReason::TickTimerFired, 1).is_empty());
 
         // Notify the first item
         sub.notify_data_value(&1, DataValue::new_at(1, time), &time);
         let (time, time_inst) = offset(start_dt, start, 200);
-        sub.tick(&time, time_inst, TickReason::TickTimerFired, true);
-        let notif = sub.take_notification().unwrap();
-        let its = get_notifications(&notif);
+        let msgs = do_tick(&mut sub, &time, time_inst, TickReason::TickTimerFired, 1);
+        assert_eq!(msgs.len(), 1);
+        let its = get_notifications(&msgs[0]);
         assert_eq!(its.len(), 6);
         for it in its {
             let Notification::MonitoredItemNotification(_m) = it else {
@@ -1061,12 +1052,12 @@ mod tests {
 
     #[test]
     fn skipped_value_sent_without_further_notification() {
-        let mut sub = Subscription::new(1, true, Duration::from_millis(100), 100, 20, 1, 100, 1000);
+        let mut sub = Subscription::new(1, true, Duration::from_millis(100), 100, 20, 1, 1000);
         let start = Instant::now();
         let start_dt = Utc::now();
 
         sub.last_time_publishing_interval_elapsed = start;
-        sub.tick(&start_dt, start, TickReason::TickTimerFired, true);
+        do_tick(&mut sub, &start_dt, start, TickReason::TickTimerFired, 1);
         assert_eq!(sub.state, SubscriptionState::Normal);
 
         // The item is created 50ms after the subscription, so its first value is
@@ -1096,9 +1087,9 @@ mod tests {
 
         // This tick is before the held value is due, so only the first value is sent.
         let (time, time_inst) = offset(start_dt, start, 100);
-        sub.tick(&time, time_inst, TickReason::TickTimerFired, true);
-        let notif = sub.take_notification().unwrap();
-        let its = get_notifications(&notif);
+        let msgs = do_tick(&mut sub, &time, time_inst, TickReason::TickTimerFired, 1);
+        assert_eq!(msgs.len(), 1);
+        let its = get_notifications(&msgs[0]);
         assert_eq!(its.len(), 1);
         let Notification::MonitoredItemNotification(m) = &its[0] else {
             panic!("Wrong notification type");
@@ -1107,9 +1098,9 @@ mod tests {
 
         // No new value is notified, but the next tick is after the held value is due.
         let (time, time_inst) = offset(start_dt, start, 200);
-        sub.tick(&time, time_inst, TickReason::TickTimerFired, true);
-        let notif = sub.take_notification().unwrap();
-        let its = get_notifications(&notif);
+        let msgs = do_tick(&mut sub, &time, time_inst, TickReason::TickTimerFired, 1);
+        assert_eq!(msgs.len(), 1);
+        let its = get_notifications(&msgs[0]);
         assert_eq!(its.len(), 1);
         let Notification::MonitoredItemNotification(m) = &its[0] else {
             panic!("Wrong notification type");
@@ -1120,12 +1111,12 @@ mod tests {
 
     #[test]
     fn skipped_value_not_due_does_not_suppress_keep_alive() {
-        let mut sub = Subscription::new(1, true, Duration::from_millis(100), 100, 5, 1, 100, 1000);
+        let mut sub = Subscription::new(1, true, Duration::from_millis(100), 100, 5, 1, 1000);
         let start = Instant::now();
         let start_dt = Utc::now();
 
         sub.last_time_publishing_interval_elapsed = start;
-        sub.tick(&start_dt, start, TickReason::TickTimerFired, true);
+        do_tick(&mut sub, &start_dt, start, TickReason::TickTimerFired, 1);
         assert_eq!(sub.state, SubscriptionState::Normal);
 
         // The first value has a source timestamp an hour ahead, so the next value
@@ -1155,8 +1146,7 @@ mod tests {
         let mut keep_alives = 0;
         for i in 1..=30 {
             let (time, time_inst) = offset(start_dt, start, 100 * i);
-            sub.tick(&time, time_inst, TickReason::TickTimerFired, true);
-            while let Some(notif) = sub.take_notification() {
+            for notif in do_tick(&mut sub, &time, time_inst, TickReason::TickTimerFired, 1) {
                 if get_notifications(&notif).is_empty() {
                     keep_alives += 1;
                 } else {
@@ -1168,5 +1158,251 @@ mod tests {
         // every 5 publishing intervals while the held value is not due.
         assert_eq!(data_messages, 1);
         assert_eq!(keep_alives, 5);
+    }
+
+    #[test]
+    fn notifications_split_across_publish_requests() {
+        // At most one notification per publish.
+        let mut sub = Subscription::new(1, true, Duration::from_millis(100), 100, 20, 1, 1);
+        let start = Instant::now();
+        let start_dt = Utc::now();
+
+        sub.last_time_publishing_interval_elapsed = start;
+        do_tick(&mut sub, &start_dt, start, TickReason::TickTimerFired, 1);
+        assert_eq!(sub.state, SubscriptionState::Normal);
+
+        for i in 1..=3 {
+            sub.insert(
+                i,
+                new_value_item(i, MonitoringMode::Reporting, DataValue::new_now(i as i32)),
+            );
+        }
+
+        // Three notifications, but only two publish requests. Each request gets a
+        // message, and the subscription notes that there are more notifications.
+        let (time, time_inst) = offset(start_dt, start, 100);
+        let msgs = do_tick(&mut sub, &time, time_inst, TickReason::TickTimerFired, 2);
+        assert_eq!(msgs.len(), 2);
+        assert_eq!(msgs[0].sequence_number, 1);
+        assert_eq!(msgs[1].sequence_number, 2);
+        for msg in &msgs {
+            assert_eq!(get_notifications(msg).len(), 1);
+        }
+        assert!(sub.more_notifications());
+        assert_eq!(sub.state, SubscriptionState::Normal);
+
+        // A new publish request picks up the remaining notification immediately (Normal5),
+        // without waiting for the publishing interval.
+        let msgs = do_tick(
+            &mut sub,
+            &time,
+            time_inst,
+            TickReason::ReceivePublishRequest,
+            1,
+        );
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0].sequence_number, 3);
+        assert_eq!(get_notifications(&msgs[0]).len(), 1);
+        assert!(!sub.more_notifications());
+
+        // Nothing left, so another publish request is just held.
+        assert!(do_tick(
+            &mut sub,
+            &time,
+            time_inst,
+            TickReason::ReceivePublishRequest,
+            1
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn keep_alive_deferred_until_publish_request_available() {
+        let mut sub = Subscription::new(1, true, Duration::from_millis(100), 100, 20, 1, 1000);
+        let start = Instant::now();
+        let start_dt = Utc::now();
+
+        sub.last_time_publishing_interval_elapsed = start;
+        do_tick(&mut sub, &start_dt, start, TickReason::TickTimerFired, 0);
+        assert_eq!(sub.state, SubscriptionState::Normal);
+
+        // No publish request when the first interval elapses, so the subscription is late.
+        let (time, time_inst) = offset(start_dt, start, 100);
+        assert!(do_tick(&mut sub, &time, time_inst, TickReason::TickTimerFired, 0).is_empty());
+        assert_eq!(sub.state, SubscriptionState::Late);
+
+        // A publish request arrives at the session, but is consumed before this
+        // subscription is ticked, e.g. by another subscription. The keep-alive is deferred.
+        assert!(do_tick(
+            &mut sub,
+            &time,
+            time_inst,
+            TickReason::ReceivePublishRequest,
+            0
+        )
+        .is_empty());
+        assert_eq!(sub.state, SubscriptionState::KeepAlive);
+        assert!(sub.pending_keep_alive);
+
+        // The next available publish request gets the keep-alive.
+        let msgs = do_tick(
+            &mut sub,
+            &time,
+            time_inst,
+            TickReason::ReceivePublishRequest,
+            1,
+        );
+        assert_eq!(msgs.len(), 1);
+        assert!(get_notifications(&msgs[0]).is_empty());
+        assert_eq!(msgs[0].sequence_number, 1);
+        assert!(!sub.pending_keep_alive);
+    }
+
+    #[test]
+    fn resend_data_split_across_publish_requests() {
+        // At most one notification per publish.
+        let mut sub = Subscription::new(1, true, Duration::from_millis(100), 100, 20, 1, 1);
+        let start = Instant::now();
+        let start_dt = Utc::now();
+
+        sub.last_time_publishing_interval_elapsed = start;
+        do_tick(&mut sub, &start_dt, start, TickReason::TickTimerFired, 1);
+        for i in 1..=3 {
+            sub.insert(
+                i,
+                new_value_item(i, MonitoringMode::Reporting, DataValue::new_now(i as i32)),
+            );
+        }
+        // Send the initial values.
+        let (time, time_inst) = offset(start_dt, start, 100);
+        let msgs = do_tick(&mut sub, &time, time_inst, TickReason::TickTimerFired, 3);
+        assert_eq!(msgs.len(), 3);
+        assert!(!sub.more_notifications());
+
+        // Resend data with only a single publish request available.
+        sub.set_resend_data();
+        let (time, time_inst) = offset(start_dt, start, 200);
+        let msgs = do_tick(&mut sub, &time, time_inst, TickReason::TickTimerFired, 1);
+        assert_eq!(msgs.len(), 1);
+        assert!(sub.more_notifications());
+
+        // The remaining resent values are picked up by the next publish requests.
+        let mut values = get_notifications(&msgs[0]);
+        for _ in 0..2 {
+            let msgs = do_tick(
+                &mut sub,
+                &time,
+                time_inst,
+                TickReason::ReceivePublishRequest,
+                1,
+            );
+            assert_eq!(msgs.len(), 1);
+            values.extend(get_notifications(&msgs[0]));
+        }
+        assert!(!sub.more_notifications());
+        let mut values: Vec<_> = values
+            .into_iter()
+            .map(|n| {
+                let Notification::MonitoredItemNotification(m) = n else {
+                    panic!("Wrong notification type");
+                };
+                m.value.value
+            })
+            .collect();
+        values.sort_by_key(|v| match v {
+            Some(Variant::Int32(i)) => *i,
+            _ => panic!("Unexpected value {v:?}"),
+        });
+        assert_eq!(
+            values,
+            vec![
+                Some(Variant::Int32(1)),
+                Some(Variant::Int32(2)),
+                Some(Variant::Int32(3))
+            ]
+        );
+
+        // Nothing left after that.
+        assert!(do_tick(
+            &mut sub,
+            &time,
+            time_inst,
+            TickReason::ReceivePublishRequest,
+            1
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn triggered_notifications_delayed_until_publish_request_available() {
+        // At most one notification per publish.
+        let mut sub = Subscription::new(1, true, Duration::from_millis(100), 100, 20, 1, 1);
+        let start = Instant::now();
+        let start_dt = Utc::now();
+
+        sub.last_time_publishing_interval_elapsed = start;
+        do_tick(&mut sub, &start_dt, start, TickReason::TickTimerFired, 1);
+        sub.insert(
+            1,
+            new_value_item(
+                1,
+                MonitoringMode::Reporting,
+                DataValue::new_at(0, start_dt.into()),
+            ),
+        );
+        for i in 2..=3 {
+            sub.insert(
+                i,
+                new_value_item(
+                    i,
+                    MonitoringMode::Sampling,
+                    DataValue::new_at(0, start_dt.into()),
+                ),
+            );
+        }
+        sub.get_mut(&1).unwrap().set_triggering(&[2, 3], &[]);
+
+        // Flush the initial values.
+        let (time, time_inst) = offset(start_dt, start, 100);
+        do_tick(&mut sub, &time, time_inst, TickReason::TickTimerFired, 10);
+        assert!(sub.pending_triggered_items.is_empty());
+        assert!(!sub.more_notifications());
+
+        // Notify the sampling items, then the triggering item.
+        let (otime, time_inst) = offset(start_dt, start, 200);
+        let time = otime.into();
+        sub.notify_data_value(&2, DataValue::new_at(20, time), &time);
+        sub.notify_data_value(&3, DataValue::new_at(30, time), &time);
+        sub.notify_data_value(&1, DataValue::new_at(10, time), &time);
+
+        // Only two publish requests, so the notification for the last triggered item
+        // does not fit.
+        let msgs = do_tick(&mut sub, &otime, time_inst, TickReason::TickTimerFired, 2);
+        assert_eq!(msgs.len(), 2);
+        assert!(sub.more_notifications());
+        assert_eq!(sub.pending_triggered_items.len(), 1);
+
+        // The next publish request gets the delayed triggered notification.
+        let msgs = do_tick(
+            &mut sub,
+            &otime,
+            time_inst,
+            TickReason::ReceivePublishRequest,
+            1,
+        );
+        assert_eq!(msgs.len(), 1);
+        let its = get_notifications(&msgs[0]);
+        assert_eq!(its.len(), 1);
+        let Notification::MonitoredItemNotification(m) = &its[0] else {
+            panic!("Wrong notification type");
+        };
+        assert_eq!(m.value.value, Some(Variant::Int32(30)));
+        assert!(sub.pending_triggered_items.is_empty());
+        assert!(!sub.more_notifications());
+
+        // Nothing is available any more, so the subscription goes back to keep-alive.
+        let (time, time_inst) = offset(start_dt, start, 300);
+        assert!(do_tick(&mut sub, &time, time_inst, TickReason::TickTimerFired, 1).is_empty());
+        assert_eq!(sub.state, SubscriptionState::KeepAlive);
     }
 }

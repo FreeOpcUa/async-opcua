@@ -61,45 +61,31 @@ impl TcpConnector {
         )
         .map_err(|e| Error::new(e, "Failed to resolve URL to hostname and port"))?;
 
-        let addr = {
-            let addr = format!("{host}:{port}");
-            match tokio::net::lookup_host(addr).await {
-                Ok(mut addrs) => {
-                    if let Some(addr) = addrs.next() {
-                        addr
-                    } else {
-                        error!(
-                            "Invalid address {}, does not resolve to any socket",
-                            endpoint_url
-                        );
-                        return Err(Error::new(
-                            StatusCode::BadTcpEndpointUrlInvalid,
-                            format!(
-                                "Invalid address {}, does not resolve to any socket",
-                                endpoint_url
-                            ),
-                        ));
-                    }
-                }
-                Err(e) => {
-                    error!("Invalid address {}, cannot be parsed {:?}", endpoint_url, e);
-                    return Err(Error::new(
-                        StatusCode::BadTcpEndpointUrlInvalid,
-                        format!("Invalid address {}, cannot be parsed {:?}", endpoint_url, e),
-                    ));
-                }
+        let addrs: Vec<SocketAddr> = match tokio::net::lookup_host(format!("{host}:{port}")).await {
+            Ok(addrs) => addrs.collect(),
+            Err(e) => {
+                error!("Invalid address {}, cannot be parsed {:?}", endpoint_url, e);
+                return Err(Error::new(
+                    StatusCode::BadTcpEndpointUrlInvalid,
+                    format!("Invalid address {}, cannot be parsed {:?}", endpoint_url, e),
+                ));
             }
         };
+        if addrs.is_empty() {
+            error!(
+                "Invalid address {}, does not resolve to any socket",
+                endpoint_url
+            );
+            return Err(Error::new(
+                StatusCode::BadTcpEndpointUrlInvalid,
+                format!(
+                    "Invalid address {}, does not resolve to any socket",
+                    endpoint_url
+                ),
+            ));
+        }
 
-        debug!("Connecting to {} with url {}", addr, endpoint_url);
-
-        let socket = TcpStream::connect(addr).await.map_err(|err| {
-            error!("Could not connect to host {}, {:?}", addr, err);
-            Error::new(
-                StatusCode::BadCommunicationError,
-                format!("Could not connect to host {}, {:?}", addr, err),
-            )
-        })?;
+        let socket = connect_any(&addrs, &endpoint_url).await?;
 
         let (reader, writer) = tokio::io::split(socket);
         Ok(StreamConnection::new(
@@ -108,6 +94,38 @@ impl TcpConnector {
             endpoint_url,
         ))
     }
+}
+
+/// Connect to the first of `addrs` that accepts a connection, trying them in order.
+///
+/// A host name may resolve to several addresses, and the server is not necessarily
+/// listening on all of them. For example, `localhost` may resolve to `::1` before
+/// `127.0.0.1`, or a host name may resolve to an IPv6 link-local address first.
+async fn connect_any(addrs: &[SocketAddr], endpoint_url: &str) -> Result<TcpStream, Error> {
+    let mut last_error = None;
+    for addr in addrs {
+        debug!("Connecting to {} with url {}", addr, endpoint_url);
+        match TcpStream::connect(addr).await {
+            Ok(socket) => return Ok(socket),
+            Err(err) => {
+                debug!("Could not connect to {}: {}", addr, err);
+                last_error = Some((addr, err));
+            }
+        }
+    }
+
+    let message = match last_error {
+        Some((addr, err)) => format!(
+            "Could not connect to {} at any of {} resolved addresses, last tried {}: {:?}",
+            endpoint_url,
+            addrs.len(),
+            addr,
+            err
+        ),
+        None => format!("Could not connect to {}, no addresses to try", endpoint_url),
+    };
+    error!("{}", message);
+    Err(Error::new(StatusCode::BadCommunicationError, message))
 }
 
 impl Connector for TcpConnector {
@@ -325,5 +343,43 @@ impl Connector for ReverseTcpConnector {
 
     fn default_endpoint(&self) -> opcua_types::EndpointDescription {
         self.target_endpoint.clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::net::SocketAddr;
+
+    use opcua_types::StatusCode;
+    use tokio::net::TcpListener;
+
+    use super::connect_any;
+
+    /// Get a local address that nothing is listening on.
+    async fn closed_addr() -> SocketAddr {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        listener.local_addr().unwrap()
+    }
+
+    #[tokio::test]
+    async fn connect_any_skips_addresses_that_refuse() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let listening = listener.local_addr().unwrap();
+        let closed = closed_addr().await;
+
+        let socket = connect_any(&[closed, listening], "opc.tcp://test")
+            .await
+            .unwrap();
+        assert_eq!(socket.peer_addr().unwrap(), listening);
+    }
+
+    #[tokio::test]
+    async fn connect_any_fails_when_no_address_accepts() {
+        let closed = closed_addr().await;
+        let err = connect_any(&[closed], "opc.tcp://test").await.unwrap_err();
+        assert_eq!(err.status(), StatusCode::BadCommunicationError);
+
+        let err = connect_any(&[], "opc.tcp://test").await.unwrap_err();
+        assert_eq!(err.status(), StatusCode::BadCommunicationError);
     }
 }

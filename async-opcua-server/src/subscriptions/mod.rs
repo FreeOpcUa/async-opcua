@@ -1,5 +1,6 @@
 mod monitored_item;
 mod notify;
+mod queue;
 mod session_subscriptions;
 mod subscription;
 

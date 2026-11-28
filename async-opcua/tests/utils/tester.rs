@@ -206,7 +206,6 @@ pub fn default_server() -> ServerBuilder {
     limits.max_message_size = 1024 * 1024 * 64;
     limits.max_array_length = 100_000;
     limits.max_chunk_count = 64;
-    limits.subscriptions.max_queued_notifications = 200;
 
     builder
 }

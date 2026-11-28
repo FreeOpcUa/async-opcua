@@ -141,8 +141,6 @@ pub mod constants {
     pub const DEFAULT_PUBLISH_TIMEOUT_MS: u64 = 30000;
     /// Maximum number of notifications per publish, can be set lower by the client.
     pub const MAX_NOTIFICATIONS_PER_PUBLISH: u64 = 0;
-    /// Maximum number of queued notifications. Any notifications beyond this are dropped.
-    pub const MAX_QUEUED_NOTIFICATIONS: usize = 20;
 
     /// Receive buffer size default.
     pub const RECEIVE_BUFFER_SIZE: usize = u16::MAX as usize;
